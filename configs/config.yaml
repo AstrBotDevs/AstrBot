@@ -1,0 +1,20 @@
+openai:
+  key: 
+  chatGPTConfigs:
+    engine: text-davinci-003
+    max_tokens: 1024
+    temperature: 0.9
+    top_p: 1
+    frequency_penalty: 0.4
+    presence_penalty: 0.3
+
+qqbot:
+  appid: 
+  token: 
+
+database: 
+  url: 
+  port: 
+  user: 
+  password: 
+  db: 

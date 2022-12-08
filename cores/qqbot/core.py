@@ -44,8 +44,9 @@ class botClient(botpy.Client):
 
                 session_dict[session_id] += chatgpt_res + "\n"
 
-                #检测是否存在url，如果存在，则去除url 防止被qq过滤
-                chatgpt_res = re.sub(r"([\s]+)(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)([\s]+)", r"\1\3", chatgpt_res)
+                # #检测是否存在url，如果存在，则去除url 防止被qq过滤
+                # chatgpt_res = re.sub(r"([\s]+)(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)([\s]+)", r"\1\3", chatgpt_res)
+                chatgpt_res = chatgpt_res.replace(".", " . ")
 
                 print(f'{session_id} 目前prompt: {session_dict[session_id]}' )
                 # 发送qq信息

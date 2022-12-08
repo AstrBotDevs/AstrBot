@@ -2,10 +2,12 @@
 
 ## 目前实现功能：
 - 私信、@机器人都可以获得回复
-- 以变量的形式临时保存了Session，具体原理为：将某一个用户id作为字典的key，value为该用户历史的input和chatGPT对该用户的output
+- 以变量的形式临时保存了Session，具体原理为：将某一个用户id作为字典的key，value为历史prompt
+- 发送 /reset重置prompt
 
 ## 待实现功能：
-- 将Session持久化存储
+- 将prompt持久化存储
+- 更多交互方式
 - ...
 
 ## 使用方法：
