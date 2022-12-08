@@ -19,26 +19,22 @@ class botClient(botpy.Client):
         if result:
             qq_msg = result.group(1).strip()
         print(qq_msg)
-        # 检测@头，返回对应session
-        pattern0 = r"<@!\d+>"
-        result0 = re.search(pattern0, message.content)
-        if result0:
-            session_id = result0.group(0)
-            if session_id in session_dict:
-                print("旧会话 "+session_id)
-                chatgpt_res =await chatgpt.chat(session_dict[session_id]+' '+qq_msg)
-
-                chatgpt_res = chatgpt_res.strip()
-                session_dict[session_id] = session_dict[session_id] + ' ' + qq_msg 
-                await message.reply(content=f"[ChatGPT]{chatgpt_res}")
-            else:
-                print("新会话 "+session_id)
-                # new_session = chatgpt.newSession()
-                session_dict[session_id] = qq_msg
-
-                chatgpt_res = await chatgpt.chat(qq_msg)
-                chatgpt_res = chatgpt_res.strip()
-                await message.reply(content=f"[ChatGPT]{chatgpt_res}")
+        # 检测@头，返回对应缓存的prompt
+        session_id_pattern = r"<@!\d+>"
+        session_id_result = re.search(session_id_pattern, message.content)
+        if session_id_result:
+            # 匹配出sessionid
+            session_id = session_id_result.group(0)
+            # 添加新条目进入缓存的prompt
+            session_dict[session_id] = "Human: "+ qq_msg + "\nAI: "
+            # 请求chatGPT获得结果
+            chatgpt_res = await chatgpt.chat(session_dict[session_id])
+            # 处理结果文本
+            chatgpt_res = chatgpt_res.strip()
+            session_dict[session_id] += chatgpt_res + "\n"
+            print(f'{session_id} 目前prompt: {session_dict[session_id]}' )
+            # 发送qq信息
+            await message.reply(content=f"[ChatGPT]{chatgpt_res}")
 
 def initBot(chatgpt_inst):
     global chatgpt
