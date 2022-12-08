@@ -20,9 +20,13 @@ class ChatGPT:
     async def chat(self, prompt):
         print("[ChatGPT] 接收到prompt: "+prompt)
         response = openai.Completion.create(
-            self.chatGPT_configs
+            prompt=prompt,
+            **self.chatGPT_configs
         )
         return response["choices"][0]["text"]
+    
+    def newSession(self):
+        return openai.Session()
 
 def getInst() -> ChatGPT:
     global inst
