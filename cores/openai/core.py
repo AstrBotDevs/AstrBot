@@ -19,7 +19,7 @@ class ChatGPT:
         inst = self
     
     async def chat(self, prompt):
-        print("[ChatGPT] 接收到prompt:\n")
+        print("[ChatGPT] 接收到prompt")
         try:
             response = openai.Completion.create(
                 prompt=prompt,
