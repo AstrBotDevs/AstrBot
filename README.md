@@ -1,9 +1,10 @@
 # 基于OpenAI ChatGPT的QQ频道机器人
 
-## 目前实现功能：
-- 私信、@机器人都可以获得回复
+## 功能：
+- @机器人可以获得回复
 - 以变量的形式临时保存了Session，具体原理为：将某一个用户id作为字典的key，value为历史prompt
-- 发送 /reset重置prompt
+- 发送`/reset`重置prompt
+- 发送`/his`查看历史记录（每个用户都有独立的会话）
 
 ## 待实现功能：
 - 将prompt持久化存储
