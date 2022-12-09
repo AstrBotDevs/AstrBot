@@ -1,5 +1,6 @@
 import openai
 import yaml
+from util.errors.errors import PromptExceededError
 
 
 inst = None
@@ -18,11 +19,15 @@ class ChatGPT:
         inst = self
     
     async def chat(self, prompt):
-        print("[ChatGPT] 接收到prompt:\n"+prompt)
-        response = openai.Completion.create(
-            prompt=prompt,
-            **self.chatGPT_configs
-        )
+        print("[ChatGPT] 接收到prompt:\n")
+        try:
+            response = openai.Completion.create(
+                prompt=prompt,
+                **self.chatGPT_configs
+            )
+        except(openai.error.InvalidRequestError) as e:
+            raise PromptExceededError("OpenAI遇到错误：输入了一个不合法的请求。\n"+str(e))
+
         return response["choices"][0]["text"]
     
     def newSession(self):
