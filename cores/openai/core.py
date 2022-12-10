@@ -6,7 +6,7 @@ from util.errors.errors import PromptExceededError
 inst = None
 
 class ChatGPT:
-    def __init__(self, chatGPT_configs):
+    def __init__(self):
         with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
             cfg = yaml.safe_load(ymlfile)
             if cfg['openai']['key'] != '':
@@ -14,7 +14,11 @@ class ChatGPT:
                 openai.api_key = cfg['openai']['key']
             else:
                 print("请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
+
+        chatGPT_configs = cfg['openai']['chatGPTConfigs']
+        print(f'加载ChatGPTConfigs: {chatGPT_configs}')
         self.chatGPT_configs = chatGPT_configs
+        self.openai_configs = cfg['openai']
         global inst
         inst = self
     
@@ -28,10 +32,11 @@ class ChatGPT:
         except(openai.error.InvalidRequestError) as e:
             raise PromptExceededError("OpenAI遇到错误：输入了一个不合法的请求。\n"+str(e))
 
-        return response["choices"][0]["text"]
-    
-    def newSession(self):
-        return openai.Session()
+        # print(response['usage'])
+        return response["choices"][0]["text"], response['usage']['total_tokens']
+
+    def getConfigs(self):
+        return self.openai_configs
 
 def getInst() -> ChatGPT:
     global inst
