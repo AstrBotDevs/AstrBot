@@ -33,8 +33,8 @@
 ### 安装第三方库
 
 使用Python的pip工具安装
-`qq-botpy` （QQ频道官方Python SDK）
-`openai` (OpenAI 库)
+- `qq-botpy` （QQ频道官方Python SDK）
+- `openai` (OpenAI 库)
 
 > ⚠注意，由于qq-botpy需要运行在`Python 3.8+`的版本上，因此本项目也需要在此之上运行
 
