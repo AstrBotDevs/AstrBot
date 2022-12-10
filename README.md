@@ -1,5 +1,15 @@
 # 基于OpenAI ChatGPT的QQ频道机器人🤖
 
+## ⭐体验
+欢迎添加QQ：905617992
+
+或者扫码直接加入QQ频道
+
+<img src="screenshots/5.jpg" width = "200"/>
+
+↓ **演示截图**在文档最后 ↓
+
+
 ## ⭐功能：
 
 ### ✨基本功能
@@ -28,3 +38,8 @@
 然后在configs/config.yaml下进行配置
 
 然后启动main.py就行！
+
+## DEMO
+![1.jpg](screenshots/1.jpg)
+![3.jpg](screenshots/3.jpg)
+![2.jpg](screenshots/2.jpg)
