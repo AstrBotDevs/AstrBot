@@ -1,0 +1,3 @@
+class PromptExceededError(Exception):
+    
+    pass
