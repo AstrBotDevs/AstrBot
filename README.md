@@ -9,7 +9,6 @@
 
 ↓ **演示截图**在文档最后 ↓
 
-
 ## ⭐功能：
 
 ### ✨基本功能
@@ -30,11 +29,18 @@
 - ...
 
 ## 使用方法：
+## 安装第三方库
+使用Python的pip工具安装
+忘记在README.md上说明了()
+`qq-botpy` （QQ频道官方Python SDK）
+`openai` (OpenAI 库)
+> ⚠注意，由于qq-botpy需要运行在`Python 3.8+`的版本上，因此本项目也需要在此之上运行
+
+## 配置各种Key
 首先你需要获得
 - OpenAI的key [OpenAI](https://beta.openai.com/)
 - QQ开放平台下QQ频道机器人的token和appid [QQ开放平台](https://q.qq.com/)
 - 一个QQ频道机器人（很容易创建~）
-
 然后在configs/config.yaml下进行配置
 
 然后启动main.py就行！
