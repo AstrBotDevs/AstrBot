@@ -34,12 +34,20 @@ class botClient(botpy.Client):
                 session_dict[session_id] = []
                 await message.reply(content=f"{message.member.nick} 的历史记录重置成功")
                 return
-            if qq_msg == "/his":
-                p = get_prompts_by_cache_list(session_dict[session_id], divide=True)
-                await message.reply(content=f"{message.member.nick} 的历史记录如下：\n{p}")
+            if qq_msg[:4] == "/his":
+
+                #分页，每页5条
+                size_per_page = 3
+                page = 1
+                if qq_msg[5:]:
+                    page = int(qq_msg[5:])
+                l = session_dict[session_id]
+                max_page = len(l)//size_per_page + 1 if len(l)%size_per_page != 0 else len(l)//size_per_page
+                p = get_prompts_by_cache_list(session_dict[session_id], divide=True, paging=True, size=size_per_page, page=page)
+                await message.reply(content=f"{message.member.nick} 的历史记录如下：\n{p}\n第{page}页 | 共{max_page}页")
                 return
             if qq_msg == "/token":
-                await message.reply(content=f"{message.member.nick} 会话的token数: {get_user_usage_tokens(session_dict[session_id])}")
+                await message.reply(content=f"{message.member.nick} 会话的token数: {get_user_usage_tokens(session_dict[session_id])}\n系统最大缓存token数: {max_tokens}")
                 return
 
             if session_id not in session_dict:
@@ -124,8 +132,16 @@ async def get_chatGPT_response(prompts_str):
     chatgpt_res = res.strip()
     return res, usage
 
-def get_prompts_by_cache_list(cache_prompt_list, divide=False):
+def get_prompts_by_cache_list(cache_prompt_list, divide=False, paging=False, size=5, page=1):
     prompts = ""
+    if paging:
+        page_begin = (page-1)*size
+        page_end = page*size
+        if page_begin < 0:
+            page_begin = 0
+        if page_end > len(cache_prompt_list):
+            page_end = len(cache_prompt_list)
+        cache_prompt_list = cache_prompt_list[page_begin:page_end]
     for item in cache_prompt_list:
         prompts += str(item['prompt'])
         if divide:
