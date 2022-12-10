@@ -23,16 +23,13 @@ class botClient(botpy.Client):
             qq_msg = result.group(1).strip()
 
         # 检测用户id，返回对应缓存的prompt
-        session_id_pattern = r"<@!\d+>"
-        session_id_result = re.search(session_id_pattern, message.content)
-        if session_id_result:
-            # 匹配出sessionid
-            session_id = session_id_result.group(0)
-
+        # session_id_pattern = r"<@!\d+>"
+        # session_id_result = re.search(session_id_pattern, message.content)
+        session_id = message.author.id
+        if session_id:
             if qq_msg == "/reset":
-                session_id = session_id_result.group(0)
                 session_dict[session_id] = []
-                await message.reply(content=f"{message.member.nick} 的历史记录重置成功")
+                await message.reply(content=f"{message.member.nick}(id: {session_id}) 的历史记录重置成功")
                 return
             if qq_msg[:4] == "/his":
 
