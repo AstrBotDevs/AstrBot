@@ -120,13 +120,16 @@ async def oper_msg(message, at=False):
         try:
             chatgpt_res, current_usage_tokens = await get_chatGPT_response(cache_prompt)
         except (PromptExceededError) as e:
-            print(e)
+            print("出现token超限, 清空对应缓存")
             
             # 超过4097tokens错误，清空缓存
             session_dict[session_id] = []
             cache_data_list = []
             cache_prompt = "Human: "+ qq_msg + "\nAI: "
             chatgpt_res, current_usage_tokens = await get_chatGPT_response(cache_prompt)
+        except (BaseException) as e:
+            print("OpenAI API错误:(")
+            await message.reply(content=f"OpenAI API错误:( 原因如下：\n{str(e)}")
 
         # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens
         # print("current_usage_tokens: ", current_usage_tokens)
@@ -179,4 +182,11 @@ async def oper_msg(message, at=False):
         chatgpt_res = chatgpt_res.replace(".", " . ")
 
         # 发送qq信息
-        await message.reply(content=f"[ChatGPT]{chatgpt_res}")
+        try:
+            await message.reply(content=f"[ChatGPT]{chatgpt_res}")
+        except BaseException as e:
+            print("QQ频道API错误：\n"+str(e))
+            f_res = ""
+            for t in chatgpt_res:
+                f_res += t + ' '
+            await message.reply(content=f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
