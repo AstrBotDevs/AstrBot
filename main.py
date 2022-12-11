@@ -2,7 +2,7 @@ import cores.qqbot.core as qqBot
 from cores.openai.core import ChatGPT
 import asyncio
 import yaml
-from cores.database.conn import dbConn
+# from cores.database.conn import dbConn
 def main():
     # 读取参数
     # with open('configs/config.yaml', 'r', encoding='utf-8') as f:
