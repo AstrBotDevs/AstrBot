@@ -38,10 +38,10 @@
 
 - 获得 OpenAI的key [OpenAI](https://beta.openai.com/)
 - 获得 QQ开放平台下QQ频道机器人的token和appid [QQ开放平台](https://q.qq.com/)，一个QQ频道机器人（很容易创建~）
--在configs/config.yaml下进行配置
+- 在configs/config.yaml下进行配置
 
 ### 启动
--启动main.py
+- 启动main.py
 
 ## DEMO
 ![1.jpg](screenshots/1.jpg)
