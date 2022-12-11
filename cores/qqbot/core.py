@@ -18,7 +18,6 @@ class botClient(botpy.Client):
         await oper_msg(message=message, at=True)
 
     async def on_direct_message_create(self, message: DirectMessage):
-        print(message.content)
         await oper_msg(message=message, at=False)
 
 def initBot(chatgpt_inst):
@@ -81,6 +80,8 @@ async def oper_msg(message, at=False):
         result = re.search(pattern, message.content)
         if result:
             qq_msg = result.group(1).strip()
+    else:
+        qq_msg = message.content
 
     # 检测用户id，返回对应缓存的prompt
     # session_id_pattern = r"<@!\d+>"
