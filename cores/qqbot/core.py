@@ -9,7 +9,7 @@ from botpy.message import DirectMessage
 import json
 
 chatgpt = ""
-db = ""
+# db = ""
 session_dict = {}
 max_tokens = 2000
 
@@ -21,11 +21,11 @@ class botClient(botpy.Client):
         print(message.content)
         await oper_msg(message=message, at=False)
 
-def initBot(chatgpt_inst, db_inst):
+def initBot(chatgpt_inst):
     global chatgpt
     chatgpt = chatgpt_inst
-    global db
-    db = db_inst
+    # global db
+    # db = db_inst
     global max_tokens
     max_tokens = int(chatgpt_inst.getConfigs()['total_tokens_limit'])
     with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
@@ -158,6 +158,20 @@ async def oper_msg(message, at=False):
         # print(single_record)
         cache_data_list.append(single_record)
 
+        # 写入数据库
+        # try:
+        #     data = {
+        #         "data": cache_data_list
+        #     }
+        #     data_str = json.dumps(data)
+        #     if len(cache_data_list) > 1:
+        #         db.update_session(session_id, data_str)
+        #     else:
+        #         db.insert_session(session_id, data_str)
+        # except Exception as e:
+        #     print(e)
+        #     print("数据库写入失败")
+        
         session_dict[session_id] = cache_data_list
 
         # #检测是否存在url，如果存在，则去除url 防止被qq频道过滤
