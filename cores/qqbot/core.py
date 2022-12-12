@@ -12,6 +12,15 @@ chatgpt = ""
 # db = ""
 session_dict = {}
 max_tokens = 2000
+version = "1.3"
+gpt_config = {
+    'engine': '',
+    'temperature': '',
+    'top_p': '',
+    'frequency_penalty': '',
+    'presence_penalty': '',
+    'max_tokens': '',
+}
 
 class botClient(botpy.Client):
     async def on_at_message_create(self, message: Message):
@@ -27,6 +36,9 @@ def initBot(chatgpt_inst):
     # db = db_inst
     global max_tokens
     max_tokens = int(chatgpt_inst.getConfigs()['total_tokens_limit'])
+    global gpt_config
+    gpt_config = chatgpt_inst.getConfigs()
+    gpt_config['key'] = "***"
     with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
         if cfg['qqbot']['appid'] != '' or cfg['qqbot']['token'] != '':
@@ -102,11 +114,21 @@ async def oper_msg(message, at=False):
             l = session_dict[session_id]
             max_page = len(l)//size_per_page + 1 if len(l)%size_per_page != 0 else len(l)//size_per_page
             p = get_prompts_by_cache_list(session_dict[session_id], divide=True, paging=True, size=size_per_page, page=page)
-            await message.reply(content=f"{message.member.nick} 的历史记录如下：\n{p}\n第{page}页 | 共{max_page}页")
+            await message.reply(content=f"{message.member.nick} 的历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页")
             return
         if qq_msg == "/token":
             await message.reply(content=f"{message.member.nick} 会话的token数: {get_user_usage_tokens(session_dict[session_id])}\n系统最大缓存token数: {max_tokens}")
             return
+        if qq_msg == "/status":
+            chatgpt_cfg_str = ""
+            for k, v in gpt_config.items():
+                if k == "key":
+                    v = "***"
+                chatgpt_cfg_str += f"{k}: {v}"
+
+            await message.reply(content=f"ChatGPT配置:\n - {chatgpt_cfg_str}\n QQChannelChatGPT 版本: {version}")
+            return
+
 
         if session_id not in session_dict:
             session_dict[session_id] = []
@@ -129,7 +151,7 @@ async def oper_msg(message, at=False):
             chatgpt_res, current_usage_tokens = await get_chatGPT_response(cache_prompt)
         except (BaseException) as e:
             print("OpenAI API错误:(")
-            await message.reply(content=f"OpenAI API错误:( 原因如下：\n{str(e)}")
+            await message.reply(content=f"OpenAI API错误:( 原因如下：\n{str(e)} \n*可前往github . com/Soulter/QQChannelChatGPT进行反馈")
 
         # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens
         # print("current_usage_tokens: ", current_usage_tokens)
@@ -185,7 +207,7 @@ async def oper_msg(message, at=False):
         try:
             await message.reply(content=f"[ChatGPT]{chatgpt_res}")
         except BaseException as e:
-            print("QQ频道API错误：\n"+str(e))
+            print("QQ频道API错误: \n"+str(e))
             f_res = ""
             for t in chatgpt_res:
                 f_res += t + ' '
