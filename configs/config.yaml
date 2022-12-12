@@ -7,16 +7,8 @@ openai:
     top_p: 1
     frequency_penalty: 0.4
     presence_penalty: 0.3
-  total_tokens_limit: 1000 #这是默认的单个用户最大缓存token数。超过了这个数字会自动截断最早的prompt记录.
+  total_tokens_limit: 2000
 
 qqbot:
   appid: 
   token: 
-
-# 未实现
-database:
-  url: 
-  port: 
-  user: 
-  password: 
-  db: 
