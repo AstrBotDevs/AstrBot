@@ -5,6 +5,8 @@
 
 <img src="screenshots/5.jpg" width = "200"/>
 
+**机器人已上线，可以把↑频道内的ChatGPTBot机器人拉到自己频道去了~**
+
 ↓ **演示截图**在文档最后 ↓
 
 欢迎Star本项目
