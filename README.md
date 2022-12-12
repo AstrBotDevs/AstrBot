@@ -1,4 +1,4 @@
-# 基于OpenAI ChatGPT的QQ频道机器人🤖
+# 基于OpenAI ChatGPT的QQ频道机器人
 
 ## ⭐体验
 欢迎添加QQ：905617992
