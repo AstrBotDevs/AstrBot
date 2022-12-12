@@ -189,17 +189,30 @@ async def oper_msg(message, at=False):
             return
         
         if qq_msg == "/count":
-            f = open("./configs/stat", "r", encoding="utf-8")
-            fjson = json.loads(f.read())
-            f.close()
-            guild_count = 0
-            guild_msg_count = 0
-            guild_direct_msg_count = 0
-            for k,v in fjson.items():
-                guild_count += 1
-                guild_msg_count += v['count']
-                guild_direct_msg_count += v['direct_count']
-            await message.reply(content=f"历史会话（人）数: {len(session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}")
+            try:
+                f = open("./configs/stat", "r", encoding="utf-8")
+                fjson = json.loads(f.read())
+                f.close()
+                guild_count = 0
+                guild_msg_count = 0
+                guild_direct_msg_count = 0
+
+                for k,v in fjson.items():
+                    guild_count += 1
+                    guild_msg_count += v['count']
+                    guild_direct_msg_count += v['direct_count']
+                
+                session_count = 0
+
+                f = open("./configs/session", "r", encoding="utf-8")
+                fjson = json.loads(f.read())
+                f.close()
+                for k,v in fjson.items():
+                    session_count += 1
+            except:
+                pass
+
+            await message.reply(content=f"当前会话数: {len(session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}\n历史会话数: {session_count}")
             return
 
         if qq_msg == "/help":
@@ -208,6 +221,21 @@ async def oper_msg(message, at=False):
 
         if session_id not in session_dict:
             session_dict[session_id] = []
+
+            fjson = {}
+            try:
+                f = open("./configs/session", "r", encoding="utf-8")
+                fjson = json.loads(f.read())
+                f.close()
+            except:
+                pass
+            finally:
+                fjson[session_id] = 'true'
+                f = open("./configs/session", "w", encoding="utf-8")
+                f.write(json.dumps(fjson))
+                f.flush()
+                f.close()
+
 
         # 获取缓存
         cache_prompt = ''
