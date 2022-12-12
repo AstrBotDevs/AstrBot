@@ -199,7 +199,7 @@ async def oper_msg(message, at=False):
                 guild_count += 1
                 guild_msg_count += v['count']
                 guild_direct_msg_count += v['direct_count']
-            await message.reply(content=f"当前会话数: {len(session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}")
+            await message.reply(content=f"历史会话（人）数: {len(session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}")
             return
 
         if qq_msg == "/help":
