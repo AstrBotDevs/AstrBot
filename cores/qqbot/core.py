@@ -247,7 +247,6 @@ async def oper_msg(message, at=False):
             chatgpt_res, current_usage_tokens = await get_chatGPT_response(cache_prompt)
         except (PromptExceededError) as e:
             print("出现token超限, 清空对应缓存")
-            
             # 超过4097tokens错误，清空缓存
             session_dict[session_id] = []
             cache_data_list = []
@@ -265,6 +264,8 @@ async def oper_msg(message, at=False):
             cache_list = session_dict[session_id]
             index = 0
             while t > max_tokens:
+                if index >= len(cache_list):
+                    break
                 t -= int(cache_list[index]['single_tokens'])
                 index += 1
             session_dict[session_id] = cache_list[index:]
