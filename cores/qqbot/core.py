@@ -24,9 +24,11 @@ gpt_config = {
 count = {
 }
 stat_file = ''
+uniqueSession = False
 
 class botClient(botpy.Client):
     async def on_at_message_create(self, message: Message):
+        
         global stat_file
         try:
             if str(message.guild_id) not in count:
@@ -89,8 +91,14 @@ def initBot(chatgpt_inst):
         except BaseException:
             pass
 
+    global uniqueSession
+
     with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
+        if cfg['qqbot']['uniqueSession'] == 'true':
+            uniqueSession = True
+        else:
+            uniqueSession = False
         if cfg['qqbot']['appid'] != '' or cfg['qqbot']['token'] != '':
             print("读取QQBot appid token 成功")
             intents = botpy.Intents(public_guild_messages=True, direct_message=True) 
@@ -145,8 +153,15 @@ async def oper_msg(message, at=False):
             qq_msg = result.group(1).strip()
     else:
         qq_msg = message.content
-
-    session_id = message.author.id
+    
+    user_id = message.author.id
+    if not at:
+        session_id = message.author.id
+    else:
+        if uniqueSession:
+            session_id = message.author.id
+        else:
+            session_id = message.guild_id
     if session_id:
         if qq_msg == "/reset":
             session_dict[session_id] = []
@@ -218,7 +233,7 @@ async def oper_msg(message, at=False):
         if qq_msg == "/help":
             await message.reply(content=f"请联系频道管理员或者前往github(仓库名: QQChannelChatGPT)提issue~")
             return
-
+        
         if session_id not in session_dict:
             session_dict[session_id] = []
 
