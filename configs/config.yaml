@@ -2,13 +2,20 @@ openai:
   key: 
   chatGPTConfigs:
     engine: text-davinci-003
-    max_tokens: 1024
+    max_tokens: 800
     temperature: 0.9
     top_p: 1
     frequency_penalty: 0.4
     presence_penalty: 0.3
-  total_tokens_limit: 2000
+  total_tokens_limit: 700
+
 
 qqbot:
   appid: 
   token: 
+
+# 设置是否一个人一个会话
+uniqueSessionMode: false
+
+# QChannelBot 的版本
+version: 1.4

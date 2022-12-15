@@ -28,7 +28,6 @@ uniqueSession = False
 
 class botClient(botpy.Client):
     async def on_at_message_create(self, message: Message):
-        
         global stat_file
         try:
             if str(message.guild_id) not in count:
@@ -95,7 +94,7 @@ def initBot(chatgpt_inst):
 
     with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
-        if cfg['qqbot']['uniqueSession'] == 'true':
+        if 'uniqueSessionMode' in cfg['qqbot'] and cfg['qqbot']['uniqueSessionMode'] == 'true':
             uniqueSession = True
         else:
             uniqueSession = False
@@ -163,32 +162,41 @@ async def oper_msg(message, at=False):
         else:
             session_id = message.guild_id
     if session_id:
+        name = ''
+        if uniqueSession:
+            name = message.member.nick
+        else:
+            name = "频道"
         if qq_msg == "/reset":
+
             session_dict[session_id] = []
             if at:
-                await message.reply(content=f"{message.member.nick}(id: {session_id}) 的历史记录重置成功")
+                await message.reply(content=f"{name}(id: {session_id}) 的历史记录重置成功")
             else:
                 await message.reply(content=f"你的历史记录重置成功")
             return
         if qq_msg[:4] == "/his":
-
             #分页，每页5条
             size_per_page = 3
             page = 1
             if qq_msg[5:]:
                 page = int(qq_msg[5:])
+            # 检查是否有过历史记录
+            if session_id not in session_dict:
+                await message.reply(content=f"{name} 的历史记录为空")
+                return
             l = session_dict[session_id]
             max_page = len(l)//size_per_page + 1 if len(l)%size_per_page != 0 else len(l)//size_per_page
             p = get_prompts_by_cache_list(session_dict[session_id], divide=True, paging=True, size=size_per_page, page=page)
             if at:
-                await message.reply(content=f"{message.member.nick} 的历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页")
+                await message.reply(content=f"{name} 的历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页")
             else:
                 await message.reply(content=f"历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页")
 
             return
         if qq_msg == "/token":
             if at:
-                await message.reply(content=f"{message.member.nick} 会话的token数: {get_user_usage_tokens(session_dict[session_id])}\n系统最大缓存token数: {max_tokens}")
+                await message.reply(content=f"{name} 会话的token数: {get_user_usage_tokens(session_dict[session_id])}\n系统最大缓存token数: {max_tokens}")
             else:
                 await message.reply(content=f"会话的token数: {get_user_usage_tokens(session_dict[session_id])}\n系统最大缓存token数: {max_tokens}")
 
