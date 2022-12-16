@@ -22,8 +22,8 @@ class ChatGPT:
         global inst
         inst = self
     
-    async def chat(self, prompt):
-        print("[ChatGPT] 接收到prompt")
+    def chat(self, prompt):
+        print("[OpenAI API]收到")
         try:
             response = openai.Completion.create(
                 prompt=prompt,
@@ -33,7 +33,8 @@ class ChatGPT:
             raise PromptExceededError("OpenAI遇到错误：输入了一个不合法的请求。\n"+str(e))
 
         # print(response['usage'])
-        return response["choices"][0]["text"], response['usage']['total_tokens']
+        print("[ChatGPT] "+response["choices"][0]["text"])
+        return response["choices"][0]["text"].strip(), response['usage']['total_tokens']
 
     def getConfigs(self):
         return self.openai_configs
