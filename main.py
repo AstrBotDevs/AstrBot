@@ -2,6 +2,7 @@ import cores.qqbot.core as qqBot
 from cores.openai.core import ChatGPT
 import asyncio
 import yaml
+import threading
 # from cores.database.conn import dbConn
 def main():
     # 读取参数
@@ -15,5 +16,8 @@ def main():
     # #执行qqBot
     # qqBot.initBot(chatgpt, db)
     qqBot.initBot(chatgpt)
+
 if __name__ == "__main__":
+    # qqbot_thread = threading.Thread(target=main)
+    # qqbot_thread.start()
     main()

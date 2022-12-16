@@ -8,6 +8,8 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import asyncio
+import time
+from cores.database.conn import dbConn
 
 client = ''
 # executor = ThreadPoolExecutor(max_workers=10)
@@ -77,17 +79,46 @@ def toggle_count(at: bool, message):
     except BaseException:
         pass
 
+# 转储历史记录的定时器 Soulter
+def dump_history():
+    time.sleep(10)
+    global session_dict
+    db = dbConn()
+    while True:
+        try:
+            print("转储历史记录...")
+            for key in session_dict:
+                # print("TEST: "+str(db.get_session(key)))
+                data = session_dict[key]
+                data_json = {
+                    'data': data
+                }
+                if db.check_session(key):
+                    db.update_session(key, json.dumps(data_json))
+                else:
+                    db.insert_session(key, json.dumps(data_json))
+            print("转储历史记录完毕")
+        except BaseException as e:
+            print(e)
+        # 每隔10分钟转储一次
+        time.sleep(10)
 
 def initBot(chatgpt_inst):
     global chatgpt
     chatgpt = chatgpt_inst
-    # global db
-    # db = db_inst
+
     global max_tokens
     max_tokens = int(chatgpt_inst.getConfigs()['total_tokens_limit'])
     global gpt_config
     gpt_config = chatgpt_inst.getConfigs()
     gpt_config['key'] = "***"
+    global version
+
+    # 读取历史记录 Soulter
+    db1 = dbConn()
+    for session in db1.get_all_session():
+        session_dict[session[0]] = json.loads(session[1])['data']
+    print("历史记录读取完毕")
 
     # 读统计信息
     global stat_file
@@ -102,6 +133,9 @@ def initBot(chatgpt_inst):
         except BaseException:
             pass
 
+    # 创建转储定时器线程
+    threading.Thread(target=dump_history, daemon=True).start()
+
     global uniqueSession
     with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
@@ -109,6 +143,8 @@ def initBot(chatgpt_inst):
             uniqueSession = True
         else:
             uniqueSession = False
+        if 'version' in cfg:
+            version = cfg['version']
         if cfg['qqbot']['appid'] != '' or cfg['qqbot']['token'] != '':
             print("读取QQBot appid token 成功")
             intents = botpy.Intents(public_guild_messages=True, direct_message=True) 
@@ -286,7 +322,9 @@ def oper_msg(message, at=False, loop=None):
     cache_prompt += "Human: "+ qq_msg + "\nAI: "
     # 请求chatGPT获得结果
     try:
-        chatgpt_res, current_usage_tokens = get_chatGPT_response(cache_prompt)
+        chatgpt_res="test"
+        current_usage_tokens = 0
+        # chatgpt_res, current_usage_tokens = get_chatGPT_response(cache_prompt)
     except (PromptExceededError) as e:
         print("出现token超限, 清空对应缓存")
         # 超过4097tokens错误，清空缓存

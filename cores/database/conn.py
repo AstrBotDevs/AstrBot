@@ -1,24 +1,86 @@
-import pymysql
+import sqlite3
 import yaml
 
 # TODO: 数据库缓存prompt
 
 class dbConn():
     def __init__(self):
-        with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
-            cfg = yaml.safe_load(ymlfile)
-            if cfg['database']['host'] != '' or cfg['database']['port'] or cfg['database']['user'] != '' or cfg['database']['password'] != '' or cfg['database']['db'] != '':
-                print("读取数据库配置成功")
-                self.db = pymysql.connect(
-                    host=cfg['database']['host'],
-                    port=cfg['database']['port'],
-                    user=cfg['database']['user'],
-                    password=cfg['database']['password'],
-                    db=cfg['database']['db'],
-                    charset='utf8mb4',
-                )
-            else:
-                raise BaseException("请在config中完善你的数据库配置")
+        # 读取参数,并支持中文
+        conn = sqlite3.connect("data.db")
+        conn.text_factory=str
+        self.conn = conn
+        c = conn.cursor()
+        c.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS tb_session(
+                qq_id   VARCHAR(32) PRIMARY KEY,
+                history TEXT
+            )
+            '''
+        )
+        
+        conn.commit()
 
-    def getCursor(self):
-        return self.db.cursor()
+    def insert_session(self, qq_id, history):
+        conn = self.conn
+        c = conn.cursor()
+        c.execute(
+            '''
+            INSERT INTO tb_session(qq_id, history) VALUES (?, ?)
+            ''', (qq_id, history)
+        )
+        conn.commit()
+
+    def update_session(self, qq_id, history):
+        conn = self.conn
+        c = conn.cursor()
+        c.execute(
+            '''
+            UPDATE tb_session SET history = ? WHERE qq_id = ?
+            ''', (history, qq_id)
+        )
+        conn.commit()
+
+    def get_session(self, qq_id):
+        conn = self.conn
+        c = conn.cursor()
+        c.execute(
+            '''
+            SELECT * FROM tb_session WHERE qq_id = ?
+            ''', (qq_id, )
+        )
+        return c.fetchone()
+    
+    def get_all_session(self):
+        conn = self.conn
+        c = conn.cursor()
+        c.execute(
+            '''
+            SELECT * FROM tb_session
+            '''
+        )
+        return c.fetchall()
+    
+    def check_session(self, qq_id):
+        conn = self.conn
+        c = conn.cursor()
+        c.execute(
+            '''
+            SELECT * FROM tb_session WHERE qq_id = ?
+            ''', (qq_id, )
+        )
+        return c.fetchone() is not None
+
+    def delete_session(self, qq_id):
+        conn = self.conn
+        c = conn.cursor()
+        c.execute(
+            '''
+            DELETE FROM tb_session WHERE qq_id = ?
+            ''', (qq_id, )
+        )
+        conn.commit()
+
+    def close(self):
+        self.conn.close()
+    
