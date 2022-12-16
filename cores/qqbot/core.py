@@ -334,9 +334,7 @@ def oper_msg(message, at=False, loop=None):
     cache_prompt += "Human: "+ qq_msg + "\nAI: "
     # 请求chatGPT获得结果
     try:
-        chatgpt_res="test"
-        current_usage_tokens = 0
-        # chatgpt_res, current_usage_tokens = get_chatGPT_response(cache_prompt)
+        chatgpt_res, current_usage_tokens = get_chatGPT_response(cache_prompt)
     except (PromptExceededError) as e:
         print("出现token超限, 清空对应缓存")
         # 超过4097tokens错误，清空缓存
