@@ -3,13 +3,11 @@ openai:
   chatGPTConfigs:
     engine: text-davinci-003
     max_tokens: 800
-    temperature: 0.9
+    temperature: 0.8
     top_p: 1
     frequency_penalty: 0.4
     presence_penalty: 0.3
   total_tokens_limit: 700
-
-
 qqbot:
   appid: 
   token: 
@@ -18,4 +16,7 @@ qqbot:
 uniqueSessionMode: false
 
 # QChannelBot 的版本
-version: 1.4
+version: 1.6 beta
+
+# [Beta] 转储历史记录时间间隔(分钟)
+dump_history_interval: 10

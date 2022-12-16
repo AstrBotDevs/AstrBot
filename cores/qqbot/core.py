@@ -5,12 +5,13 @@ import re
 from util.errors.errors import PromptExceededError
 from botpy.message import DirectMessage
 import json
-from concurrent.futures import ThreadPoolExecutor
+# from concurrent.futures import ThreadPoolExecutor
 import threading
 import asyncio
 import time
 from cores.database.conn import dbConn
 
+history_dump_interval = 10
 client = ''
 # executor = ThreadPoolExecutor(max_workers=10)
 # ChatGPT的实例
@@ -53,11 +54,9 @@ class botClient(botpy.Client):
     # 收到私聊消息
     async def on_direct_message_create(self, message: DirectMessage):
         toggle_count(at=False, message=message)
-        print("收到私聊消息")
         # executor.submit(oper_msg, message, True)
         # await oper_msg(message=message, at=False)
         new_sub_thread(oper_msg, (message, False))
-        print("私聊消息处理完毕")
 
 # 写入统计信息
 def toggle_count(at: bool, message):
@@ -79,10 +78,10 @@ def toggle_count(at: bool, message):
     except BaseException:
         pass
 
-# 转储历史记录的定时器 Soulter
+# 转储历史记录的定时器~ Soulter
 def dump_history():
     time.sleep(10)
-    global session_dict
+    global session_dict, history_dump_interval
     db = dbConn()
     while True:
         try:
@@ -101,7 +100,7 @@ def dump_history():
         except BaseException as e:
             print(e)
         # 每隔10分钟转储一次
-        time.sleep(10)
+        time.sleep(10*history_dump_interval)
 
 def initBot(chatgpt_inst):
     global chatgpt
@@ -115,10 +114,13 @@ def initBot(chatgpt_inst):
     global version
 
     # 读取历史记录 Soulter
-    db1 = dbConn()
-    for session in db1.get_all_session():
-        session_dict[session[0]] = json.loads(session[1])['data']
-    print("历史记录读取完毕")
+    try:
+        db1 = dbConn()
+        for session in db1.get_all_session():
+            session_dict[session[0]] = json.loads(session[1])['data']
+        print("历史记录读取成功了喵")
+    except BaseException as e:
+        print("历史记录读取失败: " + str(e))
 
     # 读统计信息
     global stat_file
@@ -136,17 +138,27 @@ def initBot(chatgpt_inst):
     # 创建转储定时器线程
     threading.Thread(target=dump_history, daemon=True).start()
 
-    global uniqueSession
+    global uniqueSession, history_dump_interval
     with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
-        if 'uniqueSessionMode' in cfg['qqbot'] and cfg['qqbot']['uniqueSessionMode'] == 'true':
-            uniqueSession = True
-        else:
-            uniqueSession = False
-        if 'version' in cfg:
-            version = cfg['version']
+
+        try:
+            if 'uniqueSessionMode' in cfg['qqbot'] and cfg['qqbot']['uniqueSessionMode'] == 'true':
+                uniqueSession = True
+            else:
+                uniqueSession = False
+            print("独立会话模式为" + str(uniqueSession))
+            if 'version' in cfg:
+                version = cfg['version']
+                print("当前版本为" + str(version))
+            if 'dump_history_interval' in cfg:
+                history_dump_interval = int(cfg['dump_history_interval'])
+                print("历史记录转储间隔为" + str(history_dump_interval) + "分钟")
+        except BaseException:
+            print("读取uniqueSessionMode/version/dump_history_interval配置文件失败, 使用默认值喵~")
+
         if cfg['qqbot']['appid'] != '' or cfg['qqbot']['token'] != '':
-            print("读取QQBot appid token 成功")
+            print("读取QQBot appid,token 成功")
             intents = botpy.Intents(public_guild_messages=True, direct_message=True) 
             global client
             client = botClient(intents=intents)
