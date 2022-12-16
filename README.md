@@ -14,10 +14,53 @@
 ## ⭐功能：
 
 ### 基本功能
-- 可以在频道内@或者私信机器人
-- 缓存每个用户与ChatGPT的会话
-- 可在`configs/config.yaml`下配置`total_tokens_limit`来指定对每个用户的最大缓存tokens
-- 统计频道、会话、消息数量
+<details> 
+ <summary>✅ 回复符合上下文</summary>
+
+   -  程序向API发送近多次对话内容，模型根据上下文生成回复
+
+   -  你可在`configs/config.yaml`中修改`total_token_limit`来近似控制缓存大小。
+ </details>
+
+<details> 
+ <summary>✅ 支持统计频道、消息数量等信息</summary> 
+
+   -  实现了简单的统计功能
+
+ </details>
+
+<details> 
+ <summary>✅ 多并发处理，回复速度快</summary> 
+  
+   -  使用了协程，理论最高可以支持每个子频道每秒回复5条信息
+  
+ </details>
+
+<details>
+ <summary>✅ 持久化转储历史记录，重启不丢失</summary> 
+
+   -  使用内置的sqlite数据库存储历史记录到本地
+
+   -  方式为定时转储，可在`config.yaml`下修改`dump_history_interval`来修改间隔时间，单位为分钟。
+  
+ </details>
+
+<details> 
+ <summary>✅ 支持指令控制</summary> 
+  
+   -  详见下方`指令功能`
+  
+ </details>
+
+<details>
+<summary>✅ 官方API，稳定</summary>
+
+   -  不使用ChatGPT逆向接口，而使用官方API接口，稳定方便。
+
+   -  QQ频道机器人框架为QQ官方开源的框架，稳定。
+
+</details>
+
 > 关于token：token就相当于是AI中的单词数（但是不等于单词数），`text-davinci-003`模型中最大可以支持`4097`个token。在发送信息时，这个机器人会将用户的历史聊天记录打包发送给ChatGPT，因此，`token`也会相应的累加，为了保证聊天的上下文的逻辑性，就有了缓存token。
 ### 指令功能
 需要先`@`机器人之后再输入指令
