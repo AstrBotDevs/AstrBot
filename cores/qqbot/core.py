@@ -85,7 +85,7 @@ def dump_history():
     db = dbConn()
     while True:
         try:
-            print("转储历史记录...")
+            # print("转储历史记录...")
             for key in session_dict:
                 # print("TEST: "+str(db.get_session(key)))
                 data = session_dict[key]
@@ -96,7 +96,7 @@ def dump_history():
                     db.update_session(key, json.dumps(data_json))
                 else:
                     db.insert_session(key, json.dumps(data_json))
-            print("转储历史记录完毕")
+            # print("转储历史记录完毕")
         except BaseException as e:
             print(e)
         # 每隔10分钟转储一次
@@ -278,7 +278,24 @@ def oper_msg(message, at=False, loop=None):
             if k == "key":
                 continue
             chatgpt_cfg_str += f"{k}: {v}"
-        send_qq_msg(message, f"ChatGPT配置:\n - {chatgpt_cfg_str}\n QQChannelChatGPT 版本: {version}")
+        
+        key_stat = chatgpt.get_key_stat()
+        key_list = chatgpt.get_key_list()
+        chatgpt_cfg_str += '\n\n配额使用情况:\n'
+        index = 1
+        max = 900000
+        for key in key_list:
+            if key in key_stat:
+                if key_stat[key]['exceed']:
+                    chatgpt_cfg_str += f"#{index}: 已寄\n"
+                    index += 1
+                    continue
+                # chatgpt_cfg_str += f"#{index}: {round(key_stat[key]['used']/max*100, 2)}%\n"
+                chatgpt_cfg_str += f"#{index}: {key_stat[key]['used']}/{max}\n"
+                index += 1
+        chatgpt_cfg_str += '\n注: 配额情况在某些极端情况下具有一定的不准确性。\n'
+        print("生成...")
+        send_qq_msg(message, f"ChatGPT配置:\n {chatgpt_cfg_str}\n QQChannelChatGPT 版本: {version}")
         return
     if qq_msg == "/count":
         try:

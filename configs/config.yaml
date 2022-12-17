@@ -1,5 +1,11 @@
 openai:
+  # 注意：在1.7版本已支持多key自动切换，方法：
+  # key:
+  #   - xxxxx
+  #   - xxxxxx
+  # 在下方非注释的地方使用以上格式
   key: 
+    - 
   chatGPTConfigs:
     engine: text-davinci-003
     max_tokens: 800
@@ -8,6 +14,7 @@ openai:
     frequency_penalty: 0.4
     presence_penalty: 0.3
   total_tokens_limit: 700
+
 qqbot:
   appid: 
   token: 
@@ -16,7 +23,7 @@ qqbot:
 uniqueSessionMode: false
 
 # QChannelBot 的版本
-version: 1.6 beta
+version: 1.7 beta
 
 # [Beta] 转储历史记录时间间隔(分钟)
 dump_history_interval: 10
