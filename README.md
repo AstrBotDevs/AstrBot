@@ -20,9 +20,17 @@
    -  程序向API发送近多次对话内容，模型根据上下文生成回复
 
    -  你可在`configs/config.yaml`中修改`total_token_limit`来近似控制缓存大小。
- </details>
+ </details> 
 
 <details> 
+ <summary>✅ 超额自动切换</summary>
+
+   -  超额时，程序自动切换openai的key，方便快捷
+   
+</details>
+
+<details> 
+
  <summary>✅ 支持统计频道、消息数量等信息</summary> 
 
    -  实现了简单的统计功能
