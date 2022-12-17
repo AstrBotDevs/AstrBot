@@ -37,9 +37,9 @@ class ChatGPT:
                             print(f"Key: {key} 已超额")
                             continue
                         else:
-                            openai.api_key = key
-                            print(f"使用Key: {key}, 已使用token: {self.key_stat[key]['used']}")
-                            break
+                            if openai.api_key is None:
+                                openai.api_key = key
+                                print(f"使用Key: {key}, 已使用token: {self.key_stat[key]['used']}")
             self.save_key_record()
 
         chatGPT_configs = cfg['openai']['chatGPTConfigs']
