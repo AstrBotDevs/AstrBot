@@ -143,7 +143,7 @@ def initBot(chatgpt_inst):
         cfg = yaml.safe_load(ymlfile)
 
         try:
-            if 'uniqueSessionMode' in cfg and cfg['qqbot']['uniqueSessionMode'] == 'true':
+            if 'uniqueSessionMode' in cfg and cfg['uniqueSessionMode']:
                 uniqueSession = True
             else:
                 uniqueSession = False
