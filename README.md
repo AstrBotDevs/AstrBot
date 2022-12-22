@@ -1,13 +1,9 @@
-# 基于OpenAI ChatGPT的QQ频道机器人
+![QQChannelChatGPT](https://socialify.git.ci/Soulter/QQChannelChatGPT/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&logo=https%3A%2F%2Fgithub.com%2Ftencent-connect%2Fbot-docs%2Fblob%2Fmain%2Fdocs%2F.vuepress%2Fpublic%2Ffavicon-64px.png%3Fraw%3Dtrue&owner=1&pattern=Plus&stargazers=1&theme=Light)
 
 ## ⭐体验
 扫码加入QQ频道
 
 ![image](https://user-images.githubusercontent.com/37870767/208452587-6516c11b-807b-4fde-8658-37eb5fc7b78a.png)
-
-**机器人已上线，可以把↑频道内的ChatGPTBot机器人拉到自己频道去了~**
-
-↓ **演示截图**在文档最后 ↓
 
 欢迎Star本项目
 
