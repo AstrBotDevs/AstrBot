@@ -49,17 +49,20 @@ class ChatGPT:
         global inst
         inst = self
     
-    def chat(self, prompt):
+    def chat(self, prompt, image_mode = False):
         try:
-            response = openai.Completion.create(
-                prompt=prompt,
-                **self.chatGPT_configs
-            )
+            if not image_mode:
+                response = openai.Completion.create(
+                    prompt=prompt,
+                    **self.chatGPT_configs
+                )
+            else:
+                pass
         # except(openai.error.InvalidRequestError) as e:
         #     raise PromptExceededError("OpenAI遇到错误：输入了一个不合法的请求。\n"+str(e))
         except Exception as e:
             print(e)
-            if 'You exceeded' in str(e):
+            if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(e):
                 print("当前Key已超额，正在切换")
                 self.key_stat[openai.api_key]['exceed'] = True
                 self.save_key_record()
@@ -68,12 +71,22 @@ class ChatGPT:
                 if not is_switched:
                     # 所有Key都超额
                     raise e
-        # print(response['usage'])
-        self.key_stat[openai.api_key]['used'] += response['usage']['total_tokens']
-        self.save_key_record()
-        print("[ChatGPT] "+response["choices"][0]["text"])
-        return response["choices"][0]["text"].strip(), response['usage']['total_tokens']
-
+            else:
+                if not image_mode:
+                    response = openai.Completion.create(
+                        prompt=prompt,
+                        **self.chatGPT_configs
+                    )
+                else:
+                    pass
+        if not image_mode:
+            self.key_stat[openai.api_key]['used'] += response['usage']['total_tokens']
+            self.save_key_record()
+            print("[ChatGPT] "+response["choices"][0]["text"])
+            return response["choices"][0]["text"].strip(), response['usage']['total_tokens']
+        else:
+            pass
+            
     def handle_switch_key(self, prompt):
         while True:
             is_all_exceed = True

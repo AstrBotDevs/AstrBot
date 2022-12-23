@@ -47,6 +47,7 @@ class botClient(botpy.Client):
     # 收到At消息
     async def on_at_message_create(self, message: Message):
         toggle_count(at=True, message=message)
+        
         # executor.submit(oper_msg, message, True)
         new_sub_thread(oper_msg, (message, True))
         # await oper_msg(message=message, at=True)
@@ -169,19 +170,26 @@ def initBot(chatgpt_inst):
 '''
 得到OpenAI的回复
 '''
-def get_chatGPT_response(prompts_str):
+def get_chatGPT_response(prompts_str, image_mode=False):
     res = ''
     usage = ''
-    res, usage = chatgpt.chat(prompts_str)
-    # 处理结果文本
-    chatgpt_res = res.strip()
-    return res, usage
+    if not image_mode:
+        res, usage = chatgpt.chat(prompts_str)
+        # 处理结果文本
+        chatgpt_res = res.strip()
+        return res, usage
+    else:
+        res = chatgpt.chat(prompts_str, image_mode = True)
+        return res
 
 '''
 回复QQ消息
 '''
-def send_qq_msg(message, res):
-    asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
+def send_qq_msg(message, res, image_mode=False):
+    if not image_mode:
+        asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
+    else:
+        asyncio.run_coroutine_threadsafe(message.reply(image=res, content="【此功能未完全实现】\n"), client.loop)
 
 '''
 获取缓存的会话
@@ -325,7 +333,6 @@ def oper_msg(message, at=False, loop=None):
     if qq_msg == "/help":
         send_qq_msg(message, "请联系频道管理员或者前往github(仓库名: QQChannelChatGPT)提issue~")
         return
-    
     # 统计历史会话
     if session_id not in session_dict:
         session_dict[session_id] = []
@@ -413,3 +420,4 @@ def oper_msg(message, at=False, loop=None):
         }
     cache_data_list.append(single_record)
     session_dict[session_id] = cache_data_list
+
