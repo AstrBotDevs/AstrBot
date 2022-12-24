@@ -2,8 +2,6 @@
  
 ![QQChannelChatGPT](https://socialify.git.ci/Soulter/QQChannelChatGPT/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&logo=https%3A%2F%2Fgithub.com%2Ftencent-connect%2Fbot-docs%2Fblob%2Fmain%2Fdocs%2F.vuepress%2Fpublic%2Ffavicon-64px.png%3Fraw%3Dtrue&owner=1&pattern=Plus&stargazers=1&theme=Light)
 
-⭐[爱发电](https://afdian.net/a/soulter)⭐
-
 </div>
 
 ## ⭐体验
@@ -100,6 +98,9 @@
 
 ### 启动
 - 启动main.py
+
+## 赞助
+⭐[爱发电](https://afdian.net/a/soulter)⭐
 
 ## DEMO
 ![1.jpg](screenshots/1.jpg)
