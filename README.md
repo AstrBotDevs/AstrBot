@@ -7,7 +7,7 @@
 ## ⭐体验
 扫码加入QQ频道
 
-![image](https://user-images.githubusercontent.com/37870767/208452587-6516c11b-807b-4fde-8658-37eb5fc7b78a.png)
+![image](https://user-images.githubusercontent.com/37870767/210030647-c4c00f31-8ccc-4bd2-835a-b5af9ab31496.png)
 
 欢迎Star本项目
  
