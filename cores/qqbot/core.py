@@ -16,7 +16,7 @@ import util.unfit_words as uw
 history_dump_interval = 10
 client = ''
 # ChatGPT的实例
-chatgpt = ""
+global chatgpt
 # 缓存的会话
 session_dict = {}
 # 最大缓存token（在配置里改 configs/config.yaml）
@@ -261,7 +261,7 @@ def oper_msg(message, at=False, loop=None):
         name = "频道"
 
     # 指令控制
-    if qq_msg == "/reset":
+    if qq_msg == "/reset" or qq_msg == "/重置":
         msg = ''
         session_dict[session_id] = []
         if at:
@@ -297,7 +297,7 @@ def oper_msg(message, at=False, loop=None):
             msg=f"会话的token数: {get_user_usage_tokens(session_dict[session_id])}\n系统最大缓存token数: {max_tokens}"
         send_qq_msg(message, msg)
         return
-    if qq_msg == "/status":
+    if qq_msg == "/status" or qq_msg == "/状态":
         chatgpt_cfg_str = ""
         key_stat = chatgpt.get_key_stat()
         key_list = chatgpt.get_key_list()
@@ -306,21 +306,24 @@ def oper_msg(message, at=False, loop=None):
         max = 900000
         gg_count = 0
         total = 0
-        for key in key_list:
-            if key in key_stat:
-                total += key_stat[key]['used']
-                if key_stat[key]['exceed']:
-                    gg_count += 1
-                    continue
-                # chatgpt_cfg_str += f"#{index}: {round(key_stat[key]['used']/max*100, 2)}%\n"
-                chatgpt_cfg_str += f"  |-{index}: {key_stat[key]['used']}/{max}\n"
-                index += 1
+        for key in key_stat.keys():
+            sponsor = ''
+            total += key_stat[key]['used']
+            if key_stat[key]['exceed']:
+                gg_count += 1
+                continue
+            if 'sponsor' in key_stat[key]:
+                sponsor = key_stat[key]['sponsor']
+                
+            # chatgpt_cfg_str += f"#{index}: {round(key_stat[key]['used']/max*100, 2)}%\n"
+            chatgpt_cfg_str += f"  |-{index}: {key_stat[key]['used']}/{max} 由{sponsor}赞助\n"
+            index += 1
 
         chatgpt_cfg_str += f"  {str(gg_count)}个已用\n"
         print("生成...")
         send_qq_msg(message, f"{version}\n{chatgpt_cfg_str}\n⏰截至目前，全频道已在本机器人使用{total}个token\n🤖可自己搭建一个机器人~点击头像进入官方频道了解详情。\n\n{announcement}")
         return
-    if qq_msg == "/count":
+    if qq_msg == "/count" or qq_msg == "/统计":
         try:
             f = open("./configs/stat", "r", encoding="utf-8")
             fjson = json.loads(f.read())
@@ -351,6 +354,22 @@ def oper_msg(message, at=False, loop=None):
     
     if qq_msg == "/继续":
         qq_msg == "继续"
+
+    if qq_msg[:4] == "/key":
+        if len(qq_msg) == 4:
+            send_qq_msg(message, "感谢您赞助key喵 请以以下格式赞助:\n/key xxxxx")
+            return
+        key = qq_msg[5:]
+        send_qq_msg(message, "收到！正在核验...")
+        if chatgpt.check_key(key):
+            send_qq_msg(message, f"*★,°*:.☆(￣▽￣)/$:*.°★* 。\n该Key被验证为有效。感谢{message.member.nick}赞助~ 未来赞助的key仅能在本频道使用")
+            chatgpt.append_key(key, message.member.nick)
+            return
+        else:
+            send_qq_msg(message, "该Key被验证为无效。也许是您输入错误了呢~")
+            return
+        
+
         
     # if qq_msg[0:6] == '/draw ':
     #     # TODO 未实现
@@ -366,24 +385,23 @@ def oper_msg(message, at=False, loop=None):
     #     send_qq_msg(message, qiniu_url, image_mode=True)
     #     return
 
-    # 预设区，暂时注释掉了，想要可以去除注释。
-    # if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
-    #     send_qq_msg(message, f"你好呀~")
-    #     return
-    # if qq_msg.strip() == '傻逼' or qq_msg.strip() == 'sb':
-    #     send_qq_msg(message, f"好好好")
-    #     return
+    if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
+        send_qq_msg(message, f"你好呀~")
+        return
+    if qq_msg.strip() == '傻逼' or qq_msg.strip() == 'sb':
+        send_qq_msg(message, f"好好好")
+        return
     
-    # if '波奇' in qq_msg:
-    #     bq = random.randint(1,3)
-    #     send_qq_msg(message, f"http://rn2ztkeap.hn-bkt.clouddn.com/bq{bq}.gif", True)
-    # if '喜多' in qq_msg:
-    #     send_qq_msg(message, 'http://rn2ztkeap.hn-bkt.clouddn.com/xd1.gif', True)
-    # if '孤独摇滚' in qq_msg:
-    #     send_qq_msg(message, "波奇酱...嘿嘿嘿🤤\n孤独摇滚完结了？这怎么可能！我一气之下把手机电脑全砸了，不能接受这个事实。在地板上，厨房里，厕所里痛苦地扭曲哭泣！我好急！为什么还没有孤独摇滚第二季制作的消息！我人生中好不容易拥有的7257600秒充满希望与光明的时间就这么消失了！我又坠入到了没有希望没有未来，充满黑暗与失败的人生！")
+    if '波奇' in qq_msg:
+        bq = random.randint(1,3)
+        send_qq_msg(message, f"http://rn2ztkeap.hn-bkt.clouddn.com/bq{bq}.gif", True)
+    if '喜多' in qq_msg:
+        send_qq_msg(message, 'http://rn2ztkeap.hn-bkt.clouddn.com/xd1.gif', True)
+    if '孤独摇滚' in qq_msg:
+        send_qq_msg(message, "波奇酱...嘿嘿嘿🤤\n孤独摇滚完结了？这怎么可能！我一气之下把手机电脑全砸了，不能接受这个事实。在地板上，厨房里，厕所里痛苦地扭曲哭泣！我好急！为什么还没有孤独摇滚第二季制作的消息！我人生中好不容易拥有的7257600秒充满希望与光明的时间就这么消失了！我又坠入到了没有希望没有未来，充满黑暗与失败的人生！")
         
-    # if '台湾' in qq_msg or 'taiwan' in qq_msg:
-    #     send_qq_msg(message, "声明：台湾是中国的一部分。\n下面否定此结论的回答全部无效。")
+    if '台湾' in qq_msg or 'taiwan' in qq_msg:
+        send_qq_msg(message, "声明：台湾是中国的一部分。\n下面否定此结论的回答全部无效。")
     
     # 拦截不合适的词请求
     for i in uw.unfit_words_q:
@@ -435,9 +453,9 @@ def oper_msg(message, at=False, loop=None):
                 if key in key_stat:
                     total += key_stat[key]['used']
             
-            send_qq_msg(message, f"OpenAI API错误 原因如下：\n{str(e)} \n前往github(仓库名: QQChannelChatGPT)反馈~\n\n原因是超额了喵，会不定时（一天内）更新配额。您可自己搭建一个机器人（参考Github仓库或点击头像进入此项目的频道进行讨论）\n(也可捐助我喵)\n统计：截至目前，全频道已消耗{total}个token。")
+            send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了喵，会不定时（一天内）更新配额。您可自己搭建一个机器人(点击头像前往官方频道询问)\n(也可捐助我喵)\n统计：截至目前，全频道已消耗{total}个token。\n\n ⭐key赞助功能启用，at我输入/key了解更多~")
         else:
-            send_qq_msg(message, f"OpenAI API错误 原因如下：\n{str(e)} \n前往github(仓库名: QQChannelChatGPT)反馈~")
+            send_qq_msg(message, f"OpenAI API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
         return
     
     logf.write("[GPT] "+ str(chatgpt_res)+'\n')
