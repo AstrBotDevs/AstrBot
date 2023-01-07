@@ -5,15 +5,16 @@ import re
 from util.errors.errors import PromptExceededError
 from botpy.message import DirectMessage
 import json
-# from concurrent.futures import ThreadPoolExecutor
 import threading
 import asyncio
 import time
 from cores.database.conn import dbConn
+import requests
+import random
+import util.unfit_words as uw
 
 history_dump_interval = 10
 client = ''
-# executor = ThreadPoolExecutor(max_workers=10)
 # ChatGPT的实例
 chatgpt = ""
 # 缓存的会话
@@ -38,6 +39,16 @@ count = {
 stat_file = ''
 # 是否是独立会话（在配置改）
 uniqueSession = False
+# 日志记录
+logf = open('log.log', 'a+', encoding='utf-8')
+
+
+#######################
+# 公告（可自定义）：
+announcement = "⚠公约：禁止涉政、暴力等敏感话题，关于此话题得到的回复不受控。\n目前已知的问题：部分代码（例如Java、SQL，Python代码不会）会被频道拦截。\n欢迎进频道捐助我喵✨"
+
+#######################
+
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
@@ -187,9 +198,13 @@ def get_chatGPT_response(prompts_str, image_mode=False):
 '''
 def send_qq_msg(message, res, image_mode=False):
     if not image_mode:
-        asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
+        try:
+            asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
+        except BaseException as e:
+            raise e
     else:
-        asyncio.run_coroutine_threadsafe(message.reply(image=res, content="【此功能未完全实现】\n"), client.loop)
+        asyncio.run_coroutine_threadsafe(message.reply(image=res, content=""), client.loop)
+
 
 '''
 获取缓存的会话
@@ -217,7 +232,9 @@ def get_user_usage_tokens(cache_list):
     return usage_tokens
 
 def oper_msg(message, at=False, loop=None):
-    print("[QQBOT] 接收到消息："+ message.content)
+    print("[QQBOT] 接收到消息："+ str(message.content))
+    logf.write("[QQBOT] "+ str(message.content)+'\n')
+    logf.flush()
     qq_msg = ''
     session_id = ''
     name = ''
@@ -248,7 +265,7 @@ def oper_msg(message, at=False, loop=None):
         msg = ''
         session_dict[session_id] = []
         if at:
-            msg = f"{name}(id: {session_id}) 的历史记录重置成功"
+            msg = f"{name}(id: {session_id})的历史记录重置成功\n\n{announcement}"
         else:
             msg = f"你的历史记录重置成功"
         send_qq_msg(message, msg)
@@ -269,7 +286,7 @@ def oper_msg(message, at=False, loop=None):
         if at:
             msg=f"{name} 的历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页"
         else:
-            msg=f"历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页"
+            msg=f"历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页\n\n{announcement}"
         send_qq_msg(message, msg)
         return
     if qq_msg == "/token":
@@ -282,28 +299,26 @@ def oper_msg(message, at=False, loop=None):
         return
     if qq_msg == "/status":
         chatgpt_cfg_str = ""
-        for k, v in gpt_config.items():
-            if k == "key":
-                continue
-            chatgpt_cfg_str += f"{k}: {v}"
-        
         key_stat = chatgpt.get_key_stat()
         key_list = chatgpt.get_key_list()
-        chatgpt_cfg_str += '\n\n配额使用情况:\n'
+        chatgpt_cfg_str += '⭐使用情况:\n'
         index = 1
         max = 900000
+        gg_count = 0
+        total = 0
         for key in key_list:
             if key in key_stat:
+                total += key_stat[key]['used']
                 if key_stat[key]['exceed']:
-                    chatgpt_cfg_str += f"#{index}: 已寄\n"
-                    index += 1
+                    gg_count += 1
                     continue
                 # chatgpt_cfg_str += f"#{index}: {round(key_stat[key]['used']/max*100, 2)}%\n"
-                chatgpt_cfg_str += f"#{index}: {key_stat[key]['used']}/{max}\n"
+                chatgpt_cfg_str += f"  |-{index}: {key_stat[key]['used']}/{max}\n"
                 index += 1
-        chatgpt_cfg_str += '\n注: 配额情况在某些极端情况下具有一定的不准确性。\n'
+
+        chatgpt_cfg_str += f"  {str(gg_count)}个已用\n"
         print("生成...")
-        send_qq_msg(message, f"ChatGPT配置:\n {chatgpt_cfg_str}\n QQChannelChatGPT 版本: {version}")
+        send_qq_msg(message, f"{version}\n{chatgpt_cfg_str}\n⏰截至目前，全频道已在本机器人使用{total}个token\n🤖可自己搭建一个机器人~点击头像进入官方频道了解详情。\n\n{announcement}")
         return
     if qq_msg == "/count":
         try:
@@ -333,7 +348,48 @@ def oper_msg(message, at=False, loop=None):
     if qq_msg == "/help":
         send_qq_msg(message, "请联系频道管理员或者前往github(仓库名: QQChannelChatGPT)提issue~")
         return
-    # 统计历史会话
+    
+    if qq_msg == "/继续":
+        qq_msg == "继续"
+        
+    # if qq_msg[0:6] == '/draw ':
+    #     # TODO 未实现
+    #     prompt = qq_msg[6:]
+    #     url = get_chatGPT_response(prompt, image_mode = True)
+    #     resp = requests.get(url)
+    #     filename = './images/' + str(int(time.time())) + '.jpg'
+    #     print(url)
+    #     with open(filename, 'wb') as f:
+    #         f.write(resp.content)
+    #     qiniu_url = cores.database.qiniu.put_img(filename)
+    #     print(qiniu_url)
+    #     send_qq_msg(message, qiniu_url, image_mode=True)
+    #     return
+
+    # 预设区，暂时注释掉了，想要可以去除注释。
+    # if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
+    #     send_qq_msg(message, f"你好呀~")
+    #     return
+    # if qq_msg.strip() == '傻逼' or qq_msg.strip() == 'sb':
+    #     send_qq_msg(message, f"好好好")
+    #     return
+    
+    # if '波奇' in qq_msg:
+    #     bq = random.randint(1,3)
+    #     send_qq_msg(message, f"http://rn2ztkeap.hn-bkt.clouddn.com/bq{bq}.gif", True)
+    # if '喜多' in qq_msg:
+    #     send_qq_msg(message, 'http://rn2ztkeap.hn-bkt.clouddn.com/xd1.gif', True)
+    # if '孤独摇滚' in qq_msg:
+    #     send_qq_msg(message, "波奇酱...嘿嘿嘿🤤\n孤独摇滚完结了？这怎么可能！我一气之下把手机电脑全砸了，不能接受这个事实。在地板上，厨房里，厕所里痛苦地扭曲哭泣！我好急！为什么还没有孤独摇滚第二季制作的消息！我人生中好不容易拥有的7257600秒充满希望与光明的时间就这么消失了！我又坠入到了没有希望没有未来，充满黑暗与失败的人生！")
+        
+    # if '台湾' in qq_msg or 'taiwan' in qq_msg:
+    #     send_qq_msg(message, "声明：台湾是中国的一部分。\n下面否定此结论的回答全部无效。")
+    
+    # 拦截不合适的词请求
+    for i in uw.unfit_words_q:
+        if i in qq_msg.strip():
+            send_qq_msg(message, f"你的提问中有不太合适的内容😭\n请更换措辞~")
+            return
     if session_id not in session_dict:
         session_dict[session_id] = []
 
@@ -368,27 +424,50 @@ def oper_msg(message, at=False, loop=None):
         chatgpt_res, current_usage_tokens = get_chatGPT_response(cache_prompt)
     except (BaseException) as e:
         print("OpenAI API错误:(")
-        send_qq_msg(message, f"OpenAI API错误:( 原因如下：\n{str(e)} \n*前往github(仓库名: QQChannelChatGPT)反馈~")
+        if 'exceeded' in str(e):
+            
+            # 计算token总量
+            key_stat = chatgpt.get_key_stat()
+            key_list = chatgpt.get_key_list()
+            index = 1
+            total = 0
+            for key in key_list:
+                if key in key_stat:
+                    total += key_stat[key]['used']
+            
+            send_qq_msg(message, f"OpenAI API错误 原因如下：\n{str(e)} \n前往github(仓库名: QQChannelChatGPT)反馈~\n\n原因是超额了喵，会不定时（一天内）更新配额。您可自己搭建一个机器人（参考Github仓库或点击头像进入此项目的频道进行讨论）\n(也可捐助我喵)\n统计：截至目前，全频道已消耗{total}个token。")
+        else:
+            send_qq_msg(message, f"OpenAI API错误 原因如下：\n{str(e)} \n前往github(仓库名: QQChannelChatGPT)反馈~")
         return
+    
+    logf.write("[GPT] "+ str(chatgpt_res)+'\n')
+    logf.flush()
 
     # 发送qq信息
     try:
         # 防止被qq频道过滤消息
         gap_chatgpt_res = chatgpt_res.replace(".", " . ")
+        if '```' in gap_chatgpt_res:
+            chatgpt_res.replace('```', "")
+        # 过滤不合适的词
+        for i in uw.unfit_words:
+            if i in gap_chatgpt_res:
+                gap_chatgpt_res = gap_chatgpt_res.replace(i, "***")
         # 发送信息
-        send_qq_msg(message, '[ChatGPT]'+gap_chatgpt_res)
+        send_qq_msg(message, '[GPT]'+gap_chatgpt_res)
     except BaseException as e:
         print("QQ频道API错误: \n"+str(e))
         f_res = ""
         for t in chatgpt_res:
             f_res += t + ' '
         try:
-            pass
+            send_qq_msg(message, '[GPT]'+f_res)
             # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
         except BaseException as e:
             # 如果还是不行则过滤url
             f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '', f_res, flags=re.MULTILINE)
-            f_res = f_res.replace(".", " . ")
+            f_res = f_res.replace(".", "·")
+            send_qq_msg(message, '[GPT]'+f_res)
             # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
 
     # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens

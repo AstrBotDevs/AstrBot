@@ -57,7 +57,11 @@ class ChatGPT:
                     **self.chatGPT_configs
                 )
             else:
-                pass
+                response = openai.Image.create(
+                    prompt=prompt,
+                    n=1,
+                    size="512x512",
+                )
         # except(openai.error.InvalidRequestError) as e:
         #     raise PromptExceededError("OpenAI遇到错误：输入了一个不合法的请求。\n"+str(e))
         except Exception as e:
@@ -78,14 +82,18 @@ class ChatGPT:
                         **self.chatGPT_configs
                     )
                 else:
-                    pass
+                    response = openai.Image.create(
+                        prompt=prompt,
+                        n=1,
+                        size="512x512",
+                    )
         if not image_mode:
             self.key_stat[openai.api_key]['used'] += response['usage']['total_tokens']
             self.save_key_record()
             print("[ChatGPT] "+response["choices"][0]["text"])
             return response["choices"][0]["text"].strip(), response['usage']['total_tokens']
         else:
-            pass
+            return response['data'][0]['url']
             
     def handle_switch_key(self, prompt):
         while True:
