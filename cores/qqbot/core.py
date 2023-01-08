@@ -122,6 +122,11 @@ def dump_history():
 def upload():
     global object_id
     while True:
+        addr = ''
+        try:
+            addr = requests.get('http://myip.ipip.net', timeout=5).text
+        except BaseException:
+            pass
         try:
             ts = str(time.time())
             # md = hashlib.md5((ts+'REDACTED_LEANCLOUD_APP_KEY').encode())
@@ -131,8 +136,7 @@ def upload():
                 'X-LC-Key': 'REDACTED_LEANCLOUD_APP_KEY',
                 'Content-Type': 'application/json'
             }
-            # print(md.hexdigest())
-            d = {"data": {"guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count}}
+            d = {"data": {"guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count, 'addr': addr}}
             d = json.dumps(d).encode("utf-8")
             print(d)
             res = requests.put(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record/{object_id}', headers = headers, data = d)
@@ -190,7 +194,7 @@ def initBot(chatgpt_inst):
     if is_upload_log:
         # 读取object_id
         global object_id
-        object_id_file = open("./configs/object_id", 'w+', encoding='utf-8')
+        object_id_file = open("./configs/object_id", 'r', encoding='utf-8')
         object_id = object_id_file.read()
         object_id_file.close()
         # 创建上传定时器线程
