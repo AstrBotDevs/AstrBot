@@ -138,13 +138,10 @@ def upload():
             }
             d = {"data": {"guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count, 'addr': addr}}
             d = json.dumps(d).encode("utf-8")
-            print(d)
             res = requests.put(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record/{object_id}', headers = headers, data = d)
-            print(res.text)
             if json.loads(res.text)['code'] == 1:
                 print("new user")
                 res = requests.post(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record', headers = headers, data = d)
-                print(res.text)
                 object_id = json.loads(res.text)['objectId']
                 object_id_file = open("./configs/object_id", 'w+', encoding='utf-8')
                 object_id_file.write(str(object_id))
