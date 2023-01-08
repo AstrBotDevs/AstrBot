@@ -2,14 +2,12 @@
  
 ![QQChannelChatGPT](https://socialify.git.ci/Soulter/QQChannelChatGPT/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&logo=https%3A%2F%2Fgithub.com%2Ftencent-connect%2Fbot-docs%2Fblob%2Fmain%2Fdocs%2F.vuepress%2Fpublic%2Ffavicon-64px.png%3Fraw%3Dtrue&owner=1&pattern=Plus&stargazers=1&theme=Light)
 
-⭐[爱发电](https://afdian.net/a/soulter)⭐
-
 </div>
 
 ## ⭐体验
 扫码加入QQ频道
 
-![image](https://user-images.githubusercontent.com/37870767/208452587-6516c11b-807b-4fde-8658-37eb5fc7b78a.png)
+![image](https://user-images.githubusercontent.com/37870767/210030647-c4c00f31-8ccc-4bd2-835a-b5af9ab31496.png)
 
 欢迎Star本项目
  
@@ -100,6 +98,9 @@
 
 ### 启动
 - 启动main.py
+
+## 赞助
+⭐[爱发电](https://afdian.net/a/soulter)⭐
 
 ## DEMO
 ![1.jpg](screenshots/1.jpg)
