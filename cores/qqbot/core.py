@@ -13,6 +13,9 @@ import requests
 import random
 import util.unfit_words as uw
 
+import hashlib
+import uuid
+
 history_dump_interval = 10
 client = ''
 # ChatGPT的实例
@@ -22,7 +25,7 @@ session_dict = {}
 # 最大缓存token（在配置里改 configs/config.yaml）
 max_tokens = 2000
 # 版本
-version = "1.4"
+version = ""
 # gpt配置（在配置改）
 gpt_config = {
     'engine': '',
@@ -41,11 +44,13 @@ stat_file = ''
 uniqueSession = False
 # 日志记录
 logf = open('log.log', 'a+', encoding='utf-8')
+# 是否上传日志,仅上传频道数量等数量的统计信息，不包含key等敏感信息
+is_upload_log = True
 
 
 #######################
 # 公告（可自定义）：
-announcement = "⚠公约：禁止涉政、暴力等敏感话题，关于此话题得到的回复不受控。\n目前已知的问题：部分代码（例如Java、SQL，Python代码不会）会被频道拦截。\n欢迎进频道捐助我喵✨"
+announcement = "⚠公约：禁止涉政、暴力等敏感话题，关于此话题得到的回复不受控。\n目前已知的问题：部分代码（例如Java、SQL，Python代码不会）会被频道拦截。\n🤖可自己搭建一个机器人~详见QQChannelChatGPT项目。"
 
 #######################
 
@@ -114,6 +119,39 @@ def dump_history():
         # 每隔10分钟转储一次
         time.sleep(10*history_dump_interval)
 
+def upload():
+    global object_id
+    while True:
+        try:
+            ts = str(time.time())
+            # md = hashlib.md5((ts+'REDACTED_LEANCLOUD_APP_KEY').encode())
+            guild_count, guild_msg_count, guild_direct_msg_count, session_count = get_stat()
+            headers = {
+                'X-LC-Id': 'REDACTED_LEANCLOUD_APP_ID',
+                'X-LC-Key': 'REDACTED_LEANCLOUD_APP_KEY',
+                'Content-Type': 'application/json'
+            }
+            # print(md.hexdigest())
+            d = {"data": {"guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count}}
+            d = json.dumps(d).encode("utf-8")
+            print(d)
+            res = requests.put(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record/{object_id}', headers = headers, data = d)
+            print(res.text)
+            if json.loads(res.text)['code'] == 1:
+                print("new user")
+                res = requests.post(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record', headers = headers, data = d)
+                print(res.text)
+                object_id = json.loads(res.text)['objectId']
+                object_id_file = open("./configs/object_id", 'w+', encoding='utf-8')
+                object_id_file.write(str(object_id))
+                object_id_file.flush()
+                object_id_file.close()
+        except BaseException as e:
+            print(e)
+        # 每隔2小时上传一次
+        time.sleep(60*60*2)
+
+
 def initBot(chatgpt_inst):
     global chatgpt
     chatgpt = chatgpt_inst
@@ -146,9 +184,17 @@ def initBot(chatgpt_inst):
             count = json.loads(res)
         except BaseException:
             pass
-
     # 创建转储定时器线程
     threading.Thread(target=dump_history, daemon=True).start()
+
+    if is_upload_log:
+        # 读取object_id
+        global object_id
+        object_id_file = open("./configs/object_id", 'w+', encoding='utf-8')
+        object_id = object_id_file.read()
+        object_id_file.close()
+        # 创建上传定时器线程
+        threading.Thread(target=upload, daemon=True).start()
 
     global uniqueSession, history_dump_interval
     with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
@@ -284,7 +330,7 @@ def oper_msg(message, at=False, loop=None):
         max_page = len(l)//size_per_page + 1 if len(l)%size_per_page != 0 else len(l)//size_per_page
         p = get_prompts_by_cache_list(session_dict[session_id], divide=True, paging=True, size=size_per_page, page=page)
         if at:
-            msg=f"{name} 的历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页"
+            msg=f"{name}的历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页"
         else:
             msg=f"历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页\n\n{announcement}"
         send_qq_msg(message, msg)
@@ -321,31 +367,10 @@ def oper_msg(message, at=False, loop=None):
 
         chatgpt_cfg_str += f"  {str(gg_count)}个已用\n"
         print("生成...")
-        send_qq_msg(message, f"{version}\n{chatgpt_cfg_str}\n⏰截至目前，全频道已在本机器人使用{total}个token\n🤖可自己搭建一个机器人~点击头像进入官方频道了解详情。\n\n{announcement}")
+        send_qq_msg(message, f"{version}\n{chatgpt_cfg_str}\n⏰截至目前，全频道已在本机器人使用{total}个token\n{announcement}")
         return
     if qq_msg == "/count" or qq_msg == "/统计":
-        try:
-            f = open("./configs/stat", "r", encoding="utf-8")
-            fjson = json.loads(f.read())
-            f.close()
-            guild_count = 0
-            guild_msg_count = 0
-            guild_direct_msg_count = 0
-
-            for k,v in fjson.items():
-                guild_count += 1
-                guild_msg_count += v['count']
-                guild_direct_msg_count += v['direct_count']
-            
-            session_count = 0
-
-            f = open("./configs/session", "r", encoding="utf-8")
-            fjson = json.loads(f.read())
-            f.close()
-            for k,v in fjson.items():
-                session_count += 1
-        except:
-            pass
+        guild_count, guild_msg_count, guild_direct_msg_count, session_count = get_stat()
         send_qq_msg(message, f"当前会话数: {len(session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}\n历史会话数: {session_count}")
         return
     if qq_msg == "/help":
@@ -372,7 +397,7 @@ def oper_msg(message, at=False, loop=None):
 
         
     # if qq_msg[0:6] == '/draw ':
-    #     # TODO 未实现
+    #     # TODO 未完全实现
     #     prompt = qq_msg[6:]
     #     url = get_chatGPT_response(prompt, image_mode = True)
     #     resp = requests.get(url)
@@ -385,23 +410,24 @@ def oper_msg(message, at=False, loop=None):
     #     send_qq_msg(message, qiniu_url, image_mode=True)
     #     return
 
-    if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
-        send_qq_msg(message, f"你好呀~")
-        return
-    if qq_msg.strip() == '傻逼' or qq_msg.strip() == 'sb':
-        send_qq_msg(message, f"好好好")
-        return
+    # 这里是预设，你可以按需更改
+    # if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
+    #     send_qq_msg(message, f"你好呀~")
+    #     return
+    # if qq_msg.strip() == '傻逼' or qq_msg.strip() == 'sb':
+    #     send_qq_msg(message, f"好好好")
+    #     return
     
-    if '波奇' in qq_msg:
-        bq = random.randint(1,3)
-        send_qq_msg(message, f"http://rn2ztkeap.hn-bkt.clouddn.com/bq{bq}.gif", True)
-    if '喜多' in qq_msg:
-        send_qq_msg(message, 'http://rn2ztkeap.hn-bkt.clouddn.com/xd1.gif', True)
-    if '孤独摇滚' in qq_msg:
-        send_qq_msg(message, "波奇酱...嘿嘿嘿🤤\n孤独摇滚完结了？这怎么可能！我一气之下把手机电脑全砸了，不能接受这个事实。在地板上，厨房里，厕所里痛苦地扭曲哭泣！我好急！为什么还没有孤独摇滚第二季制作的消息！我人生中好不容易拥有的7257600秒充满希望与光明的时间就这么消失了！我又坠入到了没有希望没有未来，充满黑暗与失败的人生！")
+    # if '波奇' in qq_msg:
+    #     bq = random.randint(1,3)
+    #     send_qq_msg(message, f"http://rn2ztkeap.hn-bkt.clouddn.com/bq{bq}.gif", True)
+    # if '喜多' in qq_msg:
+    #     send_qq_msg(message, 'http://rn2ztkeap.hn-bkt.clouddn.com/xd1.gif', True)
+    # if '孤独摇滚' in qq_msg:
+    #     send_qq_msg(message, "波奇酱...嘿嘿嘿🤤\n孤独摇滚完结了？这怎么可能！我一气之下把手机电脑全砸了，不能接受这个事实。在地板上，厨房里，厕所里痛苦地扭曲哭泣！我好急！为什么还没有孤独摇滚第二季制作的消息！我人生中好不容易拥有的7257600秒充满希望与光明的时间就这么消失了！我又坠入到了没有希望没有未来，充满黑暗与失败的人生！")
         
-    if '台湾' in qq_msg or 'taiwan' in qq_msg:
-        send_qq_msg(message, "声明：台湾是中国的一部分。\n下面否定此结论的回答全部无效。")
+    # if '台湾' in qq_msg or 'taiwan' in qq_msg:
+    #     send_qq_msg(message, "声明：台湾是中国的一部分。\n下面否定此结论的回答全部无效。")
     
     # 拦截不合适的词请求
     for i in uw.unfit_words_q:
@@ -453,7 +479,7 @@ def oper_msg(message, at=False, loop=None):
                 if key in key_stat:
                     total += key_stat[key]['used']
             
-            send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了喵，会不定时（一天内）更新配额。您可自己搭建一个机器人(点击头像前往官方频道询问)\n(也可捐助我喵)\n统计：截至目前，全频道已消耗{total}个token。\n\n ⭐key赞助功能启用，at我输入/key了解更多~")
+            send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了喵，会不定时（一天内）更新配额。您可自己搭建一个机器人(点击头像前往官方频道询问)\n(也可捐助我喵)\n统计：截至目前，全频道已消耗{total}个token。\n")
         else:
             send_qq_msg(message, f"OpenAI API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
         return
@@ -518,3 +544,27 @@ def oper_msg(message, at=False, loop=None):
     cache_data_list.append(single_record)
     session_dict[session_id] = cache_data_list
 
+def get_stat():
+    try:
+        f = open("./configs/stat", "r", encoding="utf-8")
+        fjson = json.loads(f.read())
+        f.close()
+        guild_count = 0
+        guild_msg_count = 0
+        guild_direct_msg_count = 0
+
+        for k,v in fjson.items():
+            guild_count += 1
+            guild_msg_count += v['count']
+            guild_direct_msg_count += v['direct_count']
+        
+        session_count = 0
+
+        f = open("./configs/session", "r", encoding="utf-8")
+        fjson = json.loads(f.read())
+        f.close()
+        for k,v in fjson.items():
+            session_count += 1
+        return guild_count, guild_msg_count, guild_direct_msg_count, session_count
+    except:
+        return -1, -1, -1, -1
