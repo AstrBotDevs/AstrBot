@@ -3,13 +3,18 @@ import yaml
 from util.errors.errors import PromptExceededError
 import json
 import time
+import os
+import sys
 
 inst = None
+# 适配pyinstaller
+abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
+key_record_path = abs_path+'chatgpt_key_record'
 
 class ChatGPT:
     def __init__(self):
         self.key_list = []
-        with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
+        with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
             cfg = yaml.safe_load(ymlfile)
             if cfg['openai']['key'] != '':
                 print("读取ChatGPT Key成功")
@@ -106,7 +111,7 @@ class ChatGPT:
         return self.openai_configs
     
     def save_key_record(self):
-        with open("chatgpt_key_record", 'w', encoding='utf-8') as f:
+        with open(key_record_path, 'w', encoding='utf-8') as f:
             json.dump(self.key_stat, f)
 
     def get_key_stat(self):
@@ -138,7 +143,10 @@ class ChatGPT:
 
     # 将key_list的key转储到key_record中，并记录相关数据
     def init_key_record(self):
-        with open("chatgpt_key_record", 'r', encoding='utf-8') as keyfile:
+        if not os.path.exists(key_record_path):
+            with open(key_record_path, 'w', encoding='utf-8') as f:
+                json.dump({}, f)
+        with open(key_record_path, 'r', encoding='utf-8') as keyfile:
             try:
                 self.key_stat = json.load(keyfile)
             except Exception as e:
@@ -149,7 +157,6 @@ class ChatGPT:
                     if key not in self.key_stat:
                         self.key_stat[key] = {'exceed': False, 'used': 0}
                         if openai.api_key is None:
-                            print("切换")
                             openai.api_key = key
                     else:
                         if self.key_stat[key]['exceed']:

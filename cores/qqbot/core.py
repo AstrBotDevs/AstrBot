@@ -10,12 +10,9 @@ import asyncio
 import time
 from cores.database.conn import dbConn
 import requests
-import random
 import util.unfit_words as uw
-
-import hashlib
-import uuid
-
+import os
+import sys
 history_dump_interval = 10
 client = ''
 # ChatGPT的实例
@@ -36,17 +33,15 @@ gpt_config = {
     'max_tokens': '',
 }
 # 统计信息
-count = {
-}
+count = {}
 # 统计信息
 stat_file = ''
 # 是否是独立会话（在配置改）
 uniqueSession = False
 # 日志记录
 logf = open('log.log', 'a+', encoding='utf-8')
-# 是否上传日志,仅上传频道数量等数量的统计信息，不包含key等敏感信息
+# 是否上传日志,仅上传频道数量等数量的统计信息
 is_upload_log = True
-
 
 #######################
 # 公告（可自定义）：
@@ -54,17 +49,21 @@ announcement = "⚠公约：禁止涉政、暴力等敏感话题，关于此话�
 
 #######################
 
+# 适配pyinstaller
+abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
+print(abs_path)
+
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
-    thread.start()
+    thread.start() 
 
 class botClient(botpy.Client):
     # 收到At消息
     async def on_at_message_create(self, message: Message):
         toggle_count(at=True, message=message)
-        
         # executor.submit(oper_msg, message, True)
+        print(message)
         new_sub_thread(oper_msg, (message, True))
         # await oper_msg(message=message, at=True)
 
@@ -73,6 +72,7 @@ class botClient(botpy.Client):
         toggle_count(at=False, message=message)
         # executor.submit(oper_msg, message, True)
         # await oper_msg(message=message, at=False)
+        print(message)
         new_sub_thread(oper_msg, (message, False))
 
 # 写入统计信息
@@ -88,7 +88,7 @@ def toggle_count(at: bool, message):
             count[str(message.guild_id)]['count'] += 1
             if not at:
                 count[str(message.guild_id)]['direct_count'] += 1
-        stat_file = open("./configs/stat", 'w', encoding='utf-8')
+        stat_file = open(abs_path+"configs/stat", 'w', encoding='utf-8')
         stat_file.write(json.dumps(count))
         stat_file.flush()
         stat_file.close()
@@ -143,7 +143,7 @@ def upload():
                 print("new user")
                 res = requests.post(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record', headers = headers, data = d)
                 object_id = json.loads(res.text)['objectId']
-                object_id_file = open("./configs/object_id", 'w+', encoding='utf-8')
+                object_id_file = open(abs_path+"configs/object_id", 'w+', encoding='utf-8')
                 object_id_file.write(str(object_id))
                 object_id_file.flush()
                 object_id_file.close()
@@ -175,7 +175,10 @@ def initBot(chatgpt_inst):
 
     # 读统计信息
     global stat_file
-    stat_file = open("./configs/stat", 'r', encoding='utf-8')
+    if not os.path.exists(abs_path+"configs/stat"):
+        with open(abs_path+"configs/stat", 'w', encoding='utf-8') as f:
+                json.dump({}, f)
+    stat_file = open(abs_path+"configs/stat", 'r', encoding='utf-8')
     global count
     res = stat_file.read()
     if res == '':
@@ -191,14 +194,17 @@ def initBot(chatgpt_inst):
     if is_upload_log:
         # 读取object_id
         global object_id
-        object_id_file = open("./configs/object_id", 'r', encoding='utf-8')
+        if not os.path.exists(abs_path+"configs/object_id"):
+            with open(abs_path+"configs/object_id", 'w', encoding='utf-8') as f:
+                f.write("")
+        object_id_file = open(abs_path+"configs/object_id", 'r', encoding='utf-8')
         object_id = object_id_file.read()
         object_id_file.close()
         # 创建上传定时器线程
         threading.Thread(target=upload, daemon=True).start()
 
     global uniqueSession, history_dump_interval
-    with open("./configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
+    with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
 
         try:
@@ -224,6 +230,7 @@ def initBot(chatgpt_inst):
             client.run(appid=cfg['qqbot']['appid'], token=cfg['qqbot']['token'])
         else:
             raise BaseException("请在config中完善你的appid和token")
+    print("QQBot初始化完成\n\n如果有任何问题，请在https://github.com/Soulter/QQChannelChatGPT上提交issue说明问题！或者添加QQ：905617992\n\n")
 
 '''
 得到OpenAI的回复
@@ -440,14 +447,14 @@ def oper_msg(message, at=False, loop=None):
 
         fjson = {}
         try:
-            f = open("./configs/session", "r", encoding="utf-8")
+            f = open(abs_path+"configs/session", "r", encoding="utf-8")
             fjson = json.loads(f.read())
             f.close()
         except:
             pass
         finally:
             fjson[session_id] = 'true'
-            f = open("./configs/session", "w", encoding="utf-8")
+            f = open(abs_path+"configs/session", "w", encoding="utf-8")
             f.write(json.dumps(fjson))
             f.flush()
             f.close()
@@ -547,7 +554,7 @@ def oper_msg(message, at=False, loop=None):
 
 def get_stat():
     try:
-        f = open("./configs/stat", "r", encoding="utf-8")
+        f = open(abs_path+"configs/stat", "r", encoding="utf-8")
         fjson = json.loads(f.read())
         f.close()
         guild_count = 0
@@ -561,7 +568,7 @@ def get_stat():
         
         session_count = 0
 
-        f = open("./configs/session", "r", encoding="utf-8")
+        f = open(abs_path+"configs/session", "r", encoding="utf-8")
         fjson = json.loads(f.read())
         f.close()
         for k,v in fjson.items():
