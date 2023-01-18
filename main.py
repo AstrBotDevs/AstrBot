@@ -13,7 +13,7 @@ def main(loop, event):
     #实例化ChatGPT
     chatgpt = ChatGPT()
     # #执行qqBot
-    qqBot.initBot(chatgpt, loop, event)
+    qqBot.initBot(chatgpt)
 
 # def hot_update(loop, event):
 #     global main_thread
