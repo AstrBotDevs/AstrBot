@@ -222,15 +222,32 @@ def initBot(chatgpt_inst):
         except BaseException:
             print("读取uniqueSessionMode/version/dump_history_interval配置文件失败, 使用默认值喵~")
 
+        print("QQBot初始化完成\n\n如果有任何问题，请在https://github.com/Soulter/QQChannelChatGPT上提交issue说明问题！或者添加QQ：905617992\n")
+
         if cfg['qqbot']['appid'] != '' or cfg['qqbot']['token'] != '':
             print("读取QQBot appid,token 成功")
-            intents = botpy.Intents(public_guild_messages=True, direct_message=True) 
-            global client
-            client = botClient(intents=intents)
-            client.run(appid=cfg['qqbot']['appid'], token=cfg['qqbot']['token'])
+            # bot_run_thread = threading.Thread(target=run_bot, args=(cfg['qqbot']['appid'], cfg['qqbot']['token'], loop), daemon=True)
+            # bot_run_thread.start()
+            run_bot(cfg['qqbot']['appid'], cfg['qqbot']['token'])
         else:
             raise BaseException("请在config中完善你的appid和token")
-    print("QQBot初始化完成\n\n如果有任何问题，请在https://github.com/Soulter/QQChannelChatGPT上提交issue说明问题！或者添加QQ：905617992\n\n")
+        
+        # 中断监测
+        # while True:
+        #     time.sleep(10)
+        #     if event.is_set():
+        #         print("检测到中断信号，正在退出...")
+        #         asyncio.run_coroutine_threadsafe(client.close(), loop)
+        #         time.sleep(5)
+        #         break
+            
+def run_bot(appid, token):
+    # 设置事件循环
+    # asyncio.set_event_loop(loop)
+    intents = botpy.Intents(public_guild_messages=True, direct_message=True) 
+    global client
+    client = botClient(intents=intents)
+    client.run(appid=appid, token=token)
 
 '''
 得到OpenAI的回复
@@ -293,18 +310,18 @@ def oper_msg(message, at=False, loop=None):
     session_id = ''
     name = ''
 
+
     if at:
-        # 过滤用户id
-        pattern = r"<@!\d+>\s+(.+)"
-        # 多行匹配
-        pattern = re.compile(pattern, flags=re.MULTILINE)
-        result = re.search(pattern, message.content)
-        if result:
-            qq_msg = result.group(1).strip()
+        qq_msg = message.content
+        lines = qq_msg.splitlines()
+        for i in range(len(lines)):
+            lines[i] = re.sub(r"<@!\d+>", "", lines[i])
+        qq_msg = "\n".join(lines).lstrip()
+
         if uniqueSession:
             session_id = message.author.id
         else:
-            session_id = message.guild_id
+            session_id = message.channel_id
     else:
         qq_msg = message.content
         session_id = message.author.id
