@@ -7,9 +7,17 @@
 ## ⭐体验
 扫码加入QQ频道
 
-![guild](https://user-images.githubusercontent.com/37870767/212687699-ac7e0651-6f48-4ebd-ad2f-95eaebba1783.jpg)
+![image](https://user-images.githubusercontent.com/37870767/215336586-924f438f-5d81-4c1e-800e-54a074126df7.png)
 
-欢迎Star本项目
+
+
+**支持Windows一键安装！！**
+**请前往Release下载最新版本**
+
+**详细部署教程链接**https://soulter.top/posts/qpdg.html
+**详细部署教程链接**https://soulter.top/posts/qpdg.html
+**详细部署教程链接**https://soulter.top/posts/qpdg.html
+
  
 
 ## ⭐功能：
