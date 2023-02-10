@@ -1,15 +1,24 @@
-<div align="center">
- 
-![QQChannelChatGPT](https://socialify.git.ci/Soulter/QQChannelChatGPT/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&logo=https%3A%2F%2Fgithub.com%2Ftencent-connect%2Fbot-docs%2Fblob%2Fmain%2Fdocs%2F.vuepress%2Fpublic%2Ffavicon-64px.png%3Fraw%3Dtrue&owner=1&pattern=Plus&stargazers=1&theme=Light)
-
-</div>
+## ⭐支持此项目
+[爱发电](https://afdian.net/a/soulter)
 
 ## ⭐体验
 扫码加入QQ频道
 
-![guild](https://user-images.githubusercontent.com/37870767/212687699-ac7e0651-6f48-4ebd-ad2f-95eaebba1783.jpg)
+![image](https://user-images.githubusercontent.com/37870767/217891261-7f2bbede-a70a-4e9b-9cdd-15dcb06f6629.png)
 
-欢迎Star本项目
+
+
+**推荐Windows一键安装（版本更新更及时）！！**
+**请前往Release下载最新版本**
+
+**详细部署教程链接**https://soulter.top/posts/qpdg.html
+
+**详细部署教程链接**https://soulter.top/posts/qpdg.html
+
+**详细部署教程链接**https://soulter.top/posts/qpdg.html
+
+有任何问题请加频道反馈。
+
  
 
 ## ⭐功能：
@@ -99,8 +108,6 @@
 ### 启动
 - 启动main.py
 
-## 赞助
-⭐[爱发电](https://afdian.net/a/soulter)⭐
 
 ## DEMO
 ![1.jpg](screenshots/1.jpg)
