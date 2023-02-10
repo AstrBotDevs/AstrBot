@@ -68,15 +68,20 @@ def hot_update(ver):
                 version_file.flush()
                 version_file.close()
 
-                update_version(version)
+                try:
+                    update_version(version)
+                except BaseException as e:
+                    print(e)
                 
                 print('自启动')
                 py = sys.executable
                 os.execl(py, py, *sys.argv)
             time.sleep(60*20)
         except BaseException as e:
+            print(e)
+            print("upd出现异常，请联系QQ905617992")
             time.sleep(60*20)
-            raise e
+
 
 def update_version(ver):
     if not os.path.exists('update_record'):
