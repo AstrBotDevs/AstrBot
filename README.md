@@ -1,6 +1,3 @@
-## ⭐支持此项目
-[爱发电](https://afdian.net/a/soulter)
-
 ## ⭐体验
 扫码加入QQ频道
 
