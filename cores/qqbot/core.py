@@ -136,7 +136,7 @@ def upload():
                 'Content-Type': 'application/json'
             }
             key_stat = chatgpt.get_key_stat()
-            d = {"data": {"guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count, 'addr': addr, 'winver': '2.21', 'key_stat':key_stat}}
+            d = {"data": {"guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count, 'addr': addr, 'winver': '2.3', 'key_stat':key_stat}}
             d = json.dumps(d).encode("utf-8")
             res = requests.put(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record/{object_id}', headers = headers, data = d)
             if json.loads(res.text)['code'] == 1:
@@ -616,7 +616,7 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
         msg = f"当前会话数: {len(session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}\n历史会话数: {session_count}"
     
     if qq_msg == "/help":
-        msg = "[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎赞助支持我！]\n\n指令面板：\n/status 查看机器人key状态\n/count 查看机器人统计信息\n/reset 重置会话\n/his 查看历史记录\n/token 查看会话token数\n/help 查看帮助\n/key 人格指令菜单"
+        msg = "[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎赞助支持我！]\n\n指令面板：\n/status 查看机器人key状态\n/count 查看机器人统计信息\n/reset 重置会话\n/his 查看历史记录\n/token 查看会话token数\n/help 查看帮助\n/set 人格指令菜单\n/key 动态添加key"
 
     if qq_msg[:4] == "/key":
         if len(qq_msg) == 4:
