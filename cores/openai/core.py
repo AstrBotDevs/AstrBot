@@ -16,13 +16,12 @@ class ChatGPT:
         self.key_list = []
         with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
             cfg = yaml.safe_load(ymlfile)
-            if cfg['openai']['key'] != '':
+            if cfg['openai']['key'] != '' or cfg['openai']['key'] != '修改我！！':
                 print("读取ChatGPT Key成功")
                 self.key_list = cfg['openai']['key']
-                print(f"Key列表: {self.key_list}")
                 # openai.api_key = cfg['openai']['key']
             else:
-                print("请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
+                input("请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
         
         # init key record
         self.init_key_record()
@@ -31,8 +30,6 @@ class ChatGPT:
         print(f'加载ChatGPTConfigs: {chatGPT_configs}')
         self.chatGPT_configs = chatGPT_configs
         self.openai_configs = cfg['openai']
-        global inst
-        inst = self
     
     def chat(self, prompt, image_mode = False):
         try:
@@ -50,7 +47,7 @@ class ChatGPT:
         except Exception as e:
             print(e)
             if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(e) or 'No API key provided.' in str(e):
-                print("当前Key已超额，正在切换")
+                print("当前Key已超额,正在切换")
                 self.key_stat[openai.api_key]['exceed'] = True
                 self.save_key_record()
 
@@ -73,8 +70,8 @@ class ChatGPT:
         if not image_mode:
             self.key_stat[openai.api_key]['used'] += response['usage']['total_tokens']
             self.save_key_record()
-            print("[ChatGPT] "+response["choices"][0]["text"])
-            return response["choices"][0]["text"].strip(), response['usage']['total_tokens']
+            print("[ChatGPT] "+str(response["choices"][0]["text"]))
+            return str(response["choices"][0]["text"]).strip(), response['usage']['total_tokens']
         else:
             return response['data'][0]['url']
             
@@ -96,7 +93,7 @@ class ChatGPT:
                         except Exception as e:
                             print(e)
                             if 'You exceeded' in str(e):
-                                print("当前Key已超额，正在切换")
+                                print("当前Key已超额,正在切换")
                                 self.key_stat[openai.api_key]['exceed'] = True
                                 self.save_key_record()
                                 time.sleep(1)
@@ -131,7 +128,7 @@ class ChatGPT:
         openai.api_key = key
         try:
             openai.Completion.create(
-                prompt="test",
+                prompt="1",
                 **self.chatGPT_configs
             )
             openai.api_key = pre_key
@@ -141,7 +138,7 @@ class ChatGPT:
         openai.api_key = pre_key
         return False
 
-    # 将key_list的key转储到key_record中，并记录相关数据
+    #将key_list的key转储到key_record中，并记录相关数据
     def init_key_record(self):
         if not os.path.exists(key_record_path):
             with open(key_record_path, 'w', encoding='utf-8') as f:
@@ -156,20 +153,17 @@ class ChatGPT:
                 for key in self.key_list:
                     if key not in self.key_stat:
                         self.key_stat[key] = {'exceed': False, 'used': 0}
-                        if openai.api_key is None:
-                            openai.api_key = key
+                        # if openai.api_key is None:
+                        #     openai.api_key = key
                     else:
-                        if self.key_stat[key]['exceed']:
-                            print(f"Key: {key} 已超额")
-                            continue
-                        else:
-                            if openai.api_key is None:
-                                openai.api_key = key
-                                print(f"使用Key: {key}, 已使用token: {self.key_stat[key]['used']}")
+                        # if self.key_stat[key]['exceed']:
+                        #     print(f"Key: {key} 已超额")
+                        #     continue
+                        # else:
+                        #     if openai.api_key is None:
+                        #         openai.api_key = key
+                        #         print(f"使用Key: {key}, 已使用token: {self.key_stat[key]['used']}")
+                        pass
                 if openai.api_key == None:
                     self.handle_switch_key("")
             self.save_key_record()
-
-def getInst() -> ChatGPT:
-    global inst
-    return inst

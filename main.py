@@ -24,12 +24,10 @@ def hot_update(ver):
     target = 'target.tar'
     time.sleep(5)
     while(True):
-        print("OKOK")
         if os.path.exists('version.txt'):
             version_file = open('version.txt', 'r', encoding='utf-8')
             vs = version_file.read()
             version = float(vs)
-            print('当前版本: ' + str(version))
         else:
             version = 0
         if not os.path.exists(target):
