@@ -1,6 +1,6 @@
 ## ⭐体验
 
-扫码加入QQ频道(频道名: GPT机器人 | 频道号: x42d56aki2)
+使用手机QQ扫码加入QQ频道(频道名: GPT机器人 | 频道号: x42d56aki2)
 
 ![image](https://user-images.githubusercontent.com/37870767/221722540-d4b0fada-4fa2-4063-bb00-1bb3e4d9a747.png)
 
