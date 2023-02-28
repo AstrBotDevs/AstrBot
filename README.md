@@ -4,16 +4,11 @@
 
 ![image](https://user-images.githubusercontent.com/37870767/221722540-d4b0fada-4fa2-4063-bb00-1bb3e4d9a747.png)
 
-
-**推荐Windows一键安装（版本更新更及时）！！**
-
-**Windows用户请前往Release下载最新版本**
+**Windows用户推荐Windows一键安装，请前往Release下载最新版本**
 
 **详细部署教程链接**https://soulter.top/posts/qpdg.html
 
 有任何问题请加频道反馈。
-
- 
 
 ## ⭐功能：
 
