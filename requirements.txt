@@ -1,3 +1,3 @@
-requests~=2.28.2
+requests~=2.27.1
 openai~=0.26.5
 qq-botpy~=1.1.2

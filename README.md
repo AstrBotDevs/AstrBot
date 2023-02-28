@@ -1,14 +1,12 @@
 ## ⭐体验
 扫码加入QQ频道
 
-![image](https://user-images.githubusercontent.com/37870767/217891261-7f2bbede-a70a-4e9b-9cdd-15dcb06f6629.png)
+![image](https://user-images.githubusercontent.com/37870767/219872641-ddbada16-7784-4525-b451-795a074882a0.png)
 
 
 
 **推荐Windows一键安装（版本更新更及时）！！**
 **请前往Release下载最新版本**
-
-**详细部署教程链接**https://soulter.top/posts/qpdg.html
 
 **详细部署教程链接**https://soulter.top/posts/qpdg.html
 
@@ -85,6 +83,9 @@
 - `/token`查看当前缓存的总token数
 - `/count` 查看统计
 - `/status` 查看chatGPT的配置
+- `/help` 查看帮助
+- `/key` 动态添加key
+- `/set` 人格设置面板
 
 ## 📰使用方法：
 
@@ -93,6 +94,7 @@
 使用Python的pip工具安装
 - `qq-botpy` （QQ频道官方Python SDK）
 - `openai` (OpenAI 库)
+
 ```shell
 pip install -r requirements.txt
 ```
