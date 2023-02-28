@@ -51,6 +51,9 @@ announcement = ""
 # 人格信息
 now_personality = {}
 
+# 机器人私聊模式
+direct_message_mode = True
+
 # 适配pyinstaller
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
@@ -68,10 +71,11 @@ class botClient(botpy.Client):
 
     # 收到私聊消息
     async def on_direct_message_create(self, message: DirectMessage):
-        toggle_count(at=False, message=message)
-        # executor.submit(oper_msg, message, True)
-        # await oper_msg(message=message, at=False)
-        new_sub_thread(oper_msg, (message, False))
+        if direct_message_mode:
+            toggle_count(at=False, message=message)
+            # executor.submit(oper_msg, message, True)
+            # await oper_msg(message=message, at=False)
+            new_sub_thread(oper_msg, (message, False))
 
 # 写入统计信息
 def toggle_count(at: bool, message):
@@ -202,10 +206,17 @@ def initBot(chatgpt_inst):
         # 创建上传定时器线程
         threading.Thread(target=upload, daemon=True).start()
 
-    global config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement
+    global config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode
     with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
         config = cfg
+
+        if 'direct_message_mode' in cfg:
+            direct_message_mode = cfg['direct_message_mode']
+            if direct_message_mode:
+                print("[System] 私聊功能打开")
+            else:
+                print("[System] 私聊功能关闭")
 
         # 得到发言频率配置
         if 'limit' in cfg:
@@ -215,7 +226,7 @@ def initBot(chatgpt_inst):
             if 'time' in cfg['limit']:
                 frequency_time = cfg['limit']['time']
         
-        announcement += '[QQChannelChatGPT项目]\n所有回答与腾讯公司无关。出现问题请前往[ChatGPT机器人]官方频道\n\n'
+        announcement += '[QQChannelChatGPT项目]\n所有回答与腾讯公司无关。出现问题请前往[GPT机器人]官方频道\n\n'
         # 得到公告配置
         if 'notice' in cfg:
             print('[System] 公告配置: '+cfg['notice'])
@@ -487,7 +498,7 @@ def oper_msg(message, at=False, loop=None):
         while t > max_tokens:
             if index >= len(cache_data_list):
                 break
-            if cache_data_list[index]['level'] != 'max':
+            if 'level' in cache_data_list[index] and cache_data_list[index]['level'] != 'max':
                 t -= int(cache_data_list[index]['single_tokens'])
                 del cache_data_list[index]
             else:
