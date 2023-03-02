@@ -17,25 +17,28 @@ class ChatGPT:
         with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
             cfg = yaml.safe_load(ymlfile)
             if cfg['openai']['key'] != '' or cfg['openai']['key'] != '修改我！！':
-                print("读取ChatGPT Key成功")
+                print("[System] 读取ChatGPT Key成功")
                 self.key_list = cfg['openai']['key']
                 # openai.api_key = cfg['openai']['key']
             else:
-                input("请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
+                input("[System] 请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
         
         # init key record
         self.init_key_record()
 
         chatGPT_configs = cfg['openai']['chatGPTConfigs']
-        print(f'加载ChatGPTConfigs: {chatGPT_configs}')
+        print(f'[System] 加载ChatGPTConfigs: {chatGPT_configs}')
         self.chatGPT_configs = chatGPT_configs
         self.openai_configs = cfg['openai']
     
     def chat(self, prompt, image_mode = False):
+        # ChatGPT API 2023/3/2
+        messages = [{"role": "user", "content": prompt}]
         try:
             if not image_mode:
-                response = openai.Completion.create(
-                    prompt=prompt,
+                
+                response = openai.ChatCompletion.create(
+                    messages=messages,
                     **self.chatGPT_configs
                 )
             else:
@@ -47,7 +50,7 @@ class ChatGPT:
         except Exception as e:
             print(e)
             if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(e) or 'No API key provided.' in str(e):
-                print("当前Key已超额,正在切换")
+                print("[System] 当前Key已超额,正在切换")
                 self.key_stat[openai.api_key]['exceed'] = True
                 self.save_key_record()
 
@@ -57,8 +60,8 @@ class ChatGPT:
                     raise e
             else:
                 if not image_mode:
-                    response = openai.Completion.create(
-                        prompt=prompt,
+                    response = openai.ChatCompletion.create(
+                        messages=messages,
                         **self.chatGPT_configs
                     )
                 else:
@@ -70,30 +73,31 @@ class ChatGPT:
         if not image_mode:
             self.key_stat[openai.api_key]['used'] += response['usage']['total_tokens']
             self.save_key_record()
-            print("[ChatGPT] "+str(response["choices"][0]["text"]))
-            return str(response["choices"][0]["text"]).strip(), response['usage']['total_tokens']
+            print("[ChatGPT] "+str(response["choices"][0]["message"]["content"]))
+            return str(response["choices"][0]["message"]["content"]).strip(), response['usage']['total_tokens']
         else:
             return response['data'][0]['url']
             
     def handle_switch_key(self, prompt):
+        messages = [{"role": "user", "content": prompt}]
         while True:
             is_all_exceed = True
             for key in self.key_stat:
                 if not self.key_stat[key]['exceed']:
                     is_all_exceed = False
                     openai.api_key = key
-                    print(f"切换到Key: {key}, 已使用token: {self.key_stat[key]['used']}")
+                    print(f"[System] 切换到Key: {key}, 已使用token: {self.key_stat[key]['used']}")
                     if prompt != '':
                         try:
-                            response = openai.Completion.create(
-                                prompt=prompt,
+                            response = openai.ChatCompletion.create(
+                                messages=messages,
                                 **self.chatGPT_configs
                             )
                             return response, True
                         except Exception as e:
                             print(e)
                             if 'You exceeded' in str(e):
-                                print("当前Key已超额,正在切换")
+                                print("[System] 当前Key已超额,正在切换")
                                 self.key_stat[openai.api_key]['exceed'] = True
                                 self.save_key_record()
                                 time.sleep(1)
@@ -101,7 +105,7 @@ class ChatGPT:
                     else:
                         return True
             if is_all_exceed:
-                print("所有Key已超额")
+                print("[System] 所有Key已超额")
                 return None, False
                 
     def getConfigs(self):
@@ -126,9 +130,10 @@ class ChatGPT:
     def check_key(self, key):
         pre_key = openai.api_key
         openai.api_key = key
+        messages = [{"role": "user", "content": "1"}]
         try:
-            openai.Completion.create(
-                prompt="1",
+            response = openai.ChatCompletion.create(
+                messages=messages,
                 **self.chatGPT_configs
             )
             openai.api_key = pre_key

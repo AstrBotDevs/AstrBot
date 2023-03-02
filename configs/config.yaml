@@ -6,19 +6,16 @@ openai:
   # 在下方非注释的地方使用以上格式
   key: 
     - 
-  
-  # OpenAI GPT模型参数
+    
   chatGPTConfigs:
-    engine: text-davinci-003
-    max_tokens: 600
-    temperature: 0.8
+    engine: "gpt-3.5-turbo"
+    max_tokens: 1000
+    temperature: 0.9
     top_p: 1
-    frequency_penalty: 0.4
-    presence_penalty: 0.3
-  total_tokens_limit: 500
-
-# QQ开放平台机器人信息
-# https://q.qq.com
+    frequency_penalty: 0
+    presence_penalty: 0
+    
+  total_tokens_limit: 2000
 qqbot:
   appid: 
   token: 
@@ -26,18 +23,16 @@ qqbot:
 # 设置是否一个人一个会话
 uniqueSessionMode: false
 
-# QQChannelChatGPTBot版本号（不用改）
-version: 2.33
+# QChannelBot 的版本，请勿修改此字段，否则可能产生一些bug
+version: 2.4 RealChatGPT Ver.
 
-# 转储历史记录时间间隔(分钟)
+# [Beta] 转储历史记录时间间隔(分钟)
 dump_history_interval: 10
 
-# 用户发言频率限制。
 # 一个用户只能在time秒内发送count条消息
 limit:
   time: 60
   count: 5
-
 # 公告
 notice: "此机器人由Github项目QQChannelChatGPT驱动。"
 

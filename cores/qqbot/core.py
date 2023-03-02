@@ -15,6 +15,7 @@ import os
 import sys
 from cores.qqbot.personality import personalities
 
+
 history_dump_interval = 10
 # QQBotClient实例
 client = ''
@@ -56,6 +57,9 @@ direct_message_mode = True
 
 # 适配pyinstaller
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
+
+# 版本
+version = '2.4 RealChatGPT Ver.'
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
@@ -121,7 +125,7 @@ def dump_history():
         # 每隔10分钟转储一次
         time.sleep(10*history_dump_interval)
 
-# 上传统计信息
+# 上传统计信息并检查更新
 def upload():
     global object_id
     while True:
@@ -206,17 +210,20 @@ def initBot(chatgpt_inst):
         # 创建上传定时器线程
         threading.Thread(target=upload, daemon=True).start()
 
-    global config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode
+    global config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode, version
     with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
         config = cfg
-
+        
+        # 得到私聊模式配置
         if 'direct_message_mode' in cfg:
             direct_message_mode = cfg['direct_message_mode']
-            if direct_message_mode:
-                print("[System] 私聊功能打开")
-            else:
-                print("[System] 私聊功能关闭")
+            print("[System] 私聊功能: "+str(direct_message_mode))
+
+        # 得到版本
+        if 'version' in cfg:
+            version = cfg['version']
+            print("[System] QQChannelChatGPT版本: "+str(version))
 
         # 得到发言频率配置
         if 'limit' in cfg:
@@ -245,11 +252,15 @@ def initBot(chatgpt_inst):
 
         print(f"[System] QQ开放平台AppID: {cfg['qqbot']['appid']} 令牌: {cfg['qqbot']['token']}")
 
-        print("[System] 如果有任何问题，请在https://github.com/Soulter/QQChannelChatGPT上提交issue说明问题！或者添加QQ：905617992\n")
+        print("\n[System] 如果有任何问题，请在https://github.com/Soulter/QQChannelChatGPT上提交issue说明问题！或者添加QQ：905617992")
+        print("[System] 请给https://github.com/Soulter/QQChannelChatGPT点个star!")
+        print("[System] 请给https://github.com/Soulter/QQChannelChatGPT点个star!")
+        input("\n仔细阅读完以上信息后，输入任意信息并回车以继续")
         try:
             run_bot(cfg['qqbot']['appid'], cfg['qqbot']['token'])
         except BaseException as e:
             input(f"\n[System-Error] 启动QQ机器人时出现错误，原因如下：{e}\n可能是没有填写QQBOT appid和token？请在config中完善你的appid和token\n配置教程：https://soulter.top/posts/qpdg.html\n")
+
         
 '''
 启动机器人
@@ -627,7 +638,15 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
         msg = f"当前会话数: {len(session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}\n历史会话数: {session_count}"
     
     if qq_msg == "/help":
-        msg = "[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎赞助支持我！]\n\n指令面板：\n/status 查看机器人key状态\n/count 查看机器人统计信息\n/reset 重置会话\n/his 查看历史记录\n/token 查看会话token数\n/help 查看帮助\n/set 人格指令菜单\n/key 动态添加key"
+        ol_version = 'Unknown'
+        try:
+            global version
+            res = requests.get("https://soulter.top/channelbot/update.json")
+            res_obj = json.loads(res.text)
+            ol_version = res_obj['version']
+        except BaseException:
+            pass
+        msg = f"[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\n当前版本:{version}\n最新版本:{str(ol_version)}\n请及时更新！\n\n指令面板：\n/status 查看机器人key状态\n/count 查看机器人统计信息\n/reset 重置会话\n/his 查看历史记录\n/token 查看会话token数\n/help 查看帮助\n/set 人格指令菜单\n/key 动态添加key"
 
     if qq_msg[:4] == "/key":
         if len(qq_msg) == 4:
