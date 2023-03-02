@@ -1,0 +1,42 @@
+openai:
+  # 注意：在1.7版本已支持多key自动切换，方法：
+  # key:
+  #   - xxxxx
+  #   - xxxxxx
+  # 在下方非注释的地方使用以上格式
+  key: 
+    - 
+    
+  chatGPTConfigs:
+    engine: "gpt-3.5-turbo"
+    max_tokens: 1000
+    temperature: 0.9
+    top_p: 1
+    frequency_penalty: 0
+    presence_penalty: 0
+    
+  total_tokens_limit: 2000
+qqbot:
+  appid: 
+  token: 
+
+# 设置是否一个人一个会话
+uniqueSessionMode: false
+
+# QChannelBot 的版本，请勿修改此字段，否则可能产生一些bug
+version: 2.4 RealChatGPT Ver.
+
+# [Beta] 转储历史记录时间间隔(分钟)
+dump_history_interval: 10
+
+# 一个用户只能在time秒内发送count条消息
+limit:
+  time: 60
+  count: 5
+# 公告
+notice: "此机器人由Github项目QQChannelChatGPT驱动。"
+
+# 是否打开私信功能
+# 设置为true则频道成员可以私聊机器人。
+# 设置为false则频道成员不能私聊机器人。
+direct_message_mode: true
