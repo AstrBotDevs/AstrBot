@@ -8,7 +8,7 @@ openai:
     - 
     
   chatGPTConfigs:
-    engine: "gpt-3.5-turbo"
+    model: "gpt-3.5-turbo"
     max_tokens: 1000
     temperature: 0.9
     top_p: 1
