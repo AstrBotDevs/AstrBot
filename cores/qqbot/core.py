@@ -61,6 +61,9 @@ abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 # 版本
 version = '2.4 RealChatGPT Ver.'
 
+# gpt配置信息
+gpt_config = {}
+
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
     thread.start() 
@@ -210,7 +213,7 @@ def initBot(chatgpt_inst):
         # 创建上传定时器线程
         threading.Thread(target=upload, daemon=True).start()
 
-    global config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode, version
+    global gpt_config, config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode, version
     with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
         config = cfg
@@ -219,6 +222,10 @@ def initBot(chatgpt_inst):
         if 'direct_message_mode' in cfg:
             direct_message_mode = cfg['direct_message_mode']
             print("[System] 私聊功能: "+str(direct_message_mode))
+        
+        # 得到GPT配置信息
+        if 'openai' in cfg and 'chatGPTConfigs' in cfg['openai']:
+            gpt_config = cfg['openai']['chatGPTConfigs']
 
         # 得到版本
         if 'version' in cfg:
@@ -612,6 +619,10 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
             msg=f"{name} 会话的token数: {get_user_usage_tokens(session_dict[session_id])}\n系统最大缓存token数: {max_tokens}"
         else:
             msg=f"会话的token数: {get_user_usage_tokens(session_dict[session_id])}\n系统最大缓存token数: {max_tokens}"
+    
+    if qq_msg == '/gpt':
+        global gpt_config
+        msg=f"OpenAI GPT配置:\n {gpt_config}"
     
     if qq_msg == "/status" or qq_msg == "/状态":
         chatgpt_cfg_str = ""
