@@ -1,20 +1,14 @@
 ## ⭐体验
-扫码加入QQ频道
 
-![image](https://user-images.githubusercontent.com/37870767/219872641-ddbada16-7784-4525-b451-795a074882a0.png)
+使用手机QQ扫码加入QQ频道(频道名: GPT机器人 | 频道号: x42d56aki2)
 
+![image](https://user-images.githubusercontent.com/37870767/221722540-d4b0fada-4fa2-4063-bb00-1bb3e4d9a747.png)
 
-
-**推荐Windows一键安装（版本更新更及时）！！**
-**请前往Release下载最新版本**
-
-**详细部署教程链接**https://soulter.top/posts/qpdg.html
+**Windows用户推荐Windows一键安装，请前往Release下载最新版本**
 
 **详细部署教程链接**https://soulter.top/posts/qpdg.html
 
 有任何问题请加频道反馈。
-
- 
 
 ## ⭐功能：
 
@@ -59,7 +53,7 @@
  </details>
 
 <details> 
- <summary>✅ 支持指令控制</summary> 
+ <summary>✅ 支持多种指令控制</summary> 
   
    -  详见下方`指令功能`
   
@@ -89,16 +83,18 @@
 
 ## 📰使用方法：
 
+**详细部署教程链接**https://soulter.top/posts/qpdg.html
+
 ### 安装第三方库
 
 使用Python的pip工具安装
 - `qq-botpy` （QQ频道官方Python SDK）
-- `openai` (OpenAI 库)
+- `openai` (OpenAI Python SDK)
 
 ```shell
 pip install -r requirements.txt
 ```
-> ⚠注意，由于qq-botpy需要运行在`Python 3.8+`的版本上，因此本项目也需要在此之上运行
+> ⚠注意，由于qq-botpy库需要运行在`Python 3.8+`的版本上，因此本项目也需要在此之上运行
 
 ### 配置
 
