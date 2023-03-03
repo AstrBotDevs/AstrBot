@@ -61,6 +61,14 @@ abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 # 版本
 version = '2.4 RealChatGPT Ver.'
 
+# 语言模型提供商
+REV_CHATGPT = 'rev_chatgpt'
+OPENAI_OFFICIAL = 'openai_official'
+provider = ''
+
+# 逆向库对象及负载均衡
+rev_chatgpt = []
+
 # gpt配置信息
 gpt_config = {}
 
@@ -167,41 +175,64 @@ def upload():
 '''
 初始化机器人
 '''
-def initBot(chatgpt_inst):
-    global chatgpt
-    chatgpt = chatgpt_inst
-    global max_tokens
-    max_tokens = int(chatgpt_inst.getConfigs()['total_tokens_limit'])
-    global now_personality
+def initBot(cfg, prov):
+    global chatgpt, provider, rev_chatgpt
+    global now_personality, gpt_config, config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode, version
 
+    provider = prov
+    config = cfg
 
-    # 读取历史记录 Soulter
-    try:
-        db1 = dbConn()
-        for session in db1.get_all_session():
-            session_dict[session[0]] = json.loads(session[1])['data']
-        print("[System] 历史记录读取成功喵")
-    except BaseException as e:
-        print("[System] 历史记录读取失败: " + str(e))
+    # 语言模型提供商
+    if prov == REV_CHATGPT:
+        if 'account' in cfg['rev_ChatGPT']:
+            from addons.revChatGPT.revchatgpt import revChatGPT
+            for i in range(0, len(cfg['rev_ChatGPT']['account'])):
+                print(f"[System] 正在创建rev_ChatGPT负载{str(i)}: " + cfg['rev_ChatGPT']['account'][i]['email'])
+                revstat = {
+                    'obj': revChatGPT(cfg['rev_ChatGPT']['account'][i]),
+                    'busy': False
+                }
+                rev_chatgpt.append(revstat)
+        else:
+            input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT的email和password")
+    elif prov == OPENAI_OFFICIAL:
+        from cores.openai.core import ChatGPT
+        chatgpt = ChatGPT(cfg['openai'])
+        global max_tokens
+        max_tokens = int(chatgpt.getConfigs()['total_tokens_limit'])
+        
+        # 读取历史记录 Soulter
+        try:
+            db1 = dbConn()
+            for session in db1.get_all_session():
+                session_dict[session[0]] = json.loads(session[1])['data']
+            print("[System] 历史记录读取成功喵")
+        except BaseException as e:
+            print("[System] 历史记录读取失败: " + str(e))
 
-    # 读统计信息
-    global stat_file
-    if not os.path.exists(abs_path+"configs/stat"):
-        with open(abs_path+"configs/stat", 'w', encoding='utf-8') as f:
-                json.dump({}, f)
-    stat_file = open(abs_path+"configs/stat", 'r', encoding='utf-8')
-    global count
-    res = stat_file.read()
-    if res == '':
-        count = {}
-    else:
-        try: 
-            count = json.loads(res)
-        except BaseException:
-            pass
-    # 创建转储定时器线程
-    threading.Thread(target=dump_history, daemon=True).start()
+        # 读统计信息
+        global stat_file
+        if not os.path.exists(abs_path+"configs/stat"):
+            with open(abs_path+"configs/stat", 'w', encoding='utf-8') as f:
+                    json.dump({}, f)
+        stat_file = open(abs_path+"configs/stat", 'r', encoding='utf-8')
+        global count
+        res = stat_file.read()
+        if res == '':
+            count = {}
+        else:
+            try: 
+                count = json.loads(res)
+            except BaseException:
+                pass
+        # 创建转储定时器线程
+        threading.Thread(target=dump_history, daemon=True).start()
 
+        # 得到GPT配置信息
+        if 'openai' in cfg and 'chatGPTConfigs' in cfg['openai']:
+            gpt_config = cfg['openai']['chatGPTConfigs']
+
+    # 统计上传
     if is_upload_log:
         # 读取object_id
         global object_id
@@ -213,61 +244,52 @@ def initBot(chatgpt_inst):
         object_id_file.close()
         # 创建上传定时器线程
         threading.Thread(target=upload, daemon=True).start()
+    
+    # 得到私聊模式配置
+    if 'direct_message_mode' in cfg:
+        direct_message_mode = cfg['direct_message_mode']
+        print("[System] 私聊功能: "+str(direct_message_mode))
 
-    global gpt_config, config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode, version
-    with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
-        cfg = yaml.safe_load(ymlfile)
-        config = cfg
-        
-        # 得到私聊模式配置
-        if 'direct_message_mode' in cfg:
-            direct_message_mode = cfg['direct_message_mode']
-            print("[System] 私聊功能: "+str(direct_message_mode))
-        
-        # 得到GPT配置信息
-        if 'openai' in cfg and 'chatGPTConfigs' in cfg['openai']:
-            gpt_config = cfg['openai']['chatGPTConfigs']
+    # 得到版本
+    if 'version' in cfg:
+        version = cfg['version']
+        print("[System] QQChannelChatGPT版本: "+str(version))
 
-        # 得到版本
-        if 'version' in cfg:
-            version = cfg['version']
-            print("[System] QQChannelChatGPT版本: "+str(version))
+    # 得到发言频率配置
+    if 'limit' in cfg:
+        print('[System] 发言频率配置: '+str(cfg['limit']))
+        if 'count' in cfg['limit']:
+            frequency_count = cfg['limit']['count']
+        if 'time' in cfg['limit']:
+            frequency_time = cfg['limit']['time']
+    
+    announcement += '[QQChannelChatGPT项目]\n所有回答与腾讯公司无关。出现问题请前往[GPT机器人]官方频道\n\n'
+    # 得到公告配置
+    if 'notice' in cfg:
+        print('[System] 公告配置: '+cfg['notice'])
+        announcement += cfg['notice']
+    try:
+        if 'uniqueSessionMode' in cfg and cfg['uniqueSessionMode']:
+            uniqueSession = True
+        else:
+            uniqueSession = False
+        print("[System] 独立会话: " + str(uniqueSession))
+        if 'dump_history_interval' in cfg:
+            history_dump_interval = int(cfg['dump_history_interval'])
+            print("[System] 历史记录转储时间周期: " + str(history_dump_interval) + "分钟")
+    except BaseException:
+        print("[System-Error] 读取uniqueSessionMode/version/dump_history_interval配置文件失败, 使用默认值。")
 
-        # 得到发言频率配置
-        if 'limit' in cfg:
-            print('[System] 发言频率配置: '+str(cfg['limit']))
-            if 'count' in cfg['limit']:
-                frequency_count = cfg['limit']['count']
-            if 'time' in cfg['limit']:
-                frequency_time = cfg['limit']['time']
-        
-        announcement += '[QQChannelChatGPT项目]\n所有回答与腾讯公司无关。出现问题请前往[GPT机器人]官方频道\n\n'
-        # 得到公告配置
-        if 'notice' in cfg:
-            print('[System] 公告配置: '+cfg['notice'])
-            announcement += cfg['notice']
-        try:
-            if 'uniqueSessionMode' in cfg and cfg['uniqueSessionMode']:
-                uniqueSession = True
-            else:
-                uniqueSession = False
-            print("[System] 独立会话: " + str(uniqueSession))
-            if 'dump_history_interval' in cfg:
-                history_dump_interval = int(cfg['dump_history_interval'])
-                print("[System] 历史记录转储时间周期: " + str(history_dump_interval) + "分钟")
-        except BaseException:
-            print("[System-Error] 读取uniqueSessionMode/version/dump_history_interval配置文件失败, 使用默认值。")
+    print(f"[System] QQ开放平台AppID: {cfg['qqbot']['appid']} 令牌: {cfg['qqbot']['token']}")
 
-        print(f"[System] QQ开放平台AppID: {cfg['qqbot']['appid']} 令牌: {cfg['qqbot']['token']}")
-
-        print("\n[System] 如果有任何问题，请在https://github.com/Soulter/QQChannelChatGPT上提交issue说明问题！或者添加QQ：905617992")
-        print("[System] 请给https://github.com/Soulter/QQChannelChatGPT点个star!")
-        print("[System] 请给https://github.com/Soulter/QQChannelChatGPT点个star!")
-        input("\n仔细阅读完以上信息后，输入任意信息并回车以继续")
-        try:
-            run_bot(cfg['qqbot']['appid'], cfg['qqbot']['token'])
-        except BaseException as e:
-            input(f"\n[System-Error] 启动QQ机器人时出现错误，原因如下：{e}\n可能是没有填写QQBOT appid和token？请在config中完善你的appid和token\n配置教程：https://soulter.top/posts/qpdg.html\n")
+    print("\n[System] 如果有任何问题，请在https://github.com/Soulter/QQChannelChatGPT上提交issue说明问题！或者添加QQ：905617992")
+    print("[System] 请给https://github.com/Soulter/QQChannelChatGPT点个star!")
+    print("[System] 请给https://github.com/Soulter/QQChannelChatGPT点个star!")
+    input("\n仔细阅读完以上信息后，输入任意信息并回车以继续")
+    try:
+        run_bot(cfg['qqbot']['appid'], cfg['qqbot']['token'])
+    except BaseException as e:
+        input(f"\n[System-Error] 启动QQ机器人时出现错误，原因如下：{e}\n可能是没有填写QQBOT appid和token？请在config中完善你的appid和token\n配置教程：https://soulter.top/posts/qpdg.html\n")
 
         
 '''
@@ -280,7 +302,7 @@ def run_bot(appid, token):
     client.run(appid=appid, token=token)
 
 '''
-得到OpenAI的回复
+得到OpenAI官方API的回复
 '''
 def get_chatGPT_response(prompts_str, image_mode=False):
     res = ''
@@ -295,14 +317,34 @@ def get_chatGPT_response(prompts_str, image_mode=False):
         return res
 
 '''
+负载均衡，得到逆向ChatGPT回复
+'''
+def get_rev_ChatGPT_response(prompts_str):
+    res = ''
+    print("[Debug] "+str(rev_chatgpt))
+    for revstat in rev_chatgpt:
+        if not revstat['busy']:
+            revstat['busy'] = True
+            print("[Debug] 使用逆向ChatGPT回复ing", end='')
+            res = revstat['obj'].chat(prompts_str)
+            print("OK")
+            revstat['busy'] = False
+            # 处理结果文本
+            chatgpt_res = res.strip()
+            return res
+    res = '所有的OpenAI账号都有负载, 请稍后再试~'
+    return res
+
+
+'''
 回复QQ消息
 '''
 def send_qq_msg(message, res, image_mode=False):
     if not image_mode:
         try:
             asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
-        except BaseException as e:
-            raise e
+        except:
+            raise
     else:
         asyncio.run_coroutine_threadsafe(message.reply(image=res, content=""), client.loop)
 
@@ -357,7 +399,7 @@ def check_frequency(id) -> bool:
 处理消息
 '''
 def oper_msg(message, at=False, loop=None):
-    global session_dict
+    global session_dict, provider
     print("[QQBOT] 接收到消息："+ str(message.content))
     qq_msg = ''
     session_id = ''
@@ -408,20 +450,6 @@ def oper_msg(message, at=False, loop=None):
     if command_type == 1 and 'prompt' in now_personality:
         # 设置人格
         qq_msg = now_personality['prompt']
- 
-    # if qq_msg[0:6] == '/draw ':
-    #     # TODO 未完全实现
-    #     prompt = qq_msg[6:]
-    #     url = get_chatGPT_response(prompt, image_mode = True)
-    #     resp = requests.get(url)
-    #     filename = './images/' + str(int(time.time())) + '.jpg'
-    #     print(url)
-    #     with open(filename, 'wb') as f:
-    #         f.write(resp.content)
-    #     qiniu_url = cores.database.qiniu.put_img(filename)
-    #     print(qiniu_url)
-    #     send_qq_msg(message, qiniu_url, image_mode=True)
-    #     return
 
     # 这里是预设，你可以按需更改
     if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
@@ -435,12 +463,13 @@ def oper_msg(message, at=False, loop=None):
     # if '台湾' in qq_msg or 'taiwan' in qq_msg:
     #     send_qq_msg(message, "声明：台湾是中国的一部分。\n下面否定此结论的回答全部无效。")
     
-    # 拦截不合适的词请求
+    # 关键词拦截器
     for i in uw.unfit_words_q:
         if i in qq_msg.strip():
             send_qq_msg(message, f"你的提问中有不太合适的内容😭\n请更换措辞~")
             return
-
+        
+    # 会话机制
     if session_id not in session_dict:
         session_dict[session_id] = []
 
@@ -457,32 +486,78 @@ def oper_msg(message, at=False, loop=None):
             f.write(json.dumps(fjson))
             f.flush()
             f.close()
+        
+    chatgpt_res = "[Error] 占位符"
+    if provider == OPENAI_OFFICIAL:
 
-    # 获取缓存
-    cache_prompt = ''
-    cache_data_list = session_dict[session_id]
-    cache_prompt = get_prompts_by_cache_list(cache_data_list)
-    cache_prompt += "\nHuman: "+ qq_msg + "\nAI: "
+        # 获取缓存
+        cache_prompt = ''
+        cache_data_list = session_dict[session_id]
+        cache_prompt = get_prompts_by_cache_list(cache_data_list)
+        cache_prompt += "\nHuman: "+ qq_msg + "\nAI: "
     
-    # 请求chatGPT获得结果
-    try:
-        chatgpt_res, current_usage_tokens = get_chatGPT_response(prompts_str=cache_prompt)
-    except (BaseException) as e:
-        print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
-        if 'maximum context length' in str(e):
-            print("token超限, 清空对应缓存")
-            session_dict[session_id] = []
-            cache_data_list = []
-            cache_prompt = "Human: "+ qq_msg + "\nAI: "
+        # 请求chatGPT获得结果
+        try:
             chatgpt_res, current_usage_tokens = get_chatGPT_response(prompts_str=cache_prompt)
-        elif 'exceeded' in str(e):
-            send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
+        except (BaseException) as e:
+            print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
+            if 'maximum context length' in str(e):
+                print("token超限, 清空对应缓存")
+                session_dict[session_id] = []
+                cache_data_list = []
+                cache_prompt = "Human: "+ qq_msg + "\nAI: "
+                chatgpt_res, current_usage_tokens = get_chatGPT_response(prompts_str=cache_prompt)
+            elif 'exceeded' in str(e):
+                send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
+            else:
+                send_qq_msg(message, f"OpenAI API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
+            return
+        
+        # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens
+        if current_usage_tokens > max_tokens:
+            t = current_usage_tokens
+            index = 0
+            while t > max_tokens:
+                if index >= len(cache_data_list):
+                    break
+                if 'level' in cache_data_list[index] and cache_data_list[index]['level'] != 'max':
+                    t -= int(cache_data_list[index]['single_tokens'])
+                    del cache_data_list[index]
+                else:
+                    index += 1
+            # 删除完后更新相关字段
+            session_dict[session_id] = cache_data_list
+            cache_prompt = get_prompts_by_cache_list(cache_data_list)
+
+        # 添加新条目进入缓存的prompt
+        if command_type == 1:
+            level = 'max'
         else:
-            send_qq_msg(message, f"OpenAI API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
-        return
-    
-    logf.write("[GPT] "+ str(chatgpt_res)+'\n')
-    logf.flush()
+            level = 'normal'
+        if len(cache_data_list) > 0: 
+            single_record = {
+                "prompt": f'Human: {qq_msg}\nAI: {chatgpt_res}\n',
+                "usage_tokens": current_usage_tokens,
+                "single_tokens": current_usage_tokens - int(cache_data_list[-1]['usage_tokens']),
+                "level": level
+            }
+        else:
+            single_record = {
+                "prompt": f'Human: {qq_msg}\nAI: {chatgpt_res}\n',
+                "usage_tokens": current_usage_tokens,
+                "single_tokens": current_usage_tokens,
+                "level": level
+            }
+        cache_data_list.append(single_record)
+        session_dict[session_id] = cache_data_list
+        
+    elif provider == REV_CHATGPT:
+        try:
+            chatgpt_res = "[Rev]"+str(get_rev_ChatGPT_response(qq_msg))
+        except BaseException as e:
+            print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
+            send_qq_msg(message, f"Rev ChatGPT API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
+            return
 
     # 发送qq信息
     try:
@@ -496,7 +571,7 @@ def oper_msg(message, at=False, loop=None):
                 gap_chatgpt_res = gap_chatgpt_res.replace(i, "***")
         # 发送信息
         send_qq_msg(message, ''+gap_chatgpt_res)
-    except BaseException as e:
+    except:
         print("QQ频道API错误: \n"+str(e))
         f_res = ""
         for t in chatgpt_res:
@@ -504,50 +579,17 @@ def oper_msg(message, at=False, loop=None):
         try:
             send_qq_msg(message, ''+f_res)
             # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
-        except BaseException as e:
+        except:
             # 如果还是不行则过滤url
             f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '', f_res, flags=re.MULTILINE)
             f_res = f_res.replace(".", "·")
             send_qq_msg(message, ''+f_res)
             # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
 
-    # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens
-    if current_usage_tokens > max_tokens:
-        t = current_usage_tokens
-        index = 0
-        while t > max_tokens:
-            if index >= len(cache_data_list):
-                break
-            if 'level' in cache_data_list[index] and cache_data_list[index]['level'] != 'max':
-                t -= int(cache_data_list[index]['single_tokens'])
-                del cache_data_list[index]
-            else:
-                index += 1
-        # 删除完后更新相关字段
-        session_dict[session_id] = cache_data_list
-        cache_prompt = get_prompts_by_cache_list(cache_data_list)
+    # 记录日志
+    logf.write("[GPT] "+ str(chatgpt_res)+'\n')
+    logf.flush()
 
-    # 添加新条目进入缓存的prompt
-    if command_type == 1:
-        level = 'max'
-    else:
-        level = 'normal'
-    if len(cache_data_list) > 0: 
-        single_record = {
-            "prompt": f'Human: {qq_msg}\nAI: {chatgpt_res}\n',
-            "usage_tokens": current_usage_tokens,
-            "single_tokens": current_usage_tokens - int(cache_data_list[-1]['usage_tokens']),
-            "level": level
-        }
-    else:
-        single_record = {
-            "prompt": f'Human: {qq_msg}\nAI: {chatgpt_res}\n',
-            "usage_tokens": current_usage_tokens,
-            "single_tokens": current_usage_tokens,
-            "level": level
-        }
-    cache_data_list.append(single_record)
-    session_dict[session_id] = cache_data_list
 
 '''
 获取统计信息
@@ -583,7 +625,7 @@ def get_stat():
 def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
     go = False # 是否处理完指令后继续执行msg_oper后面的代码
     msg = ''
-    global session_dict, now_personality
+    global session_dict, now_personality, provider
 
     # 指令返回值，/set设置人格是1
     type = -1
@@ -598,6 +640,9 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
             msg = f"你的历史记录重置成功"
     
     if qq_msg[:4] == "/his":
+        if provider == REV_CHATGPT:
+            msg = "[QQChannelChatGPT]当前使用的语言模型提供商是Rev_ChatGPT, 不支持查看历史记录"
+            return msg, go, type
         #分页，每页5条
         msg = ''
         size_per_page = 3
@@ -616,6 +661,9 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
             msg=f"历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页\n\n{announcement}"
     
     if qq_msg == "/token":
+        if provider == REV_CHATGPT:
+            msg = "[QQChannelChatGPT]当前使用的语言模型提供商是Rev_ChatGPT, 不支持使用此指令"
+            return msg, go, type
         msg = ''
         if at:
             msg=f"{name} 会话的token数: {get_user_usage_tokens(session_dict[session_id])}\n系统最大缓存token数: {max_tokens}"
@@ -623,10 +671,14 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
             msg=f"会话的token数: {get_user_usage_tokens(session_dict[session_id])}\n系统最大缓存token数: {max_tokens}"
     
     if qq_msg == '/gpt':
+        if provider == REV_CHATGPT:
+            msg = "[QQChannelChatGPT]当前使用的语言模型提供商是Rev_ChatGPT, 不支持使用此指令"
+            return msg, go, type
         global gpt_config
         msg=f"OpenAI GPT配置:\n {gpt_config}"
     
     if qq_msg == "/status" or qq_msg == "/状态":
+        
         chatgpt_cfg_str = ""
         key_stat = chatgpt.get_key_stat()
         key_list = chatgpt.get_key_list()
@@ -663,7 +715,7 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
 
     if qq_msg[:4] == "/key":
         if len(qq_msg) == 4:
-            msg = "感谢您赞助key。请以以下格式赞助:\n/key xxxxx"
+            msg = "感谢您赞助key，key为官方API使用，请以以下格式赞助:\n/key xxxxx"
         key = qq_msg[5:]
         send_qq_msg(message, "收到！正在核验...")
         if chatgpt.check_key(key):

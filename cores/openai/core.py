@@ -12,24 +12,22 @@ abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 key_record_path = abs_path+'chatgpt_key_record'
 
 class ChatGPT:
-    def __init__(self):
+    def __init__(self, cfg):
         self.key_list = []
-        with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
-            cfg = yaml.safe_load(ymlfile)
-            if cfg['openai']['key'] != '' or cfg['openai']['key'] != '修改我！！':
-                print("[System] 读取ChatGPT Key成功")
-                self.key_list = cfg['openai']['key']
-                # openai.api_key = cfg['openai']['key']
-            else:
-                input("[System] 请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
+        if cfg['key'] != '' or cfg['key'] != '修改我！！':
+            print("[System] 读取ChatGPT Key成功")
+            self.key_list = cfg['key']
+            # openai.api_key = cfg['key']
+        else:
+            input("[System] 请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
         
         # init key record
         self.init_key_record()
 
-        chatGPT_configs = cfg['openai']['chatGPTConfigs']
+        chatGPT_configs = cfg['chatGPTConfigs']
         print(f'[System] 加载ChatGPTConfigs: {chatGPT_configs}')
         self.chatGPT_configs = chatGPT_configs
-        self.openai_configs = cfg['openai']
+        self.openai_configs = cfg
     
     def chat(self, prompt, image_mode = False):
         # ChatGPT API 2023/3/2

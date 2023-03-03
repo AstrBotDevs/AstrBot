@@ -5,19 +5,27 @@ import os, sys
 import signal
 import requests,json
 
-# 是否是windows打包。一般人不需要改这个，这个只是我为了方便加上的。
-win_compile_mode = False
+
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
-
-
 
 def main(loop, event):
     import cores.qqbot.core as qqBot
-    from cores.openai.core import ChatGPT
-    #实例化ChatGPT
-    chatgpt = ChatGPT()
-    # #执行qqBot
-    qqBot.initBot(chatgpt)
+    import yaml
+
+    ymlfile =  open(abs_path+"configs/config.yaml", 'r', encoding='utf-8')
+    cfg = yaml.safe_load(ymlfile)
+    provider = privider_chooser(cfg)
+    print('[System] 当前语言模型提供商: ' + provider)
+    # 执行Bot
+    qqBot.initBot(cfg, provider)
+
+# 语言模型提供商选择器
+# 目前有：OpenAI官方API、逆向库
+def privider_chooser(cfg):
+    if 'rev_ChatGPT' in cfg and cfg['rev_ChatGPT']['enable']:
+        return 'rev_chatgpt'
+    else:
+        return 'openai_official'
 
 # 仅支持linux
 def hot_update(ver):
@@ -77,9 +85,8 @@ def hot_update(ver):
             time.sleep(60*20)
         except BaseException as e:
             print(e)
-            print("upd出现异常，请联系QQ905617992")
+            print("upd出现异常, 请联系QQ905617992")
             time.sleep(60*20)
-
 
 def update_version(ver):
     if not os.path.exists('update_record'):

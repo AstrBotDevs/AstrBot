@@ -1,21 +1,27 @@
+# 如果你不知道怎么部署，请务必查看https://soulter.top/posts/qpdg.html
+
+# 注意：已支持多key自动切换，方法：
+# key:
+#   - sk-xxxxxx
+#   - sk-xxxxxx
+# 在下方非注释的地方使用以上格式
 openai:
-  # 注意：在1.7版本已支持多key自动切换，方法：
-  # key:
-  #   - xxxxx
-  #   - xxxxxx
-  # 在下方非注释的地方使用以上格式
   key: 
     - 
     
+  # 这里是GPT配置，语言模型默认使用gpt-3.5-turbo
   chatGPTConfigs:
-    engine: "gpt-3.5-turbo"
-    max_tokens: 1000
+    model: gpt-3.5-turbo
+    max_tokens: 1500
     temperature: 0.9
     top_p: 1
     frequency_penalty: 0
     presence_penalty: 0
     
-  total_tokens_limit: 2000
+  total_tokens_limit: 2800
+
+# QQ开放平台的appid和令牌
+# q.qq.com
 qqbot:
   appid: 
   token: 
@@ -24,7 +30,7 @@ qqbot:
 uniqueSessionMode: false
 
 # QChannelBot 的版本，请勿修改此字段，否则可能产生一些bug
-version: 2.4 RealChatGPT Ver.
+version: 2.5 RealChatGPT Ver.
 
 # [Beta] 转储历史记录时间间隔(分钟)
 dump_history_interval: 10
@@ -40,3 +46,31 @@ notice: "此机器人由Github项目QQChannelChatGPT驱动。"
 # 设置为true则频道成员可以私聊机器人。
 # 设置为false则频道成员不能私聊机器人。
 direct_message_mode: true
+
+################外带程序（插件）################
+
+# 逆向ChatGPT库
+# https://github.com/acheong08/ChatGPT
+# 优点：免费（无免费额度限制）；
+# 缺点：速度相对慢。OpenAI 速率限制：免费帐户每小时 50 个请求。您可以通过多帐户循环来绕过它
+# use设置为true后，将会停止使用上面正常的官方API调用而使用本逆向项目
+#
+# 多账户可以保证每个请求都能得到及时的回复。
+# 关于account的格式
+# account:
+#   - email: 第1个账户
+#     password: 第1个账户密码
+#   - email: 第2个账户
+#     password: 第2个账户密码
+#   - ....
+# 请严格按照上面这个格式填写。
+# 这里我免费提供2个账号给大家，不过用的人一定会很多的，所以会造成一些bug，因此还是用自己的账号好一点。
+# 需要账号可以联系我。QQ905617992
+
+rev_ChatGPT:
+  enable: true
+  account:
+    - email: removed-account-01@example.invalid
+      password: 0
+    - email: removed-account-02@example.invalid
+      password: 0
