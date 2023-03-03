@@ -28,7 +28,7 @@ def privider_chooser(cfg):
         return 'openai_official'
 
 # 仅支持linux
-def hot_update(ver):
+def hot_update():
     target = 'target.tar'
     time.sleep(5)
     while(True):
