@@ -188,11 +188,14 @@ def initBot(cfg, prov):
             from addons.revChatGPT.revchatgpt import revChatGPT
             for i in range(0, len(cfg['rev_ChatGPT']['account'])):
                 print(f"[System] 正在创建rev_ChatGPT负载{str(i)}: " + cfg['rev_ChatGPT']['account'][i]['email'])
-                revstat = {
-                    'obj': revChatGPT(cfg['rev_ChatGPT']['account'][i]),
-                    'busy': False
-                }
-                rev_chatgpt.append(revstat)
+                try:
+                    revstat = {
+                        'obj': revChatGPT(cfg['rev_ChatGPT']['account'][i]),
+                        'busy': False
+                    }
+                    rev_chatgpt.append(revstat)
+                except:
+                    print("[System] 创建rev_ChatGPT负载失败")
         else:
             input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT的email和password")
     elif prov == OPENAI_OFFICIAL:
