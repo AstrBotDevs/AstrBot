@@ -53,7 +53,7 @@ direct_message_mode: true
 # https://github.com/acheong08/ChatGPT
 # 优点：免费（无免费额度限制）；
 # 缺点：速度相对慢。OpenAI 速率限制：免费帐户每小时 50 个请求。您可以通过多帐户循环来绕过它
-# use设置为true后，将会停止使用上面正常的官方API调用而使用本逆向项目
+# enable设置为true后，将会停止使用上面正常的官方API调用而使用本逆向项目
 #
 # 多账户可以保证每个请求都能得到及时的回复。
 # 关于account的格式
@@ -68,7 +68,7 @@ direct_message_mode: true
 # 需要账号可以联系我。QQ905617992
 
 rev_ChatGPT:
-  enable: true
+  enable: false
   account:
     - email: removed-account-01@example.invalid
       password: 0
