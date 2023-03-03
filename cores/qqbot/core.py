@@ -131,6 +131,7 @@ def dump_history():
 # 上传统计信息并检查更新
 def upload():
     global object_id
+    global version
     while True:
         addr = ''
         try:
@@ -147,7 +148,7 @@ def upload():
                 'Content-Type': 'application/json'
             }
             key_stat = chatgpt.get_key_stat()
-            d = {"data": {"guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count, 'addr': addr, 'winver': '2.3', 'key_stat':key_stat}}
+            d = {"data": {"guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count, 'addr': addr, 'winver': version, 'key_stat':key_stat}}
             d = json.dumps(d).encode("utf-8")
             res = requests.put(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record/{object_id}', headers = headers, data = d)
             if json.loads(res.text)['code'] == 1:
@@ -462,19 +463,20 @@ def oper_msg(message, at=False, loop=None):
     cache_data_list = session_dict[session_id]
     cache_prompt = get_prompts_by_cache_list(cache_data_list)
     cache_prompt += "\nHuman: "+ qq_msg + "\nAI: "
+    
     # 请求chatGPT获得结果
     try:
         chatgpt_res, current_usage_tokens = get_chatGPT_response(prompts_str=cache_prompt)
-    except (PromptExceededError) as e:
-        print("token超限, 清空对应缓存")
-        session_dict[session_id] = []
-        cache_data_list = []
-        cache_prompt = "Human: "+ qq_msg + "\nAI: "
-        chatgpt_res, current_usage_tokens = get_chatGPT_response(prompts_str=cache_prompt)
     except (BaseException) as e:
-        print("OpenAI API错误:(")
-        if 'exceeded' in str(e):
-            send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。您可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
+        print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
+        if 'maximum context length' in str(e):
+            print("token超限, 清空对应缓存")
+            session_dict[session_id] = []
+            cache_data_list = []
+            cache_prompt = "Human: "+ qq_msg + "\nAI: "
+            chatgpt_res, current_usage_tokens = get_chatGPT_response(prompts_str=cache_prompt)
+        elif 'exceeded' in str(e):
+            send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
         else:
             send_qq_msg(message, f"OpenAI API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
         return
