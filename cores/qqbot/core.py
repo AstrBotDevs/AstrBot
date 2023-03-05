@@ -187,17 +187,18 @@ def initBot(cfg, prov):
         if 'account' in cfg['rev_ChatGPT']:
             from addons.revChatGPT.revchatgpt import revChatGPT
             for i in range(0, len(cfg['rev_ChatGPT']['account'])):
-                print(f"[System] 正在创建rev_ChatGPT负载{str(i)}: " + cfg['rev_ChatGPT']['account'][i]['email'])
                 try:
+                    print(f"[System] 创建rev_ChatGPT负载{str(i)}: " + str(cfg['rev_ChatGPT']['account'][i]))
                     revstat = {
                         'obj': revChatGPT(cfg['rev_ChatGPT']['account'][i]),
                         'busy': False
                     }
                     rev_chatgpt.append(revstat)
+
                 except:
                     print("[System] 创建rev_ChatGPT负载失败")
         else:
-            input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT的email和password")
+            input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
     elif prov == OPENAI_OFFICIAL:
         from cores.openai.core import ChatGPT
         chatgpt = ChatGPT(cfg['openai'])
@@ -307,16 +308,23 @@ def run_bot(appid, token):
 '''
 得到OpenAI官方API的回复
 '''
-def get_chatGPT_response(prompts_str, image_mode=False):
+def get_chatGPT_response(context, request, image_mode=False):
     res = ''
     usage = ''
+
+    req_list = []
+    for i in context:
+        req_list.append(i['user'])
+        req_list.append(i['AI'])
+    req_list.append(request['user'])
+
     if not image_mode:
-        res, usage = chatgpt.chat(prompts_str)
+        res, usage = chatgpt.chat(req_list)
         # 处理结果文本
         chatgpt_res = res.strip()
         return res, usage
     else:
-        res = chatgpt.chat(prompts_str, image_mode = True)
+        res = chatgpt.chat(req_list, image_mode = True)
         return res
 
 '''
@@ -345,9 +353,11 @@ def get_rev_ChatGPT_response(prompts_str):
 def send_qq_msg(message, res, image_mode=False):
     if not image_mode:
         try:
-            asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
-        except:
-            raise
+            res = asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
+            res.result()
+        except BaseException as e:
+            print("[System-Error] 回复QQ消息失败")
+            raise e
     else:
         asyncio.run_coroutine_threadsafe(message.reply(image=res, content=""), client.loop)
 
@@ -366,10 +376,13 @@ def get_prompts_by_cache_list(cache_data_list, divide=False, paging=False, size=
             page_end = len(cache_data_list)
         cache_data_list = cache_data_list[page_begin:page_end]
     for item in cache_data_list:
-        prompts += str(item['prompt'])
+        prompts += str(item['user']['role']) + ":\n" + str(item['user']['content']) + "\n"
+        prompts += str(item['AI']['role']) + ":\n" + str(item['AI']['content']) + "\n"
+
         if divide:
             prompts += "----------\n"
     return prompts
+
     
 def get_user_usage_tokens(cache_list):
     usage_tokens = 0
@@ -494,26 +507,44 @@ def oper_msg(message, at=False, loop=None):
     if provider == OPENAI_OFFICIAL:
 
         # 获取缓存
-        cache_prompt = ''
+        # cache_prompt = ''
         cache_data_list = session_dict[session_id]
-        cache_prompt = get_prompts_by_cache_list(cache_data_list)
-        cache_prompt += "\nHuman: "+ qq_msg + "\nAI: "
+        # cache_prompt = get_prompts_by_cache_list(cache_data_list)
+        # cache_prompt += "\nHuman: "+ qq_msg + "\nAI: "
+
+        # 创建一个新的Record
+
+        record_obj = {
+            "user": {
+                "role": "user",
+                "content": qq_msg,
+            },
+            "AI": {},
+            'usage_tokens': 0,
+            'level': 'normal',
+        }
+
+        if command_type == 1:
+            record_obj['user'] = 'system'
+        
+        print("[Debug] "+ str(cache_data_list))
     
         # 请求chatGPT获得结果
         try:
-            chatgpt_res, current_usage_tokens = get_chatGPT_response(prompts_str=cache_prompt)
+            chatgpt_res, current_usage_tokens = get_chatGPT_response(context=cache_data_list, request=record_obj)
         except (BaseException) as e:
             print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
             if 'maximum context length' in str(e):
                 print("token超限, 清空对应缓存")
                 session_dict[session_id] = []
                 cache_data_list = []
-                cache_prompt = "Human: "+ qq_msg + "\nAI: "
-                chatgpt_res, current_usage_tokens = get_chatGPT_response(prompts_str=cache_prompt)
+                chatgpt_res, current_usage_tokens = get_chatGPT_response(context=cache_data_list, request=record_obj)
             elif 'exceeded' in str(e):
                 send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
             else:
-                send_qq_msg(message, f"OpenAI API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
+                f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
+                f_res = f_res.replace(".", "·")
+                send_qq_msg(message, f"OpenAI API错误。原因如下：\n{f_res} \n前往官方频道反馈~")
             return
         
         # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens
@@ -530,28 +561,44 @@ def oper_msg(message, at=False, loop=None):
                     index += 1
             # 删除完后更新相关字段
             session_dict[session_id] = cache_data_list
-            cache_prompt = get_prompts_by_cache_list(cache_data_list)
+            # cache_prompt = get_prompts_by_cache_list(cache_data_list)
 
-        # 添加新条目进入缓存的prompt
+        # 人格置顶
         if command_type == 1:
             level = 'max'
         else:
             level = 'normal'
-        if len(cache_data_list) > 0: 
-            single_record = {
-                "prompt": f'Human: {qq_msg}\nAI: {chatgpt_res}\n',
-                "usage_tokens": current_usage_tokens,
-                "single_tokens": current_usage_tokens - int(cache_data_list[-1]['usage_tokens']),
-                "level": level
-            }
+
+        # 添加新条目进入缓存的prompt
+        record_obj['AI'] = {
+            'role': 'assistant',
+            'content': chatgpt_res,
+        }
+        record_obj['usage_tokens'] = current_usage_tokens
+        if len(cache_data_list) > 0:
+            record_obj['single_tokens'] = current_usage_tokens - int(cache_data_list[-1]['usage_tokens'])
         else:
-            single_record = {
-                "prompt": f'Human: {qq_msg}\nAI: {chatgpt_res}\n',
-                "usage_tokens": current_usage_tokens,
-                "single_tokens": current_usage_tokens,
-                "level": level
-            }
-        cache_data_list.append(single_record)
+            record_obj['single_tokens'] = current_usage_tokens
+        record_obj['level'] = level
+
+        cache_data_list.append(record_obj)
+        # if len(cache_data_list) > 0: 
+        #     single_record = {
+        #         'role': 'assistant',
+        #         "content": chatgpt_res,
+        #         "usage_tokens": current_usage_tokens,
+        #         "single_tokens": current_usage_tokens - int(cache_data_list[-1]['usage_tokens']),
+        #         "level": level
+        #     }
+        # else:
+        #     single_record = {
+        #         'role': 'assistant',
+        #         "prompt": f'Human: {qq_msg}\nAI: {chatgpt_res}\n',
+        #         "usage_tokens": current_usage_tokens,
+        #         "single_tokens": current_usage_tokens,
+        #         "level": level
+        #     }
+        # cache_data_list.append(single_record)
         session_dict[session_id] = cache_data_list
         
     elif provider == REV_CHATGPT:
@@ -574,7 +621,7 @@ def oper_msg(message, at=False, loop=None):
                 gap_chatgpt_res = gap_chatgpt_res.replace(i, "***")
         # 发送信息
         send_qq_msg(message, ''+gap_chatgpt_res)
-    except:
+    except BaseException as e:
         print("QQ频道API错误: \n"+str(e))
         f_res = ""
         for t in chatgpt_res:
@@ -582,9 +629,9 @@ def oper_msg(message, at=False, loop=None):
         try:
             send_qq_msg(message, ''+f_res)
             # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
-        except:
+        except BaseException as e:
             # 如果还是不行则过滤url
-            f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '', f_res, flags=re.MULTILINE)
+            f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
             f_res = f_res.replace(".", "·")
             send_qq_msg(message, ''+f_res)
             # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
