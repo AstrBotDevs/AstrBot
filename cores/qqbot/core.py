@@ -187,17 +187,18 @@ def initBot(cfg, prov):
         if 'account' in cfg['rev_ChatGPT']:
             from addons.revChatGPT.revchatgpt import revChatGPT
             for i in range(0, len(cfg['rev_ChatGPT']['account'])):
-                print(f"[System] 正在创建rev_ChatGPT负载{str(i)}: " + cfg['rev_ChatGPT']['account'][i]['email'])
                 try:
+                    print(f"[System] 创建rev_ChatGPT负载{str(i)}: " + str(cfg['rev_ChatGPT']['account'][i]))
                     revstat = {
                         'obj': revChatGPT(cfg['rev_ChatGPT']['account'][i]),
                         'busy': False
                     }
                     rev_chatgpt.append(revstat)
+
                 except:
                     print("[System] 创建rev_ChatGPT负载失败")
         else:
-            input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT的email和password")
+            input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
     elif prov == OPENAI_OFFICIAL:
         from cores.openai.core import ChatGPT
         chatgpt = ChatGPT(cfg['openai'])
@@ -345,9 +346,11 @@ def get_rev_ChatGPT_response(prompts_str):
 def send_qq_msg(message, res, image_mode=False):
     if not image_mode:
         try:
-            asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
-        except:
-            raise
+            res = asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
+            res.result()
+        except BaseException as e:
+            print("[System-Error] 回复QQ消息失败")
+            raise e
     else:
         asyncio.run_coroutine_threadsafe(message.reply(image=res, content=""), client.loop)
 
@@ -574,7 +577,7 @@ def oper_msg(message, at=False, loop=None):
                 gap_chatgpt_res = gap_chatgpt_res.replace(i, "***")
         # 发送信息
         send_qq_msg(message, ''+gap_chatgpt_res)
-    except:
+    except BaseException as e:
         print("QQ频道API错误: \n"+str(e))
         f_res = ""
         for t in chatgpt_res:
@@ -582,7 +585,7 @@ def oper_msg(message, at=False, loop=None):
         try:
             send_qq_msg(message, ''+f_res)
             # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
-        except:
+        except BaseException as e:
             # 如果还是不行则过滤url
             f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '', f_res, flags=re.MULTILINE)
             f_res = f_res.replace(".", "·")

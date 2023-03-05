@@ -56,20 +56,30 @@ direct_message_mode: true
 # enable设置为true后，将会停止使用上面正常的官方API调用而使用本逆向项目
 #
 # 多账户可以保证每个请求都能得到及时的回复。
-# 关于account的格式
+
+
+# 关于account的格式，请你务必认真阅读以下格式。
+
+
+# account支持email+password、session_token、access_token多种方式登录。
+# 如果要使用session_token、access_token登录，直接添加新的一行（注意缩进！） - access_token: xxxxxxx即可
 # account:
+#   - session_token: xxxxxxxx
+#   - access_token: xxxxxxxx
 #   - email: 第1个账户
 #     password: 第1个账户密码
 #   - email: 第2个账户
 #     password: 第2个账户密码
 #   - ....
 # 请严格按照上面这个格式填写。
-# 这里我免费提供2个账号给大家，不过用的人一定会很多的，所以会造成一些bug，因此还是用自己的账号好一点。
+# 这里免费提供2个账号给大家，不过用的人一定会很多的，所以会造成一些bug，因此还是用自己的账号好一点。
 # 需要账号可以联系我。QQ905617992
 
 rev_ChatGPT:
   enable: false
   account:
+    - access_token: REDACTED_EXPIRED_JWT
+    # - session_token: xxxxxxxx
     - email: removed-account-01@example.invalid
       password: 0
     - email: removed-account-02@example.invalid
