@@ -29,55 +29,37 @@ class ChatGPT:
         self.chatGPT_configs = chatGPT_configs
         self.openai_configs = cfg
     
-    def chat(self, prompt, image_mode = False):
+    def chat(self, req, image_mode = False):
         # ChatGPT API 2023/3/2
-        messages = [{"role": "user", "content": prompt}]
+        # messages = [{"role": "user", "content": prompt}]
         try:
-            if not image_mode:
-                
-                response = openai.ChatCompletion.create(
-                    messages=messages,
-                    **self.chatGPT_configs
-                )
-            else:
-                response = openai.Image.create(
-                    prompt=prompt,
-                    n=1,
-                    size="512x512",
-                )
+            response = openai.ChatCompletion.create(
+                messages=req,
+                **self.chatGPT_configs
+            )
         except Exception as e:
             print(e)
-            if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(e) or 'No API key provided.' in str(e):
-                print("[System] 当前Key已超额,正在切换")
+            if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(e) or 'No API key provided' in str(e) or 'Incorrect API key provided' in str(e):
+                print("[System] 当前Key已超额或者不正常,正在切换")
                 self.key_stat[openai.api_key]['exceed'] = True
                 self.save_key_record()
 
-                response, is_switched = self.handle_switch_key(prompt)
+                response, is_switched = self.handle_switch_key(req)
                 if not is_switched:
-                    # 所有Key都超额
+                    # 所有Key都超额或不正常
                     raise e
             else:
-                if not image_mode:
-                    response = openai.ChatCompletion.create(
-                        messages=messages,
-                        **self.chatGPT_configs
-                    )
-                else:
-                    response = openai.Image.create(
-                        prompt=prompt,
-                        n=1,
-                        size="512x512",
-                    )
-        if not image_mode:
-            self.key_stat[openai.api_key]['used'] += response['usage']['total_tokens']
-            self.save_key_record()
-            print("[ChatGPT] "+str(response["choices"][0]["message"]["content"]))
-            return str(response["choices"][0]["message"]["content"]).strip(), response['usage']['total_tokens']
-        else:
-            return response['data'][0]['url']
+                response = openai.ChatCompletion.create(
+                    messages=req,
+                    **self.chatGPT_configs
+                )
+        self.key_stat[openai.api_key]['used'] += response['usage']['total_tokens']
+        self.save_key_record()
+        print("[ChatGPT] "+str(response["choices"][0]["message"]["content"]))
+        return str(response["choices"][0]["message"]["content"]).strip(), response['usage']['total_tokens']
             
-    def handle_switch_key(self, prompt):
-        messages = [{"role": "user", "content": prompt}]
+    def handle_switch_key(self, req):
+        # messages = [{"role": "user", "content": prompt}]
         while True:
             is_all_exceed = True
             for key in self.key_stat:
@@ -85,10 +67,10 @@ class ChatGPT:
                     is_all_exceed = False
                     openai.api_key = key
                     print(f"[System] 切换到Key: {key}, 已使用token: {self.key_stat[key]['used']}")
-                    if prompt != '':
+                    if len(req) > 0:
                         try:
                             response = openai.ChatCompletion.create(
-                                messages=messages,
+                                messages=req,
                                 **self.chatGPT_configs
                             )
                             return response, True
