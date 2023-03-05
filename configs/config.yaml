@@ -78,7 +78,7 @@ direct_message_mode: true
 rev_ChatGPT:
   enable: false
   account:
-    - access_token: REDACTED_EXPIRED_JWT
+    - access_token: 
     # - session_token: xxxxxxxx
     - email: removed-account-01@example.invalid
       password: 0
