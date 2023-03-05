@@ -47,6 +47,10 @@ notice: "此机器人由Github项目QQChannelChatGPT驱动。"
 # 设置为false则频道成员不能私聊机器人。
 direct_message_mode: true
 
+# 系统代理
+# http_proxy: mask
+# https_proxy: mask
+
 ################外带程序（插件）################
 
 # 逆向ChatGPT库

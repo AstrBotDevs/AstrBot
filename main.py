@@ -8,12 +8,19 @@ import requests,json
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
+
 def main(loop, event):
     import cores.qqbot.core as qqBot
     import yaml
 
     ymlfile =  open(abs_path+"configs/config.yaml", 'r', encoding='utf-8')
     cfg = yaml.safe_load(ymlfile)
+
+    if 'http_proxy' in cfg:
+        os.environ['HTTP_PROXY'] = cfg['http_proxy']
+    if 'https_proxy' in cfg:
+        os.environ['HTTPS_PROXY'] = cfg['https_proxy']
+
     provider = privider_chooser(cfg)
     print('[System] 当前语言模型提供商: ' + provider)
     # 执行Bot
