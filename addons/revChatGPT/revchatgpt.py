@@ -3,8 +3,8 @@ from revChatGPT.V1 import Chatbot
 class revChatGPT:
     def __init__(self, config):
         
-        print("[RevChatGPT] 逆向库初始化："+str(config))
-        config['password'] = str(config['password'])
+        if 'password' in config:
+            config['password'] = str(config['password'])
         self.chatbot = Chatbot(config=config)
 
     def chat(self, prompt):
