@@ -288,7 +288,7 @@ def initBot(cfg, prov):
     print("\n[System] 如果有任何问题，请在https://github.com/Soulter/QQChannelChatGPT上提交issue说明问题！或者添加QQ：905617992")
     print("[System] 请给https://github.com/Soulter/QQChannelChatGPT点个star!")
     print("[System] 请给https://github.com/Soulter/QQChannelChatGPT点个star!")
-    input("\n仔细阅读完以上信息后，输入任意信息并回车以继续")
+    # input("\n仔细阅读完以上信息后，输入任意信息并回车以继续")
     try:
         run_bot(cfg['qqbot']['appid'], cfg['qqbot']['token'])
     except BaseException as e:
