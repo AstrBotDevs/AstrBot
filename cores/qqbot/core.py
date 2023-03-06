@@ -1,5 +1,6 @@
 import botpy
 from botpy.message import Message
+from botpy.types.message import Reference
 import yaml
 import re
 from util.errors.errors import PromptExceededError
@@ -80,8 +81,9 @@ class botClient(botpy.Client):
     # 收到At消息
     async def on_at_message_create(self, message: Message):
         toggle_count(at=True, message=message)
+        message_reference = Reference(message_id=message.id, ignore_get_message_error=False)
         # executor.submit(oper_msg, message, True)
-        new_sub_thread(oper_msg, (message, True))
+        new_sub_thread(oper_msg, (message, True, message_reference))
         # await oper_msg(message=message, at=True)
 
     # 收到私聊消息
@@ -335,14 +337,26 @@ def get_rev_ChatGPT_response(prompts_str):
     print("[Debug] "+str(rev_chatgpt))
     for revstat in rev_chatgpt:
         if not revstat['busy']:
-            revstat['busy'] = True
-            print("[Debug] 使用逆向ChatGPT回复ing", end='')
-            res = revstat['obj'].chat(prompts_str)
-            print("OK")
-            revstat['busy'] = False
-            # 处理结果文本
-            chatgpt_res = res.strip()
-            return res
+            try:
+                revstat['busy'] = True
+                print("[Debug] 使用逆向ChatGPT回复ing", end='', flush=True)
+                res = revstat['obj'].chat(prompts_str)
+                print("OK")
+                revstat['busy'] = False
+                # 处理结果文本
+                chatgpt_res = res.strip()
+                return res
+            except Exception as e:
+                print("[System-Error] 逆向ChatGPT回复失败" + str(e))
+                try:
+                    if e.code == 2:
+                        print("[System-Error] 频率限制，正在切换账号。"+ str(e))
+                        continue
+                    else:
+                        res = '所有的非忙碌OpenAI账号经过测试都暂时出现问题，请稍后再试或者联系管理员~'
+                        return res
+                except BaseException:
+                    continue
     res = '所有的OpenAI账号都有负载, 请稍后再试~'
     return res
 
@@ -350,10 +364,13 @@ def get_rev_ChatGPT_response(prompts_str):
 '''
 回复QQ消息
 '''
-def send_qq_msg(message, res, image_mode=False):
+def send_qq_msg(message, res, image_mode=False, msg_ref = None):
     if not image_mode:
         try:
-            res = asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
+            if msg_ref is not None:
+                res = asyncio.run_coroutine_threadsafe(message.reply(content=res, message_reference = msg_ref), client.loop)
+            else:
+                res = asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
             res.result()
         except BaseException as e:
             print("[System-Error] 回复QQ消息失败")
@@ -414,7 +431,7 @@ def check_frequency(id) -> bool:
 '''
 处理消息
 '''
-def oper_msg(message, at=False, loop=None):
+def oper_msg(message, at=False, msg_ref = None):
     global session_dict, provider
     print("[QQBOT] 接收到消息："+ str(message.content))
     qq_msg = ''
@@ -469,7 +486,7 @@ def oper_msg(message, at=False, loop=None):
 
     # 这里是预设，你可以按需更改
     if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
-        send_qq_msg(message, f"你好呀~")
+        send_qq_msg(message, f"你好呀~", msg_ref=msg_ref)
         return
     # if qq_msg.strip() == '傻逼' or qq_msg.strip() == 'sb':
     #     send_qq_msg(message, f"好好好")
@@ -482,7 +499,7 @@ def oper_msg(message, at=False, loop=None):
     # 关键词拦截器
     for i in uw.unfit_words_q:
         if i in qq_msg.strip():
-            send_qq_msg(message, f"你的提问中有不太合适的内容😭\n请更换措辞~")
+            send_qq_msg(message, f"你的提问中有不太合适的内容😭\n请更换措辞~", msg_ref=msg_ref)
             return
         
     # 会话机制
@@ -504,6 +521,10 @@ def oper_msg(message, at=False, loop=None):
             f.close()
         
     chatgpt_res = "[Error] 占位符"
+
+    send_qq_msg(message, f"正在思考！\n(此机器人供测试，稳定性无法保证。加入[GPT机器人]了解更多)", msg_ref=msg_ref)
+
+
     if provider == OPENAI_OFFICIAL:
 
         # 获取缓存
@@ -620,20 +641,20 @@ def oper_msg(message, at=False, loop=None):
             if i in gap_chatgpt_res:
                 gap_chatgpt_res = gap_chatgpt_res.replace(i, "***")
         # 发送信息
-        send_qq_msg(message, ''+gap_chatgpt_res)
+        send_qq_msg(message, ''+gap_chatgpt_res, msg_ref=msg_ref)
     except BaseException as e:
         print("QQ频道API错误: \n"+str(e))
         f_res = ""
         for t in chatgpt_res:
             f_res += t + ' '
         try:
-            send_qq_msg(message, ''+f_res)
+            send_qq_msg(message, ''+f_res, msg_ref=msg_ref)
             # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
         except BaseException as e:
             # 如果还是不行则过滤url
             f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
             f_res = f_res.replace(".", "·")
-            send_qq_msg(message, ''+f_res)
+            send_qq_msg(message, ''+f_res, msg_ref=msg_ref)
             # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
 
     # 记录日志
