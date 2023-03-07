@@ -528,9 +528,6 @@ def oper_msg(message, at=False, msg_ref = None):
         
     chatgpt_res = "[Error] 占位符"
 
-    send_qq_msg(message, f"正在思考！\n(此机器人供测试，稳定性无法保证。加入[GPT机器人]了解更多)")
-
-
     if provider == OPENAI_OFFICIAL:
 
         # 获取缓存
