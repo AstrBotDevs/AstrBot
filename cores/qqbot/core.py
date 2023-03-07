@@ -753,7 +753,7 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
         key_stat = chatgpt.get_key_stat()
         key_list = chatgpt.get_key_list()
         index = 1
-        max = 900000
+        max = 9000000
         gg_count = 0
         total = 0
         tag = ''
