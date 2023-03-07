@@ -321,6 +321,7 @@ def get_chatGPT_response(context, request, image_mode=False):
     req_list.append(request['user'])
 
     if not image_mode:
+        print("[Debug] "+ str(req_list))
         res, usage = chatgpt.chat(req_list)
         # 处理结果文本
         chatgpt_res = res.strip()
@@ -542,11 +543,11 @@ def oper_msg(message, at=False, msg_ref = None):
             },
             "AI": {},
             'usage_tokens': 0,
-            'level': 'normal',
         }
 
+        # ChatGPT API 回复倾向（人格）
         if command_type == 1:
-            record_obj['user'] = 'system'
+            record_obj["user"]["role"] = "system"
         
         print("[Debug] "+ str(cache_data_list))
     
@@ -576,7 +577,8 @@ def oper_msg(message, at=False, msg_ref = None):
             while t > max_tokens:
                 if index >= len(cache_data_list):
                     break
-                if 'level' in cache_data_list[index] and cache_data_list[index]['level'] != 'max':
+                # 保留倾向（人格）信息
+                if 'user' in cache_data_list[index] and cache_data_list[index]['user']['role'] != 'system':
                     t -= int(cache_data_list[index]['single_tokens'])
                     del cache_data_list[index]
                 else:
@@ -584,12 +586,6 @@ def oper_msg(message, at=False, msg_ref = None):
             # 删除完后更新相关字段
             session_dict[session_id] = cache_data_list
             # cache_prompt = get_prompts_by_cache_list(cache_data_list)
-
-        # 人格置顶
-        if command_type == 1:
-            level = 'max'
-        else:
-            level = 'normal'
 
         # 添加新条目进入缓存的prompt
         record_obj['AI'] = {
@@ -601,7 +597,6 @@ def oper_msg(message, at=False, msg_ref = None):
             record_obj['single_tokens'] = current_usage_tokens - int(cache_data_list[-1]['usage_tokens'])
         else:
             record_obj['single_tokens'] = current_usage_tokens
-        record_obj['level'] = level
 
         cache_data_list.append(record_obj)
         # if len(cache_data_list) > 0: 
@@ -796,7 +791,8 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
 
     if qq_msg[:6] == "/unset":
         now_personality = {}
-        msg = "已清除人格"
+        session_dict[session_id] = []
+        msg = "已清除人格并重置历史记录。"
     
     if qq_msg[:4] == "/set":
         if len(qq_msg) == 4:
@@ -834,5 +830,12 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
                 go = True
                 type = 1
             else:
-                msg = f"人格{ps}不存在, 请使用/set list查看人格列表"
+                now_personality = {
+                    'name': '自定义人格',
+                    'prompt': ps
+                }
+                session_dict[session_id] = []
+                msg = f"你的自定义人格已设置。 \n人格信息: {ps}\n请耐心等待机器人回复第一条信息。"
+                go = True
+                type = 1
     return msg, go, type
