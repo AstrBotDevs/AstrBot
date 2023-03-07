@@ -522,7 +522,7 @@ def oper_msg(message, at=False, msg_ref = None):
         
     chatgpt_res = "[Error] 占位符"
 
-    send_qq_msg(message, f"正在思考！\n(此机器人供测试，稳定性无法保证。加入[GPT机器人]了解更多)", msg_ref=msg_ref)
+    send_qq_msg(message, f"正在思考！\n(此机器人供测试，稳定性无法保证。加入[GPT机器人]了解更多)")
 
 
     if provider == OPENAI_OFFICIAL:
@@ -562,11 +562,12 @@ def oper_msg(message, at=False, msg_ref = None):
                 chatgpt_res, current_usage_tokens = get_chatGPT_response(context=cache_data_list, request=record_obj)
             elif 'exceeded' in str(e):
                 send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
+                return
             else:
                 f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
                 f_res = f_res.replace(".", "·")
                 send_qq_msg(message, f"OpenAI API错误。原因如下：\n{f_res} \n前往官方频道反馈~")
-            return
+                return
         
         # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens
         if current_usage_tokens > max_tokens:
@@ -634,8 +635,6 @@ def oper_msg(message, at=False, msg_ref = None):
     try:
         # 防止被qq频道过滤消息
         gap_chatgpt_res = chatgpt_res.replace(".", " . ")
-        if '```' in gap_chatgpt_res:
-            chatgpt_res.replace('```', "")
         # 过滤不合适的词
         for i in uw.unfit_words:
             if i in gap_chatgpt_res:
