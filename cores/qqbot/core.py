@@ -60,7 +60,7 @@ direct_message_mode = True
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 # 版本
-version = '2.4 RealChatGPT Ver.'
+version = '2.6'
 
 # 语言模型提供商
 REV_CHATGPT = 'rev_chatgpt'
@@ -258,8 +258,13 @@ def initBot(cfg, prov):
 
     # 得到版本
     if 'version' in cfg:
-        version = cfg['version']
-        print("[System] QQChannelChatGPT版本: "+str(version))
+        try:
+            f = open(abs_path+"version.txt", 'r', encoding='utf-8')
+            version = f.read()
+        except:
+            print('[System-Err] 读取更新记录文件失败')
+        version = 'Unknown'
+        # print("[System] QQChannelChatGPT版本: "+str(version))
 
     # 得到发言频率配置
     if 'limit' in cfg:
