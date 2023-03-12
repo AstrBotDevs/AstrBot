@@ -1,4 +1,4 @@
 requests~=2.27.1
 openai~=0.27.0
 qq-botpy~=1.1.2
-revChatGPT~=3.1.4
+revChatGPT~=3.3.4
