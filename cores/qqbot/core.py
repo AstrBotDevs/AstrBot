@@ -61,7 +61,7 @@ direct_message_mode = True
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 # 版本
-version = '2.6'
+version = '2.7 ChineseAreGood Ver.'
 
 # 语言模型提供商
 REV_CHATGPT = 'rev_chatgpt'
@@ -276,7 +276,7 @@ def initBot(cfg, prov):
             version = f.read()
         except:
             print('[System-Err] 读取更新记录文件失败')
-        version = 'Unknown'
+        # version = 'Unknown'
         # print("[System] QQChannelChatGPT版本: "+str(version))
 
     # 得到发言频率配置
@@ -518,8 +518,14 @@ def oper_msg(message, at=False, msg_ref = None):
     
     # 关键词拦截器
     for i in uw.unfit_words_q:
-        if i in qq_msg.strip():
-            send_qq_msg(message, f"你的提问中有不太合适的内容😭\n请更换措辞~", msg_ref=msg_ref)
+        matches = re.match(i, qq_msg.strip(), re.I | re.M)
+        if matches:
+            send_qq_msg(message, f"你的提问得到的回复未通过【自有关键词拦截】服务，不予回复。", msg_ref=msg_ref)
+            return
+    if baidu_judge != None:
+        check, msg = baidu_judge.judge(qq_msg)
+        if not check:
+            send_qq_msg(message, f"你的提问得到的回复未通过【百度AI内容审核】服务，不予回复。\n\n{msg}", msg_ref=msg_ref)
             return
         
     # 会话机制
@@ -650,8 +656,7 @@ def oper_msg(message, at=False, msg_ref = None):
     # 过滤不合适的词
     judged_res = chatgpt_res
     for i in uw.unfit_words:
-        if i in chatgpt_res:
-            judged_res = chatgpt_res.replace(i, "***")
+        res = re.sub(i, "***", judged_res)
     # 百度内容审核服务二次审核
     if baidu_judge != None:
         check, msg = baidu_judge.judge(judged_res)
