@@ -50,7 +50,7 @@ direct_message_mode: true
 ################外带程序（插件）################
 
 # 百度内容审核服务
-# 新用户免费5万次调用。https://ai.baidu.com/
+# 新用户免费5万次调用。https://cloud.baidu.com/doc/ANTIPORN/index.html
 baidu_aip:
   enable: false
   app_id: 
