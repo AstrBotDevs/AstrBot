@@ -13,6 +13,8 @@
 
 **详细部署教程链接**https://soulter.top/posts/qpdg.html
 
+**有网络问题报错的请先看issue**
+
 有任何问题请加频道反馈。
 
 ## ⭐功能：
