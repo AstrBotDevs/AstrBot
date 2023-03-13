@@ -12,13 +12,13 @@ openai:
   # 这里是GPT配置，语言模型默认使用gpt-3.5-turbo
   chatGPTConfigs:
     model: gpt-3.5-turbo
-    max_tokens: 1500
+    max_tokens: 3000
     temperature: 0.9
     top_p: 1
     frequency_penalty: 0
     presence_penalty: 0
     
-  total_tokens_limit: 2800
+  total_tokens_limit: 5000
 
 # QQ开放平台的appid和令牌
 # q.qq.com
@@ -28,30 +28,34 @@ qqbot:
 
 # 设置是否一个人一个会话
 uniqueSessionMode: false
-
 # QChannelBot 的版本，请勿修改此字段，否则可能产生一些bug
-version: 2.5 RealChatGPT Ver.
-
+version: 2.7 ChineseVeryGood Ver.
 # [Beta] 转储历史记录时间间隔(分钟)
 dump_history_interval: 10
-
 # 一个用户只能在time秒内发送count条消息
 limit:
   time: 60
   count: 5
 # 公告
 notice: "此机器人由Github项目QQChannelChatGPT驱动。"
-
 # 是否打开私信功能
 # 设置为true则频道成员可以私聊机器人。
 # 设置为false则频道成员不能私聊机器人。
 direct_message_mode: true
 
 # 系统代理
-# http_proxy: mask
-# https_proxy: mask
+# http_proxy: http://localhost:7890
+# https_proxy: http://localhost:7890
 
 ################外带程序（插件）################
+
+# 百度内容审核服务
+# 新用户免费5万次调用。https://ai.baidu.com/
+baidu_aip:
+  enable: false
+  app_id: 
+  api_key: 
+  secret_key: 
 
 # 逆向ChatGPT库
 # https://github.com/acheong08/ChatGPT
@@ -82,8 +86,6 @@ direct_message_mode: true
 rev_ChatGPT:
   enable: false
   account:
-    - access_token: 
-    # - session_token: xxxxxxxx
     - email: removed-account-01@example.invalid
       password: 0
     - email: removed-account-02@example.invalid

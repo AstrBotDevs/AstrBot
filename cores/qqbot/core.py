@@ -15,6 +15,7 @@ import util.unfit_words as uw
 import os
 import sys
 from cores.qqbot.personality import personalities
+from addons.baidu_aip_judge import BaiduJudge
 
 
 history_dump_interval = 10
@@ -72,6 +73,9 @@ rev_chatgpt = []
 
 # gpt配置信息
 gpt_config = {}
+
+# 百度内容审核实例
+baidu_judge = None
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
@@ -158,7 +162,7 @@ def upload():
                 'Content-Type': 'application/json'
             }
             key_stat = chatgpt.get_key_stat()
-            d = {"data": {"guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count, 'addr': addr, 'winver': version, 'key_stat':key_stat}}
+            d = {"data": {'version': version, "guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count, 'addr': addr, 'key_stat':key_stat}}
             d = json.dumps(d).encode("utf-8")
             res = requests.put(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record/{object_id}', headers = headers, data = d)
             if json.loads(res.text)['code'] == 1:
@@ -178,7 +182,7 @@ def upload():
 初始化机器人
 '''
 def initBot(cfg, prov):
-    global chatgpt, provider, rev_chatgpt
+    global chatgpt, provider, rev_chatgpt, baidu_judge
     global now_personality, gpt_config, config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode, version
 
     provider = prov
@@ -238,6 +242,15 @@ def initBot(cfg, prov):
         if 'openai' in cfg and 'chatGPTConfigs' in cfg['openai']:
             gpt_config = cfg['openai']['chatGPTConfigs']
 
+    # 百度内容审核
+    if 'baidu_aip' in cfg and 'enable' in cfg['baidu_aip'] and cfg['baidu_aip']['enable']:
+        try: 
+            baidu_judge = BaiduJudge(cfg['baidu_aip'])
+            print("[System] 百度内容审核初始化成功")
+        except BaseException as e:
+            input("[System] 百度内容审核初始化失败: " + str(e))
+            exit()
+        
     # 统计上传
     if is_upload_log:
         # 读取object_id
@@ -492,11 +505,12 @@ def oper_msg(message, at=False, msg_ref = None):
 
     # 这里是预设，你可以按需更改
     if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
-        send_qq_msg(message, f"你好呀~", msg_ref=msg_ref)
+        send_qq_msg(message, f"你好呀🥰，输入/help查看指令噢", msg_ref=msg_ref)
         return
     # if qq_msg.strip() == '傻逼' or qq_msg.strip() == 'sb':
     #     send_qq_msg(message, f"好好好")
     #     return
+
     # if '喜多' in qq_msg:
     #     send_qq_msg(message, 'http://rn2ztkeap.hn-bkt.clouddn.com/xd1.gif', True)
     # if '台湾' in qq_msg or 'taiwan' in qq_msg:
@@ -627,17 +641,30 @@ def oper_msg(message, at=False, msg_ref = None):
             print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
             send_qq_msg(message, f"Rev ChatGPT API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
             return
+    
+    # 记录日志
+    logf.write("[GPT] "+ str(chatgpt_res)+'\n')
+    logf.flush()
 
+    # 敏感过滤
+    # 过滤不合适的词
+    judged_res = chatgpt_res
+    for i in uw.unfit_words:
+        if i in chatgpt_res:
+            judged_res = chatgpt_res.replace(i, "***")
+    # 百度内容审核服务二次审核
+    if baidu_judge != None:
+        check, msg = baidu_judge.judge(judged_res)
+        if not check:
+            send_qq_msg(message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref)
+            return      
     # 发送qq信息
     try:
         # 防止被qq频道过滤消息
-        gap_chatgpt_res = chatgpt_res.replace(".", " . ")
-        # 过滤不合适的词
-        for i in uw.unfit_words:
-            if i in gap_chatgpt_res:
-                gap_chatgpt_res = gap_chatgpt_res.replace(i, "***")
-        # 发送信息
+        gap_chatgpt_res = judged_res.replace(".", " . ")
         send_qq_msg(message, ''+gap_chatgpt_res, msg_ref=msg_ref)
+        # 发送信息
+        
     except BaseException as e:
         print("QQ频道API错误: \n"+str(e))
         f_res = ""
@@ -652,10 +679,6 @@ def oper_msg(message, at=False, msg_ref = None):
             f_res = f_res.replace(".", "·")
             send_qq_msg(message, ''+f_res, msg_ref=msg_ref)
             # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
-
-    # 记录日志
-    logf.write("[GPT] "+ str(chatgpt_res)+'\n')
-    logf.flush()
 
 
 '''
