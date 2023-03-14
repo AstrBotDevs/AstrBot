@@ -287,7 +287,7 @@ def initBot(cfg, prov):
         if 'time' in cfg['limit']:
             frequency_time = cfg['limit']['time']
     
-    announcement += '[QQChannelChatGPT项目]\n所有回答与腾讯公司无关。出现问题请前往[GPT机器人]官方频道\n\n'
+    announcement += '[QQChannelChatGPT项目，觉得好用的话欢迎前往Github给Star]\n所有回答与腾讯公司无关。出现问题请前往[GPT机器人]官方频道\n\n'
     # 得到公告配置
     if 'notice' in cfg:
         print('[System] 公告配置: '+cfg['notice'])
@@ -656,7 +656,7 @@ def oper_msg(message, at=False, msg_ref = None):
     # 过滤不合适的词
     judged_res = chatgpt_res
     for i in uw.unfit_words:
-        res = re.sub(i, "***", judged_res)
+        judged_res = re.sub(i, "***", judged_res)
     # 百度内容审核服务二次审核
     if baidu_judge != None:
         check, msg = baidu_judge.judge(judged_res)
