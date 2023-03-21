@@ -1,8 +1,3 @@
-# 2023/3/2 已支持官方ChatGPT API，性能更好！！！
-
-# 2023/3/3 已支持逆向ChatGPT，能力与网页ChatGPT完全一致！
-
-
 ## ⭐体验
 
 使用手机QQ扫码加入QQ频道(频道名: GPT机器人 | 频道号: x42d56aki2)
@@ -11,13 +6,16 @@
 
 **Windows用户推荐Windows一键安装，请前往Release下载最新版本**
 
-**详细部署教程链接**https://soulter.top/posts/qpdg.html
+详细部署教程链接：https://soulter.top/posts/qpdg.html
 
-**有网络问题报错的请先看issue**
-
-有任何问题请加频道反馈。
+有网络问题报错的请先看issue，解决不了再加频道反馈
 
 ## ⭐功能：
+
+- 逆向ChatGPT库
+- 官方ChatGPT AI
+- 文心一言（即将支持，链接https://github.com/Soulter/ERNIEBot 欢迎Star）
+- NewBing（即将支持）
 
 ### 基本功能
 <details> 
