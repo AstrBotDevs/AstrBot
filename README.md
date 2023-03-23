@@ -2,7 +2,7 @@
 
 使用手机QQ扫码加入QQ频道(频道名: GPT机器人 | 频道号: x42d56aki2)
 
-![8E297FC5AC9089AC7B3C8133A51FEF6E](https://user-images.githubusercontent.com/37870767/227197121-4f1e02a4-92fd-4497-8768-9d6977a291b7.jpg)
+<img src="https://user-images.githubusercontent.com/37870767/227197121-4f1e02a4-92fd-4497-8768-9d6977a291b7.jpg" width="200"></img>
 
 **Windows用户推荐Windows一键安装，请前往Release下载最新版本**
 
