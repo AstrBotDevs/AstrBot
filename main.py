@@ -179,8 +179,8 @@ if __name__ == "__main__":
     check_env()
     bot_event = threading.Event()
     loop = asyncio.get_event_loop()
-    ma_type = get_platform()
-    if ma_type == 'linux':
-        threading.Thread(target=hot_update).start()
+    # ma_type = get_platform()
+    # if ma_type == 'linux':
+    #     threading.Thread(target=hot_update).start()
         
     main(loop, bot_event)
