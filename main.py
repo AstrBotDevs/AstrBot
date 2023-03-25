@@ -33,6 +33,8 @@ def privider_chooser(cfg):
         return 'rev_chatgpt'
     elif 'rev_ernie' in cfg and cfg['rev_ernie']['enable']:
         return 'rev_ernie'
+    elif 'rev_edgegpt' in cfg and cfg['rev_edgegpt']['enable']:
+        return 'rev_edgegpt'
     else:
         return 'openai_official'
 
