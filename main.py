@@ -31,6 +31,8 @@ def main(loop, event):
 def privider_chooser(cfg):
     if 'rev_ChatGPT' in cfg and cfg['rev_ChatGPT']['enable']:
         return 'rev_chatgpt'
+    elif 'rev_ernie' in cfg and cfg['rev_ernie']['enable']:
+        return 'rev_ernie'
     else:
         return 'openai_official'
 

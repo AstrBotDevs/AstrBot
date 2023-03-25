@@ -66,6 +66,7 @@ version = '2.7 ChineseAreGood Ver.'
 # 语言模型提供商
 REV_CHATGPT = 'rev_chatgpt'
 OPENAI_OFFICIAL = 'openai_official'
+REV_ERNIE = 'rev_ernie'
 provider = ''
 
 # 逆向库对象及负载均衡
@@ -76,6 +77,7 @@ gpt_config = {}
 
 # 百度内容审核实例
 baidu_judge = None
+
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
@@ -182,7 +184,7 @@ def upload():
 初始化机器人
 '''
 def initBot(cfg, prov):
-    global chatgpt, provider, rev_chatgpt, baidu_judge
+    global chatgpt, provider, rev_chatgpt, baidu_judge, rev_ernie
     global now_personality, gpt_config, config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode, version
 
     provider = prov
@@ -241,6 +243,9 @@ def initBot(cfg, prov):
         # 得到GPT配置信息
         if 'openai' in cfg and 'chatGPTConfigs' in cfg['openai']:
             gpt_config = cfg['openai']['chatGPTConfigs']
+    elif prov == REV_ERNIE:
+        from addons.revERNIE import revernie
+        rev_ernie = revernie.wx
 
     # 百度内容审核
     if 'baidu_aip' in cfg and 'enable' in cfg['baidu_aip'] and cfg['baidu_aip']['enable']:
@@ -647,7 +652,13 @@ def oper_msg(message, at=False, msg_ref = None):
             print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
             send_qq_msg(message, f"Rev ChatGPT API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
             return
-    
+    elif provider == REV_ERNIE:
+        try:
+            chatgpt_res = "[RevERNIE]"+str(rev_ernie.chatViaSelenium(qq_msg))
+        except BaseException as e:
+            print("[System-Err] Rev ERNIE API错误。原因如下:\n"+str(e))
+            send_qq_msg(message, f"Rev ERNIE API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
+            return
     # 记录日志
     logf.write("[GPT] "+ str(chatgpt_res)+'\n')
     logf.flush()
