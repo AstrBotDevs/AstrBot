@@ -1,9 +1,5 @@
-requests~=2.27.1
-openai~=0.27.0
-qq-botpy~=1.1.2
-revChatGPT~=3.3.4
-<<<<<<< HEAD
-baidu-aip~=4.16.9
-=======
-baidu-aip~=4.16.9
->>>>>>> 7f3b4d912f22efea301c320d71349ef6269d670e
+requests
+openai
+qq-botpy
+revChatGPT
+baidu-aip
