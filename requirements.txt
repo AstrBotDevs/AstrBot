@@ -2,3 +2,4 @@ requests~=2.27.1
 openai~=0.27.0
 qq-botpy~=1.1.2
 revChatGPT~=3.3.4
+baidu-aip~=4.16.9
