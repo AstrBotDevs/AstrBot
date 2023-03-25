@@ -1,5 +1,5 @@
 requests
 openai
 qq-botpy
-revChatGPT
+revChatGPT~=4.0.8
 baidu-aip
