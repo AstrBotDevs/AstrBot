@@ -1,4 +1,4 @@
-from revChatGPT.V1 import Chatbot, Error
+from revChatGPT.V1 import Chatbot
 
 class revChatGPT:
     def __init__(self, config):
@@ -32,16 +32,12 @@ class revChatGPT:
                 for data in self.chatbot.ask(prompt):
                     resp = data["message"]
                 break
-            except Error as e:
+            except BaseException as e:
                 try:
-                    if e.code == 2:
-                        print("[RevChatGPT] 频率限制")
+                    print("[RevChatGPT] 请求出现了一些问题, 正在重试。次数"+str(err_count))
+                    err_count += 1
+                    if err_count >= retry_count:
                         raise e
-                    else:
-                        print("[RevChatGPT] 请求出现了一些问题, 正在重试。次数"+str(err_count))
-                        err_count += 1
-                        if err_count >= retry_count:
-                            raise e
                 except BaseException:
                     err_count += 1
         
