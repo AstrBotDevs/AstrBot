@@ -14,7 +14,9 @@ key_record_path = abs_path+'chatgpt_key_record'
 class ChatGPT:
     def __init__(self, cfg):
         self.key_list = []
-        if cfg['key'] != '' or cfg['key'] != '修改我！！':
+        if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
+            openai.api_base = cfg['api_base']
+        if cfg['key'] != '' and cfg['key'] != None:
             print("[System] 读取ChatGPT Key成功")
             self.key_list = cfg['key']
             # openai.api_key = cfg['key']
