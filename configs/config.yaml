@@ -68,6 +68,9 @@ baidu_aip:
 rev_ernie:
   enable: false
 
+rev_edgegpt:
+  enable: false
+
 # 逆向ChatGPT库
 # https://github.com/acheong08/ChatGPT
 # 优点：免费（无免费额度限制）；
