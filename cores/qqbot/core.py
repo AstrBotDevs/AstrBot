@@ -666,8 +666,12 @@ def oper_msg(message, at=False, msg_ref = None):
             return
     elif provider == REV_EDGEGPT:
         try:
-            chatgpt_res = "[RevBing]"
-            chatgpt_res = asyncio.run(rev_edgegpt.chat(qq_msg))
+            if rev_edgegpt.is_busy():
+                send_qq_msg(message, f"[RevBing] 正忙，请稍后再试",msg_ref=msg_ref)
+                return
+            else:
+                chatgpt_res = "[RevBing]"
+                chatgpt_res += str(asyncio.run_coroutine_threadsafe(rev_edgegpt.chat(qq_msg), client.loop).result())
         except BaseException as e:
             print("[System-Err] Rev NewBing API错误。原因如下:\n"+str(e))
             send_qq_msg(message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
@@ -744,7 +748,7 @@ def get_stat():
 def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
     go = False # 是否处理完指令后继续执行msg_oper后面的代码
     msg = ''
-    global session_dict, now_personality, provider
+    global session_dict, now_personality, provider, rev_edgegpt, client
 
     # 指令返回值，/set设置人格是1
     type = -1
@@ -752,8 +756,12 @@ def command_oper(qq_msg, message, session_id, name, user_id, user_name, at):
     # 指令控制
     if qq_msg == "/reset" or qq_msg == "/重置":
         msg = ''
-        session_dict[session_id] = []
+        if provider == REV_EDGEGPT and rev_edgegpt is not None:
+            asyncio.run_coroutine_threadsafe(rev_edgegpt.reset(), client.loop).result()
+        else:
+            session_dict[session_id] = []
         if at:
+            
             msg = f"{name}(id: {session_id})的历史记录重置成功\n\n{announcement}"
         else:
             msg = f"你的历史记录重置成功"
