@@ -1,4 +1,7 @@
+import io
+
 import botpy
+from PIL import Image
 from botpy.message import Message
 from botpy.types.message import Reference
 import yaml
@@ -338,7 +341,7 @@ def run_bot(appid, token):
 '''
 得到OpenAI官方API的回复
 '''
-def get_chatGPT_response(context, request, image_mode=False):
+def get_chatGPT_response(context, request, image_mode=False, img_num=1, img_size="1024*1024"):
     res = ''
     usage = ''
 
@@ -349,13 +352,13 @@ def get_chatGPT_response(context, request, image_mode=False):
     req_list.append(request['user'])
 
     if not image_mode:
-        print("[Debug] "+ str(req_list))
+        # print("[Debug] "+ str(req_list))
         res, usage = chatgpt.chat(req_list)
         # 处理结果文本
         chatgpt_res = res.strip()
         return res, usage
     else:
-        res = chatgpt.chat(req_list, image_mode = True)
+        res = chatgpt.chat(req_list, image_mode=True, img_num=img_num, img_size=img_size)
         return res
 
 '''
@@ -416,7 +419,13 @@ def send_qq_msg(message, res, image_mode=False, msg_ref = None):
                 print("[System-Error] 回复QQ消息失败")
                 raise e
     else:
-        asyncio.run_coroutine_threadsafe(message.reply(image=res, content=""), client.loop)
+        pic_res = requests.get(str(res), stream=True)
+        if pic_res.status_code == 200:
+            # 将二进制数据转换成图片对象
+            image = Image.open(io.BytesIO(pic_res.content))
+            # 保存图片到本地
+            image.save('tmp_image.jpg')
+        asyncio.run_coroutine_threadsafe(message.reply(file_image='tmp_image.jpg', content=""), client.loop)
 
 
 '''
@@ -528,6 +537,7 @@ def oper_msg(message, at=False, msg_ref = None):
     if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
         send_qq_msg(message, f"你好呀🥰，输入/help查看指令噢", msg_ref=msg_ref)
         return
+
     # if qq_msg.strip() == '傻逼' or qq_msg.strip() == 'sb':
     #     send_qq_msg(message, f"好好好")
     #     return
@@ -587,79 +597,109 @@ def oper_msg(message, at=False, msg_ref = None):
             "AI": {},
             'usage_tokens': 0,
         }
-
+        record_obj_img = {
+            "user": {
+                "role": "user",
+                "content": qq_msg[1:], # 去掉第一个字符
+            },
+            "AI": {},
+            'usage_tokens': 0,
+        }
         # ChatGPT API 回复倾向（人格）
         if command_type == 1:
             record_obj["user"]["role"] = "system"
-        
-        print("[Debug] "+ str(cache_data_list))
-    
-        # 请求chatGPT获得结果
-        try:
-            chatgpt_res, current_usage_tokens = get_chatGPT_response(context=cache_data_list, request=record_obj)
-        except (BaseException) as e:
-            print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
-            if 'maximum context length' in str(e):
-                print("token超限, 清空对应缓存")
-                session_dict[session_id] = []
-                cache_data_list = []
-                chatgpt_res, current_usage_tokens = get_chatGPT_response(context=cache_data_list, request=record_obj)
-            elif 'exceeded' in str(e):
-                send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
-                return
-            else:
-                f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
-                f_res = f_res.replace(".", "·")
-                send_qq_msg(message, f"OpenAI API错误。原因如下：\n{f_res} \n前往官方频道反馈~")
-                return
-        
-        # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens
-        if current_usage_tokens > max_tokens:
-            t = current_usage_tokens
-            index = 0
-            while t > max_tokens:
-                if index >= len(cache_data_list):
-                    break
-                # 保留倾向（人格）信息
-                if 'user' in cache_data_list[index] and cache_data_list[index]['user']['role'] != 'system':
-                    t -= int(cache_data_list[index]['single_tokens'])
-                    del cache_data_list[index]
+            record_obj_img["user"]["role"] = "system"
+        # print("[Debug] "+ str(cache_data_list))
+        # print("qq_msg", qq_msg)
+        # print("qq_msg.strip", qq_msg.strip())
+        if qq_msg[0] == '画':
+            print("[Debug] 画图模式")
+            # 请求chatGPT获得结果
+            try:
+                chatgpt_res = get_chatGPT_response(context=[], request=record_obj_img, image_mode=True, img_num=1, img_size="1024x1024")
+                # print(chatgpt_res)
+                for i in range(len(chatgpt_res)):
+                    send_qq_msg(message, chatgpt_res[i], image_mode=True)
+                # print(chatgpt_res)
+            except (BaseException) as e:
+                print("[System-Err] OpenAI API错误。原因如下:\n" + str(e))
+                if 'exceeded' in str(e):
+                    send_qq_msg(message,
+                                f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
+                    return
                 else:
-                    index += 1
-            # 删除完后更新相关字段
-            session_dict[session_id] = cache_data_list
-            # cache_prompt = get_prompts_by_cache_list(cache_data_list)
-
-        # 添加新条目进入缓存的prompt
-        record_obj['AI'] = {
-            'role': 'assistant',
-            'content': chatgpt_res,
-        }
-        record_obj['usage_tokens'] = current_usage_tokens
-        if len(cache_data_list) > 0:
-            record_obj['single_tokens'] = current_usage_tokens - int(cache_data_list[-1]['usage_tokens'])
+                    f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e),
+                                   flags=re.MULTILINE)
+                    f_res = f_res.replace(".", "·")
+                    send_qq_msg(message, f"OpenAI API错误。原因如下：\n{f_res} \n前往官方频道反馈~")
+                    return
         else:
-            record_obj['single_tokens'] = current_usage_tokens
+            # 请求chatGPT获得结果
+            try:
+                chatgpt_res, current_usage_tokens = get_chatGPT_response(context=cache_data_list, request=record_obj)
+            except (BaseException) as e:
+                print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
+                if 'maximum context length' in str(e):
+                    print("token超限, 清空对应缓存")
+                    session_dict[session_id] = []
+                    cache_data_list = []
+                    chatgpt_res, current_usage_tokens = get_chatGPT_response(context=cache_data_list, request=record_obj)
+                elif 'exceeded' in str(e):
+                    send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
+                    return
+                else:
+                    f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
+                    f_res = f_res.replace(".", "·")
+                    send_qq_msg(message, f"OpenAI API错误。原因如下：\n{f_res} \n前往官方频道反馈~")
+                    return
 
-        cache_data_list.append(record_obj)
-        # if len(cache_data_list) > 0: 
-        #     single_record = {
-        #         'role': 'assistant',
-        #         "content": chatgpt_res,
-        #         "usage_tokens": current_usage_tokens,
-        #         "single_tokens": current_usage_tokens - int(cache_data_list[-1]['usage_tokens']),
-        #         "level": level
-        #     }
-        # else:
-        #     single_record = {
-        #         'role': 'assistant',
-        #         "prompt": f'Human: {qq_msg}\nAI: {chatgpt_res}\n',
-        #         "usage_tokens": current_usage_tokens,
-        #         "single_tokens": current_usage_tokens,
-        #         "level": level
-        #     }
-        # cache_data_list.append(single_record)
-        session_dict[session_id] = cache_data_list
+            # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens
+            if current_usage_tokens > max_tokens:
+                t = current_usage_tokens
+                index = 0
+                while t > max_tokens:
+                    if index >= len(cache_data_list):
+                        break
+                    # 保留倾向（人格）信息
+                    if 'user' in cache_data_list[index] and cache_data_list[index]['user']['role'] != 'system':
+                        t -= int(cache_data_list[index]['single_tokens'])
+                        del cache_data_list[index]
+                    else:
+                        index += 1
+                # 删除完后更新相关字段
+                session_dict[session_id] = cache_data_list
+                # cache_prompt = get_prompts_by_cache_list(cache_data_list)
+
+            # 添加新条目进入缓存的prompt
+            record_obj['AI'] = {
+                'role': 'assistant',
+                'content': chatgpt_res,
+            }
+            record_obj['usage_tokens'] = current_usage_tokens
+            if len(cache_data_list) > 0:
+                record_obj['single_tokens'] = current_usage_tokens - int(cache_data_list[-1]['usage_tokens'])
+            else:
+                record_obj['single_tokens'] = current_usage_tokens
+
+            cache_data_list.append(record_obj)
+            # if len(cache_data_list) > 0:
+            #     single_record = {
+            #         'role': 'assistant',
+            #         "content": chatgpt_res,
+            #         "usage_tokens": current_usage_tokens,
+            #         "single_tokens": current_usage_tokens - int(cache_data_list[-1]['usage_tokens']),
+            #         "level": level
+            #     }
+            # else:
+            #     single_record = {
+            #         'role': 'assistant',
+            #         "prompt": f'Human: {qq_msg}\nAI: {chatgpt_res}\n',
+            #         "usage_tokens": current_usage_tokens,
+            #         "single_tokens": current_usage_tokens,
+            #         "level": level
+            #     }
+            # cache_data_list.append(single_record)
+            session_dict[session_id] = cache_data_list
         
     elif provider == REV_CHATGPT:
         try:
@@ -691,38 +731,39 @@ def oper_msg(message, at=False, msg_ref = None):
     logf.write("[GPT] "+ str(chatgpt_res)+'\n')
     logf.flush()
 
-    # 敏感过滤
-    # 过滤不合适的词
-    judged_res = chatgpt_res
-    for i in uw.unfit_words:
-        judged_res = re.sub(i, "***", judged_res)
-    # 百度内容审核服务二次审核
-    if baidu_judge != None:
-        check, msg = baidu_judge.judge(judged_res)
-        if not check:
-            send_qq_msg(message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref)
-            return      
-    # 发送qq信息
-    try:
-        # 防止被qq频道过滤消息
-        gap_chatgpt_res = judged_res.replace(".", " . ")
-        send_qq_msg(message, ''+gap_chatgpt_res, msg_ref=msg_ref)
-        # 发送信息
-        
-    except BaseException as e:
-        print("QQ频道API错误: \n"+str(e))
-        f_res = ""
-        for t in chatgpt_res:
-            f_res += t + ' '
+    if qq_msg[0] != '画':
+        # 敏感过滤
+        # 过滤不合适的词
+        judged_res = chatgpt_res
+        for i in uw.unfit_words:
+            judged_res = re.sub(i, "***", judged_res)
+        # 百度内容审核服务二次审核
+        if baidu_judge != None:
+            check, msg = baidu_judge.judge(judged_res)
+            if not check:
+                send_qq_msg(message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref)
+                return
+        # 发送qq信息
         try:
-            send_qq_msg(message, ''+f_res, msg_ref=msg_ref)
-            # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
+            # 防止被qq频道过滤消息
+            gap_chatgpt_res = judged_res.replace(".", " . ")
+            send_qq_msg(message, ''+gap_chatgpt_res, msg_ref=msg_ref)
+            # 发送信息
+
         except BaseException as e:
-            # 如果还是不行则过滤url
-            f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
-            f_res = f_res.replace(".", "·")
-            send_qq_msg(message, ''+f_res, msg_ref=msg_ref)
-            # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
+            print("QQ频道API错误: \n"+str(e))
+            f_res = ""
+            for t in chatgpt_res:
+                f_res += t + ' '
+            try:
+                send_qq_msg(message, ''+f_res, msg_ref=msg_ref)
+                # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
+            except BaseException as e:
+                # 如果还是不行则过滤url
+                f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
+                f_res = f_res.replace(".", "·")
+                send_qq_msg(message, ''+f_res, msg_ref=msg_ref)
+                # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
 
 
 '''
