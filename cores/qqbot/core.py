@@ -82,6 +82,9 @@ gpt_config = {}
 # 百度内容审核实例
 baidu_judge = None
 
+# 回复前缀
+reply_prefix = ''
+
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
@@ -189,10 +192,13 @@ def upload():
 '''
 def initBot(cfg, prov):
     global chatgpt, provider, rev_chatgpt, baidu_judge, rev_ernie, rev_edgegpt
-    global now_personality, gpt_config, config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode, version
+    global reply_prefix, now_personality, gpt_config, config, uniqueSession, history_dump_interval, frequency_count, frequency_time,announcement, direct_message_mode, version
 
     provider = prov
     config = cfg
+    reply_prefix_config = None
+    if 'reply_prefix' in cfg:
+        reply_prefix_config = cfg['reply_prefix']
 
     # 语言模型提供商
     if prov == REV_CHATGPT:
@@ -209,6 +215,8 @@ def initBot(cfg, prov):
 
                 except:
                     print("[System] 创建rev_ChatGPT负载失败")
+            if REV_CHATGPT in reply_prefix_config:
+                reply_prefix = reply_prefix_config[REV_CHATGPT]
         else:
             input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
     elif prov == OPENAI_OFFICIAL:
@@ -247,12 +255,17 @@ def initBot(cfg, prov):
         # 得到GPT配置信息
         if 'openai' in cfg and 'chatGPTConfigs' in cfg['openai']:
             gpt_config = cfg['openai']['chatGPTConfigs']
+
+        if OPENAI_OFFICIAL in reply_prefix_config:
+            reply_prefix = reply_prefix_config[OPENAI_OFFICIAL]
     elif prov == REV_ERNIE:
         from addons.revERNIE import revernie
         rev_ernie = revernie.wx
     elif prov == REV_EDGEGPT:
         from addons.revEdgeGPT import revedgegpt
         rev_edgegpt = revedgegpt.revEdgeGPT()
+        if REV_EDGEGPT in reply_prefix_config:
+            reply_prefix = reply_prefix_config[REV_EDGEGPT]
 
 
     # 百度内容审核
@@ -703,14 +716,14 @@ def oper_msg(message, at=False, msg_ref = None):
         
     elif provider == REV_CHATGPT:
         try:
-            chatgpt_res = "[Rev]"+str(get_rev_ChatGPT_response(qq_msg))
+            chatgpt_res = reply_prefix+str(get_rev_ChatGPT_response(qq_msg))
         except BaseException as e:
             print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
             send_qq_msg(message, f"Rev ChatGPT API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
             return
     elif provider == REV_ERNIE:
         try:
-            chatgpt_res = "[RevERNIE]"+str(rev_ernie.chatViaSelenium(qq_msg))
+            chatgpt_res = reply_prefix+str(rev_ernie.chatViaSelenium(qq_msg))
         except BaseException as e:
             print("[System-Err] Rev ERNIE API错误。原因如下:\n"+str(e))
             send_qq_msg(message, f"Rev ERNIE API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
@@ -721,14 +734,14 @@ def oper_msg(message, at=False, msg_ref = None):
                 send_qq_msg(message, f"[RevBing] 正忙，请稍后再试",msg_ref=msg_ref)
                 return
             else:
-                chatgpt_res = "[RevBing]"
+                chatgpt_res = reply_prefix
                 chatgpt_res += str(asyncio.run_coroutine_threadsafe(rev_edgegpt.chat(qq_msg), client.loop).result())
         except BaseException as e:
             print("[System-Err] Rev NewBing API错误。原因如下:\n"+str(e))
             send_qq_msg(message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
             return
     # 记录日志
-    logf.write("[GPT] "+ str(chatgpt_res)+'\n')
+    logf.write(f"{reply_prefix} {str(chatgpt_res)}\n")
     logf.flush()
 
     if qq_msg[0] != '画':

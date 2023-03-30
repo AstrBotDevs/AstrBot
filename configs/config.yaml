@@ -1,5 +1,7 @@
 # 如果你不知道怎么部署，请务必查看https://soulter.top/posts/qpdg.html
 
+# 不一定需要key了，如果你没有key但有openAI账号或者必应账号，也可以使用下面的逆向库
+
 # 注意：已支持多key自动切换，方法：
 # key:
 #   - sk-xxxxxx
@@ -52,6 +54,12 @@ direct_message_mode: true
 # 系统代理
 # http_proxy: http://localhost:7890
 # https_proxy: http://localhost:7890
+
+# 自定义回复前缀，如[Rev]或其他，务必加引号以防止不必要的bug。
+reply_prefix:
+  openai_official: "[GPT]"
+  rev_chatgpt: "[Rev]"
+  rev_edgegpt: "[RevBing]"
 
 
 ################外带程序（插件）################
