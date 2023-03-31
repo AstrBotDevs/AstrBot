@@ -63,6 +63,10 @@ class ProviderOpenAIOfficial(Provider):
         # 创建转储定时器线程
         threading.Thread(target=self.dump_history, daemon=True).start()
 
+        # 人格
+        self.now_personality = {}
+
+
     # 转储历史记录的定时器~ Soulter
     def dump_history(self):
         time.sleep(10)
@@ -149,7 +153,7 @@ class ProviderOpenAIOfficial(Provider):
             while t > self.max_tokens:
                 if index >= len(cache_data_list):
                     break
-                # 保留倾向（人格）信息
+                # 保留人格信息
                 if 'user' in cache_data_list[index] and cache_data_list[index]['user']['role'] != 'system':
                     t -= int(cache_data_list[index]['single_tokens'])
                     del cache_data_list[index]
@@ -211,7 +215,67 @@ class ProviderOpenAIOfficial(Provider):
             raise BaseException("连接超时")
                 
         return image_url
+
+    def forget(self, session_id) -> bool:
+        self.session_dict[session_id] = []
+        return True
     
+    '''
+    获取缓存的会话
+    '''
+    def get_prompts_by_cache_list(cache_data_list, divide=False, paging=False, size=5, page=1):
+        prompts = ""
+        if paging:
+            page_begin = (page-1)*size
+            page_end = page*size
+            if page_begin < 0:
+                page_begin = 0
+            if page_end > len(cache_data_list):
+                page_end = len(cache_data_list)
+            cache_data_list = cache_data_list[page_begin:page_end]
+        for item in cache_data_list:
+            prompts += str(item['user']['role']) + ":\n" + str(item['user']['content']) + "\n"
+            prompts += str(item['AI']['role']) + ":\n" + str(item['AI']['content']) + "\n"
+
+            if divide:
+                prompts += "----------\n"
+        return prompts
+    
+        
+    def get_user_usage_tokens(cache_list):
+        usage_tokens = 0
+        for item in cache_list:
+            usage_tokens += int(item['single_tokens'])
+        return usage_tokens
+        
+    '''
+    获取统计信息
+    '''
+    def get_stat(self):
+        try:
+            f = open(abs_path+"configs/stat", "r", encoding="utf-8")
+            fjson = json.loads(f.read())
+            f.close()
+            guild_count = 0
+            guild_msg_count = 0
+            guild_direct_msg_count = 0
+
+            for k,v in fjson.items():
+                guild_count += 1
+                guild_msg_count += v['count']
+                guild_direct_msg_count += v['direct_count']
+            
+            session_count = 0
+
+            f = open(abs_path+"configs/session", "r", encoding="utf-8")
+            fjson = json.loads(f.read())
+            f.close()
+            for k,v in fjson.items():
+                session_count += 1
+            return guild_count, guild_msg_count, guild_direct_msg_count, session_count
+        except:
+            return -1, -1, -1, -1
+
     # 包装信息
     def wrap(self, prompt, session_id):
         # 获得缓存信息
@@ -226,12 +290,12 @@ class ProviderOpenAIOfficial(Provider):
         }
         req_list = []
         for i in context:
-            req_list.append(i['user'])
-            req_list.append(i['AI'])
+            if 'user' in i:
+                req_list.append(i['user'])
+            if 'AI' in i:
+                req_list.append(i['AI'])
         req_list.append(new_record['user'])
         return context, new_record, req_list
-
-
     
     def handle_switch_key(self, req):
         # messages = [{"role": "user", "content": prompt}]

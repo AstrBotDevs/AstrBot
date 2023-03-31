@@ -11,6 +11,9 @@ class ProviderRevEdgeGPT(Provider):
             cookies = json.load(f)
         self.bot = Chatbot(cookies=cookies)
 
+    def is_busy(self):
+        return self.busy
+
     async def forget(self):
         try:
             await self.bot.reset()
