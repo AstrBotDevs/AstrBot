@@ -650,6 +650,7 @@ def oper_msg(message, at=False, msg_ref = None):
             # 请求chatGPT获得结果
             try:
                 chatgpt_res, current_usage_tokens = get_chatGPT_response(context=cache_data_list, request=record_obj)
+                chatgpt_res = reply_prefix + chatgpt_res
             except (BaseException) as e:
                 print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
                 if 'maximum context length' in str(e):
