@@ -1,5 +1,5 @@
 from revChatGPT.V1 import Chatbot
-from provider import Provider
+from model.provider.provider import Provider
 
 class ProviderRevChatGPT(Provider):
     def __init__(self, config):

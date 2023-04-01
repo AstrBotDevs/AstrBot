@@ -1,5 +1,5 @@
-from provider import Provider
 import asyncio
+from model.provider.provider import Provider
 from EdgeGPT import Chatbot, ConversationStyle
 import json
 
@@ -17,9 +17,9 @@ class ProviderRevEdgeGPT(Provider):
     async def forget(self):
         try:
             await self.bot.reset()
-            return False
-        except BaseException:
             return True
+        except BaseException:
+            return False
         
     async def text_chat(self, prompt):
         if self.busy:

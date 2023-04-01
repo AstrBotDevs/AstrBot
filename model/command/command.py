@@ -10,18 +10,12 @@ class Command:
 
     @abc.abstractmethod
     def check_command(self, message):
-        if message.startswith("reset") or message.startswith("重置"):
-            return True, self.reset()
-        elif message.startswith("help") or message.startswith("帮助"):
+        if message.startswith("help") or message.startswith("帮助"):
             return True, self.help()
         return False, None
 
     def reset(self):
-        res = self.provider.forget()
-        if res:
-            return res, "重置成功"
-        else:
-            return res, "重置失敗"
+        return False
     
     def set(self):
         return False
@@ -33,15 +27,14 @@ class Command:
         return False
     
     def help(self):
-        ol_version = 'Unknown'
-        try:
-            global version
-            res = requests.get("https://soulter.top/channelbot/update.json")
-            res_obj = json.loads(res.text)
-            ol_version = res_obj['version']
-        except BaseException:
-            pass
-        return True, f"[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\n当前版本:{version}\n最新版本:{str(ol_version)}\n请及时更新！\n\n指令面板：\n/status 查看机器人key状态\n/count 查看机器人统计信息\n/reset 重置会话\n/his 查看历史记录\n/token 查看会话token数\n/help 查看帮助\n/set 人格指令菜单\n/key 动态添加key"
+        # ol_version = 'Unknown'
+        # try:
+        #     res = requests.get("https://soulter.top/channelbot/update.json")
+        #     res_obj = json.loads(res.text)
+        #     ol_version = res_obj['version']
+        # except BaseException:
+        #     pass
+        return True, f"[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\n指令面板：\n/status 查看机器人key状态\n/count 查看机器人统计信息\n/reset 重置会话\n/his 查看历史记录\n/token 查看会话token数\n/help 查看帮助\n/set 人格指令菜单\n/key 动态添加key"
 
     
     def status(self):

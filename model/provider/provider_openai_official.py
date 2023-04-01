@@ -223,7 +223,7 @@ class ProviderOpenAIOfficial(Provider):
     '''
     获取缓存的会话
     '''
-    def get_prompts_by_cache_list(cache_data_list, divide=False, paging=False, size=5, page=1):
+    def get_prompts_by_cache_list(self, cache_data_list, divide=False, paging=False, size=5, page=1):
         prompts = ""
         if paging:
             page_begin = (page-1)*size
@@ -242,7 +242,7 @@ class ProviderOpenAIOfficial(Provider):
         return prompts
     
         
-    def get_user_usage_tokens(cache_list):
+    def get_user_usage_tokens(self,cache_list):
         usage_tokens = 0
         for item in cache_list:
             usage_tokens += int(item['single_tokens'])

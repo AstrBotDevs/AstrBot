@@ -52,9 +52,6 @@ frequency_count = 2
 # 公告（可自定义）：
 announcement = ""
 
-# 人格信息
-now_personality = {}
-
 # 机器人私聊模式
 direct_message_mode = True
 
@@ -307,7 +304,7 @@ def get_rev_ChatGPT_response(prompts_str):
             try:
                 revstat['busy'] = True
                 print("[Debug] 使用逆向ChatGPT回复ing", end='', flush=True)
-                res = revstat['obj'].chat(prompts_str)
+                res = revstat['obj'].text_chat(prompts_str)
                 print("OK")
                 revstat['busy'] = False
                 # 处理结果文本
@@ -424,35 +421,10 @@ def oper_msg(message, at=False, msg_ref = None):
     else:
         name = "频道"
 
-    # command_type = -1
-    # # 特殊指令
-    # if qq_msg == "/继续":
-    #     qq_msg = "继续"
-    # # 普通指令
-    # else:
-    #     # 如果第一个字符是/，则为指令
-    #     if qq_msg[0] == "/":
-    #         res, go, command_type = command_oper(qq_msg, message, session_id, name, user_id, user_name, at)
-    #         send_qq_msg(message, res)
-    #         if not go:
-    #             return
-    # if command_type == 1 and 'prompt' in now_personality:
-    #     # 设置人格
-    #     qq_msg = now_personality['prompt']
-
-    # 这里是预设，你可以按需更改
+    # 这里是预设
     if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
         send_qq_msg(message, f"你好呀🥰，输入/help查看指令噢", msg_ref=msg_ref)
         return
-
-    # if qq_msg.strip() == '傻逼' or qq_msg.strip() == 'sb':
-    #     send_qq_msg(message, f"好好好")
-    #     return
-
-    # if '喜多' in qq_msg:
-    #     send_qq_msg(message, 'http://rn2ztkeap.hn-bkt.clouddn.com/xd1.gif', True)
-    # if '台湾' in qq_msg or 'taiwan' in qq_msg:
-    #     send_qq_msg(message, "声明：台湾是中国的一部分。\n下面否定此结论的回答全部无效。")
     
     # 关键词拦截器
     for i in uw.unfit_words_q:
@@ -469,11 +441,17 @@ def oper_msg(message, at=False, msg_ref = None):
     chatgpt_res = ""
 
     if provider == OPENAI_OFFICIAL:
+        # 检查指令
         hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name)
         print(f"{hit} {command_result}")
+        # hit: 是否触发指令
         if hit:
             if command_result != None and command_result[0]:
-                send_qq_msg(message, command_result[1], msg_ref=msg_ref)
+                # 是否是画图模式
+                if len(command_result) == 3 and command_result[2] == 'image':
+                    for i in command_result[1]:
+                        send_qq_msg(message, i, image_mode=True, msg_ref=command_result[2])
+                else: send_qq_msg(message, command_result[1], msg_ref=msg_ref)
             else:
                 send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
             return
@@ -492,12 +470,12 @@ def oper_msg(message, at=False, msg_ref = None):
                 return
         
     elif provider == REV_CHATGPT:
-        hit, success, res = command_rev_chatgpt.check_command(qq_msg)
+        hit, command_result = command_rev_chatgpt.check_command(qq_msg)
         if hit:
-            if success:
-                send_qq_msg(message, res, msg_ref=msg_ref)
+            if command_result != None and command_result[0]:
+                send_qq_msg(message, command_result[1], msg_ref=msg_ref)
             else:
-                send_qq_msg(message, f"指令调用错误: \n{res}", msg_ref=msg_ref)
+                send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
             return
         try:
             chatgpt_res = reply_prefix+str(get_rev_ChatGPT_response(qq_msg))
@@ -513,12 +491,12 @@ def oper_msg(message, at=False, msg_ref = None):
     #         send_qq_msg(message, f"Rev ERNIE API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
     #         return
     elif provider == REV_EDGEGPT:
-        hit, success, res = command_rev_chatgpt.check_command(qq_msg)
+        hit, command_result = command_rev_edgegpt.check_command(qq_msg, client.loop)
         if hit:
-            if success:
-                send_qq_msg(message, res, msg_ref=msg_ref)
+            if command_result != None and command_result[0]:
+                send_qq_msg(message, command_result[1], msg_ref=msg_ref)
             else:
-                send_qq_msg(message, f"指令调用错误: \n{res}", msg_ref=msg_ref)
+                send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
             return
         try:
             if rev_edgegpt.is_busy():
@@ -526,7 +504,7 @@ def oper_msg(message, at=False, msg_ref = None):
                 return
             else:
                 chatgpt_res = reply_prefix
-                chatgpt_res += str(asyncio.run_coroutine_threadsafe(rev_edgegpt.chat(qq_msg), client.loop).result())
+                chatgpt_res += str(asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result())
         except BaseException as e:
             print("[System-Err] Rev NewBing API错误。原因如下:\n"+str(e))
             send_qq_msg(message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")

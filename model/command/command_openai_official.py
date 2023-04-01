@@ -10,7 +10,7 @@ class CommandOpenAIOfficial(Command):
         if message.startswith("reset") or message.startswith("重置"):
             return True, self.reset(session_id)
         elif message.startswith("his") or message.startswith("历史"):
-            return True, self.his(message)
+            return True, self.his(message, session_id, user_name)
         elif message.startswith("token"):
             return True, self.token(session_id)
         elif message.startswith("gpt"):
@@ -24,7 +24,7 @@ class CommandOpenAIOfficial(Command):
         elif message.startswith("key") or message.startswith("动态添加key"):
             return True, self.key(message, user_name)
         elif message.startswith("unset"):
-            return True, self.set(session_id)
+            return True, self.unset(session_id)
         elif message.startswith("set"):
             return True, self.set(message, session_id)
         elif message.startswith("画"):
@@ -45,7 +45,8 @@ class CommandOpenAIOfficial(Command):
             page = int(message[4:])
         # 检查是否有过历史记录
         if session_id not in self.provider.session_dict:
-            msg = f"{name} 的历史记录为空"
+            msg = f"历史记录为空"
+            return True, msg
         l = self.provider.session_dict[session_id]
         max_page = len(l)//size_per_page + 1 if len(l)%size_per_page != 0 else len(l)//size_per_page
         p = self.provider.get_prompts_by_cache_list(self.provider.session_dict[session_id], divide=True, paging=True, size=size_per_page, page=page)
@@ -156,8 +157,9 @@ class CommandOpenAIOfficial(Command):
             
     def draw(self, message):
         try:
+            # 画图模式传回3个参数
             img_url = self.provider.image_chat(message)
-            return True, img_url
+            return True, img_url, "image"
         except Exception as e:
             if 'exceeded' in str(e):
                 return f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)"
