@@ -16,6 +16,7 @@
 - 官方ChatGPT AI
 - 文心一言（即将支持，链接https://github.com/Soulter/ERNIEBot 欢迎Star）
 - NewBing
+- Bard
 
 ### 基本功能
 <details> 
