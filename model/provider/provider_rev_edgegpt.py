@@ -34,7 +34,7 @@ class ProviderRevEdgeGPT(Provider):
                 resp = await self.bot.ask(prompt=prompt, conversation_style=ConversationStyle.creative)
                 resp = resp['item']['messages'][len(resp['item']['messages'])-1]['text']
                 if resp == prompt:
-                    resp += '\n\n如果你没有让我复述你的话，那代表我可能不想和你继续这个话题了，请输入/reset重置会话😶'
+                    resp += '\n\n如果你没有让我复述你的话，那代表我可能不想和你继续这个话题了，请输入reset重置会话😶'
                 break
             except BaseException as e:
                 print(e.with_traceback)

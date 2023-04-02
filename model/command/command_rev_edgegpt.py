@@ -21,5 +21,5 @@ class CommandRevEdgeGPT(Command):
             return res, "重置失败"
     
     def help(self):
-        return True, "指令面板:\nreset: 重置\nhelp: 帮助"
+        return True, "[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\nRevBing指令面板:\nreset: 重置\nhelp: 帮助"
         
