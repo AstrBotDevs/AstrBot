@@ -494,7 +494,11 @@ def oper_msg(message, at=False, msg_ref = None):
         hit, command_result = command_rev_edgegpt.check_command(qq_msg, client.loop)
         if hit:
             if command_result != None and command_result[0]:
-                send_qq_msg(message, command_result[1], msg_ref=msg_ref)
+                try:
+                    send_qq_msg(message, command_result[1], msg_ref=msg_ref)
+                except BaseException as e:
+                    t = command_result[1].replace(".", " . ")
+                    send_qq_msg(message, t, msg_ref=msg_ref)
             else:
                 send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
             return
