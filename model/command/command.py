@@ -21,9 +21,10 @@ class Command:
     def update(self, message: str):
         l = message.split(" ")
         if len(l) == 1:
-            # 得到当前commit hash
+            # 得到本地版本号和最新版本号
             repo = Repo()
-            commit = repo.head.commit
+            now_commit = repo.head.commit
+
             # 得到最新的5条commit列表, 包含commit信息
             origin = repo.remotes.origin
             origin.fetch()
@@ -35,7 +36,7 @@ class Command:
                 index+=1
             remote_commit_hash = origin.refs.master.commit.hexsha[:6]
 
-            return True, f"当前版本: {commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n最新5条commit:\n{str(commits_log)}\n使用update latest更新至最新版本\n"
+            return True, f"当前版本: {now_commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n最新5条commit:\n{str(commits_log)}\n使用update latest更新至最新版本\n"
         else:
             if l[1] == "latest":
                 try:
