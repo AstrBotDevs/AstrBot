@@ -24,13 +24,18 @@ class Command:
             # 得到当前commit hash
             repo = Repo()
             commit = repo.head.commit
-            # 得到最新的5条commit列表
+            # 得到最新的5条commit列表, 包含commit信息
             origin = repo.remotes.origin
             origin.fetch()
-            commits = list(origin.refs.master.log())[0:5]
-            remote_commit_hash = origin.refs.master.commit.hexsha
+            commits = list(repo.iter_commits('master', max_count=5))
+            commits_log = ''
+            index = 1
+            for commit in commits:
+                commits_log += f"[{index}] {commit.message}\n-----------\n"
+                index+=1
+            remote_commit_hash = origin.refs.master.commit.hexsha[:6]
 
-            return True, f"当前版本: {commit.hexsha}\n最新版本: {remote_commit_hash}\n\n最新5条commit:{str(commits)}\n\n使用update latest更新至最新版本\n"
+            return True, f"当前版本: {commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n最新5条commit:\n{str(commits_log)}\n使用update latest更新至最新版本\n"
         else:
             if l[1] == "latest":
                 try:
