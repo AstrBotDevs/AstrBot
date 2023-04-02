@@ -30,7 +30,7 @@ class Command:
             commits = list(origin.refs.master.log())[0:5]
             remote_commit_hash = origin.refs.master.commit.hexsha
 
-            return True, f"当前版本: {commit.hexsha}\n最新版本: {remote_commit_hash}\n\n最新5条commit:\n\n使用update latest更新至最新版本\n"
+            return True, f"当前版本: {commit.hexsha}\n最新版本: {remote_commit_hash}\n\n最新5条commit:{str(commits)}\n\n使用update latest更新至最新版本\n"
         else:
             if l[1] == "latest":
                 try:
