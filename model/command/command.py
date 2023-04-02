@@ -1,5 +1,9 @@
 import abc
 import json
+from git.repo import Repo
+import os
+import sys
+
 
 import requests
 from model.provider.provider import Provider
@@ -13,6 +17,31 @@ class Command:
         if message.startswith("help") or message.startswith("帮助"):
             return True, self.help()
         return False, None
+    
+    def update(self, message: str):
+        l = message.split(" ")
+        if len(l) == 1:
+            # 得到当前commit hash
+            repo = Repo()
+            commit = repo.head.commit
+            # 得到最新的5条commit列表
+            origin = repo.remotes.origin
+            origin.fetch()
+            commits = list(origin.refs.master.log())[0:5]
+            remote_commit_hash = origin.refs.master.commit.hexsha
+
+            return True, f"当前版本: {commit.hexsha}\n最新版本: {remote_commit_hash}\n\n最新5条commit:\n\n使用update latest更新至最新版本\n"
+        else:
+            if l[1] == "latest":
+                try:
+                    repo = Repo()
+                    repo.remotes.origin.pull()
+                    py = sys.executable
+                    os.execl(py, py, *sys.argv)
+                    return True, "更新成功"
+                    
+                except BaseException as e:
+                    return False, "更新失败: "+str(e)
 
     def reset(self):
         return False

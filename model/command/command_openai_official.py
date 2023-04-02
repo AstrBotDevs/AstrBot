@@ -29,6 +29,8 @@ class CommandOpenAIOfficial(Command):
             return True, self.set(message, session_id)
         elif message.startswith("画"):
             return True, self.draw(message)
+        elif message.startswith("update"):
+            return True, self.update()
         
         return False, None
     

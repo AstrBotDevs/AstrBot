@@ -13,6 +13,8 @@ class CommandRevChatGPT(Command):
         #     return True, self.reset()
         if message.startswith("help") or message.startswith("帮助"):
             return True, self.help()
+        elif message.startswith("update"):
+            return True, self.update()
         return False, None
     
     def help(self):
