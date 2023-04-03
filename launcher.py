@@ -47,18 +47,19 @@ if __name__ == "__main__":
         if commit_hash != remote_commit_hash:
             res = input("检测到项目有更新, 是否更新? (y/n): ")
             if res == 'y':
-                repo.remotes.origin.pull()
+                repo.remote().pull()
                 print("项目更新完毕")
             if res == 'n':
                 print("已取消更新")
     except:
         print("正在从https://github.com/Soulter/QQChannelChatGPT.git拉取项目...")
-        Repo.clone_from('https://github.com/Soulter/QQChannelChatGPT.git',to_path=project_path,branch='61-enhancement-重构代码增强稳定性')
+        Repo.clone_from('https://github.com/Soulter/QQChannelChatGPT.git',to_path=project_path,branch='master')
         print("项目拉取完毕")
-        print("【重要提醒】如果你没有Python环境, 请先安装Python环境! 否则接下来的操作会造成闪退。")
+        print("【重要提醒】如果你没有Python环境, 请先安装Python环境，版本需大于等于3.9, 否则接下来的操作会造成闪退。")
         print("【重要提醒】Python3.9淘宝下载地址: https://npm.taobao.org/mirrors/python/3.9.7/python-3.9.7-amd64.exe ")
         print("【重要提醒】安装时, 请务必勾选“Add Python 3.9 to PATH”选项。")
         print("【重要提醒】QQ: 905617992")
+        print("【重要提醒】欢迎给项目Star:) https://github.com/Soulter/QQChannelChatGPT")
         input("已确保安装了Python3.9+的版本，按下回车继续...")
         print("正在安装依赖库...")
         os.system('python -m pip install -r QQChannelChatGPT\\requirements.txt')
