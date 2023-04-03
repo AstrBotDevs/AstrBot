@@ -4,7 +4,7 @@
 
 <img src="https://user-images.githubusercontent.com/37870767/227197121-4f1e02a4-92fd-4497-8768-9d6977a291b7.jpg" width="200"></img>
 
-**Windows用户推荐Windows一键安装，请前往Release下载最新版本**
+**Windows用户推荐Windows一键安装，请前往Release下载最新版本（Beta）**
 
 详细部署教程链接：https://soulter.top/posts/qpdg.html
 
