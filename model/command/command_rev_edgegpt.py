@@ -6,11 +6,11 @@ class CommandRevEdgeGPT(Command):
         self.provider = provider
         
     def check_command(self, message: str, loop):
-        if message.startswith("reset") or message.startswith("重置"):
+        if self.command_start_with(message, "reset"):
             return True, self.reset(loop)
-        elif message.startswith("help") or message.startswith("帮助"):
+        elif self.command_start_with(message, "help"):
             return True, self.help()
-        elif message.startswith("update"):
+        elif self.command_start_with(message, "update"):
             return True, self.update(message)
         return False, None
     

@@ -6,14 +6,9 @@ class CommandRevChatGPT(Command):
         self.provider = provider
         
     def check_command(self, message: str):
-        # hit, res = super().check_command(message)
-        # if hit:
-        #     return res
-        # if message.startswith("reset") or message.startswith("重置"):
-        #     return True, self.reset()
-        if message.startswith("help") or message.startswith("帮助"):
+        if self.command_start_with(message, "help", "帮助"):
             return True, self.help()
-        elif message.startswith("update"):
+        elif self.command_start_with(message, "update"):
             return True, self.update(message)
         return False, None
     

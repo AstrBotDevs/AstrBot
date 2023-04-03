@@ -7,32 +7,34 @@ class CommandOpenAIOfficial(Command):
         self.provider = provider
         
     def check_command(self, message: str, session_id: str, user_name: str):
-        if message.startswith("reset") or message.startswith("重置"):
+        if self.command_start_with(message, "reset", "重置"):
             return True, self.reset(session_id)
-        elif message.startswith("his") or message.startswith("历史"):
+        elif self.command_start_with(message, "his", "历史"):
             return True, self.his(message, session_id, user_name)
-        elif message.startswith("token"):
+        elif self.command_start_with(message, "token"):
             return True, self.token(session_id)
-        elif message.startswith("gpt"):
+        elif self.command_start_with(message, "gpt"):
             return True, self.gpt()
-        elif message.startswith("status") or message.startswith("状态"):
+        elif self.command_start_with(message, "status"):
             return True, self.status()
-        elif message.startswith("count") or message.startswith("统计"):
+        elif self.command_start_with(message, "count"):
             return True, self.count()
-        elif message.startswith("help") or message.startswith("帮助"):
+        elif self.command_start_with(message, "help", "帮助"):
             return True, self.help()
-        elif message.startswith("key") or message.startswith("动态添加key"):
+        elif self.command_start_with(message, "key"):
             return True, self.key(message, user_name)
-        elif message.startswith("unset"):
+        elif self.command_start_with(message, "unset"):
             return True, self.unset(session_id)
-        elif message.startswith("set"):
+        elif self.command_start_with(message, "set"):
             return True, self.set(message, session_id)
-        elif message.startswith("画"):
+        elif self.command_start_with(message, "update"):
             return True, self.draw(message)
-        elif message.startswith("update"):
+        elif self.command_start_with(message, "画"):
             return True, self.update(message)
         
         return False, None
+    
+
     
     def reset(self, session_id: str):
         self.provider.forget(session_id)

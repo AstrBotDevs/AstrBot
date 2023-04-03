@@ -19,6 +19,13 @@ class Command:
             return True, self.help()
         return False, None
     
+    # 接受可变参数
+    def command_start_with(self, message: str, *args):
+        for arg in args:
+            if message.startswith(arg) or message.startswith('/'+arg):
+                return True
+        return False
+    
     def update(self, message: str):
         l = message.split(" ")
         if len(l) == 1:
