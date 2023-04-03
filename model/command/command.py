@@ -1,5 +1,6 @@
 import abc
 import json
+import git.exc
 from git.repo import Repo
 import os
 import sys
@@ -22,7 +23,10 @@ class Command:
         l = message.split(" ")
         if len(l) == 1:
             # 得到本地版本号和最新版本号
-            repo = Repo()
+            try:
+                repo = Repo()
+            except git.exc.InvalidGitRepositoryError:
+                repo = Repo(path="QQChannelChatGPT")
             now_commit = repo.head.commit
 
             # 得到最新的5条commit列表, 包含commit信息
