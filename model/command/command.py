@@ -44,7 +44,10 @@ class Command:
         else:
             if l[1] == "latest":
                 try:
-                    repo = Repo()
+                    try:
+                        repo = Repo()
+                    except git.exc.InvalidGitRepositoryError:
+                        repo = Repo(path="QQChannelChatGPT")
                     repo.remotes.origin.pull()
                     py = sys.executable
                     os.execl(py, py, *sys.argv)
