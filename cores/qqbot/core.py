@@ -451,7 +451,12 @@ def oper_msg(message, at=False, msg_ref = None):
                 if len(command_result) == 3 and command_result[2] == 'image':
                     for i in command_result[1]:
                         send_qq_msg(message, i, image_mode=True, msg_ref=command_result[2])
-                else: send_qq_msg(message, command_result[1], msg_ref=msg_ref)
+                else: 
+                    try:
+                        send_qq_msg(message, command_result[1], msg_ref=msg_ref)
+                    except BaseException as e:
+                        t = command_result[1].replace(".", " . ")
+                        send_qq_msg(message, t, msg_ref=msg_ref)
             else:
                 send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
             return
@@ -473,7 +478,11 @@ def oper_msg(message, at=False, msg_ref = None):
         hit, command_result = command_rev_chatgpt.check_command(qq_msg)
         if hit:
             if command_result != None and command_result[0]:
-                send_qq_msg(message, command_result[1], msg_ref=msg_ref)
+                try:
+                    send_qq_msg(message, command_result[1], msg_ref=msg_ref)
+                except BaseException as e:
+                    t = command_result[1].replace(".", " . ")
+                    send_qq_msg(message, t, msg_ref=msg_ref)
             else:
                 send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
             return
