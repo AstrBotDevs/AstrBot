@@ -2,9 +2,7 @@ import threading
 import time
 import asyncio
 import os, sys
-import signal
-import requests,json
-
+import json
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
@@ -52,6 +50,7 @@ def hot_update():
         if not os.path.exists(target):
             version = 0
         try:
+            import requests
             res = requests.get("https://soulter.top/channelbot/update.json")
             res_obj = json.loads(res.text)
             ol_version = float(res_obj['version'])
@@ -176,11 +175,11 @@ if __name__ == "__main__":
     pid = os.getpid()
     global ma_type
     print("程序PID:"+str(pid))
+    print
     check_env()
     bot_event = threading.Event()
     loop = asyncio.get_event_loop()
     # ma_type = get_platform()
     # if ma_type == 'linux':
     #     threading.Thread(target=hot_update).start()
-        
     main(loop, bot_event)
