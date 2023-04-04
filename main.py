@@ -142,9 +142,7 @@ def check_env():
         # print(e)
         try:
             print("安装依赖库中...")
-            os.system("pip3 install openai")
-            os.system("pip3 install qq-botpy")
-            os.system("pip3 install pyyaml")
+            os.system("pip install -r requirements.txt")
             print("安装依赖库完毕...")
         except BaseException:
             print("\n安装第三方库异常.请自行安装或者联系QQ905617992.")
