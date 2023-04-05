@@ -20,21 +20,23 @@ def main(loop, event):
         os.environ['HTTPS_PROXY'] = cfg['https_proxy']
 
     provider = privider_chooser(cfg)
-    print('[System] 当前语言模型提供商: ' + provider)
+    print('[System] 当前语言模型提供商: ' + str(provider))
     # 执行Bot
     qqBot.initBot(cfg, provider)
 
 # 语言模型提供商选择器
 # 目前有：OpenAI官方API、逆向库
 def privider_chooser(cfg):
+    l = []
     if 'rev_ChatGPT' in cfg and cfg['rev_ChatGPT']['enable']:
-        return 'rev_chatgpt'
-    elif 'rev_ernie' in cfg and cfg['rev_ernie']['enable']:
-        return 'rev_ernie'
-    elif 'rev_edgegpt' in cfg and cfg['rev_edgegpt']['enable']:
-        return 'rev_edgegpt'
-    else:
-        return 'openai_official'
+        l.append('rev_chatgpt')
+    if 'rev_ernie' in cfg and cfg['rev_ernie']['enable']:
+        l.append('rev_ernie')
+    if 'rev_edgegpt' in cfg and cfg['rev_edgegpt']['enable']:
+        l.append('rev_edgegpt')
+    if 'openai' in cfg and len(cfg['openai']['key'])>0:
+        l.append('openai_official')
+    return l
 
 # 仅支持linux
 def hot_update():
