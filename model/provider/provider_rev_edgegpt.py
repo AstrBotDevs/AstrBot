@@ -32,6 +32,7 @@ class ProviderRevEdgeGPT(Provider):
         while err_count < retry_count:
             try:
                 resp = await self.bot.ask(prompt=prompt, conversation_style=ConversationStyle.creative)
+                print("[RevEdgeGPT] "+str(resp))
                 resp = resp['item']['messages'][len(resp['item']['messages'])-1]['text']
                 if resp == prompt:
                     resp += '\n\n如果你没有让我复述你的话，那代表我可能不想和你继续这个话题了，请输入reset重置会话😶'
