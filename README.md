@@ -5,18 +5,24 @@
 <img src="https://user-images.githubusercontent.com/37870767/227197121-4f1e02a4-92fd-4497-8768-9d6977a291b7.jpg" width="200"></img>
 
 **Windows用户推荐Windows一键安装，请前往Release下载最新版本（Beta）**
+有报错请先看issue，解决不了再在频道内反馈。
 
-详细部署教程链接：https://soulter.top/posts/qpdg.html
 
-有网络问题报错的请先看issue，解决不了再加频道反馈
+
 
 ## ⭐功能：
 
+近期新功能：
+- 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
+
+支持的AI语言模型（请在`configs/config.yaml`下配置）：
 - 逆向ChatGPT库
 - 官方ChatGPT AI
 - 文心一言（即将支持，链接https://github.com/Soulter/ERNIEBot 欢迎Star）
 - NewBing
 - Bard （即将支持）
+
+部署QQ频道机器人教程链接：https://soulter.top/posts/qpdg.html
 
 ### 基本功能
 <details> 
