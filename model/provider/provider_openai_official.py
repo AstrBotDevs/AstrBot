@@ -302,6 +302,8 @@ class ProviderOpenAIOfficial(Provider):
         while True:
             is_all_exceed = True
             for key in self.key_stat:
+                if key == None:
+                    continue
                 if not self.key_stat[key]['exceed']:
                     is_all_exceed = False
                     openai.api_key = key
@@ -325,6 +327,9 @@ class ProviderOpenAIOfficial(Provider):
                         return True
             if is_all_exceed:
                 print("[System] 所有Key已超额")
+                return None, False
+            else:
+                print("[System] 在切换key时程序异常。")
                 return None, False
                 
     def getConfigs(self):

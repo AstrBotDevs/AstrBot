@@ -76,7 +76,7 @@ gpt_config = {}
 # 百度内容审核实例
 baidu_judge = None
 # 回复前缀
-reply_prefix = ''
+reply_prefix = {}
 
 
 def new_sub_thread(func, args=()):
@@ -162,12 +162,11 @@ def upload():
 def initBot(cfg, prov):
     global chatgpt, provider, rev_chatgpt, baidu_judge, rev_edgegpt, chosen_provider
     global reply_prefix, gpt_config, config, uniqueSession, frequency_count, frequency_time,announcement, direct_message_mode, version
-    global command_openai_official, command_rev_chatgpt, command_rev_edgegpt
+    global command_openai_official, command_rev_chatgpt, command_rev_edgegpt,reply_prefix
     provider = prov
     config = cfg
-    reply_prefix_config = None
     if 'reply_prefix' in cfg:
-        reply_prefix_config = cfg['reply_prefix']
+        reply_prefix = cfg['reply_prefix']
 
     # 语言模型提供商
     if REV_CHATGPT in prov:
@@ -176,9 +175,6 @@ def initBot(cfg, prov):
             from model.command.command_rev_chatgpt import CommandRevChatGPT
             rev_chatgpt = ProviderRevChatGPT(cfg['rev_ChatGPT'])
             command_rev_chatgpt = CommandRevChatGPT(cfg['rev_ChatGPT'])
-
-            if REV_CHATGPT in reply_prefix_config:
-                reply_prefix = reply_prefix_config[REV_CHATGPT]
             chosen_provider = REV_CHATGPT
         else:
             input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
@@ -188,16 +184,12 @@ def initBot(cfg, prov):
         from model.command.command_rev_edgegpt import CommandRevEdgeGPT
         rev_edgegpt = ProviderRevEdgeGPT()
         command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
-        if REV_EDGEGPT in reply_prefix_config:
-            reply_prefix = reply_prefix_config[REV_EDGEGPT]
         chosen_provider = REV_EDGEGPT
     if OPENAI_OFFICIAL in prov:
         from model.provider.provider_openai_official import ProviderOpenAIOfficial
         from model.command.command_openai_official import CommandOpenAIOfficial
         chatgpt = ProviderOpenAIOfficial(cfg['openai'])
         command_openai_official = CommandOpenAIOfficial(chatgpt)
-        if OPENAI_OFFICIAL in reply_prefix_config:
-            reply_prefix = reply_prefix_config[OPENAI_OFFICIAL]
         chosen_provider = OPENAI_OFFICIAL
 
 
@@ -348,7 +340,7 @@ def oper_msg(message, at=False, msg_ref = None):
     session_id = ''
     user_id = message.author.id
     user_name = message.author.username
-    global chosen_provider
+    global chosen_provider, reply_prefix
     print(chosen_provider)
     
     # 检查发言频率
@@ -430,7 +422,10 @@ def oper_msg(message, at=False, msg_ref = None):
             return
         # 请求chatGPT获得结果
         try:
-            chatgpt_res = reply_prefix + chatgpt.text_chat(qq_msg, session_id)
+
+            chatgpt_res = chatgpt.text_chat(qq_msg, session_id)
+            if OPENAI_OFFICIAL in reply_prefix:
+                chatgpt_res = reply_prefix[OPENAI_OFFICIAL] + chatgpt_res
         except (BaseException) as e:
             print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
             if 'exceeded' in str(e):
@@ -455,7 +450,9 @@ def oper_msg(message, at=False, msg_ref = None):
                 send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
             return
         try:
-            chatgpt_res = reply_prefix+str(rev_chatgpt.text_chat(qq_msg))
+            chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
+            if REV_CHATGPT in reply_prefix:
+                chatgpt_res = reply_prefix[REV_CHATGPT] + chatgpt_res
         except BaseException as e:
             print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
             send_qq_msg(message, f"Rev ChatGPT API错误。原因如下: \n{str(e)} \n前往官方频道反馈~")
@@ -477,8 +474,9 @@ def oper_msg(message, at=False, msg_ref = None):
                 send_qq_msg(message, f"[RevBing] 正忙，请稍后再试",msg_ref=msg_ref)
                 return
             else:
-                chatgpt_res = reply_prefix
-                chatgpt_res += str(asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result())
+                chatgpt_res = str(asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result())
+                if REV_EDGEGPT in reply_prefix:
+                    chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
         except BaseException as e:
             print("[System-Err] Rev NewBing API错误。原因如下:\n"+str(e))
             send_qq_msg(message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")

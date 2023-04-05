@@ -34,7 +34,7 @@ def privider_chooser(cfg):
         l.append('rev_ernie')
     if 'rev_edgegpt' in cfg and cfg['rev_edgegpt']['enable']:
         l.append('rev_edgegpt')
-    if 'openai' in cfg and len(cfg['openai']['key'])>0:
+    if 'openai' in cfg and cfg['openai']['key'] != None and len(cfg['openai']['key'])>0:
         l.append('openai_official')
     return l
 
