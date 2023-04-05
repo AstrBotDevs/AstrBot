@@ -39,7 +39,7 @@ class Command:
             # 得到最新的5条commit列表, 包含commit信息
             origin = repo.remotes.origin
             origin.fetch()
-            commits = list(repo.iter_commits('master', max_count=5))
+            commits = list(repo.iter_commits('master', max_count=3))
             commits_log = ''
             index = 1
             for commit in commits:

@@ -192,6 +192,13 @@ def initBot(cfg, prov):
         command_openai_official = CommandOpenAIOfficial(chatgpt)
         chosen_provider = OPENAI_OFFICIAL
 
+    # 检查provider设置偏好
+    if os.path.exists("provider_preference.txt"):
+        with open("provider_preference.txt", 'r', encoding='utf-8') as f:
+            res = f.read()
+            if res in prov:
+                chosen_provider = res
+        
 
     # 百度内容审核
     if 'baidu_aip' in cfg and 'enable' in cfg['baidu_aip'] and cfg['baidu_aip']['enable']:
@@ -330,6 +337,10 @@ def check_frequency(id) -> bool:
         user_frequency[id] = t
         return True
 
+
+def save_provider_preference(chosen_provider):
+    with open('provider_preference.txt', 'w') as f:
+        f.write(chosen_provider)
 '''
 处理消息
 '''
@@ -387,14 +398,17 @@ def oper_msg(message, at=False, msg_ref = None):
     # 检查是否是更换语言模型的请求
     if qq_msg.startswith('/bing'):
         chosen_provider = REV_EDGEGPT
+        save_provider_preference(chosen_provider)
         send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
         return
     elif qq_msg.startswith('/gpt'):
         chosen_provider = OPENAI_OFFICIAL
+        save_provider_preference(chosen_provider)
         send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
         return
     elif qq_msg.startswith('/revgpt'):
         chosen_provider = REV_CHATGPT
+        save_provider_preference(chosen_provider)
         send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
         return
 
