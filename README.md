@@ -7,13 +7,11 @@
 **Windows用户推荐Windows一键安装，请前往Release下载最新版本（Beta）**
 有报错请先看issue，解决不了再在频道内反馈。
 
-
-
-
 ## ⭐功能：
 
 近期新功能：
 - 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
+- 热更新
 
 支持的AI语言模型（请在`configs/config.yaml`下配置）：
 - 逆向ChatGPT库
