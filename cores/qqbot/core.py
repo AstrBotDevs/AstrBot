@@ -61,22 +61,20 @@ abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 # 版本
 version = '2.9'
 
-# 语言模型提供商
+# 语言模型
 REV_CHATGPT = 'rev_chatgpt'
 OPENAI_OFFICIAL = 'openai_official'
 REV_ERNIE = 'rev_ernie'
 REV_EDGEGPT = 'rev_edgegpt'
-provider = ''
+provider = None
+chosen_provider = None
 
-# 逆向库对象及负载均衡
-rev_chatgpt = []
-
+# 逆向库对象
+rev_chatgpt = None
 # gpt配置信息
 gpt_config = {}
-
 # 百度内容审核实例
 baidu_judge = None
-
 # 回复前缀
 reply_prefix = ''
 
@@ -162,10 +160,9 @@ def upload():
 初始化机器人
 '''
 def initBot(cfg, prov):
-    global chatgpt, provider, rev_chatgpt, baidu_judge, rev_ernie, rev_edgegpt
-    global reply_prefix, now_personality, gpt_config, config, uniqueSession, frequency_count, frequency_time,announcement, direct_message_mode, version
+    global chatgpt, provider, rev_chatgpt, baidu_judge, rev_edgegpt, chosen_provider
+    global reply_prefix, gpt_config, config, uniqueSession, frequency_count, frequency_time,announcement, direct_message_mode, version
     global command_openai_official, command_rev_chatgpt, command_rev_edgegpt
-
     provider = prov
     config = cfg
     reply_prefix_config = None
@@ -173,43 +170,36 @@ def initBot(cfg, prov):
         reply_prefix_config = cfg['reply_prefix']
 
     # 语言模型提供商
-    if prov == REV_CHATGPT:
+    if REV_CHATGPT in prov:
         if 'account' in cfg['rev_ChatGPT']:
             from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
             from model.command.command_rev_chatgpt import CommandRevChatGPT
-            for i in range(0, len(cfg['rev_ChatGPT']['account'])):
-                try:
-                    print(f"[System] 创建rev_ChatGPT负载{str(i)}: " + str(cfg['rev_ChatGPT']['account'][i]))
-                    revstat = {
-                        'obj': ProviderRevChatGPT(cfg['rev_ChatGPT']['account'][i]),
-                        'busy': False
-                    }
-                    rev_chatgpt.append(revstat)
-                except:
-                    print("[System] 创建rev_ChatGPT负载失败")
-            command_rev_chatgpt = CommandRevChatGPT(rev_chatgpt)
+            rev_chatgpt = ProviderRevChatGPT(cfg['rev_ChatGPT'])
+            command_rev_chatgpt = CommandRevChatGPT(cfg['rev_ChatGPT'])
 
             if REV_CHATGPT in reply_prefix_config:
                 reply_prefix = reply_prefix_config[REV_CHATGPT]
+            chosen_provider = REV_CHATGPT
         else:
             input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
-    elif prov == OPENAI_OFFICIAL:
-        from model.provider.provider_openai_official import ProviderOpenAIOfficial
-        from model.command.command_openai_official import CommandOpenAIOfficial
-        chatgpt = ProviderOpenAIOfficial(cfg['openai'])
-        command_openai_official = CommandOpenAIOfficial(chatgpt)
-        if OPENAI_OFFICIAL in reply_prefix_config:
-            reply_prefix = reply_prefix_config[OPENAI_OFFICIAL]
-    # elif prov == REV_ERNIE:
-    #     from addons.revERNIE import revernie
-    #     rev_ernie = revernie.wx
-    elif prov == REV_EDGEGPT:
+        
+    if REV_EDGEGPT in prov:
         from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
         from model.command.command_rev_edgegpt import CommandRevEdgeGPT
         rev_edgegpt = ProviderRevEdgeGPT()
         command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
         if REV_EDGEGPT in reply_prefix_config:
             reply_prefix = reply_prefix_config[REV_EDGEGPT]
+        chosen_provider = REV_EDGEGPT
+    if OPENAI_OFFICIAL in prov:
+        from model.provider.provider_openai_official import ProviderOpenAIOfficial
+        from model.command.command_openai_official import CommandOpenAIOfficial
+        chatgpt = ProviderOpenAIOfficial(cfg['openai'])
+        command_openai_official = CommandOpenAIOfficial(chatgpt)
+        if OPENAI_OFFICIAL in reply_prefix_config:
+            reply_prefix = reply_prefix_config[OPENAI_OFFICIAL]
+        chosen_provider = OPENAI_OFFICIAL
+
 
     # 百度内容审核
     if 'baidu_aip' in cfg and 'enable' in cfg['baidu_aip'] and cfg['baidu_aip']['enable']:
@@ -245,8 +235,6 @@ def initBot(cfg, prov):
             version = f.read()
         except:
             print('[System-Err] 读取更新记录文件失败')
-        # version = 'Unknown'
-        # print("[System] QQChannelChatGPT版本: "+str(version))
 
     # 得到发言频率配置
     if 'limit' in cfg:
@@ -292,37 +280,6 @@ def run_bot(appid, token):
     global client
     client = botClient(intents=intents)
     client.run(appid=appid, token=token)
-
-'''
-负载均衡，得到逆向ChatGPT回复
-'''
-def get_rev_ChatGPT_response(prompts_str):
-    res = ''
-    print("[Debug] "+str(rev_chatgpt))
-    for revstat in rev_chatgpt:
-        if not revstat['busy']:
-            try:
-                revstat['busy'] = True
-                print("[Debug] 使用逆向ChatGPT回复ing", end='', flush=True)
-                res = revstat['obj'].text_chat(prompts_str)
-                print("OK")
-                revstat['busy'] = False
-                # 处理结果文本
-                chatgpt_res = res.strip()
-                return res
-            except Exception as e:
-                print("[System-Error] 逆向ChatGPT回复失败" + str(e))
-                try:
-                    if e.code == 2:
-                        print("[System-Error] 频率限制，正在切换账号。"+ str(e))
-                        continue
-                    else:
-                        res = '所有的非忙碌OpenAI账号经过测试都暂时出现问题，请稍后再试或者联系管理员~'
-                        return res
-                except BaseException:
-                    continue
-    res = '所有的OpenAI账号都有负载, 请稍后再试~'
-    return res
 
 
 '''
@@ -389,9 +346,10 @@ def oper_msg(message, at=False, msg_ref = None):
     print("[QQBOT] 接收到消息："+ str(message.content))
     qq_msg = ''
     session_id = ''
-    name = ''
     user_id = message.author.id
     user_name = message.author.username
+    global chosen_provider
+    print(chosen_provider)
     
     # 检查发言频率
     if not check_frequency(user_id):
@@ -402,6 +360,7 @@ def oper_msg(message, at=False, msg_ref = None):
     logf.flush()
 
     if at:
+        # 过滤@
         qq_msg = message.content
         lines = qq_msg.splitlines()
         for i in range(len(lines)):
@@ -415,11 +374,6 @@ def oper_msg(message, at=False, msg_ref = None):
     else:
         qq_msg = message.content
         session_id = user_id
-        
-    if uniqueSession:
-        name = user_name
-    else:
-        name = "频道"
 
     # 这里是预设
     if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
@@ -437,10 +391,24 @@ def oper_msg(message, at=False, msg_ref = None):
         if not check:
             send_qq_msg(message, f"你的提问得到的回复未通过【百度AI内容审核】服务，不予回复。\n\n{msg}", msg_ref=msg_ref)
             return
-        
+    
+    # 检查是否是更换语言模型的请求
+    if qq_msg.startswith('/bing'):
+        chosen_provider = REV_EDGEGPT
+        send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
+        return
+    elif qq_msg.startswith('/gpt'):
+        chosen_provider = OPENAI_OFFICIAL
+        send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
+        return
+    elif qq_msg.startswith('/revgpt'):
+        chosen_provider = REV_CHATGPT
+        send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
+        return
+
     chatgpt_res = ""
 
-    if provider == OPENAI_OFFICIAL:
+    if chosen_provider == OPENAI_OFFICIAL:
         # 检查指令
         hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name)
         print(f"{hit} {command_result}")
@@ -474,7 +442,7 @@ def oper_msg(message, at=False, msg_ref = None):
                 send_qq_msg(message, f"OpenAI API错误。原因如下：\n{f_res} \n前往官方频道反馈~")
                 return
         
-    elif provider == REV_CHATGPT:
+    elif chosen_provider == REV_CHATGPT:
         hit, command_result = command_rev_chatgpt.check_command(qq_msg)
         if hit:
             if command_result != None and command_result[0]:
@@ -487,19 +455,12 @@ def oper_msg(message, at=False, msg_ref = None):
                 send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
             return
         try:
-            chatgpt_res = reply_prefix+str(get_rev_ChatGPT_response(qq_msg))
+            chatgpt_res = reply_prefix+str(rev_chatgpt.text_chat(qq_msg))
         except BaseException as e:
             print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
-            send_qq_msg(message, f"Rev ChatGPT API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
+            send_qq_msg(message, f"Rev ChatGPT API错误。原因如下: \n{str(e)} \n前往官方频道反馈~")
             return
-    # elif provider == REV_ERNIE:
-    #     try:
-    #         chatgpt_res = reply_prefix+str(rev_ernie.chatViaSelenium(qq_msg))
-    #     except BaseException as e:
-    #         print("[System-Err] Rev ERNIE API错误。原因如下:\n"+str(e))
-    #         send_qq_msg(message, f"Rev ERNIE API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
-    #         return
-    elif provider == REV_EDGEGPT:
+    elif chosen_provider == REV_EDGEGPT:
         hit, command_result = command_rev_edgegpt.check_command(qq_msg, client.loop)
         if hit:
             if command_result != None and command_result[0]:
