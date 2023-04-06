@@ -488,14 +488,15 @@ def oper_msg(message, at=False, msg_ref = None):
                 send_qq_msg(message, f"[RevBing] 正忙，请稍后再试",msg_ref=msg_ref)
                 return
             else:
-                chatgpt_res, res_code = str(asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result())
+                res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
                 if res_code == 0: # bing不想继续话题，重置会话后重试。
                     send_qq_msg(message, f"Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref)
                     asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), client.loop)
-                    chatgpt_res, res_code = str(asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result())
+                    res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
                     if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
                         send_qq_msg(message, f"Bing仍然不想继续话题, 请检查您的提问。", msg_ref=msg_ref)
                         return
+                chatgpt_res = str(res)
                 if REV_EDGEGPT in reply_prefix:
                     chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
         except BaseException as e:
