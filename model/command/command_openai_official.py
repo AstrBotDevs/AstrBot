@@ -33,7 +33,6 @@ class CommandOpenAIOfficial(Command):
             return True, self.draw(message)
         
         return False, None
-    
 
     
     def reset(self, session_id: str):
