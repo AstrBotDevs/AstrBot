@@ -1,5 +1,6 @@
 import abc
 import json
+import platform
 import git.exc
 from git.repo import Repo
 import os
@@ -50,15 +51,36 @@ class Command:
             return True, f"当前版本: {now_commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n最新3条commit:\n{str(commits_log)}\n使用update latest更新至最新版本\n"
         else:
             if l[1] == "latest":
+                pash_tag = ""
                 try:
                     try:
                         repo = Repo()
                     except git.exc.InvalidGitRepositoryError:
                         repo = Repo(path="QQChannelChatGPT")
+                        pash_tag = "QQChannelChatGPT\\"
                     repo.remotes.origin.pull()
+
+                    try:
+                        os.system("pip install -r "+pash_tag+"requirements.txt")
+                    except BaseException as e:
+                        print(str(e))
+
                     py = sys.executable
                     os.execl(py, py, *sys.argv)
-                    return True, "更新成功"
+
+
+                    # 检查是否是windows环境
+                    # if platform.system().lower() == "windows":
+                    #     if os.path.exists("launcher.exe"):
+                    #         os.system("start launcher.exe")
+                    #     elif os.path.exists("QQChannelChatGPT\\main.py"):
+                    #         os.system("start python QQChannelChatGPT\\main.py")
+                    #     else:
+                    #         return True, "更新成功，未发现启动项，因此需要手动重启程序。"
+                    #     exit()
+                    # else:
+                    #     py = sys.executable
+                    #     os.execl(py, py, *sys.argv)
                     
                 except BaseException as e:
                     return False, "更新失败: "+str(e)

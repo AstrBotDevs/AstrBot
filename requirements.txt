@@ -3,7 +3,7 @@ openai
 qq-botpy
 revChatGPT~=4.0.8
 baidu-aip
-EdgeGPT~=0.1.2
+EdgeGPT~=0.1.22.1
 chardet
 Pillow
 GitPython
