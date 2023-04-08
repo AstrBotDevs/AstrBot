@@ -491,7 +491,7 @@ def oper_msg(message, at=False, msg_ref = None):
                 res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
                 if res_code == 0: # bing不想继续话题，重置会话后重试。
                     send_qq_msg(message, f"Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref)
-                    asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), client.loop)
+                    asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), client.loop).result()
                     res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
                     if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
                         send_qq_msg(message, f"Bing仍然不想继续话题, 请检查您的提问。", msg_ref=msg_ref)
