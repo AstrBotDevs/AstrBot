@@ -419,7 +419,7 @@ def oper_msg(message: Message, at=False, msg_ref = None):
     temp_switch = ""
     if qq_msg.startswith('/bing'):
         l = qq_msg.split(' ')
-        if len(l) >= 1 and l[1] != "":
+        if len(l) > 1 and l[1] != "":
             # 临时对话模式，先记录下之前的语言模型，回答完毕后再切回
             temp_switch = chosen_provider
             chosen_provider = REV_EDGEGPT
@@ -434,7 +434,7 @@ def oper_msg(message: Message, at=False, msg_ref = None):
             return
     elif qq_msg.startswith('/gpt'):
         l = qq_msg.split(' ')
-        if len(l) >= 1 and l[1] != "":
+        if len(l) > 1 and l[1] != "":
             # 临时对话模式，先记录下之前的语言模型，回答完毕后再切回
             temp_switch = chosen_provider
             chosen_provider = OPENAI_OFFICIAL
@@ -449,7 +449,7 @@ def oper_msg(message: Message, at=False, msg_ref = None):
             return
     elif qq_msg.startswith('/revgpt'):
         l = qq_msg.split(' ')
-        if len(l) >= 1 and l[1] != "":
+        if len(l) > 1 and l[1] != "":
             # 临时对话模式，先记录下之前的语言模型，回答完毕后再切回
             temp_switch = chosen_provider
             chosen_provider = REV_CHATGPT
