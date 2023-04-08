@@ -27,6 +27,24 @@ class Command:
                 return True
         return False
     
+    def keyword(self, message: str):
+        if len(message.split(" ")) != 3:
+            return True, "【设置关键词/关键指令回复】示例：\nkeyword hi 你好\n当发送hi的时候会回复你好\nkeyword /hi 你好\n当发送/hi时会回复你好", "keyword"
+        
+        l = message.split(" ")
+        try:
+            if os.path.exists("keyword.json"):
+                with open("keyword.json", "r", encoding="utf-8") as f:
+                    keyword = json.load(f)
+                    keyword[l[1]] = l[2]
+            else:
+                keyword = {l[1]: l[2]}
+            with open("keyword.json", "w", encoding="utf-8") as f:
+                json.dump(keyword, f, ensure_ascii=False, indent=4)
+            return True, "设置成功: "+l[1]+" -> "+l[2], "keyword"
+        except BaseException as e:
+            return False, "设置失败: "+str(e), "keyword"
+    
     def update(self, message: str):
         l = message.split(" ")
         if len(l) == 1:
@@ -48,7 +66,7 @@ class Command:
                 index+=1
             remote_commit_hash = origin.refs.master.commit.hexsha[:6]
 
-            return True, f"当前版本: {now_commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n最新3条commit:\n{str(commits_log)}\n使用update latest更新至最新版本\n"
+            return True, f"当前版本: {now_commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n最新3条commit:\n{str(commits_log)}\n使用update latest更新至最新版本\n", "update"
         else:
             if l[1] == "latest":
                 pash_tag = ""
@@ -83,7 +101,7 @@ class Command:
                     #     os.execl(py, py, *sys.argv)
                     
                 except BaseException as e:
-                    return False, "更新失败: "+str(e)
+                    return False, "更新失败: "+str(e), "update"
 
     def reset(self):
         return False
@@ -98,7 +116,7 @@ class Command:
         return False
     
     def help(self):
-        return True, f"[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\n指令面板：\nstatus 查看机器人key状态\ncount 查看机器人统计信息\nreset 重置会话\nhis 查看历史记录\ntoken 查看会话token数\nhelp 查看帮助\nset 人格指令菜单\nkey 动态添加key"
+        return True, f"[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\n指令面板：\nstatus 查看机器人key状态\ncount 查看机器人统计信息\nreset 重置会话\nhis 查看历史记录\ntoken 查看会话token数\nhelp 查看帮助\nset 人格指令菜单\nkey 动态添加key", "help"
     
     def status(self):
         return False

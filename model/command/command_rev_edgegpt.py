@@ -12,16 +12,18 @@ class CommandRevEdgeGPT(Command):
             return True, self.help()
         elif self.command_start_with(message, "update"):
             return True, self.update(message)
+        elif self.command_start_with(message, "keyword"):
+            return True, self.keyword(message)
         return False, None
     
     def reset(self, loop):
         res = asyncio.run_coroutine_threadsafe(self.provider.forget(), loop).result()
         print(res)
         if res:
-            return res, "重置成功"
+            return res, "重置成功", "reset"
         else:
-            return res, "重置失败"
+            return res, "重置失败", "reset"
     
     def help(self):
-        return True, "[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\nRevBing指令面板:\nreset: 重置\nhelp: 帮助"
+        return True, "[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\nRevBing指令面板:\nreset: 重置\nhelp: 帮助", "help"
         

@@ -77,6 +77,8 @@ gpt_config = {}
 baidu_judge = None
 # 回复前缀
 reply_prefix = {}
+# 关键词回复
+keywords = {}
 
 
 def new_sub_thread(func, args=()):
@@ -162,7 +164,7 @@ def upload():
 def initBot(cfg, prov):
     global chatgpt, provider, rev_chatgpt, baidu_judge, rev_edgegpt, chosen_provider
     global reply_prefix, gpt_config, config, uniqueSession, frequency_count, frequency_time,announcement, direct_message_mode, version
-    global command_openai_official, command_rev_chatgpt, command_rev_edgegpt,reply_prefix
+    global command_openai_official, command_rev_chatgpt, command_rev_edgegpt,reply_prefix, keywords
     provider = prov
     config = cfg
     if 'reply_prefix' in cfg:
@@ -191,6 +193,11 @@ def initBot(cfg, prov):
         chatgpt = ProviderOpenAIOfficial(cfg['openai'])
         command_openai_official = CommandOpenAIOfficial(chatgpt)
         chosen_provider = OPENAI_OFFICIAL
+
+    # 得到关键词
+    if os.path.exists("keyword.json"):
+        with open("keyword.json", 'r', encoding='utf-8') as f:
+            keywords = json.load(f)
 
     # 检查provider设置偏好
     if os.path.exists("provider_preference.txt"):
@@ -351,8 +358,9 @@ def oper_msg(message, at=False, msg_ref = None):
     session_id = ''
     user_id = message.author.id
     user_name = message.author.username
-    global chosen_provider, reply_prefix
-    print(chosen_provider)
+    global chosen_provider, reply_prefix, keywords
+    hit = False # 是否命中指令
+    command_result = ()
     
     # 检查发言频率
     if not check_frequency(user_id):
@@ -378,11 +386,13 @@ def oper_msg(message, at=False, msg_ref = None):
         qq_msg = message.content
         session_id = user_id
 
-    # 这里是预设
-    if qq_msg.strip() == 'hello' or qq_msg.strip() == '你好' or qq_msg.strip() == '':
-        send_qq_msg(message, f"你好呀🥰，输入/help查看指令噢", msg_ref=msg_ref)
-        return
-    
+    # 关键词回复
+    for k in keywords:
+        if qq_msg == k:
+            send_qq_msg(message, keywords[k], msg_ref=msg_ref)
+            return
+
+
     # 关键词拦截器
     for i in uw.unfit_words_q:
         matches = re.match(i, qq_msg.strip(), re.I | re.M)
@@ -415,16 +425,75 @@ def oper_msg(message, at=False, msg_ref = None):
     chatgpt_res = ""
 
     if chosen_provider == OPENAI_OFFICIAL:
-        # 检查指令
         hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name)
         print(f"{hit} {command_result}")
-        # hit: 是否触发指令
-        if hit:
-            if command_result != None and command_result[0]:
-                # 是否是画图模式
-                if len(command_result) == 3 and command_result[2] == 'image':
+        # hit: 是否触发了指令.
+        if not hit:
+            # 请求ChatGPT获得结果
+            try:
+                chatgpt_res = chatgpt.text_chat(qq_msg, session_id)
+                if OPENAI_OFFICIAL in reply_prefix:
+                    chatgpt_res = reply_prefix[OPENAI_OFFICIAL] + chatgpt_res
+            except (BaseException) as e:
+                print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
+                if 'exceeded' in str(e):
+                    send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
+                    return
+                else:
+                    f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
+                    f_res = f_res.replace(".", "·")
+                    send_qq_msg(message, f"OpenAI API错误。原因如下：\n{f_res} \n前往官方频道反馈~")
+                    return
+
+    elif chosen_provider == REV_CHATGPT:
+        hit, command_result = command_rev_chatgpt.check_command(qq_msg)
+        if not hit:
+            try:
+                chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
+                if REV_CHATGPT in reply_prefix:
+                    chatgpt_res = reply_prefix[REV_CHATGPT] + chatgpt_res
+            except BaseException as e:
+                print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
+                send_qq_msg(message, f"Rev ChatGPT API错误。原因如下: \n{str(e)} \n前往官方频道反馈~")
+                return
+    elif chosen_provider == REV_EDGEGPT:
+        hit, command_result = command_rev_edgegpt.check_command(qq_msg, client.loop)
+        if not hit:
+            try:
+                if rev_edgegpt.is_busy():
+                    send_qq_msg(message, f"[RevBing] 正忙，请稍后再试",msg_ref=msg_ref)
+                    return
+                else:
+                    res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
+                    if res_code == 0: # bing不想继续话题，重置会话后重试。
+                        send_qq_msg(message, f"Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref)
+                        asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), client.loop).result()
+                        res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
+                        if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
+                            send_qq_msg(message, f"Bing仍然不想继续话题, 请检查您的提问。", msg_ref=msg_ref)
+                            return
+                    chatgpt_res = str(res)
+                    if REV_EDGEGPT in reply_prefix:
+                        chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
+            except BaseException as e:
+                print("[System-Err] Rev NewBing API错误。原因如下:\n"+str(e))
+                send_qq_msg(message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
+                return
+        
+    # 指令回复
+    if hit:
+        # 检查指令. command_result是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
+        if command_result != None:
+            command = command_result[2]
+            if command == "keyword":
+                with open("keyword.json", "r", encoding="utf-8") as f:
+                    keywords = json.load(f)
+
+            if command_result[0]:
+                # 是否是画图指令
+                if len(command_result) == 3 and command_result[2] == 'draw':
                     for i in command_result[1]:
-                        send_qq_msg(message, i, image_mode=True, msg_ref=command_result[2])
+                        send_qq_msg(message, i, image_mode=True, msg_ref=msg_ref)
                 else: 
                     try:
                         send_qq_msg(message, command_result[1], msg_ref=msg_ref)
@@ -433,77 +502,8 @@ def oper_msg(message, at=False, msg_ref = None):
                         send_qq_msg(message, t, msg_ref=msg_ref)
             else:
                 send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
-            return
-        # 请求chatGPT获得结果
-        try:
+        return
 
-            chatgpt_res = chatgpt.text_chat(qq_msg, session_id)
-            if OPENAI_OFFICIAL in reply_prefix:
-                chatgpt_res = reply_prefix[OPENAI_OFFICIAL] + chatgpt_res
-        except (BaseException) as e:
-            print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
-            if 'exceeded' in str(e):
-                send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
-                return
-            else:
-                f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
-                f_res = f_res.replace(".", "·")
-                send_qq_msg(message, f"OpenAI API错误。原因如下：\n{f_res} \n前往官方频道反馈~")
-                return
-        
-    elif chosen_provider == REV_CHATGPT:
-        hit, command_result = command_rev_chatgpt.check_command(qq_msg)
-        if hit:
-            if command_result != None and command_result[0]:
-                try:
-                    send_qq_msg(message, command_result[1], msg_ref=msg_ref)
-                except BaseException as e:
-                    t = command_result[1].replace(".", " . ")
-                    send_qq_msg(message, t, msg_ref=msg_ref)
-            else:
-                send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
-            return
-        try:
-            chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
-            if REV_CHATGPT in reply_prefix:
-                chatgpt_res = reply_prefix[REV_CHATGPT] + chatgpt_res
-        except BaseException as e:
-            print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
-            send_qq_msg(message, f"Rev ChatGPT API错误。原因如下: \n{str(e)} \n前往官方频道反馈~")
-            return
-    elif chosen_provider == REV_EDGEGPT:
-        hit, command_result = command_rev_edgegpt.check_command(qq_msg, client.loop)
-        if hit:
-            if command_result != None and command_result[0]:
-                try:
-                    send_qq_msg(message, command_result[1], msg_ref=msg_ref)
-                except BaseException as e:
-                    t = command_result[1].replace(".", " . ")
-                    send_qq_msg(message, t, msg_ref=msg_ref)
-            else:
-                send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
-            return
-        try:
-            if rev_edgegpt.is_busy():
-                send_qq_msg(message, f"[RevBing] 正忙，请稍后再试",msg_ref=msg_ref)
-                return
-            else:
-                res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
-                if res_code == 0: # bing不想继续话题，重置会话后重试。
-                    send_qq_msg(message, f"Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref)
-                    asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), client.loop).result()
-                    res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
-                    if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
-                        send_qq_msg(message, f"Bing仍然不想继续话题, 请检查您的提问。", msg_ref=msg_ref)
-                        return
-                chatgpt_res = str(res)
-                if REV_EDGEGPT in reply_prefix:
-                    chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
-        except BaseException as e:
-            print("[System-Err] Rev NewBing API错误。原因如下:\n"+str(e))
-            send_qq_msg(message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
-            return
-        
     # 记录日志
     logf.write(f"{reply_prefix} {str(chatgpt_res)}\n")
     logf.flush()

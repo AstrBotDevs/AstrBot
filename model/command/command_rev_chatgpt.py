@@ -10,8 +10,10 @@ class CommandRevChatGPT(Command):
             return True, self.help()
         elif self.command_start_with(message, "update"):
             return True, self.update(message)
+        elif self.command_start_with(message, "keyword"):
+            return True, self.keyword(message)
         return False, None
     
     def help(self):
-        return True, "[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\nRevChatGPT指令面板：\n当前语言模型RevChatGPT未实现任何指令\n"
+        return True, "[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\nRevChatGPT指令面板：\n当前语言模型RevChatGPT未实现任何指令\n", "help"
     
