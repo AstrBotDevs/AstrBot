@@ -351,7 +351,7 @@ def save_provider_preference(chosen_provider):
 '''
 处理消息
 '''
-def oper_msg(message, at=False, msg_ref = None):
+def oper_msg(message: Message, at=False, msg_ref = None):
     global session_dict, provider
     print("[QQBOT] 接收到消息："+ str(message.content))
     qq_msg = ''
@@ -360,7 +360,8 @@ def oper_msg(message, at=False, msg_ref = None):
     user_name = message.author.username
     global chosen_provider, reply_prefix, keywords
     hit = False # 是否命中指令
-    command_result = ()
+    command_result = () # 调用指令返回的结果
+    role = "member" # 角色
     
     # 检查发言频率
     if not check_frequency(user_id):
@@ -371,6 +372,7 @@ def oper_msg(message, at=False, msg_ref = None):
     logf.flush()
 
     if at:
+        # 在频道内
         # 过滤@
         qq_msg = message.content
         lines = qq_msg.splitlines()
@@ -382,7 +384,15 @@ def oper_msg(message, at=False, msg_ref = None):
             session_id = user_id
         else:
             session_id = message.channel_id
+
+        # 得到身份
+        if "2" in message.member.roles or "4" in message.member.roles or "5" in message.member.roles:
+            print("[System] 检测到管理员身份")
+            role = "admin"
+        else:
+            role = "member"
     else:
+        # 私信
         qq_msg = message.content
         session_id = user_id
 
@@ -406,26 +416,57 @@ def oper_msg(message, at=False, msg_ref = None):
             return
     
     # 检查是否是更换语言模型的请求
+    temp_switch = ""
     if qq_msg.startswith('/bing'):
-        chosen_provider = REV_EDGEGPT
-        save_provider_preference(chosen_provider)
-        send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
-        return
+        l = qq_msg.split(' ')
+        if len(l) >= 1 and l[1] != "":
+            # 临时对话模式，先记录下之前的语言模型，回答完毕后再切回
+            temp_switch = chosen_provider
+            chosen_provider = REV_EDGEGPT
+            qq_msg = l[1]
+        else:
+            if role != "admin":
+                send_qq_msg(message, f"你没有权限更换语言模型。", msg_ref=msg_ref)
+                return
+            chosen_provider = REV_EDGEGPT
+            save_provider_preference(chosen_provider)
+            send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
+            return
     elif qq_msg.startswith('/gpt'):
-        chosen_provider = OPENAI_OFFICIAL
-        save_provider_preference(chosen_provider)
-        send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
-        return
+        l = qq_msg.split(' ')
+        if len(l) >= 1 and l[1] != "":
+            # 临时对话模式，先记录下之前的语言模型，回答完毕后再切回
+            temp_switch = chosen_provider
+            chosen_provider = OPENAI_OFFICIAL
+            qq_msg = l[1]
+        else:
+            if role != "admin":
+                send_qq_msg(message, f"你没有权限更换语言模型。", msg_ref=msg_ref)
+                return
+            chosen_provider = OPENAI_OFFICIAL
+            save_provider_preference(chosen_provider)
+            send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
+            return
     elif qq_msg.startswith('/revgpt'):
-        chosen_provider = REV_CHATGPT
-        save_provider_preference(chosen_provider)
-        send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
-        return
+        l = qq_msg.split(' ')
+        if len(l) >= 1 and l[1] != "":
+            # 临时对话模式，先记录下之前的语言模型，回答完毕后再切回
+            temp_switch = chosen_provider
+            chosen_provider = REV_CHATGPT
+            qq_msg = l[1]
+        else:
+            if role != "admin":
+                send_qq_msg(message, f"你没有权限更换语言模型。", msg_ref=msg_ref)
+                return
+            chosen_provider = REV_CHATGPT
+            save_provider_preference(chosen_provider)
+            send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
+            return
 
     chatgpt_res = ""
 
     if chosen_provider == OPENAI_OFFICIAL:
-        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name)
+        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role)
         print(f"{hit} {command_result}")
         # hit: 是否触发了指令.
         if not hit:
@@ -438,15 +479,13 @@ def oper_msg(message, at=False, msg_ref = None):
                 print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
                 if 'exceeded' in str(e):
                     send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
-                    return
                 else:
                     f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
                     f_res = f_res.replace(".", "·")
                     send_qq_msg(message, f"OpenAI API错误。原因如下：\n{f_res} \n前往官方频道反馈~")
-                    return
 
     elif chosen_provider == REV_CHATGPT:
-        hit, command_result = command_rev_chatgpt.check_command(qq_msg)
+        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role)
         if not hit:
             try:
                 chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
@@ -455,14 +494,12 @@ def oper_msg(message, at=False, msg_ref = None):
             except BaseException as e:
                 print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
                 send_qq_msg(message, f"Rev ChatGPT API错误。原因如下: \n{str(e)} \n前往官方频道反馈~")
-                return
     elif chosen_provider == REV_EDGEGPT:
-        hit, command_result = command_rev_edgegpt.check_command(qq_msg, client.loop)
+        hit, command_result = command_rev_edgegpt.check_command(qq_msg, client.loop, role)
         if not hit:
             try:
                 if rev_edgegpt.is_busy():
                     send_qq_msg(message, f"[RevBing] 正忙，请稍后再试",msg_ref=msg_ref)
-                    return
                 else:
                     res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
                     if res_code == 0: # bing不想继续话题，重置会话后重试。
@@ -471,14 +508,20 @@ def oper_msg(message, at=False, msg_ref = None):
                         res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
                         if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
                             send_qq_msg(message, f"Bing仍然不想继续话题, 请检查您的提问。", msg_ref=msg_ref)
-                            return
-                    chatgpt_res = str(res)
-                    if REV_EDGEGPT in reply_prefix:
-                        chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
+                    else:
+                        chatgpt_res = str(res)
+                        if REV_EDGEGPT in reply_prefix:
+                            chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
             except BaseException as e:
                 print("[System-Err] Rev NewBing API错误。原因如下:\n"+str(e))
                 send_qq_msg(message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
-                return
+    
+    # 切换回原来的语言模型
+    if temp_switch != "":
+        chosen_provider = temp_switch
+
+    if chatgpt_res == "":
+        return
         
     # 指令回复
     if hit:

@@ -6,7 +6,7 @@ class CommandOpenAIOfficial(Command):
     def __init__(self, provider: ProviderOpenAIOfficial):
         self.provider = provider
         
-    def check_command(self, message: str, session_id: str, user_name: str):
+    def check_command(self, message: str, session_id: str, user_name: str, role):
         if self.command_start_with(message, "reset", "重置"):
             return True, self.reset(session_id)
         elif self.command_start_with(message, "his", "历史"):
@@ -21,18 +21,18 @@ class CommandOpenAIOfficial(Command):
             return True, self.count()
         elif self.command_start_with(message, "help", "帮助"):
             return True, self.help()
-        elif self.command_start_with(message, "key"):
-            return True, self.key(message, user_name)
         elif self.command_start_with(message, "unset"):
             return True, self.unset(session_id)
         elif self.command_start_with(message, "set"):
             return True, self.set(message, session_id)
         elif self.command_start_with(message, "update"):
-            return True, self.update(message)
+            return True, self.update(message, role)
         elif self.command_start_with(message, "画"):
             return True, self.draw(message)
         elif self.command_start_with(message, "keyword"):
-            return True, self.keyword(message)
+            return True, self.keyword(message, role)
+        elif self.command_start_with(message, "key"):
+            return True, self.key(message, user_name)
         
         return False, None
 

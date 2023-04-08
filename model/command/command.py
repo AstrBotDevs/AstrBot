@@ -27,7 +27,9 @@ class Command:
                 return True
         return False
     
-    def keyword(self, message: str):
+    def keyword(self, message: str, role: str):
+        if role != "admin":
+            return True, "你没有权限使用该指令", "keyword"
         if len(message.split(" ")) != 3:
             return True, "【设置关键词/关键指令回复】示例：\nkeyword hi 你好\n当发送hi的时候会回复你好\nkeyword /hi 你好\n当发送/hi时会回复你好", "keyword"
         
@@ -45,7 +47,9 @@ class Command:
         except BaseException as e:
             return False, "设置失败: "+str(e), "keyword"
     
-    def update(self, message: str):
+    def update(self, message: str, role: str):
+        if role != "admin":
+            return True, "你没有权限使用该指令", "keyword"
         l = message.split(" ")
         if len(l) == 1:
             # 得到本地版本号和最新版本号

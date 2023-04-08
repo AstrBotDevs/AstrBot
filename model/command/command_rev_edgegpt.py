@@ -5,15 +5,15 @@ class CommandRevEdgeGPT(Command):
     def __init__(self, provider: ProviderRevEdgeGPT):
         self.provider = provider
         
-    def check_command(self, message: str, loop):
+    def check_command(self, message: str, loop, role):
         if self.command_start_with(message, "reset"):
             return True, self.reset(loop)
         elif self.command_start_with(message, "help"):
             return True, self.help()
         elif self.command_start_with(message, "update"):
-            return True, self.update(message)
+            return True, self.update(message, role)
         elif self.command_start_with(message, "keyword"):
-            return True, self.keyword(message)
+            return True, self.keyword(message, role)
         return False, None
     
     def reset(self, loop):

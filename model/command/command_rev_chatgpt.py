@@ -5,13 +5,13 @@ class CommandRevChatGPT(Command):
     def __init__(self, provider: ProviderRevChatGPT):
         self.provider = provider
         
-    def check_command(self, message: str):
+    def check_command(self, message: str, role):
         if self.command_start_with(message, "help", "帮助"):
             return True, self.help()
         elif self.command_start_with(message, "update"):
-            return True, self.update(message)
+            return True, self.update(message, role)
         elif self.command_start_with(message, "keyword"):
-            return True, self.keyword(message)
+            return True, self.keyword(message, role)
         return False, None
     
     def help(self):
