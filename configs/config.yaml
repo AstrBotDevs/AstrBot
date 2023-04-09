@@ -1,43 +1,42 @@
-# 如果你不知道怎么部署，请务必查看https://soulter.top/posts/qpdg.html
+# 如果你不知道怎么部署，请查看https://soulter.top/posts/qpdg.html
+# 不一定需要key了，如果你没有key但有openAI账号或者必应账号，可以考虑使用下面的逆向库
 
-# 不一定需要key了，如果你没有key但有openAI账号或者必应账号，也可以使用下面的逆向库
 
-# 注意：已支持多key自动切换，方法：
-# key:
-#   - sk-xxxxxx
-#   - sk-xxxxxx
-# 在下方非注释的地方使用以上格式
+###############平台设置#################
 
-# 关于api_base：可以使用一些云函数（如腾讯、阿里）来避免国内被墙的问题。
-# 详见：
-# https://github.com/Ice-Hazymoon/openai-scf-proxy
-# https://github.com/Soulter/QQChannelChatGPT/issues/42
-# 设置为none则表示使用官方默认api地址
-openai:
-  key: 
-    - 
-  api_base: none
-  # 这里是GPT配置，语言模型默认使用gpt-3.5-turbo
-  chatGPTConfigs:
-    model: gpt-3.5-turbo
-    max_tokens: 3000
-    temperature: 0.9
-    top_p: 1
-    frequency_penalty: 0
-    presence_penalty: 0
-    
-  total_tokens_limit: 5000
-
+# QQ频道机器人
 # QQ开放平台的appid和令牌
 # q.qq.com
+# enable为true则启用，false则不启用
 qqbot:
+  enable: true
   appid: 
   token: 
+
+# QQ机器人
+# enable为true则启用，false则不启用
+# 需要安装GO-CQHTTP配合使用。
+# 文档：https://docs.go-cqhttp.org/
+# 请将go-cqhttp的配置文件的sever部分粘贴为以下内容，否则无法使用
+# 请先启动go-cqhttp再启动本程序
+# 
+# servers:
+#   - http:
+#       host: 127.0.0.1
+#       version: 0
+#       port: 5700
+#       timeout: 5
+#   - ws:
+#       address: 127.0.0.1:6700
+#       middlewares:
+#         <<: *default
+gocqbot:
+  enable: false
 
 # 设置是否一个人一个会话
 uniqueSessionMode: false
 # QChannelBot 的版本，请勿修改此字段，否则可能产生一些bug
-version: 2.8
+version: 3.0
 # [Beta] 转储历史记录时间间隔(分钟)
 dump_history_interval: 10
 # 一个用户只能在time秒内发送count条消息
@@ -61,9 +60,6 @@ reply_prefix:
   rev_chatgpt: "[Rev]"
   rev_edgegpt: "[RevBing]"
 
-
-################外带程序（插件）################
-
 # 百度内容审核服务
 # 新用户免费5万次调用。https://cloud.baidu.com/doc/ANTIPORN/index.html
 baidu_aip:
@@ -72,10 +68,45 @@ baidu_aip:
   api_key: 
   secret_key: 
 
+
+
+
+###############语言模型设置#################
+
+
+# OpenAI官方API
+# 注意：已支持多key自动切换，方法：
+# key:
+#   - sk-xxxxxx
+#   - sk-xxxxxx
+# 在下方非注释的地方使用以上格式
+# 关于api_base：可以使用一些云函数（如腾讯、阿里）来避免国内被墙的问题。
+# 详见：
+# https://github.com/Ice-Hazymoon/openai-scf-proxy
+# https://github.com/Soulter/QQChannelChatGPT/issues/42
+# 设置为none则表示使用官方默认api地址
+openai:
+  key: 
+    - 
+  api_base: none
+  # 这里是GPT配置，语言模型默认使用gpt-3.5-turbo
+  chatGPTConfigs:
+    model: gpt-3.5-turbo
+    max_tokens: 3000
+    temperature: 0.9
+    top_p: 1
+    frequency_penalty: 0
+    presence_penalty: 0
+    
+  total_tokens_limit: 5000
+
 # 逆向文心一言【暂时不可用，请勿使用】
 rev_ernie:
   enable: false
 
+# 逆向New Bing
+# 需要在项目根目录下创建cookies.json并粘贴cookies进去。
+# 详见：https://soulter.top/posts/qpdg.html
 rev_edgegpt:
   enable: false
 
@@ -93,14 +124,14 @@ rev_edgegpt:
 #   - email: 第2个账户
 #     password: 第2个账户密码
 #   - ....
-# 支持使用session_token\access_token登录
+# 支持使用access_token登录
 # 例：
 # - session_token: xxxxx
 # - access_token: xxxx
 # 请严格按照上面这个格式填写。
-
+# 逆向ChatGPT库的email-password登录方式不工作，建议使用access_token登录
+# 获取access_token的方法，详见：https://soulter.top/posts/qpdg.html
 rev_ChatGPT:
   enable: false
   account:
-    - email: 
-      password: 
+    - access_token: 

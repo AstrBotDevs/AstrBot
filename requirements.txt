@@ -1,5 +1,5 @@
 requests
-openai
+openai~=0.27.4
 qq-botpy
 revChatGPT~=4.0.8
 baidu-aip
@@ -7,3 +7,4 @@ EdgeGPT~=0.1.22.1
 chardet
 Pillow
 GitPython
+git+https://github.com/Lxns-Network/nakuru-project.git

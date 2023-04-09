@@ -1,13 +1,10 @@
 import abc
 import json
-import platform
 import git.exc
 from git.repo import Repo
 import os
 import sys
 
-
-import requests
 from model.provider.provider import Provider
 
 class Command:
@@ -59,7 +56,7 @@ class Command:
                 repo = Repo(path="QQChannelChatGPT")
             now_commit = repo.head.commit
 
-            # 得到最新的3条commit列表, 包含commit信息
+            # 得到远程3条commit列表, 包含commit信息
             origin = repo.remotes.origin
             origin.fetch()
             commits = list(repo.iter_commits('master', max_count=3))
@@ -70,7 +67,7 @@ class Command:
                 index+=1
             remote_commit_hash = origin.refs.master.commit.hexsha[:6]
 
-            return True, f"当前版本: {now_commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n最新3条commit:\n{str(commits_log)}\n使用update latest更新至最新版本\n", "update"
+            return True, f"当前版本: {now_commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n3条commit(非最新):\n{str(commits_log)}\n使用update latest更新至最新版本\n", "update"
         else:
             if l[1] == "latest":
                 pash_tag = ""
@@ -79,17 +76,16 @@ class Command:
                         repo = Repo()
                     except git.exc.InvalidGitRepositoryError:
                         repo = Repo(path="QQChannelChatGPT")
-                        pash_tag = "QQChannelChatGPT\\"
+                        pash_tag = "QQChannelChatGPT"+os.sep
                     repo.remotes.origin.pull()
 
                     try:
-                        os.system("pip install -r "+pash_tag+"requirements.txt")
+                        os.system("pip3 install -r "+pash_tag+"requirements.txt")
                     except BaseException as e:
                         print(str(e))
 
                     py = sys.executable
                     os.execl(py, py, *sys.argv)
-
 
                     # 检查是否是windows环境
                     # if platform.system().lower() == "windows":

@@ -1,12 +1,7 @@
-import io
-
 import botpy
-from PIL import Image
 from botpy.message import Message
 from botpy.types.message import Reference
-import yaml
 import re
-from util.errors.errors import PromptExceededError
 from botpy.message import DirectMessage
 import json
 import threading
@@ -18,7 +13,13 @@ import os
 import sys
 from cores.qqbot.personality import personalities
 from addons.baidu_aip_judge import BaiduJudge
-
+from model.platform.qqchan import QQChan
+from model.platform.qq import QQ
+from nakuru import (
+    CQHTTP,
+    GroupMessage,
+)
+from nakuru.entities.components import Plain
 
 # QQBotClient实例
 client = ''
@@ -59,7 +60,7 @@ direct_message_mode = True
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 # 版本
-version = '2.9'
+version = '3.0'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
@@ -80,27 +81,27 @@ reply_prefix = {}
 # 关键词回复
 keywords = {}
 
+# QQ频道机器人
+qqchannel_bot = None
+PLATFORM_QQCHAN = 'qqchan'
+qqchan_loop = None
+
+# QQ机器人
+gocq_bot = None
+PLATFORM_GOCQ = 'gocq'
+gocq_app = CQHTTP(
+    host="127.0.0.1",
+    port=6700,
+    http_port=5700,
+)
+gocq_loop = None
+
+bing_cache_loop = None
+
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
-    thread.start() 
-
-class botClient(botpy.Client):
-    # 收到At消息
-    async def on_at_message_create(self, message: Message):
-        toggle_count(at=True, message=message)
-        message_reference = Reference(message_id=message.id, ignore_get_message_error=False)
-        # executor.submit(oper_msg, message, True)
-        new_sub_thread(oper_msg, (message, True, message_reference))
-        # await oper_msg(message=message, at=True)
-
-    # 收到私聊消息
-    async def on_direct_message_create(self, message: DirectMessage):
-        if direct_message_mode:
-            toggle_count(at=False, message=message)
-            # executor.submit(oper_msg, message, True)
-            # await oper_msg(message=message, at=False)
-            new_sub_thread(oper_msg, (message, False))
+    thread.start()
 
 # 写入统计信息
 def toggle_count(at: bool, message):
@@ -206,7 +207,6 @@ def initBot(cfg, prov):
             if res in prov:
                 chosen_provider = res
         
-
     # 百度内容审核
     if 'baidu_aip' in cfg and 'enable' in cfg['baidu_aip'] and cfg['baidu_aip']['enable']:
         try: 
@@ -234,14 +234,6 @@ def initBot(cfg, prov):
         direct_message_mode = cfg['direct_message_mode']
         print("[System] 私聊功能: "+str(direct_message_mode))
 
-    # 得到版本
-    if 'version' in cfg:
-        try:
-            f = open(abs_path+"version.txt", 'r', encoding='utf-8')
-            version = f.read()
-        except:
-            print('[System-Err] 读取更新记录文件失败')
-
     # 得到发言频率配置
     if 'limit' in cfg:
         print('[System] 发言频率配置: '+str(cfg['limit']))
@@ -250,7 +242,6 @@ def initBot(cfg, prov):
         if 'time' in cfg['limit']:
             frequency_time = cfg['limit']['time']
     
-    announcement += '[QQChannelChatGPT项目，觉得好用的话欢迎前往Github给Star]\n所有回答与腾讯公司无关。出现问题请前往[GPT机器人]官方频道\n\n'
     # 得到公告配置
     if 'notice' in cfg:
         print('[System] 公告配置: '+cfg['notice'])
@@ -268,60 +259,54 @@ def initBot(cfg, prov):
 
     print(f"[System] QQ开放平台AppID: {cfg['qqbot']['appid']} 令牌: {cfg['qqbot']['token']}")
 
-    print("\n[System] 如果有任何问题，请在https://github.com/Soulter/QQChannelChatGPT上提交issue说明问题！或者添加QQ：905617992")
-    print("[System] 请给https://github.com/Soulter/QQChannelChatGPT点个star!")
-    print("[System] 请给https://github.com/Soulter/QQChannelChatGPT点个star!")
-    # input("\n仔细阅读完以上信息后，输入任意信息并回车以继续")
-    try:
-        run_bot(cfg['qqbot']['appid'], cfg['qqbot']['token'])
-    except BaseException as e:
-        input(f"\n[System-Error] 启动QQ机器人时出现错误，原因如下：{e}\n可能是没有填写QQBOT appid和token？请在config中完善你的appid和token\n配置教程：https://soulter.top/posts/qpdg.html\n")
+    print("\n[System] 如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue说明问题！或者添加QQ：905617992")
+    print("[System] 请给 https://github.com/Soulter/QQChannelChatGPT 点个star!")
 
-        
-'''
-启动机器人
-'''
-def run_bot(appid, token):
+    thread_inst = None
+
+    # QQ频道
+    if 'qqbot' in cfg and cfg['qqbot']['enable']:
+        print("[System] 启用QQ频道机器人")
+        global qqchannel_bot, qqchan_loop
+        qqchannel_bot = QQChan()
+        qqchan_loop = asyncio.new_event_loop()
+        thread_inst = threading.Thread(target=run_qqchan_bot, args=(cfg, qqchan_loop, qqchannel_bot), daemon=False)
+        thread_inst.start()
+        # thread.join()
+
+    # GOCQ
+    if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
+        print("[System] 启用QQ机器人")
+        global gocq_app, gocq_bot, gocq_loop
+        gocq_bot = QQ()
+        gocq_loop = asyncio.new_event_loop()
+        thread_inst = threading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=False)
+        thread_inst.start()
+
+    if thread_inst == None:
+        input("[System-Error] 没有启用任何机器人，程序退出")
+        exit()
+
+    thread_inst.join()
+
+def run_qqchan_bot(cfg, loop, qqchannel_bot):
+    asyncio.set_event_loop(loop)
     intents = botpy.Intents(public_guild_messages=True, direct_message=True) 
     global client
     client = botClient(intents=intents)
-    client.run(appid=appid, token=token)
+    try:
+        qqchannel_bot.run_bot(client, cfg['qqbot']['appid'], cfg['qqbot']['token'])
+    except BaseException as e:
+        input(f"\n[System-Error] 启动QQ频道机器人时出现错误，原因如下：{e}\n可能是没有填写QQBOT appid和token？请在config中完善你的appid和token\n配置教程：https://soulter.top/posts/qpdg.html\n")
 
-
-'''
-回复QQ消息
-'''
-def send_qq_msg(message, res, image_mode=False, msg_ref = None):
-    if not image_mode:
-        try:
-            if msg_ref is not None:
-                reply_res = asyncio.run_coroutine_threadsafe(message.reply(content=res, message_reference = msg_ref), client.loop)
-            else:
-                reply_res = asyncio.run_coroutine_threadsafe(message.reply(content=res), client.loop)
-            reply_res.result()
-        except BaseException as e:
-            if "msg over length" in str(e):
-                split_res = []
-                split_res.append(res[:len(res)//2])      
-                split_res.append(res[len(res)//2:])
-                for i in split_res:
-                    if msg_ref is not None:
-                        reply_res = asyncio.run_coroutine_threadsafe(message.reply(content=i, message_reference = msg_ref), client.loop)
-                    else:
-                        reply_res = asyncio.run_coroutine_threadsafe(message.reply(content=i), client.loop)
-                    reply_res.result()
-            else:
-                print("[System-Error] 回复QQ消息失败")
-                raise e
-    else:
-        pic_res = requests.get(str(res), stream=True)
-        if pic_res.status_code == 200:
-            # 将二进制数据转换成图片对象
-            image = Image.open(io.BytesIO(pic_res.content))
-            # 保存图片到本地
-            image.save('tmp_image.jpg')
-        asyncio.run_coroutine_threadsafe(message.reply(file_image='tmp_image.jpg', content=""), client.loop)
-
+def run_gocq_bot(loop, gocq_bot, gocq_app):
+    asyncio.set_event_loop(loop)
+    global gocq_client
+    gocq_client = gocqClient()
+    try:
+        gocq_bot.run_bot(gocq_app)
+    except BaseException as e:
+        input("启动QQ机器人出现错误"+str(e))
 
 '''
 检查发言频率
@@ -344,123 +329,129 @@ def check_frequency(id) -> bool:
         user_frequency[id] = t
         return True
 
-
 def save_provider_preference(chosen_provider):
     with open('provider_preference.txt', 'w') as f:
         f.write(chosen_provider)
+
+
+'''
+通用回复方法
+'''
+def send_message(platform, message, res, msg_ref = None, image = None, gocq_loop = None, qqchannel_bot = None, gocq_bot = None):
+    if platform == PLATFORM_QQCHAN:
+        if image != None:
+            qqchannel_bot.send_qq_msg(message, res, image_mode=True, msg_ref=msg_ref)
+        else:
+            qqchannel_bot.send_qq_msg(message, res, msg_ref=msg_ref)
+    if platform == PLATFORM_GOCQ: asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res), gocq_loop).result()
+
 '''
 处理消息
 '''
-def oper_msg(message: Message, at=False, msg_ref = None):
+def oper_msg(message, at=False, msg_ref = None, platform = None):
     global session_dict, provider
-    print("[QQBOT] 接收到消息："+ str(message.content))
     qq_msg = ''
     session_id = ''
-    user_id = message.author.id
-    user_name = message.author.username
-    global chosen_provider, reply_prefix, keywords
+    user_id = ''
+    user_name = ''
+    global chosen_provider, reply_prefix, keywords, qqchannel_bot, gocq_bot, gocq_loop, bing_cache_loop
+    role = "member" # 角色
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
-    role = "member" # 角色
+
+    if platform == PLATFORM_QQCHAN:
+        print("[QQCHAN-BOT] 接收到消息："+ str(message.content))
+        user_id = message.author.id
+        user_name = message.author.username
+        global qqchan_loop
+    if platform == PLATFORM_GOCQ:
+        print("[GOCQ-BOT] 接收到消息："+ str(message.message[0].text))
+        user_id = message.group_id
+        user_name = message.group_id
+        global gocq_loop
     
     # 检查发言频率
     if not check_frequency(user_id):
-        send_qq_msg(message, f'{user_name}的发言超过频率限制(╯▔皿▔)╯。\n{frequency_time}秒内只能提问{frequency_count}次。')
+        qqchannel_bot.send_qq_msg(message, f'{user_name}的发言超过频率限制(╯▔皿▔)╯。\n{frequency_time}秒内只能提问{frequency_count}次。')
         return
 
-    logf.write("[QQBOT] "+ str(message.content)+'\n')
-    logf.flush()
-
-    if at:
-        # 在频道内
-        # 过滤@
-        qq_msg = message.content
-        lines = qq_msg.splitlines()
-        for i in range(len(lines)):
-            lines[i] = re.sub(r"<@!\d+>", "", lines[i])
-        qq_msg = "\n".join(lines).lstrip().strip()
-
-        if uniqueSession:
-            session_id = user_id
+    if platform == PLATFORM_QQCHAN:
+        if at:
+            # 频道内
+            # 过滤@
+            qq_msg = message.content
+            lines = qq_msg.splitlines()
+            for i in range(len(lines)):
+                lines[i] = re.sub(r"<@!\d+>", "", lines[i])
+            qq_msg = "\n".join(lines).lstrip().strip()
+            if uniqueSession:
+                session_id = user_id
+            else:
+                session_id = message.channel_id
+            # 得到身份
+            if "2" in message.member.roles or "4" in message.member.roles or "5" in message.member.roles:
+                print("[QQCHAN-BOT] 检测到管理员身份")
+                role = "admin"
+            else:
+                role = "member"
         else:
-            session_id = message.channel_id
+            # 私信
+            qq_msg = message.content
+            session_id = user_id
 
-        # 得到身份
-        if "2" in message.member.roles or "4" in message.member.roles or "5" in message.member.roles:
-            print("[System] 检测到管理员身份")
+    if platform == PLATFORM_GOCQ:
+        if isinstance(message.message[0], Plain):
+            qq_msg = message.message[0].text
+            session_id = message.group_id
+            # todo: 暂时将所有人设为管理员
             role = "admin"
         else:
-            role = "member"
-    else:
-        # 私信
-        qq_msg = message.content
-        session_id = user_id
+            return
+        
+    logf.write("[QQBOT] "+ qq_msg+'\n')
+    logf.flush()
 
     # 关键词回复
     for k in keywords:
         if qq_msg == k:
-            send_qq_msg(message, keywords[k], msg_ref=msg_ref)
+            send_message(platform, message, keywords[k], msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
             return
-
 
     # 关键词拦截器
     for i in uw.unfit_words_q:
         matches = re.match(i, qq_msg.strip(), re.I | re.M)
         if matches:
-            send_qq_msg(message, f"你的提问得到的回复未通过【自有关键词拦截】服务，不予回复。", msg_ref=msg_ref)
+            send_message(platform, message,  f"你的提问得到的回复未通过【自有关键词拦截】服务, 不予回复。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
             return
     if baidu_judge != None:
         check, msg = baidu_judge.judge(qq_msg)
         if not check:
-            send_qq_msg(message, f"你的提问得到的回复未通过【百度AI内容审核】服务，不予回复。\n\n{msg}", msg_ref=msg_ref)
+            send_message(platform, message,  f"你的提问得到的回复未通过【百度AI内容审核】服务, 不予回复。\n\n{msg}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
             return
     
     # 检查是否是更换语言模型的请求
     temp_switch = ""
-    if qq_msg.startswith('/bing'):
+    if qq_msg.startswith('/bing') or qq_msg.startswith('/gpt') or qq_msg.startswith('/revgpt'):
+        target = chosen_provider
+        if qq_msg.startswith('/bing'):
+            target = REV_EDGEGPT
+        elif qq_msg.startswith('/gpt'):
+            target = OPENAI_OFFICIAL
+        elif qq_msg.startswith('/revgpt'):
+            target = REV_CHATGPT
         l = qq_msg.split(' ')
         if len(l) > 1 and l[1] != "":
             # 临时对话模式，先记录下之前的语言模型，回答完毕后再切回
             temp_switch = chosen_provider
-            chosen_provider = REV_EDGEGPT
+            chosen_provider = target
             qq_msg = l[1]
         else:
             if role != "admin":
-                send_qq_msg(message, f"你没有权限更换语言模型。", msg_ref=msg_ref)
+                send_message(platform, message, "你没有权限更换语言模型。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
                 return
-            chosen_provider = REV_EDGEGPT
+            chosen_provider = target
             save_provider_preference(chosen_provider)
-            send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
-            return
-    elif qq_msg.startswith('/gpt'):
-        l = qq_msg.split(' ')
-        if len(l) > 1 and l[1] != "":
-            # 临时对话模式，先记录下之前的语言模型，回答完毕后再切回
-            temp_switch = chosen_provider
-            chosen_provider = OPENAI_OFFICIAL
-            qq_msg = l[1]
-        else:
-            if role != "admin":
-                send_qq_msg(message, f"你没有权限更换语言模型。", msg_ref=msg_ref)
-                return
-            chosen_provider = OPENAI_OFFICIAL
-            save_provider_preference(chosen_provider)
-            send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
-            return
-    elif qq_msg.startswith('/revgpt'):
-        l = qq_msg.split(' ')
-        if len(l) > 1 and l[1] != "":
-            # 临时对话模式，先记录下之前的语言模型，回答完毕后再切回
-            temp_switch = chosen_provider
-            chosen_provider = REV_CHATGPT
-            qq_msg = l[1]
-        else:
-            if role != "admin":
-                send_qq_msg(message, f"你没有权限更换语言模型。", msg_ref=msg_ref)
-                return
-            chosen_provider = REV_CHATGPT
-            save_provider_preference(chosen_provider)
-            send_qq_msg(message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
+            send_message(platform, message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
             return
 
     chatgpt_res = ""
@@ -477,12 +468,7 @@ def oper_msg(message: Message, at=False, msg_ref = None):
                     chatgpt_res = reply_prefix[OPENAI_OFFICIAL] + chatgpt_res
             except (BaseException) as e:
                 print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
-                if 'exceeded' in str(e):
-                    send_qq_msg(message, f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)")
-                else:
-                    f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
-                    f_res = f_res.replace(".", "·")
-                    send_qq_msg(message, f"OpenAI API错误。原因如下：\n{f_res} \n前往官方频道反馈~")
+                send_message(platform, message, f"OpenAI API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_CHATGPT:
         hit, command_result = command_rev_chatgpt.check_command(qq_msg, role)
@@ -493,35 +479,38 @@ def oper_msg(message: Message, at=False, msg_ref = None):
                     chatgpt_res = reply_prefix[REV_CHATGPT] + chatgpt_res
             except BaseException as e:
                 print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
-                send_qq_msg(message, f"Rev ChatGPT API错误。原因如下: \n{str(e)} \n前往官方频道反馈~")
+                send_message(platform, message, f"Rev ChatGPT API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+
     elif chosen_provider == REV_EDGEGPT:
-        hit, command_result = command_rev_edgegpt.check_command(qq_msg, client.loop, role)
+        if bing_cache_loop == None:
+            if platform == PLATFORM_GOCQ:
+                bing_cache_loop = gocq_loop
+            elif platform == PLATFORM_QQCHAN:
+                bing_cache_loop = qqchan_loop
+        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role)
         if not hit:
             try:
                 if rev_edgegpt.is_busy():
-                    send_qq_msg(message, f"[RevBing] 正忙，请稍后再试",msg_ref=msg_ref)
+                    send_message(platform, message, "[RevBing] 正忙，请稍后再试", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
                 else:
-                    res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
+                    res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), bing_cache_loop).result()
                     if res_code == 0: # bing不想继续话题，重置会话后重试。
-                        send_qq_msg(message, f"Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref)
-                        asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), client.loop).result()
-                        res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), client.loop).result()
+                        send_message(platform, message, "Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                        asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
+                        res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), bing_cache_loop).result()
                         if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
-                            send_qq_msg(message, f"Bing仍然不想继续话题, 请检查您的提问。", msg_ref=msg_ref)
+                            send_message(platform, message, "Bing仍然不想继续话题, 请检查您的提问。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
                     else:
                         chatgpt_res = str(res)
                         if REV_EDGEGPT in reply_prefix:
                             chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
             except BaseException as e:
                 print("[System-Err] Rev NewBing API错误。原因如下:\n"+str(e))
-                send_qq_msg(message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~")
-    
+                send_message(platform, message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+
     # 切换回原来的语言模型
     if temp_switch != "":
         chosen_provider = temp_switch
-
-    if chatgpt_res == "":
-        return
         
     # 指令回复
     if hit:
@@ -536,15 +525,20 @@ def oper_msg(message: Message, at=False, msg_ref = None):
                 # 是否是画图指令
                 if len(command_result) == 3 and command_result[2] == 'draw':
                     for i in command_result[1]:
-                        send_qq_msg(message, i, image_mode=True, msg_ref=msg_ref)
+                        send_message(platform, message, i, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
                 else: 
                     try:
-                        send_qq_msg(message, command_result[1], msg_ref=msg_ref)
+                        send_message(platform, message, command_result[1], msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
                     except BaseException as e:
                         t = command_result[1].replace(".", " . ")
-                        send_qq_msg(message, t, msg_ref=msg_ref)
+                        send_message(platform, message, t, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+
             else:
-                send_qq_msg(message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref)
+                send_message(platform, message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+
+        return
+    
+    if chatgpt_res == "":
         return
 
     # 记录日志
@@ -560,34 +554,20 @@ def oper_msg(message: Message, at=False, msg_ref = None):
     if baidu_judge != None:
         check, msg = baidu_judge.judge(judged_res)
         if not check:
-            send_qq_msg(message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref)
+            send_message(platform, message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
             return
+        
     # 发送qq信息
     try:
-        # 防止被qq频道过滤消息
-        gap_chatgpt_res = judged_res.replace(".", " . ")
-        send_qq_msg(message, ''+gap_chatgpt_res, msg_ref=msg_ref)
-        # 发送信息
+        send_message(platform, message, chatgpt_res, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
     except BaseException as e:
-        print("QQ频道API错误: \n"+str(e))
-        f_res = ""
-        for t in chatgpt_res:
-            f_res += t + ' '
-        try:
-            send_qq_msg(message, ''+f_res, msg_ref=msg_ref)
-            # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
-        except BaseException as e:
-            # 如果还是不行则过滤url
-            f_res = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
-            f_res = f_res.replace(".", "·")
-            send_qq_msg(message, ''+f_res, msg_ref=msg_ref)
-            # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
+        print("回复消息错误: \n"+str(e))
 
-        
 '''
 获取统计信息
 '''
 def get_stat(self):
+
     try:
         f = open(abs_path+"configs/stat", "r", encoding="utf-8")
         fjson = json.loads(f.read())
@@ -611,3 +591,29 @@ def get_stat(self):
         return guild_count, guild_msg_count, guild_direct_msg_count, session_count
     except:
         return -1, -1, -1, -1
+    
+
+# QQ频道机器人
+class botClient(botpy.Client):
+    # 收到频道消息
+    async def on_at_message_create(self, message: Message):
+        toggle_count(at=True, message=message)
+        message_reference = Reference(message_id=message.id, ignore_get_message_error=False)
+        new_sub_thread(oper_msg, (message, True, message_reference, PLATFORM_QQCHAN))
+
+    # 收到私聊消息
+    async def on_direct_message_create(self, message: DirectMessage):
+        if direct_message_mode:
+            toggle_count(at=False, message=message)
+            new_sub_thread(oper_msg, (message, False, None, PLATFORM_QQCHAN))
+# QQ机器人
+class gocqClient():
+    # 收到群聊消息
+    @gocq_app.receiver("GroupMessage")
+    async def _(app: CQHTTP, source: GroupMessage):
+        if isinstance(source.message[0], Plain):
+            if source.message[0].text.startswith('ai '):
+                source.message[0].text = source.message[0].text[3:]
+                new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
+        else:
+            return

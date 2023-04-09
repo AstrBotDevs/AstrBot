@@ -1,4 +1,3 @@
-import asyncio
 from model.provider.provider import Provider
 from EdgeGPT import Chatbot, ConversationStyle
 import json
@@ -32,7 +31,6 @@ class ProviderRevEdgeGPT(Provider):
         while err_count < retry_count:
             try:
                 resp = await self.bot.ask(prompt=prompt, conversation_style=ConversationStyle.creative)
-                print("[RevEdgeGPT] "+str(resp))
                 resp = resp['item']['messages'][len(resp['item']['messages'])-1]['text']
                 if 'I\'m sorry but I prefer not to continue this conversation. I\'m still learning so I appreciate your understanding and patience.' in resp:
                     self.busy = False
@@ -44,6 +42,7 @@ class ProviderRevEdgeGPT(Provider):
                 print(e.with_traceback)
                 err_count += 1
                 if err_count >= retry_count:
+                        self.busy = False
                         raise e
                 print("[RevEdgeGPT] 请求出现了一些问题, 正在重试。次数"+str(err_count))
         self.busy = False
