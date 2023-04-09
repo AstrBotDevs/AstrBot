@@ -1,3 +1,11 @@
+<div align="center">
+
+# QQChannelChatGPT
+在QQ和QQ频道上使用ChatGPT、NewBing等语言模型
+
+</div>
+
+
 ## ⭐体验
 
 使用手机QQ扫码加入QQ频道(频道名: GPT机器人 | 频道号: x42d56aki2)
