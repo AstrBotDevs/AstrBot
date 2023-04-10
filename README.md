@@ -1,3 +1,13 @@
+<div align="center">
+
+# QQChannelChatGPT
+在QQ和QQ频道上使用ChatGPT、NewBing等语言模型吗，稳定，一次部署，同时使用。
+
+教程：https://soulter.top/posts/qpdg.html
+
+</div>
+
+
 ## ⭐体验
 
 使用手机QQ扫码加入QQ频道(频道名: GPT机器人 | 频道号: x42d56aki2)
@@ -12,6 +22,7 @@
 近期新功能：
 - 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
 - 热更新
+- 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
 
 支持的AI语言模型（请在`configs/config.yaml`下配置）：
 - 逆向ChatGPT库
