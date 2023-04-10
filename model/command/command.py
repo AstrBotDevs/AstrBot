@@ -63,7 +63,10 @@ class Command:
             commits_log = ''
             index = 1
             for commit in commits:
-                commits_log += f"[{index}] {commit.message}\n-----------\n"
+                if commit.message.endswith("\n"):
+                    commits_log += f"[{index}] {commit.message}-----------\n"
+                else:
+                    commits_log += f"[{index}] {commit.message}\n-----------\n"
                 index+=1
             remote_commit_hash = origin.refs.master.commit.hexsha[:6]
 
