@@ -44,7 +44,7 @@ def check_env():
         if os.path.exists('requirements.txt'):
             os.system("pip3 install -r requirements.txt")
         elif os.path.exists('QQChannelChatGPT'+ os.sep +'requirements.txt'):
-            os.system('QQChannelChatGPT'+ os.sep +'requirements.txt')
+            os.system('pip3 install -r QQChannelChatGPT'+ os.sep +'requirements.txt')
         os.system("clear")
         print("安装依赖库完毕...")
     except BaseException as e:

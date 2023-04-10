@@ -82,11 +82,6 @@ class Command:
                         pash_tag = "QQChannelChatGPT"+os.sep
                     repo.remotes.origin.pull()
 
-                    try:
-                        os.system("pip3 install -r "+pash_tag+"requirements.txt")
-                    except BaseException as e:
-                        print(str(e))
-
                     py = sys.executable
                     os.execl(py, py, *sys.argv)
 
