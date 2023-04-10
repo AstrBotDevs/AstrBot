@@ -490,20 +490,20 @@ def oper_msg(message, at=False, msg_ref = None, platform = None):
         hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role)
         if not hit:
             try:
-                if rev_edgegpt.is_busy():
-                    send_message(platform, message, "[RevBing] 正忙，请稍后再试", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
-                else:
+                while rev_edgegpt.is_busy():
+                    time.sleep(1)
+
+                res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), bing_cache_loop).result()
+                if res_code == 0: # bing不想继续话题，重置会话后重试。
+                    send_message(platform, message, "Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                    asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
                     res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), bing_cache_loop).result()
-                    if res_code == 0: # bing不想继续话题，重置会话后重试。
-                        send_message(platform, message, "Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
-                        asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
-                        res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), bing_cache_loop).result()
-                        if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
-                            send_message(platform, message, "Bing仍然不想继续话题, 请检查您的提问。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
-                    else:
-                        chatgpt_res = str(res)
-                        if REV_EDGEGPT in reply_prefix:
-                            chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
+                    if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
+                        send_message(platform, message, "Bing仍然不想继续话题, 请检查您的提问。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                        res = ""
+                chatgpt_res = str(res)
+                if REV_EDGEGPT in reply_prefix:
+                    chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
             except BaseException as e:
                 print("[System-Err] Rev NewBing API错误。原因如下:\n"+str(e))
                 send_message(platform, message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
@@ -611,6 +611,8 @@ class gocqClient():
     # 收到群聊消息
     @gocq_app.receiver("GroupMessage")
     async def _(app: CQHTTP, source: GroupMessage):
+        # 检测到有人加入了群
+        # print(source)
         if isinstance(source.message[0], Plain):
             if source.message[0].text.startswith('ai '):
                 source.message[0].text = source.message[0].text[3:]
