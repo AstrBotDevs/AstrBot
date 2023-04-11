@@ -91,7 +91,9 @@
 
 > 关于token：token就相当于是AI中的单词数（但是不等于单词数），`text-davinci-003`模型中最大可以支持`4097`个token。在发送信息时，这个机器人会将用户的历史聊天记录打包发送给ChatGPT，因此，`token`也会相应的累加，为了保证聊天的上下文的逻辑性，就有了缓存token。
 ### 指令功能
-需要先`@`机器人之后再输入指令
+
+#### OpenAI官方API
+在频道内需要先`@`机器人之后再输入指令；在QQ中暂时需要在消息前加上`ai `，不需要@
 - `/reset`重置prompt
 - `/his`查看历史记录（每个用户都有独立的会话）
 - `/his [页码数]`查看不同页码的历史记录。例如`/his 2`查看第2页
@@ -101,6 +103,20 @@
 - `/help` 查看帮助
 - `/key` 动态添加key
 - `/set` 人格设置面板
+- `/keyword nihao 你好` 设置关键词回复。nihao->你好
+- `/bing` 切换为bing
+- `/revgpt` 切换为ChatGPT逆向库
+
+#### Bing语言模型
+- `/reset`重置prompt
+- `/gpt` 切换为OpenAI官方API
+- `/revgpt` 切换为ChatGPT逆向库
+
+#### 逆向ChatGPT库语言模型
+- `/gpt` 切换为OpenAI官方API
+- `/bing` 切换为bing
+
+* 切换模型指令支持临时回复。如`/bing 你好`将会临时使用一次bing模型
 
 ## 📰使用方法：
 
