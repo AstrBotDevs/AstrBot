@@ -82,9 +82,6 @@ class Command:
                         pash_tag = "QQChannelChatGPT"+os.sep
                     repo.remotes.origin.pull()
 
-                    py = sys.executable
-                    os.execl(py, py, *sys.argv)
-
                     # 检查是否是windows环境
                     # if platform.system().lower() == "windows":
                     #     if os.path.exists("launcher.exe"):
@@ -97,9 +94,14 @@ class Command:
                     # else:
                     #     py = sys.executable
                     #     os.execl(py, py, *sys.argv)
+                    return True, "更新成功~是否重启？输入update reboot重启（重启指令不返回任何确认信息）。", "update"
                     
                 except BaseException as e:
                     return False, "更新失败: "+str(e), "update"
+            if l[1] == "reboot":
+                py = sys.executable
+                os.execl(py, py, *sys.argv)
+
 
     def reset(self):
         return False
