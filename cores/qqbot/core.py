@@ -624,9 +624,10 @@ class gocqClient():
                 source.message[0].text = source.message[0].text[3:]
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         if isinstance(source.message[0], At):
-            if source.message[1].text.startswith('ai '):
-                source.message[1].text = source.message[0].text[3:]
-            new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
+            if source.message[0].qq == source.self_id:
+                if source.message[1].text.startswith('ai '):
+                    source.message[1].text = source.message[0].text[3:]
+                new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         else:
             return
         
