@@ -366,7 +366,10 @@ def oper_msg(message, at=False, msg_ref = None, platform = None):
         user_name = message.author.username
         global qqchan_loop
     if platform == PLATFORM_GOCQ:
-        print("[GOCQ-BOT] 接收到消息："+ str(message.message[0].text))
+        if 'text' in message.message[0]:
+            print("[GOCQ-BOT] 接收到消息："+ str(message.message[0].text))
+        else:
+            print("[GOCQ-BOT] 接收到消息："+ str(message.message[1].text))
         user_id = message.group_id
         user_name = message.group_id
         global gocq_loop
@@ -402,7 +405,10 @@ def oper_msg(message, at=False, msg_ref = None, platform = None):
 
     if platform == PLATFORM_GOCQ:
         if isinstance(message.message[0], Plain):
-            qq_msg = message.message[0].text
+            if 'text' in message.message[0]:
+                print("[GOCQ-BOT] 接收到消息："+ str(message.message[0].text))
+            else:
+                print("[GOCQ-BOT] 接收到消息："+ str(message.message[1].text))
             session_id = message.group_id
             # todo: 暂时将所有人设为管理员
             role = "admin"
