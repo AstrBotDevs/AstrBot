@@ -407,8 +407,10 @@ def oper_msg(message, at=False, msg_ref = None, platform = None):
         if isinstance(message.message[0], Plain):
             if 'text' in message.message[0]:
                 print("[GOCQ-BOT] 接收到消息："+ str(message.message[0].text))
+                qq_msg = str(message.message[0].text)
             else:
                 print("[GOCQ-BOT] 接收到消息："+ str(message.message[1].text))
+                qq_msg = str(message.message[1].text)
             session_id = message.group_id
             # todo: 暂时将所有人设为管理员
             role = "admin"
