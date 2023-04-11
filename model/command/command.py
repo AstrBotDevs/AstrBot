@@ -94,11 +94,11 @@ class Command:
                     # else:
                     #     py = sys.executable
                     #     os.execl(py, py, *sys.argv)
-                    return True, "更新成功~是否重启？输入update reboot重启（重启指令不返回任何确认信息）。", "update"
+                    return True, "更新成功~是否重启？输入update r重启（重启指令不返回任何确认信息）。", "update"
                     
                 except BaseException as e:
                     return False, "更新失败: "+str(e), "update"
-            if l[1] == "reboot":
+            if l[1] == "r":
                 py = sys.executable
                 os.execl(py, py, *sys.argv)
 
