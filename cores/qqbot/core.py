@@ -407,7 +407,7 @@ def oper_msg(message, at=False, msg_ref = None, platform = None):
         if isinstance(message.message[0], Plain):
             qq_msg = str(message.message[0].text)
         elif isinstance(message.message[0], At):
-            qq_msg = str(message.message[1].text)
+            qq_msg = str(message.message[1].text).strip()
         else:
             return
         session_id = message.group_id
