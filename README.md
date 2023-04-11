@@ -11,16 +11,6 @@
 
 </div>
 
-
-## ⭐体验
-
-
-
-
-
-**Windows用户推荐Windows一键安装，请前往Release下载最新版本（Beta）**
-有报错请先看issue，解决不了再在频道内反馈。
-
 ## ⭐功能：
 
 近期新功能：
@@ -125,6 +115,9 @@
 ## 📰使用方法：
 
 **详细部署教程链接**https://soulter.top/posts/qpdg.html
+
+**Windows用户推荐Windows一键安装，请前往Release下载最新版本（Beta）**
+有报错请先看issue，解决不了再在频道内反馈。
 
 ### 安装第三方库
 
