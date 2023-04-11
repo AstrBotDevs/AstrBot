@@ -366,10 +366,11 @@ def oper_msg(message, at=False, msg_ref = None, platform = None):
         user_name = message.author.username
         global qqchan_loop
     if platform == PLATFORM_GOCQ:
-        if 'text' in message.message[0]:
+        if isinstance(message.message[0], Plain):
             print("[GOCQ-BOT] 接收到消息："+ str(message.message[0].text))
-        else:
+        elif isinstance(message.message[0], At):
             print("[GOCQ-BOT] 接收到消息："+ str(message.message[1].text))
+            
         user_id = message.group_id
         user_name = message.group_id
         global gocq_loop
