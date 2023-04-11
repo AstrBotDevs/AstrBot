@@ -5,14 +5,18 @@
 
 教程：https://soulter.top/posts/qpdg.html
 
+欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）：
+
+<img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img>
+
 </div>
 
 
 ## ⭐体验
 
-使用手机QQ扫码加入QQ频道(频道名: GPT机器人 | 频道号: x42d56aki2)
 
-<img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="200"></img>
+
+
 
 **Windows用户推荐Windows一键安装，请前往Release下载最新版本（Beta）**
 有报错请先看issue，解决不了再在频道内反馈。
