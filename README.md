@@ -1,7 +1,7 @@
 <div align="center">
 
 # QQChannelChatGPT
-在QQ和QQ频道上使用ChatGPT、NewBing等语言模型吗，稳定，一次部署，同时使用。
+在QQ和QQ频道上使用ChatGPT、NewBing等语言模型，稳定，一次部署，同时使用。
 
 教程：https://soulter.top/posts/qpdg.html
 
