@@ -18,8 +18,9 @@ from model.platform.qq import QQ
 from nakuru import (
     CQHTTP,
     GroupMessage,
+    GroupMemberIncrease
 )
-from nakuru.entities.components import Plain
+from nakuru.entities.components import Plain,At
 
 # QQBotClient实例
 client = ''
@@ -611,11 +612,18 @@ class gocqClient():
     # 收到群聊消息
     @gocq_app.receiver("GroupMessage")
     async def _(app: CQHTTP, source: GroupMessage):
-        # 检测到有人加入了群
-        # print(source)
+        # 如果at了本机器人
         if isinstance(source.message[0], Plain):
             if source.message[0].text.startswith('ai '):
                 source.message[0].text = source.message[0].text[3:]
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
+        if  isinstance(source.message[0], At):
+            if source.message[0].text.startswith('ai '):
+                source.message[0].text = source.message[0].text[3:]
+            new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         else:
             return
+        
+    @gocq_app.receiver("GroupMemberIncrease")
+    async def _(app: CQHTTP, source: GroupMemberIncrease):
+        await app.send_group_msg(group_id=source.group_id, message=f"欢迎 {source.member_id} 加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~")
