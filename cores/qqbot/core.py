@@ -18,7 +18,9 @@ from model.platform.qq import QQ
 from nakuru import (
     CQHTTP,
     GroupMessage,
-    GroupMemberIncrease
+    GroupMemberIncrease,
+    FriendMessage
+    
 )
 from nakuru.entities.components import Plain,At
 
@@ -348,8 +350,9 @@ def send_message(platform, message, res, msg_ref = None, image = None, gocq_loop
 
 '''
 处理消息
+group: 群聊模式
 '''
-def oper_msg(message, at=False, msg_ref = None, platform = None):
+def oper_msg(message, group=False, msg_ref = None, platform = None):
     global session_dict, provider
     qq_msg = ''
     session_id = ''
@@ -371,8 +374,8 @@ def oper_msg(message, at=False, msg_ref = None, platform = None):
         elif isinstance(message.message[0], At):
             print("[GOCQ-BOT] 接收到消息："+ str(message.message[1].text))
             
-        user_id = message.group_id
-        user_name = message.group_id
+        user_id = message.user_id
+        user_name = message.user_id
         global gocq_loop
     
     # 检查发言频率
@@ -381,7 +384,7 @@ def oper_msg(message, at=False, msg_ref = None, platform = None):
         return
 
     if platform == PLATFORM_QQCHAN:
-        if at:
+        if group:
             # 频道内
             # 过滤@
             qq_msg = message.content
@@ -405,13 +408,17 @@ def oper_msg(message, at=False, msg_ref = None, platform = None):
             session_id = user_id
 
     if platform == PLATFORM_GOCQ:
-        if isinstance(message.message[0], Plain):
-            qq_msg = str(message.message[0].text)
-        elif isinstance(message.message[0], At):
-            qq_msg = str(message.message[1].text).strip()
+        if group:
+            if isinstance(message.message[0], Plain):
+                qq_msg = str(message.message[0].text)
+            elif isinstance(message.message[0], At):
+                qq_msg = str(message.message[1].text).strip()
+            else:
+                return
+            session_id = message.group_id
         else:
-            return
-        session_id = message.group_id
+            qq_msg = message.message[0].text
+            session_id = message.user_id
         # todo: 暂时将所有人设为管理员
         role = "admin"
         
@@ -618,7 +625,6 @@ class gocqClient():
     # 收到群聊消息
     @gocq_app.receiver("GroupMessage")
     async def _(app: CQHTTP, source: GroupMessage):
-        # 如果at了本机器人
         if isinstance(source.message[0], Plain):
             if source.message[0].text.startswith('ai '):
                 source.message[0].text = source.message[0].text[3:]
@@ -628,6 +634,13 @@ class gocqClient():
                 if source.message[1].text.startswith('ai '):
                     source.message[1].text = source.message[0].text[3:]
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
+        else:
+            return
+        
+    @gocq_app.receiver("FriendMessage")
+    async def _(app: CQHTTP, source: FriendMessage):
+        if isinstance(source.message[0], Plain):
+            new_sub_thread(oper_msg, (source, False, None, PLATFORM_GOCQ))
         else:
             return
         
