@@ -25,7 +25,13 @@ class Command:
             "update": "更新面板",
             "update latest": "更新到最新版本",
             "update r": "重启程序",
-            "reset": "重置会话"
+            "reset": "重置会话",
+            "/bing": "切换到bing模型",
+            "/gpt": "切换到OpenAI ChatGPT API",
+            "/revgpt": "切换到网页版ChatGPT",
+            "/bing 问题": "临时使用一次bing模型进行会话",
+            "/gpt 问题": "临时使用一次OpenAI ChatGPT API进行会话",
+            "/revgpt 问题": "临时使用一次网页版ChatGPT进行会话",
         }
     
     def help_messager(self, commands: dict):
