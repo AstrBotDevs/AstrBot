@@ -56,6 +56,7 @@ class Command:
             "update latest": "更新到最新版本",
             "update r": "重启程序",
             "reset": "重置会话",
+            "nick": "设置机器人昵称",
             "/bing": "切换到bing模型",
             "/gpt": "切换到OpenAI ChatGPT API",
             "/revgpt": "切换到网页版ChatGPT",

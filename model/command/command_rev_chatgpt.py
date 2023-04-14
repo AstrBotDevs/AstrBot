@@ -17,6 +17,9 @@ class CommandRevChatGPT(Command):
             return True, self.update(message, role)
         elif self.command_start_with(message, "keyword"):
             return True, self.keyword(message, role)
+        
+        if self.command_start_with(message, "/"):
+            return True, (False, "未知指令", "unknown_command")
         return False, None
     
     def reset(self):

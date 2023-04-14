@@ -37,6 +37,9 @@ class CommandOpenAIOfficial(Command):
         elif self.command_start_with(message, "key"):
             return True, self.key(message, user_name)
         
+        if self.command_start_with(message, "/"):
+            return True, (False, "未知指令", "unknown_command")
+        
         return False, None
     
     def help(self):
