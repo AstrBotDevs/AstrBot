@@ -98,6 +98,7 @@ gocq_app = CQHTTP(
     http_port=5700,
 )
 gocq_loop = None
+nick_qq = "ai "
 
 bing_cache_loop = None
 
@@ -264,6 +265,16 @@ def initBot(cfg, prov):
 
     print("\n[System] 如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue说明问题！或者添加QQ：905617992")
     print("[System] 请给 https://github.com/Soulter/QQChannelChatGPT 点个star!")
+
+    # 得到指令设置(cmd_config.json)
+    if os.path.exists("cmd_config.json"):
+        with open("cmd_config.json", 'r', encoding='utf-8') as f:
+            cmd_config = json.load(f)
+            # QQ机器人昵称
+            if 'nick_qq' in cmd_config:
+                global nick_qq
+                nick_qq = cmd_config['nick_qq']
+
 
     thread_inst = None
 
@@ -471,8 +482,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
     chatgpt_res = ""
 
     if chosen_provider == OPENAI_OFFICIAL:
-        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role)
-        print(f"{hit} {command_result}")
+        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform)
         # hit: 是否触发了指令.
         if not hit:
             # 请求ChatGPT获得结果
@@ -485,7 +495,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
                 send_message(platform, message, f"OpenAI API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_CHATGPT:
-        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role)
+        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform)
         if not hit:
             try:
                 chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
@@ -501,7 +511,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
                 bing_cache_loop = gocq_loop
             elif platform == PLATFORM_QQCHAN:
                 bing_cache_loop = qqchan_loop
-        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role)
+        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, platform=platform)
         if not hit:
             try:
                 while rev_edgegpt.is_busy():
@@ -534,6 +544,12 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
             if command == "keyword":
                 with open("keyword.json", "r", encoding="utf-8") as f:
                     keywords = json.load(f)
+
+            # QQ昵称
+            if command == "nick":
+                with open("cmd_config.json", "r", encoding="utf-8") as f:
+                    global nick_qq
+                    nick_qq = json.load(f)["nick_qq"]
 
             if command_result[0]:
                 # 是否是画图指令
@@ -625,14 +641,15 @@ class gocqClient():
     # 收到群聊消息
     @gocq_app.receiver("GroupMessage")
     async def _(app: CQHTTP, source: GroupMessage):
+        global nick_qq
         if isinstance(source.message[0], Plain):
-            if source.message[0].text.startswith('ai '):
-                source.message[0].text = source.message[0].text[3:]
+            if source.message[0].text.startswith(nick_qq):
+                source.message[0].text = source.message[0].text[len(nick_qq):]
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         if isinstance(source.message[0], At):
             if source.message[0].qq == source.self_id:
-                if source.message[1].text.startswith('ai '):
-                    source.message[1].text = source.message[0].text[3:]
+                if source.message[1].text.startswith(nick_qq):
+                    source.message[1].text = source.message[0].text[len(nick_qq):]
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         else:
             return
@@ -646,6 +663,7 @@ class gocqClient():
         
     @gocq_app.receiver("GroupMemberIncrease")
     async def _(app: CQHTTP, source: GroupMemberIncrease):
+        global nick_qq
         await app.sendGroupMessage(source.group_id, [
-            Plain(text=f"欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n@我输入help查看帮助~\n")
+            Plain(text=f"欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n@我输入help查看帮助~\n我叫{nick_qq}, 你也可以以【{nick_qq}+问题】的格式来提醒我并问我问题哦~\n")
         ])

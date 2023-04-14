@@ -6,7 +6,10 @@ class CommandOpenAIOfficial(Command):
     def __init__(self, provider: ProviderOpenAIOfficial):
         self.provider = provider
         
-    def check_command(self, message: str, session_id: str, user_name: str, role):
+    def check_command(self, message: str, session_id: str, user_name: str, role, platform: str):
+        hit, res = super().check_command(message, role, platform)
+        if hit:
+            return True, res
         if self.command_start_with(message, "reset", "重置"):
             return True, self.reset(session_id)
         elif self.command_start_with(message, "his", "历史"):

@@ -8,15 +8,45 @@ import requests
 from model.provider.provider import Provider
 import json
 
+PLATFORM_QQCHAN = 'qqchan'
+PLATFORM_GOCQ = 'gocq'
+
 class Command:
     def __init__(self, provider: Provider):
         self.provider = Provider
 
     @abc.abstractmethod
-    def check_command(self, message):
-        if message.startswith("help") or message.startswith("帮助"):
-            return True, self.help()
+    def check_command(self, message, role, platform):
+        if self.command_start_with(message, "nick"):
+            return True, self.set_nick(message, platform)
         return False, None
+
+    '''
+    存储机器人的昵称
+    '''
+    def set_nick(self, message: str, platform: str):
+        if platform == PLATFORM_GOCQ:
+            nick = message.split(" ")[1]
+            self.general_command_storer("nick_qq", nick)
+            return True, f"设置成功！现在你可以叫我{nick}来提问我啦~", "nick"
+        elif platform == PLATFORM_QQCHAN:
+            nick = message.split(" ")[2]
+            return False, "QQ频道平台不支持为机器人设置昵称。", "nick"
+    
+    """
+    存储指令结果到cmd_config.json
+    """
+    def general_command_storer(self, key, value):
+        if not os.path.exists("cmd_config.json"):
+            config = {}
+        else:
+            with open("cmd_config.json", "r", encoding="utf-8") as f:
+                config = json.load(f)
+        config[key] = value
+        with open("cmd_config.json", "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+            f.flush()
+
     
     def general_commands(self):
         return {
@@ -69,6 +99,7 @@ class Command:
                 keyword = {l[1]: l[2]}
             with open("keyword.json", "w", encoding="utf-8") as f:
                 json.dump(keyword, f, ensure_ascii=False, indent=4)
+                f.flush()
             return True, "设置成功: "+l[1]+" -> "+l[2], "keyword"
         except BaseException as e:
             return False, "设置失败: "+str(e), "keyword"

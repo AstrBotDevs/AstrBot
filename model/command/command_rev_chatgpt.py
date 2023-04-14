@@ -5,7 +5,10 @@ class CommandRevChatGPT(Command):
     def __init__(self, provider: ProviderRevChatGPT):
         self.provider = provider
         
-    def check_command(self, message: str, role):
+    def check_command(self, message: str, role, platform: str):
+        hit, res = super().check_command(message, role, platform)
+        if hit:
+            return True, res
         if self.command_start_with(message, "help", "帮助"):
             return True, self.help()
         elif self.command_start_with(message, "reset"):
