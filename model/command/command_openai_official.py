@@ -35,6 +35,16 @@ class CommandOpenAIOfficial(Command):
             return True, self.key(message, user_name)
         
         return False, None
+    
+    def help(self):
+        commands = super().general_commands()
+        commands['画'] = '画画'
+        commands['key'] = '添加OpenAI key'
+        commands['set'] = '人格设置面板'
+        commands['gpt'] = '查看gpt配置信息'
+        commands['status'] = '查看key使用状态'
+        commands['token'] = '查看本轮会话token'
+        return True, super().help_messager(commands), "help"
 
     
     def reset(self, session_id: str):

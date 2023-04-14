@@ -4,8 +4,9 @@ import git.exc
 from git.repo import Repo
 import os
 import sys
-
+import requests
 from model.provider.provider import Provider
+import json
 
 class Command:
     def __init__(self, provider: Provider):
@@ -16,6 +17,28 @@ class Command:
         if message.startswith("help") or message.startswith("帮助"):
             return True, self.help()
         return False, None
+    
+    def general_commands(self):
+        return {
+            "help": "帮助",
+            "keyword": "设置关键词/关键指令回复",
+            "update": "更新面板",
+            "update latest": "更新到最新版本",
+            "update r": "重启程序",
+            "reset": "重置会话"
+        }
+    
+    def help_messager(self, commands: dict):
+        try:
+            resp = requests.get("https://soulter.top/channelbot/notice.json").text
+            notice = json.loads(resp)["notice"]
+        except BaseException as e:
+            notice = ""
+        msg = "Github项目名QQChannelChatGPT, 有问题提交issue, 欢迎Star\n【指令列表】\n"
+        for key, value in commands.items():
+            msg += key + ": " + value + "\n"
+        msg += notice
+        return msg
     
     # 接受可变参数
     def command_start_with(self, message: str, *args):
@@ -116,7 +139,7 @@ class Command:
         return False
     
     def help(self):
-        return True, f"[Github项目名: QQChannelChatGPT，有问题请前往提交issue，欢迎Star此项目~]\n\n指令面板：\nstatus 查看机器人key状态\ncount 查看机器人统计信息\nreset 重置会话\nhis 查看历史记录\ntoken 查看会话token数\nhelp 查看帮助\nset 人格指令菜单\nkey 动态添加key", "help"
+        return False
     
     def status(self):
         return False
