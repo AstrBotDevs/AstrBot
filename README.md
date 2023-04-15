@@ -13,6 +13,8 @@
 
 ## ⭐功能：
 
+通知：部署好后，如果使用的是bing或者逆向ChatGPT库，需要使用切换模型指令`/bing`或者'/revgpt'
+
 近期新功能：
 - 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
 - 热更新
