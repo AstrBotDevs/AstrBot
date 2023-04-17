@@ -102,6 +102,7 @@
 - `/keyword nihao 你好` 设置关键词回复。nihao->你好
 - `/bing` 切换为bing
 - `/revgpt` 切换为ChatGPT逆向库
+- `/画` 画画
 
 #### Bing语言模型
 - `/reset`重置prompt
