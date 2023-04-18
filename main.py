@@ -39,19 +39,19 @@ def check_env():
         print("请使用Python3.8运行本项目")
         input("按任意键退出...")
         exit()
-    try:
-        print("检查依赖库中...")
-        if os.path.exists('requirements.txt'):
-            os.system("pip3 install -r requirements.txt")
-        elif os.path.exists('QQChannelChatGPT'+ os.sep +'requirements.txt'):
-            os.system('pip3 install -r QQChannelChatGPT'+ os.sep +'requirements.txt')
-        os.system("clear")
-        print("安装依赖库完毕...")
-    except BaseException as e:
-        print("安装依赖库失败，请手动安装依赖库。")
-        print(e)
-        input("按任意键退出...")
-        exit()
+    # try:
+    #     print("检查依赖库中...")
+    #     if os.path.exists('requirements.txt'):
+    #         os.system("pip3 install -r requirements.txt")
+    #     elif os.path.exists('QQChannelChatGPT'+ os.sep +'requirements.txt'):
+    #         os.system('pip3 install -r QQChannelChatGPT'+ os.sep +'requirements.txt')
+    #     os.system("clear")
+    #     print("安装依赖库完毕...")
+    # except BaseException as e:
+    #     print("安装依赖库失败，请手动安装依赖库。")
+    #     print(e)
+    #     input("按任意键退出...")
+    #     exit()
     
     # 检查key
     with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
