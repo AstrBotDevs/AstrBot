@@ -471,9 +471,9 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
             chosen_provider = target
             qq_msg = l[1]
         else:
-            if role != "admin":
-                send_message(platform, message, "你没有权限更换语言模型。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
-                return
+            # if role != "admin":
+            #     send_message(platform, message, "你没有权限更换语言模型。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            #     return
             chosen_provider = target
             save_provider_preference(chosen_provider)
             send_message(platform, message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
