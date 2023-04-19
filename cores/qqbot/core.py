@@ -20,7 +20,6 @@ from nakuru import (
     GroupMessage,
     GroupMemberIncrease,
     FriendMessage
-    
 )
 from nakuru.entities.components import Plain,At
 
@@ -481,7 +480,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
 
     chatgpt_res = ""
 
-    if chosen_provider == OPENAI_OFFICIAL:
+    if chosen_provider == OPENAI_OFFICIAL: 
         hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform)
         # hit: 是否触发了指令.
         if not hit:
@@ -523,7 +522,8 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
                     asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
                     res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), bing_cache_loop).result()
                     if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
-                        send_message(platform, message, "Bing仍然不想继续话题, 请检查您的提问。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                        asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
+                        send_message(platform, message, "Bing仍然不想继续话题, 会话已重置, 请检查您的提问后重试。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
                         res = ""
                 chatgpt_res = str(res)
                 if REV_EDGEGPT in reply_prefix:

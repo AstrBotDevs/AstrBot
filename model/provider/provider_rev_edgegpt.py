@@ -36,7 +36,10 @@ class ProviderRevEdgeGPT(Provider):
                     self.busy = False
                     return '', 0
                 if resp == prompt:
-                    resp += '\n\n如果你没有让我复述你的话，那代表我可能不想和你继续这个话题了，请输入reset重置会话😶'
+                    # resp += '\n\n如果你没有让我复述你的话，那代表我可能不想和你继续这个话题了，请输入reset重置会话😶'
+                    await self.forget()
+                    err_count += 1
+                    continue
                 break
             except BaseException as e:
                 print(e.with_traceback)
