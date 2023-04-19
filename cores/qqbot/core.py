@@ -176,27 +176,30 @@ def initBot(cfg, prov):
 
     # 语言模型提供商
     if REV_CHATGPT in prov:
-        if 'account' in cfg['rev_ChatGPT']:
-            from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
-            from model.command.command_rev_chatgpt import CommandRevChatGPT
-            rev_chatgpt = ProviderRevChatGPT(cfg['rev_ChatGPT'])
-            command_rev_chatgpt = CommandRevChatGPT(cfg['rev_ChatGPT'])
-            chosen_provider = REV_CHATGPT
-        else:
-            input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
+        if cfg['rev_ChatGPT']['enable']:
+            if 'account' in cfg['rev_ChatGPT']:
+                from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
+                from model.command.command_rev_chatgpt import CommandRevChatGPT
+                rev_chatgpt = ProviderRevChatGPT(cfg['rev_ChatGPT'])
+                command_rev_chatgpt = CommandRevChatGPT(cfg['rev_ChatGPT'])
+                chosen_provider = REV_CHATGPT
+            else:
+                input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
         
     if REV_EDGEGPT in prov:
-        from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
-        from model.command.command_rev_edgegpt import CommandRevEdgeGPT
-        rev_edgegpt = ProviderRevEdgeGPT()
-        command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
-        chosen_provider = REV_EDGEGPT
+        if cfg['rev_edgegpt']['enable']:
+            from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
+            from model.command.command_rev_edgegpt import CommandRevEdgeGPT
+            rev_edgegpt = ProviderRevEdgeGPT()
+            command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
+            chosen_provider = REV_EDGEGPT
     if OPENAI_OFFICIAL in prov:
-        from model.provider.provider_openai_official import ProviderOpenAIOfficial
-        from model.command.command_openai_official import CommandOpenAIOfficial
-        chatgpt = ProviderOpenAIOfficial(cfg['openai'])
-        command_openai_official = CommandOpenAIOfficial(chatgpt)
-        chosen_provider = OPENAI_OFFICIAL
+        if cfg['openai']['key'] is not None:
+            from model.provider.provider_openai_official import ProviderOpenAIOfficial
+            from model.command.command_openai_official import CommandOpenAIOfficial
+            chatgpt = ProviderOpenAIOfficial(cfg['openai'])
+            command_openai_official = CommandOpenAIOfficial(chatgpt)
+            chosen_provider = OPENAI_OFFICIAL
 
     # 得到关键词
     if os.path.exists("keyword.json"):
@@ -264,6 +267,9 @@ def initBot(cfg, prov):
 
     print("\n[System] 如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue说明问题！或者添加QQ：905617992")
     print("[System] 请给 https://github.com/Soulter/QQChannelChatGPT 点个star!")
+
+    if chosen_provider is None:
+        print("[System-Warning] 检测到没有启动任何一个语言模型。请至少在配置文件中启用一个语言模型。")
 
     # 得到指令设置(cmd_config.json)
     if os.path.exists("cmd_config.json"):
@@ -387,6 +393,9 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
         user_id = message.user_id
         user_name = message.user_id
         global gocq_loop
+    
+    if chosen_provider is None:
+        send_message(platform, message,  f"没有启动任何一个语言模型。请至少在配置文件中启用一个语言模型。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
     
     # 检查发言频率
     if not check_frequency(user_id):
