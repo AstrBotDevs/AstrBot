@@ -31,24 +31,27 @@ class ProviderRevEdgeGPT(Provider):
         while err_count < retry_count:
             try:
                 resp = await self.bot.ask(prompt=prompt, conversation_style=ConversationStyle.creative)
-                resp = resp['item']['messages'][len(resp['item']['messages'])-1]['text']
+                # print("[RevEdgeGPT] "+str(resp))
+                reply_msg = resp['item']['messages'][len(resp['item']['messages'])-1]['text']
                 if 'throttling' in resp['item']:
                     throttling = resp['item']['throttling']
+                    # print(throttling)
                 else:
                     throttling = None
                 if 'I\'m sorry but I prefer not to continue this conversation. I\'m still learning so I appreciate your understanding and patience.' in resp:
                     self.busy = False
                     return '', 0
-                if resp == prompt:
+                if reply_msg == prompt:
                     # resp += '\n\n如果你没有让我复述你的话，那代表我可能不想和你继续这个话题了，请输入reset重置会话😶'
                     await self.forget()
                     err_count += 1
                     continue
                 if throttling is not None:
-                    resp += f'\n{throttling.numUserMessagesInConversation}/{throttling.maxNumUserMessagesInConversation}'
+                    reply_msg += f"⌈\n{throttling['numUserMessagesInConversation']}/{throttling['maxNumUserMessagesInConversation']}⌋"
                 break
             except BaseException as e:
-                print(e.with_traceback)
+                # raise e
+                print(e)
                 err_count += 1
                 if err_count >= retry_count:
                         self.busy = False
@@ -56,6 +59,6 @@ class ProviderRevEdgeGPT(Provider):
                 print("[RevEdgeGPT] 请求出现了一些问题, 正在重试。次数"+str(err_count))
         self.busy = False
         
-        print("[RevEdgeGPT] "+str(resp))
-        return resp, 1
+        print("[RevEdgeGPT] "+str(reply_msg))
+        return reply_msg, 1
     
