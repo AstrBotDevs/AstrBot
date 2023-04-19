@@ -32,6 +32,10 @@ class ProviderRevEdgeGPT(Provider):
             try:
                 resp = await self.bot.ask(prompt=prompt, conversation_style=ConversationStyle.creative)
                 resp = resp['item']['messages'][len(resp['item']['messages'])-1]['text']
+                if 'throttling' in resp['item']:
+                    throttling = resp['item']['throttling']
+                else:
+                    throttling = None
                 if 'I\'m sorry but I prefer not to continue this conversation. I\'m still learning so I appreciate your understanding and patience.' in resp:
                     self.busy = False
                     return '', 0
@@ -40,6 +44,8 @@ class ProviderRevEdgeGPT(Provider):
                     await self.forget()
                     err_count += 1
                     continue
+                if throttling is not None:
+                    resp += f'\n{throttling.numUserMessagesInConversation}/{throttling.maxNumUserMessagesInConversation}'
                 break
             except BaseException as e:
                 print(e.with_traceback)
