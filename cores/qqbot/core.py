@@ -362,7 +362,11 @@ def send_message(platform, message, res, msg_ref = None, image = None, gocq_loop
             qqchannel_bot.send_qq_msg(message, res, image_mode=True, msg_ref=msg_ref)
         else:
             qqchannel_bot.send_qq_msg(message, res, msg_ref=msg_ref)
-    if platform == PLATFORM_GOCQ: asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res), gocq_loop).result()
+    if platform == PLATFORM_GOCQ: 
+        if image != None:
+            asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, image, image_mode=True), gocq_loop).result()
+        else:
+            asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res), gocq_loop).result()
 
 '''
 处理消息
