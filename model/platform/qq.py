@@ -11,7 +11,7 @@ class QQ:
         if not image_mode:
             if source.type == "GroupMessage":
                 await self.client.sendGroupMessage(source.group_id, [
-                    At(target=source.user_id),
+                    At(qq=source.user_id),
                     Plain(text=res)
                 ])
             elif source.type == "FriendMessage":
@@ -21,11 +21,12 @@ class QQ:
         else:
             if source.type == "GroupMessage":
                 await self.client.sendGroupMessage(source.group_id, [
-                    At(target=source.user_id),
+                    At(qq=source.user_id),
                     Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
                     Image.fromURL(url=res)
                 ])
             elif source.type == "FriendMessage":
                 await self.client.sendFriendMessage(source.user_id, [
+                    Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
                     Image.fromURL(url=res)
                 ])
