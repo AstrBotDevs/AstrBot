@@ -32,6 +32,8 @@ class ProviderRevEdgeGPT(Provider):
             try:
                 resp = await self.bot.ask(prompt=prompt, conversation_style=ConversationStyle.creative)
                 # print("[RevEdgeGPT] "+str(resp))
+                if 'messages' not in resp['item']:
+                    await self.bot.reset()
                 msj_obj = resp['item']['messages'][len(resp['item']['messages'])-1]
                 reply_msg = msj_obj['text']
                 if 'sourceAttributions' in msj_obj:
