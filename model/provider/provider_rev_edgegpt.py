@@ -45,7 +45,7 @@ class ProviderRevEdgeGPT(Provider):
                     # print(throttling)
                 else:
                     throttling = None
-                if 'I\'m sorry but I prefer not to continue this conversation. I\'m still learning so I appreciate your understanding and patience.' in resp:
+                if 'I\'m sorry but I prefer not to continue this conversation. I\'m still learning so I appreciate your understanding and patience.' in reply_msg:
                     self.busy = False
                     return '', 0
                 if reply_msg == prompt:
@@ -53,7 +53,7 @@ class ProviderRevEdgeGPT(Provider):
                     await self.forget()
                     err_count += 1
                     continue
-                if reply_msg is None:
+                if reply_source is None:
                     # 不想答复
                     return '', 0
                 else:
