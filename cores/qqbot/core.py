@@ -529,11 +529,11 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
                 while rev_edgegpt.is_busy():
                     time.sleep(1)
 
-                res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), bing_cache_loop).result()
+                res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg, platform), bing_cache_loop).result()
                 if res_code == 0: # bing不想继续话题，重置会话后重试。
                     send_message(platform, message, "Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
                     asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
-                    res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg), bing_cache_loop).result()
+                    res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg, platform), bing_cache_loop).result()
                     if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
                         asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
                         send_message(platform, message, "Bing仍然不想继续话题, 会话已重置, 请检查您的提问后重试。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)

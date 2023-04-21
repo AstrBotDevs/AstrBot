@@ -20,7 +20,7 @@ class ProviderRevEdgeGPT(Provider):
         except BaseException:
             return False
         
-    async def text_chat(self, prompt):
+    async def text_chat(self, prompt, platform = 'none'):
         if self.busy:
              return
         self.busy = True
@@ -57,12 +57,13 @@ class ProviderRevEdgeGPT(Provider):
                     # 不想答复
                     return '', 0
                 else:
-                    index = 1
-                    if len(reply_source) > 0:
-                        reply_msg += "\n\n信息来源:\n"
-                    for i in reply_source:
-                        reply_msg += f"[{str(index)}]: {i['seeMoreUrl']} | {i['providerDisplayName']}\n"
-                        index += 1
+                    if platform != 'qqchan':
+                        index = 1
+                        if len(reply_source) > 0:
+                            reply_msg += "\n\n信息来源:\n"
+                        for i in reply_source:
+                            reply_msg += f"[{str(index)}]: {i['seeMoreUrl']} | {i['providerDisplayName']}\n"
+                            index += 1
                 if throttling is not None:
                     reply_msg += f"\n⌈{throttling['numUserMessagesInConversation']}/{throttling['maxNumUserMessagesInConversation']}⌋"
                 break
