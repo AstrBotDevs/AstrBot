@@ -129,12 +129,25 @@ pip install -r requirements.txt
 ```
 > ⚠Python版本应>=3.9
 
+
 ### 配置
 
 **详细部署教程链接**https://soulter.top/posts/qpdg.html
 
 ### 启动
 - 启动main.py
+
+
+## 感谢
+本项目使用了一下项目:
+
+[ChatGPT by acheong08](https://github.com/acheong08/ChatGPT)
+
+[EdgeGPT by acheong08](https://github.com/acheong08/EdgeGPT)
+
+[go-cqhttp by Mrs4s](https://github.com/Mrs4s/go-cqhttp)
+
+[nakuru-project by Lxns-Network](https://github.com/Lxns-Network/nakuru-project)
 
 
 ## ⚙配置文件说明：
