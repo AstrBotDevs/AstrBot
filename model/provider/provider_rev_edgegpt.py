@@ -65,6 +65,13 @@ class ProviderRevEdgeGPT(Provider):
                             reply_msg += f"[{str(index)}]: {i['seeMoreUrl']} | {i['providerDisplayName']}\n"
                             index += 1
                 if throttling is not None:
+                    if throttling['numUserMessagesInConversation'] == throttling['maxNumUserMessagesInConversation']:
+                        # 达到上限，重置会话
+                        await self.forget()
+                    if throttling['numUserMessagesInConversation'] > throttling['maxNumUserMessagesInConversation']:
+                        await self.forget()
+                        err_count += 1
+                        continue
                     reply_msg += f"\n⌈{throttling['numUserMessagesInConversation']}/{throttling['maxNumUserMessagesInConversation']}⌋"
                 break
             except BaseException as e:
