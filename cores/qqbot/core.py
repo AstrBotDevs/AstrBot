@@ -594,7 +594,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
         chatgpt_res = re.sub(i, "***", chatgpt_res)
     # 百度内容审核服务二次审核
     if baidu_judge != None:
-        check, msg = baidu_judge.judge(judged_res)
+        check, msg = baidu_judge.judge(chatgpt_res)
         if not check:
             send_message(platform, message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
             return
