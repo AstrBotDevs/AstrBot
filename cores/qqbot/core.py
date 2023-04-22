@@ -590,9 +590,8 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
 
     # 敏感过滤
     # 过滤不合适的词
-    judged_res = chatgpt_res
     for i in uw.unfit_words:
-        judged_res = re.sub(i, "***", judged_res)
+        chatgpt_res = re.sub(i, "***", chatgpt_res)
     # 百度内容审核服务二次审核
     if baidu_judge != None:
         check, msg = baidu_judge.judge(judged_res)
