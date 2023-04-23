@@ -187,12 +187,15 @@ def initBot(cfg, prov):
                 input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
         
     if REV_EDGEGPT in prov:
-        if cfg['rev_edgegpt']['enable']:
-            from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
-            from model.command.command_rev_edgegpt import CommandRevEdgeGPT
-            rev_edgegpt = ProviderRevEdgeGPT()
-            command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
-            chosen_provider = REV_EDGEGPT
+        if not os.path.exists('./cookies.json'):
+            input("【错误】导入Bing模型时发生错误，没有找到cookies文件或者cookies文件放置位置错误。windows启动器启动的用户请把cookies.json文件放到和启动器相同的目录下。\n如何获取请看https://github.com/Soulter/QQChannelChatGPT仓库介绍。")
+        else:
+            if cfg['rev_edgegpt']['enable']:
+                from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
+                from model.command.command_rev_edgegpt import CommandRevEdgeGPT
+                rev_edgegpt = ProviderRevEdgeGPT()
+                command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
+                chosen_provider = REV_EDGEGPT
     if OPENAI_OFFICIAL in prov:
         if cfg['openai']['key'] is not None:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial

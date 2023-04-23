@@ -5,10 +5,15 @@ import os, sys
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 def main(loop, event):
-    import cores.qqbot.core as qqBot
-    import yaml
-    ymlfile =  open(abs_path+"configs/config.yaml", 'r', encoding='utf-8')
-    cfg = yaml.safe_load(ymlfile)
+    try:
+        import cores.qqbot.core as qqBot
+        import yaml
+        ymlfile =  open(abs_path+"configs/config.yaml", 'r', encoding='utf-8')
+        cfg = yaml.safe_load(ymlfile)
+    except BaseException as e:
+        print(e)
+        input("yaml库未导入或者配置文件格式错误，请退出程序重试。")
+        exit()
 
     if 'http_proxy' in cfg:
         os.environ['HTTP_PROXY'] = cfg['http_proxy']
@@ -39,19 +44,26 @@ def check_env():
         print("请使用Python3.8运行本项目")
         input("按任意键退出...")
         exit()
-    # try:
-    #     print("检查依赖库中...")
-    #     if os.path.exists('requirements.txt'):
-    #         os.system("pip3 install -r requirements.txt")
-    #     elif os.path.exists('QQChannelChatGPT'+ os.sep +'requirements.txt'):
-    #         os.system('pip3 install -r QQChannelChatGPT'+ os.sep +'requirements.txt')
-    #     os.system("clear")
-    #     print("安装依赖库完毕...")
-    # except BaseException as e:
-    #     print("安装依赖库失败，请手动安装依赖库。")
-    #     print(e)
-    #     input("按任意键退出...")
-    #     exit()
+
+    print("正在更新三方依赖库...")
+    mm = os.system('pip install -r QQChannelChatGPT/requirements.txt')
+    if mm == 0:
+        print("依赖库安装完毕。")
+    else:
+        while True:
+            res = input("依赖库可能安装失败了。\n如果是报错ValueError: check_hostname requires server_hostname，请尝试先关闭代理后重试。\n输入y回车重试\n输入c回车使用国内镜像源下载\n输入其他按键回车继续往下执行。")
+            if res == "y":
+                mm = os.system('pip install -r QQChannelChatGPT/requirements.txt')
+                if mm == 0:
+                    print("依赖库安装完毕。")
+                    break
+            elif res == "c":
+                mm = os.system('pip install -r QQChannelChatGPT/requirements.txt -i https://mirrors.aliyun.com/pypi/simple/')
+                if mm == 0:
+                    print("依赖库安装完毕。")
+                    break
+            else:
+                break
     
     # 检查key
     with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
