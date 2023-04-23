@@ -7,27 +7,26 @@
 
 欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）：
 
-<img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img>
+<!-- <img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img> -->
 
 </div>
 
 ## ⭐功能：
 
-通知：部署好后，如果使用的是bing或者逆向ChatGPT库，需要使用切换模型指令`/bing`或者'/revgpt'
-
 近期新功能：
 - 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
 - 热更新
 - 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
+- 更强大的Windows启动器，环境配置自动搞定。链接：https://github.com/Soulter/QQChatGPTLauncher/releases/latest
 
 支持的AI语言模型（请在`configs/config.yaml`下配置）：
 - 逆向ChatGPT库
 - 官方ChatGPT AI
-- 文心一言（即将支持，链接https://github.com/Soulter/ERNIEBot 欢迎Star）
+- 文心一言（即将支持）
 - NewBing
 - Bard （即将支持）
 
-部署QQ频道机器人教程链接：https://soulter.top/posts/qpdg.html
+部署此项目的教程链接：https://soulter.top/posts/qpdg.html
 
 ### 基本功能
 <details> 
