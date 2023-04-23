@@ -13,21 +13,20 @@
 
 ## ⭐功能：
 
-通知：部署好后，如果使用的是bing或者逆向ChatGPT库，需要使用切换模型指令`/bing`或者'/revgpt'
-
 近期新功能：
 - 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
 - 热更新
 - 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
+- 更强大的Windows启动器，环境配置自动搞定。链接：https://github.com/Soulter/QQChatGPTLauncher/releases/latest
 
 支持的AI语言模型（请在`configs/config.yaml`下配置）：
 - 逆向ChatGPT库
 - 官方ChatGPT AI
-- 文心一言（即将支持，链接https://github.com/Soulter/ERNIEBot 欢迎Star）
+- 文心一言（即将支持）
 - NewBing
 - Bard （即将支持）
 
-部署QQ频道机器人教程链接：https://soulter.top/posts/qpdg.html
+部署此项目的教程链接：https://soulter.top/posts/qpdg.html
 
 ### 基本功能
 <details> 
