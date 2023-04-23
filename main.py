@@ -45,20 +45,24 @@ def check_env():
         input("按任意键退出...")
         exit()
 
+    if os.path.exists('requirements.txt'):
+        pth = 'requirements.txt'
+    else:
+        pth = 'QQChannelChatGPT'+ os.sep +'requirements.txt'
     print("正在更新三方依赖库...")
-    mm = os.system('pip install -r QQChannelChatGPT/requirements.txt')
+    mm = os.system('pip install -r '+pth)
     if mm == 0:
         print("依赖库安装完毕。")
     else:
         while True:
             res = input("依赖库可能安装失败了。\n如果是报错ValueError: check_hostname requires server_hostname，请尝试先关闭代理后重试。\n输入y回车重试\n输入c回车使用国内镜像源下载\n输入其他按键回车继续往下执行。")
             if res == "y":
-                mm = os.system('pip install -r QQChannelChatGPT/requirements.txt')
+                mm = os.system('pip install -r '+pth)
                 if mm == 0:
                     print("依赖库安装完毕。")
                     break
             elif res == "c":
-                mm = os.system('pip install -r QQChannelChatGPT/requirements.txt -i https://mirrors.aliyun.com/pypi/simple/')
+                mm = os.system(f'pip install -r {pth} -i https://mirrors.aliyun.com/pypi/simple/')
                 if mm == 0:
                     print("依赖库安装完毕。")
                     break
