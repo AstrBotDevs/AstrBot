@@ -1,11 +1,16 @@
 <div align="center">
 
-# QQChannelChatGPT
-在QQ和QQ频道上使用ChatGPT、NewBing等语言模型，稳定，一次部署，同时使用。
+<img src="https://socialify.git.ci/Soulter/QQChannelChatGPT/image?description=1&forks=1&issues=1&language=1&name=1&owner=1&pattern=Circuit%20Board&stargazers=1&theme=Light" alt="QQChannelChatGPT" width="600" height="300" />
 
-教程：https://soulter.top/posts/qpdg.html
+[![Language](https://img.shields.io/badge/language-python-green.svg?style=plastic)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-AGPL3-orange.svg?style=plastic)](https://github.com/Soulter/QQChannelChatGPT/blob/master/LICENSE)
+![Python](https://img.shields.io/badge/python-3.9+-blue)
+ 
+_✨在QQ和QQ频道上使用ChatGPT、NewBing等语言模型，稳定，一次部署，同时使用✨_
 
-欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）：
+_✨教程：https://soulter.top/posts/qpdg.html✨_
+
+_✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）✨_
 
 <!-- <img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img> -->
 
