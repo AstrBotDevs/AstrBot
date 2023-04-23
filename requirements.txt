@@ -7,4 +7,4 @@ EdgeGPT~=0.1.22.1
 chardet~=5.1.0
 Pillow~=9.4.0
 GitPython~=3.1.31
-git+https://github.com/Lxns-Network/nakuru-project.git
+nakuru-project-test~=0.0.1
