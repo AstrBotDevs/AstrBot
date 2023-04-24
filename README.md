@@ -8,7 +8,7 @@
  
 _✨在QQ和QQ频道上使用ChatGPT、NewBing等语言模型，稳定，一次部署，同时使用✨_
 
-_✨教程：https://soulter.top/posts/qpdg.html✨_
+_✨教程：https://github.com/Soulter/QQChannelChatGPT/wiki ✨_
 
 _✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）✨_
 
@@ -31,7 +31,7 @@ _✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群�
 - NewBing
 - Bard （即将支持）
 
-部署此项目的教程链接：https://soulter.top/posts/qpdg.html
+部署此项目的教程链接：https://github.com/Soulter/QQChannelChatGPT/wiki
 
 ### 基本功能
 <details> 
@@ -136,7 +136,7 @@ pip install -r requirements.txt
 
 ### 配置
 
-**详细部署教程链接**https://soulter.top/posts/qpdg.html
+**详细部署教程链接**https://github.com/Soulter/QQChannelChatGPT/wiki
 
 ### 启动
 - 启动main.py
@@ -156,7 +156,7 @@ pip install -r requirements.txt
 
 ## ⚙配置文件说明：
 ```yaml
-# 如果你不知道怎么部署，请查看https://soulter.top/posts/qpdg.html
+# 如果你不知道怎么部署，请查看https://github.com/Soulter/QQChannelChatGPT/wiki
 # 不一定需要key了，如果你没有key但有openAI账号或者必应账号，可以考虑使用下面的逆向库
 
 
