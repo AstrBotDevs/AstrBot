@@ -105,6 +105,19 @@ def get_platform():
 
 if __name__ == "__main__":
     check_env()
+
+    # 获取参数
+    args = sys.argv
+    if len(args) > 1:
+        if args[1] == '-replit':
+            print("[System] 启动Replit Web保活服务...")
+            try:
+                from webapp_replit import keep_alive
+                keep_alive()
+            except BaseException as e:
+                print(e)
+                print(f"[System-err] Replit Web保活服务启动失败:{str(e)}")
+
     bot_event = threading.Event()
     loop = asyncio.get_event_loop()
     main(loop, bot_event)
