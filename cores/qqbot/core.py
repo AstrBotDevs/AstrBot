@@ -175,7 +175,9 @@ def initBot(cfg, prov):
         reply_prefix = cfg['reply_prefix']
 
     # 语言模型提供商
+    print("--------------------加载语言模型--------------------")
     if REV_CHATGPT in prov:
+        print("- 逆向ChatGPT库 -")
         if cfg['rev_ChatGPT']['enable']:
             if 'account' in cfg['rev_ChatGPT']:
                 from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
@@ -187,8 +189,9 @@ def initBot(cfg, prov):
                 input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
         
     if REV_EDGEGPT in prov:
+        print("- New Bing -")
         if not os.path.exists('./cookies.json'):
-            input("【错误】导入Bing模型时发生错误，没有找到cookies文件或者cookies文件放置位置错误。windows启动器启动的用户请把cookies.json文件放到和启动器相同的目录下。\n如何获取请看https://github.com/Soulter/QQChannelChatGPT仓库介绍。")
+            input("[System-err] 导入Bing模型时发生错误, 没有找到cookies文件或者cookies文件放置位置错误。windows启动器启动的用户请把cookies.json文件放到和启动器相同的目录下。\n如何获取请看https://github.com/Soulter/QQChannelChatGPT仓库介绍。")
         else:
             if cfg['rev_edgegpt']['enable']:
                 from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
@@ -197,6 +200,7 @@ def initBot(cfg, prov):
                 command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
                 chosen_provider = REV_EDGEGPT
     if OPENAI_OFFICIAL in prov:
+        print("- OpenAI ChatGPT官方API -")
         if cfg['openai']['key'] is not None:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial
             from model.command.command_openai_official import CommandOpenAIOfficial
@@ -204,6 +208,7 @@ def initBot(cfg, prov):
             command_openai_official = CommandOpenAIOfficial(chatgpt)
             chosen_provider = OPENAI_OFFICIAL
 
+    print("--------------------加载个性化配置--------------------")
     # 得到关键词
     if os.path.exists("keyword.json"):
         with open("keyword.json", 'r', encoding='utf-8') as f:
@@ -264,7 +269,7 @@ def initBot(cfg, prov):
         if 'dump_history_interval' in cfg:
             print("[System] 历史记录转储时间周期: " + cfg['dump_history_interval'] + "分钟")
     except BaseException:
-        print("[System-Error] 读取uniqueSessionMode/version/dump_history_interval配置文件失败, 使用默认值。")
+        pass
 
     print(f"[System] QQ开放平台AppID: {cfg['qqbot']['appid']} 令牌: {cfg['qqbot']['token']}")
 
@@ -286,9 +291,11 @@ def initBot(cfg, prov):
 
     thread_inst = None
 
+    print("--------------------加载平台--------------------")
+
     # QQ频道
     if 'qqbot' in cfg and cfg['qqbot']['enable']:
-        print("[System] 启用QQ频道机器人")
+        print("- 启用QQ频道机器人 -")
         global qqchannel_bot, qqchan_loop
         qqchannel_bot = QQChan()
         qqchan_loop = asyncio.new_event_loop()
@@ -298,7 +305,7 @@ def initBot(cfg, prov):
 
     # GOCQ
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
-        print("[System] 启用QQ机器人")
+        print("- 启用QQ机器人 -")
         global gocq_app, gocq_bot, gocq_loop
         gocq_bot = QQ()
         gocq_loop = asyncio.new_event_loop()
@@ -436,7 +443,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
     if platform == PLATFORM_GOCQ:
         if group:
             if isinstance(message.message[0], Plain):
-                qq_msg = str(message.message[0].text)
+                qq_msg = str(message.message[0].text).strip()
             elif isinstance(message.message[0], At):
                 qq_msg = str(message.message[1].text).strip()
             else:
@@ -447,7 +454,11 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
             session_id = message.user_id
         # todo: 暂时将所有人设为管理员
         role = "admin"
-        
+
+    if qq_msg == "":
+        send_message(platform, message,  f"Hi~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+        return
+
     logf.write("[QQBOT] "+ qq_msg+'\n')
     logf.flush()
 
