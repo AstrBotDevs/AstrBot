@@ -1,10 +1,10 @@
 requests~=2.28.1
 openai~=0.27.4
 qq-botpy~=1.1.2
-revChatGPT~=4.0.8
+revChatGPT~=5.0.0
 baidu-aip~=4.16.9
 EdgeGPT~=0.1.22.1
 chardet~=5.1.0
 Pillow~=9.4.0
 GitPython~=3.1.31
-git+https://github.com/Lxns-Network/nakuru-project.git
+nakuru-project-test~=0.0.1

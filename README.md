@@ -1,33 +1,37 @@
 <div align="center">
 
-# QQChannelChatGPT
-在QQ和QQ频道上使用ChatGPT、NewBing等语言模型，稳定，一次部署，同时使用。
+<img src="https://socialify.git.ci/Soulter/QQChannelChatGPT/image?description=1&forks=1&issues=1&language=1&name=1&owner=1&pattern=Circuit%20Board&stargazers=1&theme=Light" alt="QQChannelChatGPT" width="600" height="300" />
 
-教程：https://soulter.top/posts/qpdg.html
+[![Language](https://img.shields.io/badge/language-python-green.svg?style=plastic)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-AGPL3-orange.svg?style=plastic)](https://github.com/Soulter/QQChannelChatGPT/blob/master/LICENSE)
+![Python](https://img.shields.io/badge/python-3.9+-blue)
+ 
+_✨在QQ和QQ频道上使用ChatGPT、NewBing等语言模型，稳定，一次部署，同时使用✨_
 
-欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）：
+_✨教程：https://github.com/Soulter/QQChannelChatGPT/wiki ✨_
 
-<img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img>
+_✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）✨_
+
+<!-- <img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img> -->
 
 </div>
 
 ## ⭐功能：
 
-通知：部署好后，如果使用的是bing或者逆向ChatGPT库，需要使用切换模型指令`/bing`或者'/revgpt'
-
 近期新功能：
 - 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
 - 热更新
 - 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
+- 更强大的Windows启动器，环境配置自动搞定。链接：https://github.com/Soulter/QQChatGPTLauncher/releases/latest
 
 支持的AI语言模型（请在`configs/config.yaml`下配置）：
 - 逆向ChatGPT库
 - 官方ChatGPT AI
-- 文心一言（即将支持，链接https://github.com/Soulter/ERNIEBot 欢迎Star）
+- 文心一言（即将支持）
 - NewBing
 - Bard （即将支持）
 
-部署QQ频道机器人教程链接：https://soulter.top/posts/qpdg.html
+部署此项目的教程链接：https://github.com/Soulter/QQChannelChatGPT/wiki
 
 ### 基本功能
 <details> 
@@ -129,17 +133,30 @@ pip install -r requirements.txt
 ```
 > ⚠Python版本应>=3.9
 
+
 ### 配置
 
-**详细部署教程链接**https://soulter.top/posts/qpdg.html
+**详细部署教程链接**https://github.com/Soulter/QQChannelChatGPT/wiki
 
 ### 启动
 - 启动main.py
 
 
+## 感谢
+本项目使用了一下项目:
+
+[ChatGPT by acheong08](https://github.com/acheong08/ChatGPT)
+
+[EdgeGPT by acheong08](https://github.com/acheong08/EdgeGPT)
+
+[go-cqhttp by Mrs4s](https://github.com/Mrs4s/go-cqhttp)
+
+[nakuru-project by Lxns-Network](https://github.com/Lxns-Network/nakuru-project)
+
+
 ## ⚙配置文件说明：
 ```yaml
-# 如果你不知道怎么部署，请查看https://soulter.top/posts/qpdg.html
+# 如果你不知道怎么部署，请查看https://github.com/Soulter/QQChannelChatGPT/wiki
 # 不一定需要key了，如果你没有key但有openAI账号或者必应账号，可以考虑使用下面的逆向库
 
 

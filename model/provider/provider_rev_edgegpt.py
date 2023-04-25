@@ -1,6 +1,7 @@
 from model.provider.provider import Provider
 from EdgeGPT import Chatbot, ConversationStyle
 import json
+import os
 
 class ProviderRevEdgeGPT(Provider):
     def __init__(self):

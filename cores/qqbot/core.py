@@ -187,12 +187,15 @@ def initBot(cfg, prov):
                 input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
         
     if REV_EDGEGPT in prov:
-        if cfg['rev_edgegpt']['enable']:
-            from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
-            from model.command.command_rev_edgegpt import CommandRevEdgeGPT
-            rev_edgegpt = ProviderRevEdgeGPT()
-            command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
-            chosen_provider = REV_EDGEGPT
+        if not os.path.exists('./cookies.json'):
+            input("【错误】导入Bing模型时发生错误，没有找到cookies文件或者cookies文件放置位置错误。windows启动器启动的用户请把cookies.json文件放到和启动器相同的目录下。\n如何获取请看https://github.com/Soulter/QQChannelChatGPT仓库介绍。")
+        else:
+            if cfg['rev_edgegpt']['enable']:
+                from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
+                from model.command.command_rev_edgegpt import CommandRevEdgeGPT
+                rev_edgegpt = ProviderRevEdgeGPT()
+                command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
+                chosen_provider = REV_EDGEGPT
     if OPENAI_OFFICIAL in prov:
         if cfg['openai']['key'] is not None:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial
@@ -590,12 +593,11 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
 
     # 敏感过滤
     # 过滤不合适的词
-    judged_res = chatgpt_res
     for i in uw.unfit_words:
-        judged_res = re.sub(i, "***", judged_res)
+        chatgpt_res = re.sub(i, "***", chatgpt_res)
     # 百度内容审核服务二次审核
     if baidu_judge != None:
-        check, msg = baidu_judge.judge(judged_res)
+        check, msg = baidu_judge.judge(chatgpt_res)
         if not check:
             send_message(platform, message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
             return
