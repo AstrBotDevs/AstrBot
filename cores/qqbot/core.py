@@ -506,8 +506,8 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
                 if OPENAI_OFFICIAL in reply_prefix:
                     chatgpt_res = reply_prefix[OPENAI_OFFICIAL] + chatgpt_res
             except (BaseException) as e:
-                print("[System-Err] OpenAI API错误。原因如下:\n"+str(e))
-                send_message(platform, message, f"OpenAI API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                print("[System-Err] OpenAI API请求错误, 原因: "+str(e))
+                send_message(platform, message, f"OpenAI API错误, 原因: {str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_CHATGPT:
         hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform)
@@ -517,8 +517,8 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
                 if REV_CHATGPT in reply_prefix:
                     chatgpt_res = reply_prefix[REV_CHATGPT] + chatgpt_res
             except BaseException as e:
-                print("[System-Err] Rev ChatGPT API错误。原因如下:\n"+str(e))
-                send_message(platform, message, f"Rev ChatGPT API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                print("[System-Err] RevChatGPT请求错误, 原因: "+str(e))
+                send_message(platform, message, f"RevChatGPT错误, 原因: \n{str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_EDGEGPT:
         if bing_cache_loop == None:

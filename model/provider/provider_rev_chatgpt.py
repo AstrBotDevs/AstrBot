@@ -1,4 +1,5 @@
 from revChatGPT.V1 import Chatbot
+from revChatGPT import typings
 from model.provider.provider import Provider
 
 class ProviderRevChatGPT(Provider):
@@ -6,7 +7,7 @@ class ProviderRevChatGPT(Provider):
         self.rev_chatgpt = []
         for i in range(0, len(config['account'])):
             try:
-                print(f"[System] 创建rev_ChatGPT负载{str(i)}: " + str(config['account'][i]))
+                print(f"[System] 创建rev_ChatGPT负载{str(i)}中...")
                 if 'password' in config['account'][i]:
                     config['account'][i]['password'] = str(config['account'][i]['password'])
                 revstat = {
@@ -30,14 +31,25 @@ class ProviderRevChatGPT(Provider):
                 for data in bot.ask(prompt):
                     resp = data["message"]
                 break
+            except typings.Error as e:
+                if e.code == typings.ErrorType.RATE_LIMIT_ERROR:
+                    raise e
+                if e.code == typings.ErrorType.INVALID_ACCESS_TOKEN_ERROR:
+                    raise e
+                if e.code == typings.ErrorType.EXPIRED_ACCESS_TOKEN_ERROR:
+                    raise e
+                if e.code == typings.ErrorType.PROHIBITED_CONCURRENT_QUERY_ERROR:
+                    raise e
+                
+                err_count += 1
+                print(f"[RevChatGPT] 请求出现问题: {str(e)} | 正在重试: {str(err_count)}")
+                if err_count >= retry_count:
+                    raise e
             except BaseException as e:
-                try:
-                    print("[RevChatGPT] 请求出现了一些问题, 正在重试。次数"+str(err_count))
-                    err_count += 1
-                    if err_count >= retry_count:
-                        raise e
-                except BaseException:
-                    err_count += 1
+                err_count += 1
+                print(f"[RevChatGPT] 请求出现问题: {str(e)} | 正在重试: {str(err_count)}")
+                if err_count >= retry_count:
+                    raise e
         
         print("[RevChatGPT] "+str(resp))
         return resp
@@ -45,26 +57,24 @@ class ProviderRevChatGPT(Provider):
     def text_chat(self, prompt):
         res = ''
         print("[Debug] "+str(self.rev_chatgpt))
+        err_msg = ''
+        cursor = 0
         for revstat in self.rev_chatgpt:
+            cursor += 1
             if not revstat['busy']:
                 try:
                     revstat['busy'] = True
-                    print("[Debug] 使用逆向ChatGPT回复ing", end='', flush=True)
                     res = self.request_text(prompt, revstat['obj'])
-                    print("OK")
                     revstat['busy'] = False
-                    # 处理结果文本
-                    chatgpt_res = res.strip()
-                    return res
-                except Exception as e:
-                    print("[System-Error] 逆向ChatGPT回复失败" + str(e))
-                    try:
-                        if e.code == 2:
-                            print("[System-Error] 频率限制，正在切换账号。"+ str(e))
-                            continue
-                        else:
-                            res = '所有的非忙碌OpenAI账号经过测试都暂时出现问题，请稍后再试或者联系管理员~'
-                            return res
-                    except BaseException:
-                        continue
-        res = '所有的OpenAI账号都有负载, 请稍后再试~'
+                    return res.strip()
+                # todo: 细化错误管理
+                except BaseException as e:
+                    revstat['busy'] = False
+                    print(f"请求出现问题: {str(e)}")
+                    err_msg += f"账号{cursor} - 错误原因: {str(e)}"
+                    continue
+            else:
+                err_msg += f"账号{cursor} - 错误原因: 忙碌"
+                continue
+        res = f'回复失败。错误跟踪：{err_msg}'
+        return res
