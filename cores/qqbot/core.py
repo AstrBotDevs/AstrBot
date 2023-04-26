@@ -91,15 +91,28 @@ qqchan_loop = None
 # QQ机器人
 gocq_bot = None
 PLATFORM_GOCQ = 'gocq'
-gocq_app = CQHTTP(
-    host="127.0.0.1",
-    port=6700,
-    http_port=5700,
-)
+gocq_app = None
+
 gocq_loop = None
 nick_qq = "ai "
 
 bing_cache_loop = None
+
+def gocq_runner():
+    global gocq_app
+    ok = False
+    while not ok:
+        try:
+            gocq_app = CQHTTP(
+                host="127.0.0.1",
+                port=6700,
+                http_port=5700,
+            )
+            ok = True
+        except BaseException as e:
+            print("[System-err] 连接到go-cqhttp异常, 5秒后重试。"+str(e))
+
+threading.Thread(target=gocq_runner, daemon=True).start()
 
 
 def new_sub_thread(func, args=()):
