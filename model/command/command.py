@@ -11,6 +11,7 @@ import json
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
 
+# 指令功能的基类，通用的（不区分语言模型）的指令就在这实现
 class Command:
     def __init__(self, provider: Provider):
         self.provider = Provider
@@ -22,7 +23,7 @@ class Command:
         return False, None
 
     '''
-    存储机器人的昵称
+    nick: 存储机器人的昵称
     '''
     def set_nick(self, message: str, platform: str):
         if platform == PLATFORM_GOCQ:
@@ -84,19 +85,34 @@ class Command:
                 return True
         return False
     
+    # keyword: 关键字
     def keyword(self, message: str, role: str):
         if role != "admin":
             return True, "你没有权限使用该指令", "keyword"
-        if len(message.split(" ")) != 3:
-            return True, "【设置关键词/关键指令回复】示例：\nkeyword hi 你好\n当发送hi的时候会回复你好\nkeyword /hi 你好\n当发送/hi时会回复你好", "keyword"
-        
+
         l = message.split(" ")
+
+        if len(l) <= 3:
+            return True, "【设置关键词回复】示例：\nkeyword hi 你好\n当发送hi的时候会回复你好\nkeyword /hi 你好\n当发送/hi时会回复你好\n删除关键词: keyword d hi\n删除hi关键词的回复", "keyword"
+        
+        del_mode = False
+        if l[1] == "d":
+            del_mode = True    
+
         try:
             if os.path.exists("keyword.json"):
                 with open("keyword.json", "r", encoding="utf-8") as f:
                     keyword = json.load(f)
-                    keyword[l[1]] = l[2]
+                    if del_mode:
+                        # 删除关键词
+                        if l[1] not in keyword:
+                            return False, "该关键词不存在", "keyword"
+                        else: del keyword[l[1]]
+                    else:
+                        keyword[l[1]] = l[2]
             else:
+                if del_mode:
+                    return False, "该关键词不存在", "keyword"
                 keyword = {l[1]: l[2]}
             with open("keyword.json", "w", encoding="utf-8") as f:
                 json.dump(keyword, f, ensure_ascii=False, indent=4)
