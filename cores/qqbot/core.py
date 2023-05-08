@@ -94,7 +94,7 @@ PLATFORM_GOCQ = 'gocq'
 gocq_app = None
 
 gocq_loop = None
-nick_qq = "ai "
+nick_qq = "ai"
 
 bing_cache_loop = None
 
@@ -681,14 +681,24 @@ class gocqClient():
     @gocq_app.receiver("GroupMessage")
     async def _(app: CQHTTP, source: GroupMessage):
         global nick_qq
+        # 将nick_qq转换为元组
+        if nick_qq == None:
+            nick_qq = ("ai",)
+        if isinstance(nick_qq, str):
+            nick_qq = (nick_qq,)
+        if isinstance(nick_qq, list):
+            nick_qq = tuple(nick_qq)
+
         if isinstance(source.message[0], Plain):
             if source.message[0].text.startswith(nick_qq):
-                source.message[0].text = source.message[0].text[len(nick_qq):].strip()
+                _len = 0
+                for i in nick_qq:
+                    if source.message[0].text.startswith(i):
+                        _len = len(i)
+                source.message[0].text = source.message[0].text[_len:].strip()
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         if isinstance(source.message[0], At):
             if source.message[0].qq == source.self_id:
-                if source.message[1].text.startswith(nick_qq):
-                    source.message[1].text = source.message[0].text[len(nick_qq):].strip()
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         else:
             return

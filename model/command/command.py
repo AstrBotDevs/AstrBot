@@ -27,9 +27,12 @@ class Command:
     '''
     def set_nick(self, message: str, platform: str):
         if platform == PLATFORM_GOCQ:
-            nick = message.split(" ")[1]
+            l = message.split(" ")
+            if len(l) == 1:
+                return True, "【设置机器人昵称】示例：\n支持多昵称\nnick 昵称1 昵称2 昵称3", "nick"
+            nick = l[1:]
             self.general_command_storer("nick_qq", nick)
-            return True, f"设置成功！现在你可以叫我{nick}来提问我啦~", "nick"
+            return True, f"设置成功！现在你可以叫我这些昵称来提问我啦~", "nick"
         elif platform == PLATFORM_QQCHAN:
             nick = message.split(" ")[2]
             return False, "QQ频道平台不支持为机器人设置昵称。", "nick"
