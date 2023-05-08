@@ -95,11 +95,12 @@ class Command:
 
         l = message.split(" ")
 
-        if len(l) <= 3:
+        if len(l) < 3:
             return True, "【设置关键词回复】示例：\nkeyword hi 你好\n当发送hi的时候会回复你好\nkeyword /hi 你好\n当发送/hi时会回复你好\n删除关键词: keyword d hi\n删除hi关键词的回复", "keyword"
         
         del_mode = False
         if l[1] == "d":
+            print("删除关键词: "+l[2])
             del_mode = True    
 
         try:
@@ -108,9 +109,9 @@ class Command:
                     keyword = json.load(f)
                     if del_mode:
                         # 删除关键词
-                        if l[1] not in keyword:
+                        if l[2] not in keyword:
                             return False, "该关键词不存在", "keyword"
-                        else: del keyword[l[1]]
+                        else: del keyword[l[2]]
                     else:
                         keyword[l[1]] = l[2]
             else:
@@ -118,8 +119,11 @@ class Command:
                     return False, "该关键词不存在", "keyword"
                 keyword = {l[1]: l[2]}
             with open("keyword.json", "w", encoding="utf-8") as f:
+                print("设置指令: "+l[1]+" -> "+l[2])
                 json.dump(keyword, f, ensure_ascii=False, indent=4)
                 f.flush()
+            if del_mode:
+                return True, "删除成功: "+l[2], "keyword"
             return True, "设置成功: "+l[1]+" -> "+l[2], "keyword"
         except BaseException as e:
             return False, "设置失败: "+str(e), "keyword"
