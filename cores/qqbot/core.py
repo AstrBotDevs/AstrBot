@@ -522,7 +522,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
 
     if chosen_provider == OPENAI_OFFICIAL: 
         hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform)
-        # hit: 是否触发了指令.
+        # hit: 是否触发了指令
         if not hit:
             # 请求ChatGPT获得结果
             try:
@@ -582,8 +582,9 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
         if command_result != None:
             command = command_result[2]
             if command == "keyword":
-                with open("keyword.json", "r", encoding="utf-8") as f:
-                    keywords = json.load(f)
+                if os.path.exists("keyword.json"):
+                    with open("keyword.json", "r", encoding="utf-8") as f:
+                        keywords = json.load(f)
 
             # QQ昵称
             if command == "nick":

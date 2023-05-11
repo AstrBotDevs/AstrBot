@@ -7,6 +7,7 @@ import sys
 import requests
 from model.provider.provider import Provider
 import json
+import util.plugin_util as putil
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -16,10 +17,33 @@ class Command:
     def __init__(self, provider: Provider):
         self.provider = Provider
 
-    @abc.abstractmethod
     def check_command(self, message, role, platform):
+        # 插件
+        plugins = []
+        try:
+            go = True
+            if os.path.exists("addons/plugins"):
+                plugins = putil.get_modules("addons/plugins")
+            elif os.path.exists("QQChannelChatGPT/addons/plugins"):
+                plugins = putil.get_modules("QQChannelChatGPT/addons/plugins")
+            else:
+                go = False
+
+            if go:
+                print(f"[DEBUG] 当前加载的插件：{plugins}")
+                for p in plugins:
+                    module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
+                    cls = putil.get_classes(module)
+                    obj = getattr(module, cls[0])()
+                    hit, res = obj.run(message, role, platform)
+                    if hit:
+                        return True, res
+        except BaseException as e:
+            print(f"[Debug] 插件加载出现问题，原因: {str(e)}\n已安装插件: {plugins}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。")
+        
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform)
+        
         return False, None
 
     '''
