@@ -53,6 +53,8 @@ class Command:
     插件指令
     '''
     def plugin_oper(self, message: str, role: str):
+        if role != "admin":
+            return False, f"你的身份组{role}没有权限操作插件", "plugin"
         l = message.split(" ")
         if len(l) < 3:
             return True, "【安装插件】示例：\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名", "plugin"

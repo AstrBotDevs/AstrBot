@@ -465,8 +465,13 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
         else:
             qq_msg = message.message[0].text
             session_id = message.user_id
-        # todo: 暂时将所有人设为管理员
         role = "admin"
+        if "sender" in message:
+            if message.sender.role == "owner":
+                role = "admin"
+            else:
+                role = message.sender.role
+        print("[GOCQ-BOT] 消息身份："+ role)
 
     if qq_msg == "":
         send_message(platform, message,  f"Hi~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
