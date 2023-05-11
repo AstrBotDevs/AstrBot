@@ -66,7 +66,11 @@ class Command:
                 return False, "未找到插件目录", "plugin"
             if l[1] == "i":
                 try:
-                    Repo.clone_from(l[2],to_path=ppath,branch='master')
+                    # 得到url的最后一段
+                    d = l[2].split("/")[-1]
+                    # 创建文件夹
+                    os.mkdir(os.path.join(ppath, d))
+                    Repo.clone_from(l[2],to_path=os.path.join(ppath, d),branch='master')
                     return True, "插件拉取成功~", "plugin"
                 except BaseException as e:
                     return False, f"拉取插件失败，原因: {str(e)}", "plugin"
