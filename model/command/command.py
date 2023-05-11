@@ -59,9 +59,9 @@ class Command:
         else:
             ppath = ""
             if os.path.exists("addons/plugins"):
-                ppath = putil.get_modules("addons/plugins")
+                ppath = "addons/plugins"
             elif os.path.exists("QQChannelChatGPT/addons/plugins"):
-                ppath = putil.get_modules("QQChannelChatGPT/addons/plugins")
+                ppath = "QQChannelChatGPT/addons/plugins"
             else:
                 return False, "未找到插件目录", "plugin"
             if l[1] == "i":
