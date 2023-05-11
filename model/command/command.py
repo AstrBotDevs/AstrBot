@@ -67,13 +67,13 @@ class Command:
             if l[1] == "i":
                 try:
                     Repo.clone_from(l[2],to_path=ppath,branch='master')
-                    return False, "插件拉取成功~", "plugin"
+                    return True, "插件拉取成功~", "plugin"
                 except BaseException as e:
                     return False, f"拉取插件失败，原因: {str(e)}", "plugin"
             elif l[1] == "d":
                 try:
                     os.remove(os.path.join(ppath, l[2]))
-                    return False, "插件卸载成功~", "plugin"
+                    return True, "插件卸载成功~", "plugin"
                 except BaseException as e:
                     return False, f"卸载插件失败，原因: {str(e)}", "plugin"
                 
