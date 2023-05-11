@@ -44,7 +44,40 @@ class Command:
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform)
         
+        if self.command_start_with(message, "plugin"):
+            return True, self.plugin_oper(message, role)
+        
         return False, None
+    
+    '''
+    插件指令
+    '''
+    def plugin_oper(message: str, role: str):
+        l = message.split(" ")
+        if len(l) < 3:
+            return True, "【安装插件】示例：\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名", "plugin"
+        else:
+            ppath = ""
+            if os.path.exists("addons/plugins"):
+                ppath = putil.get_modules("addons/plugins")
+            elif os.path.exists("QQChannelChatGPT/addons/plugins"):
+                ppath = putil.get_modules("QQChannelChatGPT/addons/plugins")
+            else:
+                return False, "未找到插件目录", "plugin"
+            if l[1] == "i":
+                try:
+                    Repo.clone_from(l[2],to_path=ppath,branch='master')
+                    return False, "插件拉取成功~", "plugin"
+                except BaseException as e:
+                    return False, f"拉取插件失败，原因: {str(e)}", "plugin"
+            elif l[1] == "d":
+                try:
+                    os.remove(os.path.join(ppath, l[2]))
+                    return False, "插件卸载成功~", "plugin"
+                except BaseException as e:
+                    return False, f"卸载插件失败，原因: {str(e)}", "plugin"
+                
+            
 
     '''
     nick: 存储机器人的昵称
