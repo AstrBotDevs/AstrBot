@@ -92,6 +92,7 @@ qqchan_loop = None
 gocq_bot = None
 PLATFORM_GOCQ = 'gocq'
 gocq_app = None
+admin_qq = "123456"
 
 gocq_loop = None
 nick_qq = "ai"
@@ -319,6 +320,19 @@ def initBot(cfg, prov):
     # GOCQ
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
         print("- 启用QQ机器人 -")
+
+        if os.path.exists("cmd_config.json"):
+            with open("cmd_config.json", 'r', encoding='utf-8') as f:
+                cmd_config = json.load(f)
+                global admin_qq
+                if "admin_qq" in cmd_config:
+                    admin_qq = cmd_config['admin_qq']
+                    print("[System] 管理者QQ号: " + admin_qq)
+                else:
+                    admin_qq = input("[System] 请输入管理者QQ号(管理者QQ号才能使用update/plugin等指令): ")
+                    print("[System] 管理者QQ号: " + admin_qq)
+
+
         global gocq_app, gocq_bot, gocq_loop
         gocq_bot = QQ()
         gocq_loop = asyncio.new_event_loop()
@@ -405,6 +419,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
     role = "member" # 角色
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
+    global admin_qq
 
     if platform == PLATFORM_QQCHAN:
         print("[QQCHAN-BOT] 接收到消息："+ str(message.content))
@@ -465,13 +480,11 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
         else:
             qq_msg = message.message[0].text
             session_id = message.user_id
-        role = "admin"
+        role = "member"
         if "sender" in message:
-            if message.sender.role == "owner":
+            if message.sender.user_id == admin_qq:
+                print("[GOCQ-BOT] 检测到管理员身份")
                 role = "admin"
-            else:
-                role = message.sender.role
-        print("[GOCQ-BOT] 消息身份："+ role)
 
     if qq_msg == "":
         send_message(platform, message,  f"Hi~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
