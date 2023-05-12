@@ -307,20 +307,11 @@ def initBot(cfg, prov):
 
     print("--------------------加载平台--------------------")
 
-    # QQ频道
-    if 'qqbot' in cfg and cfg['qqbot']['enable']:
-        print("- 启用QQ频道机器人 -")
-        global qqchannel_bot, qqchan_loop
-        qqchannel_bot = QQChan()
-        qqchan_loop = asyncio.new_event_loop()
-        thread_inst = threading.Thread(target=run_qqchan_bot, args=(cfg, qqchan_loop, qqchannel_bot), daemon=False)
-        thread_inst.start()
-        # thread.join()
+
 
     # GOCQ
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
         print("- 启用QQ机器人 -")
-
         if os.path.exists("cmd_config.json"):
             with open("cmd_config.json", 'r', encoding='utf-8') as f:
                 cmd_config = json.load(f)
@@ -331,13 +322,21 @@ def initBot(cfg, prov):
                 else:
                     admin_qq = input("[System] 请输入管理者QQ号(管理者QQ号才能使用update/plugin等指令): ")
                     print("[System] 管理者QQ号: " + admin_qq)
-
-
         global gocq_app, gocq_bot, gocq_loop
         gocq_bot = QQ()
         gocq_loop = asyncio.new_event_loop()
         thread_inst = threading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=False)
         thread_inst.start()
+
+    # QQ频道
+    if 'qqbot' in cfg and cfg['qqbot']['enable']:
+        print("- 启用QQ频道机器人 -")
+        global qqchannel_bot, qqchan_loop
+        qqchannel_bot = QQChan()
+        qqchan_loop = asyncio.new_event_loop()
+        thread_inst = threading.Thread(target=run_qqchan_bot, args=(cfg, qqchan_loop, qqchannel_bot), daemon=False)
+        thread_inst.start()
+        # thread.join()
 
     if thread_inst == None:
         input("[System-Error] 没有启用任何机器人，程序退出")
