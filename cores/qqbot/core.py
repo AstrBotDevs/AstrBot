@@ -306,9 +306,6 @@ def initBot(cfg, prov):
     thread_inst = None
 
     print("--------------------加载平台--------------------")
-
-
-
     # GOCQ
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
         print("- 启用QQ机器人 -")
@@ -321,7 +318,11 @@ def initBot(cfg, prov):
                     print("[System] 管理者QQ号: " + admin_qq)
                 else:
                     admin_qq = input("[System] 请输入管理者QQ号(管理者QQ号才能使用update/plugin等指令): ")
-                    print("[System] 管理者QQ号: " + admin_qq)
+                    print("[System] 管理者QQ号设置为: " + admin_qq)
+                    cmd_config['admin_qq'] = admin_qq
+                    with open("cmd_config.json", 'w', encoding='utf-8') as f:
+                        json.dump(cmd_config, f, indent=4)
+                        f.flush()
         global gocq_app, gocq_bot, gocq_loop
         gocq_bot = QQ()
         gocq_loop = asyncio.new_event_loop()
@@ -480,10 +481,9 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
             qq_msg = message.message[0].text
             session_id = message.user_id
         role = "member"
-        if "sender" in message:
-            if message.sender.user_id == admin_qq:
-                print("[GOCQ-BOT] 检测到管理员身份")
-                role = "admin"
+        if str(message.sender.user_id) == admin_qq:
+            print("[GOCQ-BOT] 检测到管理员身份")
+            role = "admin"
 
     if qq_msg == "":
         send_message(platform, message,  f"Hi~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
