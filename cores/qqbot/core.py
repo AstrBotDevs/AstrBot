@@ -62,7 +62,7 @@ direct_message_mode = True
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 # 版本
-version = '3.0'
+version = '3.0.2'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
