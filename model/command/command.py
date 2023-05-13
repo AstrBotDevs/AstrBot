@@ -106,6 +106,8 @@ class Command:
             elif l[1] == "d":
                 try:
                     os.remove(os.path.join(ppath, l[2]))
+                    if l[2] in self.cached_plugins:
+                        del self.cached_plugins[l[2]]
                     return True, "插件卸载成功~", "plugin"
                 except BaseException as e:
                     return False, f"卸载插件失败，原因: {str(e)}", "plugin"
