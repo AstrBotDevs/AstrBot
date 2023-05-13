@@ -72,8 +72,6 @@ class Command:
     插件指令
     '''
     def plugin_oper(self, message: str, role: str):
-        if role != "admin":
-            return False, f"你的身份组{role}没有权限操作插件", "plugin"
         l = message.split(" ")
         if len(l) < 2:
             return True, "【安装插件】示例：\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload", "plugin"
@@ -86,6 +84,8 @@ class Command:
             else:
                 return False, "未找到插件目录", "plugin"
             if l[1] == "i":
+                if role != "admin":
+                    return False, f"你的身份组{role}没有权限安装插件", "plugin"
                 try:
                     # 得到url的最后一段
                     d = l[2].split("/")[-1]
@@ -106,6 +106,8 @@ class Command:
                 except BaseException as e:
                     return False, f"拉取插件失败，原因: {str(e)}", "plugin"
             elif l[1] == "d":
+                if role != "admin":
+                    return False, f"你的身份组{role}没有权限删除插件", "plugin"
                 try:
                     os.remove(os.path.join(ppath, l[2]))
                     if l[2] in self.cached_plugins:
@@ -115,7 +117,7 @@ class Command:
                     return False, f"卸载插件失败，原因: {str(e)}", "plugin"
             elif l[1] == "l":
                 try:
-                    return True, "已安装的插件: " + "\n".join(os.listdir(ppath)) + "\n使用plugin v 插件名 查看插件帮助（如果有的话）", "plugin"
+                    return True, "已安装的插件: \n" + "\n".join(os.listdir(ppath)) + "\n使用plugin v 插件名 查看插件帮助（如果有的话）", "plugin"
                 except BaseException as e:
                     return False, f"获取插件列表失败，原因: {str(e)}", "plugin"
             elif l[1] == "v":
@@ -131,6 +133,8 @@ class Command:
                 except BaseException as e:
                     return False, f"获取插件版本失败，原因: {str(e)}", "plugin"
             elif l[1] == "reload":
+                if role != "admin":
+                    return False, f"你的身份组{role}没有权限重载插件", "plugin"
                 try:
                     for pm in self.cached_plugins:
                         module = self.cached_plugins[pm]["module"]
