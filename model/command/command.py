@@ -8,6 +8,7 @@ from model.provider.provider import Provider
 import json
 import util.plugin_util as putil
 import importlib
+from pip._internal import main as pipmain
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -38,14 +39,19 @@ class Command:
             if plugins != None:
                 # print(f"[DEBUG] 当前加载的插件：{plugins}")
                 for p in plugins:
+                    # print(f"[Debug] 当前加载的插件：{self.cached_plugins}")
                     try:
                         if p in self.cached_plugins:
-                            module = self.cached_plugins[p]
+                            module = self.cached_plugins[p]["module"]
+                            obj = self.cached_plugins[p]["clsobj"]
                         else:
                             module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
-                            self.cached_plugins[p] = module
-                        cls = putil.get_classes(p, module)
-                        obj = getattr(module, cls[0])()
+                            cls = putil.get_classes(p, module)
+                            obj = getattr(module, cls[0])()
+                            self.cached_plugins[p] = {
+                                "module": module,
+                                "clsobj": obj
+                            }
                         hit, res = obj.run(message, role, platform, message_obj)
                         if hit:
                             return True, res
@@ -84,8 +90,16 @@ class Command:
                     # 得到url的最后一段
                     d = l[2].split("/")[-1]
                     # 创建文件夹
-                    os.mkdir(os.path.join(ppath, d))
-                    Repo.clone_from(l[2],to_path=os.path.join(ppath, d),branch='master')
+                    plugin_path = os.path.join(ppath, d)
+                    os.mkdir(plugin_path)
+                    Repo.clone_from(l[2],to_path=plugin_path,branch='master')
+
+                    # 读取插件的requirements.txt
+                    if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
+                        with open(os.path.join(plugin_path, "requirements.txt"), "r", encoding="utf-8") as f:
+                            for line in f.readlines():
+                                pipmain(['install', line.strip()])
+
                     return True, "插件拉取成功~", "plugin"
                 except BaseException as e:
                     return False, f"拉取插件失败，原因: {str(e)}", "plugin"
@@ -98,7 +112,13 @@ class Command:
             elif l[1] == "reload":
                 try:
                     for pm in self.cached_plugins:
-                        importlib.reload(self.cached_plugins[pm])
+                        module = self.cached_plugins[pm]["module"]
+                        cls = putil.get_classes(pm, module)
+                        obj = getattr(module, cls[0])()
+                        self.cached_plugins[pm] = {
+                            "module": module,
+                            "clsobj": obj
+                        }
                     return True, "插件重载成功！", "plugin"
                 except BaseException as e:
                     return False, f"插件重载失败，原因: {str(e)}", "plugin"
