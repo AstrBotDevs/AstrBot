@@ -39,7 +39,7 @@ class Command:
             if plugins != None:
                 # print(f"[DEBUG] 当前加载的插件：{plugins}")
                 for p in plugins:
-                    # print(f"[Debug] 当前加载的插件：{self.cached_plugins}")
+                    # print(f"[Debug] 当前缓存的插件：{self.cached_plugins}")
                     try:
                         if p in self.cached_plugins:
                             module = self.cached_plugins[p]["module"]
