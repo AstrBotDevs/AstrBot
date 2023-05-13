@@ -6,8 +6,10 @@ def get_classes(p_name, arg):
     classes = []
     clsmembers = inspect.getmembers(arg, inspect.isclass)
     for (name, _) in clsmembers:
-        if p_name == name.lower().replace("plugin", ""):
+        # print(name, p_name)
+        if p_name.lower() == name.lower().replace("plugin", ""):
             classes.append(name)
+            break
     return classes
 
 # 获取一个文件夹下所有的模块
