@@ -93,6 +93,18 @@ _✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群�
 </details>
 
 > 关于token：token就相当于是AI中的单词数（但是不等于单词数），`text-davinci-003`模型中最大可以支持`4097`个token。在发送信息时，这个机器人会将用户的历史聊天记录打包发送给ChatGPT，因此，`token`也会相应的累加，为了保证聊天的上下文的逻辑性，就有了缓存token。
+
+### 🛠️ 插件支持
+
+本项目支持接入插件。
+
+插件开发教程：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
+
+部分好用的插件：
+
+`HuggingChat`: https://github.com/Soulter/HuggingChatForQQBot
+
+
 ### 指令功能
 
 #### OpenAI官方API
