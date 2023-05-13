@@ -8,7 +8,8 @@ from model.provider.provider import Provider
 import json
 import util.plugin_util as putil
 import importlib
-from pip._internal import main as pipmain
+import shutil
+
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -110,7 +111,7 @@ class Command:
                     return False, f"你的身份组{role}没有权限删除插件", "plugin"
                 try:
                     # 删除文件夹
-                    os.rmdir(os.path.join(ppath, l[2]))
+                    shutil.rmtree(os.path.join(ppath, l[2]))
                     if l[2] in self.cached_plugins:
                         del self.cached_plugins[l[2]]
                     return True, "插件卸载成功~", "plugin"
