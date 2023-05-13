@@ -109,7 +109,8 @@ class Command:
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限删除插件", "plugin"
                 try:
-                    os.removedirs(os.path.join(ppath, l[2]))
+                    # 删除文件夹
+                    os.rmdir(os.path.join(ppath, l[2]))
                     if l[2] in self.cached_plugins:
                         del self.cached_plugins[l[2]]
                     return True, "插件卸载成功~", "plugin"
