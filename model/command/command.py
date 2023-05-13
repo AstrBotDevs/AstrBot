@@ -38,16 +38,19 @@ class Command:
             if plugins != None:
                 # print(f"[DEBUG] 当前加载的插件：{plugins}")
                 for p in plugins:
-                    if p in self.cached_plugins:
-                        module = self.cached_plugins[p]
-                    else:
-                        module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
-                        self.cached_plugins[p] = module
-                    cls = putil.get_classes(p, module)
-                    obj = getattr(module, cls[0])()
-                    hit, res = obj.run(message, role, platform, message_obj)
-                    if hit:
-                        return True, res
+                    try:
+                        if p in self.cached_plugins:
+                            module = self.cached_plugins[p]
+                        else:
+                            module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
+                            self.cached_plugins[p] = module
+                        cls = putil.get_classes(p, module)
+                        obj = getattr(module, cls[0])()
+                        hit, res = obj.run(message, role, platform, message_obj)
+                        if hit:
+                            return True, res
+                    except BaseException as e:
+                        print(f"[Debug] 加载{p}插件出现问题，原因{str(e)}")
         except BaseException as e:
             print(f"[Debug] 插件加载出现问题，原因: {str(e)}\n已安装插件: {plugins}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。")
 
