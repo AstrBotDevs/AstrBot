@@ -4,9 +4,14 @@ from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
 class CommandRevChatGPT(Command):
     def __init__(self, provider: ProviderRevChatGPT):
         self.provider = provider
-        
-    def check_command(self, message: str, role, platform: str):
-        hit, res = super().check_command(message, role, platform)
+        self.cached_plugins = {}
+
+    def check_command(self, 
+                      message: str, 
+                      role: str, 
+                      platform: str,
+                      message_obj):
+        hit, res = super().check_command(message, role, platform, message_obj=message_obj)
         if hit:
             return True, res
         if self.command_start_with(message, "help", "帮助"):

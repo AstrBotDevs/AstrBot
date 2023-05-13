@@ -4,9 +4,16 @@ import asyncio
 class CommandRevEdgeGPT(Command):
     def __init__(self, provider: ProviderRevEdgeGPT):
         self.provider = provider
+        self.cached_plugins = {}
+
         
-    def check_command(self, message: str, loop, role, platform: str):
-        hit, res = super().check_command(message, role, platform)
+    def check_command(self, 
+                      message: str, 
+                      loop, 
+                      role: str, 
+                      platform: str,
+                      message_obj):
+        hit, res = super().check_command(message, role, platform, message_obj=message_obj)
         if hit:
             return True, res
         if self.command_start_with(message, "reset"):

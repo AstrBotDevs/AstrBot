@@ -5,9 +5,16 @@ from cores.qqbot.personality import personalities
 class CommandOpenAIOfficial(Command):
     def __init__(self, provider: ProviderOpenAIOfficial):
         self.provider = provider
+        self.cached_plugins = {}
         
-    def check_command(self, message: str, session_id: str, user_name: str, role, platform: str):
-        hit, res = super().check_command(message, role, platform)
+    def check_command(self, 
+                      message: str, 
+                      session_id: str, 
+                      user_name: str, 
+                      role: str, 
+                      platform: str,
+                      message_obj):
+        hit, res = super().check_command(message, role, platform, message_obj=message_obj)
         if hit:
             return True, res
         if self.command_start_with(message, "reset", "重置"):

@@ -1,8 +1,7 @@
 import botpy
-from botpy.message import Message
+from botpy.message import Message, DirectMessage
 from botpy.types.message import Reference
 import re
-from botpy.message import DirectMessage
 import json
 import threading
 import asyncio
@@ -396,20 +395,25 @@ def save_provider_preference(chosen_provider):
 def send_message(platform, message, res, msg_ref = None, image = None, gocq_loop = None, qqchannel_bot = None, gocq_bot = None):
     if platform == PLATFORM_QQCHAN:
         if image != None:
-            qqchannel_bot.send_qq_msg(message, res, image_mode=True, msg_ref=msg_ref)
+            qqchannel_bot.send_qq_msg(message, str(res), image_mode=True, msg_ref=msg_ref)
         else:
-            qqchannel_bot.send_qq_msg(message, res, msg_ref=msg_ref)
+            qqchannel_bot.send_qq_msg(message, str(res), msg_ref=msg_ref)
     if platform == PLATFORM_GOCQ: 
         if image != None:
             asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, image, image_mode=True), gocq_loop).result()
         else:
-            asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res), gocq_loop).result()
+            asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res, False, ), gocq_loop).result()
 
-'''
-处理消息
-group: 群聊模式
-'''
-def oper_msg(message, group=False, msg_ref = None, platform = None):
+
+def oper_msg(message, 
+             group: bool=False, 
+             msg_ref: Reference = None, 
+             platform: str = None):
+    """
+    处理消息。
+    group: 群聊模式,
+    message: 频道是频道的消息对象, QQ是nakuru-gocq的消息对象
+    """
     global session_dict, provider
     qq_msg = ''
     session_id = ''
@@ -538,7 +542,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
     chatgpt_res = ""
 
     if chosen_provider == OPENAI_OFFICIAL: 
-        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform)
+        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform, message_obj=message)
         # hit: 是否触发了指令
         if not hit:
             # 请求ChatGPT获得结果
@@ -551,7 +555,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
                 send_message(platform, message, f"OpenAI API错误, 原因: {str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_CHATGPT:
-        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform)
+        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform, message=message)
         if not hit:
             try:
                 chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
@@ -567,7 +571,7 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
                 bing_cache_loop = gocq_loop
             elif platform == PLATFORM_QQCHAN:
                 bing_cache_loop = qqchan_loop
-        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, platform=platform)
+        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, platform=platform, message_obj=message)
         if not hit:
             try:
                 while rev_edgegpt.is_busy():
@@ -611,18 +615,17 @@ def oper_msg(message, group=False, msg_ref = None, platform = None):
 
             if command_result[0]:
                 # 是否是画图指令
-                if len(command_result) == 3 and command_result[2] == 'draw':
+                if isinstance(command_result, list) and len(command_result) == 3 and command_result[2] == 'draw':
                     for i in command_result[1]:
                         send_message(platform, message, i, msg_ref=msg_ref, image=i, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
-                else: 
+                else:
                     try:
                         send_message(platform, message, command_result[1], msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
                     except BaseException as e:
-                        t = command_result[1].replace(".", " . ")
-                        send_message(platform, message, t, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                        send_message(platform, message, f"回复消息出错: {str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
             else:
-                send_message(platform, message, f"指令调用错误: \n{command_result[1]}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                send_message(platform, message, f"指令调用错误: \n{str(command_result[1])}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
         return
     

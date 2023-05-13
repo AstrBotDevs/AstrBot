@@ -1,6 +1,7 @@
 import io
 import botpy
 from PIL import Image
+from botpy.message import Message, DirectMessage
 import re
 import asyncio
 import requests
@@ -15,13 +16,13 @@ class QQChan():
         self.client.run(appid=appid, token=token)
 
     def send_qq_msg(self, message, res, image_mode=False, msg_ref = None):
-        print("[System-Info] 回复QQ频道消息中..."+res)
+        print("[System-Info] 回复QQ频道消息中..."+str(res))
         if not image_mode:
             try:
                 if msg_ref is not None:
-                    reply_res = asyncio.run_coroutine_threadsafe(message.reply(content=res, message_reference = msg_ref), self.client.loop)
+                    reply_res = asyncio.run_coroutine_threadsafe(message.reply(content=str(res), message_reference = msg_ref), self.client.loop)
                 else:
-                    reply_res = asyncio.run_coroutine_threadsafe(message.reply(content=res), self.client.loop)
+                    reply_res = asyncio.run_coroutine_threadsafe(message.reply(content=str(res)), self.client.loop)
                 reply_res.result()
             except BaseException as e:
                 # 分割过长的消息

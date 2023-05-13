@@ -5,8 +5,20 @@ class QQ:
         self.client = gocq
         self.client.run()
 
-    async def send_qq_msg(self, source, res, image_mode = False):
-        print("[System-Info] 回复QQ消息中..."+res)
+    async def send_qq_msg(self, 
+                          source, 
+                          res, 
+                          image_mode: bool = False):
+        """
+         res可以是一个数组，也就是gocq的消息链.
+        """
+
+        # print(res)
+        print("[System-Info] 回复QQ消息中..."+str(res))
+
+        if isinstance(res, list) and len(res) > 0:
+            await self.client.sendGroupMessage(source.group_id, res)
+            return
         # 通过消息链处理
         if not image_mode:
             if source.type == "GroupMessage":

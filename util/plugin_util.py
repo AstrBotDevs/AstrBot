@@ -2,11 +2,12 @@ import os
 import inspect
 
 # 找出模块里所有的类名
-def get_classes(arg):
+def get_classes(p_name, arg):
     classes = []
     clsmembers = inspect.getmembers(arg, inspect.isclass)
     for (name, _) in clsmembers:
-        classes.append(name)
+        if p_name == name.lower().replace("plugin", ""):
+            classes.append(name)
     return classes
 
 # 获取一个文件夹下所有的模块

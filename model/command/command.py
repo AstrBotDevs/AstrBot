@@ -1,4 +1,3 @@
-import abc
 import json
 import git.exc
 from git.repo import Repo
@@ -8,6 +7,7 @@ import requests
 from model.provider.provider import Provider
 import json
 import util.plugin_util as putil
+import importlib
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -17,30 +17,40 @@ class Command:
     def __init__(self, provider: Provider):
         self.provider = Provider
 
-    def check_command(self, message, role, platform):
-        # 插件
+    def get_plugin_modules(self):
         plugins = []
         try:
-            go = True
             if os.path.exists("addons/plugins"):
                 plugins = putil.get_modules("addons/plugins")
+                return plugins
             elif os.path.exists("QQChannelChatGPT/addons/plugins"):
                 plugins = putil.get_modules("QQChannelChatGPT/addons/plugins")
+                return plugins
             else:
-                go = False
+                return None
+        except BaseException as e:
+            raise e
 
-            if go:
-                print(f"[DEBUG] 当前加载的插件：{plugins}")
+    def check_command(self, message, role, platform, message_obj):
+        # 插件
+        try:
+            plugins = self.get_plugin_modules()
+            if plugins != None:
+                # print(f"[DEBUG] 当前加载的插件：{plugins}")
                 for p in plugins:
-                    module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
-                    cls = putil.get_classes(module)
+                    if p in self.cached_plugins:
+                        module = self.cached_plugins[p]
+                    else:
+                        module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
+                        self.cached_plugins[p] = module
+                    cls = putil.get_classes(p, module)
                     obj = getattr(module, cls[0])()
-                    hit, res = obj.run(message, role, platform)
+                    hit, res = obj.run(message, role, platform, message_obj)
                     if hit:
                         return True, res
         except BaseException as e:
             print(f"[Debug] 插件加载出现问题，原因: {str(e)}\n已安装插件: {plugins}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。")
-        
+
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform)
         
@@ -56,8 +66,8 @@ class Command:
         if role != "admin":
             return False, f"你的身份组{role}没有权限操作插件", "plugin"
         l = message.split(" ")
-        if len(l) < 3:
-            return True, "【安装插件】示例：\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名", "plugin"
+        if len(l) < 2:
+            return True, "【安装插件】示例：\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload", "plugin"
         else:
             ppath = ""
             if os.path.exists("addons/plugins"):
@@ -82,8 +92,14 @@ class Command:
                     return True, "插件卸载成功~", "plugin"
                 except BaseException as e:
                     return False, f"卸载插件失败，原因: {str(e)}", "plugin"
-                
-            
+            elif l[1] == "reload":
+                try:
+                    for pm in self.cached_plugins:
+                        importlib.reload(self.cached_plugins[pm])
+                    return True, "插件重载成功！", "plugin"
+                except BaseException as e:
+                    return False, f"插件重载失败，原因: {str(e)}", "plugin"
+
 
     '''
     nick: 存储机器人的昵称
@@ -121,7 +137,7 @@ class Command:
             "keyword": "设置关键词/关键指令回复",
             "update": "更新面板",
             "update latest": "更新到最新版本",
-            "update r": "重启程序",
+            "update r": "重启机器人",
             "reset": "重置会话",
             "nick": "设置机器人昵称",
             "/bing": "切换到bing模型",
@@ -130,6 +146,7 @@ class Command:
             "/bing 问题": "临时使用一次bing模型进行会话",
             "/gpt 问题": "临时使用一次OpenAI ChatGPT API进行会话",
             "/revgpt 问题": "临时使用一次网页版ChatGPT进行会话",
+            "plugin": "插件安装、卸载和重载"
         }
     
     def help_messager(self, commands: dict):
@@ -229,18 +246,6 @@ class Command:
                         pash_tag = "QQChannelChatGPT"+os.sep
                     repo.remotes.origin.pull()
 
-                    # 检查是否是windows环境
-                    # if platform.system().lower() == "windows":
-                    #     if os.path.exists("launcher.exe"):
-                    #         os.system("start launcher.exe")
-                    #     elif os.path.exists("QQChannelChatGPT\\main.py"):
-                    #         os.system("start python QQChannelChatGPT\\main.py")
-                    #     else:
-                    #         return True, "更新成功，未发现启动项，因此需要手动重启程序。"
-                    #     exit()
-                    # else:
-                    #     py = sys.executable
-                    #     os.execl(py, py, *sys.argv)
                     return True, "更新成功~是否重启？输入update r重启（重启指令不返回任何确认信息）。", "update"
                     
                 except BaseException as e:
