@@ -98,7 +98,7 @@ class Command:
                     if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
                         with open(os.path.join(plugin_path, "requirements.txt"), "r", encoding="utf-8") as f:
                             for line in f.readlines():
-                                pipmain(['install', line.strip()])
+                                mm = os.system(f"pip3 install {line.strip()}")
 
                     return True, "插件拉取成功~", "plugin"
                 except BaseException as e:
