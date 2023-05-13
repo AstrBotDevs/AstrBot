@@ -99,6 +99,8 @@ class Command:
                         with open(os.path.join(plugin_path, "requirements.txt"), "r", encoding="utf-8") as f:
                             for line in f.readlines():
                                 mm = os.system(f"pip3 install {line.strip()}")
+                                if mm != 0:
+                                    return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
 
                     return True, "插件拉取成功~", "plugin"
                 except BaseException as e:
@@ -111,6 +113,23 @@ class Command:
                     return True, "插件卸载成功~", "plugin"
                 except BaseException as e:
                     return False, f"卸载插件失败，原因: {str(e)}", "plugin"
+            elif l[1] == "l":
+                try:
+                    return True, "已安装的插件: " + "\n".join(os.listdir(ppath)) + "\n使用plugin v 插件名 查看插件帮助（如果有的话）", "plugin"
+                except BaseException as e:
+                    return False, f"获取插件列表失败，原因: {str(e)}", "plugin"
+            elif l[1] == "v":
+                try:
+                    if l[2] in os.listdir(ppath):
+                        # 获取Readme
+                        if os.path.exists(os.path.join(ppath, l[2], "README.md")):
+                            with open(os.path.join(ppath, l[2], "README.md"), "r", encoding="utf-8") as f:
+                                readme = f.read()
+                        else:
+                            readme = "暂无帮助（未找到此插件的README.md）"
+                        return True, readme, "plugin"
+                except BaseException as e:
+                    return False, f"获取插件版本失败，原因: {str(e)}", "plugin"
             elif l[1] == "reload":
                 try:
                     for pm in self.cached_plugins:
