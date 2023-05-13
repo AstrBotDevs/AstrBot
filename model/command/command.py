@@ -74,7 +74,7 @@ class Command:
     def plugin_oper(self, message: str, role: str):
         l = message.split(" ")
         if len(l) < 2:
-            return True, "【安装插件】示例：\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload", "plugin"
+            return True, "【插件指令】示例：\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload\n查看插件列表\nplugin l", "plugin"
         else:
             ppath = ""
             if os.path.exists("addons/plugins"):
