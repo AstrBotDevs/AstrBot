@@ -9,6 +9,8 @@
 _✨在QQ和QQ频道上使用ChatGPT、NewBing等语言模型，稳定，一次部署，同时使用✨_
 
 _✨教程：https://github.com/Soulter/QQChannelChatGPT/wiki ✨_
+ 
+_✨插件开发教程：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6 ✨_
 
 _✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）✨_
 
@@ -19,7 +21,7 @@ _✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群�
 ## ⭐功能：
 
 近期新功能：
-- 支持插件！
+- 支持插件！https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
 - 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
 - 热更新
 - 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
