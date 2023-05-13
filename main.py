@@ -1,6 +1,7 @@
 import threading
 import asyncio
 import os, sys
+from pip._internal import main as pipmain
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
@@ -46,50 +47,48 @@ def check_env():
         exit()
 
     # 检查pip
-    pip_tag = "pip"
-    mm = os.system("pip -V")
-    if mm != 0:
-        mm1 = os.system("pip3 -V")
-        if mm1 != 0:
-            print("未检测到pip, 请安装Python(版本应>=3.9)")
-            input("按任意键退出...")
-            exit()
-        else:
-            pip_tag = "pip3"
+    # pip_tag = "pip"
+    # mm = os.system("pip -V")
+    # if mm != 0:
+    #     mm1 = os.system("pip3 -V")
+    #     if mm1 != 0:
+    #         print("未检测到pip, 请安装Python(版本应>=3.9)")
+    #         input("按任意键退出...")
+    #         exit()
+    #     else:
+    #         pip_tag = "pip3"
     
-
     if os.path.exists('requirements.txt'):
         pth = 'requirements.txt'
     else:
         pth = 'QQChannelChatGPT'+ os.sep +'requirements.txt'
     print("正在更新三方依赖库...")
-    mm = os.system(f'{pip_tag} install -r {pth}')
-    if mm == 0:
+    try:
+        pipmain(['install', '-r', pth])
         print("依赖库安装完毕。")
-    else:
+    except BaseException as e:
+        print(e)
         while True:
             res = input("依赖库可能安装失败了。\n如果是报错ValueError: check_hostname requires server_hostname，请尝试先关闭代理后重试。\n输入y回车重试\n输入c回车使用国内镜像源下载\n输入其他按键回车继续往下执行。")
             if res == "y":
-                mm = os.system(f'{pip_tag} install -r {pth}')
-                if mm == 0:
+                try:
+                    pipmain(['install', '-r', pth])
                     print("依赖库安装完毕。")
                     break
+                except BaseException as e:
+                    print(e)
+                    continue
+
             elif res == "c":
-                mm = os.system(f'{pip_tag} install -r {pth} -i https://mirrors.aliyun.com/pypi/simple/')
-                if mm == 0:
+                try:
+                    pipmain(['install', '-r', pth, '-i', 'https://mirrors.aliyun.com/pypi/simple/'])
                     print("依赖库安装完毕。")
                     break
+                except BaseException as e:
+                    print(e)
+                    continue
             else:
                 break
-    
-    # 检查key
-    # with open(abs_path+"configs/config.yaml", 'r', encoding='utf-8') as ymlfile:
-    #     import yaml
-    #     cfg = yaml.safe_load(ymlfile)
-    #     if cfg['openai']['key'] == '' or cfg['openai']['key'] == None:
-    #         print("请先在configs/config.yaml下添加一个可用的OpenAI Key。详情请前往https://beta.openai.com/account/api-keys")
-    #     if cfg['qqbot']['appid'] == '' or cfg['qqbot']['token'] == '' or cfg['qqbot']['appid'] == None or cfg['qqbot']['token'] == None: 
-    #         print("请先在configs/config.yaml下完善appid和token令牌(在https://q.qq.com/上注册一个QQ机器人即可获得)")
 
 def get_platform():
     import platform
