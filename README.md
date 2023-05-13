@@ -19,6 +19,7 @@ _✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群�
 ## ⭐功能：
 
 近期新功能：
+- 支持插件！
 - 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
 - 热更新
 - 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
