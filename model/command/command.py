@@ -186,6 +186,11 @@ class Command:
                         return False, f"插件重载失败。\n跟踪: \n{err}", "plugin"
                 except BaseException as e:
                     return False, f"插件重载失败，原因: {str(e)}", "plugin"
+                
+            elif l[1] == "dev":
+                if role != "admin":
+                    return False, f"你的身份组{role}没有权限开发者模式", "plugin"
+                return True, "cached_plugins: \n" + str(cached_plugins), "plugin"
 
 
     '''
