@@ -123,9 +123,8 @@ class Command:
                                 mm = os.system(f"pip3 install {line.strip()}")
                                 if mm != 0:
                                     return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
-                    
                     # 加载没缓存的插件
-                    ok, err = self.plugin_reload(cached_plugins)
+                    ok, err = self.plugin_reload(cached_plugins, target=d)
                     if ok:
                         return True, "插件拉取并载入成功~", "plugin"
                     else:
