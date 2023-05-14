@@ -51,7 +51,7 @@ class ProviderRevChatGPT(Provider):
                 if err_count >= retry_count:
                     raise e
         
-        print("[RevChatGPT] "+str(resp))
+        # print("[RevChatGPT] "+str(resp))
         return resp
 
     def text_chat(self, prompt):

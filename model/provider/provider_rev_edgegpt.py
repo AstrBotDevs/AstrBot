@@ -85,6 +85,6 @@ class ProviderRevEdgeGPT(Provider):
                 print("[RevEdgeGPT] 请求出现了一些问题, 正在重试。次数"+str(err_count))
         self.busy = False
         
-        print("[RevEdgeGPT] "+str(reply_msg))
+        # print("[RevEdgeGPT] "+str(reply_msg))
         return reply_msg, 1
     

@@ -140,7 +140,7 @@ class ProviderOpenAIOfficial(Provider):
         
         self.key_stat[openai.api_key]['used'] += response['usage']['total_tokens']
         self.save_key_record()
-        print("[ChatGPT] "+str(response["choices"][0]["message"]["content"]))
+        # print("[ChatGPT] "+str(response["choices"][0]["message"]["content"]))
         chatgpt_res = str(response["choices"][0]["message"]["content"]).strip()
         current_usage_tokens = response['usage']['total_tokens']
 
