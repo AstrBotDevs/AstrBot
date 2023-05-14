@@ -14,7 +14,10 @@ class QQ:
         """
 
         # print(res)
-        print("[System-Info] 回复QQ消息中..."+str(res))
+        _t = str(res)
+        if len(_t) > 20:
+            _t = _t[:20]+"..."
+        print("[QQ-BOT] 回复QQ消息: "+_t)
 
         if isinstance(res, list) and len(res) > 0:
             await self.client.sendGroupMessage(source.group_id, res)
