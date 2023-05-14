@@ -6,6 +6,7 @@ import sys
 from cores.database.conn import dbConn
 from model.provider.provider import Provider
 import threading
+from util import general_utils as gu
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 key_record_path = abs_path+'chatgpt_key_record'
@@ -16,7 +17,7 @@ class ProviderOpenAIOfficial(Provider):
         if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
             openai.api_base = cfg['api_base']
         if cfg['key'] != '' and cfg['key'] != None:
-            print("[System] 读取ChatGPT Key成功")
+            gu.log("读取ChatGPT Key成功")
             self.key_list = cfg['key']
         else:
             input("[System] 请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
@@ -25,7 +26,7 @@ class ProviderOpenAIOfficial(Provider):
         self.init_key_record()
 
         self.chatGPT_configs = cfg['chatGPTConfigs']
-        print(f'[System] 加载ChatGPTConfigs: {self.chatGPT_configs}')
+        gu.log(f'加载ChatGPTConfigs: {self.chatGPT_configs}')
         self.openai_configs = cfg
         # 会话缓存
         self.session_dict = {}
@@ -39,9 +40,10 @@ class ProviderOpenAIOfficial(Provider):
             db1 = dbConn()
             for session in db1.get_all_session():
                 self.session_dict[session[0]] = json.loads(session[1])['data']
-            print("[System] 历史记录读取成功喵")
+            gu.log("历史记录读取成功喵")
         except BaseException as e:
-            print("[System] 历史记录读取失败: " + str(e))
+            gu.log("历史记录读取失败喵", level=gu.LEVEL_ERROR)
+
 
         # 读取统计信息
         if not os.path.exists(abs_path+"configs/stat"):
@@ -118,9 +120,8 @@ class ProviderOpenAIOfficial(Provider):
                 )
                 break
             except Exception as e:
-                print(e)
                 if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(e) or 'No API key provided' in str(e) or 'Incorrect API key provided' in str(e):
-                    print("[System] 当前Key已超额或者不正常,正在切换")
+                    gu.log("当前Key已超额或者不正常,正在切换", level=gu.LEVEL_WARNING)
                     self.key_stat[openai.api_key]['exceed'] = True
                     self.save_key_record()
 
@@ -130,10 +131,12 @@ class ProviderOpenAIOfficial(Provider):
                         raise e
                     else:
                         break
-                if 'maximum context length' in str(e):
-                    print("token超限, 清空对应缓存")
+                elif 'maximum context length' in str(e):
+                    gu.log("token超限, 清空对应缓存")
                     self.session_dict[session_id] = []
                     cache_data_list, new_record, req = self.wrap(prompt, session_id)
+                else:
+                    gu.log(str(e), level=gu.LEVEL_ERROR)
                 retry+=1
         if retry >= 5:
             raise BaseException("连接超时")
@@ -192,13 +195,12 @@ class ProviderOpenAIOfficial(Provider):
                 image_url = []
                 for i in range(img_num):
                     image_url.append(response['data'][i]['url'])
-                print(image_url)
                 break
             except Exception as e:
-                print(e)
+                gu.log(str(e), level=gu.LEVEL_ERROR)
                 if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(
                         e) or 'No API key provided' in str(e) or 'Incorrect API key provided' in str(e):
-                    print("[System] 当前Key已超额或者不正常,正在切换")
+                    gu.log("当前Key已超额或者不正常, 正在切换", level=gu.LEVEL_WARNING)
                     self.key_stat[openai.api_key]['exceed'] = True
                     self.save_key_record()
 
@@ -305,7 +307,7 @@ class ProviderOpenAIOfficial(Provider):
                 if not self.key_stat[key]['exceed']:
                     is_all_exceed = False
                     openai.api_key = key
-                    print(f"[System] 切换到Key: {key}, 已使用token: {self.key_stat[key]['used']}")
+                    gu.log(f"切换到Key: {key}, 已使用token: {self.key_stat[key]['used']}", level=gu.LEVEL_INFO)
                     if len(req) > 0:
                         try:
                             response = openai.ChatCompletion.create(
@@ -314,20 +316,21 @@ class ProviderOpenAIOfficial(Provider):
                             )
                             return response, True
                         except Exception as e:
-                            print(e)
                             if 'You exceeded' in str(e):
-                                print("[System] 当前Key已超额,正在切换")
+                                gu.log("当前Key已超额, 正在切换")
                                 self.key_stat[openai.api_key]['exceed'] = True
                                 self.save_key_record()
                                 time.sleep(1)
                                 continue
+                            else:
+                                gu.log(str(e), level=gu.LEVEL_ERROR)
                     else:
                         return True
             if is_all_exceed:
-                print("[System] 所有Key已超额")
+                gu.log("所有Key已超额", level=gu.LEVEL_CRITICAL)
                 return None, False
             else:
-                print("[System] 在切换key时程序异常。")
+                gu.log("在切换key时程序异常。", level=gu.LEVEL_ERROR)
                 return None, False
                 
     def getConfigs(self):
@@ -375,7 +378,7 @@ class ProviderOpenAIOfficial(Provider):
             try:
                 self.key_stat = json.load(keyfile)
             except Exception as e:
-                print(e)
+                gu.log(str(e), level=gu.LEVEL_ERROR)
                 self.key_stat = {}
             finally:
                 for key in self.key_list:

@@ -2,6 +2,8 @@ from model.provider.provider import Provider
 from EdgeGPT import Chatbot, ConversationStyle
 import json
 import os
+from util import general_utils as gu
+
 
 class ProviderRevEdgeGPT(Provider):
     def __init__(self):
@@ -76,13 +78,12 @@ class ProviderRevEdgeGPT(Provider):
                     reply_msg += f"\n⌈{throttling['numUserMessagesInConversation']}/{throttling['maxNumUserMessagesInConversation']}⌋"
                 break
             except BaseException as e:
-                # raise e
-                print(e)
+                gu.log(str(e), level=gu.LEVEL_WARNING, tag="RevEdgeGPT")
                 err_count += 1
                 if err_count >= retry_count:
                         self.busy = False
                         raise e
-                print("[RevEdgeGPT] 请求出现了一些问题, 正在重试。次数"+str(err_count))
+                gu.log("请求出现了一些问题, 正在重试。次数"+str(err_count), level=gu.LEVEL_WARNING, tag="RevEdgeGPT")
         self.busy = False
         
         # print("[RevEdgeGPT] "+str(reply_msg))
