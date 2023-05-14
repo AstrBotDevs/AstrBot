@@ -7,9 +7,8 @@ import requests
 from model.provider.provider import Provider
 import json
 import util.plugin_util as putil
-import importlib
 import shutil
-
+import importlib
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -33,49 +32,69 @@ class Command:
         except BaseException as e:
             raise e
 
-    def check_command(self, message, role, platform, message_obj):
+    def check_command(self, message, role, platform, message_obj, cached_plugins: dict):
         # 插件
-        try:
-            plugins = self.get_plugin_modules()
-            if plugins != None:
-                # print(f"[DEBUG] 当前加载的插件：{plugins}")
-                for p in plugins:
-                    # print(f"[Debug] 当前缓存的插件：{self.cached_plugins}")
-                    try:
-                        if p in self.cached_plugins:
-                            module = self.cached_plugins[p]["module"]
-                            obj = self.cached_plugins[p]["clsobj"]
-                        else:
-                            module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
-                            cls = putil.get_classes(p, module)
-                            obj = getattr(module, cls[0])()
-                            self.cached_plugins[p] = {
-                                "module": module,
-                                "clsobj": obj
-                            }
-                        hit, res = obj.run(message, role, platform, message_obj)
-                        if hit:
-                            return True, res
-                    except BaseException as e:
-                        print(f"[Debug] 加载{p}插件出现问题，原因{str(e)}")
-        except BaseException as e:
-            print(f"[Debug] 插件加载出现问题，原因: {str(e)}\n已安装插件: {plugins}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。")
+
+        for k, v in cached_plugins.items():
+            try:
+                hit, res = v["clsobj"].run(message, role, platform, message_obj)
+                if hit:
+                    return True, res
+            except BaseException as e:
+                print(f"[Debug] {k}插件加载出现问题，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。")
 
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform)
         
         if self.command_start_with(message, "plugin"):
-            return True, self.plugin_oper(message, role)
+            return True, self.plugin_oper(message, role, cached_plugins)
         
         return False, None
+    
+    def plugin_reload(self, cached_plugins: dict, target: str = None, all: bool = False):
+        plugins = self.get_plugin_modules()
+        fail_rec = ""
+        if plugins != None:
+            for p in plugins:
+                try:
+                    if p not in cached_plugins or p == target or all:
+                        module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
+                        if p in cached_plugins:
+                            module = importlib.reload(module)
+                        cls = putil.get_classes(p, module)
+                        obj = getattr(module, cls[0])()
+                        try:
+                            info = obj.info()
+                            if 'name' not in info or 'desc' not in info or 'version' not in info or 'author' not in info:
+                                fail_rec += f"载入插件{p}失败，原因: 插件信息不完整\n"
+                                continue
+                            if isinstance(info, dict) == False:
+                                fail_rec += f"载入插件{p}失败，原因: 插件信息格式不正确\n"
+                                continue
+                        except BaseException as e:
+                            fail_rec += f"调用插件{p} info失败, 原因: {str(e)}\n"
+                            continue
+                        cached_plugins[p] = {
+                            "module": module,
+                            "clsobj": obj,
+                            "info": info
+                        }  
+                except BaseException as e:
+                    fail_rec += f"加载{p}插件出现问题，原因{str(e)}\n"
+            if fail_rec == "":
+                return True, None
+            else:
+                return False, fail_rec
+        else:
+            return False, "未找到任何插件模块"
     
     '''
     插件指令
     '''
-    def plugin_oper(self, message: str, role: str):
+    def plugin_oper(self, message: str, role: str, cached_plugins: dict):
         l = message.split(" ")
         if len(l) < 2:
-            return True, "【插件指令】示例：\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload\n查看插件列表\nplugin l", "plugin"
+            return True, "\n=====插件指令面板=====\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n===============", "plugin"
         else:
             ppath = ""
             if os.path.exists("addons/plugins"):
@@ -92,6 +111,8 @@ class Command:
                     d = l[2].split("/")[-1]
                     # 创建文件夹
                     plugin_path = os.path.join(ppath, d)
+                    if os.path.exists(plugin_path):
+                        shutil.rmtree(plugin_path)
                     os.mkdir(plugin_path)
                     Repo.clone_from(l[2],to_path=plugin_path,branch='master')
 
@@ -102,8 +123,15 @@ class Command:
                                 mm = os.system(f"pip3 install {line.strip()}")
                                 if mm != 0:
                                     return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
-
-                    return True, "插件拉取成功~", "plugin"
+                    
+                    # 加载没缓存的插件
+                    ok, err = self.plugin_reload(cached_plugins)
+                    if ok:
+                        return True, "插件拉取并载入成功~", "plugin"
+                    else:
+                        # if os.path.exists(plugin_path):
+                        #     shutil.rmtree(plugin_path)
+                        return False, f"插件拉取载入失败。\n跟踪: \n{err}", "plugin"
                 except BaseException as e:
                     return False, f"拉取插件失败，原因: {str(e)}", "plugin"
             elif l[1] == "d":
@@ -112,41 +140,51 @@ class Command:
                 try:
                     # 删除文件夹
                     shutil.rmtree(os.path.join(ppath, l[2]))
-                    if l[2] in self.cached_plugins:
-                        del self.cached_plugins[l[2]]
+                    if l[2] in cached_plugins:
+                        del cached_plugins[l[2]]
                     return True, "插件卸载成功~", "plugin"
                 except BaseException as e:
                     return False, f"卸载插件失败，原因: {str(e)}", "plugin"
+            elif l[1] == "u":
+                plugin_path = os.path.join(ppath, l[2])
+                try:
+                    repo = Repo(path = plugin_path)
+                    repo.remotes.origin.pull()
+                    ok, err = self.plugin_reload(cached_plugins, target=l[2])
+                    if ok:
+                        return True, "\n更新插件成功!!", "plugin"
+                    else:
+                        return False, "更新插件成功，但是重载插件失败。\n问题跟踪: \n"+err, "plugin"
+                except BaseException as e:
+                    return False, "更新插件失败, 请使用plugin i指令覆盖安装", "plugin"
+
             elif l[1] == "l":
                 try:
-                    return True, "已安装的插件: \n" + "\n".join(os.listdir(ppath)) + "\n使用plugin v 插件名 查看插件帮助（如果有的话）", "plugin"
+                    plugin_list_info = "\n".join([f"{k}: \n名称: {v['info']['name']}\n简介: {v['info']['desc']}\n版本: {v['info']['version']}\n作者: {v['info']['author']}\n" for k, v in cached_plugins.items()])
+                    return True, "\n=====已激活插件列表=====\n" + plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n=================", "plugin"
                 except BaseException as e:
                     return False, f"获取插件列表失败，原因: {str(e)}", "plugin"
             elif l[1] == "v":
                 try:
-                    if l[2] in os.listdir(ppath):
-                        # 获取Readme
-                        if os.path.exists(os.path.join(ppath, l[2], "README.md")):
-                            with open(os.path.join(ppath, l[2], "README.md"), "r", encoding="utf-8") as f:
-                                readme = f.read()
-                        else:
-                            readme = "暂无帮助（未找到此插件的README.md）"
-                        return True, readme, "plugin"
+                    if l[2] in cached_plugins:
+                        info = cached_plugins[l[2]]["info"]
+                        res = f"\n=====插件信息=====\n名称: {info['name']}\n{info['desc']}\n版本: {info['version']}作者: {info['author']}\n\n帮助:\n{info['help']}"
+                        return True, res, "plugin"
+                    else:
+                        return False, "未找到该插件", "plugin"
                 except BaseException as e:
-                    return False, f"获取插件版本失败，原因: {str(e)}", "plugin"
+                    return False, f"获取插件信息失败，原因: {str(e)}", "plugin"
             elif l[1] == "reload":
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限重载插件", "plugin"
                 try:
-                    for pm in self.cached_plugins:
-                        module = self.cached_plugins[pm]["module"]
-                        cls = putil.get_classes(pm, module)
-                        obj = getattr(module, cls[0])()
-                        self.cached_plugins[pm] = {
-                            "module": module,
-                            "clsobj": obj
-                        }
-                    return True, "插件重载成功！", "plugin"
+                    ok, err = self.plugin_reload(cached_plugins, all = True)
+                    if ok:
+                        return True, "\n重载插件成功~", "plugin"
+                    else:
+                        # if os.path.exists(plugin_path):
+                        #     shutil.rmtree(plugin_path)
+                        return False, f"插件重载失败。\n跟踪: \n{err}", "plugin"
                 except BaseException as e:
                     return False, f"插件重载失败，原因: {str(e)}", "plugin"
 

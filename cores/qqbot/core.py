@@ -21,6 +21,7 @@ from nakuru import (
     FriendMessage
 )
 from nakuru.entities.components import Plain,At
+from model.command.command import Command
 
 # QQBotClient实例
 client = ''
@@ -98,6 +99,10 @@ nick_qq = "ai"
 
 bing_cache_loop = None
 
+# 插件
+cached_plugins = {}
+
+
 def gocq_runner():
     global gocq_app
     ok = False
@@ -118,6 +123,7 @@ threading.Thread(target=gocq_runner, daemon=True).start()
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
     thread.start()
+
 
 # 写入统计信息
 def toggle_count(at: bool, message):
@@ -181,7 +187,7 @@ def upload():
 def initBot(cfg, prov):
     global chatgpt, provider, rev_chatgpt, baidu_judge, rev_edgegpt, chosen_provider
     global reply_prefix, gpt_config, config, uniqueSession, frequency_count, frequency_time,announcement, direct_message_mode, version
-    global command_openai_official, command_rev_chatgpt, command_rev_edgegpt,reply_prefix, keywords
+    global command_openai_official, command_rev_chatgpt, command_rev_edgegpt,reply_prefix, keywords, cached_plugins
     provider = prov
     config = cfg
     if 'reply_prefix' in cfg:
@@ -304,6 +310,15 @@ def initBot(cfg, prov):
 
     thread_inst = None
 
+    print("--------------------加载插件--------------------")
+    # 加载插件
+    _command = Command(None)
+    ok, err = _command.plugin_reload(cached_plugins)
+    if ok:
+        print("加载插件完成")
+    else:
+        print(err)
+
     print("--------------------加载平台--------------------")
     # GOCQ
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
@@ -423,7 +438,7 @@ def oper_msg(message,
     role = "member" # 角色
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
-    global admin_qq
+    global admin_qq, cached_plugins
 
     if platform == PLATFORM_QQCHAN:
         print("[QQCHAN-BOT] 接收到消息："+ str(message.content))
@@ -445,7 +460,7 @@ def oper_msg(message,
     
     # 检查发言频率
     if not check_frequency(user_id):
-        qqchannel_bot.send_qq_msg(message, f'{user_name}的发言超过频率限制(╯▔皿▔)╯。\n{frequency_time}秒内只能提问{frequency_count}次。')
+        send_message(platform, message, f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。', msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
         return
 
     if platform == PLATFORM_QQCHAN:
@@ -542,7 +557,7 @@ def oper_msg(message,
     chatgpt_res = ""
 
     if chosen_provider == OPENAI_OFFICIAL: 
-        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform, message_obj=message)
+        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform, message_obj=message, cached_plugins=cached_plugins)
         # hit: 是否触发了指令
         if not hit:
             # 请求ChatGPT获得结果
@@ -555,7 +570,7 @@ def oper_msg(message,
                 send_message(platform, message, f"OpenAI API错误, 原因: {str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_CHATGPT:
-        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform, message=message)
+        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform, message=message, cached_plugins=cached_plugins)
         if not hit:
             try:
                 chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
@@ -571,7 +586,7 @@ def oper_msg(message,
                 bing_cache_loop = gocq_loop
             elif platform == PLATFORM_QQCHAN:
                 bing_cache_loop = qqchan_loop
-        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, platform=platform, message_obj=message)
+        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, platform=platform, message_obj=message, cached_plugins=cached_plugins)
         if not hit:
             try:
                 while rev_edgegpt.is_busy():

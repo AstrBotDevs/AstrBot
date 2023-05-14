@@ -10,8 +10,9 @@ class CommandRevChatGPT(Command):
                       message: str, 
                       role: str, 
                       platform: str,
-                      message_obj):
-        hit, res = super().check_command(message, role, platform, message_obj=message_obj)
+                      message_obj,
+                      cached_plugins: dict):
+        hit, res = super().check_command(message, role, platform, message_obj=message_obj, cached_plugins=cached_plugins)
         if hit:
             return True, res
         if self.command_start_with(message, "help", "帮助"):

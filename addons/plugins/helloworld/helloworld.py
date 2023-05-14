@@ -27,8 +27,9 @@ class HelloWorldPlugin:
             """
             QQ平台指令处理逻辑
             """
+            img_url = "https://gchat.qpic.cn/gchatpic_new/905617992/720871955-2246763964-C6EE1A52CC668EC982453065C4FA8747/0?term=2&amp;is_origin=0"
             if message == "helloworld":
-                return True, tuple([True, [Plain("Hello World!!")], "helloworld"])
+                return True, tuple([True, [Plain("Hello World!!"), Image.fromURL(url=img_url)], "helloworld"])
             else:
                 return False, None
         elif platform == "qqchan":
@@ -39,6 +40,24 @@ class HelloWorldPlugin:
                 return True, tuple([True, "Hello World!!", "helloworld"])
             else:
                 return False, None
+    """
+    帮助函数，当用户输入 plugin v 插件名称 时，会调用此函数，返回帮助信息
+    返回参数要求(必填)：dict{
+        "name": str, # 插件名称
+        "desc": str, # 插件简短描述
+        "help": str, # 插件帮助信息
+        "version": str, # 插件版本
+        "author": str, # 插件作者
+    }
+    """        
+    def info(self):
+        return {
+            "name": "helloworld",
+            "desc": "测试插件",
+            "help": "测试插件, 回复helloworld即可触发",
+            "version": "v1.0.1 beta",
+            "author": "Soulter"
+        }
 
 
         # 热知识：检测消息开头指令，使用以下方法
