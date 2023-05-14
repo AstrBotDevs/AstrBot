@@ -43,7 +43,7 @@ class Command:
                 if hit:
                     return True, res
             except BaseException as e:
-                gu.log("{k}插件加载出现问题，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                gu.log(f"{k}插件加载出现问题，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
 
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform)

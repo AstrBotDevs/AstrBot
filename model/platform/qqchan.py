@@ -16,7 +16,7 @@ class QQChan():
         self.client.run(appid=appid, token=token)
 
     def send_qq_msg(self, message, res, image_mode=False, msg_ref = None):
-        gu.log("回复QQ频道消息: "+str(res), level=gu.LEVEL_INFO, tag="QQ频道")
+        gu.log("回复QQ频道消息: "+str(res), level=gu.LEVEL_INFO, tag="QQ频道", max_len=30)
 
         if not image_mode:
             try:

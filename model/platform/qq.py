@@ -12,7 +12,7 @@ class QQ:
         """
          res可以是一个数组，也就是gocq的消息链.
         """
-        gu.log("回复QQ消息: "+str(res), level=gu.LEVEL_INFO, tag="QQ")
+        gu.log("回复QQ消息: "+str(res), level=gu.LEVEL_INFO, tag="QQ", max_len=30)
 
         if isinstance(res, list) and len(res) > 0:
             await self.client.sendGroupMessage(source.group_id, res)
