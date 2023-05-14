@@ -6,7 +6,7 @@ import re
 import asyncio
 import requests
 from cores.qqbot.personality import personalities
-
+from util import general_utils as gu
 
 class QQChan():
 
@@ -16,10 +16,8 @@ class QQChan():
         self.client.run(appid=appid, token=token)
 
     def send_qq_msg(self, message, res, image_mode=False, msg_ref = None):
-        _t = str(res)
-        if len(_t) > 20:
-            _t = _t[:20]+"..."
-        print("[QQCHAN-BOT] 回复QQ频道消息: "+_t)
+        gu.log("回复QQ频道消息: "+str(res), level=gu.LEVEL_INFO, tag="QQ频道")
+
         if not image_mode:
             try:
                 if msg_ref is not None:

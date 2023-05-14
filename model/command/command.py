@@ -272,7 +272,6 @@ class Command:
         
         del_mode = False
         if l[1] == "d":
-            print("删除关键词: "+l[2])
             del_mode = True    
 
         try:
@@ -291,7 +290,6 @@ class Command:
                     return False, "该关键词不存在", "keyword"
                 keyword = {l[1]: l[2]}
             with open("keyword.json", "w", encoding="utf-8") as f:
-                print("设置指令: "+l[1]+" -> "+l[2])
                 json.dump(keyword, f, ensure_ascii=False, indent=4)
                 f.flush()
             if del_mode:

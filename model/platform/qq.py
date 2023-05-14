@@ -1,5 +1,5 @@
 from nakuru.entities.components import Plain, At, Image
-
+from util import general_utils as gu
 class QQ:
     def run_bot(self, gocq):
         self.client = gocq
@@ -12,12 +12,7 @@ class QQ:
         """
          res可以是一个数组，也就是gocq的消息链.
         """
-
-        # print(res)
-        _t = str(res)
-        if len(_t) > 20:
-            _t = _t[:20]+"..."
-        print("[QQ-BOT] 回复QQ消息: "+_t)
+        gu.log("回复QQ消息: "+str(res), level=gu.LEVEL_INFO, tag="QQ")
 
         if isinstance(res, list) and len(res) > 0:
             await self.client.sendGroupMessage(source.group_id, res)

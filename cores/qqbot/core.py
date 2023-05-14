@@ -22,6 +22,7 @@ from nakuru import (
 )
 from nakuru.entities.components import Plain,At
 from model.command.command import Command
+from util import general_utils as gu
 
 # QQBotClient实例
 client = ''
@@ -115,7 +116,7 @@ def gocq_runner():
             )
             ok = True
         except BaseException as e:
-            print("[System-err] 连接到go-cqhttp异常, 5秒后重试。"+str(e))
+            gu.log("连接到go-cqhttp异常, 5秒后重试。"+str(e), gu.LEVEL_ERROR)
 
 threading.Thread(target=gocq_runner, daemon=True).start()
 
@@ -169,7 +170,6 @@ def upload():
             d = json.dumps(d).encode("utf-8")
             res = requests.put(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record/{object_id}', headers = headers, data = d)
             if json.loads(res.text)['code'] == 1:
-                print("[System] New User.")
                 res = requests.post(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record', headers = headers, data = d)
                 object_id = json.loads(res.text)['objectId']
                 object_id_file = open(abs_path+"configs/object_id", 'w+', encoding='utf-8')
@@ -194,9 +194,9 @@ def initBot(cfg, prov):
         reply_prefix = cfg['reply_prefix']
 
     # 语言模型提供商
-    print("--------------------加载语言模型--------------------")
+    gu.log("--------加载语言模型--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     if REV_CHATGPT in prov:
-        print("- 逆向ChatGPT库 -")
+        gu.log("- 逆向ChatGPT库 -", gu.LEVEL_INFO)
         if cfg['rev_ChatGPT']['enable']:
             if 'account' in cfg['rev_ChatGPT']:
                 from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
@@ -208,7 +208,8 @@ def initBot(cfg, prov):
                 input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
         
     if REV_EDGEGPT in prov:
-        print("- New Bing -")
+        gu.log("- New Bing -", gu.LEVEL_INFO)
+
         if not os.path.exists('./cookies.json'):
             input("[System-err] 导入Bing模型时发生错误, 没有找到cookies文件或者cookies文件放置位置错误。windows启动器启动的用户请把cookies.json文件放到和启动器相同的目录下。\n如何获取请看https://github.com/Soulter/QQChannelChatGPT仓库介绍。")
         else:
@@ -219,7 +220,7 @@ def initBot(cfg, prov):
                 command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
                 chosen_provider = REV_EDGEGPT
     if OPENAI_OFFICIAL in prov:
-        print("- OpenAI ChatGPT官方API -")
+        gu.log("- OpenAI官方 -", gu.LEVEL_INFO)
         if cfg['openai']['key'] is not None:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial
             from model.command.command_openai_official import CommandOpenAIOfficial
@@ -227,7 +228,7 @@ def initBot(cfg, prov):
             command_openai_official = CommandOpenAIOfficial(chatgpt)
             chosen_provider = OPENAI_OFFICIAL
 
-    print("--------------------加载个性化配置--------------------")
+    gu.log("--------加载个性化配置--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 得到关键词
     if os.path.exists("keyword.json"):
         with open("keyword.json", 'r', encoding='utf-8') as f:
@@ -244,10 +245,9 @@ def initBot(cfg, prov):
     if 'baidu_aip' in cfg and 'enable' in cfg['baidu_aip'] and cfg['baidu_aip']['enable']:
         try: 
             baidu_judge = BaiduJudge(cfg['baidu_aip'])
-            print("[System] 百度内容审核初始化成功")
+            gu.log("百度内容审核初始化成功", gu.LEVEL_INFO)
         except BaseException as e:
-            input("[System] 百度内容审核初始化失败: " + str(e))
-            exit()
+            gu.log("百度内容审核初始化失败", gu.LEVEL_ERROR)
         
     # 统计上传
     if is_upload_log:
@@ -265,11 +265,11 @@ def initBot(cfg, prov):
     # 得到私聊模式配置
     if 'direct_message_mode' in cfg:
         direct_message_mode = cfg['direct_message_mode']
-        print("[System] 私聊功能: "+str(direct_message_mode))
+        gu.log("私聊功能: "+str(direct_message_mode), gu.LEVEL_INFO)
 
     # 得到发言频率配置
     if 'limit' in cfg:
-        print('[System] 发言频率配置: '+str(cfg['limit']))
+        gu.log("发言频率配置: "+str(cfg['limit']), gu.LEVEL_INFO)
         if 'count' in cfg['limit']:
             frequency_count = cfg['limit']['count']
         if 'time' in cfg['limit']:
@@ -277,26 +277,27 @@ def initBot(cfg, prov):
     
     # 得到公告配置
     if 'notice' in cfg:
-        print('[System] 公告配置: '+cfg['notice'])
+        gu.log("公告配置: "+cfg['notice'], gu.LEVEL_INFO)
         announcement += cfg['notice']
     try:
         if 'uniqueSessionMode' in cfg and cfg['uniqueSessionMode']:
             uniqueSession = True
         else:
             uniqueSession = False
-        print("[System] 独立会话: " + str(uniqueSession))
+        gu.log("独立会话: "+str(uniqueSession), gu.LEVEL_INFO)
         if 'dump_history_interval' in cfg:
-            print("[System] 历史记录转储时间周期: " + cfg['dump_history_interval'] + "分钟")
+            gu.log("历史记录保存间隔: "+str(cfg['dump_history_interval']), gu.LEVEL_INFO)
     except BaseException:
         pass
 
-    print(f"[System] QQ开放平台AppID: {cfg['qqbot']['appid']} 令牌: {cfg['qqbot']['token']}")
+    
+    gu.log(f"QQ开放平台AppID: {cfg['qqbot']['appid']} 令牌: {cfg['qqbot']['token']}")
 
-    print("\n[System] 如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue说明问题！或者添加QQ：905617992")
-    print("[System] 请给 https://github.com/Soulter/QQChannelChatGPT 点个star!")
+    gu.log("\n如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue说明问题！或者添加QQ：905617992", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
 
     if chosen_provider is None:
-        print("[System-Warning] 检测到没有启动任何一个语言模型。请至少在配置文件中启用一个语言模型。")
+        gu.log("检测到没有启动任何一个语言模型。请至少在配置文件中启用一个语言模型。", gu.LEVEL_CRITICAL)
 
     # 得到指令设置(cmd_config.json)
     if os.path.exists("cmd_config.json"):
@@ -310,29 +311,29 @@ def initBot(cfg, prov):
 
     thread_inst = None
 
-    print("--------------------加载插件--------------------")
+    gu.log("--------加载插件--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 加载插件
     _command = Command(None)
     ok, err = _command.plugin_reload(cached_plugins)
     if ok:
-        print("加载插件完成")
+        gu.log("加载插件完成", gu.LEVEL_INFO)
     else:
-        print(err)
+        gu.log(err, gu.LEVEL_ERROR)
 
-    print("--------------------加载平台--------------------")
+    gu.log("--------加载平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # GOCQ
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
-        print("- 启用QQ机器人 -")
+        gu.log("启用QQ机器人", gu.LEVEL_INFO)
         if os.path.exists("cmd_config.json"):
             with open("cmd_config.json", 'r', encoding='utf-8') as f:
                 cmd_config = json.load(f)
                 global admin_qq
                 if "admin_qq" in cmd_config:
                     admin_qq = cmd_config['admin_qq']
-                    print("[System] 管理者QQ号: " + admin_qq)
+                    gu.log("管理者QQ号: " + admin_qq, gu.LEVEL_INFO)
                 else:
                     admin_qq = input("[System] 请输入管理者QQ号(管理者QQ号才能使用update/plugin等指令): ")
-                    print("[System] 管理者QQ号设置为: " + admin_qq)
+                    gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
                     cmd_config['admin_qq'] = admin_qq
                     with open("cmd_config.json", 'w', encoding='utf-8') as f:
                         json.dump(cmd_config, f, indent=4)
@@ -345,7 +346,7 @@ def initBot(cfg, prov):
 
     # QQ频道
     if 'qqbot' in cfg and cfg['qqbot']['enable']:
-        print("- 启用QQ频道机器人 -")
+        gu.log("启用QQ频道机器人", gu.LEVEL_INFO)
         global qqchannel_bot, qqchan_loop
         qqchannel_bot = QQChan()
         qqchan_loop = asyncio.new_event_loop()
@@ -441,15 +442,15 @@ def oper_msg(message,
     global admin_qq, cached_plugins
 
     if platform == PLATFORM_QQCHAN:
-        print("[QQCHAN-BOT] 接收到消息："+ str(message.content))
+        gu.log(f"接收到消息：{message.content}", gu.LEVEL_INFO, tag="QQ频道")
         user_id = message.author.id
         user_name = message.author.username
         global qqchan_loop
     if platform == PLATFORM_GOCQ:
         if isinstance(message.message[0], Plain):
-            print("[GOCQ-BOT] 接收到消息："+ str(message.message[0].text))
+            gu.log(f"接收到消息：{message.message[0].text}", gu.LEVEL_INFO, tag="QQ")
         elif isinstance(message.message[0], At):
-            print("[GOCQ-BOT] 接收到消息："+ str(message.message[1].text))
+            gu.log(f"接收到消息：{message.message[1].text}", gu.LEVEL_INFO, tag="QQ")
             
         user_id = message.user_id
         user_name = message.user_id
@@ -478,7 +479,7 @@ def oper_msg(message,
                 session_id = message.channel_id
             # 得到身份
             if "2" in message.member.roles or "4" in message.member.roles or "5" in message.member.roles:
-                print("[QQCHAN-BOT] 检测到管理员身份")
+                gu.log(f"检测到管理员身份", gu.LEVEL_INFO, tag="QQ频道")
                 role = "admin"
             else:
                 role = "member"
@@ -501,7 +502,7 @@ def oper_msg(message,
             session_id = message.user_id
         role = "member"
         if str(message.sender.user_id) == admin_qq:
-            print("[GOCQ-BOT] 检测到管理员身份")
+            gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="QQ")
             role = "admin"
 
     if qq_msg == "":
@@ -566,7 +567,7 @@ def oper_msg(message,
                 if OPENAI_OFFICIAL in reply_prefix:
                     chatgpt_res = reply_prefix[OPENAI_OFFICIAL] + chatgpt_res
             except (BaseException) as e:
-                print("[System-Err] OpenAI API请求错误, 原因: "+str(e))
+                gu.log("OpenAI API请求错误, 原因: "+str(e), gu.LEVEL_ERROR)
                 send_message(platform, message, f"OpenAI API错误, 原因: {str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_CHATGPT:
@@ -577,7 +578,7 @@ def oper_msg(message,
                 if REV_CHATGPT in reply_prefix:
                     chatgpt_res = reply_prefix[REV_CHATGPT] + chatgpt_res
             except BaseException as e:
-                print("[System-Err] RevChatGPT请求错误, 原因: "+str(e))
+                gu.log("逆向ChatGPT请求错误, 原因: "+str(e), gu.LEVEL_ERROR)
                 send_message(platform, message, f"RevChatGPT错误, 原因: \n{str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_EDGEGPT:
@@ -605,7 +606,7 @@ def oper_msg(message,
                 if REV_EDGEGPT in reply_prefix:
                     chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
             except BaseException as e:
-                print("[System-Err] Rev NewBing API错误。原因如下:\n"+str(e))
+                gu.log("NewBing请求错误, 原因: "+str(e), gu.LEVEL_ERROR)
                 send_message(platform, message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     # 切换回原来的语言模型
@@ -666,7 +667,7 @@ def oper_msg(message,
     try:
         send_message(platform, message, chatgpt_res, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
     except BaseException as e:
-        print("回复消息错误: \n"+str(e))
+        gu.log("回复消息错误: \n"+str(e), gu.LEVEL_ERROR)
 
 '''
 获取统计信息
