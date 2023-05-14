@@ -40,10 +40,13 @@ def log(
         level: str = "INFO",
         tag: str = "System",
         fg: str = None,
-        bg: str = None):
+        bg: str = None,
+        max_len: int = 20):
     """
     日志记录函数
     """
+    if len(msg) > max_len:
+        msg = msg[:max_len] + "..."
     now = datetime.datetime.now().strftime("%m-%d %H:%M:%S")
     pre = f"[{now}] [{level}] [{tag}]: {msg}"
     if level == "INFO":
