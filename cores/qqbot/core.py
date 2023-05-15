@@ -92,7 +92,11 @@ qqchan_loop = None
 # QQ机器人
 gocq_bot = None
 PLATFORM_GOCQ = 'gocq'
-gocq_app = None
+gocq_app = CQHTTP(
+    host="127.0.0.1",
+    port=6700,
+    http_port=5700,
+)
 admin_qq = "123456"
 
 gocq_loop = None
@@ -102,23 +106,6 @@ bing_cache_loop = None
 
 # 插件
 cached_plugins = {}
-
-
-def gocq_runner():
-    global gocq_app
-    ok = False
-    while not ok:
-        try:
-            gocq_app = CQHTTP(
-                host="127.0.0.1",
-                port=6700,
-                http_port=5700,
-            )
-            ok = True
-        except BaseException as e:
-            gu.log("连接到go-cqhttp异常, 5秒后重试。"+str(e), gu.LEVEL_ERROR)
-
-threading.Thread(target=gocq_runner, daemon=True).start()
 
 
 def new_sub_thread(func, args=()):
@@ -323,7 +310,8 @@ def initBot(cfg, prov):
     gu.log("--------加载平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # GOCQ
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
-        gu.log("启用QQ机器人", gu.LEVEL_INFO)
+        gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
+            
         if os.path.exists("cmd_config.json"):
             with open("cmd_config.json", 'r', encoding='utf-8') as f:
                 cmd_config = json.load(f)
@@ -346,7 +334,7 @@ def initBot(cfg, prov):
 
     # QQ频道
     if 'qqbot' in cfg and cfg['qqbot']['enable']:
-        gu.log("启用QQ频道机器人", gu.LEVEL_INFO)
+        gu.log("- 启用QQ频道机器人 -", gu.LEVEL_INFO)
         global qqchannel_bot, qqchan_loop
         qqchannel_bot = QQChan()
         qqchan_loop = asyncio.new_event_loop()
@@ -372,6 +360,16 @@ def run_qqchan_bot(cfg, loop, qqchannel_bot):
 
 def run_gocq_bot(loop, gocq_bot, gocq_app):
     asyncio.set_event_loop(loop)
+    gu.log("正在检查本地GO-CQHTTP连接...端口5700, 6700", tag="QQ")
+    while True:
+        if not gu.port_checker(5700) or not gu.port_checker(6700):
+            gu.log("与GO-CQHTTP通信失败, 请检查GO-CQHTTP是否启动并正确配置。5秒后自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
+            time.sleep(5)
+        else:
+            gu.log("检查完毕，未发现问题。", tag="QQ")
+            break
+
+
     global gocq_client
     gocq_client = gocqClient()
     try:

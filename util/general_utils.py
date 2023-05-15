@@ -1,4 +1,6 @@
 import datetime
+import socket
+
 FG_COLORS = {
     "black": "30",
     "red": "31",
@@ -72,3 +74,14 @@ def log(
     
     print(f"\033[{fg};{bg}m{pre}\033[0m")
 
+
+def port_checker(port: int, host: str = "localhost"):
+    sk = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    sk.settimeout(1)
+    try:
+        sk.connect((host, port))
+        sk.close()
+        return True
+    except Exception:
+        sk.close()
+        return False
