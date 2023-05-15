@@ -7,7 +7,7 @@ def get_classes(p_name, arg):
     clsmembers = inspect.getmembers(arg, inspect.isclass)
     for (name, _) in clsmembers:
         # print(name, p_name)
-        if p_name.lower() == name.lower().replace("plugin", ""):
+        if p_name.lower() == name.lower()[:-6]:
             classes.append(name)
             break
     return classes
