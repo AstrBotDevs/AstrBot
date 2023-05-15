@@ -66,9 +66,7 @@ class QQ:
         提供给插件的发送QQ消息接口, 不用在外部await。
         参数说明：第一个参数可以是消息对象，也可以是QQ群号。第二个参数是消息内容（消息内容可以是消息链列表，也可以是纯文字信息）。
         '''
-        if isinstance(to, int):
-
         try:
-            asyncio.run_coroutine_threadsafe(self.send_qq_msg(message_obj, res), self.gocq_loop).result()
+            asyncio.run_coroutine_threadsafe(self.send_qq_msg(to, res), self.gocq_loop).result()
         except BaseException as e:
             raise e
