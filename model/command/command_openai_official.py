@@ -1,6 +1,7 @@
 from model.command.command import Command
 from model.provider.provider_openai_official import ProviderOpenAIOfficial
 from cores.qqbot.personality import personalities
+from model.platform.qq import QQ
 
 class CommandOpenAIOfficial(Command):
     def __init__(self, provider: ProviderOpenAIOfficial):
@@ -14,8 +15,9 @@ class CommandOpenAIOfficial(Command):
                       role: str, 
                       platform: str,
                       message_obj,
-                      cached_plugins: dict):
-        hit, res = super().check_command(message, role, platform, message_obj=message_obj, cached_plugins=cached_plugins)
+                      cached_plugins: dict,
+                      qq_platform: QQ):
+        hit, res = super().check_command(message, role, platform, message_obj=message_obj, cached_plugins=cached_plugins, qq_platform=qq_platform)
         if hit:
             return True, res
         if self.command_start_with(message, "reset", "重置"):

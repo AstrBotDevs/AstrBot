@@ -1,5 +1,6 @@
 from model.command.command import Command
 from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
+from model.platform.qq import QQ
 
 class CommandRevChatGPT(Command):
     def __init__(self, provider: ProviderRevChatGPT):
@@ -11,8 +12,9 @@ class CommandRevChatGPT(Command):
                       role: str, 
                       platform: str,
                       message_obj,
-                      cached_plugins: dict):
-        hit, res = super().check_command(message, role, platform, message_obj=message_obj, cached_plugins=cached_plugins)
+                      cached_plugins: dict,
+                      qq_platform: QQ):
+        hit, res = super().check_command(message, role, platform, message_obj=message_obj, cached_plugins=cached_plugins, qq_platform=qq_platform)
         if hit:
             return True, res
         if self.command_start_with(message, "help", "帮助"):

@@ -309,6 +309,7 @@ def initBot(cfg, prov):
 
     gu.log("--------加载平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # GOCQ
+    global gocq_bot
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
         gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
             
@@ -326,11 +327,14 @@ def initBot(cfg, prov):
                     with open("cmd_config.json", 'w', encoding='utf-8') as f:
                         json.dump(cmd_config, f, indent=4)
                         f.flush()
-        global gocq_app, gocq_bot, gocq_loop
-        gocq_bot = QQ()
+        global gocq_app, gocq_loop
         gocq_loop = asyncio.new_event_loop()
+        gocq_bot = QQ(True, gocq_loop)
         thread_inst = threading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=False)
         thread_inst.start()
+    else:
+        gocq_bot = QQ(False)
+
 
     # QQ频道
     if 'qqbot' in cfg and cfg['qqbot']['enable']:
@@ -437,7 +441,7 @@ def oper_msg(message,
     role = "member" # 角色
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
-    global admin_qq, cached_plugins
+    global admin_qq, cached_plugins, gocq_bot
 
     if platform == PLATFORM_QQCHAN:
         gu.log(f"接收到消息：{message.content}", gu.LEVEL_INFO, tag="QQ频道")
@@ -556,7 +560,7 @@ def oper_msg(message,
     chatgpt_res = ""
 
     if chosen_provider == OPENAI_OFFICIAL: 
-        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform, message_obj=message, cached_plugins=cached_plugins)
+        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
         # hit: 是否触发了指令
         if not hit:
             # 请求ChatGPT获得结果
@@ -569,7 +573,7 @@ def oper_msg(message,
                 send_message(platform, message, f"OpenAI API错误, 原因: {str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_CHATGPT:
-        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform, message_obj=message, cached_plugins=cached_plugins)
+        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
         if not hit:
             try:
                 chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
@@ -585,7 +589,7 @@ def oper_msg(message,
                 bing_cache_loop = gocq_loop
             elif platform == PLATFORM_QQCHAN:
                 bing_cache_loop = qqchan_loop
-        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, platform=platform, message_obj=message, cached_plugins=cached_plugins)
+        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
         if not hit:
             try:
                 while rev_edgegpt.is_busy():

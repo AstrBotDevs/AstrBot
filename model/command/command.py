@@ -10,7 +10,7 @@ import util.plugin_util as putil
 import shutil
 import importlib
 from util import general_utils as gu
-
+from model.platform.qq import QQ
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -34,12 +34,12 @@ class Command:
         except BaseException as e:
             raise e
 
-    def check_command(self, message, role, platform, message_obj, cached_plugins: dict):
+    def check_command(self, message, role, platform, message_obj, cached_plugins: dict, qq_platform: QQ):
         # 插件
 
         for k, v in cached_plugins.items():
             try:
-                hit, res = v["clsobj"].run(message, role, platform, message_obj)
+                hit, res = v["clsobj"].run(message, role, platform, message_obj, qq_platform)
                 if hit:
                     return True, res
             except BaseException as e:

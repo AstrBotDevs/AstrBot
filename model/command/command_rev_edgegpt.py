@@ -1,6 +1,8 @@
 from model.command.command import Command
 from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
 import asyncio
+from model.platform.qq import QQ
+
 class CommandRevEdgeGPT(Command):
     def __init__(self, provider: ProviderRevEdgeGPT):
         self.provider = provider
@@ -13,8 +15,9 @@ class CommandRevEdgeGPT(Command):
                       role: str, 
                       platform: str,
                       message_obj,
-                      cached_plugins: dict):
-        hit, res = super().check_command(message, role, platform, message_obj=message_obj, cached_plugins=cached_plugins)
+                      cached_plugins: dict, 
+                      qq_platform: QQ):
+        hit, res = super().check_command(message, role, platform, message_obj=message_obj, cached_plugins=cached_plugins, qq_platform=qq_platform)
         if hit:
             return True, res
         if self.command_start_with(message, "reset"):
