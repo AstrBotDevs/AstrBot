@@ -644,9 +644,9 @@ def oper_msg(message,
 
             if command_result[0]:
                 # 是否是画图指令
-                if isinstance(command_result, list) and len(command_result) == 3 and command_result[2] == 'draw':
+                if isinstance(command_result[1], list) and len(command_result) == 3 and command_result[2] == 'draw':
                     for i in command_result[1]:
-                        send_message(platform, message, i[0], msg_ref=msg_ref, image=i[0], gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                        send_message(platform, message, i, msg_ref=msg_ref, image=i, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
                 else:
                     try:
                         send_message(platform, message, command_result[1], msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
