@@ -102,7 +102,11 @@ _✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群�
 
 部分好用的插件：
 
-`HuggingChat`: https://github.com/Soulter/HuggingChatForQQBot
+- `HuggingChat`: https://github.com/Soulter/HuggingChatForQQBot | HuggingChat模型接入
+
+- `GoodPlugins`: https://github.com/Soulter/goodplugins | 随机动漫图片等等
+
+- `sysstat`: https://github.com/Soulter/sysstatqcbot | 查看系统状态
 
 
 ### 指令功能
