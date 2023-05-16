@@ -59,7 +59,7 @@ class ProviderRevChatGPT(Provider):
         # print("[RevChatGPT] "+str(resp))
         return resp
 
-    def text_chat(self, prompt):
+    def text_chat(self, prompt) -> str:
         res = ''
         err_msg = ''
         cursor = 0
@@ -82,3 +82,9 @@ class ProviderRevChatGPT(Provider):
                 continue
         res = f'回复失败。错误跟踪：{err_msg}'
         return res
+    
+    def is_all_busy(self) -> bool:
+        for revstat in self.rev_chatgpt:
+            if not revstat['busy']:
+                return False
+        return True

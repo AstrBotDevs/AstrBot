@@ -560,6 +560,9 @@ def oper_msg(message,
     chatgpt_res = ""
 
     if chosen_provider == OPENAI_OFFICIAL: 
+        if chatgpt == None:
+            send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            return
         hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
         # hit: 是否触发了指令
         if not hit:
@@ -573,9 +576,14 @@ def oper_msg(message,
                 send_message(platform, message, f"OpenAI API错误, 原因: {str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_CHATGPT:
+        if rev_chatgpt == None:
+            send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            return
         hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
         if not hit:
             try:
+                while rev_chatgpt.is_all_busy():
+                    time.sleep(1)
                 chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
                 if REV_CHATGPT in reply_prefix:
                     chatgpt_res = reply_prefix[REV_CHATGPT] + chatgpt_res
@@ -584,6 +592,9 @@ def oper_msg(message,
                 send_message(platform, message, f"RevChatGPT错误, 原因: \n{str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_EDGEGPT:
+        if rev_edgegpt == None:
+            send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            return
         if bing_cache_loop == None:
             if platform == PLATFORM_GOCQ:
                 bing_cache_loop = gocq_loop
