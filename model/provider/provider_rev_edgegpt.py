@@ -81,6 +81,7 @@ class ProviderRevEdgeGPT(Provider):
                 gu.log(str(e), level=gu.LEVEL_WARNING, tag="RevEdgeGPT")
                 err_count += 1
                 if err_count >= retry_count:
+                        gu.log(r"如果报错, 且您的机器在中国大陆内, 请确保您的电脑已经设置好代理软件(梯子), 并在配置文件设置了系统代理地址。详见https://github.com/Soulter/QQChannelChatGPT/wiki/%E4%BA%8C%E3%80%81%E9%A1%B9%E7%9B%AE%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E9%85%8D%E7%BD%AE", max_len=999)
                         self.busy = False
                         raise e
                 gu.log("请求出现了一些问题, 正在重试。次数"+str(err_count), level=gu.LEVEL_WARNING, tag="RevEdgeGPT")
