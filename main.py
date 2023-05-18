@@ -1,11 +1,10 @@
-import threading
-import asyncio
 import os, sys
 from pip._internal import main as pipmain
+import util.general_utils as gu
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
-def main(loop, event):
+def main():
     try:
         import cores.qqbot.core as qqBot
         import yaml
@@ -13,7 +12,7 @@ def main(loop, event):
         cfg = yaml.safe_load(ymlfile)
     except BaseException as e:
         print(e)
-        input("yaml库未导入或者配置文件格式错误，请退出程序重试。")
+        input("第三方依赖库未完全安装完毕，请退出程序重试。")
         exit()
 
     if 'http_proxy' in cfg:
@@ -22,7 +21,11 @@ def main(loop, event):
         os.environ['HTTPS_PROXY'] = cfg['https_proxy']
 
     provider = privider_chooser(cfg)
-    print('[System] 当前语言模型提供商: ' + str(provider))
+    if len(provider) == 0:
+        gu.log("未开启任何语言模型, 请在configs/config.yaml下选择开启相应语言模型。", gu.LEVEL_CRITICAL)
+        input("按任意键退出...")
+        exit()
+    print('[System] 开启的语言模型: ' + str(provider))
     # 执行Bot
     qqBot.initBot(cfg, provider)
 
@@ -116,7 +119,4 @@ if __name__ == "__main__":
             except BaseException as e:
                 print(e)
                 print(f"[System-err] Replit Web保活服务启动失败:{str(e)}")
-
-    bot_event = threading.Event()
-    loop = asyncio.get_event_loop()
-    main(loop, bot_event)
+    main()

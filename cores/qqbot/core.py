@@ -280,9 +280,6 @@ def initBot(cfg, prov):
     
     gu.log(f"QQ开放平台AppID: {cfg['qqbot']['appid']} 令牌: {cfg['qqbot']['token']}")
 
-    gu.log("\n如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue说明问题！或者添加QQ：905617992", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-
     if chosen_provider is None:
         gu.log("检测到没有启动任何一个语言模型。请至少在配置文件中启用一个语言模型。", gu.LEVEL_CRITICAL)
 
@@ -335,6 +332,9 @@ def initBot(cfg, prov):
     else:
         gocq_bot = QQ(False)
 
+    gu.log("机器人部署教程: https://github.com/Soulter/QQChannelChatGPT/wiki/", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue说明问题！", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
 
     # QQ频道
     if 'qqbot' in cfg and cfg['qqbot']['enable']:
