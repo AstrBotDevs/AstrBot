@@ -12,7 +12,7 @@ _✨教程：https://github.com/Soulter/QQChannelChatGPT/wiki ✨_
  
 _✨插件开发教程：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6 ✨_
 
-_✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）✨_
+_✨欢迎体验（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）✨_
 
 <!-- <img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img> -->
 
@@ -25,7 +25,7 @@ _✨欢迎体验😊（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群�
 - 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
 - 热更新
 - 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
-- 更强大的Windows启动器，环境配置自动搞定。链接：https://github.com/Soulter/QQChatGPTLauncher/releases/latest
+- Windows启动器。链接：https://github.com/Soulter/QQChatGPTLauncher/releases/latest
 
 支持的AI语言模型（请在`configs/config.yaml`下配置）：
 - 逆向ChatGPT库
