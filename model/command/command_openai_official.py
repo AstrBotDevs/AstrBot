@@ -189,6 +189,10 @@ class CommandOpenAIOfficial(Command):
                 return True, f"自定义人格已设置。 \n人格信息: {ps}", "set"
             
     def draw(self, message):
+        if message.startswith("/画"):
+            message = message[2:]
+        elif message.startswith("画"):
+            message = message[1:]
         try:
             # 画图模式传回3个参数
             img_url = self.provider.image_chat(message)
