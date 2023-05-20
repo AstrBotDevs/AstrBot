@@ -18,7 +18,8 @@ from nakuru import (
     CQHTTP,
     GroupMessage,
     GroupMemberIncrease,
-    FriendMessage
+    FriendMessage,
+    GuildMessage
 )
 from nakuru.entities.components import Plain,At
 from model.command.command import Command
@@ -313,17 +314,32 @@ def initBot(cfg, prov):
         if os.path.exists("cmd_config.json"):
             with open("cmd_config.json", 'r', encoding='utf-8') as f:
                 cmd_config = json.load(f)
-                global admin_qq
+                global admin_qq, admin_qqchan
                 if "admin_qq" in cmd_config:
                     admin_qq = cmd_config['admin_qq']
                     gu.log("管理者QQ号: " + admin_qq, gu.LEVEL_INFO)
                 else:
-                    admin_qq = input("[System] 请输入管理者QQ号(管理者QQ号才能使用update/plugin等指令): ")
+                    gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
+                    admin_qq = input("请输入管理者QQ号(必须设置): ")
                     gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
                     cmd_config['admin_qq'] = admin_qq
                     with open("cmd_config.json", 'w', encoding='utf-8') as f:
                         json.dump(cmd_config, f, indent=4)
                         f.flush()
+                if "admin_qqchan" in cmd_config:
+                    admin_qqchan = cmd_config['admin_qqchan']
+                    gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
+                else:
+                    gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
+                    admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
+                    if admin_qqchan == "":
+                        gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+                    else:
+                        gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+                        cmd_config['admin_qqchan'] = admin_qqchan
+                        with open("cmd_config.json", 'w', encoding='utf-8') as f:
+                            json.dump(cmd_config, f, indent=4)
+                            f.flush()
         global gocq_app, gocq_loop
         gocq_loop = asyncio.new_event_loop()
         gocq_bot = QQ(True, gocq_loop)
@@ -441,7 +457,7 @@ def oper_msg(message,
     role = "member" # 角色
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
-    global admin_qq, cached_plugins, gocq_bot
+    global admin_qq, admin_qqchan, cached_plugins, gocq_bot
 
     if platform == PLATFORM_QQCHAN:
         gu.log(f"接收到消息：{message.content}", gu.LEVEL_INFO, tag="QQ频道")
@@ -450,9 +466,9 @@ def oper_msg(message,
         global qqchan_loop
     if platform == PLATFORM_GOCQ:
         if isinstance(message.message[0], Plain):
-            gu.log(f"接收到消息：{message.message[0].text}", gu.LEVEL_INFO, tag="QQ")
+            gu.log(f"接收到消息：{message.message[0].text}", gu.LEVEL_INFO, tag="GOCQ")
         elif isinstance(message.message[0], At):
-            gu.log(f"接收到消息：{message.message[1].text}", gu.LEVEL_INFO, tag="QQ")
+            gu.log(f"接收到消息：{message.message[1].text}", gu.LEVEL_INFO, tag="GOCQ")
             
         user_id = message.user_id
         user_name = message.user_id
@@ -498,20 +514,24 @@ def oper_msg(message,
                 qq_msg = str(message.message[1].text).strip()
             else:
                 return
-            session_id = message.group_id
+            # 适配GO-CQHTTP的频道功能
+            if message.type == "GuildMessage":
+                session_id = message.channel_id
+            else:
+                session_id = message.group_id
         else:
             qq_msg = message.message[0].text
             session_id = message.user_id
         role = "member"
-        if str(message.sender.user_id) == admin_qq:
-            gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="QQ")
+        if str(message.sender.user_id) == admin_qq or str(message.sender.tiny_id) == admin_qqchan:
+            gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="GOCQ")
             role = "admin"
 
     if qq_msg == "":
         send_message(platform, message,  f"Hi~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
         return
 
-    logf.write("[QQBOT] "+ qq_msg+'\n')
+    logf.write("[GOCQBOT] "+ qq_msg+'\n')
     logf.flush()
 
     # 关键词回复
@@ -636,7 +656,7 @@ def oper_msg(message,
                     with open("keyword.json", "r", encoding="utf-8") as f:
                         keywords = json.load(f)
 
-            # QQ昵称
+            # 昵称
             if command == "nick":
                 with open("cmd_config.json", "r", encoding="utf-8") as f:
                     global nick_qq
@@ -733,7 +753,7 @@ class gocqClient():
         global nick_qq
         # 将nick_qq转换为元组
         if nick_qq == None:
-            nick_qq = ("ai",)
+            nick_qq = ("ai","!","！")
         if isinstance(nick_qq, str):
             nick_qq = (nick_qq,)
         if isinstance(nick_qq, list):
@@ -766,3 +786,28 @@ class gocqClient():
         await app.sendGroupMessage(source.group_id, [
             Plain(text=f"欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n@我输入help查看帮助~\n我叫{nick_qq}, 你也可以以【{nick_qq}+问题】的格式来提醒我并问我问题哦~\n")
         ])
+
+    @gocq_app.receiver("GuildMessage")
+    async def _(app: CQHTTP, source: GuildMessage):
+        # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
+        global nick_qq
+        if nick_qq == None:
+            nick_qq = ("ai","!","！")
+        if isinstance(nick_qq, str):
+            nick_qq = (nick_qq,)
+        if isinstance(nick_qq, list):
+            nick_qq = tuple(nick_qq)
+
+        if isinstance(source.message[0], Plain):
+            if source.message[0].text.startswith(nick_qq):
+                _len = 0
+                for i in nick_qq:
+                    if source.message[0].text.startswith(i):
+                        _len = len(i)
+                source.message[0].text = source.message[0].text[_len:].strip()
+                new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
+        if isinstance(source.message[0], At):
+            if source.message[0].tiny_id == source.self_tiny_id:
+                new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
+        else:
+            return

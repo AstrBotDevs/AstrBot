@@ -51,7 +51,18 @@ class Command:
         if self.command_start_with(message, "plugin"):
             return True, self.plugin_oper(message, role, cached_plugins)
         
+        if self.command_start_with(message, "myid"):
+            return True, self.get_my_id(message_obj, platform)
+        
         return False, None
+    
+    def get_my_id(self, message_obj, platform):
+        if platform == "gocq":
+            if message_obj.type == "GuildMessage":
+                return True, f"你的频道id是{str(message_obj.sender.tiny_id)}", "plugin"
+            else:
+                return True, f"你的QQ是{str(message_obj.sender.user_id)}", "plugin"
+
     
     def plugin_reload(self, cached_plugins: dict, target: str = None, all: bool = False):
         plugins = self.get_plugin_modules()
