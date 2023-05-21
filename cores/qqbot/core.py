@@ -797,7 +797,7 @@ class gocqClient():
     async def _(app: CQHTTP, source: GroupMemberIncrease):
         global nick_qq
         await app.sendGroupMessage(source.group_id, [
-            Plain(text=f"欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n@我输入help查看帮助~\n我叫{nick_qq}, 你也可以以【{nick_qq}+问题】的格式来提醒我并问我问题哦~\n")
+            Plain(text=f"欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n@我输入help查看帮助~\n")
         ])
 
     @gocq_app.receiver("GuildMessage")
