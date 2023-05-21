@@ -760,7 +760,7 @@ class gocqClient():
     # 收到群聊消息
     @gocq_app.receiver("GroupMessage")
     async def _(app: CQHTTP, source: GroupMessage):
-        gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
+        # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
 
         global nick_qq
         # 将nick_qq转换为元组
@@ -802,7 +802,7 @@ class gocqClient():
 
     @gocq_app.receiver("GuildMessage")
     async def _(app: CQHTTP, source: GuildMessage):
-        gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
+        # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
         global nick_qq
         if nick_qq == None:
             nick_qq = ("ai","!","！")
