@@ -202,11 +202,14 @@ def initBot(cfg, prov):
             input("[System-err] 导入Bing模型时发生错误, 没有找到cookies文件或者cookies文件放置位置错误。windows启动器启动的用户请把cookies.json文件放到和启动器相同的目录下。\n如何获取请看https://github.com/Soulter/QQChannelChatGPT仓库介绍。")
         else:
             if cfg['rev_edgegpt']['enable']:
-                from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
-                from model.command.command_rev_edgegpt import CommandRevEdgeGPT
-                rev_edgegpt = ProviderRevEdgeGPT()
-                command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
-                chosen_provider = REV_EDGEGPT
+                try:
+                    from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
+                    from model.command.command_rev_edgegpt import CommandRevEdgeGPT
+                    rev_edgegpt = ProviderRevEdgeGPT()
+                    command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
+                    chosen_provider = REV_EDGEGPT
+                except BaseException as e:
+                    gu.log("加载Bing模型时发生错误, 请检查1. cookies文件是否正确放置 2. 是否设置了代理（梯子）。", gu.LEVEL_ERROR, max_len=60)
     if OPENAI_OFFICIAL in prov:
         gu.log("- OpenAI官方 -", gu.LEVEL_INFO)
         if cfg['openai']['key'] is not None:
