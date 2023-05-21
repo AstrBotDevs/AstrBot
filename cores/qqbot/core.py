@@ -528,7 +528,12 @@ def oper_msg(message,
             qq_msg = message.message[0].text
             session_id = message.user_id
         role = "member"
-        if ("user_id" in message.sender and str(message.sender.user_id) == admin_qq) or ("tiny_id" in message.sender and str(message.sender.tiny_id) == admin_qqchan):
+
+        if message.type == "GuildMessage":
+            sender_id = str(message.sender.tiny_id)
+        else:
+            sender_id = str(message.sender.user_id)
+        if sender_id == admin_qq or sender_id == admin_qqchan:
             gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="GOCQ")
             role = "admin"
 

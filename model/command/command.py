@@ -11,6 +11,7 @@ import shutil
 import importlib
 from util import general_utils as gu
 from model.platform.qq import QQ
+import stat
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -151,7 +152,8 @@ class Command:
                     return False, f"你的身份组{role}没有权限删除插件", "plugin"
                 try:
                     # 删除文件夹
-                    shutil.rmtree(os.path.join(ppath, l[2]))
+                    # shutil.rmtree(os.path.join(ppath, l[2]))
+                    self.remove_dir(os.path.join(ppath, l[2]))
                     if l[2] in cached_plugins:
                         del cached_plugins[l[2]]
                     return True, "插件卸载成功~", "plugin"
@@ -204,6 +206,18 @@ class Command:
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限开发者模式", "plugin"
                 return True, "cached_plugins: \n" + str(cached_plugins), "plugin"
+    
+
+    def remove_dir(self, file_path):        
+        while 1:
+            if not os.path.exists(file_path):
+                break
+            try:
+                shutil.rmtree(file_path)
+            except PermissionError as e:
+                err_file_path = str(e).split("\'", 2)[1]
+                if os.path.exists(err_file_path):
+                    os.chmod(err_file_path, stat.S_IWUSR)
 
 
     '''
