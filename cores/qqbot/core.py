@@ -43,7 +43,7 @@ stat_file = ''
 uniqueSession = False
 
 # 日志记录
-logf = open('log.log', 'a+', encoding='utf-8')
+# logf = open('log.log', 'a+', encoding='utf-8')
 # 是否上传日志,仅上传频道数量等数量的统计信息
 is_upload_log = True
 
@@ -101,7 +101,7 @@ gocq_app = CQHTTP(
 admin_qq = "123456"
 
 gocq_loop = None
-nick_qq = "ai"
+nick_qq = None
 
 bing_cache_loop = None
 
@@ -310,36 +310,38 @@ def initBot(cfg, prov):
     global gocq_bot
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
         gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
-            
+
+        cmd_config = {}
         if os.path.exists("cmd_config.json"):
             with open("cmd_config.json", 'r', encoding='utf-8') as f:
                 cmd_config = json.load(f)
-                global admin_qq, admin_qqchan
-                if "admin_qq" in cmd_config:
-                    admin_qq = cmd_config['admin_qq']
-                    gu.log("管理者QQ号: " + admin_qq, gu.LEVEL_INFO)
-                else:
-                    gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
-                    admin_qq = input("请输入管理者QQ号(必须设置): ")
-                    gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-                    cmd_config['admin_qq'] = admin_qq
-                    with open("cmd_config.json", 'w', encoding='utf-8') as f:
-                        json.dump(cmd_config, f, indent=4)
-                        f.flush()
-                if "admin_qqchan" in cmd_config:
-                    admin_qqchan = cmd_config['admin_qqchan']
-                    gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
-                else:
-                    gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
-                    admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
-                    if admin_qqchan == "":
-                        gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-                    else:
-                        gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-                        cmd_config['admin_qqchan'] = admin_qqchan
-                        with open("cmd_config.json", 'w', encoding='utf-8') as f:
-                            json.dump(cmd_config, f, indent=4)
-                            f.flush()
+        global admin_qq, admin_qqchan
+        if "admin_qq" in cmd_config:
+            admin_qq = cmd_config['admin_qq']
+            gu.log("管理者QQ号: " + admin_qq, gu.LEVEL_INFO)
+        else:
+            gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
+            admin_qq = input("请输入管理者QQ号(必须设置): ")
+            gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+            cmd_config['admin_qq'] = admin_qq
+            with open("cmd_config.json", 'w', encoding='utf-8') as f:
+                json.dump(cmd_config, f, indent=4)
+                f.flush()
+        if "admin_qqchan" in cmd_config:
+            admin_qqchan = cmd_config['admin_qqchan']
+            gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
+        else:
+            gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
+            admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
+            if admin_qqchan == "":
+                gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+            else:
+                gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+                cmd_config['admin_qqchan'] = admin_qqchan
+                with open("cmd_config.json", 'w', encoding='utf-8') as f:
+                    json.dump(cmd_config, f, indent=4)
+                    f.flush()
+        
         global gocq_app, gocq_loop
         gocq_loop = asyncio.new_event_loop()
         gocq_bot = QQ(True, gocq_loop)
@@ -523,7 +525,7 @@ def oper_msg(message,
             qq_msg = message.message[0].text
             session_id = message.user_id
         role = "member"
-        if str(message.sender.user_id) == admin_qq or str(message.sender.tiny_id) == admin_qqchan:
+        if ("user_id" in message.sender and str(message.sender.user_id) == admin_qq) or ("tiny_id" in message.sender and str(message.sender.tiny_id) == admin_qqchan):
             gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="GOCQ")
             role = "admin"
 
@@ -531,8 +533,8 @@ def oper_msg(message,
         send_message(platform, message,  f"Hi~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
         return
 
-    logf.write("[GOCQBOT] "+ qq_msg+'\n')
-    logf.flush()
+    # logf.write("[GOCQBOT] "+ qq_msg+'\n')
+    # logf.flush()
 
     # 关键词回复
     for k in keywords:
@@ -682,8 +684,8 @@ def oper_msg(message,
         return
 
     # 记录日志
-    logf.write(f"{reply_prefix} {str(chatgpt_res)}\n")
-    logf.flush()
+    # logf.write(f"{reply_prefix} {str(chatgpt_res)}\n")
+    # logf.flush()
 
     # 敏感过滤
     # 过滤不合适的词
@@ -750,6 +752,8 @@ class gocqClient():
     # 收到群聊消息
     @gocq_app.receiver("GroupMessage")
     async def _(app: CQHTTP, source: GroupMessage):
+        gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
+
         global nick_qq
         # 将nick_qq转换为元组
         if nick_qq == None:
@@ -761,6 +765,7 @@ class gocqClient():
 
         if isinstance(source.message[0], Plain):
             if source.message[0].text.startswith(nick_qq):
+                # print(nick_qq)
                 _len = 0
                 for i in nick_qq:
                     if source.message[0].text.startswith(i):
@@ -789,7 +794,7 @@ class gocqClient():
 
     @gocq_app.receiver("GuildMessage")
     async def _(app: CQHTTP, source: GuildMessage):
-        # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
+        gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
         global nick_qq
         if nick_qq == None:
             nick_qq = ("ai","!","！")
