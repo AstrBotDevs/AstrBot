@@ -479,6 +479,7 @@ def oper_msg(message,
         nick_qq = tuple(nick_qq)    
 
     if platform == PLATFORM_QQCHAN:
+        with_tag = True
         gu.log(f"收到消息：{message.content}", gu.LEVEL_INFO, tag="QQ频道")
         user_id = message.author.id
         user_name = message.author.username
@@ -512,7 +513,7 @@ def oper_msg(message,
                 qq_msg = str(i.text).strip()
                 break
         for i in nick_qq:
-            if qq_msg.startswith(i):
+            if i != '' and qq_msg.startswith(i):
                 _len = len(i)
                 with_tag = True
                 break
