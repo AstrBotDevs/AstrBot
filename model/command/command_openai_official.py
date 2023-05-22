@@ -64,10 +64,14 @@ class CommandOpenAIOfficial(Command):
 
     
     def reset(self, session_id: str):
+        if self.provider is None:
+            return False, "未启动OpenAI ChatGPT语言模型.", "reset"
         self.provider.forget(session_id)
         return True, "重置成功", "reset"
     
     def his(self, message: str, session_id: str, name: str):
+        if self.provider is None:
+            return False, "未启动OpenAI ChatGPT语言模型.", "his"
         #分页，每页5条
         msg = ''
         size_per_page = 3
@@ -84,12 +88,18 @@ class CommandOpenAIOfficial(Command):
         return True, f"历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页", "his"
     
     def token(self, session_id: str):
+        if self.provider is None:
+            return False, "未启动OpenAI ChatGPT语言模型.", "token"
         return True, f"会话的token数: {self.provider.get_user_usage_tokens(self.provider.session_dict[session_id])}\n系统最大缓存token数: {self.provider.max_tokens}", "token"
 
     def gpt(self):
+        if self.provider is None:
+            return False, "未启动OpenAI ChatGPT语言模型.", "gpt"
         return True, f"OpenAI GPT配置:\n {self.provider.chatGPT_configs}", "gpt"
     
     def status(self):
+        if self.provider is None:
+            return False, "未启动OpenAI ChatGPT语言模型.", "status"
         chatgpt_cfg_str = ""
         key_stat = self.provider.get_key_stat()
         index = 1
@@ -110,10 +120,14 @@ class CommandOpenAIOfficial(Command):
         return True, f"⭐使用情况({str(gg_count)}个已用):\n{chatgpt_cfg_str}⏰全频道已用{total}tokens", "status"
 
     def count(self):
+        if self.provider is None:
+            return False, "未启动OpenAI ChatGPT语言模型.", "reset"
         guild_count, guild_msg_count, guild_direct_msg_count, session_count = self.provider.get_stat()
         return True, f"当前会话数: {len(self.provider.session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}\n历史会话数: {session_count}", "count"
 
     def key(self, message: str, user_name: str):
+        if self.provider is None:
+            return False, "未启动OpenAI ChatGPT语言模型.", "reset"
         l = message.split(" ")
         if len(l) == 1:
             msg = "感谢您赞助key，key为官方API使用，请以以下格式赞助:\n/key xxxxx"
@@ -126,11 +140,15 @@ class CommandOpenAIOfficial(Command):
             return True, "该Key被验证为无效。也许是输入错误了，或者重试。", "key"
 
     def unset(self, session_id: str):
+        if self.provider is None:
+            return False, "未启动OpenAI ChatGPT语言模型.", "unset"
         self.provider.now_personality = {}
         self.provider.forget(session_id)
         return True, "已清除人格并重置历史记录。", "unset"
 
     def set(self, message: str, session_id: str):
+        if self.provider is None:
+            return False, "未启动OpenAI ChatGPT语言模型.", "set"
         l = message.split(" ")
         if len(l) == 1:
             return True, f"【由Github项目QQChannelChatGPT支持】\n\n【人格文本由PlexPt开源项目awesome-chatgpt-pr \
@@ -189,6 +207,8 @@ class CommandOpenAIOfficial(Command):
                 return True, f"自定义人格已设置。 \n人格信息: {ps}", "set"
             
     def draw(self, message):
+        if self.provider is None:
+            return False, "未启动OpenAI ChatGPT语言模型.", "draw"
         if message.startswith("/画"):
             message = message[2:]
         elif message.startswith("画"):

@@ -34,6 +34,8 @@ class CommandRevEdgeGPT(Command):
         return False, None
     
     def reset(self, loop):
+        if self.provider is None:
+            return False, "未启动Bing语言模型.", "reset"
         res = asyncio.run_coroutine_threadsafe(self.provider.forget(), loop).result()
         print(res)
         if res:
