@@ -462,7 +462,7 @@ def oper_msg(message,
     session_id = ''
     user_id = ''
     user_name = ''
-    global chosen_provider, reply_prefix, keywords, qqchannel_bot, gocq_bot, gocq_loop, bing_cache_loop
+    global chosen_provider, reply_prefix, keywords, qqchannel_bot, gocq_bot, gocq_loop, bing_cache_loop, qqchan_loop
     role = "member" # 角色
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
@@ -487,7 +487,6 @@ def oper_msg(message,
         gu.log(f"收到消息：{message.content}", gu.LEVEL_INFO, tag="QQ频道")
         user_id = message.author.id
         user_name = message.author.username
-        global qqchan_loop
         if group:
             # 频道内
             # 过滤@
@@ -526,9 +525,7 @@ def oper_msg(message,
 
         gu.log(f"收到消息：{qq_msg}", gu.LEVEL_INFO, tag="QQ")
         user_id = message.user_id
-        user_name = message.user_id
-        global gocq_loop
-        
+
         if group:
             # 适配GO-CQHTTP的频道功能
             if message.type == "GuildMessage":
