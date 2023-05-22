@@ -462,25 +462,42 @@ def oper_msg(message,
     role = "member" # 角色
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
-    global admin_qq, admin_qqchan, cached_plugins, gocq_bot
+    global admin_qq, admin_qqchan, cached_plugins, gocq_bot, nick_qq
+
+    with_tag = False # 是否带有昵称
+
+    # 将nick_qq(昵称)统一转换为tuple
+    if nick_qq == None:
+        nick_qq = ("ai","!","！")
+    if isinstance(nick_qq, str):
+        nick_qq = (nick_qq,)
+    if isinstance(nick_qq, list):
+        nick_qq = tuple(nick_qq)
+    
+    if platform == PLATFORM_GOCQ:
+        _len = 0
+        for i in nick_qq:
+            if message.message[0].text.startswith(i):
+                _len = len(i)
+                with_tag = True
+                break
+        message.message[0].text = message.message[0].text[_len:].strip()
+        
 
     if platform == PLATFORM_QQCHAN:
-        gu.log(f"接收到消息：{message.content}", gu.LEVEL_INFO, tag="QQ频道")
+        gu.log(f"收到消息：{message.content}", gu.LEVEL_INFO, tag="QQ频道")
         user_id = message.author.id
         user_name = message.author.username
         global qqchan_loop
     if platform == PLATFORM_GOCQ:
         if isinstance(message.message[0], Plain):
-            gu.log(f"接收到消息：{message.message[0].text}", gu.LEVEL_INFO, tag="GOCQ")
+            gu.log(f"收到消息：{message.message[0].text}", gu.LEVEL_INFO, tag="GOCQ")
         elif isinstance(message.message[0], At):
-            gu.log(f"接收到消息：{message.message[1].text}", gu.LEVEL_INFO, tag="GOCQ")
+            gu.log(f"收到消息：{message.message[1].text}", gu.LEVEL_INFO, tag="GOCQ")
             
         user_id = message.user_id
         user_name = message.user_id
         global gocq_loop
-    
-    if chosen_provider is None:
-        send_message(platform, message,  f"没有启动任何一个语言模型。请至少在配置文件中启用一个语言模型。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
     
     # 检查发言频率
     if not check_frequency(user_id):
@@ -502,7 +519,7 @@ def oper_msg(message,
                 session_id = message.channel_id
             # 得到身份
             if "2" in message.member.roles or "4" in message.member.roles or "5" in message.member.roles:
-                gu.log(f"检测到管理员身份", gu.LEVEL_INFO, tag="QQ频道")
+                # gu.log(f"检测到管理员身份", gu.LEVEL_INFO, tag="QQ频道")
                 role = "admin"
             else:
                 role = "member"
@@ -534,7 +551,7 @@ def oper_msg(message,
         else:
             sender_id = str(message.sender.user_id)
         if sender_id == admin_qq or sender_id == admin_qqchan:
-            gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="GOCQ")
+            # gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="GOCQ")
             role = "admin"
 
     if qq_msg == "":
@@ -590,12 +607,14 @@ def oper_msg(message,
     chatgpt_res = ""
 
     if chosen_provider == OPENAI_OFFICIAL: 
-        if chatgpt == None:
-            send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
-            return
         hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
         # hit: 是否触发了指令
         if not hit:
+            if not with_tag:
+                return
+            if chatgpt == None:
+                send_message(platform, message, f"管理员未启动OpenAI模型或初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                return
             # 请求ChatGPT获得结果
             try:
                 chatgpt_res = chatgpt.text_chat(qq_msg, session_id)
@@ -606,11 +625,13 @@ def oper_msg(message,
                 send_message(platform, message, f"OpenAI API错误, 原因: {str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_CHATGPT:
-        if rev_chatgpt == None:
-            send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
-            return
         hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
         if not hit:
+            if not with_tag:
+                return
+            if rev_chatgpt == None:
+                send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                return
             try:
                 while rev_chatgpt.is_all_busy():
                     time.sleep(1)
@@ -622,9 +643,6 @@ def oper_msg(message,
                 send_message(platform, message, f"RevChatGPT错误, 原因: \n{str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
 
     elif chosen_provider == REV_EDGEGPT:
-        if rev_edgegpt == None:
-            send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
-            return
         if bing_cache_loop == None:
             if platform == PLATFORM_GOCQ:
                 bing_cache_loop = gocq_loop
@@ -633,6 +651,11 @@ def oper_msg(message,
         hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
         if not hit:
             try:
+                if not with_tag:
+                    return
+                if rev_edgegpt == None:
+                    send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                    return
                 while rev_edgegpt.is_busy():
                     time.sleep(1)
 
@@ -669,14 +692,16 @@ def oper_msg(message,
             # 昵称
             if command == "nick":
                 with open("cmd_config.json", "r", encoding="utf-8") as f:
-                    global nick_qq
                     nick_qq = json.load(f)["nick_qq"]
 
             if command_result[0]:
                 # 是否是画图指令
                 if isinstance(command_result[1], list) and len(command_result) == 3 and command_result[2] == 'draw':
-                    for i in command_result[1]:
-                        send_message(platform, message, i, msg_ref=msg_ref, image=i, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                    if chatgpt != None:
+                        for i in command_result[1]:
+                            send_message(platform, message, i, msg_ref=msg_ref, image=i, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                    else:
+                        send_message(platform, message, "画图指令需要启用OpenAI官方模型.", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
                 else:
                     try:
                         send_message(platform, message, command_result[1], msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
@@ -762,24 +787,15 @@ class gocqClient():
     async def _(app: CQHTTP, source: GroupMessage):
         # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
 
-        global nick_qq
-        # 将nick_qq转换为元组
-        if nick_qq == None:
-            nick_qq = ("ai","!","！")
-        if isinstance(nick_qq, str):
-            nick_qq = (nick_qq,)
-        if isinstance(nick_qq, list):
-            nick_qq = tuple(nick_qq)
-
         if isinstance(source.message[0], Plain):
-            if source.message[0].text.startswith(nick_qq):
-                # print(nick_qq)
-                _len = 0
-                for i in nick_qq:
-                    if source.message[0].text.startswith(i):
-                        _len = len(i)
-                source.message[0].text = source.message[0].text[_len:].strip()
-                new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
+            # if source.message[0].text.startswith(nick_qq):
+            #     # print(nick_qq)
+            #     _len = 0
+            #     for i in nick_qq:
+            #         if source.message[0].text.startswith(i):
+            #             _len = len(i)
+            #     source.message[0].text = source.message[0].text[_len:].strip()
+            new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         if isinstance(source.message[0], At):
             if source.message[0].qq == source.self_id:
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
@@ -803,22 +819,22 @@ class gocqClient():
     @gocq_app.receiver("GuildMessage")
     async def _(app: CQHTTP, source: GuildMessage):
         # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
-        global nick_qq
-        if nick_qq == None:
-            nick_qq = ("ai","!","！")
-        if isinstance(nick_qq, str):
-            nick_qq = (nick_qq,)
-        if isinstance(nick_qq, list):
-            nick_qq = tuple(nick_qq)
+        # global nick_qq
+        # if nick_qq == None:
+        #     nick_qq = ("ai","!","！")
+        # if isinstance(nick_qq, str):
+        #     nick_qq = (nick_qq,)
+        # if isinstance(nick_qq, list):
+        #     nick_qq = tuple(nick_qq)
 
         if isinstance(source.message[0], Plain):
-            if source.message[0].text.startswith(nick_qq):
-                _len = 0
-                for i in nick_qq:
-                    if source.message[0].text.startswith(i):
-                        _len = len(i)
-                source.message[0].text = source.message[0].text[_len:].strip()
-                new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
+            # if source.message[0].text.startswith(nick_qq):
+            #     _len = 0
+            #     for i in nick_qq:
+            #         if source.message[0].text.startswith(i):
+            #             _len = len(i)
+            #     source.message[0].text = source.message[0].text[_len:].strip()
+            new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         if isinstance(source.message[0], At):
             if source.message[0].tiny_id == source.self_tiny_id:
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
