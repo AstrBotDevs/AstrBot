@@ -477,11 +477,6 @@ def oper_msg(message,
         nick_qq = (nick_qq,)
     if isinstance(nick_qq, list):
         nick_qq = tuple(nick_qq)    
-    
-    # 检查发言频率
-    if not check_frequency(user_id):
-        send_message(platform, message, f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。', msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
-        return
 
     if platform == PLATFORM_QQCHAN:
         gu.log(f"收到消息：{message.content}", gu.LEVEL_INFO, tag="QQ频道")
@@ -548,6 +543,12 @@ def oper_msg(message,
     if qq_msg == "":
         send_message(platform, message,  f"Hi~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
         return
+    
+    if with_tag:
+        # 检查发言频率
+        if not check_frequency(user_id):
+            send_message(platform, message, f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。', msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            return
 
     # logf.write("[GOCQBOT] "+ qq_msg+'\n')
     # logf.flush()
@@ -802,7 +803,7 @@ class gocqClient():
 
     @gocq_app.receiver("GuildMessage")
     async def _(app: CQHTTP, source: GuildMessage):
-        gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
+        # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
 
         if isinstance(source.message[0], Plain):
             # if source.message[0].text.startswith(nick_qq):
