@@ -792,13 +792,6 @@ class gocqClient():
         # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
 
         if isinstance(source.message[0], Plain):
-            # if source.message[0].text.startswith(nick_qq):
-            #     # print(nick_qq)
-            #     _len = 0
-            #     for i in nick_qq:
-            #         if source.message[0].text.startswith(i):
-            #             _len = len(i)
-            #     source.message[0].text = source.message[0].text[_len:].strip()
             new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         if isinstance(source.message[0], At):
             if source.message[0].qq == source.self_id:
@@ -822,14 +815,7 @@ class gocqClient():
 
     @gocq_app.receiver("GuildMessage")
     async def _(app: CQHTTP, source: GuildMessage):
-        # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
-        # global nick_qq
-        # if nick_qq == None:
-        #     nick_qq = ("ai","!","！")
-        # if isinstance(nick_qq, str):
-        #     nick_qq = (nick_qq,)
-        # if isinstance(nick_qq, list):
-        #     nick_qq = tuple(nick_qq)
+        gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
 
         if isinstance(source.message[0], Plain):
             # if source.message[0].text.startswith(nick_qq):
@@ -840,7 +826,7 @@ class gocqClient():
             #     source.message[0].text = source.message[0].text[_len:].strip()
             new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         if isinstance(source.message[0], At):
-            if source.message[0].tiny_id == source.self_tiny_id:
+            if source.message[0].qq == source.self_tiny_id:
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
         else:
             return
