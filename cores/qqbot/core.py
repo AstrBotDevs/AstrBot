@@ -512,8 +512,16 @@ def oper_msg(message,
             if isinstance(i, Plain):
                 qq_msg += str(i.text).strip()
             if isinstance(i, At):
-                if i.qq == message.self_id:
-                    with_tag = True
+                # @机器人
+                if message.type == "GuildMessage":
+                    if i.qq == message.self_tiny_id:
+                        with_tag = True
+                if message.type == "FriendMessage":
+                    if i.qq == message.self_id:
+                        with_tag = True
+                if message.type == "GroupMessage":
+                    if i.qq == message.self_id:
+                        with_tag = True
            
         for i in nick_qq:
             if i != '' and qq_msg.startswith(i):

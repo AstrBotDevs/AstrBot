@@ -112,6 +112,7 @@ class ProviderOpenAIOfficial(Provider):
         cache_data_list, new_record, req = self.wrap(prompt, session_id)
         retry = 0
         response = None
+        err = ''
         while retry < 5:
             try:
                 response = openai.ChatCompletion.create(
@@ -121,7 +122,7 @@ class ProviderOpenAIOfficial(Provider):
                 break
             except Exception as e:
                 if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(e) or 'No API key provided' in str(e) or 'Incorrect API key provided' in str(e):
-                    gu.log("当前Key已超额或者不正常,正在切换", level=gu.LEVEL_WARNING)
+                    gu.log("当前Key已超额或异常, 正在切换", level=gu.LEVEL_WARNING)
                     self.key_stat[openai.api_key]['exceed'] = True
                     self.save_key_record()
 
@@ -137,10 +138,11 @@ class ProviderOpenAIOfficial(Provider):
                     cache_data_list, new_record, req = self.wrap(prompt, session_id)
                 else:
                     gu.log(str(e), level=gu.LEVEL_ERROR)
+                err = str(e)
                 retry+=1
         if retry >= 5:
             gu.log(r"如果报错, 且您的机器在中国大陆内, 请确保您的电脑已经设置好代理软件(梯子), 并在配置文件设置了系统代理地址。详见https://github.com/Soulter/QQChannelChatGPT/wiki/%E4%BA%8C%E3%80%81%E9%A1%B9%E7%9B%AE%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E9%85%8D%E7%BD%AE", max_len=999)
-            raise BaseException("连接出错")
+            raise BaseException("连接出错: "+str(err))
         
         self.key_stat[openai.api_key]['used'] += response['usage']['total_tokens']
         self.save_key_record()
