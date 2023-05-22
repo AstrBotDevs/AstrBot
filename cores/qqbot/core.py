@@ -510,8 +510,11 @@ def oper_msg(message,
         _len = 0
         for i in message.message:
             if isinstance(i, Plain):
-                qq_msg = str(i.text).strip()
-                break
+                qq_msg += str(i.text).strip()
+            if isinstance(i, At):
+                if i.qq == message.self_id:
+                    with_tag = True
+           
         for i in nick_qq:
             if i != '' and qq_msg.startswith(i):
                 _len = len(i)
