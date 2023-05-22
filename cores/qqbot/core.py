@@ -23,12 +23,15 @@ from nakuru import (
 )
 from nakuru.entities.components import Plain,At
 from model.command.command import Command
+from model.command.command_rev_chatgpt import CommandRevChatGPT
+from model.command.command_rev_edgegpt import CommandRevEdgeGPT
+from model.command.command_openai_official import CommandOpenAIOfficial
 from util import general_utils as gu
+
+
 
 # QQBotClient实例
 client = ''
-# ChatGPT实例
-global chatgpt
 # 缓存的会话
 session_dict = {}
 # 最大缓存token（在配置里改 configs/config.yaml）
@@ -74,8 +77,10 @@ REV_EDGEGPT = 'rev_edgegpt'
 provider = None
 chosen_provider = None
 
-# 逆向库对象
+# 语言模型对象
 rev_chatgpt = None
+rev_edgegpt = None
+chatgpt = None
 # gpt配置信息
 gpt_config = {}
 # 百度内容审核实例
@@ -183,14 +188,13 @@ def initBot(cfg, prov):
 
     # 语言模型提供商
     gu.log("--------加载语言模型--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+
     if REV_CHATGPT in prov:
         gu.log("- 逆向ChatGPT库 -", gu.LEVEL_INFO)
         if cfg['rev_ChatGPT']['enable']:
             if 'account' in cfg['rev_ChatGPT']:
                 from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
-                from model.command.command_rev_chatgpt import CommandRevChatGPT
                 rev_chatgpt = ProviderRevChatGPT(cfg['rev_ChatGPT'])
-                command_rev_chatgpt = CommandRevChatGPT(cfg['rev_ChatGPT'])
                 chosen_provider = REV_CHATGPT
             else:
                 input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
@@ -204,9 +208,7 @@ def initBot(cfg, prov):
             if cfg['rev_edgegpt']['enable']:
                 try:
                     from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
-                    from model.command.command_rev_edgegpt import CommandRevEdgeGPT
                     rev_edgegpt = ProviderRevEdgeGPT()
-                    command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
                     chosen_provider = REV_EDGEGPT
                 except BaseException as e:
                     gu.log("加载Bing模型时发生错误, 请检查1. cookies文件是否正确放置 2. 是否设置了代理（梯子）。", gu.LEVEL_ERROR, max_len=60)
@@ -214,10 +216,12 @@ def initBot(cfg, prov):
         gu.log("- OpenAI官方 -", gu.LEVEL_INFO)
         if cfg['openai']['key'] is not None:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial
-            from model.command.command_openai_official import CommandOpenAIOfficial
             chatgpt = ProviderOpenAIOfficial(cfg['openai'])
-            command_openai_official = CommandOpenAIOfficial(chatgpt)
             chosen_provider = OPENAI_OFFICIAL
+
+    command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
+    command_rev_chatgpt = CommandRevChatGPT(rev_chatgpt)
+    command_openai_official = CommandOpenAIOfficial(chatgpt)
 
     gu.log("--------加载个性化配置--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 得到关键词
