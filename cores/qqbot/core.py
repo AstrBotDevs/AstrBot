@@ -529,6 +529,7 @@ def oper_msg(message,
             else:
                 session_id = message.group_id
         else:
+            with_tag = True
             # qq_msg = message.message[0].text
             session_id = message.user_id
         role = "member"
