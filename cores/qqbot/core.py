@@ -476,17 +476,8 @@ def oper_msg(message,
     if isinstance(nick_qq, str):
         nick_qq = (nick_qq,)
     if isinstance(nick_qq, list):
-        nick_qq = tuple(nick_qq)
+        nick_qq = tuple(nick_qq)    
     
-    if platform == PLATFORM_GOCQ:
-        _len = 0
-        for i in nick_qq:
-            if message.message[0].text.startswith(i):
-                _len = len(i)
-                with_tag = True
-                break
-        message.message[0].text = message.message[0].text[_len:].strip()
-        
 
     if platform == PLATFORM_QQCHAN:
         gu.log(f"收到消息：{message.content}", gu.LEVEL_INFO, tag="QQ频道")
@@ -494,11 +485,7 @@ def oper_msg(message,
         user_name = message.author.username
         global qqchan_loop
     if platform == PLATFORM_GOCQ:
-        if isinstance(message.message[0], Plain):
-            gu.log(f"收到消息：{message.message[0].text}", gu.LEVEL_INFO, tag="GOCQ")
-        elif isinstance(message.message[0], At):
-            gu.log(f"收到消息：{message.message[1].text}", gu.LEVEL_INFO, tag="GOCQ")
-            
+        gu.log(f"收到消息：{qq_msg}", gu.LEVEL_INFO, tag="QQ")
         user_id = message.user_id
         user_name = message.user_id
         global gocq_loop
@@ -534,19 +521,30 @@ def oper_msg(message,
 
     if platform == PLATFORM_GOCQ:
         if group:
-            if isinstance(message.message[0], Plain):
-                qq_msg = str(message.message[0].text).strip()
-            elif isinstance(message.message[0], At):
-                qq_msg = str(message.message[1].text).strip()
-            else:
-                return
+            # if isinstance(message.message[0], Plain):
+            #     qq_msg = str(message.message[0].text).strip()
+            # elif isinstance(message.message[0], At):
+            #     qq_msg = str(message.message[1].text).strip()
+            # else:
+            #     return
+            _len = 0
+            for i in message.message:
+                if isinstance(i, Plain):
+                    qq_msg = str(i.text).strip()
+                    break
+            for i in nick_qq:
+                if qq_msg.startswith(i):
+                    _len = len(i)
+                    with_tag = True
+                    break
+            qq_msg = qq_msg[_len:].strip()
             # 适配GO-CQHTTP的频道功能
             if message.type == "GuildMessage":
                 session_id = message.channel_id
             else:
                 session_id = message.group_id
         else:
-            qq_msg = message.message[0].text
+            # qq_msg = message.message[0].text
             session_id = message.user_id
         role = "member"
 
