@@ -183,6 +183,9 @@ class Command:
             elif l[1] == "l":
                 try:
                     plugin_list_info = "\n".join([f"{k}: \n名称: {v['info']['name']}\n简介: {v['info']['desc']}\n版本: {v['info']['version']}\n作者: {v['info']['author']}\n" for k, v in cached_plugins.items()])
+                    if platform == gu.PLATFORM_GOCQ:
+                        p = gu.create_text_image("【已激活插件列表】", plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n")
+                        return True, [Image.fromFileSystem(p)], "plugin"
                     return True, "\n=====已激活插件列表=====\n" + plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n=================", "plugin"
                 except BaseException as e:
                     return False, f"获取插件列表失败，原因: {str(e)}", "plugin"
@@ -190,6 +193,9 @@ class Command:
                 try:
                     if l[2] in cached_plugins:
                         info = cached_plugins[l[2]]["info"]
+                        if platform == gu.PLATFORM_GOCQ:
+                            p = gu.create_text_image(f"【插件信息】", f"名称: {info['name']}\n{info['desc']}\n版本: {info['version']}\n作者: {info['author']}\n\n帮助:\n{info['help']}")
+                            return True, [Image.fromFileSystem(p)], "plugin"
                         res = f"\n=====插件信息=====\n名称: {info['name']}\n{info['desc']}\n版本: {info['version']}作者: {info['author']}\n\n帮助:\n{info['help']}"
                         return True, res, "plugin"
                     else:
