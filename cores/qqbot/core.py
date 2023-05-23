@@ -315,6 +315,7 @@ def initBot(cfg, prov):
     gu.log("--------加载平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # GOCQ
     global gocq_bot
+
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
         gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
 
@@ -363,7 +364,7 @@ def initBot(cfg, prov):
 
     # QQ频道
     if 'qqbot' in cfg and cfg['qqbot']['enable']:
-        gu.log("- 启用QQ频道机器人 -", gu.LEVEL_INFO)
+        gu.log("- 启用QQ频道机器人(旧版) -", gu.LEVEL_INFO)
         global qqchannel_bot, qqchan_loop
         qqchannel_bot = QQChan()
         qqchan_loop = asyncio.new_event_loop()
@@ -372,7 +373,7 @@ def initBot(cfg, prov):
         # thread.join()
 
     if thread_inst == None:
-        input("[System-Error] 没有启用任何机器人，程序退出")
+        input("[System-Error] 没有启用/成功启用任何机器人，程序退出")
         exit()
 
     thread_inst.join()
@@ -385,7 +386,10 @@ def run_qqchan_bot(cfg, loop, qqchannel_bot):
     try:
         qqchannel_bot.run_bot(client, cfg['qqbot']['appid'], cfg['qqbot']['token'])
     except BaseException as e:
-        input(f"\n[System-Error] 启动QQ频道机器人时出现错误，原因如下：{e}\n可能是没有填写QQBOT appid和token？请在config中完善你的appid和token\n配置教程：https://soulter.top/posts/qpdg.html\n")
+        gu.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
+        gu.log(r"【提醒】有可能你想启动的是gocq, 并不是这个旧版的QQ频道SDK, 如果是这样, 请修改配置文件（QQChannelChatGPT/config.yaml）详情请看：https://github.com/Soulter/QQChannelChatGPT/wiki/%E4%BA%8C%E3%80%81%E9%A1%B9%E7%9B%AE%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E9%85%8D%E7%BD%AE。" + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
+        # gu.log("如果你使用了go-cqhttp, 则可以忽略上面的报错。" + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
+        # input(f"\n[System-Error] 启动QQ频道机器人时出现错误，原因如下：{e}\n可能是没有填写QQBOT appid和token？请在config中完善你的appid和token\n配置教程：https://soulter.top/posts/qpdg.html\n")
 
 def run_gocq_bot(loop, gocq_bot, gocq_app):
     asyncio.set_event_loop(loop)
