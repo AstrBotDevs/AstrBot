@@ -1,4 +1,5 @@
 import datetime
+import time
 import socket
 from PIL import Image, ImageDraw, ImageFont
 import os
@@ -129,3 +130,43 @@ def word2img(title: str, text: str, max_width=30, font_size=20):
     draw.text((10, title_height+20), text, fill=(0, 0, 0), font=text_font)
 
     return image
+
+
+def save_temp_img(img: Image) -> str:
+    if not os.path.exists("temp"):
+        os.makedirs("temp")
+
+    # 获得文件创建时间，清除超过1小时的
+    try:
+        for f in os.listdir("temp"):
+            path = os.path.join("temp", f)
+            if os.path.isfile(path):
+                ctime = os.path.getctime(path)
+                if time.time() - ctime > 3600:
+                    os.remove(path)
+    except Exception as e:
+        log(f"清除临时文件失败: {e}", level=LEVEL_WARNING, tag="GeneralUtils")
+
+    # 获得时间戳
+    timestamp = int(time.time())
+    p = f"temp/{timestamp}.png"
+    img.save(p)
+    return p
+
+
+def create_text_image(title: str, text: str, max_width=30, font_size=20):
+    '''
+    文本转图片。
+    title: 标题
+    text: 文本内容
+    max_width: 文本宽度最大值（默认30）
+    font_size: 字体大小（默认20）
+
+    返回：文件路径
+    '''
+    try:
+        img = word2img(title, text, max_width, font_size)
+        p = save_temp_img(img)
+        return p
+    except Exception as e:
+        raise e

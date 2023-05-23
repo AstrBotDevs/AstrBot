@@ -114,9 +114,8 @@ class Command:
         l = message.split(" ")
         if len(l) < 2:
             if platform == gu.PLATFORM_GOCQ:
-                img = gu.word2img("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
-                img.save("plu.png")
-                return True, [Image.fromFileSystem("plu.png")], "plugin"
+                p = gu.create_text_image("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
+                return True, [Image.fromFileSystem(p)], "plugin"
             return True, "\n=====插件指令面板=====\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n===============", "plugin"
         else:
             ppath = ""
@@ -291,10 +290,8 @@ class Command:
 
         if platform == gu.PLATFORM_GOCQ:
             try:
-                img = gu.word2img("【指令列表】", msg)
-                # 保存图片到本地
-                img.save("help.png")
-                return [Image.fromFileSystem("help.png")]
+                p = gu.create_text_image("【指令列表】", msg)
+                return [Image.fromFileSystem(p)]
             except BaseException as e:
                 gu.log(str(e))
                 return msg

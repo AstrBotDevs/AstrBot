@@ -116,10 +116,11 @@ class QQ:
         max_width: 文本宽度最大值（默认30）
         font_size: 字体大小（默认20）
 
-        返回：PIL的Image对象
+        返回：文件路径
         '''
         try:
             img = gu.word2img(title, text, max_width, font_size)
-            return img
+            p = gu.save_temp_img(img)
+            return p
         except Exception as e:
             raise e
