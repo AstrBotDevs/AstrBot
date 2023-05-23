@@ -5,6 +5,8 @@ from nakuru import (
     CQHTTP,
     GuildMessage
 )
+
+
 class QQ:
     def __init__(self, is_start: bool, gocq_loop = None) -> None:
         self.is_start = is_start
@@ -40,7 +42,10 @@ class QQ:
             if source.type == "GuildMessage":
                 await self.client.sendGuildChannelMessage(source.guild_id, source.channel_id, res)
                 return
-            else:
+            elif source.type == "FriendMessage":
+                await self.client.sendFriendMessage(source.user_id, res)
+                return
+            elif source.type == "GroupMessage":
                 await self.client.sendGroupMessage(source.group_id, res)
                 return
         
@@ -101,4 +106,20 @@ class QQ:
         try:
             asyncio.run_coroutine_threadsafe(self.send_qq_msg(message_obj, res), self.gocq_loop).result()
         except BaseException as e:
+            raise e
+
+    def create_text_image(title: str, text: str, max_width=30, font_size=20):
+        '''
+        文本转图片。
+        title: 标题
+        text: 文本内容
+        max_width: 文本宽度最大值（默认30）
+        font_size: 字体大小（默认20）
+
+        返回：PIL的Image对象
+        '''
+        try:
+            img = gu.word2img(title, text, max_width, font_size)
+            return img
+        except Exception as e:
             raise e

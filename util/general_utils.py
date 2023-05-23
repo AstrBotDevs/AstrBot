@@ -1,5 +1,10 @@
 import datetime
 import socket
+from PIL import Image, ImageDraw, ImageFont
+import os
+
+PLATFORM_GOCQ = 'gocq'
+PLATFORM_QQCHAN = 'qqchan'
 
 FG_COLORS = {
     "black": "30",
@@ -85,3 +90,42 @@ def port_checker(port: int, host: str = "localhost"):
     except Exception:
         sk.close()
         return False
+    
+def word2img(title: str, text: str, max_width=30, font_size=20):
+    if os.path.exists("resources/fonts/genshin.ttf"):
+        font_path = "resources/fonts/genshin.ttf"
+    elif os.path.exists("QQChannelChatGPT/resources/fonts/genshin.ttf"):
+        font_path = "QQChannelChatGPT/resources/fonts/genshin.ttf"
+    elif os.path.exists("C:/Windows/Fonts/simhei.ttf"):
+        font_path = "C:/Windows/Fonts/simhei.ttf"
+    elif os.path.exists("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"):
+        font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+    else:
+        raise Exception("找不到字体文件")
+    
+    width_factor = 0.9
+    height_factor = 1.5
+    # 格式化文本宽度最大为30
+    lines = text.split('\n')
+    i = 0
+    length = len(lines)
+    for l in lines:
+        if len(l) > max_width:
+            lines[i] = l[:max_width] + '\n' + l[max_width:]
+            length += 1
+        i += 1
+    text = '\n'.join(lines)
+    width = int(max_width * font_size * width_factor)
+    height = int(length * font_size * height_factor)
+    image = Image.new('RGB', (width, height), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+
+    text_font = ImageFont.truetype(font_path, font_size)
+    title_font = ImageFont.truetype(font_path, font_size + 5)
+    # 标题居中
+    title_width, title_height = title_font.getsize(title)
+    draw.text(((width - title_width) / 2, 10), title, fill=(0, 0, 0), font=title_font)
+    # 文本不居中
+    draw.text((10, title_height+20), text, fill=(0, 0, 0), font=text_font)
+
+    return image

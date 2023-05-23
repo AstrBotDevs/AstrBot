@@ -12,6 +12,11 @@ import importlib
 from util import general_utils as gu
 from model.platform.qq import QQ
 import stat
+from nakuru.entities.components import (
+    Plain,
+    Image
+)
+from PIL import Image as PILImage
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -50,7 +55,7 @@ class Command:
             return True, self.set_nick(message, platform)
         
         if self.command_start_with(message, "plugin"):
-            return True, self.plugin_oper(message, role, cached_plugins)
+            return True, self.plugin_oper(message, role, cached_plugins, platform)
         
         if self.command_start_with(message, "myid"):
             return True, self.get_my_id(message_obj, platform)
@@ -105,9 +110,13 @@ class Command:
     '''
     插件指令
     '''
-    def plugin_oper(self, message: str, role: str, cached_plugins: dict):
+    def plugin_oper(self, message: str, role: str, cached_plugins: dict, platform: str):
         l = message.split(" ")
         if len(l) < 2:
+            if platform == gu.PLATFORM_GOCQ:
+                img = gu.word2img("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
+                img.save("plu.png")
+                return True, [Image.fromFileSystem("plu.png")], "plugin"
             return True, "\n=====插件指令面板=====\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n===============", "plugin"
         else:
             ppath = ""
@@ -268,16 +277,27 @@ class Command:
             "plugin": "插件安装、卸载和重载"
         }
     
-    def help_messager(self, commands: dict):
+    def help_messager(self, commands: dict, platform: str):
         try:
             resp = requests.get("https://soulter.top/channelbot/notice.json").text
             notice = json.loads(resp)["notice"]
         except BaseException as e:
             notice = ""
-        msg = "Github项目名QQChannelChatGPT, 有问题提交issue, 欢迎Star\n【指令列表】\n"
+        msg = ''
+        # msg = "Github项目名QQChannelChatGPT, 有问题提交issue, 欢迎Star\n【指令列表】\n"
         for key, value in commands.items():
             msg += key + ": " + value + "\n"
         msg += notice
+
+        if platform == gu.PLATFORM_GOCQ:
+            try:
+                img = gu.word2img("【指令列表】", msg)
+                # 保存图片到本地
+                img.save("help.png")
+                return [Image.fromFileSystem("help.png")]
+            except BaseException as e:
+                gu.log(str(e))
+                return msg
         return msg
     
     # 接受可变参数

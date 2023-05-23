@@ -17,6 +17,7 @@ class CommandRevEdgeGPT(Command):
                       message_obj,
                       cached_plugins: dict, 
                       qq_platform: QQ):
+        self.platform = platform
         hit, res = super().check_command(message, role, platform, message_obj=message_obj, cached_plugins=cached_plugins, qq_platform=qq_platform)
         if hit:
             return True, res
@@ -44,5 +45,5 @@ class CommandRevEdgeGPT(Command):
             return res, "重置失败", "reset"
     
     def help(self):
-        return True, super().help_messager(super().general_commands()), "help"
+        return True, super().help_messager(super().general_commands(), self.platform), "help"
         

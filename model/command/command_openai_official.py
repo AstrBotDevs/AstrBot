@@ -2,6 +2,8 @@ from model.command.command import Command
 from model.provider.provider_openai_official import ProviderOpenAIOfficial
 from cores.qqbot.personality import personalities
 from model.platform.qq import QQ
+from util import general_utils as gu
+
 
 class CommandOpenAIOfficial(Command):
     def __init__(self, provider: ProviderOpenAIOfficial):
@@ -17,6 +19,7 @@ class CommandOpenAIOfficial(Command):
                       message_obj,
                       cached_plugins: dict,
                       qq_platform: QQ):
+        self.platform = platform
         hit, res = super().check_command(message, role, platform, message_obj=message_obj, cached_plugins=cached_plugins, qq_platform=qq_platform)
         if hit:
             return True, res
@@ -60,7 +63,7 @@ class CommandOpenAIOfficial(Command):
         commands['gpt'] = '查看gpt配置信息'
         commands['status'] = '查看key使用状态'
         commands['token'] = '查看本轮会话token'
-        return True, super().help_messager(commands), "help"
+        return True, super().help_messager(commands, self.platform), "help"
 
     
     def reset(self, session_id: str):
