@@ -113,6 +113,9 @@ bing_cache_loop = None
 # 插件
 cached_plugins = {}
 
+cnt_total = 0
+cnt_valid = 0
+
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
@@ -142,37 +145,31 @@ def toggle_count(at: bool, message):
 # 上传统计信息并检查更新
 def upload():
     global object_id
-    global version
+    global version, cnt_valid, cnt_total
     while True:
         addr = ''
+        addr_ip = ''
         try:
-            # 用户唯一性标识
             addr = requests.get('http://myip.ipip.net', timeout=5).text
-        except BaseException:
+            addr_ip = re.findall(r'\d+.\d+.\d+.\d+', addr)[0]
+        except BaseException as e:
+            print(e)
             pass
         try:
-            ts = str(time.time())
-            guild_count, guild_msg_count, guild_direct_msg_count, session_count = get_stat()
-            headers = {
-                'X-LC-Id': 'REDACTED_LEANCLOUD_APP_ID',
-                'X-LC-Key': 'REDACTED_LEANCLOUD_APP_KEY',
-                'Content-Type': 'application/json'
-            }
-            key_stat = chatgpt.get_key_stat()
-            d = {"data": {'version': version, "guild_count": guild_count, "guild_msg_count": guild_msg_count, "guild_direct_msg_count": guild_direct_msg_count, "session_count": session_count, 'addr': addr, 'key_stat':key_stat}}
-            d = json.dumps(d).encode("utf-8")
-            res = requests.put(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record/{object_id}', headers = headers, data = d)
-            if json.loads(res.text)['code'] == 1:
-                res = requests.post(f'https://uqfxtww1.lc-cn-n1-shared.com/1.1/classes/bot_record', headers = headers, data = d)
-                object_id = json.loads(res.text)['objectId']
-                object_id_file = open(abs_path+"configs/object_id", 'w+', encoding='utf-8')
-                object_id_file.write(str(object_id))
-                object_id_file.flush()
-                object_id_file.close()
+            o = {"cnt_total": cnt_total,"admin": admin_qq,"addr": addr,}
+            o_j = json.dumps(o)
+            res = {"version": version, "count": cnt_valid, "ip": addr_ip, "others": o_j}
+            resp = requests.post('https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
+            # print(resp.text)
+            if resp.status_code == 200:
+                ok = resp.json()
+                if ok['status'] == 'ok':
+                    cnt_valid = 0
+                    cnt_total = 0
         except BaseException as e:
+            print(e)
             pass
-        # 每隔2小时上传一次
-        time.sleep(60*60*2)
+        time.sleep(60*10)
 
 '''
 初始化机器人
@@ -244,18 +241,7 @@ def initBot(cfg, prov):
         except BaseException as e:
             gu.log("百度内容审核初始化失败", gu.LEVEL_ERROR)
         
-    # 统计上传
-    if is_upload_log:
-        # 读取object_id
-        global object_id
-        if not os.path.exists(abs_path+"configs/object_id"):
-            with open(abs_path+"configs/object_id", 'w', encoding='utf-8') as f:
-                f.write("")
-        object_id_file = open(abs_path+"configs/object_id", 'r', encoding='utf-8')
-        object_id = object_id_file.read()
-        object_id_file.close()
-        # 创建上传定时器线程
-        threading.Thread(target=upload, daemon=True).start()
+    threading.Thread(target=upload, daemon=True).start()
     
     # 得到私聊模式配置
     if 'direct_message_mode' in cfg:
@@ -440,6 +426,8 @@ def save_provider_preference(chosen_provider):
 通用回复方法
 '''
 def send_message(platform, message, res, msg_ref = None, image = None, gocq_loop = None, qqchannel_bot = None, gocq_bot = None):
+    global cnt_valid
+    cnt_valid += 1
     if platform == PLATFORM_QQCHAN:
         if image != None:
             qqchannel_bot.send_qq_msg(message, str(res), image_mode=True, msg_ref=msg_ref)
@@ -471,6 +459,9 @@ def oper_msg(message,
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
     global admin_qq, admin_qqchan, cached_plugins, gocq_bot, nick_qq
+    global cnt_total
+
+    cnt_total += 1
 
     with_tag = False # 是否带有昵称
 
