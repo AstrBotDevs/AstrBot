@@ -1,10 +1,12 @@
-from nakuru.entities.components import Plain, At, Image
+from nakuru.entities.components import Plain, At, Image, Node
 from util import general_utils as gu
 import asyncio
 from nakuru import (
     CQHTTP,
     GuildMessage
 )
+import time
+
 
 
 class QQ:
@@ -36,6 +38,17 @@ class QQ:
                 "type": "GroupMessage",
                 "group_id": source
             }
+            
+        if isinstance(res, str):
+            res_str = res
+            res = []
+            if source.type == "GroupMessage":
+                res.append(At(qq=source.user_id))
+            if image_mode:
+                res.append(Plain(text="好的，我根据你的需要为你生成了一张图片😊"))
+                res.append(Image.fromURL(url=res))
+            else:
+                res.append(Plain(text=res_str))
 
         # 回复消息链
         if isinstance(res, list) and len(res) > 0:
@@ -46,41 +59,65 @@ class QQ:
                 await self.client.sendFriendMessage(source.user_id, res)
                 return
             elif source.type == "GroupMessage":
+                # 过长时forward发送
+                plain_text_len = 0
+                image_num = 0
+                for i in res:
+                    if isinstance(i, Plain):
+                        plain_text_len += len(i.text)
+                    elif isinstance(i, Image):
+                        image_num += 1
+                if plain_text_len > 100 or image_num > 1:
+                    # 删除At
+                    _t = ""
+                    for i in res:
+                        if isinstance(i, Plain):
+                            _t += i.text
+                    node = Node(res)
+                    node.content = _t
+                    node.uin = source.self_id
+                    print(source)
+                    node.name = f"To {source.sender.nickname}:"
+                    node.time = int(time.time())
+                    # print(node)
+                    nodes = [node]
+                    await self.client.sendGroupForwardMessage(source.group_id, nodes)
+                    return
                 await self.client.sendGroupMessage(source.group_id, res)
                 return
         
-        # 通过消息链处理
-        if not image_mode:
-            if source.type == "GroupMessage":
-                await self.client.sendGroupMessage(source.group_id, [
-                    At(qq=source.user_id),
-                    Plain(text=res)
-                ])
-            elif source.type == "FriendMessage":
-                await self.client.sendFriendMessage(source.user_id, [
-                    Plain(text=res)
-                ])
-            elif source.type == "GuildMessage":
-                await self.client.sendGuildChannelMessage(source.guild_id, source.channel_id, [
-                    Plain(text=res)
-                ])
-        else:
-            if source.type == "GroupMessage":
-                await self.client.sendGroupMessage(source.group_id, [
-                    At(qq=source.user_id),
-                    Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
-                    Image.fromURL(url=res)
-                ])
-            elif source.type == "FriendMessage":
-                await self.client.sendFriendMessage(source.user_id, [
-                    Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
-                    Image.fromURL(url=res)
-                ])
-            elif source.type == "GuildMessage":
-                await self.client.sendGuildChannelMessage(source.guild_id, source.channel_id, [
-                    Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
-                    Image.fromURL(url=res)
-                ])
+        # # 通过消息链处理
+        # if not image_mode:
+        #     if source.type == "GroupMessage":
+        #         await self.client.sendGroupMessage(source.group_id, [
+        #             At(qq=source.user_id),
+        #             Plain(text=res)
+        #         ])
+        #     elif source.type == "FriendMessage":
+        #         await self.client.sendFriendMessage(source.user_id, [
+        #             Plain(text=res)
+        #         ])
+        #     elif source.type == "GuildMessage":
+        #         await self.client.sendGuildChannelMessage(source.guild_id, source.channel_id, [
+        #             Plain(text=res)
+        #         ])
+        # else:
+        #     if source.type == "GroupMessage":
+        #         await self.client.sendGroupMessage(source.group_id, [
+        #             At(qq=source.user_id),
+        #             Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
+        #             Image.fromURL(url=res)
+        #         ])
+        #     elif source.type == "FriendMessage":
+        #         await self.client.sendFriendMessage(source.user_id, [
+        #             Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
+        #             Image.fromURL(url=res)
+        #         ])
+        #     elif source.type == "GuildMessage":
+        #         await self.client.sendGuildChannelMessage(source.guild_id, source.channel_id, [
+        #             Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
+        #             Image.fromURL(url=res)
+        #         ])
 
     def send(self, 
             to,
