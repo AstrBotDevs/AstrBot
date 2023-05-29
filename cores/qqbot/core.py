@@ -327,7 +327,7 @@ def initBot(cfg, prov):
         global gocq_app, gocq_loop
         gocq_loop = asyncio.new_event_loop()
         gocq_bot = QQ(True, cc, gocq_loop)
-        thread_inst = tshreading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=False)
+        thread_inst = threading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=False)
         thread_inst.start()
     else:
         gocq_bot = QQ(False)
