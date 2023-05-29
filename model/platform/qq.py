@@ -1,5 +1,6 @@
 from nakuru.entities.components import Plain, At, Image, Node
 from util import general_utils as gu
+from util import cmd_config as CmdConfig
 import asyncio
 from nakuru import (
     CQHTTP,
@@ -10,9 +11,10 @@ import time
 
 
 class QQ:
-    def __init__(self, is_start: bool, gocq_loop = None) -> None:
+    def __init__(self, is_start: bool, cc: CmdConfig.CmdConfig = None, gocq_loop = None) -> None:
         self.is_start = is_start
         self.gocq_loop = gocq_loop
+        self.cc = cc
 
     def run_bot(self, gocq):
         self.client: CQHTTP = gocq
@@ -67,7 +69,7 @@ class QQ:
                         plain_text_len += len(i.text)
                     elif isinstance(i, Image):
                         image_num += 1
-                if plain_text_len > 100 or image_num > 1:
+                if plain_text_len > self.cc.get('qq_forward_threshold', 200) or image_num > 1:
                     # 删除At
                     _t = ""
                     for i in res:
@@ -85,39 +87,6 @@ class QQ:
                     return
                 await self.client.sendGroupMessage(source.group_id, res)
                 return
-        
-        # # 通过消息链处理
-        # if not image_mode:
-        #     if source.type == "GroupMessage":
-        #         await self.client.sendGroupMessage(source.group_id, [
-        #             At(qq=source.user_id),
-        #             Plain(text=res)
-        #         ])
-        #     elif source.type == "FriendMessage":
-        #         await self.client.sendFriendMessage(source.user_id, [
-        #             Plain(text=res)
-        #         ])
-        #     elif source.type == "GuildMessage":
-        #         await self.client.sendGuildChannelMessage(source.guild_id, source.channel_id, [
-        #             Plain(text=res)
-        #         ])
-        # else:
-        #     if source.type == "GroupMessage":
-        #         await self.client.sendGroupMessage(source.group_id, [
-        #             At(qq=source.user_id),
-        #             Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
-        #             Image.fromURL(url=res)
-        #         ])
-        #     elif source.type == "FriendMessage":
-        #         await self.client.sendFriendMessage(source.user_id, [
-        #             Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
-        #             Image.fromURL(url=res)
-        #         ])
-        #     elif source.type == "GuildMessage":
-        #         await self.client.sendGuildChannelMessage(source.guild_id, source.channel_id, [
-        #             Plain(text="好的，我根据你的需要为你生成了一张图片😊"),
-        #             Image.fromURL(url=res)
-        #         ])
 
     def send(self, 
             to,

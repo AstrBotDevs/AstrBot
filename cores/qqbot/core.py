@@ -27,6 +27,7 @@ from model.command.command_rev_chatgpt import CommandRevChatGPT
 from model.command.command_rev_edgegpt import CommandRevEdgeGPT
 from model.command.command_openai_official import CommandOpenAIOfficial
 from util import general_utils as gu
+from util import cmd_config as CmdConfig
 
 
 
@@ -113,8 +114,13 @@ bing_cache_loop = None
 # 插件
 cached_plugins = {}
 
+# 统计
 cnt_total = 0
 cnt_valid = 0
+
+# 新版配置文件
+cc = CmdConfig.CmdConfig()
+cc.init_attributes(["qq_forward_threshold"], 200)
 
 
 def new_sub_thread(func, args=()):
@@ -277,15 +283,8 @@ def initBot(cfg, prov):
     if chosen_provider is None:
         gu.log("检测到没有启动任何一个语言模型。请至少在配置文件中启用一个语言模型。", gu.LEVEL_CRITICAL)
 
-    # 得到指令设置(cmd_config.json)
-    if os.path.exists("cmd_config.json"):
-        with open("cmd_config.json", 'r', encoding='utf-8') as f:
-            cmd_config = json.load(f)
-            # QQ机器人昵称
-            if 'nick_qq' in cmd_config:
-                global nick_qq
-                nick_qq = cmd_config['nick_qq']
-
+    global nick_qq
+    nick_qq = cc.get('nick_qq', nick_qq)
 
     thread_inst = None
 
@@ -305,41 +304,30 @@ def initBot(cfg, prov):
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
         gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
 
-        cmd_config = {}
-        if os.path.exists("cmd_config.json"):
-            with open("cmd_config.json", 'r', encoding='utf-8') as f:
-                cmd_config = json.load(f)
         global admin_qq, admin_qqchan
-        if "admin_qq" in cmd_config:
-            admin_qq = cmd_config['admin_qq']
-            gu.log("管理者QQ号: " + admin_qq, gu.LEVEL_INFO)
-        else:
+        admin_qq = cc.get('admin_qq', None)
+        admin_qqchan = cc.get('admin_qqchan', None)
+        if admin_qq == None:
             gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
             admin_qq = input("请输入管理者QQ号(必须设置): ")
             gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-            cmd_config['admin_qq'] = admin_qq
-            with open("cmd_config.json", 'w', encoding='utf-8') as f:
-                json.dump(cmd_config, f, indent=4)
-                f.flush()
-        if "admin_qqchan" in cmd_config:
-            admin_qqchan = cmd_config['admin_qqchan']
-            gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
-        else:
+            cc.put('admin_qq', admin_qq)
+        if admin_qqchan == None:
             gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
             admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
             if admin_qqchan == "":
                 gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
             else:
                 gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-                cmd_config['admin_qqchan'] = admin_qqchan
-                with open("cmd_config.json", 'w', encoding='utf-8') as f:
-                    json.dump(cmd_config, f, indent=4)
-                    f.flush()
+                cc.put('admin_qqchan', admin_qqchan)
+        
+        gu.log("管理者QQ: " + admin_qq, gu.LEVEL_INFO)
+        gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
         
         global gocq_app, gocq_loop
         gocq_loop = asyncio.new_event_loop()
-        gocq_bot = QQ(True, gocq_loop)
-        thread_inst = threading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=False)
+        gocq_bot = QQ(True, cc, gocq_loop)
+        thread_inst = tshreading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=False)
         thread_inst.start()
     else:
         gocq_bot = QQ(False)
@@ -691,8 +679,7 @@ def oper_msg(message,
 
             # 昵称
             if command == "nick":
-                with open("cmd_config.json", "r", encoding="utf-8") as f:
-                    nick_qq = json.load(f)["nick_qq"]
+                nick_qq = cc.get("nick_qq", nick_qq)
 
             if command_result[0]:
                 # 是否是画图指令
