@@ -3,6 +3,7 @@ from EdgeGPT import Chatbot, ConversationStyle
 import json
 import os
 from util import general_utils as gu
+from util.cmd_config import CmdConfig as cc
 
 
 class ProviderRevEdgeGPT(Provider):
@@ -11,7 +12,10 @@ class ProviderRevEdgeGPT(Provider):
         self.wait_stack = []
         with open('./cookies.json', 'r') as f:
             cookies = json.load(f)
-        self.bot = Chatbot(cookies=cookies)
+        proxy = cc.get("bing_proxy", None)
+        if proxy == "":
+            proxy = None
+        self.bot = Chatbot(cookies=cookies, proxy = proxy)
 
     def is_busy(self):
         return self.busy
