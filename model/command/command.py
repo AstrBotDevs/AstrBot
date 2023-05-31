@@ -10,6 +10,7 @@ import util.plugin_util as putil
 import shutil
 import importlib
 from util import general_utils as gu
+from util import cmd_config as CmdConfig
 from model.platform.qq import QQ
 import stat
 from nakuru.entities.components import (
@@ -25,6 +26,7 @@ PLATFORM_GOCQ = 'gocq'
 class Command:
     def __init__(self, provider: Provider):
         self.provider = Provider
+        self.cc = CmdConfig.CmdConfig()
 
     def get_plugin_modules(self):
         plugins = []
@@ -59,6 +61,8 @@ class Command:
         
         if self.command_start_with(message, "myid"):
             return True, self.get_my_id(message_obj, platform)
+        if self.command_start_with(message, "newconf"):
+            return True, self.get_new_conf(role, platform)
         
         return False, None
     
@@ -68,6 +72,15 @@ class Command:
                 return True, f"你的频道id是{str(message_obj.sender.tiny_id)}", "plugin"
             else:
                 return True, f"你的QQ是{str(message_obj.sender.user_id)}", "plugin"
+            
+    def get_new_conf(self, role, platform):
+        if role != "admin":
+            return False, f"你的身份组{role}没有权限使用此指令。", "newconf"
+        if platform == gu.PLATFORM_GOCQ:
+            obj = self.cc.get_all()
+            p = gu.create_text_image("【cmd_config.json】", json.dumps(obj, indent=4, ensure_ascii=False))
+            return True, [Image.fromFileSystem(p)], "newconf"
+            
 
     
     def plugin_reload(self, cached_plugins: dict, target: str = None, all: bool = False):
