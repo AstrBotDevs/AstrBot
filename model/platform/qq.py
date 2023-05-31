@@ -1,6 +1,6 @@
 from nakuru.entities.components import Plain, At, Image, Node
 from util import general_utils as gu
-from util import cmd_config as CmdConfig
+from util.cmd_config import CmdConfig
 import asyncio
 from nakuru import (
     CQHTTP,
@@ -11,7 +11,7 @@ import time
 
 
 class QQ:
-    def __init__(self, is_start: bool, cc: CmdConfig.CmdConfig = None, gocq_loop = None) -> None:
+    def __init__(self, is_start: bool, cc: CmdConfig = None, gocq_loop = None) -> None:
         self.is_start = is_start
         self.gocq_loop = gocq_loop
         self.cc = cc

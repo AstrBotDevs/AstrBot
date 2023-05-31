@@ -1,35 +1,46 @@
 import os
 import json
 
+cpath = "cmd_config.json"
+
+def check_exist():
+    if not os.path.exists(cpath):
+        with open(cpath, "w", encoding="utf-8") as f:
+            json.dump({}, f, indent=4)
+            f.flush()
+
 class CmdConfig():
-    def __init__(self) -> None:
-        self.cpath = "cmd_config.json"
-        if not os.path.exists(self.cpath):
-            with open(self.cpath, "w", encoding="utf-8") as f:
-                json.dump({}, f, indent=4)
-                f.flush()
-    def get(self, key, default=None):
-        with open(self.cpath, "r", encoding="utf-8") as f:
+
+    @staticmethod
+    def get(key, default=None):
+        check_exist()
+        with open(cpath, "r", encoding="utf-8") as f:
             d = json.load(f)
             if key in d:
                 return d[key]
             else:
                 return default
-    
-    def get_all(self):
-        with open(self.cpath, "r", encoding="utf-8") as f:
+            
+    @staticmethod
+    def get_all():
+        check_exist()
+        with open(cpath, "r", encoding="utf-8") as f:
             return json.load(f)
         
-    def put(self, key, value):
-        with open(self.cpath, "r", encoding="utf-8") as f:
+    @staticmethod
+    def put(key, value):
+        check_exist()
+        with open(cpath, "r", encoding="utf-8") as f:
             d = json.load(f)
             d[key] = value
-            with open(self.cpath, "w", encoding="utf-8") as f:
+            with open(cpath, "w", encoding="utf-8") as f:
                 json.dump(d, f, indent=4)
                 f.flush()
 
-    def init_attributes(self, keys: list, init_val = ""):
-        with open(self.cpath, "r", encoding="utf-8") as f:
+    @staticmethod
+    def init_attributes(keys: list, init_val = ""):
+        check_exist()
+        with open(cpath, "r", encoding="utf-8") as f:
             d = json.load(f)
             _tag = False
             for k in keys:
@@ -37,6 +48,6 @@ class CmdConfig():
                     d[k] = init_val
                     _tag = True
             if _tag:
-                with open(self.cpath, "w", encoding="utf-8") as f:
+                with open(cpath, "w", encoding="utf-8") as f:
                     json.dump(d, f, indent=4)
                     f.flush()

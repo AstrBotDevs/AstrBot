@@ -27,7 +27,7 @@ from model.command.command_rev_chatgpt import CommandRevChatGPT
 from model.command.command_rev_edgegpt import CommandRevEdgeGPT
 from model.command.command_openai_official import CommandOpenAIOfficial
 from util import general_utils as gu
-from util import cmd_config as CmdConfig
+from util.cmd_config import CmdConfig as cc
 
 
 
@@ -119,7 +119,6 @@ cnt_total = 0
 cnt_valid = 0
 
 # 新版配置文件
-cc = CmdConfig.CmdConfig()
 cc.init_attributes(["qq_forward_threshold"], 200)
 cc.init_attributes(["qq_welcome"], "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
 

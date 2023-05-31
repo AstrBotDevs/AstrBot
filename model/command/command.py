@@ -10,7 +10,7 @@ import util.plugin_util as putil
 import shutil
 import importlib
 from util import general_utils as gu
-from util import cmd_config as CmdConfig
+from util.cmd_config import CmdConfig as cc
 from model.platform.qq import QQ
 import stat
 from nakuru.entities.components import (
@@ -26,7 +26,6 @@ PLATFORM_GOCQ = 'gocq'
 class Command:
     def __init__(self, provider: Provider):
         self.provider = Provider
-        self.cc = CmdConfig.CmdConfig()
 
     def get_plugin_modules(self):
         plugins = []
@@ -77,7 +76,7 @@ class Command:
         if role != "admin":
             return False, f"你的身份组{role}没有权限使用此指令。", "newconf"
         if platform == gu.PLATFORM_GOCQ:
-            obj = self.cc.get_all()
+            obj = cc.get_all()
             p = gu.create_text_image("【cmd_config.json】", json.dumps(obj, indent=4, ensure_ascii=False))
             return True, [Image.fromFileSystem(p)], "newconf"
             
