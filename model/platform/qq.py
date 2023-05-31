@@ -33,7 +33,7 @@ class QQ:
          res可以是一个数组, 也就是gocq的消息链。
          插件开发者请使用send方法, 可以不用直接调用这个方法。
         """
-        gu.log("回复GOCQ消息: "+str(res), level=gu.LEVEL_INFO, tag="GOCQ", max_len=40)
+        gu.log("回复GOCQ消息: "+str(res), level=gu.LEVEL_INFO, tag="GOCQ", max_len=300)
 
         if isinstance(source, int):
             source = {
