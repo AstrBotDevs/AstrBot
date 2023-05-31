@@ -121,6 +121,7 @@ cnt_valid = 0
 # 新版配置文件
 cc = CmdConfig.CmdConfig()
 cc.init_attributes(["qq_forward_threshold"], 200)
+cc.init_attributes(["qq_welcome"], "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
 
 
 def new_sub_thread(func, args=()):
@@ -791,9 +792,9 @@ class gocqClient():
         
     @gocq_app.receiver("GroupMemberIncrease")
     async def _(app: CQHTTP, source: GroupMemberIncrease):
-        global nick_qq
+        global nick_qq, cc
         await app.sendGroupMessage(source.group_id, [
-            Plain(text=f"欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n@我输入help查看帮助~\n")
+            Plain(text=cc.get("qq_welcome", "欢迎新人~")),
         ])
 
     @gocq_app.receiver("GuildMessage")
