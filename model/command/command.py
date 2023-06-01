@@ -53,7 +53,7 @@ class Command:
                 gu.log(f"{k}插件加载出现问题，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
 
         if self.command_start_with(message, "nick"):
-            return True, self.set_nick(message, platform)
+            return True, self.set_nick(message, platform, role)
         
         if self.command_start_with(message, "plugin"):
             return True, self.plugin_oper(message, role, cached_plugins, platform)
@@ -111,6 +111,7 @@ class Command:
                             "info": info
                         }  
                 except BaseException as e:
+                    raise e
                     fail_rec += f"加载{p}插件出现问题，原因{str(e)}\n"
             if fail_rec == "":
                 return True, None
@@ -249,7 +250,9 @@ class Command:
     '''
     nick: 存储机器人的昵称
     '''
-    def set_nick(self, message: str, platform: str):
+    def set_nick(self, message: str, platform: str, role: str = "member"):
+        if role != "admin":
+            return True, "你无权使用该指令 :P", "nick"
         if platform == PLATFORM_GOCQ:
             l = message.split(" ")
             if len(l) == 1:
