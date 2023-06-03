@@ -9,7 +9,11 @@ from nakuru import (
 import time
 
 
-
+class FakeSource:
+    def __init__(self, type, group_id):
+        self.type = type
+        self.group_id = group_id
+    
 class QQ:
     def __init__(self, is_start: bool, cc: CmdConfig = None, gocq_loop = None) -> None:
         self.is_start = is_start
@@ -36,10 +40,7 @@ class QQ:
         gu.log("回复GOCQ消息: "+str(res), level=gu.LEVEL_INFO, tag="GOCQ", max_len=300)
 
         if isinstance(source, int):
-            source = {
-                "type": "GroupMessage",
-                "group_id": source
-            }
+            source = FakeSource("GroupMessage", source)
             
         if isinstance(res, str):
             res_str = res
