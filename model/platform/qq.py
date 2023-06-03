@@ -72,18 +72,16 @@ class QQ:
                         image_num += 1
                 if plain_text_len > self.cc.get('qq_forward_threshold', 200) or image_num > 1:
                     # 删除At
-                    _t = ""
                     for i in res:
-                        if isinstance(i, Plain):
-                            _t += i.text
+                        if isinstance(i, At):
+                            res.remove(i)
                     node = Node(res)
-                    node.content = _t
+                    # node.content = res
                     node.uin = source.self_id
-                    print(source)
                     node.name = f"To {source.sender.nickname}:"
                     node.time = int(time.time())
-                    # print(node)
-                    nodes = [node]
+                    print(node)
+                    nodes=[node]
                     await self.client.sendGroupForwardMessage(source.group_id, nodes)
                     return
                 await self.client.sendGroupMessage(source.group_id, res)
