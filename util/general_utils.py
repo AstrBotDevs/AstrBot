@@ -104,8 +104,8 @@ def word2img(title: str, text: str, max_width=30, font_size=20):
     else:
         raise Exception("找不到字体文件")
     
-    width_factor = 0.9
-    height_factor = 1.5
+    width_factor = 1.0
+    height_factor = 1.8
     # 格式化文本宽度最大为30
     lines = text.split('\n')
     i = 0
