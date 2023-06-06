@@ -316,6 +316,7 @@ class Command:
             if plugin_list_info.strip() != "":
                 msg += "\n【插件列表】\n"
                 msg += plugin_list_info
+                msg += "\n*使用plugin v 插件名 查看插件帮助"
         msg += notice
 
         if platform == gu.PLATFORM_GOCQ:
