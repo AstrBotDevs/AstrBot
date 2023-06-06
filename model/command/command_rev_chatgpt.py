@@ -19,7 +19,7 @@ class CommandRevChatGPT(Command):
         if hit:
             return True, res
         if self.command_start_with(message, "help", "帮助"):
-            return True, self.help()
+            return True, self.help(cached_plugins)
         elif self.command_start_with(message, "reset"):
             return True, self.reset()
         elif self.command_start_with(message, "update"):
@@ -34,5 +34,6 @@ class CommandRevChatGPT(Command):
     def reset(self):
         return False, "此功能暂未开放", "reset"
     
-    def help(self):
-        return True, super().help_messager(super().general_commands(), self.platform), "help"
+    
+    def help(self, cached_plugins: dict):
+        return True, super().help_messager(super().general_commands(), self.platform, cached_plugins), "help"

@@ -300,7 +300,7 @@ class Command:
             "plugin": "插件安装、卸载和重载"
         }
     
-    def help_messager(self, commands: dict, platform: str):
+    def help_messager(self, commands: dict, platform: str, cached_plugins: dict = None):
         try:
             resp = requests.get("https://soulter.top/channelbot/notice.json").text
             notice = json.loads(resp)["notice"]
@@ -311,10 +311,11 @@ class Command:
         for key, value in commands.items():
             msg += key + ": " + value + "\n"
         # plugins
-        plugin_list_info = "\n".join([f"{k}: \n名称: {v['info']['name']}\n简介: {v['info']['desc']}\n" for k, v in cached_plugins.items()])
-        if plugin_list_info.strip() != "":
-            msg += "\n【插件列表】\n"
-            msg += plugin_list_info
+        if cached_plugins != None:
+            plugin_list_info = "\n".join([f"{k}: \n名称: {v['info']['name']}\n简介: {v['info']['desc']}\n" for k, v in cached_plugins.items()])
+            if plugin_list_info.strip() != "":
+                msg += "\n【插件列表】\n"
+                msg += plugin_list_info
         msg += notice
 
         if platform == gu.PLATFORM_GOCQ:

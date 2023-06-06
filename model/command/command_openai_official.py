@@ -36,7 +36,7 @@ class CommandOpenAIOfficial(Command):
         elif self.command_start_with(message, "count"):
             return True, self.count()
         elif self.command_start_with(message, "help", "帮助"):
-            return True, self.help()
+            return True, self.help(cached_plugins)
         elif self.command_start_with(message, "unset"):
             return True, self.unset(session_id)
         elif self.command_start_with(message, "set"):
@@ -55,7 +55,7 @@ class CommandOpenAIOfficial(Command):
         
         return False, None
     
-    def help(self):
+    def help(self, cached_plugins):
         commands = super().general_commands()
         commands['画'] = '画画'
         commands['key'] = '添加OpenAI key'
@@ -63,9 +63,9 @@ class CommandOpenAIOfficial(Command):
         commands['gpt'] = '查看gpt配置信息'
         commands['status'] = '查看key使用状态'
         commands['token'] = '查看本轮会话token'
-        return True, super().help_messager(commands, self.platform), "help"
+        return True, super().help_messager(commands, self.platform, cached_plugins), "help"
 
-    
+        
     def reset(self, session_id: str):
         if self.provider is None:
             return False, "未启动OpenAI ChatGPT语言模型.", "reset"

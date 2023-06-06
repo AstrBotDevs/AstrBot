@@ -24,7 +24,7 @@ class CommandRevEdgeGPT(Command):
         if self.command_start_with(message, "reset"):
             return True, self.reset(loop)
         elif self.command_start_with(message, "help"):
-            return True, self.help()
+            return True, self.help(cached_plugins)
         elif self.command_start_with(message, "update"):
             return True, self.update(message, role)
         elif self.command_start_with(message, "keyword"):
@@ -44,6 +44,6 @@ class CommandRevEdgeGPT(Command):
         else:
             return res, "重置失败", "reset"
     
-    def help(self):
-        return True, super().help_messager(super().general_commands(), self.platform), "help"
+    def help(self, cached_plugins: dict):
+        return True, super().help_messager(super().general_commands(), self.platform, cached_plugins), "help"
         
