@@ -105,15 +105,21 @@ def word2img(title: str, text: str, max_width=30, font_size=20):
         raise Exception("找不到字体文件")
     
     width_factor = 1.0
-    height_factor = 1.8
+    height_factor = 1.5
     # 格式化文本宽度最大为30
     lines = text.split('\n')
     i = 0
     length = len(lines)
     for l in lines:
         if len(l) > max_width:
-            lines[i] = l[:max_width] + '\n' + l[max_width:]
-            length += 1
+            # lines[i] = l[:max_width] + '\n' + l[max_width:]
+            # for
+            cp = l
+            for ii in range(len(l)):
+                if ii % max_width == 0:
+                    cp = cp[:ii] + '\n' + cp[ii:]
+                    length += 1
+            lines[i] = cp
         i += 1
     text = '\n'.join(lines)
     width = int(max_width * font_size * width_factor)
