@@ -62,9 +62,8 @@ class QQ:
                 else:
                     news.append(i)
             p = gu.create_text_image("", "".join(plains))
-            res = [Image.fromFileSystem(p), news]
-        
-        print(str(res))
+            news.append(Image.fromFileSystem(p))
+            res = news
 
 
         # 回复消息链
