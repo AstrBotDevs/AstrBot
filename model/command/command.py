@@ -60,8 +60,8 @@ class Command:
         
         if self.command_start_with(message, "myid"):
             return True, self.get_my_id(message_obj, platform)
-        if self.command_start_with(message, "newconf"):
-            return True, self.get_new_conf(role, platform)
+        if self.command_start_with(message, "nconf") or self.command_start_with(message, "newconf"):
+            return True, self.get_new_conf(message, role, platform)
         
         return False, None
     
@@ -72,13 +72,16 @@ class Command:
             else:
                 return True, f"你的QQ是{str(message_obj.sender.user_id)}", "plugin"
             
-    def get_new_conf(self, role, platform):
+    def get_new_conf(self, message, role, platform):
         if role != "admin":
             return False, f"你的身份组{role}没有权限使用此指令。", "newconf"
         if platform == gu.PLATFORM_GOCQ:
-            obj = cc.get_all()
-            p = gu.create_text_image("【cmd_config.json】", json.dumps(obj, indent=4, ensure_ascii=False))
-            return True, [Image.fromFileSystem(p)], "newconf"
+            l = message.split(" ")
+            if len(l) <= 1:
+                obj = cc.get_all()
+                p = gu.create_text_image("【cmd_config.json】", json.dumps(obj, indent=4, ensure_ascii=False))
+                return True, [Image.fromFileSystem(p)], "newconf"
+        return False, f"Not support or not implemented.", "newconf"
             
 
     
@@ -307,11 +310,16 @@ class Command:
         # msg = "Github项目名QQChannelChatGPT, 有问题提交issue, 欢迎Star\n【指令列表】\n"
         for key, value in commands.items():
             msg += key + ": " + value + "\n"
+        # plugins
+        plugin_list_info = "\n".join([f"{k}: \n名称: {v['info']['name']}\n简介: {v['info']['desc']}\n" for k, v in cached_plugins.items()])
+        if plugin_list_info.strip() != "":
+            msg += "\n【插件列表】\n"
+            msg += plugin_list_info
         msg += notice
 
         if platform == gu.PLATFORM_GOCQ:
             try:
-                p = gu.create_text_image("【指令列表】", msg)
+                p = gu.create_text_image("【Help Center】", msg)
                 return [Image.fromFileSystem(p)]
             except BaseException as e:
                 gu.log(str(e))
