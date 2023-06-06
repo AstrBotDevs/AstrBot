@@ -724,7 +724,7 @@ def oper_msg(message,
         
     # 发送qq信息
     try:
-        if platform==GOCQ:
+        if platform==PLATFORM_GOCQ:
             if cc.get("qq_pic_mode", False):
                 send_message(platform, message, chatgpt_res, image_mode=True, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
             else:
