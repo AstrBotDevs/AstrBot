@@ -63,6 +63,8 @@ class QQ:
                     news.append(i)
             p = gu.create_text_image("", "".join(plains))
             res = [Image.fromFileSystem(p), news]
+        
+        print(str(res))
 
 
         # 回复消息链
@@ -82,7 +84,7 @@ class QQ:
                         plain_text_len += len(i.text)
                     elif isinstance(i, Image):
                         image_num += 1
-                if plain_text_len > self.cc.get('qq_forward_threshold', 200) or image_num > 1:
+                if plain_text_len > self.cc.get('qq_forward_threshold', 200):
                     # 删除At
                     for i in res:
                         if isinstance(i, At):
