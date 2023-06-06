@@ -31,6 +31,8 @@ class QQ:
                           source, 
                           res, 
                           image_mode: bool = False):
+        # image_mode parameter is [deprecated].
+
         if not self.is_start:
             raise Exception("管理员未启动GOCQ平台")
         """
@@ -41,17 +43,27 @@ class QQ:
 
         if isinstance(source, int):
             source = FakeSource("GroupMessage", source)
-            
+        
+        # str convert to CQ Message Chain
         if isinstance(res, str):
             res_str = res
             res = []
             if source.type == "GroupMessage":
                 res.append(At(qq=source.user_id))
-            if image_mode:
-                res.append(Plain(text="好的，我根据你的需要为你生成了一张图片😊"))
-                res.append(Image.fromURL(url=res))
-            else:
-                res.append(Plain(text=res_str))
+            res.append(Plain(text=res_str))
+
+        # if image mode, put all Plain texts into a new picture.
+        if image_mode and isinstance(res, list):
+            plains = []
+            news = []
+            for i in res:
+                if isinstance(i, Plain):
+                    plains.append(i.text)
+                else:
+                    news.append(i)
+            p = gu.create_text_image("", "".join(plains))
+            res = [Image.fromFileSystem(p), news]
+
 
         # 回复消息链
         if isinstance(res, list) and len(res) > 0:

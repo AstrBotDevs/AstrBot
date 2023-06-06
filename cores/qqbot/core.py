@@ -122,6 +122,7 @@ cnt_valid = 0
 cc.init_attributes(["qq_forward_threshold"], 200)
 cc.init_attributes(["qq_welcome"], "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
 cc.init_attributes(["bing_proxy"], "")
+cc.init_attributes(["qq_pic_mode"], False)
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
@@ -413,7 +414,9 @@ def save_provider_preference(chosen_provider):
 '''
 通用回复方法
 '''
-def send_message(platform, message, res, msg_ref = None, image = None, gocq_loop = None, qqchannel_bot = None, gocq_bot = None):
+def send_message(platform, message, res, msg_ref = None, image = None, gocq_loop = None, qqchannel_bot = None, gocq_bot = None, image_mode=False):
+    # imagemode: 
+    # For GOCQ: when image_mode is true, ALL plain texts in res will change into a new pic
     global cnt_valid
     cnt_valid += 1
     if platform == PLATFORM_QQCHAN:
@@ -423,9 +426,10 @@ def send_message(platform, message, res, msg_ref = None, image = None, gocq_loop
             qqchannel_bot.send_qq_msg(message, str(res), msg_ref=msg_ref)
     if platform == PLATFORM_GOCQ: 
         if image != None:
-            asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, image, image_mode=True), gocq_loop).result()
+            # image is a url string
+            asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, [Plain(text="好的，我根据你的需要为你生成了一张图片😊"),Image.fromURL(image)], False), gocq_loop).result()
         else:
-            asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res, False, ), gocq_loop).result()
+            asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res, image_mode), gocq_loop).result()
 
 
 def oper_msg(message, 
@@ -720,7 +724,13 @@ def oper_msg(message,
         
     # 发送qq信息
     try:
-        send_message(platform, message, chatgpt_res, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+        if platform==GOCQ:
+            if cc.get("qq_pic_mode", False):
+                send_message(platform, message, chatgpt_res, image_mode=True, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            else:
+                send_message(platform, message, chatgpt_res, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+        else:
+            send_message(platform, message, chatgpt_res, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
     except BaseException as e:
         gu.log("回复消息错误: \n"+str(e), gu.LEVEL_ERROR)
 
