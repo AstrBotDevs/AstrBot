@@ -181,7 +181,9 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     
     
     single_size = font.getsize("步")[0]
-    max_words_per_line = (image_width // single_size - 7)*2
+    single_size1 = font.getsize("A")[0]
+    # max_words_per_line = (image_width // single_size - 7)*2
+    
 
     # pre_process, get height of each line
     pre_lines = markdown_text.split('\n')
@@ -194,20 +196,23 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
         line.replace("\t", "    ")
         if font.getsize(line)[0] > image_width:
             cp = line
-            _t = 0
+            _width = 0
+            _word_cnt = 0
             for ii in range(len(line)):
                 # 检测是否是中文
                 if line[ii] >= u'\u4e00' and line[ii] <= u'\u9fa5':
-                    _t += 2
+                    _width += single_size
                 else:
-                    _t += 1
+                    _width += single_size1
+                _word_cnt+=1
                     
-                if _t > max_words_per_line:
+                if _width > image_width:
                     # splited.append(cp[:ii] + '\n')
                     # print(cp[:_t], _t, len(cp[:ii]), max_words_per_line, len(line))
-                    _pre_lines.append(cp[:_t])
-                    cp = cp[_t:]
-                    _t = 0
+                    _pre_lines.append(cp[:_word_cnt])
+                    cp = cp[_word_cnt:]
+                    _word_cnt=0
+                    _width=0
             _pre_lines.append(cp)
         else:
             _pre_lines.append(line)
@@ -239,7 +244,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
         elif re.search(r"`(.*?)`", line):
             height += font_size+25
         else:
-            height += font_size + 10
+            height += font_size + 9
 
     markdown_text = '\n'.join(pre_lines)
     print("Pre process done, height: ", height)
