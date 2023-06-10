@@ -79,7 +79,7 @@ class ProviderRevEdgeGPT(Provider):
                         await self.forget()
                         err_count += 1
                         continue
-                    reply_msg += f"\n⌈{throttling['numUserMessagesInConversation']}/{throttling['maxNumUserMessagesInConversation']}⌋"
+                    reply_msg += f"\n[{throttling['numUserMessagesInConversation']}/{throttling['maxNumUserMessagesInConversation']}]"
                 break
             except BaseException as e:
                 gu.log(str(e), level=gu.LEVEL_WARNING, tag="RevEdgeGPT")

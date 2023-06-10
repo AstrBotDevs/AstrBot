@@ -189,7 +189,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
         i += 1
         line = line.strip()
         if pre_in_code and not line.startswith("```"):
-            height += font_size+2
+            height += font_size+4
             # pre_codes.append(line)
             continue
         if line.startswith("#"):
