@@ -176,7 +176,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
         elif line.startswith("-"):
             height += font_size+5
         elif line.startswith(">"):
-            height += font_size+10
+            height += font_size+20
         elif line.startswith("```"):
             if pre_in_code:
                 pre_in_code = False
@@ -288,7 +288,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             draw.line((x, y, x, y + font_size + 10), fill=(230, 230, 230), width=5)
             font = ImageFont.truetype(font_path, font_size)
             draw.text((x + 5, y + 5), quote_text, font=font, fill=(180, 180, 180))
-            y += font_size + 20
+            y += font_size + 25
         
         # y += 16+5
         elif line.startswith("-"):
