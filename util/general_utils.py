@@ -191,7 +191,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
         if font.getsize(line)[0] > image_width:
             cp = line
             single_size = font.getsize("步")[0]
-            max_words_per_line = (image_width // single_size)*2
+            max_words_per_line = (image_width // single_size - 2)*2
             # 步长为单个字符的宽度
             _t = 0
             for ii in range(len(line)):
