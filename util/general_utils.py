@@ -203,20 +203,29 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             if pre_in_code:
                 pre_in_code = False
                 # pre_codes = []
-                height += 10
+                height += 20
             else:
                 pre_in_code = True
-                height += 5
+                height += 10
         elif re.search(r"`(.*?)`", line):
             height += font_size+25
         else:
             cnt = 1
             if font.getsize(line)[0] > image_width:
                 cp = line
-                for ii in range(len(line)):
-                    if ii % image_width == 0:
-                        cp = cp[:ii] + '\n' + cp[ii:]
+                single_size = font.getsize("步")[0]
+                # 步长为单个字符的宽度
+                _t = 0
+                for ii in range(0, font.getsize(line)[0], single_size):
+                    # print(ii)
+                    _t += single_size
+                    if _t > image_width:
+                        # print("QIEGE")
+                        _t=0
+                        cp = cp[:ii//single_size] + '\n' + cp[ii//single_size:]
                 pre_lines[i] = cp
+                # print(cp)
+                
                 cnt+=1
             height += font_size * cnt + 8
 
@@ -250,7 +259,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     for line in lines:
         if in_code_block and not line.startswith("```"):
             code_block_codes.append(line)
-            y += font_size + 2
+            y += font_size + 4
             continue
         line = line.strip()
 
@@ -322,7 +331,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                 font = ImageFont.truetype(font_path1, 16)
                 draw.text((x + 10, code_block_start_y + 5), codes, font=font, fill=font_color)
 
-                y += 15
+                y += 20
         # y += font_size+10
         elif re.search(r"`(.*?)`", line):
             # 处理行内代码
