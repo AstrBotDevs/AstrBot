@@ -184,7 +184,28 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     height = 0
     pre_in_code = False
     i = -1
-    # pre_codes = []
+    _pre_lines = []
+    for line in pre_lines:
+        i += 1
+        if font.getsize(line)[0] > image_width:
+            cp = line
+            single_size = font.getsize("步")[0]
+            max_words_per_line = image_width // single_size - 1
+            # 步长为单个字符的宽度
+            _t = 0
+            for ii in range(len(line)):
+                _t += 1
+                if _t > max_words_per_line:
+                    # splited.append(cp[:ii] + '\n')
+                    _pre_lines.append(cp[:ii])
+                    cp = cp[ii:]
+                    _t = 0
+            _pre_lines.append(cp)
+        else:
+            _pre_lines.append(line)
+    pre_lines = _pre_lines
+
+    i=-1
     for line in pre_lines:
         i += 1
         line = line.strip()
@@ -210,24 +231,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
         elif re.search(r"`(.*?)`", line):
             height += font_size+25
         else:
-            cnt = 1
-            if font.getsize(line)[0] > image_width:
-                cp = line
-                single_size = font.getsize("步")[0]
-                # 步长为单个字符的宽度
-                _t = 0
-                for ii in range(0, font.getsize(line)[0], single_size):
-                    # print(ii)
-                    _t += single_size
-                    if _t > image_width*0.9:
-                        # print("QIEGE")
-                        _t=0
-                        cp = cp[:ii//single_size] + '\n' + cp[ii//single_size:]
-                pre_lines[i] = cp
-                # print(cp)
-                
-                cnt+=1
-            height += font_size * cnt + 10
+            height += font_size + 15
 
     markdown_text = '\n'.join(pre_lines)
     print("Pre process done, height: ", height)
