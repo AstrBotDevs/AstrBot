@@ -187,6 +187,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     _pre_lines = []
     for line in pre_lines:
         i += 1
+        line.replace("\t", "    ")
         if font.getsize(line)[0] > image_width:
             cp = line
             single_size = font.getsize("步")[0]
@@ -209,7 +210,6 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     for line in pre_lines:
         i += 1
         line = line.strip()
-        line.replace("\t", "    ")
         if pre_in_code and not line.startswith("```"):
             height += font_size+4
             # pre_codes.append(line)
