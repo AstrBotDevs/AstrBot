@@ -172,7 +172,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             continue
         if line.startswith("#"):
             header_level = line.count("#")
-            height += 58 - header_level * 4
+            height += 62 - header_level * 4
         elif line.startswith("-"):
             height += font_size+5
         elif line.startswith(">"):
@@ -186,7 +186,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                 pre_in_code = True
                 height += 5
         elif re.search(r"`(.*?)`", line):
-            height += font_size+20
+            height += font_size+25
         else:
             height += font_size+5
 
@@ -260,7 +260,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             # 处理标题
             header_level = line.count("#")
             line = line.strip("#").strip()
-            font_size = 28 - header_level * 4
+            font_size = 32 - header_level * 4
 
             # if unicode_emoji != "":
             #     emoji_url = emoji_base_url.format(unicode_emoji=unicode_emoji[-5:])
@@ -288,7 +288,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             draw.line((x, y, x, y + font_size + 10), fill=(230, 230, 230), width=5)
             font = ImageFont.truetype(font_path, font_size)
             draw.text((x + 5, y + 5), quote_text, font=font, fill=(180, 180, 180))
-            y += font_size + 10
+            y += font_size + 20
         
         # y += 16+5
         elif line.startswith("-"):

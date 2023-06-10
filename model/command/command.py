@@ -312,9 +312,9 @@ class Command:
             msg += f"`{key}` - {value}\n"
         # plugins
         if cached_plugins != None:
-            plugin_list_info = "\n".join([f"`{k}` {v['info']['name']}\n简介: \n{v['info']['desc']}\n" for k, v in cached_plugins.items()])
+            plugin_list_info = "\n".join([f"`{k}` {v['info']['name']}\n{v['info']['desc']}\n" for k, v in cached_plugins.items()])
             if plugin_list_info.strip() != "":
-                msg += "## 插件列表\n> 使用plugin v 插件名 查看插件帮助\n"
+                msg += "\n## 插件列表\n> 使用plugin v 插件名 查看插件帮助\n"
                 msg += plugin_list_info
         msg += notice
 
