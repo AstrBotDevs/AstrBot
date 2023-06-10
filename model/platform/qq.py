@@ -60,7 +60,7 @@ class QQ:
                     plains.append(i.text)
                 else:
                     news.append(i)
-            p = gu.create_text_image("", "".join(plains))
+            p = gu.create_markdown_image("".join(plains))
             news.append(Image.fromFileSystem(p))
             res = news
 
