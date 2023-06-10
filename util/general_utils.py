@@ -159,12 +159,34 @@ def word2img_markdown(markdown: str, max_width=35, font_size=25):
 
 def render_markdown(markdown_text, image_width=800, image_height=600, font_size=16, font_color=(0, 0, 0), bg_color=(255, 255, 255)):
 
+    if os.path.exists("resources/fonts/genshin.ttf"):
+        font_path = "resources/fonts/genshin.ttf"
+    elif os.path.exists("QQChannelChatGPT/resources/fonts/genshin.ttf"):
+        font_path = "QQChannelChatGPT/resources/fonts/genshin.ttf"
+    elif os.path.exists("C:/Windows/Fonts/simhei.ttf"):
+        font_path = "C:/Windows/Fonts/simhei.ttf"
+    elif os.path.exists("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"):
+        font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+    else:
+        raise Exception("找不到字体文件")
+    # backup
+    if os.path.exists("resources/fonts/simhei.ttf"):
+        font_path1 = "resources/fonts/simhei.ttf"
+    elif os.path.exists("QQChannelChatGPT/resources/fonts/simhei.ttf"):
+        font_path1 = "QQChannelChatGPT/resources/fonts/simhei.ttf"
+    else:
+        font_path1 = font_path
+    # 加载字体
+    font = ImageFont.truetype(font_path, font_size)
+
     # pre_process, get height of each line
     pre_lines = markdown_text.split('\n')
     height = 0
     pre_in_code = False
+    i = -1
     # pre_codes = []
     for line in pre_lines:
+        i += 1
         line = line.strip()
         if pre_in_code and not line.startswith("```"):
             height += font_size+2
@@ -188,8 +210,17 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
         elif re.search(r"`(.*?)`", line):
             height += font_size+25
         else:
-            height += font_size+5
+            cnt = 1
+            if len(line) > font.getsize(line)[0]:
+                cp = l
+                for ii in range(len(l)):
+                    if ii % max_width == 0:
+                        cp = cp[:ii] + '\n' + cp[ii:]
+                pre_lines[i] = cp
+                cnt+=1
+            height += font_size * cnt + 8
 
+    markdown_text = '\n'.join(pre_lines)
     print("Pre process done, height: ", height)
     image_height = height
     
@@ -204,36 +235,13 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     # # print(unicode_text)
     # unicode_emojis = re.findall(r'\\U\w{8}', unicode_text)
     # emoji_base_url = "https://abs.twimg.com/emoji/v1/72x72/{unicode_emoji}.png"
-        
-
-    if os.path.exists("resources/fonts/genshin.ttf"):
-        font_path = "resources/fonts/genshin.ttf"
-    elif os.path.exists("QQChannelChatGPT/resources/fonts/genshin.ttf"):
-        font_path = "QQChannelChatGPT/resources/fonts/genshin.ttf"
-    elif os.path.exists("C:/Windows/Fonts/simhei.ttf"):
-        font_path = "C:/Windows/Fonts/simhei.ttf"
-    elif os.path.exists("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"):
-        font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-    else:
-        raise Exception("找不到字体文件")
-    
-    # backup
-    if os.path.exists("resources/fonts/simhei.ttf"):
-        font_path1 = "resources/fonts/simhei.ttf"
-    elif os.path.exists("QQChannelChatGPT/resources/fonts/simhei.ttf"):
-        font_path1 = "QQChannelChatGPT/resources/fonts/simhei.ttf"
-    else:
-        font_path1 = font_path
-
-    
-    # 加载字体
-    font = ImageFont.truetype(font_path, font_size)
 
     # 设置初始位置
     x, y = 10, 10
 
     # 解析Markdown文本
     lines = markdown_text.split("\n")
+    # lines = pre_lines
 
     in_code_block = False
     code_block_start_y = 0
