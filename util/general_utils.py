@@ -209,6 +209,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     for line in pre_lines:
         i += 1
         line = line.strip()
+        line.replace("\t", "    ")
         if pre_in_code and not line.startswith("```"):
             height += font_size+4
             # pre_codes.append(line)
