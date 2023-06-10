@@ -249,7 +249,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     markdown_text = '\n'.join(pre_lines)
     print("Pre process done, height: ", height)
     image_height = height
-    
+    image_width += 10
     
     # 创建空白图像
     image = Image.new('RGB', (image_width, image_height), bg_color)
