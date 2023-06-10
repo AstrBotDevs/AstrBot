@@ -31,7 +31,6 @@ class QQ:
                           source, 
                           res, 
                           image_mode: bool = False):
-        # image_mode parameter is [deprecated].
 
         if not self.is_start:
             raise Exception("管理员未启动GOCQ平台")

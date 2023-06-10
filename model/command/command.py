@@ -306,22 +306,22 @@ class Command:
             notice = json.loads(resp)["notice"]
         except BaseException as e:
             notice = ""
-        msg = ''
+        msg = "# Help Center\n## 指令列表\n"
         # msg = "Github项目名QQChannelChatGPT, 有问题提交issue, 欢迎Star\n【指令列表】\n"
         for key, value in commands.items():
-            msg += key + ": " + value + "\n"
+            msg += f"`{key}` - {value}\n"
         # plugins
         if cached_plugins != None:
-            plugin_list_info = "\n".join([f"{k}: \n名称: {v['info']['name']}\n简介: {v['info']['desc']}\n" for k, v in cached_plugins.items()])
+            plugin_list_info = "\n".join([f"`{k}` {v['info']['name']}\n简介: \n{v['info']['desc']}\n" for k, v in cached_plugins.items()])
             if plugin_list_info.strip() != "":
-                msg += "\n【插件列表】\n"
+                msg += "## 插件列表\n> 使用plugin v 插件名 查看插件帮助\n"
                 msg += plugin_list_info
-                msg += "\n*使用plugin v 插件名 查看插件帮助"
         msg += notice
 
         if platform == gu.PLATFORM_GOCQ:
             try:
-                p = gu.create_text_image("【Help Center】", msg)
+                # p = gu.create_text_image("【Help Center】", msg)
+                p = gu.create_markdown_image(msg)
                 return [Image.fromFileSystem(p)]
             except BaseException as e:
                 gu.log(str(e))
