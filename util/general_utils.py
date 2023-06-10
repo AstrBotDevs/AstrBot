@@ -365,7 +365,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             font_size = 16
             font = ImageFont.truetype(font_path, font_size)
             draw.text((x, y), line, font=font, fill=font_color)
-            y += font_size + 5
+            y += font_size + 8
 
     return image
 
