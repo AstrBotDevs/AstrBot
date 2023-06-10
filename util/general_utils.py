@@ -211,7 +211,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             height += font_size+25
         else:
             cnt = 1
-            if len(line) > font.getsize(line)[0]:
+            if font.getsize(line)[0] > image_width:
                 cp = l
                 for ii in range(len(l)):
                     if ii % max_width == 0:
