@@ -219,7 +219,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                 for ii in range(0, font.getsize(line)[0], single_size):
                     # print(ii)
                     _t += single_size
-                    if _t > image_width:
+                    if _t > image_width*0.9:
                         # print("QIEGE")
                         _t=0
                         cp = cp[:ii//single_size] + '\n' + cp[ii//single_size:]
@@ -227,7 +227,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                 # print(cp)
                 
                 cnt+=1
-            height += font_size * cnt + 8
+            height += font_size * cnt + 10
 
     markdown_text = '\n'.join(pre_lines)
     print("Pre process done, height: ", height)
