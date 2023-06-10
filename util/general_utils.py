@@ -260,7 +260,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             # 处理标题
             header_level = line.count("#")
             line = line.strip("#").strip()
-            font_size = 32 - header_level * 4
+            font_size_header = 32 - header_level * 4
 
             # if unicode_emoji != "":
             #     emoji_url = emoji_base_url.format(unicode_emoji=unicode_emoji[-5:])
@@ -269,12 +269,12 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             #     image.paste(emoji, (x, y))
             #     x += font_size
 
-            font = ImageFont.truetype(font_path, font_size)
+            font = ImageFont.truetype(font_path, font_size_header)
             draw.text((x, y), line, font=font, fill=font_color)
 
             # material design color: blue 500
-            draw.line((x, y + font_size + 8, image_width - 10, y + font_size + 8), fill=(230, 230, 230), width=3)
-            y += font_size + 30
+            draw.line((x, y + font_size_header + 8, image_width - 10, y + font_size_header + 8), fill=(230, 230, 230), width=3)
+            y += font_size_header + 30
         
         # y += font_size + 10
         elif line.startswith(">"):
