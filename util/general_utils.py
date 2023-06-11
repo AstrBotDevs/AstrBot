@@ -141,7 +141,7 @@ def word2img(title: str, text: str, max_width=30, font_size=20):
 
 
 def render_markdown(markdown_text, image_width=800, image_height=600, font_size=16, font_color=(0, 0, 0), bg_color=(255, 255, 255)):
-
+    
     if os.path.exists("resources/fonts/syst.otf"):
         font_path = "resources/fonts/syst.otf"
     elif os.path.exists("QQChannelChatGPT/resources/fonts/syst.otf"):
@@ -232,6 +232,8 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     markdown_text = '\n'.join(pre_lines)
     print("Pre process done, height: ", height)
     image_height = height
+    if image_height < 100:
+        image_height = 100
     image_width += 10
     
     # 创建空白图像
