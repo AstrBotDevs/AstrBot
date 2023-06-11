@@ -411,6 +411,10 @@ class Command:
                         pash_tag = "QQChannelChatGPT"+os.sep
                     repo.remotes.origin.pull()
 
+                    if len(l) == 3 and l[2] == "r":
+                        py = sys.executable
+                        os.execl(py, py, *sys.argv)
+
                     return True, "更新成功~是否重启？输入update r重启（重启指令不返回任何确认信息）。", "update"
                     
                 except BaseException as e:
