@@ -95,10 +95,10 @@ def port_checker(port: int, host: str = "localhost"):
         return False
     
 def word2img(title: str, text: str, max_width=30, font_size=20):
-    if os.path.exists("resources/fonts/genshin.ttf"):
-        font_path = "resources/fonts/genshin.ttf"
-    elif os.path.exists("QQChannelChatGPT/resources/fonts/genshin.ttf"):
-        font_path = "QQChannelChatGPT/resources/fonts/genshin.ttf"
+    if os.path.exists("resources/fonts/syst.otf"):
+        font_path = "resources/fonts/syst.otf"
+    elif os.path.exists("QQChannelChatGPT/resources/fonts/syst.otf"):
+        font_path = "QQChannelChatGPT/resources/fonts/syst.otf"
     elif os.path.exists("C:/Windows/Fonts/simhei.ttf"):
         font_path = "C:/Windows/Fonts/simhei.ttf"
     elif os.path.exists("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"):
@@ -140,29 +140,12 @@ def word2img(title: str, text: str, max_width=30, font_size=20):
     return image
 
 
-def word2img_markdown(markdown: str, max_width=35, font_size=25):
-    
-    if os.path.exists("resources/fonts/genshin.ttf"):
-        font_path = "resources/fonts/genshin.ttf"
-    elif os.path.exists("QQChannelChatGPT/resources/fonts/genshin.ttf"):
-        font_path = "QQChannelChatGPT/resources/fonts/genshin.ttf"
-    elif os.path.exists("C:/Windows/Fonts/simhei.ttf"):
-        font_path = "C:/Windows/Fonts/simhei.ttf"
-    elif os.path.exists("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"):
-        font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-    else:
-        raise Exception("找不到字体文件")
-    
-    # try to render markdown
-
-
-
 def render_markdown(markdown_text, image_width=800, image_height=600, font_size=16, font_color=(0, 0, 0), bg_color=(255, 255, 255)):
 
-    if os.path.exists("resources/fonts/genshin.ttf"):
-        font_path = "resources/fonts/genshin.ttf"
-    elif os.path.exists("QQChannelChatGPT/resources/fonts/genshin.ttf"):
-        font_path = "QQChannelChatGPT/resources/fonts/genshin.ttf"
+    if os.path.exists("resources/fonts/syst.otf"):
+        font_path = "resources/fonts/syst.otf"
+    elif os.path.exists("QQChannelChatGPT/resources/fonts/syst.otf"):
+        font_path = "QQChannelChatGPT/resources/fonts/syst.otf"
     elif os.path.exists("C:/Windows/Fonts/simhei.ttf"):
         font_path = "C:/Windows/Fonts/simhei.ttf"
     elif os.path.exists("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"):
