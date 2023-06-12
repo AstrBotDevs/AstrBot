@@ -2,17 +2,17 @@
 
 <img src="https://socialify.git.ci/Soulter/QQChannelChatGPT/image?description=1&forks=1&issues=1&language=1&name=1&owner=1&pattern=Circuit%20Board&stargazers=1&theme=Light" alt="QQChannelChatGPT" width="600" height="300" />
 
-[![Language](https://img.shields.io/badge/language-python-green.svg?style=plastic)](https://www.python.org/)
+<!-- [![Language](https://img.shields.io/badge/language-python-green.svg?style=plastic)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-AGPL3-orange.svg?style=plastic)](https://github.com/Soulter/QQChannelChatGPT/blob/master/LICENSE)
-![Python](https://img.shields.io/badge/python-3.9+-blue)
+![Python](https://img.shields.io/badge/python-3.9+-blue) -->
  
-_✨在QQ和QQ频道上使用ChatGPT、NewBing等语言模型，稳定，一次部署，同时使用✨_
+_✨基于go-cq和官方QQ频道SDK的机器人项目。支持ChatGPT、NewBing等大模型。一次部署，同时使用✨_
 
-_✨教程：https://github.com/Soulter/QQChannelChatGPT/wiki ✨_
+_✨部署文档：https://github.com/Soulter/QQChannelChatGPT/wiki ✨_
  
-_✨插件开发教程：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6 ✨_
+_✨插件文档：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6 ✨_
 
-_✨欢迎体验（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号：322154837）✨_
+_✨欢迎体验 | **QQ群号：322154837** ✨_
 
 <!-- <img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img> -->
 
@@ -21,21 +21,18 @@ _✨欢迎体验（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号�
 ## ⭐功能：
 
 近期新功能：
-- 支持插件！https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
-- 支持一键切换语言模型（使用/bing /revgpt /gpt分别可以切换newbing、逆向ChatGPT、官方ChatGPT模型）
+- Markdown渲染支持：回复消息支持图片。
+- 支持插件。https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
 - 热更新
 - 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
 - Windows启动器。链接：https://github.com/Soulter/QQChatGPTLauncher/releases/latest
 
 支持的AI语言模型（请在`configs/config.yaml`下配置）：
-- 逆向ChatGPT库
-- 官方ChatGPT AI
-- 文心一言（即将支持）
-- NewBing
-- Bard （即将支持）
-
-部署此项目的教程链接：https://github.com/Soulter/QQChannelChatGPT/wiki
-
+- 逆向ChatGPT
+- 官方ChatGPT API
+- Bing
+- ...
+<!-- 
 ### 基本功能
 <details> 
  <summary>✅ 回复符合上下文</summary>
@@ -90,13 +87,15 @@ _✨欢迎体验（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号�
 
    -  QQ频道机器人框架为QQ官方开源的框架，稳定。
 
-</details>
+</details> -->
 
-> 关于token：token就相当于是AI中的单词数（但是不等于单词数），`text-davinci-003`模型中最大可以支持`4097`个token。在发送信息时，这个机器人会将用户的历史聊天记录打包发送给ChatGPT，因此，`token`也会相应的累加，为了保证聊天的上下文的逻辑性，就有了缓存token。
+<!-- > 关于token：token就相当于是AI中的单词数（但是不等于单词数），`text-davinci-003`模型中最大可以支持`4097`个token。在发送信息时，这个机器人会将用户的历史聊天记录打包发送给ChatGPT，因此，`token`也会相应的累加，为了保证聊天的上下文的逻辑性，就有了缓存token。 -->
 
 ### 🛠️ 插件支持
 
 本项目支持接入插件。
+
+> 使用`plugin i 插件GitHub链接`即可安装。
 
 插件开发教程：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
 
@@ -110,8 +109,8 @@ _✨欢迎体验（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号�
 
 - `BiliMonitor`: https://github.com/Soulter/BiliMonitor | 订阅B站动态！
 
-
-### 指令功能
+<!-- 
+### 指令
 
 #### OpenAI官方API
 在频道内需要先`@`机器人之后再输入指令；在QQ中暂时需要在消息前加上`ai `，不需要@
@@ -138,15 +137,14 @@ _✨欢迎体验（频道名: GPT机器人 | 频道号: x42d56aki2) | QQ群号�
 - `/gpt` 切换为OpenAI官方API
 - `/bing` 切换为bing
 
-* 切换模型指令支持临时回复。如`/bing 你好`将会临时使用一次bing模型
+* 切换模型指令支持临时回复。如`/bing 你好`将会临时使用一次bing模型 -->
 
 ## 📰使用方法：
 
-**详细部署教程链接**https://soulter.top/posts/qpdg.html
+使用文档：https://github.com/Soulter/QQChannelChatGPT/wiki
 
-**Windows用户推荐Windows一键安装，请前往Release下载最新版本（Beta）**
-有报错请先看issue，解决不了再在频道内反馈。
-
+**Windows用户可以使用启动器一键安装，请前往Release下载最新版本（Beta）**
+<!-- 
 ### 安装第三方库
 
 ```shell
@@ -154,16 +152,14 @@ pip install -r requirements.txt
 ```
 > ⚠Python版本应>=3.9
 
-
 ### 配置
 
-**详细部署教程链接**https://github.com/Soulter/QQChannelChatGPT/wiki
+**详细部署教程链接：**https://github.com/Soulter/QQChannelChatGPT/wiki
 
 ### 启动
-- 启动main.py
+- 启动main.py -->
 
-
-## 感谢
+## 🙇‍感谢
 本项目使用了一下项目:
 
 [ChatGPT by acheong08](https://github.com/acheong08/ChatGPT)
@@ -174,7 +170,12 @@ pip install -r requirements.txt
 
 [nakuru-project by Lxns-Network](https://github.com/Lxns-Network/nakuru-project)
 
+<!-- ## 👀部分演示截图
 
+帮助中心（`help`指令）
+![)F%2VQA`O)`4BHTXZ653(~9](https://github.com/Soulter/QQChannelChatGPT/assets/37870767/57eaa8c6-6962-4940-823c-2e26b5206cf5)
+
+ -->
 ## ⚙配置文件说明：
 ```yaml
 # 如果你不知道怎么部署，请查看https://github.com/Soulter/QQChannelChatGPT/wiki
