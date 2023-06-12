@@ -2,9 +2,9 @@
 
 <img src="https://socialify.git.ci/Soulter/QQChannelChatGPT/image?description=1&forks=1&issues=1&language=1&name=1&owner=1&pattern=Circuit%20Board&stargazers=1&theme=Light" alt="QQChannelChatGPT" width="600" height="300" />
 
-[![Language](https://img.shields.io/badge/language-python-green.svg?style=plastic)](https://www.python.org/)
+<!-- [![Language](https://img.shields.io/badge/language-python-green.svg?style=plastic)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-AGPL3-orange.svg?style=plastic)](https://github.com/Soulter/QQChannelChatGPT/blob/master/LICENSE)
-![Python](https://img.shields.io/badge/python-3.9+-blue)
+![Python](https://img.shields.io/badge/python-3.9+-blue) -->
  
 _✨基于go-cq和官方QQ频道SDK的机器人项目。支持ChatGPT、NewBing等大模型。一次部署，同时使用✨_
 
@@ -12,7 +12,7 @@ _✨部署文档：https://github.com/Soulter/QQChannelChatGPT/wiki ✨_
  
 _✨插件文档：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6 ✨_
 
-_✨欢迎体验 | **QQ群号：322154837** | 频道号: x42d56aki2)✨_
+_✨欢迎体验 | **QQ群号：322154837** )✨_
 
 <!-- <img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img> -->
 
