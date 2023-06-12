@@ -141,6 +141,44 @@ def word2img(title: str, text: str, max_width=30, font_size=20):
 
 
 def render_markdown(markdown_text, image_width=800, image_height=600, font_size=16, font_color=(0, 0, 0), bg_color=(255, 255, 255)):
+
+    HEADER_MARGIN = 20
+    HEADER_FONT_STANDARD_SIZE = 32
+
+    QUOTE_LEFT_LINE_MARGIN = 10
+    QUOTE_FONT_LINE_MARGIN = 5 # 引用文字距离左边线的距离和上下的距离
+    QUOTE_LEFT_LINE_HEIGHT = font_size + QUOTE_FONT_LINE_MARGIN * 2
+    QUOTE_LEFT_LINE_WIDTH = 5
+    QUOTE_LEFT_LINE_COLOR = (180, 180, 180)
+    QUOTE_FONT_SIZE = font_size
+    QUOTE_FONT_COLOR = (180, 180, 180)
+    # QUOTE_BG_COLOR = (255, 255, 255)
+
+    CODE_BLOCK_MARGIN = 10
+    CODE_BLOCK_FONT_SIZE = font_size
+    CODE_BLOCK_FONT_COLOR = (255, 255, 255)
+    CODE_BLOCK_BG_COLOR = (240, 240, 240)
+    CODE_BLOCK_CODES_MARGIN_VERTICAL = 5 # 代码块和代码之间的距离
+    CODE_BLOCK_CODES_MARGIN_HORIZONTAL = 5 # 代码块和代码之间的距离
+    CODE_BLOCK_TEXT_MARGIN = 4 # 代码和代码之间的距离
+
+    INLINE_CODE_MARGIN = 8
+    INLINE_CODE_FONT_SIZE = font_size
+    INLINE_CODE_FONT_COLOR = font_color
+    INLINE_CODE_FONT_MARGIN = 4
+    INLINE_CODE_BG_COLOR = (230, 230, 230)
+    INLINE_CODE_BG_HEIGHT = INLINE_CODE_FONT_SIZE + INLINE_CODE_FONT_MARGIN * 2
+
+    LIST_MARGIN = 8
+    LIST_FONT_SIZE = font_size
+    LIST_FONT_COLOR = font_color
+
+    TEXT_LINE_MARGIN = 8
+
+    IMAGE_MARGIN = 15
+    IMAGE_REGEX = r"!\[.*?\]\((.*?)\)"
+
+
     
     if os.path.exists("resources/fonts/syst.otf"):
         font_path = "resources/fonts/syst.otf"
@@ -165,9 +203,8 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     
     single_size = font.getsize("步")[0]
     single_size1 = font.getsize("A")[0]
-    # max_words_per_line = (image_width // single_size - 7)*2
+    images: Image = {}
     
-
     # pre_process, get height of each line
     pre_lines = markdown_text.split('\n')
     height = 0
@@ -176,6 +213,28 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     _pre_lines = []
     for line in pre_lines:
         i += 1
+        # 处理图片
+        if re.search(IMAGE_REGEX, line):
+            try:
+                image_url = re.findall(IMAGE_REGEX, line)[0]
+                print(image_url)
+                image_res = Image.open(requests.get(image_url, stream=True, timeout=5).raw)
+                images[i] = image_res
+                # 最大不得超过image_width的50%
+                img_height = image_res.size[1]
+
+                if image_res.size[0] > image_width*0.5:
+                    image_res = image_res.resize((int(image_width*0.5), int(image_res.size[1]*image_width*0.5/image_res.size[0])))
+                    img_height = image_res.size[1]
+
+                height += img_height + IMAGE_MARGIN*2
+            
+                line = re.sub(IMAGE_REGEX, "", line)
+            except Exception as e:
+                print(e)
+                line = re.sub(IMAGE_REGEX, "\n[加载失败的图片]\n", line)
+                continue
+            
         line.replace("\t", "    ")
         if font.getsize(line)[0] > image_width:
             cp = line
@@ -203,38 +262,41 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
 
     i=-1
     for line in pre_lines:
+        if line == "":
+            height += TEXT_LINE_MARGIN
+            continue
         i += 1
         line = line.strip()
         if pre_in_code and not line.startswith("```"):
-            height += font_size+4
+            height += font_size + CODE_BLOCK_TEXT_MARGIN
             # pre_codes.append(line)
             continue
         if line.startswith("#"):
             header_level = line.count("#")
-            height += 62 - header_level * 4
+            height += HEADER_FONT_STANDARD_SIZE + HEADER_MARGIN*2 - header_level * 4
         elif line.startswith("-"):
-            height += font_size+5
+            height += font_size+LIST_MARGIN*2
         elif line.startswith(">"):
-            height += font_size+20
+            height += font_size+QUOTE_LEFT_LINE_MARGIN*2
         elif line.startswith("```"):
             if pre_in_code:
                 pre_in_code = False
                 # pre_codes = []
-                height += 20
+                height += CODE_BLOCK_MARGIN
             else:
                 pre_in_code = True
-                height += 10
+                height += CODE_BLOCK_MARGIN
         elif re.search(r"`(.*?)`", line):
-            height += font_size+25
+            height += font_size+INLINE_CODE_FONT_MARGIN*2+INLINE_CODE_MARGIN*2
         else:
-            height += font_size + 9
+            height += font_size + TEXT_LINE_MARGIN*2
 
     markdown_text = '\n'.join(pre_lines)
     print("Pre process done, height: ", height)
     image_height = height
     if image_height < 100:
         image_height = 100
-    image_width += 10
+    image_width += 20
     
     # 创建空白图像
     image = Image.new('RGB', (image_width, image_height), bg_color)
@@ -258,16 +320,15 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     code_block_start_y = 0
     code_block_codes = []
 
+    index = -1
     for line in lines:
+        index += 1
         if in_code_block and not line.startswith("```"):
             code_block_codes.append(line)
-            y += font_size + 4
+            y += font_size + CODE_BLOCK_TEXT_MARGIN
             continue
         line = line.strip()
 
-        # y +=  28 - header_level * 4 + 20
-
-        
         if line.startswith("#"):
             # unicode_emojis = re.findall(r'\\U0001\w{4}', line)
             # for unicode_emoji in unicode_emojis:
@@ -279,7 +340,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             # 处理标题
             header_level = line.count("#")
             line = line.strip("#").strip()
-            font_size_header = 32 - header_level * 4
+            font_size_header = HEADER_FONT_STANDARD_SIZE - header_level * 4
 
             # if unicode_emoji != "":
             #     emoji_url = emoji_base_url.format(unicode_emoji=unicode_emoji[-5:])
@@ -289,13 +350,12 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             #     x += font_size
 
             font = ImageFont.truetype(font_path, font_size_header)
+            y += HEADER_MARGIN # 上边距
+            # 字间距
             draw.text((x, y), line, font=font, fill=font_color)
-
-            # material design color: blue 500
             draw.line((x, y + font_size_header + 8, image_width - 10, y + font_size_header + 8), fill=(230, 230, 230), width=3)
-            y += font_size_header + 30
-        
-        # y += font_size + 10
+            y += font_size_header + HEADER_MARGIN
+
         elif line.startswith(">"):
             # 处理引用
             quote_text = line.strip(">")
@@ -303,39 +363,36 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             # quote_height = font_size + 10  # 引用框的高度为字体大小加上上下边距
             # quote_box = (x, y, x + quote_width, y + quote_height)
             # draw.rounded_rectangle(quote_box, radius=5, fill=(230, 230, 230), width=2)  # 使用灰色填充矩形框作为引用背景
-
-            draw.line((x, y, x, y + font_size + 10), fill=(230, 230, 230), width=5)
-            font = ImageFont.truetype(font_path, font_size)
-            draw.text((x + 5, y + 5), quote_text, font=font, fill=(180, 180, 180))
-            y += font_size + 25
+            y+=QUOTE_LEFT_LINE_MARGIN
+            draw.line((x, y, x, y + QUOTE_LEFT_LINE_HEIGHT), fill=QUOTE_LEFT_LINE_COLOR, width=QUOTE_LEFT_LINE_WIDTH)
+            font = ImageFont.truetype(font_path, QUOTE_FONT_SIZE)
+            draw.text((x + QUOTE_FONT_LINE_MARGIN, y + QUOTE_FONT_LINE_MARGIN), quote_text, font=font, fill=QUOTE_FONT_COLOR)
+            y += font_size + QUOTE_LEFT_LINE_HEIGHT + QUOTE_LEFT_LINE_MARGIN
         
-        # y += 16+5
         elif line.startswith("-"):
             # 处理列表
             list_text = line.strip("-").strip()
-            font_size = 16
-            font = ImageFont.truetype(font_path, font_size)
-            draw.text((x, y), "  ·  " + list_text, font=font, fill=font_color)
-            y += font_size + 5
+            font = ImageFont.truetype(font_path, LIST_FONT_SIZE)
+            y += LIST_MARGIN
+            draw.text((x, y), "  ·  " + list_text, font=font, fill=LIST_FONT_COLOR)
+            y += font_size + LIST_MARGIN
 
-        # y += 5+10+font_size*line.count
         elif line.startswith("```"):
             if not in_code_block:
-                code_block_start_y = y+5
+                code_block_start_y = y+CODE_BLOCK_MARGIN
                 in_code_block = True
             else:
                 # print(code_block_codes)
                 in_code_block = False
                 codes = "\n".join(code_block_codes)
                 code_block_codes = []
-
-                draw.rounded_rectangle((x, code_block_start_y, image_width - 10, y+15), radius=5, fill=(240, 240, 240), width=2)
-                font = ImageFont.truetype(font_path1, 16)
-                draw.text((x + 10, code_block_start_y + 5), codes, font=font, fill=font_color)
-
-                y += 20
+                draw.rounded_rectangle((x, code_block_start_y, image_width - 10, y+CODE_BLOCK_CODES_MARGIN_VERTICAL + CODE_BLOCK_TEXT_MARGIN), radius=5, fill=CODE_BLOCK_BG_COLOR, width=2)
+                font = ImageFont.truetype(font_path1, CODE_BLOCK_FONT_SIZE)
+                draw.text((x + CODE_BLOCK_CODES_MARGIN_HORIZONTAL, code_block_start_y + CODE_BLOCK_CODES_MARGIN_VERTICAL), codes, font=font, fill=font_color)
+                y += CODE_BLOCK_CODES_MARGIN_VERTICAL + CODE_BLOCK_MARGIN
         # y += font_size+10
         elif re.search(r"`(.*?)`", line):
+            y += INLINE_CODE_MARGIN # 上边距
             # 处理行内代码
             code_regex = r"`(.*?)`"
             parts_inline = re.findall(code_regex, line)
@@ -346,29 +403,39 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                 # the judge has a tiny bug.
                 # when line is like "hi`hi`". all the parts will be in parts_inline.
                 if part in parts_inline:
+                    font = ImageFont.truetype(font_path, INLINE_CODE_FONT_SIZE)
                     code_text = part.strip("`")
-                    font_size = 16
-                    code_width = font.getsize(code_text)[0] + 10
-                    code_height = font_size + 10
-                    code_box = (x, y-5, x + code_width, y + code_height)
-                    font = ImageFont.truetype(font_path, font_size)
-                    draw.rounded_rectangle(code_box, radius=5, fill=(230, 230, 230), width=2)  # 使用灰色填充矩形框作为引用背景
-                    draw.text((x+5, y), code_text, font=font, fill=font_color)
-                    x += code_width
+                    code_width = font.getsize(code_text)[0] + INLINE_CODE_FONT_MARGIN*2
+                    x += INLINE_CODE_MARGIN
+                    code_box = (x, y, x + code_width, y + INLINE_CODE_BG_HEIGHT)
+                    draw.rounded_rectangle(code_box, radius=5, fill=INLINE_CODE_BG_COLOR, width=2)  # 使用灰色填充矩形框作为引用背景
+                    draw.text((x+INLINE_CODE_FONT_MARGIN, y), code_text, font=font, fill=font_color)
+                    x += code_width+INLINE_CODE_MARGIN-INLINE_CODE_FONT_MARGIN
                 else:
-                    font_size = 16
                     font = ImageFont.truetype(font_path, font_size)
                     draw.text((x, y), part, font=font, fill=font_color)
                     x += font.getsize(part)[0]
-            y += font_size + 20
+            y += font_size + INLINE_CODE_MARGIN
             x = 10
+
         else:
             # 处理普通文本
-            font_size = 16
-            font = ImageFont.truetype(font_path, font_size)
-            draw.text((x, y), line, font=font, fill=font_color)
-            y += font_size + 8
+            if line == "":
+                y += TEXT_LINE_MARGIN
+            else:
+                font = ImageFont.truetype(font_path, font_size)
+                
+                draw.text((x, y), line, font=font, fill=font_color)
+                y += font_size + TEXT_LINE_MARGIN*2
 
+        # 图片特殊处理
+        if index in images:
+            image_res = images[index]
+            # 最大不得超过image_width的50%
+            if image_res.size[0] > image_width*0.5:
+                image_res = image_res.resize((int(image_width*0.5), int(image_res.size[1]*image_width*0.5/image_res.size[0])))
+            image.paste(image_res, (IMAGE_MARGIN, y))
+            y += image_res.size[1] + IMAGE_MARGIN*2
     return image
 
 
@@ -425,22 +492,12 @@ def create_markdown_image(text: str):
     
 def test_markdown():
     # 示例使用
-    markdown_text = """
-    # Help Center
-    ## 指令列表
-    `/help` - 显示帮助中心
-    `/start` - 开始使用
-    `/about` - 关于
-    `/feedback` - 反馈
-
-    ## Plugins列表
-    `/plugins` - 显示插件列表
-    `/plugins enable <plugin_name>` - 启用插件
-    `/plugins disable <plugin_name>` - 禁用插件
-
-    > Hi, thanks for using this bot. If you have any questions, please contact me.
-
-    """
+    markdown_text = """# Help Center
+    ![](https://soulter.top/helpme.jpg)
+    
+"""
 
     image = render_markdown(markdown_text)
     image.show()  # 显示渲染后的图像
+
+test_markdown()
