@@ -95,6 +95,8 @@ _✨欢迎体验 | **QQ群号：322154837** ✨_
 
 本项目支持接入插件。
 
+> 使用`plugin i 插件GitHub链接`即可安装。
+
 插件开发教程：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
 
 部分好用的插件：
