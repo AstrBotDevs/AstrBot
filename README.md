@@ -12,7 +12,7 @@ _✨部署文档：https://github.com/Soulter/QQChannelChatGPT/wiki ✨_
  
 _✨插件文档：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6 ✨_
 
-_✨欢迎体验 | **QQ群号：322154837** )✨_
+_✨欢迎体验 | **QQ群号：322154837** ✨_
 
 <!-- <img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img> -->
 
@@ -139,7 +139,7 @@ _✨欢迎体验 | **QQ群号：322154837** )✨_
 
 ## 📰使用方法：
 
-使用文档：https://soulter.top/posts/qpdg.html
+使用文档：https://github.com/Soulter/QQChannelChatGPT/wiki
 
 **Windows用户可以使用启动器一键安装，请前往Release下载最新版本（Beta）**
 <!-- 
