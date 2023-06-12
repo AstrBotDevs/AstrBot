@@ -176,8 +176,8 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     TEXT_LINE_MARGIN = 8
 
     IMAGE_MARGIN = 15
-    IMAGE_REGEX = r"!\[.*?\]\((.*?)\)"
-
+    # 用于匹配图片的正则表达式
+    IMAGE_REGEX = r"!\s*\[.*?\]\s*\((.*?)\)"
 
     
     if os.path.exists("resources/fonts/syst.otf"):
@@ -493,7 +493,7 @@ def create_markdown_image(text: str):
 def test_markdown():
     # 示例使用
     markdown_text = """# Help Center
-    ![](https://soulter.top/helpme.jpg)
+    ! [] (https://soulter.top/helpme.jpg)
     
 """
 
