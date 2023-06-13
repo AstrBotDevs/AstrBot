@@ -200,9 +200,6 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     # 加载字体
     font = ImageFont.truetype(font_path, font_size)
     
-    
-    single_size = font.getsize("步")[0]
-    single_size1 = font.getsize("A")[0]
     images: Image = {}
     
     # pre_process, get height of each line
@@ -242,15 +239,9 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             _word_cnt = 0
             for ii in range(len(line)):
                 # 检测是否是中文
-                if line[ii] >= u'\u4e00' and line[ii] <= u'\u9fa5':
-                    _width += single_size
-                else:
-                    _width += single_size1
+                _width += font.getsize(cp[ii])[0]
                 _word_cnt+=1
-                    
                 if _width > image_width:
-                    # splited.append(cp[:ii] + '\n')
-                    # print(cp[:_t], _t, len(cp[:ii]), max_words_per_line, len(line))
                     _pre_lines.append(cp[:_word_cnt])
                     cp = cp[_word_cnt:]
                     _word_cnt=0
@@ -495,3 +486,4 @@ def test_markdown():
     markdown_text = """# Help Center
     ! [] (https://soulter.top/helpme.jpg)
     """
+
