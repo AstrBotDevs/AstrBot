@@ -140,13 +140,13 @@ def word2img(title: str, text: str, max_width=30, font_size=20):
     return image
 
 
-def render_markdown(markdown_text, image_width=800, image_height=600, font_size=16, font_color=(0, 0, 0), bg_color=(255, 255, 255)):
+def render_markdown(markdown_text, image_width=800, image_height=600, font_size=26, font_color=(0, 0, 0), bg_color=(255, 255, 255)):
 
     HEADER_MARGIN = 20
-    HEADER_FONT_STANDARD_SIZE = 32
+    HEADER_FONT_STANDARD_SIZE = 42
 
     QUOTE_LEFT_LINE_MARGIN = 10
-    QUOTE_FONT_LINE_MARGIN = 5 # 引用文字距离左边线的距离和上下的距离
+    QUOTE_FONT_LINE_MARGIN = 6 # 引用文字距离左边线的距离和上下的距离
     QUOTE_LEFT_LINE_HEIGHT = font_size + QUOTE_FONT_LINE_MARGIN * 2
     QUOTE_LEFT_LINE_WIDTH = 5
     QUOTE_LEFT_LINE_COLOR = (180, 180, 180)
