@@ -239,7 +239,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             _word_cnt = 0
             for ii in range(len(line)):
                 # 检测是否是中文
-                _width += font.getsize(cp[ii])[0]
+                _width += font.getsize(line[ii])[0]
                 _word_cnt+=1
                 if _width > image_width:
                     _pre_lines.append(cp[:_word_cnt])
@@ -486,4 +486,8 @@ def test_markdown():
     markdown_text = """# Help Center
     ! [] (https://soulter.top/helpme.jpg)
     """
+    image = render_markdown(markdown_text)
+    image.show()
+
+test_markdown()
 
