@@ -494,10 +494,4 @@ def test_markdown():
     # 示例使用
     markdown_text = """# Help Center
     ! [] (https://soulter.top/helpme.jpg)
-    
-"""
-
-    image = render_markdown(markdown_text)
-    image.show()  # 显示渲染后的图像
-
-test_markdown()
+    """
