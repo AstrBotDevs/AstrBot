@@ -12,7 +12,7 @@
  
 插件文档：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
 
-欢迎体验 | **QQ群号：322154837**
+欢迎体验 | **QQ群号：322154837** | **频道号: x42d56aki2** |
 
 <!-- <img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img> -->
 
