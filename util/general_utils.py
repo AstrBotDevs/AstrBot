@@ -489,5 +489,5 @@ def test_markdown():
     image = render_markdown(markdown_text)
     image.show()
 
-test_markdown()
+# test_markdown()
 
