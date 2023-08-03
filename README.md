@@ -30,7 +30,7 @@
 支持的AI语言模型（请在`configs/config.yaml`下配置）：
 - 逆向ChatGPT
 - 官方ChatGPT API
-- Bing
+- Bing **暂时不可用**
 - ...
 <!-- 
 ### 基本功能
