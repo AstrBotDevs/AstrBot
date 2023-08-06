@@ -6,19 +6,19 @@
 [![License](https://img.shields.io/badge/license-AGPL3-orange.svg?style=plastic)](https://github.com/Soulter/QQChannelChatGPT/blob/master/LICENSE)
 ![Python](https://img.shields.io/badge/python-3.9+-blue) -->
  
-_✨基于go-cq和官方QQ频道SDK的机器人项目。支持ChatGPT、NewBing等大模型。一次部署，同时使用✨_
+基于go-cq和官方QQ频道SDK的机器人项目。支持ChatGPT、NewBing等大模型。一次部署，同时使用
 
-_✨部署文档：https://github.com/Soulter/QQChannelChatGPT/wiki ✨_
+部署文档：https://github.com/Soulter/QQChannelChatGPT/wiki
  
-_✨插件文档：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6 ✨_
+插件文档：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
 
-_✨欢迎体验 | **QQ群号：322154837** ✨_
+欢迎体验 | **QQ群号：322154837** | **频道号: x42d56aki2** |
 
 <!-- <img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img> -->
 
 </div>
 
-## ⭐功能：
+## 🧩功能：
 
 近期新功能：
 - Markdown渲染支持：回复消息支持图片。
@@ -30,7 +30,7 @@ _✨欢迎体验 | **QQ群号：322154837** ✨_
 支持的AI语言模型（请在`configs/config.yaml`下配置）：
 - 逆向ChatGPT
 - 官方ChatGPT API
-- Bing
+- Bing **暂时不可用**
 - ...
 <!-- 
 ### 基本功能
