@@ -21,7 +21,7 @@ from nakuru import (
     FriendMessage,
     GuildMessage
 )
-from nakuru.entities.components import Plain,At
+from nakuru.entities.components import Plain,At,Image
 from model.command.command import Command
 from model.command.command_rev_chatgpt import CommandRevChatGPT
 from model.command.command_rev_edgegpt import CommandRevEdgeGPT
