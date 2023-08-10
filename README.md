@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-AGPL3-orange.svg?style=plastic)](https://github.com/Soulter/QQChannelChatGPT/blob/master/LICENSE)
 ![Python](https://img.shields.io/badge/python-3.9+-blue) -->
  
-基于go-cq和官方QQ频道SDK的机器人项目。支持ChatGPT、NewBing等大模型。一次部署，同时使用
+基于go-cqhttp和官方QQ频道SDK的QQ机器人项目。支持ChatGPT、Claude、HuggingChat大模型。一次部署，同时使用。
 
 部署文档：https://github.com/Soulter/QQChannelChatGPT/wiki
  
@@ -21,6 +21,7 @@
 ## 🧩功能：
 
 近期新功能：
+- 接入Claude、HuggingChat。
 - Markdown渲染支持：回复消息支持图片。
 - 支持插件。https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
 - 热更新
@@ -99,7 +100,7 @@
 
 插件开发教程：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
 
-部分好用的插件：
+部分公开的插件：
 
 - `LLMS`: https://github.com/Soulter/LLMS | Claude, HuggingChat 大语言模型接入。
  
