@@ -28,9 +28,11 @@
 - 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
 - Windows启动器。链接：https://github.com/Soulter/QQChatGPTLauncher/releases/latest
 
-支持的AI语言模型（请在`configs/config.yaml`下配置）：
+支持的AI语言模型：
 - 逆向ChatGPT
 - 官方ChatGPT API
+- Claude
+- HuggingChat
 - Bing **暂时不可用**
 - ...
 <!-- 
