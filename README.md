@@ -33,7 +33,7 @@
 - 官方ChatGPT API
 - Claude
 - HuggingChat
-- Bing **暂时不可用**
+- Bing
 - ...
 <!-- 
 ### 基本功能
