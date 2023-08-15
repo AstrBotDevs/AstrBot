@@ -25,12 +25,13 @@
 - OpenAI GPT-3模型（原生支持）
 - OpenAI GPT-3.5模型（原生支持）
 - OpenAI GPT-4模型（原生支持）
-- ChatGPT网页版 GPT-3.5模型（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
-- ChatGPT网页版 GPT-4模型（需订阅Plus账户，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
+- ChatGPT网页版 GPT-3.5模型（免费，原生支持）
+- ChatGPT网页版 GPT-4模型（需订阅Plus账户，原生支持）
+- Bing（免费，原生支持）
 - Claude模型（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
 - HuggingChat模型（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
 - Google Bard（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
-- Bing（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
+
 
 🌍机器人支持的能力一览：
 - 同时部署机器人到QQ和QQ频道
