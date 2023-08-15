@@ -40,7 +40,7 @@
 
 **图片生成**
 
-- NovelAI/Naifu (免费，由[aidraw插件](https://github.com/Soulter/aidraw)支持)
+- NovelAI/Naifu (免费，由[AIDraw插件](https://github.com/Soulter/aidraw)支持)
 
 
 🌍机器人支持的能力一览：
