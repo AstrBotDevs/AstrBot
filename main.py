@@ -1,6 +1,5 @@
 import os, sys
 from pip._internal import main as pipmain
-import util.general_utils as gu
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
@@ -14,7 +13,7 @@ def main():
         print(e)
         input("第三方依赖库未完全安装完毕，请退出程序重试。")
         exit()
-
+    import util.general_utils as gu
     if 'http_proxy' in cfg:
         os.environ['HTTP_PROXY'] = cfg['http_proxy']
     if 'https_proxy' in cfg:
