@@ -20,13 +20,6 @@
 
 ## 🧩功能：
 
-近期新功能：
-- 接入Claude、HuggingChat。
-- Markdown渲染支持：回复消息支持图片。
-- 支持插件。https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
-- 热更新
-- 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
-- Windows启动器。链接：https://github.com/Soulter/QQChatGPTLauncher/releases/latest
 
 🌍支持的AI语言模型一览：
 - OpenAI GPT-3模型（原生支持）
@@ -40,12 +33,15 @@
 - Bing（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
 
 🌍机器人支持的能力一览：
+- 同时部署机器人到QQ和QQ频道
 - 大模型对话
 - 大模型网页搜索能力
-- 插件安装
-- 回复文字图片渲染（以图片markdown格式回复，降低被风控概率）
+- 插件安装（在QQ或QQ频道聊天框内输入`plugin`了解详情）
+- 回复文字图片渲染（以图片markdown格式回复，降低被风控概率，需手动在`cmd_config.json`内开启）
 - 人格设置
 - 关键词回复
+- 热更新（更新本项目时**仅需**在QQ或QQ频道聊天框内输入`update latest r`）
+- Windows一键部署（https://github.com/Soulter/QQChatGPTLauncher/releases/latest）
 
 <!-- 
 ### 基本功能
