@@ -88,40 +88,39 @@ class Command:
     def plugin_reload(self, cached_plugins: dict, target: str = None, all: bool = False):
         plugins = self.get_plugin_modules()
         fail_rec = ""
-        if plugins != None:
-            for p in plugins:
-                try:
-                    if p not in cached_plugins or p == target or all:
-                        module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
-                        if p in cached_plugins:
-                            module = importlib.reload(module)
-                        cls = putil.get_classes(p, module)
-                        obj = getattr(module, cls[0])()
-                        try:
-                            info = obj.info()
-                            if 'name' not in info or 'desc' not in info or 'version' not in info or 'author' not in info:
-                                fail_rec += f"载入插件{p}失败，原因: 插件信息不完整\n"
-                                continue
-                            if isinstance(info, dict) == False:
-                                fail_rec += f"载入插件{p}失败，原因: 插件信息格式不正确\n"
-                                continue
-                        except BaseException as e:
-                            fail_rec += f"调用插件{p} info失败, 原因: {str(e)}\n"
-                            continue
-                        cached_plugins[p] = {
-                            "module": module,
-                            "clsobj": obj,
-                            "info": info
-                        }  
-                except BaseException as e:
-                    raise e
-                    fail_rec += f"加载{p}插件出现问题，原因{str(e)}\n"
-            if fail_rec == "":
-                return True, None
-            else:
-                return False, fail_rec
-        else:
+        if plugins is None:
             return False, "未找到任何插件模块"
+
+        for p in plugins:
+            try:
+                if p not in cached_plugins or p == target or all:
+                    module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
+                    if p in cached_plugins:
+                        module = importlib.reload(module)
+                    cls = putil.get_classes(p, module)
+                    obj = getattr(module, cls[0])()
+                    try:
+                        info = obj.info()
+                        if 'name' not in info or 'desc' not in info or 'version' not in info or 'author' not in info:
+                            fail_rec += f"载入插件{p}失败，原因: 插件信息不完整\n"
+                            continue
+                        if isinstance(info, dict) == False:
+                            fail_rec += f"载入插件{p}失败，原因: 插件信息格式不正确\n"
+                            continue
+                    except BaseException as e:
+                        fail_rec += f"调用插件{p} info失败, 原因: {str(e)}\n"
+                        continue
+                    cached_plugins[p] = {
+                        "module": module,
+                        "clsobj": obj,
+                        "info": info
+                    }  
+            except BaseException as e:
+                fail_rec += f"加载{p}插件出现问题，原因{str(e)}\n"
+        if fail_rec == "":
+            return True, None
+        else:
+            return False, fail_rec
     
     '''
     插件指令
@@ -130,9 +129,9 @@ class Command:
         l = message.split(" ")
         if len(l) < 2:
             if platform == gu.PLATFORM_GOCQ:
-                p = gu.create_text_image("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
+                p = gu.create_text_image("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
                 return True, [Image.fromFileSystem(p)], "plugin"
-            return True, "\n=====插件指令面板=====\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin i 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n===============", "plugin"
+            return True, "\n=====插件指令面板=====\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n===============", "plugin"
         else:
             ppath = ""
             if os.path.exists("addons/plugins"):
@@ -188,6 +187,15 @@ class Command:
                 try:
                     repo = Repo(path = plugin_path)
                     repo.remotes.origin.pull()
+
+                    # 读取插件的requirements.txt
+                    if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
+                        with open(os.path.join(plugin_path, "requirements.txt"), "r", encoding="utf-8") as f:
+                            for line in f.readlines():
+                                mm = os.system(f"pip3 install {line.strip()}")
+                                if mm != 0:
+                                    return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
+
                     ok, err = self.plugin_reload(cached_plugins, target=l[2])
                     if ok:
                         return True, "\n更新插件成功!!", "plugin"

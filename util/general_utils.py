@@ -51,7 +51,7 @@ def log(
         tag: str = "System",
         fg: str = None,
         bg: str = None,
-        max_len: int = 100):
+        max_len: int = 300):
     """
     日志记录函数
     """
