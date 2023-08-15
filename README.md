@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-AGPL3-orange.svg?style=plastic)](https://github.com/Soulter/QQChannelChatGPT/blob/master/LICENSE)
 ![Python](https://img.shields.io/badge/python-3.9+-blue) -->
  
-基于go-cqhttp和官方QQ频道SDK的QQ机器人项目。支持ChatGPT、Claude、HuggingChat大模型。一次部署，同时使用。
+基于go-cqhttp和官方QQ频道SDK的QQ机器人项目。支持ChatGPT、Claude、HuggingChat、Bard大模型。一次部署，同时使用。
 
 部署文档：https://github.com/Soulter/QQChannelChatGPT/wiki
  
@@ -28,12 +28,16 @@
 - 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
 - Windows启动器。链接：https://github.com/Soulter/QQChatGPTLauncher/releases/latest
 
-支持的AI语言模型：
-- 逆向ChatGPT
-- 官方ChatGPT API
-- Claude
-- HuggingChat
-- Bing
+🌍支持的AI语言模型一览：
+- OpenAI GPT-3模型（原生支持）
+- OpenAI GPT-3.5模型（原生支持）
+- OpenAI GPT-4模型（原生支持）
+- ChatGPT网页版 GPT-3.5模型（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
+- ChatGPT网页版 GPT-4模型（需订阅Plus账户，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
+- Claude模型（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
+- HuggingChat模型（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
+- Google Bard（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
+- Bing（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
 - ...
 <!-- 
 ### 基本功能
