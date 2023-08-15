@@ -38,7 +38,15 @@
 - HuggingChat模型（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
 - Google Bard（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
 - Bing（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
-- ...
+
+🌍机器人支持的能力一览：
+- 大模型对话
+- 大模型网页搜索能力
+- 插件安装
+- 回复文字图片渲染（以图片markdown格式回复，降低被风控概率）
+- 人格设置
+- 关键词回复
+
 <!-- 
 ### 基本功能
 <details> 
