@@ -25,15 +25,22 @@
 ## 🧩功能：
 
 🌍支持的AI语言模型一览：
+
+**文字模型**
+
 - OpenAI GPT-3模型（原生支持）
 - OpenAI GPT-3.5模型（原生支持）
 - OpenAI GPT-4模型（原生支持）
 - ChatGPT网页版 GPT-3.5模型（免费，原生支持）
 - ChatGPT网页版 GPT-4模型（需订阅Plus账户，原生支持）
 - Bing（免费，原生支持）
-- Claude模型（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
-- HuggingChat模型（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
-- Google Bard（免费，由[LLMs插件](https://github.com/Soulter/LLMS)支持）
+- Claude模型（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
+- HuggingChat模型（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
+- Google Bard（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
+
+**图片生成**
+
+- NovelAI/Naifu (免费，由[aidraw插件](https://github.com/Soulter/aidraw)支持)
 
 
 🌍机器人支持的能力一览：
