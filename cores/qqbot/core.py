@@ -367,7 +367,7 @@ def run_qqchan_bot(cfg, loop, qqchannel_bot):
         
         i = input("输入y打开配置文件, 按回车退出程序。")
         if i == "y":
-            abs_path = os.path.abspath("QQChannelChatGPT/config.yaml")
+            abs_path = os.path.abspath("QQChannelChatGPT/configs/config.yaml")
             os.system(f"notepad \"{abs_path}\"")
         # gu.log("如果你使用了go-cqhttp, 则可以忽略上面的报错。" + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
         # input(f"\n[System-Error] 启动QQ频道机器人时出现错误，原因如下：{e}\n可能是没有填写QQBOT appid和token？请在config中完善你的appid和token\n配置教程：https://soulter.top/posts/qpdg.html\n")
