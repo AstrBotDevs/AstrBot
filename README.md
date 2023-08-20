@@ -6,35 +6,54 @@
 [![License](https://img.shields.io/badge/license-AGPL3-orange.svg?style=plastic)](https://github.com/Soulter/QQChannelChatGPT/blob/master/LICENSE)
 ![Python](https://img.shields.io/badge/python-3.9+-blue) -->
  
-基于go-cqhttp和官方QQ频道SDK的QQ机器人项目。支持ChatGPT、Claude、HuggingChat大模型。一次部署，同时使用。
+基于go-cqhttp和官方QQ频道SDK的QQ机器人项目。支持ChatGPT、Claude、HuggingChat、Bard大模型。一次部署，同时使用。
 
 部署文档：https://github.com/Soulter/QQChannelChatGPT/wiki
  
-插件文档：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
-
-欢迎体验 | **QQ群号：322154837** | **频道号: x42d56aki2** |
+欢迎加群讨论 | **QQ群号：322154837** | **频道号: x42d56aki2** |
 
 <!-- <img src="https://user-images.githubusercontent.com/37870767/230417115-9dd3c9d5-6b6b-4928-8fe3-82f559208aab.JPG" width="300"></img> -->
 
 </div>
 
+## 🤔您可能想了解的
+- **如何部署？** [帮助文档](https://github.com/Soulter/QQChannelChatGPT/wiki)
+- **go-cqhttp启动不成功？** [在这里搜索解决方法](https://github.com/Mrs4s/go-cqhttp/issues)
+- **程序闪退/机器人启动不成功？** [提交issue或加群反馈](https://github.com/Soulter/QQChannelChatGPT/issues)
+- **如何开启ChatGPT、Bard、Claude等语言模型？** [查看帮助](https://github.com/Soulter/QQChannelChatGPT/wiki/%E8%A1%A5%E5%85%85%EF%BC%9A%E5%A6%82%E4%BD%95%E5%BC%80%E5%90%AFChatGPT%E3%80%81Bard%E3%80%81Claude%E7%AD%89%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%9E%8B%EF%BC%9F)
+
 ## 🧩功能：
 
-近期新功能：
-- 接入Claude、HuggingChat。
-- Markdown渲染支持：回复消息支持图片。
-- 支持插件。https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
-- 热更新
-- 接入QQ，支持在QQ上和QQ频道上同时聊天！https://github.com/Soulter/QQChannelChatGPT/issues/82
-- Windows启动器。链接：https://github.com/Soulter/QQChatGPTLauncher/releases/latest
+🌍支持的AI语言模型一览：
 
-支持的AI语言模型：
-- 逆向ChatGPT
-- 官方ChatGPT API
-- Claude
-- HuggingChat
-- Bing
-- ...
+**文字模型**
+
+- OpenAI GPT-3模型（原生支持）
+- OpenAI GPT-3.5模型（原生支持）
+- OpenAI GPT-4模型（原生支持）
+- ChatGPT网页版 GPT-3.5模型（免费，原生支持）
+- ChatGPT网页版 GPT-4模型（需订阅Plus账户，原生支持）
+- Bing（免费，原生支持）
+- Claude模型（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
+- HuggingChat模型（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
+- Google Bard（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
+
+**图片生成**
+
+- NovelAI/Naifu (免费，由[AIDraw插件](https://github.com/Soulter/aidraw)支持)
+
+
+🌍机器人支持的能力一览：
+- 同时部署机器人到QQ和QQ频道
+- 大模型对话
+- 大模型网页搜索能力
+- 插件安装（在QQ或QQ频道聊天框内输入`plugin`了解详情）
+- 回复文字图片渲染（以图片markdown格式回复，降低被风控概率，需手动在`cmd_config.json`内开启）
+- 人格设置
+- 关键词回复
+- 热更新（更新本项目时**仅需**在QQ或QQ频道聊天框内输入`update latest r`）
+- Windows一键部署（https://github.com/Soulter/QQChatGPTLauncher/releases/latest）
+
 <!-- 
 ### 基本功能
 <details> 
