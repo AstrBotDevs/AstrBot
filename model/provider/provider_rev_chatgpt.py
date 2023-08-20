@@ -2,24 +2,39 @@ from revChatGPT.V1 import Chatbot
 from revChatGPT import typings
 from model.provider.provider import Provider
 from util import general_utils as gu
+from util import cmd_config as cc
 
 
 class ProviderRevChatGPT(Provider):
     def __init__(self, config):
         self.rev_chatgpt = []
+        self.cc = cc.CmdConfig()
         for i in range(0, len(config['account'])):
             try:
-                gu.log(f"创建rev_ChatGPT负载{str(i)}中...", level=gu.LEVEL_INFO, tag="RevChatGPT")
+                gu.log(f"创建逆向ChatGPT负载{str(i+1)}中...", level=gu.LEVEL_INFO, tag="RevChatGPT")
 
                 if 'password' in config['account'][i]:
-                    config['account'][i]['password'] = str(config['account'][i]['password'])
+                    gu.log(f"创建逆向ChatGPT负载{str(i+1)}失败: 已不支持账号密码登录，请使用access_token方式登录。", level=gu.LEVEL_ERROR, tag="RevChatGPT")
+                    continue
+                rev_account_config = {
+                    'access_token': config['account'][i]['access_token'],
+                }
+                if self.cc.get("rev_chatgpt_model") != "":
+                    rev_account_config['model'] = self.cc.get("rev_chatgpt_model")
+                if len(self.cc.get("rev_chatgpt_plugin_ids")) > 0:
+                    rev_account_config['plugin_ids'] = self.cc.get("rev_chatgpt_plugin_ids")
+                if self.cc.get("rev_chatgpt_PUID") != "":
+                    rev_account_config['PUID'] = self.cc.get("rev_chatgpt_PUID")
+                if len(self.cc.get("rev_chatgpt_unverified_plugin_domains")) > 0:
+                    rev_account_config['unverified_plugin_domains'] = self.cc.get("rev_chatgpt_unverified_plugin_domains")
+
                 revstat = {
-                    'obj': Chatbot(config=config['account'][i]),
+                    'obj': Chatbot(config=rev_account_config),
                     'busy': False
                 }
                 self.rev_chatgpt.append(revstat)
             except BaseException as e:
-                gu.log(f"创建rev_ChatGPT负载{str(i)}失败: {str(e)}", level=gu.LEVEL_ERROR, tag="RevChatGPT")
+                gu.log(f"创建逆向ChatGPT负载{str(i+1)}失败: {str(e)}", level=gu.LEVEL_ERROR, tag="RevChatGPT")
 
     def forget(self) -> bool:
         return False

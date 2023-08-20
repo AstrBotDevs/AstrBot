@@ -123,6 +123,10 @@ cc.init_attributes(["qq_forward_threshold"], 200)
 cc.init_attributes(["qq_welcome"], "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
 cc.init_attributes(["bing_proxy"], "")
 cc.init_attributes(["qq_pic_mode"], False)
+cc.init_attributes(["rev_chatgpt_model"], "")
+cc.init_attributes(["rev_chatgpt_plugin_ids"], [])
+cc.init_attributes(["rev_chatgpt_PUID"], "")
+cc.init_attributes(["rev_chatgpt_unverified_plugin_domains"], [])
 # cc.init_attributes(["qq_forward_mode"], False)
 
 def new_sub_thread(func, args=()):
