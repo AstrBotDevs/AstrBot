@@ -363,7 +363,11 @@ def run_qqchan_bot(cfg, loop, qqchannel_bot):
         qqchannel_bot.run_bot(client, cfg['qqbot']['appid'], cfg['qqbot']['token'])
     except BaseException as e:
         gu.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
-        gu.log(r"【提醒】有可能你想启动的是gocq, 并不是这个旧版的QQ频道SDK, 如果是这样, 请修改配置文件（QQChannelChatGPT/config.yaml）详情请看：https://github.com/Soulter/QQChannelChatGPT/wiki/%E4%BA%8C%E3%80%81%E9%A1%B9%E7%9B%AE%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E9%85%8D%E7%BD%AE。" + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
+        gu.log(r"【提醒】如果您是初次启动，请修改配置文件（QQChannelChatGPT/config.yaml）详情请看：https://github.com/Soulter/QQChannelChatGPT/wiki。" + str(e), gu.LEVEL_CRITICAL, tag="System")
+        
+        i = input("输入y打开配置文件, 按回车退出程序。")
+        if i == "y":
+            os.system("start QQChannelChatGPT/config.yaml")
         # gu.log("如果你使用了go-cqhttp, 则可以忽略上面的报错。" + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
         # input(f"\n[System-Error] 启动QQ频道机器人时出现错误，原因如下：{e}\n可能是没有填写QQBOT appid和token？请在config中完善你的appid和token\n配置教程：https://soulter.top/posts/qpdg.html\n")
 
@@ -464,7 +468,7 @@ def oper_msg(message,
     if isinstance(nick_qq, str):
         nick_qq = (nick_qq,)
     if isinstance(nick_qq, list):
-        nick_qq = tuple(nick_qq)    
+        nick_qq = tuple(nick_qq)
 
     if platform == PLATFORM_QQCHAN:
         with_tag = True
