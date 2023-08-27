@@ -66,11 +66,14 @@ class Command:
         return False, None
     
     def get_my_id(self, message_obj, platform):
+        print(message_obj)
         if platform == "gocq":
             if message_obj.type == "GuildMessage":
                 return True, f"你的频道id是{str(message_obj.sender.tiny_id)}", "plugin"
             else:
                 return True, f"你的QQ是{str(message_obj.sender.user_id)}", "plugin"
+        else:
+            return True, f"{str(message_obj)}\n（此指令为开发专用，为提供更多数据，请自行从中找出您的频道ID。在author->id中。）", "plugin"
             
     def get_new_conf(self, message, role, platform):
         if role != "admin":
