@@ -9,3 +9,4 @@ chardet~=5.1.0
 Pillow~=9.4.0
 GitPython~=3.1.31
 nakuru-project
+beautifulsoup4
