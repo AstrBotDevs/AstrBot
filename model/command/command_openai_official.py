@@ -6,9 +6,10 @@ from util import general_utils as gu
 
 
 class CommandOpenAIOfficial(Command):
-    def __init__(self, provider: ProviderOpenAIOfficial):
+    def __init__(self, provider: ProviderOpenAIOfficial, global_object: dict):
         self.provider = provider
         self.cached_plugins = {}
+        self.global_object = global_object
         
     def check_command(self, 
                       message: str, 
@@ -18,9 +19,12 @@ class CommandOpenAIOfficial(Command):
                       platform: str,
                       message_obj,
                       cached_plugins: dict,
-                      qq_platform: QQ):
+                      qq_platform: QQ,):
         self.platform = platform
-        hit, res = super().check_command(message, role, platform, message_obj=message_obj, cached_plugins=cached_plugins, qq_platform=qq_platform)
+        hit, res = super().check_command(message, role, platform, message_obj=message_obj, 
+                                        cached_plugins=cached_plugins, 
+                                        qq_platform=qq_platform,
+                                        global_object=self.global_object)
         if hit:
             return True, res
         if self.command_start_with(message, "reset", "重置"):
@@ -43,7 +47,7 @@ class CommandOpenAIOfficial(Command):
             return True, self.set(message, session_id)
         elif self.command_start_with(message, "update"):
             return True, self.update(message, role)
-        elif self.command_start_with(message, "画"):
+        elif self.command_start_with(message, "画", "draw"):
             return True, self.draw(message)
         elif self.command_start_with(message, "keyword"):
             return True, self.keyword(message, role)

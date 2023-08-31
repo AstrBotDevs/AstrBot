@@ -41,7 +41,11 @@ class Command:
         except BaseException as e:
             raise e
 
-    def check_command(self, message, role, platform, message_obj, cached_plugins: dict, qq_platform: QQ):
+    def check_command(self, message, role, platform, 
+                    message_obj, 
+                    cached_plugins: dict, 
+                    qq_platform: QQ,
+                    global_object: dict):
         # 插件
 
         for k, v in cached_plugins.items():
@@ -62,9 +66,21 @@ class Command:
             return True, self.get_my_id(message_obj, platform)
         if self.command_start_with(message, "nconf") or self.command_start_with(message, "newconf"):
             return True, self.get_new_conf(message, role, platform)
+        if self.command_start_with(message, "web"): # 网页搜索
+            return True, self.web_search(message, global_object)
         
         return False, None
     
+    def web_search(self, message, global_object):
+        if "web_search" not in global_object:
+            global_object["web_search"] = False
+        if message == "web on":
+            global_object["web_search"] = True
+            return True, "已开启网页搜索", "web"
+        elif message == "web off":
+            global_object["web_search"] = False
+            return True, "已关闭网页搜索", "web"
+        return True, f"网页搜索功能当前状态: {global_object['web_search']}", "web"
     def get_my_id(self, message_obj, platform):
         print(message_obj)
         if platform == "gocq":
@@ -303,6 +319,7 @@ class Command:
             "reset": "重置会话",
             "nick": "设置机器人昵称",
             "plugin": "插件安装、卸载和重载",
+            "web on/off": "启动或关闭网页搜索能力",
             "/bing": "切换到bing模型",
             "/gpt": "切换到OpenAI ChatGPT API",
             "/revgpt": "切换到网页版ChatGPT",

@@ -28,6 +28,9 @@ from model.command.command_rev_edgegpt import CommandRevEdgeGPT
 from model.command.command_openai_official import CommandOpenAIOfficial
 from util import general_utils as gu
 from util.cmd_config import CmdConfig as cc
+import util.gplugin as gplugin
+from PIL import Image as PILImage
+import io
 
 
 
@@ -114,6 +117,9 @@ bing_cache_loop = None
 # 插件
 cached_plugins = {}
 
+# 全局对象
+_global_object = {}
+
 # 统计
 cnt_total = 0
 cnt_valid = 0
@@ -165,7 +171,6 @@ def upload():
             addr = requests.get('http://myip.ipip.net', timeout=5).text
             addr_ip = re.findall(r'\d+.\d+.\d+.\d+', addr)[0]
         except BaseException as e:
-            print(e)
             pass
         try:
             o = {"cnt_total": cnt_total,"admin": admin_qq,"addr": addr,}
@@ -179,7 +184,6 @@ def upload():
                     cnt_valid = 0
                     cnt_total = 0
         except BaseException as e:
-            print(e)
             pass
         time.sleep(60*10)
 
@@ -188,8 +192,8 @@ def upload():
 '''
 def initBot(cfg, prov):
     global chatgpt, provider, rev_chatgpt, baidu_judge, rev_edgegpt, chosen_provider
-    global reply_prefix, gpt_config, config, uniqueSession, frequency_count, frequency_time,announcement, direct_message_mode, version
-    global command_openai_official, command_rev_chatgpt, command_rev_edgegpt,reply_prefix, keywords, cached_plugins
+    global reply_prefix, gpt_config, config, uniqueSession, frequency_count, frequency_time, announcement, direct_message_mode, version
+    global command_openai_official, command_rev_chatgpt, command_rev_edgegpt,reply_prefix, keywords, cached_plugins, _global_object
     provider = prov
     config = cfg
     if 'reply_prefix' in cfg:
@@ -228,9 +232,9 @@ def initBot(cfg, prov):
             chatgpt = ProviderOpenAIOfficial(cfg['openai'])
             chosen_provider = OPENAI_OFFICIAL
 
-    command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt)
-    command_rev_chatgpt = CommandRevChatGPT(rev_chatgpt)
-    command_openai_official = CommandOpenAIOfficial(chatgpt)
+    command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt, _global_object)
+    command_rev_chatgpt = CommandRevChatGPT(rev_chatgpt, _global_object)
+    command_openai_official = CommandOpenAIOfficial(chatgpt, _global_object)
 
     gu.log("--------加载个性化配置--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 得到关键词
@@ -270,8 +274,11 @@ def initBot(cfg, prov):
     
     # 得到公告配置
     if 'notice' in cfg:
-        gu.log("公告配置: "+cfg['notice'], gu.LEVEL_INFO)
-        announcement += cfg['notice']
+        if cc.get("qq_welcome", None) != None and cfg['notice'] == '此机器人由Github项目QQChannelChatGPT驱动。':
+            announcement = cc.get("qq_welcome", None)
+        else:
+            announcement = cfg['notice']
+        gu.log("公告配置: " + announcement, gu.LEVEL_INFO)
     try:
         if 'uniqueSessionMode' in cfg and cfg['uniqueSessionMode']:
             uniqueSession = True
@@ -387,7 +394,6 @@ def run_gocq_bot(loop, gocq_bot, gocq_app):
             gu.log("检查完毕，未发现问题。", tag="QQ")
             break
 
-
     global gocq_client
     gocq_client = gocqClient()
     try:
@@ -424,22 +430,15 @@ def save_provider_preference(chosen_provider):
 '''
 通用回复方法
 '''
-def send_message(platform, message, res, msg_ref = None, image = None, gocq_loop = None, qqchannel_bot = None, gocq_bot = None, image_mode=False):
+def send_message(platform, message, res, msg_ref = None, image = None, image_mode=False):
     # imagemode: 
     # For GOCQ: when image_mode is true, ALL plain texts in res will change into a new pic
-    global cnt_valid
+    global cnt_valid, qqchannel_bot, qqchannel_bot, gocq_loop
     cnt_valid += 1
     if platform == PLATFORM_QQCHAN:
-        if image != None:
-            qqchannel_bot.send_qq_msg(message, str(res), image_mode=True, msg_ref=msg_ref)
-        else:
-            qqchannel_bot.send_qq_msg(message, str(res), msg_ref=msg_ref)
-    if platform == PLATFORM_GOCQ: 
-        if image != None:
-            # image is a url string
-            asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, [Plain(text="好的，我根据你的需要为你生成了一张图片😊"),Image.fromURL(image)], False), gocq_loop).result()
-        else:
-            asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res, image_mode), gocq_loop).result()
+        qqchannel_bot.send_qq_msg(message, res, msg_ref=msg_ref)
+    if platform == PLATFORM_GOCQ:
+        asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res, image_mode), gocq_loop).result()
 
 
 def oper_msg(message, 
@@ -461,7 +460,7 @@ def oper_msg(message,
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
     global admin_qq, admin_qqchan, cached_plugins, gocq_bot, nick_qq
-    global cnt_total
+    global cnt_total, _global_object
 
     cnt_total += 1
 
@@ -551,13 +550,13 @@ def oper_msg(message,
             role = "admin"
 
     if qq_msg == "":
-        send_message(platform, message,  f"Hi~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+        send_message(platform, message,  f"Hi~", msg_ref=msg_ref)
         return
     
     if with_tag:
         # 检查发言频率
         if not check_frequency(user_id):
-            send_message(platform, message, f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。', msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            send_message(platform, message, f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。', msg_ref=msg_ref)
             return
 
     # logf.write("[GOCQBOT] "+ qq_msg+'\n')
@@ -566,19 +565,19 @@ def oper_msg(message,
     # 关键词回复
     for k in keywords:
         if qq_msg == k:
-            send_message(platform, message, keywords[k], msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            send_message(platform, message, keywords[k], msg_ref=msg_ref)
             return
 
     # 关键词拦截器
     for i in uw.unfit_words_q:
         matches = re.match(i, qq_msg.strip(), re.I | re.M)
         if matches:
-            send_message(platform, message,  f"你的提问得到的回复未通过【自有关键词拦截】服务, 不予回复。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            send_message(platform, message,  f"你的提问得到的回复未通过【自有关键词拦截】服务, 不予回复。", msg_ref=msg_ref)
             return
     if baidu_judge != None:
         check, msg = baidu_judge.judge(qq_msg)
         if not check:
-            send_message(platform, message,  f"你的提问得到的回复未通过【百度AI内容审核】服务, 不予回复。\n\n{msg}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            send_message(platform, message,  f"你的提问得到的回复未通过【百度AI内容审核】服务, 不予回复。\n\n{msg}", msg_ref=msg_ref)
             return
     
     # 检查是否是更换语言模型的请求
@@ -599,50 +598,67 @@ def oper_msg(message,
             qq_msg = l[1]
         else:
             # if role != "admin":
-            #     send_message(platform, message, "你没有权限更换语言模型。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            #     send_message(platform, message, "你没有权限更换语言模型。", msg_ref=msg_ref)
             #     return
             chosen_provider = target
             save_provider_preference(chosen_provider)
-            send_message(platform, message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            send_message(platform, message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
             return
 
     chatgpt_res = ""
 
     if chosen_provider == OPENAI_OFFICIAL: 
-        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
+        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, 
+                                                                    platform=platform, message_obj=message, 
+                                                                    cached_plugins=cached_plugins, 
+                                                                    qq_platform=gocq_bot)
         # hit: 是否触发了指令
         if not hit:
             if not with_tag:
                 return
             if chatgpt == None:
-                send_message(platform, message, f"管理员未启动OpenAI模型或初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                send_message(platform, message, f"管理员未启动OpenAI模型或初始化时失败。", msg_ref=msg_ref)
                 return
             # 请求ChatGPT获得结果
             try:
-                chatgpt_res = chatgpt.text_chat(qq_msg, session_id)
+                if _global_object != None and "web_search" in _global_object and _global_object["web_search"]:
+                    chatgpt_res = gplugin.web_search(qq_msg, chatgpt)
+                else:
+                    chatgpt_res = str(chatgpt.text_chat(qq_msg))
                 if OPENAI_OFFICIAL in reply_prefix:
                     chatgpt_res = reply_prefix[OPENAI_OFFICIAL] + chatgpt_res
             except (BaseException) as e:
                 gu.log("OpenAI API请求错误, 原因: "+str(e), gu.LEVEL_ERROR)
-                send_message(platform, message, f"OpenAI API错误, 原因: {str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                send_message(platform, message, f"OpenAI API错误, 原因: {str(e)}", msg_ref=msg_ref)
 
     elif chosen_provider == REV_CHATGPT:
-        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
+        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, 
+                                                                platform=platform, 
+                                                                message_obj=message, 
+                                                                cached_plugins=cached_plugins, 
+                                                                qq_platform=gocq_bot)
         if not hit:
             if not with_tag:
                 return
             if rev_chatgpt == None:
-                send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref)
                 return
             try:
                 while rev_chatgpt.is_all_busy():
                     time.sleep(1)
-                chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
+
+                # ws_prompt = f"{qq_msg}\n\n提示："
+                # chatgpt_res = str(rev_chatgpt.text_chat(ws_prompt))
+                if _global_object != None and "web_search" in _global_object and _global_object["web_search"]:
+                    chatgpt_res = gplugin.web_search(qq_msg, rev_chatgpt)
+                else:
+                    chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
+
                 if REV_CHATGPT in reply_prefix:
                     chatgpt_res = reply_prefix[REV_CHATGPT] + chatgpt_res
             except BaseException as e:
                 gu.log("逆向ChatGPT请求错误, 原因: "+str(e), gu.LEVEL_ERROR)
-                send_message(platform, message, f"RevChatGPT错误, 原因: \n{str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                send_message(platform, message, f"RevChatGPT错误, 原因: \n{str(e)}", msg_ref=msg_ref)
 
     elif chosen_provider == REV_EDGEGPT:
         if bing_cache_loop == None:
@@ -650,32 +666,35 @@ def oper_msg(message,
                 bing_cache_loop = gocq_loop
             elif platform == PLATFORM_QQCHAN:
                 bing_cache_loop = qqchan_loop
-        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, platform=platform, message_obj=message, cached_plugins=cached_plugins, qq_platform=gocq_bot)
+        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, 
+                                                                platform=platform, message_obj=message, 
+                                                                cached_plugins=cached_plugins,
+                                                                qq_platform=gocq_bot)
         if not hit:
             try:
                 if not with_tag:
                     return
                 if rev_edgegpt == None:
-                    send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                    send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref)
                     return
                 while rev_edgegpt.is_busy():
                     time.sleep(1)
 
                 res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg, platform), bing_cache_loop).result()
                 if res_code == 0: # bing不想继续话题，重置会话后重试。
-                    send_message(platform, message, "Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                    send_message(platform, message, "Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref)
                     asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
                     res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg, platform), bing_cache_loop).result()
                     if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
                         asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
-                        send_message(platform, message, "Bing仍然不想继续话题, 会话已重置, 请检查您的提问后重试。", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                        send_message(platform, message, "Bing仍然不想继续话题, 会话已重置, 请检查您的提问后重试。", msg_ref=msg_ref)
                         res = ""
                 chatgpt_res = str(res)
                 if REV_EDGEGPT in reply_prefix:
                     chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
             except BaseException as e:
                 gu.log("NewBing请求错误, 原因: "+str(e), gu.LEVEL_ERROR)
-                send_message(platform, message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                send_message(platform, message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref)
 
     # 切换回原来的语言模型
     if temp_switch != "":
@@ -700,17 +719,22 @@ def oper_msg(message,
                 if isinstance(command_result[1], list) and len(command_result) == 3 and command_result[2] == 'draw':
                     if chatgpt != None:
                         for i in command_result[1]:
-                            send_message(platform, message, i, msg_ref=msg_ref, image=i, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                            # i is a link
+                            # 保存到本地
+                            pic_res = requests.get(i, stream = True)
+                            if pic_res.status_code == 200:
+                                image = PILImage.open(io.BytesIO(pic_res.content))
+                                send_message(platform, message, [Image.fromFileSystem(gu.save_temp_img(image))], msg_ref=msg_ref)
                     else:
-                        send_message(platform, message, "画图指令需要启用OpenAI官方模型.", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                        send_message(platform, message, "画图指令需要启用OpenAI官方模型.", msg_ref=msg_ref)
                 else:
                     try:
-                        send_message(platform, message, command_result[1], msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                        send_message(platform, message, command_result[1], msg_ref=msg_ref)
                     except BaseException as e:
-                        send_message(platform, message, f"回复消息出错: {str(e)}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                        send_message(platform, message, f"回复消息出错: {str(e)}", msg_ref=msg_ref)
 
             else:
-                send_message(platform, message, f"指令调用错误: \n{str(command_result[1])}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                send_message(platform, message, f"指令调用错误: \n{str(command_result[1])}", msg_ref=msg_ref)
 
         return
     
@@ -729,18 +753,18 @@ def oper_msg(message,
     if baidu_judge != None:
         check, msg = baidu_judge.judge(chatgpt_res)
         if not check:
-            send_message(platform, message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            send_message(platform, message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref)
             return
         
     # 发送qq信息
     try:
         if platform==PLATFORM_GOCQ:
             if cc.get("qq_pic_mode", False):
-                send_message(platform, message, chatgpt_res, image_mode=True, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                send_message(platform, message, chatgpt_res, image_mode=True, msg_ref=msg_ref)
             else:
-                send_message(platform, message, chatgpt_res, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+                send_message(platform, message, chatgpt_res, msg_ref=msg_ref)
         else:
-            send_message(platform, message, chatgpt_res, msg_ref=msg_ref, gocq_loop=gocq_loop, qqchannel_bot=qqchannel_bot, gocq_bot=gocq_bot)
+            send_message(platform, message, chatgpt_res, msg_ref=msg_ref)
     except BaseException as e:
         gu.log("回复消息错误: \n"+str(e), gu.LEVEL_ERROR)
 
@@ -811,9 +835,9 @@ class gocqClient():
         
     @gocq_app.receiver("GroupMemberIncrease")
     async def _(app: CQHTTP, source: GroupMemberIncrease):
-        global nick_qq, cc
+        global nick_qq, announcement
         await app.sendGroupMessage(source.group_id, [
-            Plain(text=cc.get("qq_welcome", "欢迎新人~")),
+            Plain(text = announcement),
         ])
 
     @gocq_app.receiver("GuildMessage")

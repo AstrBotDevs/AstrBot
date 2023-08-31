@@ -18,6 +18,12 @@ def main():
         os.environ['HTTP_PROXY'] = cfg['http_proxy']
     if 'https_proxy' in cfg:
         os.environ['HTTPS_PROXY'] = cfg['https_proxy']
+    
+    os.environ['NO_PROXY'] = 'cn.bing.com,https://api.sgroup.qq.com'
+
+    # 检查temp文件夹
+    if not os.path.exists(abs_path+"temp"):
+        os.mkdir(abs_path+"temp")
 
     provider = privider_chooser(cfg)
     if len(provider) == 0:

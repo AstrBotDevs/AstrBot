@@ -90,7 +90,10 @@ class ProviderOpenAIOfficial(Provider):
             # 每隔10分钟转储一次
             time.sleep(10*self.history_dump_interval)
 
-    def text_chat(self, prompt, session_id):
+    def text_chat(self, prompt, session_id = None):
+        if session_id is None:
+            session_id = "unknown"
+            del self.session_dict["unknown"] 
         # 会话机制
         if session_id not in self.session_dict:
             self.session_dict[session_id] = []
@@ -136,6 +139,8 @@ class ProviderOpenAIOfficial(Provider):
                     gu.log("token超限, 清空对应缓存")
                     self.session_dict[session_id] = []
                     cache_data_list, new_record, req = self.wrap(prompt, session_id)
+                elif 'Limit: 3 / min. Please try again in 20s.' in str(e):
+                    time.sleep(60)
                 else:
                     gu.log(str(e), level=gu.LEVEL_ERROR)
                 err = str(e)
