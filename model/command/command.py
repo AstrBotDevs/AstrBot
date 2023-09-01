@@ -24,8 +24,9 @@ PLATFORM_GOCQ = 'gocq'
 
 # 指令功能的基类，通用的（不区分语言模型）的指令就在这实现
 class Command:
-    def __init__(self, provider: Provider):
-        self.provider = Provider
+    def __init__(self, provider: Provider, global_object: dict):
+        self.provider = provider
+        self.global_object = global_object
 
     def get_plugin_modules(self):
         plugins = []
@@ -41,11 +42,15 @@ class Command:
         except BaseException as e:
             raise e
 
-    def check_command(self, message, role, platform, 
+    def check_command(self, 
+                      message, 
+                      session_id: str,
+                      loop,
+                      role, 
+                      platform, 
                     message_obj, 
                     cached_plugins: dict, 
-                    qq_platform: QQ,
-                    global_object: dict):
+                    qq_platform: QQ):
         # 插件
 
         for k, v in cached_plugins.items():
@@ -67,7 +72,7 @@ class Command:
         if self.command_start_with(message, "nconf") or self.command_start_with(message, "newconf"):
             return True, self.get_new_conf(message, role, platform)
         if self.command_start_with(message, "web"): # 网页搜索
-            return True, self.web_search(message, global_object)
+            return True, self.web_search(message, self.global_object)
         
         return False, None
     
@@ -81,6 +86,7 @@ class Command:
             global_object["web_search"] = False
             return True, "已关闭网页搜索", "web"
         return True, f"网页搜索功能当前状态: {global_object['web_search']}", "web"
+
     def get_my_id(self, message_obj, platform):
         print(message_obj)
         if platform == "gocq":
@@ -102,8 +108,6 @@ class Command:
                 return True, [Image.fromFileSystem(p)], "newconf"
         return False, f"Not support or not implemented.", "newconf"
             
-
-    
     def plugin_reload(self, cached_plugins: dict, target: str = None, all: bool = False):
         plugins = self.get_plugin_modules()
         fail_rec = ""
@@ -264,7 +268,6 @@ class Command:
                     return False, f"你的身份组{role}没有权限开发者模式", "plugin"
                 return True, "cached_plugins: \n" + str(cached_plugins), "plugin"
     
-
     def remove_dir(self, file_path):        
         while 1:
             if not os.path.exists(file_path):
@@ -275,7 +278,6 @@ class Command:
                 err_file_path = str(e).split("\'", 2)[1]
                 if os.path.exists(err_file_path):
                     os.chmod(err_file_path, stat.S_IWUSR)
-
 
     '''
     nick: 存储机器人的昵称
@@ -308,7 +310,6 @@ class Command:
             json.dump(config, f, indent=4, ensure_ascii=False)
             f.flush()
 
-    
     def general_commands(self):
         return {
             "help": "帮助",
@@ -447,7 +448,6 @@ class Command:
             if l[1] == "r":
                 py = sys.executable
                 os.execl(py, py, *sys.argv)
-
 
     def reset(self):
         return False

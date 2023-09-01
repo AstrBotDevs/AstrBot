@@ -3,14 +3,9 @@ import abc
 class Provider:
     def __init__(self, cfg):
         pass
-
+    
+    @abc.abstractmethod
     def text_chat(self, prompt):
-        pass
-
-    def image_chat(self, prompt):
-        pass
-
-    def memory(self):
         pass
 
     @abc.abstractmethod

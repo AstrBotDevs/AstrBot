@@ -29,8 +29,7 @@ class QQ:
 
     async def send_qq_msg(self, 
                           source, 
-                          res, 
-                          image_mode: bool = False):
+                          res):
 
         if not self.is_start:
             raise Exception("管理员未启动GOCQ平台")
@@ -52,6 +51,7 @@ class QQ:
             res.append(Plain(text=res_str))
 
         # if image mode, put all Plain texts into a new picture.
+        image_mode = self.cc.get('qq_pic_mode', False)
         if image_mode and isinstance(res, list):
             plains = []
             news = []
@@ -60,8 +60,10 @@ class QQ:
                     plains.append(i.text)
                 else:
                     news.append(i)
-            p = gu.create_markdown_image("".join(plains))
-            news.append(Image.fromFileSystem(p))
+            plains_str = "".join(plains).strip()
+            if plains_str != "":
+                p = gu.create_markdown_image("".join(plains))
+                news.append(Image.fromFileSystem(p))
             res = news
 
 

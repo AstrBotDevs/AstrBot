@@ -8,9 +8,11 @@ class CommandRevEdgeGPT(Command):
         self.provider = provider
         self.cached_plugins = {}
         self.global_object = global_object
+        super().__init__(provider, global_object)
 
     def check_command(self, 
                       message: str, 
+                      session_id: str,
                       loop, 
                       role: str, 
                       platform: str,
@@ -18,10 +20,18 @@ class CommandRevEdgeGPT(Command):
                       cached_plugins: dict, 
                       qq_platform: QQ):
         self.platform = platform
-        hit, res = super().check_command(message, role, platform, message_obj=message_obj, 
-                                        cached_plugins=cached_plugins,
-                                        qq_platform=qq_platform,
-                                        global_object=self.global_object)
+
+        hit, res = super().check_command(
+            message,
+            session_id,
+            loop,
+            role,
+            platform,
+            message_obj,
+            cached_plugins,
+            qq_platform
+        )
+        
         if hit:
             return True, res
         if self.command_start_with(message, "reset"):

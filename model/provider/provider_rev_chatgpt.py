@@ -40,14 +40,6 @@ class ProviderRevChatGPT(Provider):
 
     def forget(self) -> bool:
         return False
-    
-    # def __captcha_solver(images: list[str], challenge_details: dict) -> int:
-    #     # Create tempfile
-    #     print("Captcha solver called")
-    #     print(images)
-    #     print(challenge_details)
-    #     input("Press Enter to continue...")
-    #     return 0
         
     def request_text(self, prompt: str, bot) -> str:
         resp = ''
@@ -91,6 +83,8 @@ class ProviderRevChatGPT(Provider):
         return resp
 
     def text_chat(self, prompt) -> str:
+        while self.is_all_busy():
+            time.sleep(1)
         res = ''
         err_msg = ''
         cursor = 0

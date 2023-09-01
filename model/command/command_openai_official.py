@@ -10,27 +10,35 @@ class CommandOpenAIOfficial(Command):
         self.provider = provider
         self.cached_plugins = {}
         self.global_object = global_object
+        super().__init__(provider, global_object)
         
     def check_command(self, 
                       message: str, 
                       session_id: str, 
-                      user_name: str, 
+                      loop,
                       role: str, 
                       platform: str,
                       message_obj,
                       cached_plugins: dict,
-                      qq_platform: QQ,):
+                      qq_platform: QQ):
         self.platform = platform
-        hit, res = super().check_command(message, role, platform, message_obj=message_obj, 
-                                        cached_plugins=cached_plugins, 
-                                        qq_platform=qq_platform,
-                                        global_object=self.global_object)
+        hit, res = super().check_command(
+            message,
+            session_id,
+            loop,
+            role,
+            platform,
+            message_obj,
+            cached_plugins,
+            qq_platform
+        )
+        
         if hit:
             return True, res
         if self.command_start_with(message, "reset", "重置"):
             return True, self.reset(session_id)
         elif self.command_start_with(message, "his", "历史"):
-            return True, self.his(message, session_id, user_name)
+            return True, self.his(message, session_id)
         elif self.command_start_with(message, "token"):
             return True, self.token(session_id)
         elif self.command_start_with(message, "gpt"):
@@ -52,7 +60,7 @@ class CommandOpenAIOfficial(Command):
         elif self.command_start_with(message, "keyword"):
             return True, self.keyword(message, role)
         elif self.command_start_with(message, "key"):
-            return True, self.key(message, user_name)
+            return True, self.key(message)
         
         if self.command_start_with(message, "/"):
             return True, (False, "未知指令", "unknown_command")
@@ -76,7 +84,7 @@ class CommandOpenAIOfficial(Command):
         self.provider.forget(session_id)
         return True, "重置成功", "reset"
     
-    def his(self, message: str, session_id: str, name: str):
+    def his(self, message: str, session_id: str):
         if self.provider is None:
             return False, "未启动OpenAI ChatGPT语言模型.", "his"
         #分页，每页5条
@@ -132,7 +140,7 @@ class CommandOpenAIOfficial(Command):
         guild_count, guild_msg_count, guild_direct_msg_count, session_count = self.provider.get_stat()
         return True, f"当前会话数: {len(self.provider.session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}\n历史会话数: {session_count}", "count"
 
-    def key(self, message: str, user_name: str):
+    def key(self, message: str):
         if self.provider is None:
             return False, "未启动OpenAI ChatGPT语言模型.", "reset"
         l = message.split(" ")
@@ -141,8 +149,8 @@ class CommandOpenAIOfficial(Command):
             return True, msg, "key"
         key = l[1]
         if self.provider.check_key(key):
-            self.provider.append_key(key, user_name)
-            return True, f"*★,°*:.☆(￣▽￣)/$:*.°★* 。\n该Key被验证为有效。感谢{user_name}赞助~"
+            self.provider.append_key(key)
+            return True, f"*★,°*:.☆(￣▽￣)/$:*.°★* 。\n该Key被验证为有效。感谢你的赞助~"
         else:
             return True, "该Key被验证为无效。也许是输入错误了，或者重试。", "key"
 

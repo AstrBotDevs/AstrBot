@@ -22,6 +22,7 @@ from nakuru import (
     GuildMessage
 )
 from nakuru.entities.components import Plain,At,Image
+from model.provider.provider import Provider
 from model.command.command import Command
 from model.command.command_rev_chatgpt import CommandRevChatGPT
 from model.command.command_rev_edgegpt import CommandRevEdgeGPT
@@ -82,9 +83,12 @@ provider = None
 chosen_provider = None
 
 # 语言模型对象
-rev_chatgpt = None
-rev_edgegpt = None
-chatgpt = None
+# rev_chatgpt = None
+# rev_edgegpt = None
+# chatgpt = None
+llm_instance: Provider = None
+llm_command_instance: dict[str, Command] = {}
+
 # gpt配置信息
 gpt_config = {}
 # 百度内容审核实例
@@ -191,9 +195,10 @@ def upload():
 初始化机器人
 '''
 def initBot(cfg, prov):
-    global chatgpt, provider, rev_chatgpt, baidu_judge, rev_edgegpt, chosen_provider
+    global llm_instance, llm_command_instance
+    global provider, baidu_judge, chosen_provider
     global reply_prefix, gpt_config, config, uniqueSession, frequency_count, frequency_time, announcement, direct_message_mode, version
-    global command_openai_official, command_rev_chatgpt, command_rev_edgegpt,reply_prefix, keywords, cached_plugins, _global_object
+    global reply_prefix, keywords, cached_plugins, _global_object
     provider = prov
     config = cfg
     if 'reply_prefix' in cfg:
@@ -207,21 +212,22 @@ def initBot(cfg, prov):
         if cfg['rev_ChatGPT']['enable']:
             if 'account' in cfg['rev_ChatGPT']:
                 from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
-                rev_chatgpt = ProviderRevChatGPT(cfg['rev_ChatGPT'])
+                llm_instance = ProviderRevChatGPT(cfg['rev_ChatGPT'])
+                llm_command_instance[REV_CHATGPT] = CommandRevChatGPT(llm_instance, _global_object)
                 chosen_provider = REV_CHATGPT
             else:
                 input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
         
     if REV_EDGEGPT in prov:
         gu.log("- New Bing -", gu.LEVEL_INFO)
-
         if not os.path.exists('./cookies.json'):
             input("[System-err] 导入Bing模型时发生错误, 没有找到cookies文件或者cookies文件放置位置错误。windows启动器启动的用户请把cookies.json文件放到和启动器相同的目录下。\n如何获取请看https://github.com/Soulter/QQChannelChatGPT仓库介绍。")
         else:
             if cfg['rev_edgegpt']['enable']:
                 try:
                     from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
-                    rev_edgegpt = ProviderRevEdgeGPT()
+                    llm_instance = ProviderRevEdgeGPT()
+                    llm_command_instance[REV_EDGEGPT] = CommandRevEdgeGPT(llm_instance, _global_object)
                     chosen_provider = REV_EDGEGPT
                 except BaseException as e:
                     gu.log("加载Bing模型时发生错误, 请检查1. cookies文件是否正确放置 2. 是否设置了代理（梯子）。", gu.LEVEL_ERROR, max_len=60)
@@ -229,12 +235,9 @@ def initBot(cfg, prov):
         gu.log("- OpenAI官方 -", gu.LEVEL_INFO)
         if cfg['openai']['key'] is not None:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial
-            chatgpt = ProviderOpenAIOfficial(cfg['openai'])
+            llm_instance = ProviderOpenAIOfficial(cfg['openai'])
+            llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance, _global_object)
             chosen_provider = OPENAI_OFFICIAL
-
-    command_rev_edgegpt = CommandRevEdgeGPT(rev_edgegpt, _global_object)
-    command_rev_chatgpt = CommandRevChatGPT(rev_chatgpt, _global_object)
-    command_openai_official = CommandOpenAIOfficial(chatgpt, _global_object)
 
     gu.log("--------加载个性化配置--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 得到关键词
@@ -303,14 +306,14 @@ def initBot(cfg, prov):
 
     gu.log("--------加载插件--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 加载插件
-    _command = Command(None)
+    _command = Command(None, None)
     ok, err = _command.plugin_reload(cached_plugins)
     if ok:
         gu.log("加载插件完成", gu.LEVEL_INFO)
     else:
         gu.log(err, gu.LEVEL_ERROR)
 
-    gu.log("--------加载平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("--------加载机器人平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # GOCQ
     global gocq_bot
 
@@ -374,11 +377,12 @@ def run_qqchan_bot(cfg, loop, qqchannel_bot):
         qqchannel_bot.run_bot(client, cfg['qqbot']['appid'], cfg['qqbot']['token'])
     except BaseException as e:
         gu.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
-        gu.log(r"【提醒】如果您是初次启动，请修改配置文件（QQChannelChatGPT/config.yaml）详情请看：https://github.com/Soulter/QQChannelChatGPT/wiki。" + str(e), gu.LEVEL_CRITICAL, tag="System")
+        gu.log(r"如果您是初次启动，请修改配置文件（QQChannelChatGPT/config.yaml）详情请看：https://github.com/Soulter/QQChannelChatGPT/wiki。" + str(e), gu.LEVEL_CRITICAL, tag="System")
         
         i = input("输入y打开配置文件, 按回车退出程序。")
         if i == "y":
             abs_path = os.path.abspath("QQChannelChatGPT/configs/config.yaml")
+            print("配置文件地址：" + abs_path)
             os.system(f"notepad \"{abs_path}\"")
         # gu.log("如果你使用了go-cqhttp, 则可以忽略上面的报错。" + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
         # input(f"\n[System-Error] 启动QQ频道机器人时出现错误，原因如下：{e}\n可能是没有填写QQBOT appid和token？请在config中完善你的appid和token\n配置教程：https://soulter.top/posts/qpdg.html\n")
@@ -430,15 +434,13 @@ def save_provider_preference(chosen_provider):
 '''
 通用回复方法
 '''
-def send_message(platform, message, res, msg_ref = None, image = None, image_mode=False):
-    # imagemode: 
-    # For GOCQ: when image_mode is true, ALL plain texts in res will change into a new pic
+def send_message(platform, message, res, msg_ref = None):
     global cnt_valid, qqchannel_bot, qqchannel_bot, gocq_loop
     cnt_valid += 1
     if platform == PLATFORM_QQCHAN:
         qqchannel_bot.send_qq_msg(message, res, msg_ref=msg_ref)
     if platform == PLATFORM_GOCQ:
-        asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res, image_mode), gocq_loop).result()
+        asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res), gocq_loop).result()
 
 
 def oper_msg(message, 
@@ -604,97 +606,51 @@ def oper_msg(message,
             save_provider_preference(chosen_provider)
             send_message(platform, message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
             return
-
+        
     chatgpt_res = ""
 
-    if chosen_provider == OPENAI_OFFICIAL: 
-        hit, command_result = command_openai_official.check_command(qq_msg, session_id, user_name, role, 
-                                                                    platform=platform, message_obj=message, 
-                                                                    cached_plugins=cached_plugins, 
-                                                                    qq_platform=gocq_bot)
-        # hit: 是否触发了指令
-        if not hit:
-            if not with_tag:
-                return
-            if chatgpt == None:
-                send_message(platform, message, f"管理员未启动OpenAI模型或初始化时失败。", msg_ref=msg_ref)
-                return
-            # 请求ChatGPT获得结果
-            try:
+    hit, command_result = llm_command_instance[chosen_provider].check_command(
+        qq_msg,
+        session_id,
+        bing_cache_loop,
+        role,
+        platform,
+        message,
+        cached_plugins,
+        gocq_bot,
+    )
+
+    # 指令触发情况
+    if not hit:
+        if not with_tag:
+            return
+        if chosen_provider == None:
+            send_message(platform, message, f"管理员未启动任何语言模型或者语言模型初始化时失败。", msg_ref=msg_ref)
+            return
+        try:
+            if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
                 if _global_object != None and "web_search" in _global_object and _global_object["web_search"]:
-                    chatgpt_res = gplugin.web_search(qq_msg, chatgpt)
+                    chatgpt_res = gplugin.web_search(qq_msg, llm_instance)
                 else:
-                    chatgpt_res = str(chatgpt.text_chat(qq_msg))
-                if OPENAI_OFFICIAL in reply_prefix:
-                    chatgpt_res = reply_prefix[OPENAI_OFFICIAL] + chatgpt_res
-            except (BaseException) as e:
-                gu.log("OpenAI API请求错误, 原因: "+str(e), gu.LEVEL_ERROR)
-                send_message(platform, message, f"OpenAI API错误, 原因: {str(e)}", msg_ref=msg_ref)
-
-    elif chosen_provider == REV_CHATGPT:
-        hit, command_result = command_rev_chatgpt.check_command(qq_msg, role, 
-                                                                platform=platform, 
-                                                                message_obj=message, 
-                                                                cached_plugins=cached_plugins, 
-                                                                qq_platform=gocq_bot)
-        if not hit:
-            if not with_tag:
-                return
-            if rev_chatgpt == None:
-                send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref)
-                return
-            try:
-                while rev_chatgpt.is_all_busy():
-                    time.sleep(1)
-
-                # ws_prompt = f"{qq_msg}\n\n提示："
-                # chatgpt_res = str(rev_chatgpt.text_chat(ws_prompt))
-                if _global_object != None and "web_search" in _global_object and _global_object["web_search"]:
-                    chatgpt_res = gplugin.web_search(qq_msg, rev_chatgpt)
-                else:
-                    chatgpt_res = str(rev_chatgpt.text_chat(qq_msg))
-
-                if REV_CHATGPT in reply_prefix:
-                    chatgpt_res = reply_prefix[REV_CHATGPT] + chatgpt_res
-            except BaseException as e:
-                gu.log("逆向ChatGPT请求错误, 原因: "+str(e), gu.LEVEL_ERROR)
-                send_message(platform, message, f"RevChatGPT错误, 原因: \n{str(e)}", msg_ref=msg_ref)
-
-    elif chosen_provider == REV_EDGEGPT:
-        if bing_cache_loop == None:
-            if platform == PLATFORM_GOCQ:
-                bing_cache_loop = gocq_loop
-            elif platform == PLATFORM_QQCHAN:
-                bing_cache_loop = qqchan_loop
-        hit, command_result = command_rev_edgegpt.check_command(qq_msg, bing_cache_loop, role, 
-                                                                platform=platform, message_obj=message, 
-                                                                cached_plugins=cached_plugins,
-                                                                qq_platform=gocq_bot)
-        if not hit:
-            try:
-                if not with_tag:
-                    return
-                if rev_edgegpt == None:
-                    send_message(platform, message, f"管理员未启动此模型或者此模型初始化时失败。", msg_ref=msg_ref)
-                    return
-                while rev_edgegpt.is_busy():
-                    time.sleep(1)
-
-                res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg, platform), bing_cache_loop).result()
+                    chatgpt_res = str(llm_instance.text_chat(qq_msg, session_id))
+            elif chosen_provider == REV_EDGEGPT:
+                res, res_code = asyncio.run_coroutine_threadsafe(llm_instance.text_chat(qq_msg, platform), bing_cache_loop).result()
                 if res_code == 0: # bing不想继续话题，重置会话后重试。
                     send_message(platform, message, "Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref)
-                    asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
-                    res, res_code = asyncio.run_coroutine_threadsafe(rev_edgegpt.text_chat(qq_msg, platform), bing_cache_loop).result()
+                    asyncio.run_coroutine_threadsafe(llm_instance.forget(), bing_cache_loop).result()
+                    res, res_code = asyncio.run_coroutine_threadsafe(llm_instance.text_chat(qq_msg, platform), bing_cache_loop).result()
                     if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
-                        asyncio.run_coroutine_threadsafe(rev_edgegpt.forget(), bing_cache_loop).result()
+                        asyncio.run_coroutine_threadsafe(llm_instance.forget(), bing_cache_loop).result()
                         send_message(platform, message, "Bing仍然不想继续话题, 会话已重置, 请检查您的提问后重试。", msg_ref=msg_ref)
                         res = ""
                 chatgpt_res = str(res)
-                if REV_EDGEGPT in reply_prefix:
-                    chatgpt_res = reply_prefix[REV_EDGEGPT] + chatgpt_res
-            except BaseException as e:
-                gu.log("NewBing请求错误, 原因: "+str(e), gu.LEVEL_ERROR)
-                send_message(platform, message, f"Rev NewBing API错误。原因如下：\n{str(e)} \n前往官方频道反馈~", msg_ref=msg_ref)
+
+            if chosen_provider in reply_prefix:
+                chatgpt_res = reply_prefix[chosen_provider] + chatgpt_res
+        except BaseException as e:
+            gu.log("调用语言模型例程时出现异常。原因: "+str(e), gu.LEVEL_ERROR)
+            send_message(platform, message, "调用语言模型例程时出现异常。原因: "+str(e), msg_ref=msg_ref)
+            return
 
     # 切换回原来的语言模型
     if temp_switch != "":
@@ -703,42 +659,39 @@ def oper_msg(message,
     # 指令回复
     if hit:
         # 检查指令. command_result是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
-        if command_result != None:
-            command = command_result[2]
-            if command == "keyword":
-                if os.path.exists("keyword.json"):
-                    with open("keyword.json", "r", encoding="utf-8") as f:
-                        keywords = json.load(f)
+        if command_result == None:
+            send_message(platform, message, "指令调用未返回任何信息。", msg_ref=msg_ref)
+            return
+        command = command_result[2]
+        if command == "keyword":
+            if not os.path.exists("keyword.json"):
+                send_message(platform, message, "出现异常，文件不存在。", msg_ref=msg_ref)
+                return
+            with open("keyword.json", "r", encoding="utf-8") as f:
+                keywords = json.load(f)
+        # 昵称
+        if command == "nick":
+            nick_qq = cc.get("nick_qq", nick_qq)
 
-            # 昵称
-            if command == "nick":
-                nick_qq = cc.get("nick_qq", nick_qq)
+        if not command_result[0]:
+            send_message(platform, message, f"指令调用错误: \n{str(command_result[1])}", msg_ref=msg_ref)
+            return
+        # 画图指令
+        if isinstance(command_result[1], list) and len(command_result) == 3 and command_result[2] == 'draw':
+            for i in command_result[1]:
+                # i is a link
+                # 保存到本地
+                pic_res = requests.get(i, stream = True)
+                if pic_res.status_code == 200:
+                    image = PILImage.open(io.BytesIO(pic_res.content))
+                    send_message(platform, message, [Image.fromFileSystem(gu.save_temp_img(image))], msg_ref=msg_ref)
+        # 其他指令
+        else:
+            try:
+                send_message(platform, message, command_result[1], msg_ref=msg_ref)
+            except BaseException as e:
+                send_message(platform, message, f"回复消息出错: {str(e)}", msg_ref=msg_ref)
 
-            if command_result[0]:
-                # 是否是画图指令
-                if isinstance(command_result[1], list) and len(command_result) == 3 and command_result[2] == 'draw':
-                    if chatgpt != None:
-                        for i in command_result[1]:
-                            # i is a link
-                            # 保存到本地
-                            pic_res = requests.get(i, stream = True)
-                            if pic_res.status_code == 200:
-                                image = PILImage.open(io.BytesIO(pic_res.content))
-                                send_message(platform, message, [Image.fromFileSystem(gu.save_temp_img(image))], msg_ref=msg_ref)
-                    else:
-                        send_message(platform, message, "画图指令需要启用OpenAI官方模型.", msg_ref=msg_ref)
-                else:
-                    try:
-                        send_message(platform, message, command_result[1], msg_ref=msg_ref)
-                    except BaseException as e:
-                        send_message(platform, message, f"回复消息出错: {str(e)}", msg_ref=msg_ref)
-
-            else:
-                send_message(platform, message, f"指令调用错误: \n{str(command_result[1])}", msg_ref=msg_ref)
-
-        return
-    
-    if chatgpt_res == "":
         return
 
     # 记录日志
@@ -756,47 +709,14 @@ def oper_msg(message,
             send_message(platform, message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref)
             return
         
-    # 发送qq信息
+    # 发送信息
     try:
         if platform==PLATFORM_GOCQ:
-            if cc.get("qq_pic_mode", False):
-                send_message(platform, message, chatgpt_res, image_mode=True, msg_ref=msg_ref)
-            else:
-                send_message(platform, message, chatgpt_res, msg_ref=msg_ref)
+            send_message(platform, message, chatgpt_res, msg_ref=msg_ref)
         else:
             send_message(platform, message, chatgpt_res, msg_ref=msg_ref)
     except BaseException as e:
         gu.log("回复消息错误: \n"+str(e), gu.LEVEL_ERROR)
-
-'''
-获取统计信息
-'''
-def get_stat(self):
-
-    try:
-        f = open(abs_path+"configs/stat", "r", encoding="utf-8")
-        fjson = json.loads(f.read())
-        f.close()
-        guild_count = 0
-        guild_msg_count = 0
-        guild_direct_msg_count = 0
-
-        for k,v in fjson.items():
-            guild_count += 1
-            guild_msg_count += v['count']
-            guild_direct_msg_count += v['direct_count']
-        
-        session_count = 0
-
-        f = open(abs_path+"configs/session", "r", encoding="utf-8")
-        fjson = json.loads(f.read())
-        f.close()
-        for k,v in fjson.items():
-            session_count += 1
-        return guild_count, guild_msg_count, guild_direct_msg_count, session_count
-    except:
-        return -1, -1, -1, -1
-    
 
 # QQ频道机器人
 class botClient(botpy.Client):

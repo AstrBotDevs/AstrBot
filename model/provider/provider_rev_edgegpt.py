@@ -4,6 +4,7 @@ import json
 import os
 from util import general_utils as gu
 from util.cmd_config import CmdConfig as cc
+import time
 
 
 class ProviderRevEdgeGPT(Provider):
@@ -28,8 +29,8 @@ class ProviderRevEdgeGPT(Provider):
             return False
         
     async def text_chat(self, prompt, platform = 'none'):
-        if self.busy:
-             return
+        while self.busy:
+            time.sleep(1)
         self.busy = True
         resp = 'err'
         err_count = 0
