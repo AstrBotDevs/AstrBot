@@ -224,7 +224,9 @@ class ProviderOpenAIOfficial(Provider):
                 
         return image_url
 
-    def forget(self, session_id) -> bool:
+    def forget(self, session_id = None) -> bool:
+        if session_id is None:
+            return False
         self.session_dict[session_id] = []
         return True
     

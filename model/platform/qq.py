@@ -61,11 +61,10 @@ class QQ:
                 else:
                     news.append(i)
             plains_str = "".join(plains).strip()
-            if plains_str != "":
+            if plains_str != "" and len(plains_str) > 50:
                 p = gu.create_markdown_image("".join(plains))
                 news.append(Image.fromFileSystem(p))
-            res = news
-
+                res = news
 
         # 回复消息链
         if isinstance(res, list) and len(res) > 0:

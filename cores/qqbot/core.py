@@ -12,7 +12,7 @@ import os
 import sys
 from cores.qqbot.personality import personalities
 from addons.baidu_aip_judge import BaiduJudge
-from model.platform.qqchan import QQChan
+from model.platform.qqchan import QQChan, NakuruGuildMember, NakuruGuildMessage
 from model.platform.qq import QQ
 from nakuru import (
     CQHTTP,
@@ -86,7 +86,7 @@ chosen_provider = None
 # rev_chatgpt = None
 # rev_edgegpt = None
 # chatgpt = None
-llm_instance: Provider = None
+llm_instance: dict[str, Provider] = {}
 llm_command_instance: dict[str, Command] = {}
 
 # gpt配置信息
@@ -99,7 +99,7 @@ reply_prefix = {}
 keywords = {}
 
 # QQ频道机器人
-qqchannel_bot = None
+qqchannel_bot: QQChan = None
 PLATFORM_QQCHAN = 'qqchan'
 qqchan_loop = None
 
@@ -212,7 +212,7 @@ def initBot(cfg, prov):
         if cfg['rev_ChatGPT']['enable']:
             if 'account' in cfg['rev_ChatGPT']:
                 from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
-                llm_instance = ProviderRevChatGPT(cfg['rev_ChatGPT'])
+                llm_instance[REV_CHATGPT] = ProviderRevChatGPT(cfg['rev_ChatGPT'])
                 llm_command_instance[REV_CHATGPT] = CommandRevChatGPT(llm_instance, _global_object)
                 chosen_provider = REV_CHATGPT
             else:
@@ -226,7 +226,7 @@ def initBot(cfg, prov):
             if cfg['rev_edgegpt']['enable']:
                 try:
                     from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
-                    llm_instance = ProviderRevEdgeGPT()
+                    llm_instance[REV_EDGEGPT] = ProviderRevEdgeGPT()
                     llm_command_instance[REV_EDGEGPT] = CommandRevEdgeGPT(llm_instance, _global_object)
                     chosen_provider = REV_EDGEGPT
                 except BaseException as e:
@@ -235,7 +235,7 @@ def initBot(cfg, prov):
         gu.log("- OpenAI官方 -", gu.LEVEL_INFO)
         if cfg['openai']['key'] is not None:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial
-            llm_instance = ProviderOpenAIOfficial(cfg['openai'])
+            llm_instance[OPENAI_OFFICIAL] = ProviderOpenAIOfficial(cfg['openai'])
             llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance, _global_object)
             chosen_provider = OPENAI_OFFICIAL
 
@@ -476,35 +476,7 @@ def oper_msg(message,
     if isinstance(nick_qq, list):
         nick_qq = tuple(nick_qq)
 
-    if platform == PLATFORM_QQCHAN:
-        with_tag = True
-        gu.log(f"收到消息：{message.content}", gu.LEVEL_INFO, tag="QQ频道")
-        user_id = message.author.id
-        user_name = message.author.username
-        if group:
-            # 频道内
-            # 过滤@
-            qq_msg = message.content
-            lines = qq_msg.splitlines()
-            for i in range(len(lines)):
-                lines[i] = re.sub(r"<@!\d+>", "", lines[i])
-            qq_msg = "\n".join(lines).lstrip().strip()
-            if uniqueSession:
-                session_id = user_id
-            else:
-                session_id = message.channel_id
-            # 得到身份
-            if "2" in message.member.roles or "4" in message.member.roles or "5" in message.member.roles:
-                # gu.log(f"检测到管理员身份", gu.LEVEL_INFO, tag="QQ频道")
-                role = "admin"
-            else:
-                role = "member"
-        else:
-            # 私信
-            qq_msg = message.content
-            session_id = user_id
-
-    if platform == PLATFORM_GOCQ:
+    if platform == PLATFORM_GOCQ or platform == PLATFORM_QQCHAN:
         _len = 0
         for i in message.message:
             if isinstance(i, Plain):
@@ -512,7 +484,7 @@ def oper_msg(message,
             if isinstance(i, At):
                 # @机器人
                 if message.type == "GuildMessage":
-                    if i.qq == message.self_tiny_id:
+                    if i.qq == message.user_id:
                         with_tag = True
                 if message.type == "FriendMessage":
                     if i.qq == message.self_id:
@@ -567,7 +539,19 @@ def oper_msg(message,
     # 关键词回复
     for k in keywords:
         if qq_msg == k:
-            send_message(platform, message, keywords[k], msg_ref=msg_ref)
+            plain_text = ""
+            if 'plain_text' in keywords[k]:
+                plain_text = keywords[k]['plain_text']
+            else:
+                plain_text = keywords[k]
+            image_url = ""
+            if 'image_url' in keywords[k]:
+                image_url = keywords[k]['image_url']
+            if image_url != "":
+                res = [Plain(plain_text), Image.fromURL(image_url)]
+                send_message(platform, message, res, msg_ref=msg_ref)
+            else:
+                send_message(platform, message, plain_text, msg_ref=msg_ref)
             return
 
     # 关键词拦截器
@@ -630,17 +614,17 @@ def oper_msg(message,
         try:
             if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
                 if _global_object != None and "web_search" in _global_object and _global_object["web_search"]:
-                    chatgpt_res = gplugin.web_search(qq_msg, llm_instance)
+                    chatgpt_res = gplugin.web_search(qq_msg, llm_instance[chosen_provider])
                 else:
-                    chatgpt_res = str(llm_instance.text_chat(qq_msg, session_id))
+                    chatgpt_res = str(llm_instance[chosen_provider].text_chat(qq_msg, session_id))
             elif chosen_provider == REV_EDGEGPT:
-                res, res_code = asyncio.run_coroutine_threadsafe(llm_instance.text_chat(qq_msg, platform), bing_cache_loop).result()
+                res, res_code = asyncio.run_coroutine_threadsafe(llm_instance[chosen_provider].text_chat(qq_msg, platform), bing_cache_loop).result()
                 if res_code == 0: # bing不想继续话题，重置会话后重试。
                     send_message(platform, message, "Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref)
-                    asyncio.run_coroutine_threadsafe(llm_instance.forget(), bing_cache_loop).result()
-                    res, res_code = asyncio.run_coroutine_threadsafe(llm_instance.text_chat(qq_msg, platform), bing_cache_loop).result()
+                    asyncio.run_coroutine_threadsafe(llm_instance[chosen_provider].forget(), bing_cache_loop).result()
+                    res, res_code = asyncio.run_coroutine_threadsafe(llm_instance[chosen_provider].text_chat(qq_msg, platform), bing_cache_loop).result()
                     if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
-                        asyncio.run_coroutine_threadsafe(llm_instance.forget(), bing_cache_loop).result()
+                        asyncio.run_coroutine_threadsafe(llm_instance[chosen_provider].forget(), bing_cache_loop).result()
                         send_message(platform, message, "Bing仍然不想继续话题, 会话已重置, 请检查您的提问后重试。", msg_ref=msg_ref)
                         res = ""
                 chatgpt_res = str(res)
@@ -711,10 +695,7 @@ def oper_msg(message,
         
     # 发送信息
     try:
-        if platform==PLATFORM_GOCQ:
-            send_message(platform, message, chatgpt_res, msg_ref=msg_ref)
-        else:
-            send_message(platform, message, chatgpt_res, msg_ref=msg_ref)
+        send_message(platform, message, chatgpt_res, msg_ref=msg_ref)
     except BaseException as e:
         gu.log("回复消息错误: \n"+str(e), gu.LEVEL_ERROR)
 
@@ -723,14 +704,25 @@ class botClient(botpy.Client):
     # 收到频道消息
     async def on_at_message_create(self, message: Message):
         toggle_count(at=True, message=message)
+        gu.log(str(message), gu.LEVEL_DEBUG, max_len=9999)
+
+        # 转换层
+        nakuru_guild_message = qqchannel_bot.gocq_compatible_receive(message)
+        gu.log(f"转换后: {str(nakuru_guild_message)}", gu.LEVEL_DEBUG, max_len=9999)
+
         message_reference = Reference(message_id=message.id, ignore_get_message_error=False)
-        new_sub_thread(oper_msg, (message, True, message_reference, PLATFORM_QQCHAN))
+        new_sub_thread(oper_msg, (nakuru_guild_message, True, message_reference, PLATFORM_QQCHAN))
 
     # 收到私聊消息
     async def on_direct_message_create(self, message: DirectMessage):
         if direct_message_mode:
+
+            # 转换层
+            nakuru_guild_message = qqchannel_bot.gocq_compatible_receive(message)
+            gu.log(f"转换后: {str(nakuru_guild_message)}", gu.LEVEL_DEBUG, max_len=9999)
+
             toggle_count(at=False, message=message)
-            new_sub_thread(oper_msg, (message, False, None, PLATFORM_QQCHAN))
+            new_sub_thread(oper_msg, (nakuru_guild_message, False, None, PLATFORM_QQCHAN))
 # QQ机器人
 class gocqClient():
     # 收到群聊消息
@@ -762,7 +754,6 @@ class gocqClient():
 
     @gocq_app.receiver("GuildMessage")
     async def _(app: CQHTTP, source: GuildMessage):
-        # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
 
         if isinstance(source.message[0], Plain):
             # if source.message[0].text.startswith(nick_qq):

@@ -33,10 +33,19 @@ BG_COLORS = {
     "default": "49",
 }
 
+LEVEL_DEBUG = "DEBUG"
 LEVEL_INFO = "INFO"
 LEVEL_WARNING = "WARNING"
 LEVEL_ERROR = "ERROR"
 LEVEL_CRITICAL = "CRITICAL"
+
+level_codes = {
+    LEVEL_DEBUG: 0,
+    LEVEL_INFO: 1,
+    LEVEL_WARNING: 2,
+    LEVEL_ERROR: 3,
+    LEVEL_CRITICAL: 4
+}
 
 level_colors = {
     "INFO": "green",
@@ -55,6 +64,13 @@ def log(
     """
     日志记录函数
     """
+    _set_level_code = LEVEL_INFO
+    if 'LOG_LEVEL' in os.environ and os.environ['LOG_LEVEL'] in level_codes:
+        _set_level_code = level_codes[os.environ['LOG_LEVEL']]
+
+    if level in level_codes and level_codes[level] < _set_level_code:
+        return
+
     if len(msg) > max_len:
         msg = msg[:max_len] + "..."
     now = datetime.datetime.now().strftime("%m-%d %H:%M:%S")

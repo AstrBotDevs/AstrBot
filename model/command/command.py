@@ -68,11 +68,13 @@ class Command:
             return True, self.plugin_oper(message, role, cached_plugins, platform)
         
         if self.command_start_with(message, "myid"):
-            return True, self.get_my_id(message_obj, platform)
+            return True, self.get_my_id(message_obj)
         if self.command_start_with(message, "nconf") or self.command_start_with(message, "newconf"):
-            return True, self.get_new_conf(message, role, platform)
+            return True, self.get_new_conf(message, role)
         if self.command_start_with(message, "web"): # 网页搜索
             return True, self.web_search(message, self.global_object)
+        if self.command_start_with(message, "keyword"):
+            return True, self.keyword(message_obj, role)
         
         return False, None
     
@@ -87,26 +89,17 @@ class Command:
             return True, "已关闭网页搜索", "web"
         return True, f"网页搜索功能当前状态: {global_object['web_search']}", "web"
 
-    def get_my_id(self, message_obj, platform):
-        print(message_obj)
-        if platform == "gocq":
-            if message_obj.type == "GuildMessage":
-                return True, f"你的频道id是{str(message_obj.sender.tiny_id)}", "plugin"
-            else:
-                return True, f"你的QQ是{str(message_obj.sender.user_id)}", "plugin"
-        else:
-            return True, f"{str(message_obj)}\n（此指令为开发专用，为提供更多数据，请自行从中找出您的频道ID。在author->id中。）", "plugin"
+    def get_my_id(self, message_obj):
+        return True, f"{str(message_obj)}\n（此指令为开发专用，为提供更多数据，请自行从中找出您的频道ID。在author->id中。）", "plugin"
             
-    def get_new_conf(self, message, role, platform):
+    def get_new_conf(self, message, role):
         if role != "admin":
             return False, f"你的身份组{role}没有权限使用此指令。", "newconf"
-        if platform == gu.PLATFORM_GOCQ:
-            l = message.split(" ")
-            if len(l) <= 1:
-                obj = cc.get_all()
-                p = gu.create_text_image("【cmd_config.json】", json.dumps(obj, indent=4, ensure_ascii=False))
-                return True, [Image.fromFileSystem(p)], "newconf"
-        return False, f"Not support or not implemented.", "newconf"
+        l = message.split(" ")
+        if len(l) <= 1:
+            obj = cc.get_all()
+            p = gu.create_text_image("【cmd_config.json】", json.dumps(obj, indent=4, ensure_ascii=False))
+            return True, [Image.fromFileSystem(p)], "newconf"
             
     def plugin_reload(self, cached_plugins: dict, target: str = None, all: bool = False):
         plugins = self.get_plugin_modules()
@@ -151,10 +144,8 @@ class Command:
     def plugin_oper(self, message: str, role: str, cached_plugins: dict, platform: str):
         l = message.split(" ")
         if len(l) < 2:
-            if platform == gu.PLATFORM_GOCQ:
-                p = gu.create_text_image("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
-                return True, [Image.fromFileSystem(p)], "plugin"
-            return True, "\n=====插件指令面板=====\n安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n===============", "plugin"
+            p = gu.create_text_image("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
+            return True, [Image.fromFileSystem(p)], "plugin"
         else:
             ppath = ""
             if os.path.exists("addons/plugins"):
@@ -230,21 +221,16 @@ class Command:
             elif l[1] == "l":
                 try:
                     plugin_list_info = "\n".join([f"{k}: \n名称: {v['info']['name']}\n简介: {v['info']['desc']}\n版本: {v['info']['version']}\n作者: {v['info']['author']}\n" for k, v in cached_plugins.items()])
-                    if platform == gu.PLATFORM_GOCQ:
-                        p = gu.create_text_image("【已激活插件列表】", plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n")
-                        return True, [Image.fromFileSystem(p)], "plugin"
-                    return True, "\n=====已激活插件列表=====\n" + plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n=================", "plugin"
+                    p = gu.create_text_image("【已激活插件列表】", plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n")
+                    return True, [Image.fromFileSystem(p)], "plugin"
                 except BaseException as e:
                     return False, f"获取插件列表失败，原因: {str(e)}", "plugin"
             elif l[1] == "v":
                 try:
                     if l[2] in cached_plugins:
                         info = cached_plugins[l[2]]["info"]
-                        if platform == gu.PLATFORM_GOCQ:
-                            p = gu.create_text_image(f"【插件信息】", f"名称: {info['name']}\n{info['desc']}\n版本: {info['version']}\n作者: {info['author']}\n\n帮助:\n{info['help']}")
-                            return True, [Image.fromFileSystem(p)], "plugin"
-                        res = f"\n=====插件信息=====\n名称: {info['name']}\n{info['desc']}\n版本: {info['version']}作者: {info['author']}\n\n帮助:\n{info['help']}"
-                        return True, res, "plugin"
+                        p = gu.create_text_image(f"【插件信息】", f"名称: {info['name']}\n{info['desc']}\n版本: {info['version']}\n作者: {info['author']}\n\n帮助:\n{info['help']}")
+                        return True, [Image.fromFileSystem(p)], "plugin"
                     else:
                         return False, "未找到该插件", "plugin"
                 except BaseException as e:
@@ -344,15 +330,14 @@ class Command:
                 msg += plugin_list_info
         msg += notice
 
-        if platform == gu.PLATFORM_GOCQ:
-            try:
-                # p = gu.create_text_image("【Help Center】", msg)
-                p = gu.create_markdown_image(msg)
-                return [Image.fromFileSystem(p)]
-            except BaseException as e:
-                gu.log(str(e))
-                return msg
-        return msg
+        try:
+            # p = gu.create_text_image("【Help Center】", msg)
+            p = gu.create_markdown_image(msg)
+            return [Image.fromFileSystem(p)]
+        except BaseException as e:
+            gu.log(str(e))
+        finally:
+            return msg
     
     # 接受可变参数
     def command_start_with(self, message: str, *args):
@@ -362,14 +347,36 @@ class Command:
         return False
     
     # keyword: 关键字
-    def keyword(self, message: str, role: str):
+    def keyword(self, message_obj, role: str):
         if role != "admin":
             return True, "你没有权限使用该指令", "keyword"
+        
+        plain_text = ""
+        image_url = ""
 
-        l = message.split(" ")
+        for comp in message_obj.message:
+            if isinstance(comp, Plain):
+                plain_text += comp.text
+            elif isinstance(comp, Image) and image_url == "":
+                if comp.url is None:
+                    image_url = comp.file
+                else:
+                    image_url = comp.url
 
-        if len(l) < 3:
-            return True, "【设置关键词回复】示例：\nkeyword hi 你好\n当发送hi的时候会回复你好\nkeyword /hi 你好\n当发送/hi时会回复你好\n删除关键词: keyword d hi\n删除hi关键词的回复", "keyword"
+        l = plain_text.split(" ")
+
+        if len(l) < 3 and image_url == "":
+            return True, """
+【设置关键词回复】示例：
+1. keyword hi 你好
+当发送hi的时候会回复你好
+2. keyword /hi 你好
+当发送/hi时会回复你好
+3. keyword d hi
+删除hi关键词的回复
+4. keyword hi <图片>
+当发送hi时会回复图片(切记加空格)
+""", "keyword"
         
         del_mode = False
         if l[1] == "d":
@@ -385,18 +392,30 @@ class Command:
                             return False, "该关键词不存在", "keyword"
                         else: del keyword[l[2]]
                     else:
-                        keyword[l[1]] = l[2]
+                        keyword[l[1]] = {
+                            "plain_text": " ".join(l[2:]),
+                            "image_url": image_url
+                        }
             else:
                 if del_mode:
                     return False, "该关键词不存在", "keyword"
-                keyword = {l[1]: l[2]}
+                keyword = {
+                    l[1]: {
+                    "plain_text": l[2:],
+                    "image_url": image_url
+                    }
+                }
             with open("keyword.json", "w", encoding="utf-8") as f:
                 json.dump(keyword, f, ensure_ascii=False, indent=4)
                 f.flush()
             if del_mode:
                 return True, "删除成功: "+l[2], "keyword"
-            return True, "设置成功: "+l[1]+" -> "+l[2], "keyword"
+            if image_url == "":
+                return True, "设置成功: "+l[1]+" "+" ".join(l[2:]), "keyword"
+            else:
+                return True, [Plain("设置成功: "+l[1]+" "+" ".join(l[2:])), Image.fromURL(image_url)], "keyword"
         except BaseException as e:
+            raise e
             return False, "设置失败: "+str(e), "keyword"
     
     def update(self, message: str, role: str):

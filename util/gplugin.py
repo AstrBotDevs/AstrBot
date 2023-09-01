@@ -17,7 +17,11 @@ def special_fetch_zhihu(link: str) -> str:
     }
     response = requests.get(link, headers=headers)
     soup = BeautifulSoup(response.text, "html.parser")
-    r = soup.find(class_="List-item").find(class_="RichContent-inner")
+
+    if "zhuanlan.zhihu.com" in link:
+        r = soup.find(class_="Post-RichTextContainer")
+    else:
+        r = soup.find(class_="List-item").find(class_="RichContent-inner")
     if r is None:
         print("debug: zhihu none")
         raise Exception("zhihu none")
