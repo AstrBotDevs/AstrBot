@@ -48,7 +48,7 @@ class QQChan():
             if isinstance(i, Plain):
                 plain_text += i.text
             elif isinstance(i, Image) and image_path == None:
-                image_path = i.path
+                image_path = i.file
         return plain_text, image_path
     
     # gocq-频道SDK兼容层（收）
