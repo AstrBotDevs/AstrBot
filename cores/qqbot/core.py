@@ -112,6 +112,7 @@ gocq_app = CQHTTP(
     http_port=5700,
 )
 admin_qq = "123456"
+admin_qqchan = None
 
 gocq_loop = None
 nick_qq = None
