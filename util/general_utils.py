@@ -64,9 +64,10 @@ def log(
     """
     日志记录函数
     """
-    _set_level_code = LEVEL_INFO
+    _set_level_code = level_codes[LEVEL_INFO]
     if 'LOG_LEVEL' in os.environ and os.environ['LOG_LEVEL'] in level_codes:
         _set_level_code = level_codes[os.environ['LOG_LEVEL']]
+
 
     if level in level_codes and level_codes[level] < _set_level_code:
         return
