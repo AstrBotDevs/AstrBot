@@ -82,7 +82,7 @@ class ProviderRevChatGPT(Provider):
         # print("[RevChatGPT] "+str(resp))
         return resp
 
-    def text_chat(self, prompt) -> str:
+    def text_chat(self, prompt, session_id = None) -> str:
         while self.is_all_busy():
             time.sleep(1)
         res = ''

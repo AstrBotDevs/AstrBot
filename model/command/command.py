@@ -415,7 +415,6 @@ class Command:
             else:
                 return True, [Plain("设置成功: "+l[1]+" "+" ".join(l[2:])), Image.fromURL(image_url)], "keyword"
         except BaseException as e:
-            raise e
             return False, "设置失败: "+str(e), "keyword"
     
     def update(self, message: str, role: str):

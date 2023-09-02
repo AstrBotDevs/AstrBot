@@ -524,6 +524,9 @@ def oper_msg(message,
             # gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="GOCQ")
             role = "admin"
 
+    if platform == PLATFORM_QQCHAN:
+        with_tag = True
+
     if qq_msg == "":
         send_message(platform, message,  f"Hi~", msg_ref=msg_ref)
         return
