@@ -315,31 +315,31 @@ def initBot(cfg, prov):
         gu.log(err, gu.LEVEL_ERROR)
 
     gu.log("--------加载机器人平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+
+    global admin_qq, admin_qqchan
+    admin_qq = cc.get('admin_qq', None)
+    admin_qqchan = cc.get('admin_qqchan', None)
+    if admin_qq == None:
+        gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
+        admin_qq = input("请输入管理者QQ号(必须设置): ")
+        gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+        cc.put('admin_qq', admin_qq)
+    if admin_qqchan == None:
+        gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
+        admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
+        if admin_qqchan == "":
+            gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+        else:
+            gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+            cc.put('admin_qqchan', admin_qqchan)
+    
+    gu.log("管理者QQ: " + admin_qq, gu.LEVEL_INFO)
+    gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
     # GOCQ
     global gocq_bot
 
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
         gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
-
-        global admin_qq, admin_qqchan
-        admin_qq = cc.get('admin_qq', None)
-        admin_qqchan = cc.get('admin_qqchan', None)
-        if admin_qq == None:
-            gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
-            admin_qq = input("请输入管理者QQ号(必须设置): ")
-            gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-            cc.put('admin_qq', admin_qq)
-        if admin_qqchan == None:
-            gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
-            admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
-            if admin_qqchan == "":
-                gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-            else:
-                gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-                cc.put('admin_qqchan', admin_qqchan)
-        
-        gu.log("管理者QQ: " + admin_qq, gu.LEVEL_INFO)
-        gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
         
         global gocq_app, gocq_loop
         gocq_loop = asyncio.new_event_loop()
