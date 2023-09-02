@@ -401,7 +401,7 @@ class Command:
                     return False, "该关键词不存在", "keyword"
                 keyword = {
                     l[1]: {
-                    "plain_text": l[2:],
+                    "plain_text": " ".join(l[2:]),
                     "image_url": image_url
                     }
                 }
