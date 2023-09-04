@@ -54,8 +54,13 @@ class QQChan():
     # gocq-频道SDK兼容层（收）
     def gocq_compatible_receive(self, message: Message) -> NakuruGuildMessage:
         ngm = NakuruGuildMessage()
-        ngm.self_id = message.mentions[0].id
-        ngm.self_tiny_id = message.mentions[0].id
+        try:
+            ngm.self_id = message.mentions[0].id
+            ngm.self_tiny_id = message.mentions[0].id
+        except:
+            ngm.self_id = 0
+            ngm.self_tiny_id = 0
+
         ngm.sub_type = "normal"
         ngm.message_id = message.id
         ngm.guild_id = int(message.channel_id)
@@ -97,6 +102,14 @@ class QQChan():
             plain_text = res
 
         print(plain_text, image_path)
+
+        if image_path is not None:
+            msg_ref = None
+            if image_path.startswith("http"):
+                pic_res = requests.get(image_path, stream = True)
+                if pic_res.status_code == 200:
+                    image = PILImage.open(io.BytesIO(pic_res.content))
+                    image_path = gu.save_temp_img(image)
 
         try:
             reply_res = asyncio.run_coroutine_threadsafe(message.raw_message.reply(content=str(plain_text), message_reference = msg_ref, file_image=image_path), self.client.loop)
