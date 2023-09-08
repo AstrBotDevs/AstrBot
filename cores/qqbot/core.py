@@ -103,13 +103,27 @@ qqchannel_bot: QQChan = None
 PLATFORM_QQCHAN = 'qqchan'
 qqchan_loop = None
 
+# 新版配置文件
+cc.init_attributes(["qq_forward_threshold"], 200)
+cc.init_attributes(["qq_welcome"], "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
+cc.init_attributes(["bing_proxy"], "")
+cc.init_attributes(["qq_pic_mode"], False)
+cc.init_attributes(["rev_chatgpt_model"], "")
+cc.init_attributes(["rev_chatgpt_plugin_ids"], [])
+cc.init_attributes(["rev_chatgpt_PUID"], "")
+cc.init_attributes(["rev_chatgpt_unverified_plugin_domains"], [])
+cc.init_attributes(["gocq_host"], "127.0.0.1")
+cc.init_attributes(["gocq_http_port"], 5700)
+cc.init_attributes(["gocq_websocket_port"], 6700)
+# cc.init_attributes(["qq_forward_mode"], False)
+
 # QQ机器人
 gocq_bot = None
 PLATFORM_GOCQ = 'gocq'
 gocq_app = CQHTTP(
-    host="127.0.0.1",
-    port=6700,
-    http_port=5700,
+    host=cc.get("gocq_host", "127.0.0.1"),
+    port=cc.get("gocq_websocket_port", 6700),
+    http_port=cc.get("gocq_http_port", 5700),
 )
 admin_qq = "123456"
 admin_qqchan = None
@@ -130,17 +144,6 @@ cnt_total = 0
 cnt_valid = 0
 cnt_qqchan = 0
 cnt_gocq = 0
-
-# 新版配置文件
-cc.init_attributes(["qq_forward_threshold"], 200)
-cc.init_attributes(["qq_welcome"], "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
-cc.init_attributes(["bing_proxy"], "")
-cc.init_attributes(["qq_pic_mode"], False)
-cc.init_attributes(["rev_chatgpt_model"], "")
-cc.init_attributes(["rev_chatgpt_plugin_ids"], [])
-cc.init_attributes(["rev_chatgpt_PUID"], "")
-cc.init_attributes(["rev_chatgpt_unverified_plugin_domains"], [])
-# cc.init_attributes(["qq_forward_mode"], False)
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
@@ -398,7 +401,7 @@ def run_gocq_bot(loop, gocq_bot, gocq_app):
     asyncio.set_event_loop(loop)
     gu.log("正在检查本地GO-CQHTTP连接...端口5700, 6700", tag="QQ")
     while True:
-        if not gu.port_checker(5700) or not gu.port_checker(6700):
+        if not gu.port_checker(5700, cc.get("gocq_host", "127.0.0.1")) or not gu.port_checker(6700, cc.get("gocq_host", "127.0.0.1")):
             gu.log("与GO-CQHTTP通信失败, 请检查GO-CQHTTP是否启动并正确配置。5秒后自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
             time.sleep(5)
         else:
