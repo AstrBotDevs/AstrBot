@@ -42,9 +42,9 @@ class ProviderRevChatGPT(Provider):
             except BaseException as e:
                 gu.log(f"创建逆向ChatGPT负载{str(i+1)}失败: {str(e)}", level=gu.LEVEL_ERROR, tag="RevChatGPT")
 
-    def forget(self, session_id) -> bool:
+    def forget(self, session_id = None) -> bool:
         for i in self.rev_chatgpt:
-            if session_id in i['user']:
+            if session_id is None or session_id in i['user']:
                 try:
                     i['obj'].reset_chat()
                     return True
