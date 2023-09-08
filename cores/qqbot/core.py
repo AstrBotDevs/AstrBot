@@ -72,7 +72,7 @@ direct_message_mode = True
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 # 版本
-version = '3.0.2'
+version = '3.0.3'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
@@ -128,6 +128,8 @@ _global_object = {}
 # 统计
 cnt_total = 0
 cnt_valid = 0
+cnt_qqchan = 0
+cnt_gocq = 0
 
 # 新版配置文件
 cc.init_attributes(["qq_forward_threshold"], 200)
@@ -168,19 +170,21 @@ def toggle_count(at: bool, message):
 # 上传统计信息并检查更新
 def upload():
     global object_id
-    global version, cnt_valid, cnt_total
+    global version, cnt_valid, cnt_total, cnt_qqchan, cnt_gocq, session_dict
     while True:
         addr = ''
         addr_ip = ''
+        session_dict_dump = '{}'
         try:
             addr = requests.get('http://myip.ipip.net', timeout=5).text
             addr_ip = re.findall(r'\d+.\d+.\d+.\d+', addr)[0]
+            json.dumps(session_dict)
         except BaseException as e:
             pass
         try:
-            o = {"cnt_total": cnt_total,"admin": admin_qq,"addr": addr,}
+            o = {"cnt_total": cnt_total,"admin": admin_qq,"addr": addr, 's': session_dict_dump}
             o_j = json.dumps(o)
-            res = {"version": version, "count": cnt_valid, "ip": addr_ip, "others": o_j}
+            res = {"version": version, "count": cnt_valid, "ip": addr_ip, "others": o_j, "cntqc": cnt_qqchan, "cntgc": cnt_gocq}
             resp = requests.post('https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
             # print(resp.text)
             if resp.status_code == 200:
@@ -188,6 +192,8 @@ def upload():
                 if ok['status'] == 'ok':
                     cnt_valid = 0
                     cnt_total = 0
+                    cnt_qqchan = 0
+                    cnt_gocq = 0
         except BaseException as e:
             pass
         time.sleep(60*10)
@@ -214,7 +220,7 @@ def initBot(cfg, prov):
             if 'account' in cfg['rev_ChatGPT']:
                 from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
                 llm_instance[REV_CHATGPT] = ProviderRevChatGPT(cfg['rev_ChatGPT'])
-                llm_command_instance[REV_CHATGPT] = CommandRevChatGPT(llm_instance, _global_object)
+                llm_command_instance[REV_CHATGPT] = CommandRevChatGPT(llm_instance[REV_CHATGPT], _global_object)
                 chosen_provider = REV_CHATGPT
             else:
                 input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
@@ -228,7 +234,7 @@ def initBot(cfg, prov):
                 try:
                     from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
                     llm_instance[REV_EDGEGPT] = ProviderRevEdgeGPT()
-                    llm_command_instance[REV_EDGEGPT] = CommandRevEdgeGPT(llm_instance, _global_object)
+                    llm_command_instance[REV_EDGEGPT] = CommandRevEdgeGPT(llm_instance[REV_CHATGPT], _global_object)
                     chosen_provider = REV_EDGEGPT
                 except BaseException as e:
                     gu.log("加载Bing模型时发生错误, 请检查1. cookies文件是否正确放置 2. 是否设置了代理（梯子）。", gu.LEVEL_ERROR, max_len=60)
@@ -237,7 +243,7 @@ def initBot(cfg, prov):
         if cfg['openai']['key'] is not None:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial
             llm_instance[OPENAI_OFFICIAL] = ProviderOpenAIOfficial(cfg['openai'])
-            llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance, _global_object)
+            llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance[REV_CHATGPT], _global_object)
             chosen_provider = OPENAI_OFFICIAL
 
     gu.log("--------加载个性化配置--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
@@ -435,12 +441,24 @@ def save_provider_preference(chosen_provider):
 '''
 通用回复方法
 '''
-def send_message(platform, message, res, msg_ref = None):
-    global cnt_valid, qqchannel_bot, qqchannel_bot, gocq_loop
+def send_message(platform, message, res, msg_ref = None, session_id = None):
+    global cnt_valid, qqchannel_bot, qqchannel_bot, gocq_loop, cnt_qqchan, cnt_gocq, session_dict
     cnt_valid += 1
+    if session_id is not None:
+        if session_id not in session_dict:
+            session_dict[session_id] = {
+                'cnt': 1,
+            }
+        else:
+            session_dict[session_id]['cnt'] += 1
+            
+    else:
+        session_dict[session_id]['cnt'] += 1
     if platform == PLATFORM_QQCHAN:
+        cnt_qqchan += 1
         qqchannel_bot.send_qq_msg(message, res, msg_ref=msg_ref)
     if platform == PLATFORM_GOCQ:
+        cnt_gocq += 1
         asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res), gocq_loop).result()
 
 
@@ -453,11 +471,10 @@ def oper_msg(message,
     group: 群聊模式,
     message: 频道是频道的消息对象, QQ是nakuru-gocq的消息对象
     """
-    global session_dict, provider
+    global provider, session_dict
     qq_msg = ''
     session_id = ''
     user_id = ''
-    user_name = ''
     global chosen_provider, reply_prefix, keywords, qqchannel_bot, gocq_bot, gocq_loop, bing_cache_loop, qqchan_loop
     role = "member" # 角色
     hit = False # 是否命中指令
@@ -528,13 +545,13 @@ def oper_msg(message,
         with_tag = True
 
     if qq_msg == "":
-        send_message(platform, message,  f"Hi~", msg_ref=msg_ref)
+        send_message(platform, message,  f"Hi~", msg_ref=msg_ref, session_id=session_id)
         return
     
     if with_tag:
         # 检查发言频率
         if not check_frequency(user_id):
-            send_message(platform, message, f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。', msg_ref=msg_ref)
+            send_message(platform, message, f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。', msg_ref=msg_ref, session_id=session_id)
             return
 
     # logf.write("[GOCQBOT] "+ qq_msg+'\n')
@@ -553,21 +570,21 @@ def oper_msg(message,
                 image_url = keywords[k]['image_url']
             if image_url != "":
                 res = [Plain(plain_text), Image.fromURL(image_url)]
-                send_message(platform, message, res, msg_ref=msg_ref)
+                send_message(platform, message, res, msg_ref=msg_ref, session_id=session_id)
             else:
-                send_message(platform, message, plain_text, msg_ref=msg_ref)
+                send_message(platform, message, plain_text, msg_ref=msg_ref, session_id=session_id)
             return
 
     # 关键词拦截器
     for i in uw.unfit_words_q:
         matches = re.match(i, qq_msg.strip(), re.I | re.M)
         if matches:
-            send_message(platform, message,  f"你的提问得到的回复未通过【自有关键词拦截】服务, 不予回复。", msg_ref=msg_ref)
+            send_message(platform, message,  f"你的提问得到的回复未通过【自有关键词拦截】服务, 不予回复。", msg_ref=msg_ref, session_id=session_id)
             return
     if baidu_judge != None:
         check, msg = baidu_judge.judge(qq_msg)
         if not check:
-            send_message(platform, message,  f"你的提问得到的回复未通过【百度AI内容审核】服务, 不予回复。\n\n{msg}", msg_ref=msg_ref)
+            send_message(platform, message,  f"你的提问得到的回复未通过【百度AI内容审核】服务, 不予回复。\n\n{msg}", msg_ref=msg_ref, session_id=session_id)
             return
     
     # 检查是否是更换语言模型的请求
@@ -588,11 +605,11 @@ def oper_msg(message,
             qq_msg = l[1]
         else:
             # if role != "admin":
-            #     send_message(platform, message, "你没有权限更换语言模型。", msg_ref=msg_ref)
+            #     send_message(platform, message, "你没有权限更换语言模型。", msg_ref=msg_ref, session_id=session_id)
             #     return
             chosen_provider = target
             save_provider_preference(chosen_provider)
-            send_message(platform, message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref)
+            send_message(platform, message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref, session_id=session_id)
             return
         
     chatgpt_res = ""
@@ -613,7 +630,7 @@ def oper_msg(message,
         if not with_tag:
             return
         if chosen_provider == None:
-            send_message(platform, message, f"管理员未启动任何语言模型或者语言模型初始化时失败。", msg_ref=msg_ref)
+            send_message(platform, message, f"管理员未启动任何语言模型或者语言模型初始化时失败。", msg_ref=msg_ref, session_id=session_id)
             return
         try:
             if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
@@ -624,12 +641,12 @@ def oper_msg(message,
             elif chosen_provider == REV_EDGEGPT:
                 res, res_code = asyncio.run_coroutine_threadsafe(llm_instance[chosen_provider].text_chat(qq_msg, platform), bing_cache_loop).result()
                 if res_code == 0: # bing不想继续话题，重置会话后重试。
-                    send_message(platform, message, "Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref)
+                    send_message(platform, message, "Bing不想继续话题了, 正在自动重置会话并重试。", msg_ref=msg_ref, session_id=session_id)
                     asyncio.run_coroutine_threadsafe(llm_instance[chosen_provider].forget(), bing_cache_loop).result()
                     res, res_code = asyncio.run_coroutine_threadsafe(llm_instance[chosen_provider].text_chat(qq_msg, platform), bing_cache_loop).result()
                     if res_code == 0: # bing还是不想继续话题，大概率说明提问有问题。
                         asyncio.run_coroutine_threadsafe(llm_instance[chosen_provider].forget(), bing_cache_loop).result()
-                        send_message(platform, message, "Bing仍然不想继续话题, 会话已重置, 请检查您的提问后重试。", msg_ref=msg_ref)
+                        send_message(platform, message, "Bing仍然不想继续话题, 会话已重置, 请检查您的提问后重试。", msg_ref=msg_ref, session_id=session_id)
                         res = ""
                 chatgpt_res = str(res)
 
@@ -637,7 +654,7 @@ def oper_msg(message,
                 chatgpt_res = reply_prefix[chosen_provider] + chatgpt_res
         except BaseException as e:
             gu.log("调用语言模型例程时出现异常。原因: "+str(e), gu.LEVEL_ERROR)
-            send_message(platform, message, "调用语言模型例程时出现异常。原因: "+str(e), msg_ref=msg_ref)
+            send_message(platform, message, "调用语言模型例程时出现异常。原因: "+str(e), msg_ref=msg_ref, session_id=session_id)
             return
 
     # 切换回原来的语言模型
@@ -648,12 +665,12 @@ def oper_msg(message,
     if hit:
         # 检查指令. command_result是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
         if command_result == None:
-            send_message(platform, message, "指令调用未返回任何信息。", msg_ref=msg_ref)
+            send_message(platform, message, "指令调用未返回任何信息。", msg_ref=msg_ref, session_id=session_id)
             return
         command = command_result[2]
         if command == "keyword":
             if not os.path.exists("keyword.json"):
-                send_message(platform, message, "出现异常，文件不存在。", msg_ref=msg_ref)
+                send_message(platform, message, "出现异常，文件不存在。", msg_ref=msg_ref, session_id=session_id)
                 return
             with open("keyword.json", "r", encoding="utf-8") as f:
                 keywords = json.load(f)
@@ -662,7 +679,7 @@ def oper_msg(message,
             nick_qq = cc.get("nick_qq", nick_qq)
 
         if not command_result[0]:
-            send_message(platform, message, f"指令调用错误: \n{str(command_result[1])}", msg_ref=msg_ref)
+            send_message(platform, message, f"指令调用错误: \n{str(command_result[1])}", msg_ref=msg_ref, session_id=session_id)
             return
         # 画图指令
         if isinstance(command_result[1], list) and len(command_result) == 3 and command_result[2] == 'draw':
@@ -672,13 +689,13 @@ def oper_msg(message,
                 pic_res = requests.get(i, stream = True)
                 if pic_res.status_code == 200:
                     image = PILImage.open(io.BytesIO(pic_res.content))
-                    send_message(platform, message, [Image.fromFileSystem(gu.save_temp_img(image))], msg_ref=msg_ref)
+                    send_message(platform, message, [Image.fromFileSystem(gu.save_temp_img(image))], msg_ref=msg_ref, session_id=session_id)
         # 其他指令
         else:
             try:
-                send_message(platform, message, command_result[1], msg_ref=msg_ref)
+                send_message(platform, message, command_result[1], msg_ref=msg_ref, session_id=session_id)
             except BaseException as e:
-                send_message(platform, message, f"回复消息出错: {str(e)}", msg_ref=msg_ref)
+                send_message(platform, message, f"回复消息出错: {str(e)}", msg_ref=msg_ref, session_id=session_id)
 
         return
 
@@ -694,12 +711,12 @@ def oper_msg(message,
     if baidu_judge != None:
         check, msg = baidu_judge.judge(chatgpt_res)
         if not check:
-            send_message(platform, message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref)
+            send_message(platform, message, f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}", msg_ref=msg_ref, session_id=session_id)
             return
         
     # 发送信息
     try:
-        send_message(platform, message, chatgpt_res, msg_ref=msg_ref)
+        send_message(platform, message, chatgpt_res, msg_ref=msg_ref, session_id=session_id)
     except BaseException as e:
         gu.log("回复消息错误: \n"+str(e), gu.LEVEL_ERROR)
 

@@ -1,6 +1,7 @@
 from model.command.command import Command
 from model.provider.provider_openai_official import ProviderOpenAIOfficial
 from cores.qqbot.personality import personalities
+
 from model.platform.qq import QQ
 from util import general_utils as gu
 
@@ -164,8 +165,8 @@ class CommandOpenAIOfficial(Command):
             return False, "未启动OpenAI ChatGPT语言模型.", "set"
         l = message.split(" ")
         if len(l) == 1:
-            return True, f"【由Github项目QQChannelChatGPT支持】\n\n【人格文本由PlexPt开源项目awesome-chatgpt-pr \
-        ompts-zh提供】\n\n这个是人格设置指令。\n设置人格: \n/set 人格名。例如/set 编剧\n人格列表: /set list\n人格详细信息: \
+            return True, f"【人格文本由PlexPt开源项目awesome-chatgpt-pr \
+        ompts-zh提供】\n设置人格: \n/set 人格名。例如/set 编剧\n人格列表: /set list\n人格详细信息: \
         /set view 人格名\n自定义人格: /set 人格文本\n清除人格: /unset\n【当前人格】: {str(self.provider.now_personality)}", "set"
         elif l[1] == "list":
             msg = "人格列表：\n"
