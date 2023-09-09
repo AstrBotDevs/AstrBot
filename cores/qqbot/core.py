@@ -237,7 +237,7 @@ def initBot(cfg, prov):
                 try:
                     from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
                     llm_instance[REV_EDGEGPT] = ProviderRevEdgeGPT()
-                    llm_command_instance[REV_EDGEGPT] = CommandRevEdgeGPT(llm_instance[REV_CHATGPT], _global_object)
+                    llm_command_instance[REV_EDGEGPT] = CommandRevEdgeGPT(llm_instance[REV_EDGEGPT], _global_object)
                     chosen_provider = REV_EDGEGPT
                 except BaseException as e:
                     gu.log("加载Bing模型时发生错误, 请检查1. cookies文件是否正确放置 2. 是否设置了代理（梯子）。", gu.LEVEL_ERROR, max_len=60)
@@ -246,7 +246,7 @@ def initBot(cfg, prov):
         if cfg['openai']['key'] is not None:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial
             llm_instance[OPENAI_OFFICIAL] = ProviderOpenAIOfficial(cfg['openai'])
-            llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance[REV_CHATGPT], _global_object)
+            llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance[OPENAI_OFFICIAL], _global_object)
             chosen_provider = OPENAI_OFFICIAL
 
     gu.log("--------加载个性化配置--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
