@@ -455,11 +455,19 @@ class Command:
                         pash_tag = "QQChannelChatGPT"+os.sep
                     repo.remotes.origin.pull()
 
-                    if len(l) == 3 and l[2] == "r":
-                        py = sys.executable
-                        os.execl(py, py, *sys.argv)
+                    try:
+                        origin = repo.remotes.origin
+                        origin.fetch()
+                        commits = list(repo.iter_commits('master', max_count=1))
+                        commit_log = commits[0].message
+                    except BaseException as e:
+                        commit_log = "无法获取commit信息"
 
-                    return True, "更新成功~是否重启？输入update r重启（重启指令不返回任何确认信息）。", "update"
+                    tag = "update"
+                    if len(l) == 3 and l[2] == "r":
+                        tag = "update latest r"
+
+                    return True, f"更新成功。新版本内容: \n{commit_log}\nps:重启后生效。输入update r重启（重启指令不返回任何确认信息）。", tag
                     
                 except BaseException as e:
                     return False, "更新失败: "+str(e), "update"

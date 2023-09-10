@@ -103,7 +103,7 @@ qqchannel_bot: QQChan = None
 PLATFORM_QQCHAN = 'qqchan'
 qqchan_loop = None
 
-# 新版配置文件
+# 配置
 cc.init_attributes(["qq_forward_threshold"], 200)
 cc.init_attributes(["qq_welcome"], "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
 cc.init_attributes(["bing_proxy"], "")
@@ -115,6 +115,10 @@ cc.init_attributes(["rev_chatgpt_unverified_plugin_domains"], [])
 cc.init_attributes(["gocq_host"], "127.0.0.1")
 cc.init_attributes(["gocq_http_port"], 5700)
 cc.init_attributes(["gocq_websocket_port"], 6700)
+cc.init_attributes(["gocq_react_group"], True)
+cc.init_attributes(["gocq_react_guild"], True)
+cc.init_attributes(["gocq_react_friend"], True)
+cc.init_attributes(["gocq_react_group_increase"], True)
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
@@ -681,11 +685,16 @@ def oper_msg(message,
         if command == "nick":
             nick_qq = cc.get("nick_qq", nick_qq)
 
+        if command == "update latest r":
+            send_message(platform, message, command_result[1] + "\n\n即将自动重启。", msg_ref=msg_ref, session_id=session_id)
+            py = sys.executable
+            os.execl(py, py, *sys.argv)
+
         if not command_result[0]:
             send_message(platform, message, f"指令调用错误: \n{str(command_result[1])}", msg_ref=msg_ref, session_id=session_id)
             return
         # 画图指令
-        if isinstance(command_result[1], list) and len(command_result) == 3 and command_result[2] == 'draw':
+        if isinstance(command_result[1], list) and len(command_result) == 3 and command == 'draw':
             for i in command_result[1]:
                 # i is a link
                 # 保存到本地
@@ -753,42 +762,38 @@ class gocqClient():
     @gocq_app.receiver("GroupMessage")
     async def _(app: CQHTTP, source: GroupMessage):
         # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
-
-        if isinstance(source.message[0], Plain):
-            new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
-        if isinstance(source.message[0], At):
-            if source.message[0].qq == source.self_id:
+        if cc.get("gocq_react_group", True):
+            if isinstance(source.message[0], Plain):
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
-        else:
-            return
+            if isinstance(source.message[0], At):
+                if source.message[0].qq == source.self_id:
+                    new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
+            else:
+                return
         
     @gocq_app.receiver("FriendMessage")
     async def _(app: CQHTTP, source: FriendMessage):
-        if isinstance(source.message[0], Plain):
-            new_sub_thread(oper_msg, (source, False, None, PLATFORM_GOCQ))
-        else:
-            return
+        if cc.get("gocq_react_friend", True):
+            if isinstance(source.message[0], Plain):
+                new_sub_thread(oper_msg, (source, False, None, PLATFORM_GOCQ))
+            else:
+                return
         
     @gocq_app.receiver("GroupMemberIncrease")
     async def _(app: CQHTTP, source: GroupMemberIncrease):
-        global nick_qq, announcement
-        await app.sendGroupMessage(source.group_id, [
-            Plain(text = announcement),
-        ])
+        if cc.get("gocq_react_group_increase", True):
+            global nick_qq, announcement
+            await app.sendGroupMessage(source.group_id, [
+                Plain(text = announcement),
+            ])
 
     @gocq_app.receiver("GuildMessage")
     async def _(app: CQHTTP, source: GuildMessage):
-
-        if isinstance(source.message[0], Plain):
-            # if source.message[0].text.startswith(nick_qq):
-            #     _len = 0
-            #     for i in nick_qq:
-            #         if source.message[0].text.startswith(i):
-            #             _len = len(i)
-            #     source.message[0].text = source.message[0].text[_len:].strip()
-            new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
-        if isinstance(source.message[0], At):
-            if source.message[0].qq == source.self_tiny_id:
+        if cc.get("gocq_react_guild", True):
+            if isinstance(source.message[0], Plain):
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
-        else:
-            return
+            if isinstance(source.message[0], At):
+                if source.message[0].qq == source.self_tiny_id:
+                    new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
+            else:
+                return
