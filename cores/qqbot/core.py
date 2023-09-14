@@ -207,7 +207,7 @@ def upload():
         except BaseException as e:
             gu.log("上传统计信息时出现错误: " + str(e), gu.LEVEL_ERROR, tag="Upload")
             pass
-        time.sleep(10)
+        time.sleep(10*60)
 
 '''
 初始化机器人
@@ -367,7 +367,7 @@ def initBot(cfg, prov):
         gocq_bot = QQ(False)
 
     gu.log("机器人部署教程: https://github.com/Soulter/QQChannelChatGPT/wiki/", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue说明问题！", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue或加群322154837", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
 
     # QQ频道

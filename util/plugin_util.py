@@ -18,7 +18,6 @@ def get_modules(path):
     for root, dirs, files in os.walk(path):
         # 获得所在目录名
         p_name = os.path.basename(root)
-        print(p_name)
         for file in files:
             if file.endswith(".py") and not file.startswith("__") and p_name.lower() == file[:-3].lower():
                 modules.append(file[:-3])

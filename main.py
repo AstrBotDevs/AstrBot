@@ -11,7 +11,7 @@ def main():
         cfg = yaml.safe_load(ymlfile)
     except BaseException as e:
         print(e)
-        input("第三方依赖库未完全安装完毕，请退出程序重试。")
+        input("第三方库未完全安装完毕，请退出程序重试。")
         exit()
     import util.general_utils as gu
     if 'http_proxy' in cfg:
@@ -53,50 +53,35 @@ def check_env():
         print("请使用Python3.8运行本项目")
         input("按任意键退出...")
         exit()
-
-    # 检查pip
-    # pip_tag = "pip"
-    # mm = os.system("pip -V")
-    # if mm != 0:
-    #     mm1 = os.system("pip3 -V")
-    #     if mm1 != 0:
-    #         print("未检测到pip, 请安装Python(版本应>=3.9)")
-    #         input("按任意键退出...")
-    #         exit()
-    #     else:
-    #         pip_tag = "pip3"
     
     if os.path.exists('requirements.txt'):
         pth = 'requirements.txt'
     else:
         pth = 'QQChannelChatGPT'+ os.sep +'requirements.txt'
-    print("正在更新三方依赖库...")
+    print("正在检查更新第三方库...")
     try:
-        pipmain(['install', '-r', pth])
-        print("依赖库安装完毕。")
+        pipmain(['install', '-r', pth, '--quiet'])
     except BaseException as e:
         print(e)
         while True:
-            res = input("依赖库可能安装失败了。\n如果是报错ValueError: check_hostname requires server_hostname，请尝试先关闭代理后重试。\n输入y回车重试\n输入c回车使用国内镜像源下载\n输入其他按键回车继续往下执行。")
+            res = input("安装失败。\n如报错ValueError: check_hostname requires server_hostname，请尝试先关闭代理后重试。\n1.输入y回车重试\n2. 输入c回车使用国内镜像源下载\n3. 输入其他按键回车继续往下执行。")
             if res == "y":
                 try:
                     pipmain(['install', '-r', pth])
-                    print("依赖库安装完毕。")
                     break
                 except BaseException as e:
                     print(e)
                     continue
-
             elif res == "c":
                 try:
                     pipmain(['install', '-r', pth, '-i', 'https://mirrors.aliyun.com/pypi/simple/'])
-                    print("依赖库安装完毕。")
                     break
                 except BaseException as e:
                     print(e)
                     continue
             else:
                 break
+    print("第三方库检查完毕。")
 
 def get_platform():
     import platform
