@@ -34,6 +34,14 @@ class NakuruGuildMessage():
         return str(self.__dict__)
 
 class QQChan():
+    def __init__(self, cnt: dict = None) -> None:
+        self.qqchan_cnt = 0
+
+    def get_cnt(self):
+        return self.qqchan_cnt
+    
+    def set_cnt(self, cnt):
+        self.qqchan_cnt = cnt
 
     def run_bot(self, botclient, appid, token):
         intents = botpy.Intents(public_guild_messages=True, direct_message=True) 
@@ -48,7 +56,10 @@ class QQChan():
             if isinstance(i, Plain):
                 plain_text += i.text
             elif isinstance(i, Image) and image_path == None:
-                image_path = i.file
+                if i.path is not None:
+                    image_path = i.path
+                else:
+                    image_path = i.file
         return plain_text, image_path
     
     # gocq-频道SDK兼容层（收）
@@ -92,7 +103,7 @@ class QQChan():
 
     def send_qq_msg(self, message: NakuruGuildMessage, res, msg_ref = None):
         gu.log("回复QQ频道消息: "+str(res), level=gu.LEVEL_INFO, tag="QQ频道", max_len=500)
-
+        self.qqchan_cnt += 1
         plain_text = ""
         image_path = None
         if isinstance(res, list):

@@ -52,8 +52,6 @@ uniqueSession = False
 
 # 日志记录
 # logf = open('log.log', 'a+', encoding='utf-8')
-# 是否上传日志,仅上传频道数量等数量的统计信息
-is_upload_log = True
 
 # 用户发言频率
 user_frequency = {}
@@ -145,9 +143,6 @@ _global_object = {}
 
 # 统计
 cnt_total = 0
-cnt_valid = 0
-cnt_qqchan = 0
-cnt_gocq = 0
 
 def new_sub_thread(func, args=()):
     thread = threading.Thread(target=func, args=args, daemon=True)
@@ -176,8 +171,7 @@ def toggle_count(at: bool, message):
 
 # 上传统计信息并检查更新
 def upload():
-    global object_id
-    global version, cnt_valid, cnt_total, cnt_qqchan, cnt_gocq, session_dict
+    global version, session_dict, gocq_bot, qqchannel_bot, cnt_total
     while True:
         addr = ''
         addr_ip = ''
@@ -189,21 +183,31 @@ def upload():
         except BaseException as e:
             pass
         try:
+            gocq_cnt = 0
+            qqchan_cnt = 0
+            if gocq_bot is not None:
+                gocq_cnt = gocq_bot.get_cnt()
+            if qqchannel_bot is not None:
+                qqchan_cnt = qqchannel_bot.get_cnt()
             o = {"cnt_total": cnt_total,"admin": admin_qq,"addr": addr, 's': session_dict_dump}
             o_j = json.dumps(o)
-            res = {"version": version, "count": cnt_valid, "ip": addr_ip, "others": o_j, "cntqc": cnt_qqchan, "cntgc": cnt_gocq}
+            res = {"version": version, "count": gocq_cnt+qqchan_cnt, "ip": addr_ip, "others": o_j, "cntqc": qqchan_cnt, "cntgc": gocq_cnt}
+            gu.log(res, gu.LEVEL_DEBUG, tag="Upload", fg = gu.FG_COLORS['yellow'], bg=gu.BG_COLORS['black'])
             resp = requests.post('https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
             # print(resp.text)
             if resp.status_code == 200:
                 ok = resp.json()
                 if ok['status'] == 'ok':
-                    cnt_valid = 0
                     cnt_total = 0
-                    cnt_qqchan = 0
-                    cnt_gocq = 0
+                    if gocq_bot is not None:
+                        gocq_cnt = gocq_bot.set_cnt(0)
+                    if qqchannel_bot is not None:
+                        qqchan_cnt = qqchannel_bot.set_cnt(0)
+                    
         except BaseException as e:
+            gu.log("上传统计信息时出现错误: " + str(e), gu.LEVEL_ERROR, tag="Upload")
             pass
-        time.sleep(60*10)
+        time.sleep(10)
 
 '''
 初始化机器人
@@ -449,8 +453,7 @@ def save_provider_preference(chosen_provider):
 通用回复方法
 '''
 def send_message(platform, message, res, msg_ref = None, session_id = None):
-    global cnt_valid, qqchannel_bot, qqchannel_bot, gocq_loop, cnt_qqchan, cnt_gocq, session_dict
-    cnt_valid += 1
+    global qqchannel_bot, qqchannel_bot, gocq_loop, session_dict
     if session_id is not None:
         if session_id not in session_dict:
             session_dict[session_id] = {
@@ -462,10 +465,8 @@ def send_message(platform, message, res, msg_ref = None, session_id = None):
     else:
         session_dict[session_id]['cnt'] += 1
     if platform == PLATFORM_QQCHAN:
-        cnt_qqchan += 1
         qqchannel_bot.send_qq_msg(message, res, msg_ref=msg_ref)
     if platform == PLATFORM_GOCQ:
-        cnt_gocq += 1
         asyncio.run_coroutine_threadsafe(gocq_bot.send_qq_msg(message, res), gocq_loop).result()
 
 
@@ -487,7 +488,7 @@ def oper_msg(message,
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
     global admin_qq, admin_qqchan, cached_plugins, gocq_bot, nick_qq
-    global cnt_total, _global_object
+    global _global_object, cnt_total
 
     cnt_total += 1
 
@@ -621,6 +622,9 @@ def oper_msg(message,
         
     chatgpt_res = ""
 
+    if session_id in gocq_bot.waiting and gocq_bot.waiting[session_id] == '':
+        gocq_bot.waiting[session_id] = qq_msg
+        return
     hit, command_result = llm_command_instance[chosen_provider].check_command(
         qq_msg,
         session_id,

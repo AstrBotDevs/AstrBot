@@ -19,6 +19,8 @@ class QQ:
         self.is_start = is_start
         self.gocq_loop = gocq_loop
         self.cc = cc
+        self.waiting = {}
+        self.gocq_cnt = 0
 
     def run_bot(self, gocq):
         self.client: CQHTTP = gocq
@@ -26,11 +28,17 @@ class QQ:
 
     def get_msg_loop(self):
         return self.gocq_loop
+    
+    def get_cnt(self):
+        return self.gocq_cnt
+    
+    def set_cnt(self, cnt):
+        self.gocq_cnt = cnt
 
     async def send_qq_msg(self, 
                           source, 
                           res):
-
+        self.gocq_cnt += 1
         if not self.is_start:
             raise Exception("管理员未启动GOCQ平台")
         """
@@ -46,7 +54,7 @@ class QQ:
         if isinstance(res, str):
             res_str = res
             res = []
-            if source.type == "GroupMessage":
+            if source.type == "GroupMessage" and not isinstance(source, FakeSource):
                 res.append(At(qq=source.user_id))
             res.append(Plain(text=res_str))
 
@@ -142,3 +150,16 @@ class QQ:
             return p
         except Exception as e:
             raise e
+
+    def wait_for_message(self, group_id):
+        '''
+        等待下一条消息
+        '''
+        self.waiting[group_id] = ''
+        while True:
+            if group_id in self.waiting and self.waiting[group_id] != '':
+                # 去掉
+                ret = self.waiting[group_id]
+                del self.waiting[group_id]
+                return ret
+            time.sleep(0.5)
