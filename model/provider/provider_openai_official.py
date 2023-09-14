@@ -17,7 +17,6 @@ class ProviderOpenAIOfficial(Provider):
         if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
             openai.api_base = cfg['api_base']
         if cfg['key'] != '' and cfg['key'] != None:
-            gu.log("读取ChatGPT Key成功")
             self.key_list = cfg['key']
         else:
             input("[System] 请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
@@ -40,9 +39,9 @@ class ProviderOpenAIOfficial(Provider):
             db1 = dbConn()
             for session in db1.get_all_session():
                 self.session_dict[session[0]] = json.loads(session[1])['data']
-            gu.log("历史记录读取成功喵")
+            gu.log("读取历史记录成功")
         except BaseException as e:
-            gu.log("历史记录读取失败喵", level=gu.LEVEL_ERROR)
+            gu.log("读取历史记录失败，但不影响使用", level=gu.LEVEL_ERROR)
 
 
         # 读取统计信息

@@ -264,12 +264,10 @@ def initBot(cfg, prov):
             keywords = json.load(f)
 
     # 检查provider设置偏好
-    if os.path.exists("provider_preference.txt"):
-        with open("provider_preference.txt", 'r', encoding='utf-8') as f:
-            res = f.read()
-            if res in prov:
-                chosen_provider = res
-        
+    p = cc.get("chosen_provider", None)
+    if p is not None and p in llm_instance:
+        chosen_provider = p
+    gu.log(f"将使用{chosen_provider}语言模型。", gu.LEVEL_INFO)
     # 百度内容审核
     if 'baidu_aip' in cfg and 'enable' in cfg['baidu_aip'] and cfg['baidu_aip']['enable']:
         try: 
@@ -306,8 +304,6 @@ def initBot(cfg, prov):
         else:
             uniqueSession = False
         gu.log("独立会话: "+str(uniqueSession), gu.LEVEL_INFO)
-        if 'dump_history_interval' in cfg:
-            gu.log("历史记录保存间隔: "+str(cfg['dump_history_interval']), gu.LEVEL_INFO)
     except BaseException:
         pass
 
@@ -390,7 +386,10 @@ def run_qqchan_bot(cfg, loop, qqchannel_bot):
     asyncio.set_event_loop(loop)
     intents = botpy.Intents(public_guild_messages=True, direct_message=True) 
     global client
-    client = botClient(intents=intents)
+    client = botClient(
+        intents=intents,
+        bot_log=False
+    )
     try:
         qqchannel_bot.run_bot(client, cfg['qqbot']['appid'], cfg['qqbot']['token'])
     except BaseException as e:
@@ -443,11 +442,6 @@ def check_frequency(id) -> bool:
         t = {'time':ts,'count':1}
         user_frequency[id] = t
         return True
-
-def save_provider_preference(chosen_provider):
-    with open('provider_preference.txt', 'w') as f:
-        f.write(chosen_provider)
-
 
 '''
 通用回复方法
@@ -616,7 +610,7 @@ def oper_msg(message,
             #     send_message(platform, message, "你没有权限更换语言模型。", msg_ref=msg_ref, session_id=session_id)
             #     return
             chosen_provider = target
-            save_provider_preference(chosen_provider)
+            cc.put("chosen_provider", chosen_provider)
             send_message(platform, message, f"已切换至【{chosen_provider}】", msg_ref=msg_ref, session_id=session_id)
             return
         
