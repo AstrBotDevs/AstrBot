@@ -121,7 +121,7 @@
 
 插件开发教程：https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6
 
-部分公开的插件：
+部分插件：
 
 - `LLMS`: https://github.com/Soulter/llms | Claude, HuggingChat 大语言模型接入。
  
@@ -129,7 +129,9 @@
 
 - `sysstat`: https://github.com/Soulter/sysstatqcbot | 查看系统状态
 
-- `BiliMonitor`: https://github.com/Soulter/BiliMonitor | 订阅B站动态！
+- `BiliMonitor`: https://github.com/Soulter/BiliMonitor | 订阅B站动态
+  
+- `liferestart`: https://github.com/Soulter/liferestart | 人生重开模拟器
 
 <!-- 
 ### 指令
