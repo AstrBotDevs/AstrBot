@@ -375,7 +375,7 @@ class Command:
 3. keyword d hi
 删除hi关键词的回复
 4. keyword hi <图片>
-当发送hi时会回复图片(切记加空格)
+当发送hi时会回复图片
 """, "keyword"
         
         del_mode = False

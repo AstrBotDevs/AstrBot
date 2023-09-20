@@ -674,11 +674,15 @@ def oper_msg(message,
             return
         command = command_result[2]
         if command == "keyword":
-            if not os.path.exists("keyword.json"):
-                send_message(platform, message, "出现异常，文件不存在。", msg_ref=msg_ref, session_id=session_id)
-                return
-            with open("keyword.json", "r", encoding="utf-8") as f:
-                keywords = json.load(f)
+            if os.path.exists("keyword.json"):
+                with open("keyword.json", "r", encoding="utf-8") as f:
+                    keywords = json.load(f)
+            else:
+                try:
+                    send_message(platform, message, command_result[1], msg_ref=msg_ref, session_id=session_id)
+                except BaseException as e:
+                    send_message(platform, message, f"回复消息出错: {str(e)}", msg_ref=msg_ref, session_id=session_id)
+
         # 昵称
         if command == "nick":
             nick_qq = cc.get("nick_qq", nick_qq)

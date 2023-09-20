@@ -16,6 +16,7 @@ class ProviderOpenAIOfficial(Provider):
         self.key_list = []
         if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
             openai.api_base = cfg['api_base']
+            print(f"设置apibase为:{openai.api_base}")
         if cfg['key'] != '' and cfg['key'] != None:
             self.key_list = cfg['key']
         else:
