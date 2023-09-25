@@ -16,7 +16,7 @@ class ProviderOpenAIOfficial(Provider):
         self.key_list = []
         if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
             openai.api_base = cfg['api_base']
-            print(f"设置apibase为:{openai.api_base}")
+            print(f"设置apibase为: {openai.api_base}")
         if cfg['key'] != '' and cfg['key'] != None:
             self.key_list = cfg['key']
         else:
@@ -113,6 +113,7 @@ class ProviderOpenAIOfficial(Provider):
                 f.close()
 
         cache_data_list, new_record, req = self.wrap(prompt, session_id)
+        gu.log(f"OPENAI REQUEST: {str(req)}", level=gu.LEVEL_DEBUG, max_len=9999)
         retry = 0
         response = None
         err = ''

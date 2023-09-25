@@ -11,6 +11,7 @@ class CommandOpenAIOfficial(Command):
         self.provider = provider
         self.cached_plugins = {}
         self.global_object = global_object
+        self.personality_str = ""
         super().__init__(provider, global_object)
         
     def check_command(self, 
@@ -37,7 +38,7 @@ class CommandOpenAIOfficial(Command):
         if hit:
             return True, res
         if self.command_start_with(message, "reset", "重置"):
-            return True, self.reset(session_id)
+            return True, self.reset(session_id, message)
         elif self.command_start_with(message, "his", "历史"):
             return True, self.his(message, session_id)
         elif self.command_start_with(message, "token"):
@@ -77,11 +78,18 @@ class CommandOpenAIOfficial(Command):
         return True, super().help_messager(commands, self.platform, cached_plugins), "help"
 
         
-    def reset(self, session_id: str):
+    def reset(self, session_id: str, message: str = "reset"):
         if self.provider is None:
             return False, "未启动OpenAI ChatGPT语言模型.", "reset"
-        self.provider.forget(session_id)
-        return True, "重置成功", "reset"
+        l = message.split(" ")
+        if len(l) == 1:
+            self.provider.forget(session_id)
+            return True, "重置成功", "reset"
+        if len(l) == 2 and l[1] == "p":
+            self.provider.forget(session_id)
+            if self.personality_str != "":
+                self.set(self.personality_str, session_id) # 重新设置人格
+            return True, "重置成功", "reset"
     
     def his(self, message: str, session_id: str):
         if self.provider is None:
@@ -131,13 +139,13 @@ class CommandOpenAIOfficial(Command):
                 sponsor = key_stat[key]['sponsor']
             chatgpt_cfg_str += f"  |-{index}: {key_stat[key]['used']}/{max} {sponsor}赞助{tag}\n"
             index += 1
-        return True, f"⭐使用情况({str(gg_count)}个已用):\n{chatgpt_cfg_str}⏰全频道已用{total}tokens", "status"
+        return True, f"⭐使用情况({str(gg_count)}个已用):\n{chatgpt_cfg_str}", "status"
 
     def count(self):
         if self.provider is None:
-            return False, "未启动OpenAI ChatGPT语言模型.", "reset"
+            return False, "未启动OpenAI ChatGPT语言模型。", "reset"
         guild_count, guild_msg_count, guild_direct_msg_count, session_count = self.provider.get_stat()
-        return True, f"当前会话数: {len(self.provider.session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}\n历史会话数: {session_count}", "count"
+        return True, f"【本指令部分统计可能已经过时】\n当前会话数: {len(self.provider.session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}\n历史会话数: {session_count}", "count"
 
     def key(self, message: str):
         if self.provider is None:
@@ -167,7 +175,7 @@ class CommandOpenAIOfficial(Command):
         if len(l) == 1:
             return True, f"【人格文本由PlexPt开源项目awesome-chatgpt-pr \
         ompts-zh提供】\n设置人格: \n/set 人格名。例如/set 编剧\n人格列表: /set list\n人格详细信息: \
-        /set view 人格名\n自定义人格: /set 人格文本\n清除人格: /unset\n【当前人格】: {str(self.provider.now_personality)}", "set"
+        /set view 人格名\n自定义人格: /set 人格文本\n重置会话(清除人格): /reset\n重置会话(保留人格): /reset p\n【当前人格】: {str(self.provider.now_personality)}", "set"
         elif l[1] == "list":
             msg = "人格列表：\n"
             for key in personalities.keys():
@@ -202,7 +210,8 @@ class CommandOpenAIOfficial(Command):
                     'single-tokens': 0
                 }
                 self.provider.session_dict[session_id].append(new_record)
-                return True, f"人格{ps}已设置.", "set"
+                self.personality_str = message
+                return True, f"人格{ps}已设置。", "set"
             else:
                 self.provider.now_personality = {
                     'name': '自定义人格',
@@ -218,6 +227,7 @@ class CommandOpenAIOfficial(Command):
                 }
                 self.provider.session_dict[session_id] = []
                 self.provider.session_dict[session_id].append(new_record)
+                self.personality_str = message
                 return True, f"自定义人格已设置。 \n人格信息: {ps}", "set"
             
     def draw(self, message):

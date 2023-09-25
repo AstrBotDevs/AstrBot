@@ -504,7 +504,7 @@ def oper_msg(message,
             if isinstance(i, At):
                 # @机器人
                 if message.type == "GuildMessage":
-                    if i.qq == message.user_id:
+                    if i.qq == message.user_id or i.qq == message.self_tiny_id:
                         with_tag = True
                 if message.type == "FriendMessage":
                     if i.qq == message.self_id:

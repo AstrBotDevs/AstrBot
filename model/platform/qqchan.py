@@ -112,7 +112,7 @@ class QQChan():
         elif isinstance(res, str):
             plain_text = res
 
-        print(plain_text, image_path)
+        # print(plain_text, image_path)
 
         if image_path is not None:
             msg_ref = None

@@ -8,6 +8,7 @@ class CommandRevChatGPT(Command):
         self.provider = provider
         self.cached_plugins = {}
         self.global_object = global_object
+        self.personality_str = ""
         super().__init__(provider, global_object)
 
     def check_command(self, 
@@ -36,7 +37,7 @@ class CommandRevChatGPT(Command):
         if self.command_start_with(message, "help", "帮助"):
             return True, self.help(cached_plugins)
         elif self.command_start_with(message, "reset"):
-            return True, self.reset(session_id)
+            return True, self.reset(session_id, message)
         elif self.command_start_with(message, "update"):
             return True, self.update(message, role)
         elif self.command_start_with(message, "set"):
@@ -47,15 +48,21 @@ class CommandRevChatGPT(Command):
             return True, (False, "未知指令", "unknown_command")
         return False, None
 
-    def reset(self, session_id):
-        self.provider.forget(session_id)
-        return True, "重置完毕。", "reset"
+    def reset(self, session_id, message: str):
+        l = message.split(" ")
+        if len(l) == 1:
+            self.provider.forget(session_id)
+            return True, "重置完毕。", "reset"
+        if len(l) == 2 and l[1] == "p":
+            self.provider.forget(session_id)
+            ret = self.provider.text_chat(self.personality_str)
+            return True, f"重置完毕（保留人格）。\n\n{ret}", "reset"
     
     def set(self, message: str, session_id: str):
         l = message.split(" ")
         if len(l) == 1:
-            return True, f"设置人格: \n/set 人格名。例如/set 编剧\n人格列表: /set list\n人格详细信息: \
-        /set view 人格名\n清除人格: /reset", "set"
+            return True, f"设置人格: \n/set 人格名或人格文本。例如/set 编剧\n人格列表: /set list\n人格详细信息: \
+        /set view 人格名\n重置会话(清除人格): /reset\n重置会话(保留人格): /reset p", "set"
         elif l[1] == "list":
             msg = "人格列表：\n"
             for key in personalities.keys():
@@ -76,11 +83,15 @@ class CommandRevChatGPT(Command):
         else:
             ps = l[1].strip()
             if ps in personalities:
-                self.reset(session_id)
-                self.provider.text_chat(personalities[ps], session_id)
-                return True, f"人格【{ps}】已设置。", "set"
+                self.reset(session_id, "reset")
+                self.personality_str = personalities[ps]
+                ret = self.provider.text_chat(self.personality_str, session_id)
+                return True, f"人格【{ps}】已设置。\n\n{ret}", "set"
             else:
-                return True, f"人格【{ps}】不存在。", "set"
+                self.reset(session_id, "reset")
+                self.personality_str = ps
+                ret = self.provider.text_chat(ps, session_id)
+                return True, f"人格信息已设置。\n\n{ret}", "set"
 
     def switch(self, message: str, session_id: str):
         '''

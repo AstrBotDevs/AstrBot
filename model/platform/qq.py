@@ -101,7 +101,7 @@ class QQ:
                     node.uin = source.self_id
                     node.name = f"To {source.sender.nickname}:"
                     node.time = int(time.time())
-                    print(node)
+                    # print(node)
                     nodes=[node]
                     await self.client.sendGroupForwardMessage(source.group_id, nodes)
                     return
