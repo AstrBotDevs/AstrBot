@@ -67,7 +67,7 @@ class Command:
         if self.command_start_with(message, "plugin"):
             return True, self.plugin_oper(message, role, cached_plugins, platform)
         
-        if self.command_start_with(message, "myid"):
+        if self.command_start_with(message, "myid") or self.command_start_with(message, "!myid"):
             return True, self.get_my_id(message_obj)
         if self.command_start_with(message, "nconf") or self.command_start_with(message, "newconf"):
             return True, self.get_new_conf(message, role)
@@ -90,7 +90,7 @@ class Command:
         return True, f"网页搜索功能当前状态: {global_object['web_search']}", "web"
 
     def get_my_id(self, message_obj):
-        return True, f"{str(message_obj)}\n（此指令为开发专用，为提供更多数据，请自行从中找出您的频道ID。在author->id中。）", "plugin"
+        return True, f"你的ID：{str(message_obj.sender.tiny_id)}", "plugin"
             
     def get_new_conf(self, message, role):
         if role != "admin":
