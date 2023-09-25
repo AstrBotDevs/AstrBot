@@ -61,6 +61,8 @@ class CommandOpenAIOfficial(Command):
             return True, self.draw(message)
         elif self.command_start_with(message, "key"):
             return True, self.key(message)
+        elif self.command_start_with(message, "switch"):
+            return True, self.switch(message)
         
         if self.command_start_with(message, "/"):
             return True, (False, "未知指令", "unknown_command")
@@ -137,7 +139,7 @@ class CommandOpenAIOfficial(Command):
                 continue
             if 'sponsor' in key_stat[key]:
                 sponsor = key_stat[key]['sponsor']
-            chatgpt_cfg_str += f"  |-{index}: {key_stat[key]['used']}/{max} {sponsor}赞助{tag}\n"
+            chatgpt_cfg_str += f"  |-{index}: {key[-8:]} {key_stat[key]['used']}/{max} {sponsor}{tag}\n"
             index += 1
         return True, f"⭐使用情况({str(gg_count)}个已用):\n{chatgpt_cfg_str}", "status"
 
@@ -160,6 +162,36 @@ class CommandOpenAIOfficial(Command):
             return True, f"*★,°*:.☆(￣▽￣)/$:*.°★* 。\n该Key被验证为有效。感谢你的赞助~"
         else:
             return True, "该Key被验证为无效。也许是输入错误了，或者重试。", "key"
+
+    def switch(self, message: str):
+        '''
+        切换账号
+        '''
+        l = message.split(" ")
+        if len(l) == 1:
+            _, ret, _ = self.status()
+            curr_ = self.provider.get_curr_key()
+            if curr_ is None:
+                ret += "当前您未选择账号。输入/switch <账号序号>切换账号。"
+            else:
+                ret += f"当前您选择的账号为：{curr_[-8:]}。输入/switch <账号序号>切换账号。"
+            return True, ret, "switch"
+        elif len(l) == 2:
+            try:
+                key_stat = self.provider.get_key_stat()
+                index = int(l[1])
+                if index > len(key_stat) or index < 1:
+                    return True, "账号序号不合法。", "switch"
+                else:
+                    ret = self.provider.check_key(list(key_stat.keys())[index-1])
+                    if ret:
+                        return True, f"账号切换成功。", "switch"
+                    else:
+                        return True, f"账号切换失败，可能超额或超频。", "switch"
+            except BaseException as e:
+                return True, "未知错误: "+str(e), "switch"
+        else:
+            return True, "参数过多。", "switch"
 
     def unset(self, session_id: str):
         if self.provider is None:

@@ -355,6 +355,8 @@ class ProviderOpenAIOfficial(Provider):
         return self.key_stat
     def get_key_list(self):
         return self.key_list
+    def get_curr_key(self):
+        return openai.api_key
     
     # 添加key
     def append_key(self, key, sponsor):
