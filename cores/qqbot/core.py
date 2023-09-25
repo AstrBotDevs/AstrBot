@@ -541,12 +541,14 @@ def oper_msg(message,
             sender_id = str(message.sender.tiny_id)
         else:
             sender_id = str(message.sender.user_id)
-        if sender_id == admin_qq or sender_id == admin_qqchan:
+        if sender_id == admin_qq or \
+           sender_id == admin_qqchan or \
+           sender_id in cc.get("other_admins", []) or \
+           sender_id == cc.get("gocq_qqchan_admin", ""):
             # gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="GOCQ")
             role = "admin"
 
     if platform == PLATFORM_QQCHAN:
-        
         with_tag = True
 
     if qq_msg == "":
