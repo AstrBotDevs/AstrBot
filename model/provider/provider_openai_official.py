@@ -113,6 +113,7 @@ class ProviderOpenAIOfficial(Provider):
                 f.close()
 
         cache_data_list, new_record, req = self.wrap(prompt, session_id)
+        gu.log(f"CACHE_DATA_: {str(cache_data_list)}", level=gu.LEVEL_DEBUG, max_len=99999)
         gu.log(f"OPENAI REQUEST: {str(req)}", level=gu.LEVEL_DEBUG, max_len=9999)
         retry = 0
         response = None
@@ -156,6 +157,8 @@ class ProviderOpenAIOfficial(Provider):
         chatgpt_res = str(response["choices"][0]["message"]["content"]).strip()
         current_usage_tokens = response['usage']['total_tokens']
 
+        gu.log(f"OPENAI RESPONSE: {response['usage']}", level=gu.LEVEL_DEBUG, max_len=9999)
+
         # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens
         if current_usage_tokens > self.max_tokens:
             t = current_usage_tokens
@@ -164,7 +167,7 @@ class ProviderOpenAIOfficial(Provider):
                 if index >= len(cache_data_list):
                     break
                 # 保留人格信息
-                if 'user' in cache_data_list[index] and cache_data_list[index]['user']['role'] != 'system':
+                if cache_data_list[index]['type'] != 'personality':
                     t -= int(cache_data_list[index]['single_tokens'])
                     del cache_data_list[index]
                 else:
@@ -297,6 +300,7 @@ class ProviderOpenAIOfficial(Provider):
                 "content": prompt,
             },
             "AI": {},
+            'type': "common",
             'usage_tokens': 0,
         }
         req_list = []

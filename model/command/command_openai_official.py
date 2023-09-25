@@ -235,9 +235,14 @@ class CommandOpenAIOfficial(Command):
                 self.provider.session_dict[session_id] = []
                 new_record = {
                     "user": {
-                        "role": "system",
+                        "role": "user",
                         "content": personalities[ps],
                     },
+                    "AI": {
+                        "role": "assistant",
+                        "content": "好的，接下来我会扮演这个角色。"
+                    },
+                    'type': "personality",
                     'usage_tokens': 0,
                     'single-tokens': 0
                 }
@@ -251,9 +256,14 @@ class CommandOpenAIOfficial(Command):
                 }
                 new_record = {
                     "user": {
-                        "role": "system",
+                        "role": "user",
                         "content": ps,
                     },
+                    "AI": {
+                        "role": "assistant",
+                        "content": "好的，接下来我会扮演这个角色。"
+                    },
+                    'type': "personality",
                     'usage_tokens': 0,
                     'single-tokens': 0
                 }
