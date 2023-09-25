@@ -117,6 +117,8 @@ cc.init_attributes(["gocq_react_group"], True)
 cc.init_attributes(["gocq_react_guild"], True)
 cc.init_attributes(["gocq_react_friend"], True)
 cc.init_attributes(["gocq_react_group_increase"], True)
+cc.init_attributes(["gocq_qqchan_admin"], "")
+cc.init_attributes(["other_admins"], [])
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
@@ -544,6 +546,7 @@ def oper_msg(message,
             role = "admin"
 
     if platform == PLATFORM_QQCHAN:
+        
         with_tag = True
 
     if qq_msg == "":
