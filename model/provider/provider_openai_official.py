@@ -119,7 +119,7 @@ class ProviderOpenAIOfficial(Provider):
         retry = 0
         response = None
         err = ''
-        while retry < 5:
+        while retry < 15:
             try:
                 response = openai.ChatCompletion.create(
                     messages=req,
@@ -142,9 +142,10 @@ class ProviderOpenAIOfficial(Provider):
                     gu.log("token超限, 清空对应缓存")
                     self.session_dict[session_id] = []
                     cache_data_list, new_record, req = self.wrap(prompt, session_id)
-                elif 'Limit: 3 / min. Please try again in 20s.' in str(e):
-                    time.sleep(60)
+                elif 'Limit: 3 / min. Please try again in 20s.' in str(e) or "OpenAI response error" in str(e):
+                    time.sleep(30)
                 else:
+                    time.sleep(5)
                     gu.log(str(e), level=gu.LEVEL_ERROR)
                 err = str(e)
                 retry+=1

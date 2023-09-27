@@ -16,6 +16,7 @@ def special_fetch_zhihu(link: str) -> str:
             AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
     response = requests.get(link, headers=headers)
+    response.encoding = "utf-8"
     soup = BeautifulSoup(response.text, "html.parser")
 
     if "zhuanlan.zhihu.com" in link:
@@ -32,12 +33,13 @@ def web_keyword_search_via_bing(keyword) -> str:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
             AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
-    url = "https://cn.bing.com/search?q="+keyword
+    url = "https://www.bing.com/search?q="+keyword
     _cnt = 0
     _detail_store = []
     while _cnt < 5:
         try:
             response = requests.get(url, headers=headers)
+            response.encoding = "utf-8"
             soup = BeautifulSoup(response.text, "html.parser")
             res = []
             ols = soup.find(id="b_results")
@@ -51,19 +53,29 @@ def web_keyword_search_via_bing(keyword) -> str:
                         "desc": desc,
                         "link": link,
                     })
-                    if len(_detail_store) < 2 and "zhihu.com" in link:
-                        try:
-                            _detail_store.append(special_fetch_zhihu(link)[:800])
-                        except BaseException as e:
-                            print(f"zhihu parse err: {str(e)}")
                     if len(res) >= 5: # 限制5条
                         break
+                    if len(_detail_store) >= 3:
+                        continue
+
+                    # 爬取前两条的网页内容
+                    if "zhihu.com" in link:
+                        try:
+                            _detail_store.append(special_fetch_zhihu(link)[100:800])
+                        except BaseException as e:
+                            print(f"zhihu parse err: {str(e)}")
+                    else:
+                        try:
+                            _detail_store.append(fetch_website_content(link)[100:1000])
+                        except BaseException as e:
+                            print(f"fetch_website_content err: {str(e)}")
+
                 except Exception as e:
                     print(f"bing parse err: {str(e)}")
             if len(res) == 0:
                 break
             if len(_detail_store) > 0:
-                ret = f"{str(res)} \n来源知乎的具体资料: {str(_detail_store)}"
+                ret = f"{str(res)} \n具体网页内容: {str(_detail_store)}"
             else:
                 ret = f"{str(res)}"
             return str(ret)
@@ -71,6 +83,7 @@ def web_keyword_search_via_bing(keyword) -> str:
             print(f"bing fetch err: {str(e)}")
             _cnt += 1
             time.sleep(1)
+            
     print("fail to fetch bing info, using sougou.")
     return web_keyword_search_via_sougou(keyword)
 
@@ -96,9 +109,22 @@ def web_keyword_search_via_sougou(keyword) -> str:
                 "title": title,
                 "link": link,
             })
-        except:
-            pass
-    ret = f"{str(res)} \n全部内容: {tidy_text(soup.text)}"
+            if len(res) >= 5: # 限制5条
+                break
+        except Exception as e:
+            gu.log(f"sougou parse err: {str(e)}", tag="web_keyword_search_via_sougou", level=gu.LEVEL_ERROR)
+    # 爬取网页内容
+    _detail_store = []
+    for i in res:
+        if _detail_store >= 3:
+            break
+        try:
+            _detail_store.append(fetch_website_content(i["link"])[100:1000])
+        except BaseException as e:
+            print(f"fetch_website_content err: {str(e)}")
+    ret = f"{str(res)}"
+    if len(_detail_store) > 0:
+        ret += f"\n网页内容: {str(_detail_store)}"
     return ret
 
 def fetch_website_content(url):
@@ -107,9 +133,10 @@ def fetch_website_content(url):
             AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
     response = requests.get(url, headers=headers)
+    response.encoding = "utf-8"
     soup = BeautifulSoup(response.text, "html.parser")
     res = soup.text
-    res = res.replace("\n", "")
+    res = res.replace("\n", "").replace("  ", " ").replace("\r", "").replace("\t", "")
     with open(f"temp_{time.time()}.html", "w", encoding="utf-8") as f:
         f.write(res)
     return res
@@ -117,20 +144,26 @@ def fetch_website_content(url):
 def web_search(question, provider, session_id):
 
     new_func_call = FuncCall(provider)
-
     new_func_call.add_func("web_keyword_search_via_bing", [{
         "type": "string",
         "name": "keyword",
         "brief": "必应搜索的关键词(分词，尽量保留所有信息)"
-        }], 
+        }],
     "在必应搜索引擎上搜索给定的关键词，并且返回第一页的搜索结果列表(标题,简介和链接)",
     web_keyword_search_via_bing
     )
-
+    new_func_call.add_func("fetch_website_content", [{
+        "type": "string",
+        "name": "url",
+        "brief": "网址"
+        }],
+    "获取网址的内容",
+    fetch_website_content
+    )
     func_definition1 = new_func_call.func_dump()
     question1 = f"{question} \n（只能调用一个函数。）"
     try:
-        res1, has_func = new_func_call.func_call(question1, func_definition1, is_task=False, is_summary=False, session_id=session_id)
+        res1, has_func = new_func_call.func_call(question1, func_definition1, is_task=False, is_summary=False)
     except BaseException as e:
         res = provider.text_chat(question) + "\n(网页搜索失败, 此为默认回复)"
         return res
@@ -153,6 +186,7 @@ def web_search(question, provider, session_id):
                     raise e
                 if "The message you submitted was too long" in str(e):
                     res2 = res2[:int(len(res2) / 2)]
+                    time.sleep(3)
                     question3 = f"""请回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行回答，再给参考链接, 参考链接首末有空格。```\n{res1}\n{res2}\n```\n"""
         return res3
     else:

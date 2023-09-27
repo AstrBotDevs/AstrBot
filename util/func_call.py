@@ -1,7 +1,7 @@
 
 import json
 import util.general_utils as gu
-
+import time
 class FuncCallJsonFormatError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -48,7 +48,7 @@ class FuncCall():
         funccall_prompt = """
 我正实现function call功能，该功能旨在让你变成给定的问题到给定的函数的解析器（意味着你不是创造函数）。
 下面会给你提供可能用到的函数相关信息和一个问题，你需要将其转换成给定的函数调用。
-- 你的返回信息只含json，严格仿照以下内容（不含注释）:
+- 你的返回信息只含json，请严格仿照以下内容（不含注释），必须含有`res`,`func_call`字段:
 ```
 {
     "res": string // 如果没有找到对应的函数，那么你可以在这里正常输出内容。如果有，这里是空字符串。
@@ -111,7 +111,7 @@ class FuncCall():
 
         invoke_func_res = ""
 
-        if len(res["func_call"]) > 0:
+        if "func_call" in res and len(res["func_call"]) > 0:
             task_list = res["func_call"]
 
             invoke_func_res_list = []
@@ -174,6 +174,7 @@ class FuncCall():
                             raise e
                         if "The message you submitted was too long" in str(e):
                             # 如果返回的内容太长了，那么就截取一部分
+                            time.sleep(3)
                             invoke_func_res = invoke_func_res[:int(len(invoke_func_res) / 2)]
                             after_prompt = """
 函数返回以下内容："""+invoke_func_res+"""

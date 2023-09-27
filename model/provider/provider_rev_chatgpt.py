@@ -152,7 +152,7 @@ class ProviderRevChatGPT(Provider):
         res = ''
         err_msg = ''
         err_cnt = 0
-        while err_cnt < 5:
+        while err_cnt < 15:
             try:
                 res = self.request_text(prompt, selected_revstat['obj'])
                 selected_revstat['busy'] = False
@@ -175,6 +175,7 @@ class ProviderRevChatGPT(Provider):
                     raise Exception("触发RevChatGPT请求频率限制。请1小时后再试，或者切换账号。")
                 gu.log(f"请求异常: {str(e)}", level=gu.LEVEL_WARNING, tag="RevChatGPT")
                 err_cnt += 1
+                time.sleep(3)
 
         raise Exception(f'回复失败。原因：{err_msg}。如果您设置了多个账号，可以使用/switch指令切换账号。输入/switch查看详情。')
             
