@@ -21,7 +21,7 @@ class ProviderRevEdgeGPT(Provider):
     def is_busy(self):
         return self.busy
 
-    async def forget(self):
+    async def forget(self, session_id = None):
         try:
             await self.bot.reset()
             return True

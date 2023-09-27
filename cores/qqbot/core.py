@@ -475,7 +475,7 @@ def oper_msg(message,
     group: 群聊模式,
     message: 频道是频道的消息对象, QQ是nakuru-gocq的消息对象
     """
-    global provider, session_dict
+    global provider, session_dict, uniqueSession
     qq_msg = ''
     session_id = ''
     user_id = ''
@@ -533,7 +533,6 @@ def oper_msg(message,
                 session_id = message.group_id
         else:
             with_tag = True
-            # qq_msg = message.message[0].text
             session_id = message.user_id
         role = "member"
 
@@ -547,6 +546,9 @@ def oper_msg(message,
            sender_id == cc.get("gocq_qqchan_admin", ""):
             # gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="GOCQ")
             role = "admin"
+        if uniqueSession:
+            # 独立会话时，一个用户一个session
+            session_id = sender_id
 
     if platform == PLATFORM_QQCHAN:
         with_tag = True
@@ -645,7 +647,7 @@ def oper_msg(message,
         try:
             if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
                 if _global_object != None and "web_search" in _global_object and _global_object["web_search"]:
-                    chatgpt_res = gplugin.web_search(qq_msg, llm_instance[chosen_provider])
+                    chatgpt_res = gplugin.web_search(qq_msg, llm_instance[chosen_provider], session_id)
                 else:
                     chatgpt_res = str(llm_instance[chosen_provider].text_chat(qq_msg, session_id))
             elif chosen_provider == REV_EDGEGPT:

@@ -9,5 +9,5 @@ class Provider:
         pass
 
     @abc.abstractmethod
-    def forget(self) -> bool:
+    def forget(self, session_id = None) -> bool:
         pass

@@ -114,7 +114,7 @@ def fetch_website_content(url):
         f.write(res)
     return res
 
-def web_search(question, provider):
+def web_search(question, provider, session_id):
 
     new_func_call = FuncCall(provider)
 
@@ -137,7 +137,7 @@ def web_search(question, provider):
 
     has_func = True
     if has_func:
-        provider.forget()
+        provider.forget(session_id)
         question3 = f"""请你回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行总结回答，再给出参考链接。不要提到任何函数调用的信息。```\n{res1}\n```\n"""
         print(question3)
         _c = 0

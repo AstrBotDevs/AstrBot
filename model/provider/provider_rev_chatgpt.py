@@ -30,7 +30,7 @@ class ProviderRevChatGPT(Provider):
                     rev_account_config['unverified_plugin_domains'] = self.cc.get("rev_chatgpt_unverified_plugin_domains")
                 cb = Chatbot(config=rev_account_config)
                 # cb.captcha_solver = self.__captcha_solver
-                # 后八位
+                # 后八位c
                 g_id = rev_account_config['access_token'][-8:]
                 revstat = {
                     'id': g_id,
@@ -44,13 +44,14 @@ class ProviderRevChatGPT(Provider):
 
     def forget(self, session_id = None) -> bool:
         for i in self.rev_chatgpt:
-            if session_id is None or session_id in i['user']:
-                try:
-                    i['obj'].reset_chat()
-                    return True
-                except BaseException as e:
-                    gu.log(f"重置RevChatGPT失败。原因: {str(e)}", level=gu.LEVEL_ERROR, tag="RevChatGPT")
-                    return False
+            for user in i['user']:
+                if session_id == user['id']:
+                    try:
+                        i['obj'].reset_chat()
+                        return True
+                    except BaseException as e:
+                        gu.log(f"重置RevChatGPT失败。原因: {str(e)}", level=gu.LEVEL_ERROR, tag="RevChatGPT")
+                        return False
         return False
 
     def get_revchatgpt(self) -> list:
@@ -104,19 +105,34 @@ class ProviderRevChatGPT(Provider):
         selected_revstat = None
         min_revstat = None
         min_ = None
+        new_user = False
+        conversation_id = ''
+        parent_id = ''
         for revstat in self.rev_chatgpt:
+            for user in revstat['user']:
+                if session_id == user['id']:
+                    selected_revstat = revstat
+                    conversation_id = user['conversation_id']
+                    parent_id = user['parent_id']
+                    break
             if min_ is None:
                 min_ = len(revstat['user'])
                 min_revstat = revstat
             elif len(revstat['user']) < min_:
                 min_ = len(revstat['user'])
                 min_revstat = revstat
-            if session_id in revstat['user']:
-                selected_revstat = revstat
-                break
+            # if session_id in revstat['user']:
+            #     selected_revstat = revstat
+            #     break
+        
         if selected_revstat is None:
             selected_revstat = min_revstat
-            selected_revstat['user'].append(session_id)
+            selected_revstat['user'].append({
+                'id': session_id,
+                'conversation_id': '',
+                'parent_id': ''
+            })
+            new_user = True
 
         gu.log(f"选择账号{str(selected_revstat)}", tag="RevChatGPT", level=gu.LEVEL_DEBUG)
 
@@ -124,6 +140,15 @@ class ProviderRevChatGPT(Provider):
             gu.log(f"账号忙碌，等待中...", tag="RevChatGPT", level=gu.LEVEL_DEBUG)
             time.sleep(1)
         selected_revstat['busy'] = True
+        
+        if not new_user:
+            # 非新用户，则使用其专用的会话
+            selected_revstat['obj'].conversation_id = conversation_id
+            selected_revstat['obj'].parent_id = parent_id
+        else:
+            # 新用户，则使用新的会话
+            selected_revstat['obj'].reset_chat()
+
         res = ''
         err_msg = ''
         err_cnt = 0
@@ -131,6 +156,15 @@ class ProviderRevChatGPT(Provider):
             try:
                 res = self.request_text(prompt, selected_revstat['obj'])
                 selected_revstat['busy'] = False
+                # 记录新用户的会话
+                if new_user:
+                    i = 0
+                    for user in selected_revstat['user']:
+                        if user['id'] == session_id:
+                            selected_revstat['user'][i]['conversation_id'] = selected_revstat['obj'].conversation_id
+                            selected_revstat['user'][i]['parent_id'] = selected_revstat['obj'].parent_id
+                            break
+                        i += 1
                 return res.strip()
             except BaseException as e:
                 if "Your authentication token has expired. Please try signing in again." in str(e):
@@ -141,7 +175,7 @@ class ProviderRevChatGPT(Provider):
                     raise Exception("触发RevChatGPT请求频率限制。请1小时后再试，或者切换账号。")
                 gu.log(f"请求异常: {str(e)}", level=gu.LEVEL_WARNING, tag="RevChatGPT")
                 err_cnt += 1
-        selected_revstat['busy'] = False
+
         raise Exception(f'回复失败。原因：{err_msg}。如果您设置了多个账号，可以使用/switch指令切换账号。输入/switch查看详情。')
             
 

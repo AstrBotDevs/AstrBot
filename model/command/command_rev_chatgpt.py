@@ -106,8 +106,12 @@ class CommandRevChatGPT(Command):
             for revstat in rev_chatgpt:
                 index += 1
                 ret += f"[{index}]. {revstat['id']}\n"
-                if session_id in revstat['user']:
-                    curr_ = revstat['id']
+                # if session_id in revstat['user']:
+                #     curr_ = revstat['id']
+                for user in revstat['user']:
+                    if session_id == user['id']:
+                        curr_ = revstat['id']
+                        break
             if curr_ is None:
                 ret += "当前您未选择账号。输入/switch <账号序号>切换账号。"
             else:
