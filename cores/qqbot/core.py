@@ -666,7 +666,7 @@ def oper_msg(message,
             if chosen_provider in reply_prefix:
                 chatgpt_res = reply_prefix[chosen_provider] + chatgpt_res
         except BaseException as e:
-            gu.log(f"调用异常：{traceback.format_exc()}", gu.LEVEL_ERROR)
+            gu.log(f"调用异常：{traceback.format_exc()}", gu.LEVEL_ERROR, max_len=100000)
             gu.log("调用语言模型例程时出现异常。原因: "+str(e), gu.LEVEL_ERROR)
             send_message(platform, message, "调用语言模型例程时出现异常。原因: "+str(e), msg_ref=msg_ref, session_id=session_id)
             return

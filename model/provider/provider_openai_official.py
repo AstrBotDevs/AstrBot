@@ -93,7 +93,8 @@ class ProviderOpenAIOfficial(Provider):
     def text_chat(self, prompt, session_id = None):
         if session_id is None:
             session_id = "unknown"
-            del self.session_dict["unknown"] 
+            if "unknown" in self.session_dict:
+                del self.session_dict["unknown"] 
         # 会话机制
         if session_id not in self.session_dict:
             self.session_dict[session_id] = []

@@ -43,12 +43,12 @@ class FuncCall():
 
         return json.dumps(_l, indent=intent, ensure_ascii=False)
     
-    def func_call(self, question, func_definition, is_task = False, tasks = None, taskindex = -1, is_summary = True):
+    def func_call(self, question, func_definition, is_task = False, tasks = None, taskindex = -1, is_summary = True, session_id = None):
 
         funccall_prompt = """
-我正在实现function call功能，该功能旨在让你变成给定的问题到给定的函数的解析器（这意味着你不是创造函数）。
-下面会给你提供可能会用到函数的相关信息，和一个问题，你需要将其转换成给定的函数调用。
-- 你的返回信息只含json，且严格仿照以下内容（不含注释）:
+我正实现function call功能，该功能旨在让你变成给定的问题到给定的函数的解析器（意味着你不是创造函数）。
+下面会给你提供可能用到的函数相关信息和一个问题，你需要将其转换成给定的函数调用。
+- 你的返回信息只含json，严格仿照以下内容（不含注释）:
 ```
 {
     "res": string // 如果没有找到对应的函数，那么你可以在这里正常输出内容。如果有，这里是空字符串。
@@ -95,7 +95,7 @@ class FuncCall():
         _c = 0
         while _c < 3:
             try:
-                res = self.provider.text_chat(prompt)
+                res = self.provider.text_chat(prompt, session_id)
                 if res.find('```') != -1:
                     res = res[res.find('```json') + 7: res.rfind('```')]
                 gu.log("REVGPT func_call json result", bg=gu.BG_COLORS["green"], fg=gu.FG_COLORS["white"])
@@ -140,7 +140,7 @@ class FuncCall():
 
                 # 生成返回结果
                 after_prompt = """
-函数返回以下内容："""+invoke_func_res+"""
+有以下内容："""+invoke_func_res+"""
 请以AI助手的身份结合返回的内容对用户提问做详细全面的回答。
 用户的提问是：
 ```""" + question + """```
@@ -157,7 +157,7 @@ class FuncCall():
                 _c = 0
                 while _c < 5:
                     try:
-                        res = self.provider.text_chat(after_prompt)
+                        res = self.provider.text_chat(after_prompt, session_id)
                         # 截取```之间的内容
                         gu.log("DEBUG BEGIN", bg=gu.BG_COLORS["yellow"], fg=gu.FG_COLORS["white"])
                         print(res)

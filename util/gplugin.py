@@ -130,7 +130,7 @@ def web_search(question, provider, session_id):
     func_definition1 = new_func_call.func_dump()
     question1 = f"{question} \n（只能调用一个函数。）"
     try:
-        res1, has_func = new_func_call.func_call(question1, func_definition1, is_task=False, is_summary=False)
+        res1, has_func = new_func_call.func_call(question1, func_definition1, is_task=False, is_summary=False, session_id=session_id)
     except BaseException as e:
         res = provider.text_chat(question) + "\n(网页搜索失败, 此为默认回复)"
         return res
@@ -138,7 +138,7 @@ def web_search(question, provider, session_id):
     has_func = True
     if has_func:
         provider.forget(session_id)
-        question3 = f"""请你回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行总结回答，再给出参考链接。不要提到任何函数调用的信息。```\n{res1}\n```\n"""
+        question3 = f"""请你回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行总结回答，再给参考链接, 参考链接首末有空格。不要提到任何函数调用的信息。```\n{res1}\n```\n"""
         print(question3)
         _c = 0
         while _c < 5:
@@ -153,7 +153,7 @@ def web_search(question, provider, session_id):
                     raise e
                 if "The message you submitted was too long" in str(e):
                     res2 = res2[:int(len(res2) / 2)]
-                    question3 = f"""请你回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行回答，再给出参考链接。```\n{res1}\n{res2}\n```\n"""
+                    question3 = f"""请回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行回答，再给参考链接, 参考链接首末有空格。```\n{res1}\n{res2}\n```\n"""
         return res3
     else:
         return res1
