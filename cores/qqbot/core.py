@@ -19,7 +19,8 @@ from nakuru import (
     GroupMessage,
     GroupMemberIncrease,
     FriendMessage,
-    GuildMessage
+    GuildMessage,
+    Notify
 )
 from nakuru.entities.components import Plain,At,Image
 from model.provider.provider import Provider
@@ -772,7 +773,6 @@ class gocqClient():
     # 收到群聊消息
     @gocq_app.receiver("GroupMessage")
     async def _(app: CQHTTP, source: GroupMessage):
-        # gu.log(str(source), gu.LEVEL_INFO, max_len=9999)
         if cc.get("gocq_react_group", True):
             if isinstance(source.message[0], Plain):
                 new_sub_thread(oper_msg, (source, True, None, PLATFORM_GOCQ))
@@ -797,6 +797,12 @@ class gocqClient():
             await app.sendGroupMessage(source.group_id, [
                 Plain(text = announcement),
             ])
+
+    @gocq_app.receiver("Notify")
+    async def _(app: CQHTTP, source: Notify):
+        print(source)
+        if source.sub_type == "poke" and source.target_id == source.self_id:
+            new_sub_thread(oper_msg, (source, False, None, PLATFORM_GOCQ))
 
     @gocq_app.receiver("GuildMessage")
     async def _(app: CQHTTP, source: GuildMessage):
