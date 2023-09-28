@@ -37,7 +37,8 @@ class QQ:
 
     async def send_qq_msg(self, 
                           source, 
-                          res):
+                          res,
+                          image_mode=None):
         self.gocq_cnt += 1
         if not self.is_start:
             raise Exception("管理员未启动GOCQ平台")
@@ -59,7 +60,8 @@ class QQ:
             res.append(Plain(text=res_str))
 
         # if image mode, put all Plain texts into a new picture.
-        image_mode = self.cc.get('qq_pic_mode', False)
+        if image_mode is None:
+            image_mode = self.cc.get('qq_pic_mode', False)
         if image_mode and isinstance(res, list):
             plains = []
             news = []
@@ -111,13 +113,15 @@ class QQ:
     def send(self, 
             to,
             res,
+            image_mode=False,
             ):
         '''
         提供给插件的发送QQ消息接口, 不用在外部await。
         参数说明：第一个参数可以是消息对象，也可以是QQ群号。第二个参数是消息内容（消息内容可以是消息链列表，也可以是纯文字信息）。
+        第三个参数是是否开启图片模式，如果开启，那么所有纯文字信息都会被合并成一张图片。
         '''
         try:
-            asyncio.run_coroutine_threadsafe(self.send_qq_msg(to, res), self.gocq_loop).result()
+            asyncio.run_coroutine_threadsafe(self.send_qq_msg(to, res, image_mode), self.gocq_loop).result()
         except BaseException as e:
             raise e
         
@@ -163,3 +167,17 @@ class QQ:
                 del self.waiting[group_id]
                 return ret
             time.sleep(0.5)
+
+    def get_client(self):
+        return self.client
+
+    def nakuru_method_invoker(self, func, *args, **kwargs):
+        """
+        返回一个方法调用器，可以用来立即调用nakuru的方法。
+        """
+        try:
+            ret = asyncio.run_coroutine_threadsafe(func(*args, **kwargs), self.gocq_loop).result()
+            return ret
+        except BaseException as e:
+            raise e
+

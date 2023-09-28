@@ -679,7 +679,7 @@ def oper_msg(message,
     if hit:
         # 检查指令. command_result是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
         if command_result == None:
-            send_message(platform, message, "指令调用未返回任何信息。", msg_ref=msg_ref, session_id=session_id)
+            # send_message(platform, message, "指令调用未返回任何信息。", msg_ref=msg_ref, session_id=session_id)
             return
         command = command_result[2]
         if command == "keyword":
