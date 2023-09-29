@@ -7,7 +7,9 @@ import time
 
 
 class ProviderRevChatGPT(Provider):
-    def __init__(self, config):
+    def __init__(self, config, base_url = None):
+        if base_url == "":
+            base_url = None
         self.rev_chatgpt: list[dict] = []
         self.cc = cc.CmdConfig()
         for i in range(0, len(config['account'])):
@@ -28,7 +30,7 @@ class ProviderRevChatGPT(Provider):
                     rev_account_config['PUID'] = self.cc.get("rev_chatgpt_PUID")
                 if len(self.cc.get("rev_chatgpt_unverified_plugin_domains")) > 0:
                     rev_account_config['unverified_plugin_domains'] = self.cc.get("rev_chatgpt_unverified_plugin_domains")
-                cb = Chatbot(config=rev_account_config)
+                cb = Chatbot(config=rev_account_config, base_url=base_url)
                 # cb.captcha_solver = self.__captcha_solver
                 # 后八位c
                 g_id = rev_account_config['access_token'][-8:]

@@ -121,6 +121,7 @@ cc.init_attributes(["gocq_react_friend"], True)
 cc.init_attributes(["gocq_react_group_increase"], True)
 cc.init_attributes(["gocq_qqchan_admin"], "")
 cc.init_attributes(["other_admins"], [])
+cc.init_attributes(["CHATGPT_BASE_URL"], "")
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
@@ -234,7 +235,7 @@ def initBot(cfg, prov):
         if cfg['rev_ChatGPT']['enable']:
             if 'account' in cfg['rev_ChatGPT']:
                 from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
-                llm_instance[REV_CHATGPT] = ProviderRevChatGPT(cfg['rev_ChatGPT'])
+                llm_instance[REV_CHATGPT] = ProviderRevChatGPT(cfg['rev_ChatGPT'], base_url=cc.get("CHATGPT_BASE_URL", None))
                 llm_command_instance[REV_CHATGPT] = CommandRevChatGPT(llm_instance[REV_CHATGPT], _global_object)
                 chosen_provider = REV_CHATGPT
             else:
