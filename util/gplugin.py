@@ -7,6 +7,7 @@ from util.func_call import (
     FuncCallJsonFormatError, 
     FuncNotFoundError
 )
+import traceback
 def tidy_text(text: str) -> str:
     return text.strip().replace("\n", "").replace(" ", "").replace("\r", "")
 
@@ -80,6 +81,7 @@ def web_keyword_search_via_bing(keyword) -> str:
                 ret = f"{str(res)}"
             return str(ret)
         except Exception as e:
+            print(traceback.format_exc())
             print(f"bing fetch err: {str(e)}")
             _cnt += 1
             time.sleep(1)
