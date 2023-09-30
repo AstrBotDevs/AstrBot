@@ -41,6 +41,7 @@ def web_keyword_search_via_bing(keyword) -> str:
         try:
             response = requests.get(url, headers=headers)
             response.encoding = "utf-8"
+            gu.log(f"bing response: {response.text}", tag="bing", level=gu.LEVEL_DEBUG)
             soup = BeautifulSoup(response.text, "html.parser")
             res = []
             ols = soup.find(id="b_results")
@@ -151,7 +152,7 @@ def web_search(question, provider, session_id):
         "name": "keyword",
         "brief": "必应搜索的关键词(分词，尽量保留所有信息)"
         }],
-    "在必应搜索引擎上搜索给定的关键词，并且返回第一页的搜索结果列表(标题,简介和链接)",
+    "网页搜索。如果问题需要使用搜索，则调用。",
     web_keyword_search_via_bing
     )
     new_func_call.add_func("fetch_website_content", [{
