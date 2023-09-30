@@ -139,9 +139,11 @@ class ProviderOpenAIOfficial(Provider):
                     else:
                         break
                 elif 'maximum context length' in str(e):
-                    gu.log("token超限, 清空对应缓存")
+                    gu.log("token超限, 清空对应缓存，并进行消息0.75倍截断")
                     self.session_dict[session_id] = []
+                    prompt = prompt[:int(len(prompt)*0.75)]
                     cache_data_list, new_record, req = self.wrap(prompt, session_id)
+
                 elif 'Limit: 3 / min. Please try again in 20s.' in str(e) or "OpenAI response error" in str(e):
                     time.sleep(30)
                 else:
