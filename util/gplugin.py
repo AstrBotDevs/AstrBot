@@ -8,6 +8,8 @@ from util.func_call import (
     FuncNotFoundError
 )
 import traceback
+from googlesearch import search, SearchResult
+
 def tidy_text(text: str) -> str:
     return text.strip().replace("\n", "").replace(" ", "").replace("\r", "")
 
@@ -29,6 +31,27 @@ def special_fetch_zhihu(link: str) -> str:
         raise Exception("zhihu none")
     return tidy_text(r.text)
 
+
+def google_web_search(keyword) -> str:
+    # 获取goole搜索结果，得到title、desc、link
+    ret = ""
+    index = 1
+    try:
+        ls = search(keyword, advanced=True, num_results=5)
+        for i in ls:
+            desc = i.description
+            try:
+                desc = fetch_website_content(i.url)
+            except BaseException as e:
+                print(f"(google) fetch_website_content err: {str(e)}")
+            gu.log(f"# No.{str(index)}\ntitle: {i.title}\nurl: {i.url}\ncontent: {desc}\n\n", level=gu.LEVEL_DEBUG, max_len=9999)
+            ret += f"# No.{str(index)}\ntitle: {i.title}\nurl: {i.url}\ncontent: {desc}\n\n"
+            index += 1
+    except Exception as e:
+        print(f"google search err: {str(e)}")
+        return web_keyword_search_via_bing(keyword)
+    return ret
+
 def web_keyword_search_via_bing(keyword) -> str:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
@@ -41,7 +64,7 @@ def web_keyword_search_via_bing(keyword) -> str:
         try:
             response = requests.get(url, headers=headers)
             response.encoding = "utf-8"
-            gu.log(f"bing response: {response.text}", tag="bing", level=gu.LEVEL_DEBUG)
+            gu.log(f"bing response: {response.text}", tag="bing", level=gu.LEVEL_DEBUG, max_len=9999)
             soup = BeautifulSoup(response.text, "html.parser")
             res = []
             ols = soup.find(id="b_results")
@@ -88,7 +111,7 @@ def web_keyword_search_via_bing(keyword) -> str:
             time.sleep(1)
             
     print("fail to fetch bing info, using sougou.")
-    return web_keyword_search_via_sougou(keyword)
+    return google_web_search(keyword)
 
 def web_keyword_search_via_sougou(keyword) -> str:
     headers = {
@@ -131,29 +154,44 @@ def web_keyword_search_via_sougou(keyword) -> str:
     return ret
 
 def fetch_website_content(url):
+    gu.log(f"fetch_website_content: {url}", tag="fetch_website_content", level=gu.LEVEL_DEBUG)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
             AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=3)
     response.encoding = "utf-8"
     soup = BeautifulSoup(response.text, "html.parser")
-    res = soup.text
+    # 如果有container / content / main等的话，就只取这些部分
+    has = False
+    beleive_ls = ["container", "content", "main"]
+    res = ""
+    for cls in beleive_ls:
+        for i in soup.find_all(class_=cls):
+            has = True
+            res += i.text
+    if not has:
+        res = soup.text
     res = res.replace("\n", "").replace("  ", " ").replace("\r", "").replace("\t", "")
+    if not has:
+        res = res[300:1100]
+    else:
+        res = res[100:800]
     with open(f"temp_{time.time()}.html", "w", encoding="utf-8") as f:
         f.write(res)
+    gu.log(f"fetch_website_content: end", tag="fetch_website_content", level=gu.LEVEL_DEBUG)
     return res
 
 def web_search(question, provider, session_id):
 
     new_func_call = FuncCall(provider)
-    new_func_call.add_func("web_keyword_search_via_bing", [{
+    new_func_call.add_func("google_web_search", [{
         "type": "string",
         "name": "keyword",
-        "brief": "必应搜索的关键词(分词，尽量保留所有信息)"
+        "brief": "google search query (分词，尽量保留所有信息)"
         }],
-    "网页搜索。如果问题需要使用搜索，则调用。",
-    web_keyword_search_via_bing
+    "网页搜索。如果问题需要使用搜索(如天气、新闻或任何新的东西)，则调用。",
+    google_web_search
     )
     new_func_call.add_func("fetch_website_content", [{
         "type": "string",
