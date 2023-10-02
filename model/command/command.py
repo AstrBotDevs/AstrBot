@@ -5,7 +5,7 @@ try:
     import git.exc
     from git.repo import Repo
 except BaseException as e:
-    print("你正在运行在无Git环境下，暂时将无法使用插件、热更新功能。")
+    print("你正运行在无Git环境下，暂时将无法使用插件、热更新功能。")
     has_git = False
 
 import os

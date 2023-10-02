@@ -49,8 +49,8 @@ def privider_chooser(cfg):
     return l
 
 def check_env(ch_mirror=False):
-    if not (sys.version_info.major == 3 and sys.version_info.minor >= 8):
-        print("请使用Python3.8运行本项目")
+    if not (sys.version_info.major == 3 and sys.version_info.minor >= 9):
+        print("请使用Python3.9+运行本项目")
         input("按任意键退出...")
         exit()
     
