@@ -4,7 +4,6 @@ import warnings
 
 warnings.filterwarnings("ignore")
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
-os.chdir(abs_path)
 
 def main():
     try:
