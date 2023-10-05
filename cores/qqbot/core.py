@@ -25,9 +25,6 @@ from nakuru import (
 from nakuru.entities.components import Plain,At,Image
 from model.provider.provider import Provider
 from model.command.command import Command
-from model.command.command_rev_chatgpt import CommandRevChatGPT
-from model.command.command_rev_edgegpt import CommandRevEdgeGPT
-from model.command.command_openai_official import CommandOpenAIOfficial
 from util import general_utils as gu
 from util.cmd_config import CmdConfig as cc
 import util.gplugin as gplugin
@@ -235,6 +232,7 @@ def initBot(cfg, prov):
         if cfg['rev_ChatGPT']['enable']:
             if 'account' in cfg['rev_ChatGPT']:
                 from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
+                from model.command.command_rev_chatgpt import CommandRevChatGPT
                 llm_instance[REV_CHATGPT] = ProviderRevChatGPT(cfg['rev_ChatGPT'], base_url=cc.get("CHATGPT_BASE_URL", None))
                 llm_command_instance[REV_CHATGPT] = CommandRevChatGPT(llm_instance[REV_CHATGPT], _global_object)
                 chosen_provider = REV_CHATGPT
@@ -249,6 +247,7 @@ def initBot(cfg, prov):
             if cfg['rev_edgegpt']['enable']:
                 try:
                     from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
+                    from model.command.command_rev_edgegpt import CommandRevEdgeGPT
                     llm_instance[REV_EDGEGPT] = ProviderRevEdgeGPT()
                     llm_command_instance[REV_EDGEGPT] = CommandRevEdgeGPT(llm_instance[REV_EDGEGPT], _global_object)
                     chosen_provider = REV_EDGEGPT
@@ -259,6 +258,7 @@ def initBot(cfg, prov):
         gu.log("- OpenAI官方 -", gu.LEVEL_INFO)
         if cfg['openai']['key'] is not None:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial
+            from model.command.command_openai_official import CommandOpenAIOfficial
             llm_instance[OPENAI_OFFICIAL] = ProviderOpenAIOfficial(cfg['openai'])
             llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance[OPENAI_OFFICIAL], _global_object)
             chosen_provider = OPENAI_OFFICIAL

@@ -1,7 +1,9 @@
 import os, sys
 from pip._internal import main as pipmain
+import warnings
 import traceback
 
+warnings.filterwarnings("ignore")
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 def main():
@@ -58,10 +60,9 @@ def privider_chooser(cfg):
         l.append('openai_official')
     return l
 
-# 检查并安装环境
-def check_env():
-    if not (sys.version_info.major == 3 and sys.version_info.minor >= 8):
-        print("请使用Python3.8运行本项目")
+def check_env(ch_mirror=False):
+    if not (sys.version_info.major == 3 and sys.version_info.minor >= 9):
+        print("请使用Python3.9+运行本项目")
         input("按任意键退出...")
         exit()
     
@@ -71,7 +72,11 @@ def check_env():
         pth = 'QQChannelChatGPT'+ os.sep +'requirements.txt'
     print("正在检查更新第三方库...")
     try:
-        pipmain(['install', '-r', pth, '--quiet'])
+        if ch_mirror:
+            print("使用阿里云镜像")
+            pipmain(['install', '-r', pth, '-i', 'https://mirrors.aliyun.com/pypi/simple/', '--quiet'])
+        else:
+            pipmain(['install', '-r', pth, '--quiet'])
     except BaseException as e:
         print(e)
         while True:
@@ -107,17 +112,20 @@ def get_platform():
         print("other")
 
 if __name__ == "__main__":
-    check_env()
 
-    # 获取参数
     args = sys.argv
-    if len(args) > 1:
-        if args[1] == '-replit':
-            print("[System] 启动Replit Web保活服务...")
-            try:
-                from webapp_replit import keep_alive
-                keep_alive()
-            except BaseException as e:
-                print(e)
-                print(f"[System-err] Replit Web保活服务启动失败:{str(e)}")
+
+    if '-cn' in args:
+        check_env(True)
+    else:
+        check_env()
+
+    if '-replit' in args:
+        print("[System] 启动Replit Web保活服务...")
+        try:
+            from webapp_replit import keep_alive
+            keep_alive()
+        except BaseException as e:
+            print(e)
+            print(f"[System-err] Replit Web保活服务启动失败:{str(e)}")
     main()

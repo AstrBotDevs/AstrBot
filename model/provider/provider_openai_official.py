@@ -9,7 +9,7 @@ import threading
 from util import general_utils as gu
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
-key_record_path = abs_path+'chatgpt_key_record'
+key_record_path = abs_path + 'chatgpt_key_record'
 
 class ProviderOpenAIOfficial(Provider):
     def __init__(self, cfg):

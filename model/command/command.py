@@ -1,6 +1,13 @@
 import json
-import git.exc
-from git.repo import Repo
+
+has_git = True
+try:
+    import git.exc
+    from git.repo import Repo
+except BaseException as e:
+    print("你正运行在无Git环境下，暂时将无法使用插件、热更新功能。")
+    has_git = False
+
 import os
 import sys
 import requests
@@ -142,6 +149,8 @@ class Command:
     插件指令
     '''
     def plugin_oper(self, message: str, role: str, cached_plugins: dict, platform: str):
+        if not has_git:
+            return False, "你正在运行在无Git环境下，暂时将无法使用插件、热更新功能。", "plugin"
         l = message.split(" ")
         if len(l) < 2:
             p = gu.create_text_image("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
@@ -418,6 +427,8 @@ class Command:
             return False, "设置失败: "+str(e), "keyword"
     
     def update(self, message: str, role: str):
+        if not has_git:
+            return False, "你正在运行在无Git环境下，暂时将无法使用插件、热更新功能。", "update"
         if role != "admin":
             return True, "你没有权限使用该指令", "keyword"
         l = message.split(" ")
