@@ -101,7 +101,7 @@ class QQ:
                     node = Node(res)
                     # node.content = res
                     node.uin = 123456
-                    node.name = f"To {source.sender.nickname}:"
+                    node.name = f"bot"
                     node.time = int(time.time())
                     # print(node)
                     nodes=[node]
