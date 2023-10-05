@@ -1,11 +1,12 @@
 from model.provider.provider import Provider
-from EdgeGPT import Chatbot, ConversationStyle
+# from EdgeGPT import Chatbot, ConversationStyle
 import json
 import os
 from util import general_utils as gu
 from util.cmd_config import CmdConfig as cc
 import time
-
+from EdgeGPT.EdgeUtils import Query, Cookie
+from EdgeGPT.EdgeGPT import Chatbot as EdgeChatbot, ConversationStyle, NotAllowedToAccess
 
 class ProviderRevEdgeGPT(Provider):
     def __init__(self):
@@ -16,7 +17,13 @@ class ProviderRevEdgeGPT(Provider):
         proxy = cc.get("bing_proxy", None)
         if proxy == "":
             proxy = None
-        self.bot = Chatbot(cookies=cookies, proxy = proxy)
+        # q = Query("Hello, bing!", cookie_files="./cookies.json")
+        # print(q)
+        self.bot = EdgeChatbot(cookies=cookies, proxy = "http://127.0.0.1:7890")
+        ret = self.bot.ask_stream("Hello, bing!", conversation_style=ConversationStyle.creative, wss_link="wss://ai.nothingnessvoid.tech/sydney/ChatHub")
+        # self.bot = Chatbot(cookies=cookies, proxy = proxy)
+        for i in ret:
+            print(i, flush=True)
 
     def is_busy(self):
         return self.busy

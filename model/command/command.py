@@ -25,29 +25,16 @@ from nakuru.entities.components import (
     Image
 )
 from PIL import Image as PILImage
+from cores.qqbot.global_object import GlobalObject
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
 
 # 指令功能的基类，通用的（不区分语言模型）的指令就在这实现
 class Command:
-    def __init__(self, provider: Provider, global_object: dict):
+    def __init__(self, provider: Provider, global_object: GlobalObject = None):
         self.provider = provider
         self.global_object = global_object
-
-    def get_plugin_modules(self):
-        plugins = []
-        try:
-            if os.path.exists("addons/plugins"):
-                plugins = putil.get_modules("addons/plugins")
-                return plugins
-            elif os.path.exists("QQChannelChatGPT/addons/plugins"):
-                plugins = putil.get_modules("QQChannelChatGPT/addons/plugins")
-                return plugins
-            else:
-                return None
-        except BaseException as e:
-            raise e
 
     def check_command(self, 
                       message, 
@@ -55,14 +42,12 @@ class Command:
                       loop,
                       role, 
                       platform, 
-                    message_obj, 
-                    cached_plugins: dict, 
-                    qq_platform: QQ):
+                      message_obj):
         # 插件
-
+        cached_plugins = self.global_object.cached_plugins
         for k, v in cached_plugins.items():
             try:
-                hit, res = v["clsobj"].run(message, role, platform, message_obj, qq_platform)
+                hit, res = v["clsobj"].run(message, role, platform, message_obj, self.global_object.platform_qq)
                 if hit:
                     return True, res
             except BaseException as e:
@@ -79,22 +64,20 @@ class Command:
         if self.command_start_with(message, "nconf") or self.command_start_with(message, "newconf"):
             return True, self.get_new_conf(message, role)
         if self.command_start_with(message, "web"): # 网页搜索
-            return True, self.web_search(message, self.global_object)
+            return True, self.web_search(message)
         if self.command_start_with(message, "keyword"):
             return True, self.keyword(message_obj, role)
         
         return False, None
     
-    def web_search(self, message, global_object):
-        if "web_search" not in global_object:
-            global_object["web_search"] = False
+    def web_search(self, message):
         if message == "web on":
-            global_object["web_search"] = True
+            self.global_object.web_search = True
             return True, "已开启网页搜索", "web"
         elif message == "web off":
-            global_object["web_search"] = False
+            self.global_object.web_search = False
             return True, "已关闭网页搜索", "web"
-        return True, f"网页搜索功能当前状态: {global_object['web_search']}", "web"
+        return True, f"网页搜索功能当前状态: {self.global_object.web_search}", "web"
 
     def get_my_id(self, message_obj):
         return True, f"你的ID：{str(message_obj.sender.tiny_id)}", "plugin"
@@ -108,16 +91,34 @@ class Command:
             p = gu.create_text_image("【cmd_config.json】", json.dumps(obj, indent=4, ensure_ascii=False))
             return True, [Image.fromFileSystem(p)], "newconf"
             
+    def get_plugin_modules(self):
+        plugins = []
+        try:
+            if os.path.exists("addons/plugins"):
+                plugins = putil.get_modules("addons/plugins")
+                return plugins
+            elif os.path.exists("QQChannelChatGPT/addons/plugins"):
+                plugins = putil.get_modules("QQChannelChatGPT/addons/plugins")
+                return plugins
+            else:
+                return None
+        except BaseException as e:
+            raise e
+
     def plugin_reload(self, cached_plugins: dict, target: str = None, all: bool = False):
         plugins = self.get_plugin_modules()
         fail_rec = ""
         if plugins is None:
             return False, "未找到任何插件模块"
+        
+        print(plugins)
 
-        for p in plugins:
+        for plugin in plugins:
             try:
+                p = plugin['module']
+                root_dir_name = plugin['pname']
                 if p not in cached_plugins or p == target or all:
-                    module = __import__("addons.plugins." + p + "." + p, fromlist=[p])
+                    module = __import__("addons.plugins." + root_dir_name + "." + p, fromlist=[p])
                     if p in cached_plugins:
                         module = importlib.reload(module)
                     cls = putil.get_classes(p, module)
@@ -139,7 +140,7 @@ class Command:
                         "info": info
                     }  
             except BaseException as e:
-                fail_rec += f"加载{p}插件出现问题，原因{str(e)}\n"
+                fail_rec += f"加载{p}插件出现问题，原因 {str(e)}\n"
         if fail_rec == "":
             return True, None
         else:
@@ -167,8 +168,13 @@ class Command:
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限安装插件", "plugin"
                 try:
+                    # 删除末尾的/
+                    if l[2].endswith("/"):
+                        l[2] = l[2][:-1]
                     # 得到url的最后一段
                     d = l[2].split("/")[-1]
+                    # 转换非法字符：-
+                    d = d.replace("-", "_")
                     # 创建文件夹
                     plugin_path = os.path.join(ppath, d)
                     if os.path.exists(plugin_path):
@@ -285,25 +291,12 @@ class Command:
             if len(l) == 1:
                 return True, "【设置机器人昵称】示例：\n支持多昵称\nnick 昵称1 昵称2 昵称3", "nick"
             nick = l[1:]
-            self.general_command_storer("nick_qq", nick)
+            cc.put("nick_qq", nick)
+            self.global_object.nick = tuple(nick)
             return True, f"设置成功！现在你可以叫我这些昵称来提问我啦~", "nick"
         elif platform == PLATFORM_QQCHAN:
             nick = message.split(" ")[2]
             return False, "QQ频道平台不支持为机器人设置昵称。", "nick"
-    
-    """
-    存储指令结果到cmd_config.json
-    """
-    def general_command_storer(self, key, value):
-        if not os.path.exists("cmd_config.json"):
-            config = {}
-        else:
-            with open("cmd_config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-        config[key] = value
-        with open("cmd_config.json", "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
-            f.flush()
 
     def general_commands(self):
         return {

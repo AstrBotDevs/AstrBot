@@ -2,9 +2,10 @@ from model.command.command import Command
 from model.provider.provider_rev_chatgpt import ProviderRevChatGPT
 from model.platform.qq import QQ
 from cores.qqbot.personality import personalities
+from cores.qqbot.global_object import GlobalObject
 
 class CommandRevChatGPT(Command):
-    def __init__(self, provider: ProviderRevChatGPT, global_object: dict):
+    def __init__(self, provider: ProviderRevChatGPT, global_object: GlobalObject):
         self.provider = provider
         self.cached_plugins = {}
         self.global_object = global_object
@@ -17,9 +18,7 @@ class CommandRevChatGPT(Command):
                       loop,
                       role: str, 
                       platform: str,
-                      message_obj,
-                      cached_plugins: dict,
-                      qq_platform: QQ):
+                      message_obj):
         self.platform = platform
         hit, res = super().check_command(
             message,
@@ -27,15 +26,13 @@ class CommandRevChatGPT(Command):
             loop,
             role,
             platform,
-            message_obj,
-            cached_plugins,
-            qq_platform
+            message_obj
         )
         
         if hit:
             return True, res
         if self.command_start_with(message, "help", "帮助"):
-            return True, self.help(cached_plugins)
+            return True, self.help()
         elif self.command_start_with(message, "reset"):
             return True, self.reset(session_id, message)
         elif self.command_start_with(message, "update"):
@@ -44,8 +41,6 @@ class CommandRevChatGPT(Command):
             return True, self.set(message, session_id)
         elif self.command_start_with(message, "switch"):
             return True, self.switch(message, session_id)
-        if self.command_start_with(message, "/"):
-            return True, (False, "未知指令", "unknown_command")
         return False, None
 
     def reset(self, session_id, message: str):
@@ -135,7 +130,7 @@ class CommandRevChatGPT(Command):
         else:
             return True, "参数过多。", "switch"
 
-    def help(self, cached_plugins: dict):
+    def help(self):
         commands = super().general_commands()
         commands['set'] = '设置人格'
-        return True, super().help_messager(commands, self.platform, cached_plugins), "help"
+        return True, super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"

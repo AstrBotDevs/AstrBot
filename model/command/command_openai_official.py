@@ -4,10 +4,10 @@ from cores.qqbot.personality import personalities
 
 from model.platform.qq import QQ
 from util import general_utils as gu
-
+from cores.qqbot.global_object import GlobalObject
 
 class CommandOpenAIOfficial(Command):
-    def __init__(self, provider: ProviderOpenAIOfficial, global_object: dict):
+    def __init__(self, provider: ProviderOpenAIOfficial, global_object: GlobalObject):
         self.provider = provider
         self.cached_plugins = {}
         self.global_object = global_object
@@ -20,9 +20,7 @@ class CommandOpenAIOfficial(Command):
                       loop,
                       role: str, 
                       platform: str,
-                      message_obj,
-                      cached_plugins: dict,
-                      qq_platform: QQ):
+                      message_obj):
         self.platform = platform
         hit, res = super().check_command(
             message,
@@ -30,9 +28,7 @@ class CommandOpenAIOfficial(Command):
             loop,
             role,
             platform,
-            message_obj,
-            cached_plugins,
-            qq_platform
+            message_obj
         )
         
         if hit:
@@ -50,7 +46,7 @@ class CommandOpenAIOfficial(Command):
         elif self.command_start_with(message, "count"):
             return True, self.count()
         elif self.command_start_with(message, "help", "帮助"):
-            return True, self.help(cached_plugins)
+            return True, self.help()
         elif self.command_start_with(message, "unset"):
             return True, self.unset(session_id)
         elif self.command_start_with(message, "set"):
@@ -64,12 +60,9 @@ class CommandOpenAIOfficial(Command):
         elif self.command_start_with(message, "switch"):
             return True, self.switch(message)
         
-        if self.command_start_with(message, "/"):
-            return True, (False, "未知指令", "unknown_command")
-        
         return False, None
     
-    def help(self, cached_plugins):
+    def help(self):
         commands = super().general_commands()
         commands['画'] = '画画'
         commands['key'] = '添加OpenAI key'
@@ -77,7 +70,7 @@ class CommandOpenAIOfficial(Command):
         commands['gpt'] = '查看gpt配置信息'
         commands['status'] = '查看key使用状态'
         commands['token'] = '查看本轮会话token'
-        return True, super().help_messager(commands, self.platform, cached_plugins), "help"
+        return True, super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"
 
         
     def reset(self, session_id: str, message: str = "reset"):

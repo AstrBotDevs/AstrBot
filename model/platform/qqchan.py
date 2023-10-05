@@ -8,6 +8,7 @@ import requests
 from cores.qqbot.personality import personalities
 from util import general_utils as gu
 from nakuru.entities.components import Plain, At, Image
+from botpy.types.message import Reference
 
 class NakuruGuildMember():
     tiny_id: int
@@ -101,7 +102,7 @@ class QQChan():
 
 
 
-    def send_qq_msg(self, message: NakuruGuildMessage, res, msg_ref = None):
+    def send_qq_msg(self, message: NakuruGuildMessage, res):
         gu.log("回复QQ频道消息: "+str(res), level=gu.LEVEL_INFO, tag="QQ频道", max_len=500)
         self.qqchan_cnt += 1
         plain_text = ""
@@ -113,7 +114,7 @@ class QQChan():
             plain_text = res
 
         # print(plain_text, image_path)
-
+        msg_ref = Reference(message_id=message.raw_message.id, ignore_get_message_error=False)
         if image_path is not None:
             msg_ref = None
             if image_path.startswith("http"):
