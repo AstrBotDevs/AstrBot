@@ -16,7 +16,12 @@ class ProviderOpenAIOfficial(Provider):
         self.key_list = []
         if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
             openai.api_base = cfg['api_base']
-            print(f"设置apibase为: {openai.api_base}")
+            print(f"设置 api_base 为: {openai.api_base}")
+        # 如果 cfg['key']中有长度为1的字符串，那么是格式错误，直接报错
+        for key in cfg['key']:
+            if len(key) == 1:
+                input("检查到了长度为 1 的Key。配置文件中的 openai.key 处的格式错误 (符号 - 的后面要加空格)，请退出程序并检查配置文件，按回车跳过。")
+                raise BaseException("配置文件格式错误")
         if cfg['key'] != '' and cfg['key'] != None:
             self.key_list = cfg['key']
         else:
@@ -398,9 +403,13 @@ class ProviderOpenAIOfficial(Provider):
 
     #将key_list的key转储到key_record中，并记录相关数据
     def init_key_record(self):
+
+        # 不存在，创建
         if not os.path.exists(key_record_path):
             with open(key_record_path, 'w', encoding='utf-8') as f:
                 json.dump({}, f)
+
+        # 打开 chatgpt_key_record
         with open(key_record_path, 'r', encoding='utf-8') as keyfile:
             try:
                 self.key_stat = json.load(keyfile)

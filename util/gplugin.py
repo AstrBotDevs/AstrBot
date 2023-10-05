@@ -37,7 +37,7 @@ def google_web_search(keyword) -> str:
     ret = ""
     index = 1
     try:
-        ls = search(keyword, advanced=True, num_results=5)
+        ls = search(keyword, advanced=True, num_results=4)
         for i in ls:
             desc = i.description
             try:
@@ -177,8 +177,8 @@ def fetch_website_content(url):
         res = res[300:1100]
     else:
         res = res[100:800]
-    with open(f"temp_{time.time()}.html", "w", encoding="utf-8") as f:
-        f.write(res)
+    # with open(f"temp_{time.time()}.html", "w", encoding="utf-8") as f:
+    #     f.write(res)
     gu.log(f"fetch_website_content: end", tag="fetch_website_content", level=gu.LEVEL_DEBUG)
     return res
 

@@ -100,7 +100,7 @@ class QQ:
                             res.remove(i)
                     node = Node(res)
                     # node.content = res
-                    node.uin = source.self_id
+                    node.uin = 123456
                     node.name = f"To {source.sender.nickname}:"
                     node.time = int(time.time())
                     # print(node)

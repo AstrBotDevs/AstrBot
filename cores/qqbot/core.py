@@ -253,6 +253,7 @@ def initBot(cfg, prov):
                     llm_command_instance[REV_EDGEGPT] = CommandRevEdgeGPT(llm_instance[REV_EDGEGPT], _global_object)
                     chosen_provider = REV_EDGEGPT
                 except BaseException as e:
+                    print(traceback.format_exc())
                     gu.log("加载Bing模型时发生错误, 请检查1. cookies文件是否正确放置 2. 是否设置了代理（梯子）。", gu.LEVEL_ERROR, max_len=60)
     if OPENAI_OFFICIAL in prov:
         gu.log("- OpenAI官方 -", gu.LEVEL_INFO)
