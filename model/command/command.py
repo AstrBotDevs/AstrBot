@@ -255,6 +255,16 @@ class Command:
             elif l[1] == "reload":
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限重载插件", "plugin"
+                for plugin in cached_plugins:
+                    try:
+                        print(f"更新插件 {plugin} 依赖...")
+                        plugin_path = os.path.join(ppath, cached_plugins[plugin]["root_dir_name"])
+                        if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
+                            mm = pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), "--quiet"])
+                            if mm != 0:
+                                return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
+                    except BaseException as e:
+                        print(f"插件{plugin}依赖安装失败，原因: {str(e)}")
                 try:
                     ok, err = self.plugin_reload(cached_plugins, all = True)
                     if ok:
