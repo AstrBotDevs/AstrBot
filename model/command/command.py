@@ -26,6 +26,7 @@ from nakuru.entities.components import (
 )
 from PIL import Image as PILImage
 from cores.qqbot.global_object import GlobalObject
+from pip._internal import main as pipmain
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -134,11 +135,13 @@ class Command:
                     except BaseException as e:
                         fail_rec += f"调用插件{p} info失败, 原因: {str(e)}\n"
                         continue
-                    cached_plugins[p] = {
+                    cached_plugins[info['name']] = {
                         "module": module,
                         "clsobj": obj,
-                        "info": info
-                    }  
+                        "info": info,
+                        "name": info['name'],
+                        "root_dir_name": root_dir_name,
+                    }
             except BaseException as e:
                 fail_rec += f"加载{p}插件出现问题，原因 {str(e)}\n"
         if fail_rec == "":
@@ -184,11 +187,9 @@ class Command:
 
                     # 读取插件的requirements.txt
                     if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-                        with open(os.path.join(plugin_path, "requirements.txt"), "r", encoding="utf-8") as f:
-                            for line in f.readlines():
-                                mm = os.system(f"pip3 install {line.strip()}")
-                                if mm != 0:
-                                    return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
+                        mm = pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt")])
+                        if mm != 0:
+                            return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
                     # 加载没缓存的插件
                     ok, err = self.plugin_reload(cached_plugins, target=d)
                     if ok:
@@ -202,28 +203,29 @@ class Command:
             elif l[1] == "d":
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限删除插件", "plugin"
+                if l[2] not in cached_plugins:
+                    return False, "未找到该插件", "plugin"
+
                 try:
-                    # 删除文件夹
-                    # shutil.rmtree(os.path.join(ppath, l[2]))
-                    self.remove_dir(os.path.join(ppath, l[2]))
-                    if l[2] in cached_plugins:
-                        del cached_plugins[l[2]]
+                    root_dir_name = cached_plugins[l[2]]["root_dir_name"]
+                    self.remove_dir(os.path.join(ppath, root_dir_name))
+                    del cached_plugins[l[2]]
                     return True, "插件卸载成功~", "plugin"
                 except BaseException as e:
                     return False, f"卸载插件失败，原因: {str(e)}", "plugin"
             elif l[1] == "u":
-                plugin_path = os.path.join(ppath, l[2])
+                if l[2] not in cached_plugins:
+                    return False, "未找到该插件", "plugin"
+                root_dir_name = cached_plugins[l[2]]["root_dir_name"]
+                plugin_path = os.path.join(ppath, root_dir_name)
                 try:
                     repo = Repo(path = plugin_path)
                     repo.remotes.origin.pull()
-
                     # 读取插件的requirements.txt
                     if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-                        with open(os.path.join(plugin_path, "requirements.txt"), "r", encoding="utf-8") as f:
-                            for line in f.readlines():
-                                mm = os.system(f"pip3 install {line.strip()}")
-                                if mm != 0:
-                                    return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
+                        mm = pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt")])
+                        if mm != 0:
+                            return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
 
                     ok, err = self.plugin_reload(cached_plugins, target=l[2])
                     if ok:
