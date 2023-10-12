@@ -17,7 +17,6 @@ class CommandOpenAIOfficial(Command):
     def check_command(self, 
                       message: str, 
                       session_id: str, 
-                      loop,
                       role: str, 
                       platform: str,
                       message_obj):
@@ -25,7 +24,6 @@ class CommandOpenAIOfficial(Command):
         hit, res = super().check_command(
             message,
             session_id,
-            loop,
             role,
             platform,
             message_obj

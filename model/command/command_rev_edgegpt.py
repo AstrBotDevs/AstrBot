@@ -13,8 +13,7 @@ class CommandRevEdgeGPT(Command):
 
     def check_command(self, 
                       message: str, 
-                      session_id: str,
-                      loop, 
+                      session_id: str, 
                       role: str, 
                       platform: str,
                       message_obj):
@@ -23,7 +22,6 @@ class CommandRevEdgeGPT(Command):
         hit, res = super().check_command(
             message,
             session_id,
-            loop,
             role,
             platform,
             message_obj
@@ -32,7 +30,7 @@ class CommandRevEdgeGPT(Command):
         if hit:
             return True, res
         if self.command_start_with(message, "reset"):
-            return True, self.reset(loop)
+            return True, self.reset()
         elif self.command_start_with(message, "help"):
             return True, self.help()
         elif self.command_start_with(message, "update"):
@@ -40,7 +38,7 @@ class CommandRevEdgeGPT(Command):
 
         return False, None
     
-    def reset(self, loop):
+    def reset(self, loop = None):
         if self.provider is None:
             return False, "未启动Bing语言模型.", "reset"
         res = asyncio.run_coroutine_threadsafe(self.provider.forget(), loop).result()

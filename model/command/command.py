@@ -40,7 +40,6 @@ class Command:
     def check_command(self, 
                       message, 
                       session_id: str,
-                      loop,
                       role, 
                       platform, 
                       message_obj):
