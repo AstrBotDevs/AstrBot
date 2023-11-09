@@ -628,6 +628,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
             await send_message(platform, message, f"管理员未启动任何语言模型或者语言模型初始化时失败。", session_id=session_id)
             return
         try:
+            # check image url
             image_url = None
             for comp in message.message:
                 if isinstance(comp, Image):
@@ -637,9 +638,14 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
                     else:
                         image_url = comp.url
                         break
+            # web search keyword
+            web_sch_flag = False
+            if qq_msg.startswith("ws ") and qq_msg != "ws ":
+                qq_msg = qq_msg[3:]
+                web_sch_flag = True
                     
             if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
-                if _global_object.web_search:
+                if _global_object.web_search or web_sch_flag:
                     chatgpt_res = gplugin.web_search(qq_msg, llm_instance[chosen_provider], session_id)
                 else:
                     chatgpt_res = str(llm_instance[chosen_provider].text_chat(qq_msg, session_id, image_url))
