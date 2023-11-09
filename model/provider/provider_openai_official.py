@@ -95,7 +95,7 @@ class ProviderOpenAIOfficial(Provider):
             # 每隔10分钟转储一次
             time.sleep(10*self.history_dump_interval)
 
-    def text_chat(self, prompt, session_id = None):
+    def text_chat(self, prompt, session_id = None, image_url = None):
         if session_id is None:
             session_id = "unknown"
             if "unknown" in self.session_dict:
@@ -118,7 +118,7 @@ class ProviderOpenAIOfficial(Provider):
                 f.flush()
                 f.close()
 
-        cache_data_list, new_record, req = self.wrap(prompt, session_id)
+        cache_data_list, new_record, req = self.wrap(prompt, session_id, image_url)
         gu.log(f"CACHE_DATA_: {str(cache_data_list)}", level=gu.LEVEL_DEBUG, max_len=99999)
         gu.log(f"OPENAI REQUEST: {str(req)}", level=gu.LEVEL_DEBUG, max_len=9999)
         retry = 0
@@ -306,7 +306,20 @@ class ProviderOpenAIOfficial(Provider):
             return -1, -1, -1, -1
 
     # 包装信息
-    def wrap(self, prompt, session_id):
+    def wrap(self, prompt, session_id, image_url = None):
+        if image_url is not None:
+            prompt = [
+                {
+                    "type": "text",
+                    "text": prompt
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url
+                    }
+                }
+            ]
         # 获得缓存信息
         context = self.session_dict[session_id]
         new_record = {
@@ -332,30 +345,30 @@ class ProviderOpenAIOfficial(Provider):
         while True:
             is_all_exceed = True
             for key in self.key_stat:
-                if key == None:
+                if key == None or self.key_stat[key]['exceed']:
                     continue
-                if not self.key_stat[key]['exceed']:
-                    is_all_exceed = False
-                    openai.api_key = key
-                    gu.log(f"切换到Key: {key}, 已使用token: {self.key_stat[key]['used']}", level=gu.LEVEL_INFO)
-                    if len(req) > 0:
-                        try:
-                            response = openai.ChatCompletion.create(
-                                messages=req,
-                                **self.chatGPT_configs
-                            )
-                            return response, True
-                        except Exception as e:
-                            if 'You exceeded' in str(e):
-                                gu.log("当前Key已超额, 正在切换")
-                                self.key_stat[openai.api_key]['exceed'] = True
-                                self.save_key_record()
-                                time.sleep(1)
-                                continue
-                            else:
-                                gu.log(str(e), level=gu.LEVEL_ERROR)
+                is_all_exceed = False
+                openai.api_key = key
+                gu.log(f"切换到Key: {key}, 已使用token: {self.key_stat[key]['used']}", level=gu.LEVEL_INFO)
+                if len(req) == 0:
+                    return None, False
+                try:
+                    response = openai.ChatCompletion.create(
+                        messages=req,
+                        **self.chatGPT_configs
+                    )
+                    return response, True
+                except Exception as e:
+                    if 'You exceeded' in str(e):
+                        gu.log("当前Key已超额, 正在切换")
+                        self.key_stat[openai.api_key]['exceed'] = True
+                        self.save_key_record()
+                        time.sleep(1)
+                        continue
                     else:
-                        return True
+                        gu.log(str(e), level=gu.LEVEL_ERROR)
+                else:
+                    return True
             if is_all_exceed:
                 gu.log("所有Key已超额", level=gu.LEVEL_CRITICAL)
                 return None, False
