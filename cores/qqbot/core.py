@@ -237,7 +237,7 @@ def initBot(cfg, prov):
                     gu.log("加载Bing模型时发生错误, 请检查1. cookies文件是否正确放置 2. 是否设置了代理（梯子）。", gu.LEVEL_ERROR, max_len=60)
     if OPENAI_OFFICIAL in prov:
         gu.log("- OpenAI官方 -", gu.LEVEL_INFO)
-        if cfg['openai']['key'] is not None:
+        if cfg['openai']['key'] is not None and cfg['openai']['key'] != [None]:
             from model.provider.provider_openai_official import ProviderOpenAIOfficial
             from model.command.command_openai_official import CommandOpenAIOfficial
             llm_instance[OPENAI_OFFICIAL] = ProviderOpenAIOfficial(cfg['openai'])
@@ -646,7 +646,8 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
                     
             if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
                 if _global_object.web_search or web_sch_flag:
-                    chatgpt_res = gplugin.web_search(qq_msg, llm_instance[chosen_provider], session_id)
+                    official_fc = chosen_provider == OPENAI_OFFICIAL
+                    chatgpt_res = gplugin.web_search(qq_msg, llm_instance[chosen_provider], session_id, official_fc)
                 else:
                     chatgpt_res = str(llm_instance[chosen_provider].text_chat(qq_msg, session_id, image_url))
             elif chosen_provider == REV_EDGEGPT:

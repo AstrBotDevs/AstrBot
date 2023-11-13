@@ -1,7 +1,7 @@
 pydantic~=1.10.4
 requests~=2.28.1
-openai~=0.27.4
-qq-botpy~=1.1.2
+openai~=1.2.3
+qq-botpy
 revChatGPT~=6.8.6
 baidu-aip~=4.16.9
 EdgeGPT~=0.1.22.1

@@ -7,13 +7,23 @@ from util.func_call import (
     FuncCallJsonFormatError, 
     FuncNotFoundError
 )
+from openai.types.chat.chat_completion_message_tool_call import Function
 import traceback
 from googlesearch import search, SearchResult
+from model.provider.provider import Provider
+import json
+
 
 def tidy_text(text: str) -> str:
+    '''
+    清理文本，去除空格、换行符等
+    '''
     return text.strip().replace("\n", "").replace(" ", "").replace("\r", "")
 
 def special_fetch_zhihu(link: str) -> str:
+    '''
+    function-calling 函数, 用于获取知乎文章的内容
+    '''
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
             AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -31,9 +41,10 @@ def special_fetch_zhihu(link: str) -> str:
         raise Exception("zhihu none")
     return tidy_text(r.text)
 
-
 def google_web_search(keyword) -> str:
-    # 获取goole搜索结果，得到title、desc、link
+    '''
+    获取 google 搜索结果, 得到 title、desc、link
+    '''
     ret = ""
     index = 1
     try:
@@ -53,6 +64,9 @@ def google_web_search(keyword) -> str:
     return ret
 
 def web_keyword_search_via_bing(keyword) -> str:
+    '''
+    获取bing搜索结果, 得到 title、desc、link
+    '''
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
             AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -105,12 +119,11 @@ def web_keyword_search_via_bing(keyword) -> str:
                 ret = f"{str(res)}"
             return str(ret)
         except Exception as e:
-            print(traceback.format_exc())
-            print(f"bing fetch err: {str(e)}")
+            gu.log(f"bing fetch err: {str(e)}")
             _cnt += 1
             time.sleep(1)
             
-    print("fail to fetch bing info, using sougou.")
+    gu.log("fail to fetch bing info, using sougou.")
     return google_web_search(keyword)
 
 def web_keyword_search_via_sougou(keyword) -> str:
@@ -182,53 +195,78 @@ def fetch_website_content(url):
     gu.log(f"fetch_website_content: end", tag="fetch_website_content", level=gu.LEVEL_DEBUG)
     return res
 
-def web_search(question, provider, session_id):
-
+def web_search(question, provider: Provider, session_id, official_fc=False):
+    '''
+    official_fc: 使用官方 function-calling
+    '''
     new_func_call = FuncCall(provider)
     new_func_call.add_func("google_web_search", [{
         "type": "string",
         "name": "keyword",
-        "brief": "google search query (分词，尽量保留所有信息)"
+        "description": "google search query (分词，尽量保留所有信息)"
         }],
-    "网页搜索。如果问题需要使用搜索(如天气、新闻或任何新的东西)，则调用。",
+    "通过搜索引擎搜索。如果问题需要在网页上搜索(如天气、新闻或任何需要通过网页获取信息的问题)，则调用此函数；如果没有，不要调用此函数。",
     google_web_search
     )
     new_func_call.add_func("fetch_website_content", [{
         "type": "string",
         "name": "url",
-        "brief": "网址"
+        "description": "网址"
         }],
-    "获取网址的内容",
+    "获取网页的内容。如果问题带有合法的网页链接(例如: `帮我总结一下https://github.com的内容`), 就调用此函数。如果没有，不要调用此函数。",
     fetch_website_content
     )
-    func_definition1 = new_func_call.func_dump()
-    question1 = f"{question} \n（只能调用一个函数。）"
-    try:
-        res1, has_func = new_func_call.func_call(question1, func_definition1, is_task=False, is_summary=False)
-    except BaseException as e:
-        res = provider.text_chat(question) + "\n(网页搜索失败, 此为默认回复)"
-        return res
+    question1 = f"{question} \n> hint: 最多只能调用1个function, 并且存在不会调用任何function的可能性。"
+    has_func = False
+    function_invoked_ret = ""
+    if official_fc:
+        func = provider.text_chat(question1, session_id, function_call=new_func_call.get_func())
+        if isinstance(func, Function):
+            # arguments='{\n  "keyword": "北京今天的天气"\n}', name='google_web_search'
+            # 执行对应的结果：
+            func_obj = None
+            for i in new_func_call.func_list:
+                if i["name"] == func.name:
+                    func_obj = i["func_obj"]
+                    break
+            if not func_obj:
+                gu.log("找不到返回的 func name " + func.name, level=gu.LEVEL_ERROR)
+                return provider.text_chat(question1, session_id) + "\n(网页搜索失败, 此为默认回复)"
+            try:
+                args = json.loads(func.arguments)
+                function_invoked_ret = func_obj(**args)
+                has_func = True
+            except BaseException as e:
+                traceback.print_exc()
+                return provider.text_chat(question1, session_id) + "\n(网页搜索失败, 此为默认回复)"
+        else:
+            # now func is a string
+            return func
+    else:
+        try:
+            function_invoked_ret, has_func = new_func_call.func_call(question1, new_func_call.func_dump(), is_task=False, is_summary=False)
+        except BaseException as e:
+            res = provider.text_chat(question) + "\n(网页搜索失败, 此为默认回复)"
+            return res
+        has_func = True
 
-    has_func = True
     if has_func:
         provider.forget(session_id)
-        question3 = f"""请你回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行总结回答，再给参考链接, 参考链接首末有空格。不要提到任何函数调用的信息。```\n{res1}\n```\n"""
+        question3 = f"""请你用可爱的语气回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行总结回答，再给参考链接, 参考链接首末有空格。不要提到任何函数调用的信息。在总结的末尾加上1-2个相关的emoji。```\n{function_invoked_ret}\n```\n"""
         print(question3)
         _c = 0
         while _c < 5:
             try:
                 print('text chat')
-                res3 = provider.text_chat(question3)
-                break
+                final_ret = provider.text_chat(question3)
+                return final_ret
             except Exception as e:
                 print(e)
                 _c += 1
-                if _c == 5:
-                    raise e
+                if _c == 5: raise e
                 if "The message you submitted was too long" in str(e):
-                    res2 = res2[:int(len(res2) / 2)]
+                    provider.forget(session_id)
+                    function_invoked_ret = function_invoked_ret[:int(len(function_invoked_ret) / 2)]
                     time.sleep(3)
-                    question3 = f"""请回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行回答，再给参考链接, 参考链接首末有空格。```\n{res1}\n{res2}\n```\n"""
-        return res3
-    else:
-        return res1
+                    question3 = f"""请回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行回答，再给参考链接, 参考链接首末有空格。```\n{function_invoked_ret}\n```\n"""
+    return function_invoked_ret

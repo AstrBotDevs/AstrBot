@@ -1,6 +1,7 @@
 
 import json
 import util.general_utils as gu
+
 import time
 class FuncCallJsonFormatError(Exception):
     def __init__(self, msg):
@@ -24,9 +25,18 @@ class FuncCall():
     def add_func(self, name: str = None, func_args: list = None, desc: str = None, func_obj = None) -> None:
         if name == None or func_args == None or desc == None or func_obj == None:
             raise FuncCallJsonFormatError("name, func_args, desc must be provided.")
+        params = {
+            "type": "object", # hardcore here
+            "properties": {}
+        }
+        for param in func_args:
+            params['properties'][param['name']] = {
+                "type": param['type'],
+                "description": param['description']
+            }
         self._func = {
             "name": name,
-            "args": func_args,
+            "parameters": params,
             "description": desc,
             "func_obj": func_obj,
         }
@@ -37,11 +47,23 @@ class FuncCall():
         for f in self.func_list:
             _l.append({
                 "name": f["name"],
-                "args": f["args"],
+                "parameters": f["parameters"],
                 "description": f["description"],
             })
-
-        return json.dumps(_l, indent=intent, ensure_ascii=False)
+        return json.dumps(_l, indent=intent, ensur_ascii=False)
+    
+    def get_func(self) -> list:
+        _l = []
+        for f in self.func_list:
+            _l.append({
+                "type": "function",
+                "function": {
+                    "name": f["name"],
+                    "parameters": f["parameters"],
+                    "description": f["description"],
+                }
+            })
+        return _l
     
     def func_call(self, question, func_definition, is_task = False, tasks = None, taskindex = -1, is_summary = True, session_id = None):
 

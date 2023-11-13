@@ -1,3 +1,6 @@
+'''
+插件工具函数
+'''
 import os
 import inspect
 

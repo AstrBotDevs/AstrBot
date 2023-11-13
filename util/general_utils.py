@@ -60,17 +60,21 @@ def log(
         tag: str = "System",
         fg: str = None,
         bg: str = None,
-        max_len: int = 300):
+        max_len: int = 500,
+        err: Exception = None,):
     """
-    日志记录函数
+    日志打印函数
     """
     _set_level_code = level_codes[LEVEL_INFO]
     if 'LOG_LEVEL' in os.environ and os.environ['LOG_LEVEL'] in level_codes:
         _set_level_code = level_codes[os.environ['LOG_LEVEL']]
 
-
     if level in level_codes and level_codes[level] < _set_level_code:
         return
+    
+    if err is not None:
+        msg += "\n异常原因: " + str(err)
+        level = LEVEL_ERROR
 
     if len(msg) > max_len:
         msg = msg[:max_len] + "..."

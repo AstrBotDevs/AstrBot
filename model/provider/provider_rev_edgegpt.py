@@ -35,7 +35,7 @@ class ProviderRevEdgeGPT(Provider):
         except BaseException:
             return False
         
-    async def text_chat(self, prompt, platform = 'none'):
+    async def text_chat(self, prompt, platform = 'none', image_url=None, function_call=None):
         while self.busy:
             time.sleep(1)
         self.busy = True

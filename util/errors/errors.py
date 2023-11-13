@@ -1,3 +1,0 @@
-class PromptExceededError(Exception):
-    
-    pass
