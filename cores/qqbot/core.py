@@ -643,7 +643,8 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
             if qq_msg.startswith("ws ") and qq_msg != "ws ":
                 qq_msg = qq_msg[3:]
                 web_sch_flag = True
-                    
+            else:
+                qq_msg += "> hint: 末尾根据内容和心情添加1-2个emoji"
             if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
                 if _global_object.web_search or web_sch_flag:
                     official_fc = chosen_provider == OPENAI_OFFICIAL
