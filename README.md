@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-AGPL3-orange.svg?style=plastic)](https://github.com/Soulter/QQChannelChatGPT/blob/master/LICENSE)
 ![Python](https://img.shields.io/badge/python-3.9+-blue) -->
  
-基于go-cqhttp和官方QQ频道SDK的QQ机器人项目。支持ChatGPT、Claude、HuggingChat、Bard大模型。一次部署，同时使用。
+基于go-cqhttp和官方QQ频道SDK的QQ机器人项目。支持ChatGPT、Claude、HuggingChat 大模型，集成插件功能。
 
 部署文档：https://github.com/Soulter/QQChannelChatGPT/wiki
  
