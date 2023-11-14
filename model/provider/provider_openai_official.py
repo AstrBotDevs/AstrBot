@@ -136,7 +136,7 @@ class ProviderOpenAIOfficial(Provider):
         # 使用 tictoken 截断消息
         _encoded_prompt = self.enc.encode(prompt)
         if self.openai_model_configs['max_tokens'] < len(_encoded_prompt):
-            prompt = self.enc.decode(_encoded_prompt[:self.openai_model_configs['max_tokens'] - 100])
+            prompt = self.enc.decode(_encoded_prompt[:int(self.openai_model_configs['max_tokens']*0.80)])
             gu.log(f"注意，有一部分 prompt 文本由于超出 token 限制而被截断。", level=gu.LEVEL_WARNING, max_len=300)
 
         cache_data_list, new_record, req = self.wrap(prompt, session_id, image_url)
