@@ -25,7 +25,7 @@ from nakuru.entities.components import (
     Image
 )
 from PIL import Image as PILImage
-from cores.qqbot.global_object import GlobalObject
+from cores.qqbot.global_object import GlobalObject, AstrMessageEvent
 from pip._internal import main as pipmain
 
 PLATFORM_QQCHAN = 'qqchan'
@@ -45,11 +45,28 @@ class Command:
                       message_obj):
         # 插件
         cached_plugins = self.global_object.cached_plugins
+        ame = AstrMessageEvent(
+            message_str=message,
+            message_obj=message_obj,
+            gocq_platform=self.global_object.platform_qq,
+            qq_sdk_platform=self.global_object.platform_qqchan,
+            platform=platform,
+            role=role,
+            global_object=self.global_object
+        )
         for k, v in cached_plugins.items():
             try:
-                hit, res = v["clsobj"].run(message, role, platform, message_obj, self.global_object.platform_qq)
+                hit, res = v["clsobj"].run(ame)
                 if hit:
                     return True, res
+            except TypeError as e:
+                # 参数不匹配，尝试使用旧的参数方案
+                try:
+                    hit, res = v["clsobj"].run(message, role, platform, message_obj, self.global_object.platform_qq)
+                    if hit:
+                        return True, res
+                except BaseException as e:
+                    gu.log(f"{k}插件加载出现问题，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
             except BaseException as e:
                 gu.log(f"{k}插件加载出现问题，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
 

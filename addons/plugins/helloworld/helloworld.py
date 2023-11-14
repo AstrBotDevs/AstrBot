@@ -7,6 +7,7 @@ from botpy.message import Message, DirectMessage
 from model.platform.qq import QQ
 import time
 import threading
+from cores.qqbot.global_object import AstrMessageEvent
 
 class HelloWorldPlugin:
     """
@@ -25,27 +26,27 @@ class HelloWorldPlugin:
     例子：做一个名为"yuanshen"的插件；当接收到消息为“原神 可莉”, 如果不想要处理此消息，则返回False, None；如果想要处理，但是执行失败了，返回True, tuple([False, "请求失败啦~", "yuanshen"])
           ；执行成功了，返回True, tuple([True, "结果文本", "yuanshen"])
     """
-    def run(self, message: str, role: str, platform: str, message_obj, qq_platform: QQ):
+    def run(self, ame: AstrMessageEvent):
 
-        if platform == "gocq":
+        if ame.platform == "gocq":
             """
             QQ平台指令处理逻辑
             """
             img_url = "https://gchat.qpic.cn/gchatpic_new/905617992/720871955-2246763964-C6EE1A52CC668EC982453065C4FA8747/0?term=2&amp;is_origin=0"
-            if message == "helloworld":
+            if ame.message_str == "helloworld":
                 return True, tuple([True, [Plain("Hello World!!"), Image.fromURL(url=img_url)], "helloworld"])
-            elif message == "hiloop":
+            elif ame.message_str == "hiloop":
                 if self.myThread is None:
-                    self.myThread = threading.Thread(target=self.helloworldThread, args=(message_obj, qq_platform))
+                    self.myThread = threading.Thread(target=self.helloworldThread, args=(ame.message_obj, ame.gocq_platform))
                     self.myThread.start()
                 return True, tuple([True, [Plain("A lot of Helloworlds!!"), Image.fromURL(url=img_url)], "helloworld"]) 
             else:
                 return False, None
-        elif platform == "qqchan":
+        elif ame.platform == "qqchan":
             """
             频道处理逻辑(频道暂时只支持回复字符串类型的信息，返回的信息都会被转成字符串，如果不想处理某一个平台的信息，直接返回False, None就行)
             """
-            if message == "helloworld":
+            if ame.message_str == "helloworld":
                 return True, tuple([True, "Hello World!!", "helloworld"])
             else:
                 return False, None
