@@ -8,7 +8,7 @@
  
 基于go-cqhttp和官方QQ频道SDK的QQ机器人项目。支持ChatGPT、Claude、HuggingChat 大模型，集成插件功能。
 
-部署文档：https://github.com/Soulter/QQChannelChatGPT/wiki
+部署文档：https://github.com/Soulter/AstrBot/wiki
  
 欢迎加群讨论 | **QQ群号：322154837** | **频道号: x42d56aki2** |
 
