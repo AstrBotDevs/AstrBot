@@ -9,6 +9,7 @@ from model.provider.provider import Provider
 import threading
 from util import general_utils as gu
 import traceback
+import tiktoken
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 key_record_path = abs_path + 'chatgpt_key_record'
@@ -51,6 +52,8 @@ class ProviderOpenAIOfficial(Provider):
         self.max_tokens = cfg['total_tokens_limit']
         # 历史记录持久化间隔时间
         self.history_dump_interval = 20
+
+        self.enc = tiktoken.get_encoding("cl100k_base")
 
         # 读取历史记录
         try:
@@ -129,6 +132,11 @@ class ProviderOpenAIOfficial(Provider):
                 f.write(json.dumps(fjson))
                 f.flush()
                 f.close()
+        
+        # 使用 tictoken 截断消息
+        _encoded_prompt = self.enc.encode(prompt)
+        prompt = self.enc.decode(_encoded_prompt[:self.openai_model_configs['max_tokens'] - 100])
+        gu.log(f"注意，有一部分 prompt 文本由于超出 token 限制而被截断。", level=gu.LEVEL_WARNING, max_len=300)
 
         cache_data_list, new_record, req = self.wrap(prompt, session_id, image_url)
         gu.log(f"CACHE_DATA_: {str(cache_data_list)}", level=gu.LEVEL_DEBUG, max_len=99999)
@@ -198,7 +206,7 @@ class ProviderOpenAIOfficial(Provider):
             gu.log(r"如果报错, 且您的机器在中国大陆内, 请确保您的电脑已经设置好代理软件(梯子), 并在配置文件设置了系统代理地址。详见https://github.com/Soulter/QQChannelChatGPT/wiki/%E4%BA%8C%E3%80%81%E9%A1%B9%E7%9B%AE%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E9%85%8D%E7%BD%AE", max_len=999)
             raise BaseException("连接出错: "+str(err))
         assert isinstance(response, ChatCompletion)
-        print(response)
+        gu.log(f"OPENAI RESPONSE: {response.usage}", level=gu.LEVEL_DEBUG, max_len=9999)
 
         # 结果分类
         choice = response.choices[0]
@@ -208,8 +216,6 @@ class ProviderOpenAIOfficial(Provider):
         elif choice.message.tool_calls != None and len(choice.message.tool_calls) > 0:
             # tools call (function calling)
             return choice.message.tool_calls[0].function
-
-        gu.log(f"OPENAI RESPONSE: {response.usage}", level=gu.LEVEL_DEBUG, max_len=9999)
 
         self.key_stat[self.client.api_key]['used'] += response.usage.total_tokens
         current_usage_tokens = response.usage.total_tokens

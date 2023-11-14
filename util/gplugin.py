@@ -12,13 +12,14 @@ import traceback
 from googlesearch import search, SearchResult
 from model.provider.provider import Provider
 import json
+from readability import Document
 
 
 def tidy_text(text: str) -> str:
     '''
     清理文本，去除空格、换行符等
     '''
-    return text.strip().replace("\n", "").replace(" ", "").replace("\r", "")
+    return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
 
 def special_fetch_zhihu(link: str) -> str:
     '''
@@ -100,12 +101,12 @@ def web_keyword_search_via_bing(keyword) -> str:
                     # 爬取前两条的网页内容
                     if "zhihu.com" in link:
                         try:
-                            _detail_store.append(special_fetch_zhihu(link)[100:800])
+                            _detail_store.append(special_fetch_zhihu(link))
                         except BaseException as e:
                             print(f"zhihu parse err: {str(e)}")
                     else:
                         try:
-                            _detail_store.append(fetch_website_content(link)[100:1000])
+                            _detail_store.append(fetch_website_content(link))
                         except BaseException as e:
                             print(f"fetch_website_content err: {str(e)}")
 
@@ -158,7 +159,7 @@ def web_keyword_search_via_sougou(keyword) -> str:
         if _detail_store >= 3:
             break
         try:
-            _detail_store.append(fetch_website_content(i["link"])[100:1000])
+            _detail_store.append(fetch_website_content(i["link"]))
         except BaseException as e:
             print(f"fetch_website_content err: {str(e)}")
     ret = f"{str(res)}"
@@ -174,26 +175,32 @@ def fetch_website_content(url):
     }
     response = requests.get(url, headers=headers, timeout=3)
     response.encoding = "utf-8"
-    soup = BeautifulSoup(response.text, "html.parser")
-    # 如果有container / content / main等的话，就只取这些部分
-    has = False
-    beleive_ls = ["container", "content", "main"]
-    res = ""
-    for cls in beleive_ls:
-        for i in soup.find_all(class_=cls):
-            has = True
-            res += i.text
-    if not has:
-        res = soup.text
-    res = res.replace("\n", "").replace("  ", " ").replace("\r", "").replace("\t", "")
-    if not has:
-        res = res[300:1100]
-    else:
-        res = res[100:800]
-    # with open(f"temp_{time.time()}.html", "w", encoding="utf-8") as f:
-    #     f.write(res)
-    gu.log(f"fetch_website_content: end", tag="fetch_website_content", level=gu.LEVEL_DEBUG)
-    return res
+    # soup = BeautifulSoup(response.text, "html.parser")
+    # # 如果有container / content / main等的话，就只取这些部分
+    # has = False
+    # beleive_ls = ["container", "content", "main"]
+    # res = ""
+    # for cls in beleive_ls:
+    #     for i in soup.find_all(class_=cls):
+    #         has = True
+    #         res += i.text
+    # if not has:
+    #     res = soup.text
+    # res = res.replace("\n", "").replace("  ", " ").replace("\r", "").replace("\t", "")
+    # if not has:
+    #     res = res[300:1100]
+    # else:
+    #     res = res[100:800]
+    # # with open(f"temp_{time.time()}.html", "w", encoding="utf-8") as f:
+    # #     f.write(res)
+    # gu.log(f"fetch_website_content: end", tag="fetch_website_content", level=gu.LEVEL_DEBUG)
+    # return res
+    doc = Document(response.content)
+    # print('title:', doc.title())
+    ret = doc.summary(html_partial=True)
+    soup = BeautifulSoup(ret, 'html.parser')
+    ret = tidy_text(soup.get_text())
+    return ret
 
 def web_search(question, provider: Provider, session_id, official_fc=False):
     '''
@@ -253,9 +260,9 @@ def web_search(question, provider: Provider, session_id, official_fc=False):
     if has_func:
         provider.forget(session_id)
         question3 = f"""请你用可爱的语气回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行总结回答，再给参考链接, 参考链接首末有空格。不要提到任何函数调用的信息。在总结的末尾加上1-2个相关的emoji。```\n{function_invoked_ret}\n```\n"""
-        print(question3)
+        gu.log(f"web_search: {question3}", tag="web_search", level=gu.LEVEL_DEBUG, max_len=99999)
         _c = 0
-        while _c < 5:
+        while _c < 3:
             try:
                 print('text chat')
                 final_ret = provider.text_chat(question3)
@@ -263,7 +270,7 @@ def web_search(question, provider: Provider, session_id, official_fc=False):
             except Exception as e:
                 print(e)
                 _c += 1
-                if _c == 5: raise e
+                if _c == 3: raise e
                 if "The message you submitted was too long" in str(e):
                     provider.forget(session_id)
                     function_invoked_ret = function_invoked_ret[:int(len(function_invoked_ret) / 2)]
