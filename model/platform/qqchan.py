@@ -11,24 +11,24 @@ from nakuru.entities.components import Plain, At, Image
 from botpy.types.message import Reference
 
 class NakuruGuildMember():
-    tiny_id: int
-    user_id: int
-    title: str
-    nickname: str
-    role: int
-    icon_url: str
+    tiny_id: int # 发送者识别号
+    user_id: int # 发送者识别号
+    title: str 
+    nickname: str # 昵称
+    role: int # 角色
+    icon_url: str # 头像url
 
 class NakuruGuildMessage():
     type: str = "GuildMessage"
-    self_id: int
-    self_tiny_id: int
-    sub_type: str
-    message_id: str
-    guild_id: int
-    channel_id: int
-    user_id: int
-    message: list
-    sender: NakuruGuildMember
+    self_id: int # bot的qq号
+    self_tiny_id: int # bot的qq号
+    sub_type: str # 消息类型
+    message_id: str # 消息id
+    guild_id: int # 频道号 
+    channel_id: int # 子频道号
+    user_id: int # 发送者qq号
+    message: list # 消息内容
+    sender: NakuruGuildMember # 发送者信息
     raw_message: Message
 
     def __str__(self) -> str:
