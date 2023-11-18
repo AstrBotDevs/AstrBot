@@ -12,7 +12,6 @@ import traceback
 import tiktoken
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
-key_record_path = abs_path + 'chatgpt_key_record'
 
 class ProviderOpenAIOfficial(Provider):
     def __init__(self, cfg):
@@ -110,7 +109,11 @@ class ProviderOpenAIOfficial(Provider):
             # 每隔10分钟转储一次
             time.sleep(10*self.history_dump_interval)
 
-    def text_chat(self, prompt, session_id = None, image_url = None, function_call=None):
+    def text_chat(self, prompt, 
+                  session_id = None, 
+                  image_url = None, 
+                  function_call=None,
+                  extra_conf: dict = None):
         if session_id is None:
             session_id = "unknown"
             if "unknown" in self.session_dict:
@@ -161,7 +164,10 @@ class ProviderOpenAIOfficial(Provider):
             conf['model'] = 'gpt-4-vision-preview'
         else:
             conf = self.openai_model_configs
-        print(req)
+
+        if extra_conf is not None:
+            conf.update(extra_conf)
+
         while retry < 10:
             try:
                 if function_call is None:
@@ -410,6 +416,9 @@ class ProviderOpenAIOfficial(Provider):
     def get_curr_key(self):
         return self.client.api_key
     
+    def set_key(self, key):
+        self.client.api_key = key
+    
     # 添加key
     def append_key(self, key, sponsor):
         self.key_list.append(key)
@@ -422,14 +431,8 @@ class ProviderOpenAIOfficial(Provider):
             base_url=self.api_base
         )
         messages = [{"role": "user", "content": "please just echo `test`"}]
-        try:
-            client_.chat.completions.create(
-                messages=messages,
-                **self.openai_model_configs
-            )
-            return True
-        except Exception as e:
-            pass
-        return False
-        
-
+        client_.chat.completions.create(
+            messages=messages,
+            **self.openai_model_configs
+        )
+        return True

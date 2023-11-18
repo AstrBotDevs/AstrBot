@@ -1,13 +1,12 @@
 import json
-
+from util import general_utils as gu
 has_git = True
 try:
     import git.exc
     from git.repo import Repo
 except BaseException as e:
-    print("你正运行在无Git环境下，暂时将无法使用插件、热更新功能。")
+    gu.log("你正运行在无Git环境下，暂时将无法使用插件、热更新功能。")
     has_git = False
-
 import os
 import sys
 import requests
@@ -16,7 +15,6 @@ import json
 import util.plugin_util as putil
 import shutil
 import importlib
-from util import general_utils as gu
 from util.cmd_config import CmdConfig as cc
 from model.platform.qq import QQ
 import stat

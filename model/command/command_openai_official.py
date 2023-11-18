@@ -174,11 +174,13 @@ class CommandOpenAIOfficial(Command):
                 if index > len(key_stat) or index < 1:
                     return True, "账号序号不合法。", "switch"
                 else:
-                    ret = self.provider.check_key(list(key_stat.keys())[index-1])
-                    if ret:
-                        return True, f"账号切换成功。", "switch"
-                    else:
-                        return True, f"账号切换失败，可能超额或超频。", "switch"
+                    try:
+                        new_key = list(key_stat.keys())[index-1]
+                        ret = self.provider.check_key(new_key)
+                        self.provider.set_key(new_key)
+                    except BaseException as e:
+                        return True, "账号切换失败，原因: " + str(e), "switch"
+                    return True, f"账号切换成功。", "switch"
             except BaseException as e:
                 return True, "未知错误: "+str(e), "switch"
         else:

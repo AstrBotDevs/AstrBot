@@ -367,7 +367,7 @@ def initBot(cfg, prov):
 
     # QQ频道
     if 'qqbot' in cfg and cfg['qqbot']['enable']:
-        gu.log("- 启用QQ频道机器人(旧版) -", gu.LEVEL_INFO)
+        gu.log("- 启用QQ频道机器人 -", gu.LEVEL_INFO)
         global qqchannel_bot, qqchan_loop
         qqchannel_bot = QQChan()
         qqchan_loop = asyncio.new_event_loop()
@@ -399,7 +399,7 @@ def run_qqchan_bot(cfg, loop, qqchannel_bot: QQChan):
         gu.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
         gu.log(r"如果您是初次启动，请修改配置文件（QQChannelChatGPT/config.yaml）详情请看：https://github.com/Soulter/QQChannelChatGPT/wiki。" + str(e), gu.LEVEL_CRITICAL, tag="System")
         
-        i = input("输入y打开配置文件, 按回车退出程序。")
+        i = input("如果本 Bot 运行在 Windows 下，可以输入 y 快捷打开配置文件。按回车退出程序。")
         if i == "y":
             abs_path = os.path.abspath("QQChannelChatGPT/configs/config.yaml")
             print("配置文件地址：" + abs_path)
