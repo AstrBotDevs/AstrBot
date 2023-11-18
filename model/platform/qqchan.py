@@ -100,8 +100,6 @@ class QQChan():
         ngm.raw_message = message
         return ngm
 
-
-
     def send_qq_msg(self, message: NakuruGuildMessage, res):
         gu.log("回复QQ频道消息: "+str(res), level=gu.LEVEL_INFO, tag="QQ频道", max_len=500)
         self.qqchan_cnt += 1

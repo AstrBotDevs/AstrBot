@@ -1,5 +1,5 @@
 from model.command.command import Command
-from model.provider.provider_rev_edgegpt import ProviderRevEdgeGPT
+from model.provider.rev_edgegpt import ProviderRevEdgeGPT
 import asyncio
 from model.platform.qq import QQ
 from cores.qqbot.global_object import GlobalObject

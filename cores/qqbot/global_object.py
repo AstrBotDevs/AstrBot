@@ -1,5 +1,6 @@
 from model.platform.qqchan import QQChan, NakuruGuildMember, NakuruGuildMessage
 from model.platform.qq import QQ
+from model.provider.provider import Provider
 from nakuru import (
     CQHTTP,
     GroupMessage,
@@ -54,7 +55,8 @@ class AstrMessageEvent():
                  qq_sdk_platform: QQChan, 
                  platform: str, 
                  role: str, 
-                 global_object: GlobalObject):
+                 global_object: GlobalObject,
+                 llm_provider: Provider = None):
         self.message_str = message_str
         self.message_obj = message_obj
         self.gocq_platform = gocq_platform
@@ -62,3 +64,4 @@ class AstrMessageEvent():
         self.platform = platform
         self.role = role
         self.global_object = global_object
+        self.llm_provider = llm_provider
