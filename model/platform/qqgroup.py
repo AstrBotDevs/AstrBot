@@ -15,16 +15,13 @@ class UnofficialQQBotSDK:
         self.client_secret = client_secret
         self.get_access_token()
         self.get_wss_endpoint()
-        # self.ws_connect()
-        # print(self.ws_recv())
         asyncio.get_event_loop().run_until_complete(self.ws_client())
 
+
+    
+    
     
     def get_access_token(self) -> None:
-        # self.access_token = requests.post(self.GET_APP_ACCESS_TOKEN_URL, data={
-        #     "appid": self.appid,
-        #     "clientSecret": self.client_secret
-        # }).json()['access_token']
         res = requests.post(self.GET_APP_ACCESS_TOKEN_URL, json={
             "appId": self.appid,
             "clientSecret": self.client_secret
@@ -112,4 +109,4 @@ class UnofficialQQBotSDK:
                 
     
 if __name__ == "__main__":
-    UnofficialQQBotSDK("REDACTED_QQ_APP_ID", "b9VebKp7B2g7KK7f")
+    UnofficialQQBotSDK("", "")

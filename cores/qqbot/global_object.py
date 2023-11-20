@@ -25,7 +25,7 @@ class GlobalObject:
     uniqueSession: bool
     cnt_total: int
     platform_qq: QQ
-    platform_qqchan: QQ
+    platform_qqchan: QQChan
     
     def __init__(self):
         self.nick = None # gocq 的昵称
