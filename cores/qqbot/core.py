@@ -68,6 +68,7 @@ REV_CHATGPT = 'rev_chatgpt'
 OPENAI_OFFICIAL = 'openai_official'
 REV_ERNIE = 'rev_ernie'
 REV_EDGEGPT = 'rev_edgegpt'
+NONE_LLM = 'none_llm'
 chosen_provider = None
 
 # 语言模型对象
@@ -315,12 +316,16 @@ def initBot(cfg, prov):
 
     gu.log("--------加载插件--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 加载插件
-    _command = Command(None, None)
+    _command = Command(None, _global_object)
     ok, err = _command.plugin_reload(_global_object.cached_plugins)
     if ok:
         gu.log("加载插件完成", gu.LEVEL_INFO)
     else:
         gu.log(err, gu.LEVEL_ERROR)
+    
+    if chosen_provider is None:
+        llm_command_instance[NONE_LLM] = _command
+        chosen_provider = NONE_LLM
 
     gu.log("--------加载机器人平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
 
