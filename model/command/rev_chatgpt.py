@@ -12,14 +12,14 @@ class CommandRevChatGPT(Command):
         self.personality_str = ""
         super().__init__(provider, global_object)
 
-    def check_command(self, 
+    async def check_command(self, 
                       message: str, 
                       session_id: str,
                       role: str, 
                       platform: str,
                       message_obj):
         self.platform = platform
-        hit, res = super().check_command(
+        hit, res = await super().check_command(
             message,
             session_id,
             role,

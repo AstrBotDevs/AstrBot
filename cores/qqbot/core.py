@@ -207,6 +207,61 @@ def initBot(cfg, prov):
     if 'reply_prefix' in cfg:
         _global_object.reply_prefix = cfg['reply_prefix']
 
+    
+    gu.log("--------加载机器人平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    thread_inst = None
+    admin_qq = cc.get('admin_qq', None)
+    admin_qqchan = cc.get('admin_qqchan', None)
+    if admin_qq == None:
+        gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
+        admin_qq = input("请输入管理者QQ号(必须设置): ")
+        gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+        cc.put('admin_qq', admin_qq)
+    if admin_qqchan == None:
+        gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
+        admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
+        if admin_qqchan == "":
+            gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+        else:
+            gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+            cc.put('admin_qqchan', admin_qqchan)
+    
+    gu.log("管理者QQ: " + admin_qq, gu.LEVEL_INFO)
+    gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
+    _global_object.admin_qq = admin_qq
+    _global_object.admin_qqchan = admin_qqchan
+
+    # GOCQ
+    global gocq_bot
+
+    if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
+        gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
+        
+        global gocq_app, gocq_loop
+        gocq_loop = asyncio.new_event_loop()
+        gocq_bot = QQ(True, cc, gocq_loop)
+        thread_inst = threading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=False)
+        thread_inst.start()
+    else:
+        gocq_bot = QQ(False)
+
+    _global_object.platform_qq = gocq_bot
+
+    gu.log("机器人部署教程: https://github.com/Soulter/QQChannelChatGPT/wiki/", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue或加群322154837", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+
+    # QQ频道
+    if 'qqbot' in cfg and cfg['qqbot']['enable']:
+        gu.log("- 启用QQ频道机器人 -", gu.LEVEL_INFO)
+        global qqchannel_bot, qqchan_loop
+        qqchannel_bot = QQChan()
+        qqchan_loop = asyncio.new_event_loop()
+        _global_object.platform_qqchan = qqchannel_bot
+        thread_inst = threading.Thread(target=run_qqchan_bot, args=(cfg, qqchan_loop, qqchannel_bot), daemon=False)
+        thread_inst.start()
+        # thread.join()
+
     # 语言模型提供商
     gu.log("--------加载语言模型--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
 
@@ -312,8 +367,6 @@ def initBot(cfg, prov):
         nick_qq = tuple(nick_qq)
     _global_object.nick = nick_qq
 
-    thread_inst = None
-
     gu.log("--------加载插件--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 加载插件
     _command = Command(None, _global_object)
@@ -327,59 +380,6 @@ def initBot(cfg, prov):
         llm_command_instance[NONE_LLM] = _command
         chosen_provider = NONE_LLM
 
-    gu.log("--------加载机器人平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-
-    admin_qq = cc.get('admin_qq', None)
-    admin_qqchan = cc.get('admin_qqchan', None)
-    if admin_qq == None:
-        gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
-        admin_qq = input("请输入管理者QQ号(必须设置): ")
-        gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-        cc.put('admin_qq', admin_qq)
-    if admin_qqchan == None:
-        gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
-        admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
-        if admin_qqchan == "":
-            gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-        else:
-            gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-            cc.put('admin_qqchan', admin_qqchan)
-    
-    gu.log("管理者QQ: " + admin_qq, gu.LEVEL_INFO)
-    gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
-    _global_object.admin_qq = admin_qq
-    _global_object.admin_qqchan = admin_qqchan
-
-    # GOCQ
-    global gocq_bot
-
-    if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
-        gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
-        
-        global gocq_app, gocq_loop
-        gocq_loop = asyncio.new_event_loop()
-        gocq_bot = QQ(True, cc, gocq_loop)
-        thread_inst = threading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=False)
-        thread_inst.start()
-    else:
-        gocq_bot = QQ(False)
-
-    _global_object.platform_qq = gocq_bot
-
-    gu.log("机器人部署教程: https://github.com/Soulter/QQChannelChatGPT/wiki/", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue或加群322154837", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-
-    # QQ频道
-    if 'qqbot' in cfg and cfg['qqbot']['enable']:
-        gu.log("- 启用QQ频道机器人 -", gu.LEVEL_INFO)
-        global qqchannel_bot, qqchan_loop
-        qqchannel_bot = QQChan()
-        qqchan_loop = asyncio.new_event_loop()
-        _global_object.platform_qqchan = qqchannel_bot
-        thread_inst = threading.Thread(target=run_qqchan_bot, args=(cfg, qqchan_loop, qqchannel_bot), daemon=False)
-        thread_inst.start()
-        # thread.join()
 
     if thread_inst == None:
         input("[System-Error] 没有启用/成功启用任何机器人，程序退出")
@@ -606,7 +606,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     if session_id in gocq_bot.waiting and gocq_bot.waiting[session_id] == '':
         gocq_bot.waiting[session_id] = qq_msg
         return
-    hit, command_result = llm_command_instance[chosen_provider].check_command(
+    hit, command_result = await llm_command_instance[chosen_provider].check_command(
         qq_msg,
         session_id,
         role,
@@ -752,7 +752,6 @@ class botClient(botpy.Client):
     # 收到频道消息
     async def on_at_message_create(self, message: Message):
         gu.log(str(message), gu.LEVEL_DEBUG, max_len=9999)
-
         # 转换层
         nakuru_guild_message = qqchannel_bot.gocq_compatible_receive(message)
         gu.log(f"转换后: {str(nakuru_guild_message)}", gu.LEVEL_DEBUG, max_len=9999)

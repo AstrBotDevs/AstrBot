@@ -188,4 +188,9 @@ class QQChan():
         _n = NakuruGuildMessage()
         _n.channel_id = channel_id
         self.send_qq_msg(_n, message_chain)
-        
+
+    def send(self, message: NakuruGuildMessage, res: list):
+        '''
+        同 send_qq_msg。回复频道消息
+        '''
+        self.send_qq_msg(message, res)

@@ -1,0 +1,2 @@
+class MessageSegment:
+    pass

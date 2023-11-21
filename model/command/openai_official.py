@@ -5,6 +5,7 @@ from cores.qqbot.personality import personalities
 from model.platform.qq import QQ
 from util import general_utils as gu
 from cores.qqbot.global_object import GlobalObject
+from .adapter.protocol_adapter import UnifiedBotCompatibleLayer
 
 class CommandOpenAIOfficial(Command):
     def __init__(self, provider: ProviderOpenAIOfficial, global_object: GlobalObject):
@@ -12,16 +13,17 @@ class CommandOpenAIOfficial(Command):
         self.cached_plugins = {}
         self.global_object = global_object
         self.personality_str = ""
-        super().__init__(provider, global_object)
+        self.unified_bot_compatible_layer = UnifiedBotCompatibleLayer(self.global_object.platform_qqchan)
+        super().__init__(provider, global_object, self.unified_bot_compatible_layer)
         
-    def check_command(self, 
+    async def check_command(self, 
                       message: str, 
                       session_id: str, 
                       role: str, 
                       platform: str,
                       message_obj):
         self.platform = platform
-        hit, res = super().check_command(
+        hit, res = await super().check_command(
             message,
             session_id,
             role,

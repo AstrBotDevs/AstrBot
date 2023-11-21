@@ -1,0 +1,2 @@
+class CommandArg:
+    pass

@@ -26,21 +26,29 @@ from PIL import Image as PILImage
 from cores.qqbot.global_object import GlobalObject, AstrMessageEvent
 from pip._internal import main as pipmain
 
+from .adapter.protocol_adapter import UnifiedBotCompatibleLayer
+import asyncio
+
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
 
 # 指令功能的基类，通用的（不区分语言模型）的指令就在这实现
 class Command:
-    def __init__(self, provider: Provider, global_object: GlobalObject = None):
+    def __init__(self, provider: Provider, global_object: GlobalObject = None, unified_bot_compatible_layer: UnifiedBotCompatibleLayer = None):
         self.provider = provider
         self.global_object = global_object
+        self.unified_bot_compatible_layer = unified_bot_compatible_layer
 
-    def check_command(self, 
+
+    async def check_command(self, 
                       message, 
                       session_id: str,
                       role, 
                       platform, 
                       message_obj):
+        # UBCL
+        await self.unified_bot_compatible_layer.check_commands(message, message_obj)
+
         # 插件
         cached_plugins = self.global_object.cached_plugins
         ame = AstrMessageEvent(
@@ -70,10 +78,8 @@ class Command:
 
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform, role)
-        
         if self.command_start_with(message, "plugin"):
             return True, self.plugin_oper(message, role, cached_plugins, platform)
-        
         if self.command_start_with(message, "myid") or self.command_start_with(message, "!myid"):
             return True, self.get_my_id(message_obj)
         if self.command_start_with(message, "nconf") or self.command_start_with(message, "newconf"):
