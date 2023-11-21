@@ -11,6 +11,7 @@ from .onebot.message_event import MessageEvent
 from .onebot.message_segment import MessageSegment
 from .nonebot.command_arg import CommandArg
 from .onebot.bot import Bot
+from .nonebot.common import require
 
 from nakuru import (
     GuildMessage,

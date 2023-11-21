@@ -76,7 +76,7 @@ class QQChan():
 
         ngm.sub_type = "normal"
         ngm.message_id = message.id
-        ngm.guild_id = int(message.channel_id)
+        ngm.guild_id = int(message.guild_id)
         ngm.channel_id = int(message.channel_id)
         ngm.user_id = int(message.author.id)
         msg = []
