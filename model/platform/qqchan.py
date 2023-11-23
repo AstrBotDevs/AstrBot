@@ -10,6 +10,7 @@ from util import general_utils as gu
 from nakuru.entities.components import Plain, At, Image
 from botpy.types.message import Reference
 from botpy import Client
+import time
 
 class NakuruGuildMember():
     tiny_id: int # 发送者识别号
@@ -38,6 +39,7 @@ class NakuruGuildMessage():
 class QQChan():
     def __init__(self, cnt: dict = None) -> None:
         self.qqchan_cnt = 0
+        self.waiting: dict = {}
 
     def get_cnt(self):
         return self.qqchan_cnt
@@ -181,11 +183,35 @@ class QQChan():
                                                                         message_reference=msg_ref), self.client.loop).result()  
                         # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
 
-    def push_message(self, channel_id: int, message_chain: list):
+    def push_message(self, channel_id: int, message_chain: list, message_id: int = None):
         '''
-        推送消息
+        推送消息, 如果有 message_id，那么就是回复消息。
         '''
         _n = NakuruGuildMessage()
         _n.channel_id = channel_id
+        _n.message_id = message_id
         self.send_qq_msg(_n, message_chain)
+
+    def send(self, message_obj, message_chain: list):
+        '''
+        发送信息
+        '''
+        self.send_qq_msg(message_obj, message_chain)
+
+    def wait_for_message(self, channel_id: int) -> NakuruGuildMessage:
+        '''
+        等待指定 channel_id 的下一条信息，超时 300s 后抛出异常
+        '''
+        self.waiting[channel_id] = ''
+        cnt = 0
+        while True:
+            if channel_id in self.waiting and self.waiting[channel_id] != '':
+                # 去掉
+                ret = self.waiting[channel_id]
+                del self.waiting[channel_id]
+                return ret
+            cnt += 1
+            if cnt > 300:
+                raise Exception("等待消息超时。")
+            time.sleep(1)
         
