@@ -133,7 +133,7 @@ class QQChan():
 
         try:
             # reply_res = asyncio.run_coroutine_threadsafe(message.raw_message.reply(content=str(plain_text), message_reference = msg_ref, file_image=image_path), self.client.loop)
-            reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=message.channel_id, 
+            reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=str(message.channel_id), 
                                                                                       content=str(plain_text), 
                                                                                       msg_id=message.message_id, 
                                                                                       file_image=image_path,
@@ -146,7 +146,7 @@ class QQChan():
                 split_res.append(plain_text[:len(plain_text)//2])      
                 split_res.append(plain_text[len(plain_text)//2:])
                 for i in split_res:
-                    reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=message.channel_id, 
+                    reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=str(message.channel_id), 
                                                                                             content=str(i), 
                                                                                             msg_id=message.message_id, 
                                                                                             file_image=image_path,
@@ -157,7 +157,7 @@ class QQChan():
                 try:
                     # 防止被qq频道过滤消息
                     plain_text = plain_text.replace(".", " . ")
-                    reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=message.channel_id, 
+                    reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=str(message.channel_id), 
                                                                                             content=str(plain_text), 
                                                                                             msg_id=message.message_id, 
                                                                                             file_image=image_path,
@@ -166,7 +166,7 @@ class QQChan():
                     print("QQ频道API错误: \n"+str(e))
                     try:
                         # reply_res = asyncio.run_coroutine_threadsafe(message.raw_message.reply(content=str(str.join(" ", plain_text)), message_reference = msg_ref, file_image=image_path), self.client.loop)
-                        reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=message.channel_id, 
+                        reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=str(message.channel_id), 
                                                                         content=str(str.join(" ", plain_text)), 
                                                                         msg_id=message.message_id, 
                                                                         file_image=image_path,
@@ -174,7 +174,7 @@ class QQChan():
                     except BaseException as e:
                         plain_text = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
                         plain_text = plain_text.replace(".", "·")
-                        reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=message.channel_id, 
+                        reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=str(message.channel_id), 
                                                                         content=plain_text, 
                                                                         msg_id=message.message_id, 
                                                                         file_image=image_path,
