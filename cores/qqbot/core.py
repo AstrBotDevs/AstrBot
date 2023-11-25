@@ -13,6 +13,13 @@ from cores.qqbot.personality import personalities
 from addons.baidu_aip_judge import BaiduJudge
 from model.platform.qqchan import QQChan, NakuruGuildMember, NakuruGuildMessage
 from model.platform.qq import QQ
+from model.platform.qqgroup import (
+    UnofficialQQBotSDK,
+    Event as QQEvent,
+    Message as QQMessage,
+    MessageChain,
+    PlainText
+)
 from nakuru import (
     CQHTTP,
     GroupMessage,
@@ -86,6 +93,9 @@ PLATFORM_QQCHAN = 'qqchan'
 qqchan_loop = None
 client = None
 
+# QQ群机器人
+PLATFROM_QQBOT = 'qqbot'
+
 # 配置
 cc.init_attributes(["qq_forward_threshold"], 200)
 cc.init_attributes(["qq_welcome"], "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
@@ -105,6 +115,8 @@ cc.init_attributes(["gocq_react_group_increase"], True)
 cc.init_attributes(["gocq_qqchan_admin"], "")
 cc.init_attributes(["other_admins"], [])
 cc.init_attributes(["CHATGPT_BASE_URL"], "")
+cc.init_attributes(["qqbot_appid"], "")
+cc.init_attributes(["qqbot_secret"], "")
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
@@ -115,8 +127,14 @@ gocq_app = CQHTTP(
     port=cc.get("gocq_websocket_port", 6700),
     http_port=cc.get("gocq_http_port", 5700),
 )
+qq_bot: UnofficialQQBotSDK = UnofficialQQBotSDK(
+    cc.get("qqbot_appid", None),
+    cc.get("qqbot_secret", None)
+)
 
-gocq_loop = None
+gocq_loop: asyncio.AbstractEventLoop = None
+qqbot_loop: asyncio.AbstractEventLoop = None
+
 
 # 全局对象
 _global_object: GlobalObject = None
@@ -350,9 +368,17 @@ def initBot(cfg, prov):
     _global_object.admin_qq = admin_qq
     _global_object.admin_qqchan = admin_qqchan
 
+
+    global qq_bot, qqbot_loop
+    qqbot_loop = asyncio.new_event_loop()
+    if cc.get("qqbot_appid", None) is not None and cc.get("qqbot_secret", None) is not None:
+        gu.log("- 启用QQ群机器人 -", gu.LEVEL_INFO)
+        thread_inst = threading.Thread(target=run_qqbot, args=(qqbot_loop, qq_bot,), daemon=False)
+        thread_inst.start()
+
+
     # GOCQ
     global gocq_bot
-
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
         gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
         
@@ -432,6 +458,15 @@ def run_gocq_bot(loop, gocq_bot, gocq_app):
         input("启动QQ机器人出现错误"+str(e))
 
 '''
+启动QQ群机器人(官方接口)
+'''
+def run_qqbot(loop: asyncio.AbstractEventLoop, qq_bot: UnofficialQQBotSDK):
+    asyncio.set_event_loop(loop)
+    QQBotClient()
+    qq_bot.run_bot()
+
+
+'''
 检查发言频率
 '''
 def check_frequency(id) -> bool:
@@ -469,6 +504,10 @@ async def send_message(platform, message, res, session_id = None):
         qqchannel_bot.send_qq_msg(message, res)
     if platform == PLATFORM_GOCQ:
         await gocq_bot.send_qq_msg(message, res)
+    if platform == PLATFROM_QQBOT:
+        message_chain = MessageChain()
+        message_chain.parse_from_nakuru(res)
+        await qq_bot.send(message, message_chain)
 
 async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, NakuruGuildMessage],
              group: bool=False,
@@ -493,13 +532,15 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
 
     with_tag = False # 是否带有昵称
 
-    if platform == PLATFORM_GOCQ or platform == PLATFORM_QQCHAN:
+    if platform == PLATFORM_QQCHAN or platform == PLATFROM_QQBOT:
+        with_tag = True
+
+    if platform == PLATFORM_GOCQ or platform == PLATFORM_QQCHAN or platform == PLATFROM_QQBOT:
         _len = 0
         for i in message.message:
-            if isinstance(i, Plain):
+            if isinstance(i, Plain) or isinstance(i, PlainText):
                 qq_msg += str(i.text).strip()
             if isinstance(i, At):
-                # @机器人
                 if message.type == "GuildMessage":
                     if i.qq == message.user_id or i.qq == message.self_tiny_id:
                         with_tag = True
@@ -544,9 +585,6 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         if _global_object.uniqueSession:
             # 独立会话时，一个用户一个session
             session_id = sender_id
-
-    if platform == PLATFORM_QQCHAN:
-        with_tag = True
 
     if qq_msg == "":
         await send_message(platform, message,  f"Hi~", session_id=session_id)
@@ -813,3 +851,9 @@ class gocqClient():
                     new_sub_thread(oper_msg, (source, True, PLATFORM_GOCQ))
             else:
                 return
+            
+class QQBotClient():
+    @qq_bot.on('GroupMessage')
+    async def _(bot: UnofficialQQBotSDK, message: QQMessage):
+        print(message)
+        new_sub_thread(oper_msg, (message, True, PLATFROM_QQBOT))
