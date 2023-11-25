@@ -6,7 +6,7 @@ cpath = "cmd_config.json"
 def check_exist():
     if not os.path.exists(cpath):
         with open(cpath, "w", encoding="utf-8") as f:
-            json.dump({}, f, indent=4)
+            json.dump({}, f, indent=4, ensure_ascii=False)
             f.flush()
 
 class CmdConfig():
@@ -34,7 +34,7 @@ class CmdConfig():
             d = json.load(f)
             d[key] = value
             with open(cpath, "w", encoding="utf-8") as f:
-                json.dump(d, f, indent=4)
+                json.dump(d, f, indent=4, ensure_ascii=False)
                 f.flush()
 
     @staticmethod
@@ -49,5 +49,5 @@ class CmdConfig():
                     _tag = True
             if _tag:
                 with open(cpath, "w", encoding="utf-8") as f:
-                    json.dump(d, f, indent=4)
+                    json.dump(d, f, indent=4, ensure_ascii=False)
                     f.flush()
