@@ -40,14 +40,18 @@ class CmdConfig():
     @staticmethod
     def init_attributes(keys: list, init_val = ""):
         check_exist()
+        conf_str = ''
         with open(cpath, "r", encoding="utf-8") as f:
-            d = json.load(f)
-            _tag = False
-            for k in keys:
-                if k not in d:
-                    d[k] = init_val
-                    _tag = True
-            if _tag:
-                with open(cpath, "w", encoding="utf-8") as f:
-                    json.dump(d, f, indent=4, ensure_ascii=False)
-                    f.flush()
+             conf_str = f.read()
+        if conf_str.startswith(u'/ufeff'):
+            conf_str = conf_str.encode('utf8')[3:].decode('utf8')
+        d = json.loads(conf_str)
+        _tag = False
+        for k in keys:
+            if k not in d:
+                d[k] = init_val
+                _tag = True
+        if _tag:
+            with open(cpath, "w", encoding="utf-8") as f:
+                json.dump(d, f, indent=4, ensure_ascii=False)
+                f.flush()
