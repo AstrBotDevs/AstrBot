@@ -641,9 +641,14 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         
     chatgpt_res = ""
 
-    if session_id in gocq_bot.waiting and gocq_bot.waiting[session_id] == '':
-        gocq_bot.waiting[session_id] = qq_msg
+    # 如果是等待回复的消息
+    if platform == PLATFORM_GOCQ and session_id in gocq_bot.waiting and gocq_bot.waiting[session_id] == '':
+        gocq_bot.waiting[session_id] = message
         return
+    if platform == PLATFORM_QQCHAN and session_id in qqchannel_bot.waiting and qqchannel_bot.waiting[session_id] == '':
+        qqchannel_bot.waiting[session_id] = message
+        return
+
     hit, command_result = llm_command_instance[chosen_provider].check_command(
         qq_msg,
         session_id,

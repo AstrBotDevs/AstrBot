@@ -48,6 +48,7 @@ class AstrMessageEvent():
     platform: str # `gocq` 或 `qqchan`
     role: str # `admin` 或 `member`
     global_object: GlobalObject # 一些公用数据
+    session_id: int # 会话id (可能是群id，也可能是某个user的id。取决于是否开启了 uniqueSession)
 
     def __init__(self, message_str: str, 
                  message_obj: Union[GroupMessage, FriendMessage, GuildMessage, NakuruGuildMessage], 
@@ -56,7 +57,8 @@ class AstrMessageEvent():
                  platform: str, 
                  role: str, 
                  global_object: GlobalObject,
-                 llm_provider: Provider = None):
+                 llm_provider: Provider = None,
+                 session_id: int = None):
         self.message_str = message_str
         self.message_obj = message_obj
         self.gocq_platform = gocq_platform
@@ -65,3 +67,4 @@ class AstrMessageEvent():
         self.role = role
         self.global_object = global_object
         self.llm_provider = llm_provider
+        self.session_id = session_id

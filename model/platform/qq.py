@@ -4,8 +4,11 @@ from util.cmd_config import CmdConfig
 import asyncio
 from nakuru import (
     CQHTTP,
-    GuildMessage
+    GuildMessage,
+    GroupMessage,
+    FriendMessage
 )
+from typing import Union
 import time
 
 
@@ -155,18 +158,22 @@ class QQ:
         except Exception as e:
             raise e
 
-    def wait_for_message(self, group_id):
+    def wait_for_message(self, group_id) -> Union[GroupMessage, FriendMessage, GuildMessage]:
         '''
-        等待下一条消息
+        等待下一条消息，超时 300s 后抛出异常
         '''
         self.waiting[group_id] = ''
+        cnt = 0
         while True:
             if group_id in self.waiting and self.waiting[group_id] != '':
                 # 去掉
                 ret = self.waiting[group_id]
                 del self.waiting[group_id]
                 return ret
-            time.sleep(0.5)
+            cnt += 1
+            if cnt > 300:
+                raise Exception("等待消息超时。")
+            time.sleep(1)
 
     def get_client(self):
         return self.client

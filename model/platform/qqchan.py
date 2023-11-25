@@ -10,6 +10,7 @@ from util import general_utils as gu
 from nakuru.entities.components import Plain, At, Image
 from botpy.types.message import Reference
 from botpy import Client
+import time
 
 class NakuruGuildMember():
     tiny_id: int # 发送者识别号
@@ -38,6 +39,7 @@ class NakuruGuildMessage():
 class QQChan():
     def __init__(self, cnt: dict = None) -> None:
         self.qqchan_cnt = 0
+        self.waiting: dict = {}
 
     def get_cnt(self):
         return self.qqchan_cnt
@@ -133,7 +135,7 @@ class QQChan():
 
         try:
             # reply_res = asyncio.run_coroutine_threadsafe(message.raw_message.reply(content=str(plain_text), message_reference = msg_ref, file_image=image_path), self.client.loop)
-            reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=message.channel_id, 
+            reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=str(message.channel_id), 
                                                                                       content=str(plain_text), 
                                                                                       msg_id=message.message_id, 
                                                                                       file_image=image_path,
@@ -146,7 +148,7 @@ class QQChan():
                 split_res.append(plain_text[:len(plain_text)//2])      
                 split_res.append(plain_text[len(plain_text)//2:])
                 for i in split_res:
-                    reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=message.channel_id, 
+                    reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=str(message.channel_id), 
                                                                                             content=str(i), 
                                                                                             msg_id=message.message_id, 
                                                                                             file_image=image_path,
@@ -157,7 +159,7 @@ class QQChan():
                 try:
                     # 防止被qq频道过滤消息
                     plain_text = plain_text.replace(".", " . ")
-                    reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=message.channel_id, 
+                    reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=str(message.channel_id), 
                                                                                             content=str(plain_text), 
                                                                                             msg_id=message.message_id, 
                                                                                             file_image=image_path,
@@ -166,7 +168,7 @@ class QQChan():
                     print("QQ频道API错误: \n"+str(e))
                     try:
                         # reply_res = asyncio.run_coroutine_threadsafe(message.raw_message.reply(content=str(str.join(" ", plain_text)), message_reference = msg_ref, file_image=image_path), self.client.loop)
-                        reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=message.channel_id, 
+                        reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=str(message.channel_id), 
                                                                         content=str(str.join(" ", plain_text)), 
                                                                         msg_id=message.message_id, 
                                                                         file_image=image_path,
@@ -174,18 +176,42 @@ class QQChan():
                     except BaseException as e:
                         plain_text = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
                         plain_text = plain_text.replace(".", "·")
-                        reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=message.channel_id, 
+                        reply_res = asyncio.run_coroutine_threadsafe(self.client.api.post_message(channel_id=str(message.channel_id), 
                                                                         content=plain_text, 
                                                                         msg_id=message.message_id, 
                                                                         file_image=image_path,
                                                                         message_reference=msg_ref), self.client.loop).result()  
                         # send(message, f"QQ频道API错误：{str(e)}\n下面是格式化后的回答：\n{f_res}")
 
-    def push_message(self, channel_id: int, message_chain: list):
+    def push_message(self, channel_id: int, message_chain: list, message_id: int = None):
         '''
-        推送消息
+        推送消息, 如果有 message_id，那么就是回复消息。
         '''
         _n = NakuruGuildMessage()
         _n.channel_id = channel_id
+        _n.message_id = message_id
         self.send_qq_msg(_n, message_chain)
+
+    def send(self, message_obj, message_chain: list):
+        '''
+        发送信息
+        '''
+        self.send_qq_msg(message_obj, message_chain)
+
+    def wait_for_message(self, channel_id: int) -> NakuruGuildMessage:
+        '''
+        等待指定 channel_id 的下一条信息，超时 300s 后抛出异常
+        '''
+        self.waiting[channel_id] = ''
+        cnt = 0
+        while True:
+            if channel_id in self.waiting and self.waiting[channel_id] != '':
+                # 去掉
+                ret = self.waiting[channel_id]
+                del self.waiting[channel_id]
+                return ret
+            cnt += 1
+            if cnt > 300:
+                raise Exception("等待消息超时。")
+            time.sleep(1)
         
