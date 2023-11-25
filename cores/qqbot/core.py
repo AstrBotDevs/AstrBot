@@ -117,6 +117,7 @@ cc.init_attributes(["other_admins"], [])
 cc.init_attributes(["CHATGPT_BASE_URL"], "")
 cc.init_attributes(["qqbot_appid"], "")
 cc.init_attributes(["qqbot_secret"], "")
+cc.init_attributes(["llm_env_prompt"], "> hint: 末尾根据内容和心情添加 1-2 个emoji")
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
@@ -692,7 +693,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
                 qq_msg = qq_msg[3:]
                 web_sch_flag = True
             else:
-                qq_msg += "> hint: 末尾根据内容和心情添加1-2个emoji"
+                qq_msg += cc.get("llm_env_prompt", "")
             if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
                 if _global_object.web_search or web_sch_flag:
                     official_fc = chosen_provider == OPENAI_OFFICIAL
