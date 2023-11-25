@@ -372,7 +372,7 @@ def initBot(cfg, prov):
 
     global qq_bot, qqbot_loop
     qqbot_loop = asyncio.new_event_loop()
-    if cc.get("qqbot_appid", None) is not None and cc.get("qqbot_secret", None) is not None:
+    if cc.get("qqbot_appid", '') != '' and cc.get("qqbot_secret", '') != '':
         gu.log("- 启用QQ群机器人 -", gu.LEVEL_INFO)
         thread_inst = threading.Thread(target=run_qqbot, args=(qqbot_loop, qq_bot,), daemon=False)
         thread_inst.start()
