@@ -35,7 +35,7 @@ class ProviderOpenAIOfficial(Provider):
         self.api_base = None
         if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
             self.api_base = cfg['api_base']
-            print(f"设置 api_base 为: {self.api_base}")
+            gu.log(f"设置 api_base 为: {self.api_base}")
         # openai client
         self.client = OpenAI(
             api_key=self.key_list[0],

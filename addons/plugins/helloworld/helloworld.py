@@ -50,6 +50,11 @@ class HelloWorldPlugin:
                 return True, tuple([True, "Hello World!!", "helloworld"])
             else:
                 return False, None
+        else:
+            """
+            其他平台处理逻辑
+            """
+            return False, None
     """
     帮助函数，当用户输入 plugin v 插件名称 时，会调用此函数，返回帮助信息
     返回参数要求(必填)：dict{

@@ -126,8 +126,6 @@ class Command:
         fail_rec = ""
         if plugins is None:
             return False, "未找到任何插件模块"
-        
-        print(plugins)
 
         for plugin in plugins:
             try:

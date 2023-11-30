@@ -1,5 +1,6 @@
 import os
 import json
+from typing import Union
 
 cpath = "cmd_config.json"
 
@@ -38,7 +39,7 @@ class CmdConfig():
                 f.flush()
 
     @staticmethod
-    def init_attributes(keys: list, init_val = ""):
+    def init_attributes(key: Union[str, list], init_val = ""):
         check_exist()
         conf_str = ''
         with open(cpath, "r", encoding="utf-8-sig") as f:
@@ -47,10 +48,15 @@ class CmdConfig():
             conf_str = conf_str.encode('utf8')[3:].decode('utf8')
         d = json.loads(conf_str)
         _tag = False
-        for k in keys:
-            if k not in d:
-                d[k] = init_val
-                _tag = True
+
+        if isinstance(key, str):
+            d[key] = init_val
+            _tag = True
+        elif isinstance(key, list):
+            for k in key:
+                if k not in d:
+                    d[k] = init_val
+                    _tag = True
         if _tag:
             with open(cpath, "w", encoding="utf-8-sig") as f:
                 json.dump(d, f, indent=4, ensure_ascii=False)
