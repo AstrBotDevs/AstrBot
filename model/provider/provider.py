@@ -5,7 +5,7 @@ class Provider:
         pass
     
     @abc.abstractmethod
-    def text_chat(self, prompt, session_id, image_url: None, function_call: None):
+    def text_chat(self, prompt, session_id, image_url: None, function_call: None, extra_conf: dict = None, default_personality: dict = None) -> str:
         pass
 
     @abc.abstractmethod

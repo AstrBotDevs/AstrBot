@@ -26,6 +26,7 @@ class GlobalObject:
     cnt_total: int
     platform_qq: QQ
     platform_qqchan: QQChan
+    default_personality: dict
     
     def __init__(self):
         self.nick = None # gocq 的昵称
@@ -39,6 +40,7 @@ class GlobalObject:
         self.cnt_total = 0
         self.platform_qq = None
         self.platform_qqchan = None
+        self.default_personality = None
 
 class AstrMessageEvent():
     message_str: str # 纯消息字符串

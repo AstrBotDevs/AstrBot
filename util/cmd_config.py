@@ -50,8 +50,9 @@ class CmdConfig():
         _tag = False
 
         if isinstance(key, str):
-            d[key] = init_val
-            _tag = True
+            if key not in d:
+                d[key] = init_val
+                _tag = True
         elif isinstance(key, list):
             for k in key:
                 if k not in d:

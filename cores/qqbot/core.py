@@ -121,7 +121,7 @@ cc.init_attributes("CHATGPT_BASE_URL", "")
 cc.init_attributes("qqbot_appid", "")
 cc.init_attributes("qqbot_secret", "")
 cc.init_attributes("llm_env_prompt", "> hint: 末尾根据内容和心情添加 1-2 个emoji")
-cc.init_attributes("default_personality_name", "")
+cc.init_attributes("default_personality_str", "")
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
@@ -419,6 +419,15 @@ def initBot(cfg, prov):
         input("[System-Error] 没有启用/成功启用任何机器人，程序退出")
         exit()
 
+    default_personality_str = cc.get("default_personality_str", "")
+    if default_personality_str == "":
+        _global_object.default_personality = None
+    else: 
+        _global_object.default_personality = {
+            "name": "default",
+            "prompt": default_personality_str,
+        }
+
     gu.log("🎉 项目启动完成。")
 
     # thread_inst.join()
@@ -430,20 +439,24 @@ async def cli():
         prompt = input(">>> ")
         if prompt == "":
             continue
-        ngm = NakuruGuildMessage()
-        ngm.channel_id = 6180
-        ngm.user_id = 6180
-        ngm.message = [Plain(prompt)]
-        ngm.type = "GuildMessage"
-        ngm.self_id = 6180
-        ngm.self_tiny_id = 6180
-        ngm.guild_id = 6180
-        ngm.sender = NakuruGuildMember()
-        ngm.sender.tiny_id = 6180
-        ngm.sender.user_id = 6180
-        ngm.sender.nickname = "CLI"
-        ngm.sender.role = 0
+        ngm = await cli_pack_message(prompt)
         await oper_msg(ngm, True, PLATFORM_CLI)
+
+async def cli_pack_message(prompt: str) -> NakuruGuildMessage:
+    ngm = NakuruGuildMessage()
+    ngm.channel_id = 6180
+    ngm.user_id = 6180
+    ngm.message = [Plain(prompt)]
+    ngm.type = "GuildMessage"
+    ngm.self_id = 6180
+    ngm.self_tiny_id = 6180
+    ngm.guild_id = 6180
+    ngm.sender = NakuruGuildMember()
+    ngm.sender.tiny_id = 6180
+    ngm.sender.user_id = 6180
+    ngm.sender.nickname = "CLI"
+    ngm.sender.role = 0
+    return ngm
 
 '''
 运行QQ频道机器人
@@ -729,13 +742,13 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
                 qq_msg = qq_msg[3:]
                 web_sch_flag = True
             else:
-                qq_msg += cc.get("llm_env_prompt", "")
+                qq_msg += " " + cc.get("llm_env_prompt", "")
             if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
                 if _global_object.web_search or web_sch_flag:
                     official_fc = chosen_provider == OPENAI_OFFICIAL
                     chatgpt_res = gplugin.web_search(qq_msg, llm_instance[chosen_provider], session_id, official_fc)
                 else:
-                    chatgpt_res = str(llm_instance[chosen_provider].text_chat(qq_msg, session_id, image_url))
+                    chatgpt_res = str(llm_instance[chosen_provider].text_chat(qq_msg, session_id, image_url, default_personality = _global_object.default_personality))
             elif chosen_provider == REV_EDGEGPT:
                 res, res_code = await llm_instance[chosen_provider].text_chat(qq_msg, platform)
                 if res_code == 0: # bing不想继续话题，重置会话后重试。
