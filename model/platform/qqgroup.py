@@ -99,7 +99,7 @@ class UnofficialQQBotSDK:
     def __get_wss_endpoint(self):
         res = requests.get(self.OPENAPI_BASE_URL + "/gateway", headers=self.__auth_header())
         self.wss_endpoint = res.json()['url']
-        print("wss_endpoint: " + self.wss_endpoint)
+        # print("wss_endpoint: " + self.wss_endpoint)
 
     async def __behav_heartbeat(self, ws: WebSocketClientProtocol, t: int):
         while True:

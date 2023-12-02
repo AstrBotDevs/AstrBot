@@ -71,10 +71,8 @@ class Command:
 
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform, role)
-        
         if self.command_start_with(message, "plugin"):
             return True, self.plugin_oper(message, role, cached_plugins, platform)
-        
         if self.command_start_with(message, "myid") or self.command_start_with(message, "!myid"):
             return True, self.get_my_id(message_obj)
         if self.command_start_with(message, "nconf") or self.command_start_with(message, "newconf"):
