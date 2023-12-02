@@ -259,7 +259,7 @@ def web_search(question, provider: Provider, session_id, official_fc=False):
 
     if has_func:
         provider.forget(session_id)
-        question3 = f"""请你用活泼的语气回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行总结回答。在引文末加上参考链接的标号，如` [1]`；在文章末尾加上各参考链接，如`[1] <标题> <网址>`；不要提到任何函数调用的信息；在总结的末尾加上 1-2 个相关的emoji。```\n{function_invoked_ret}\n```\n"""
+        question3 = f"""请你用活泼的语气回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行总结回答。在文章末尾加上各参考链接，如`[1] <title> <url>`；不要提到任何函数调用的信息；在总结的末尾加上1或2个相关的emoji。```\n{function_invoked_ret}\n```\n"""
         gu.log(f"web_search: {question3}", tag="web_search", level=gu.LEVEL_DEBUG, max_len=99999)
         _c = 0
         while _c < 3:

@@ -58,7 +58,8 @@ class Command:
             qq_sdk_platform=self.global_object.platform_qqchan,
             platform=platform,
             role=role,
-            global_object=self.global_object
+            global_object=self.global_object,
+            session_id = session_id
         )
         for k, v in cached_plugins.items():
             try:
@@ -131,8 +132,6 @@ class Command:
         fail_rec = ""
         if plugins is None:
             return False, "未找到任何插件模块"
-        
-        print(plugins)
 
         for plugin in plugins:
             try:

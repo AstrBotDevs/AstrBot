@@ -26,14 +26,14 @@
 
 🌍支持的AI语言模型一览：
 
-**文字模型**
+**文字模型/图片理解**
 
 - OpenAI GPT-3模型（原生支持）
 - OpenAI GPT-3.5模型（原生支持）
 - OpenAI GPT-4模型（原生支持）
-- ChatGPT网页版 GPT-3.5模型（免费，原生支持）
-- ChatGPT网页版 GPT-4模型（需订阅Plus账户，原生支持）
-- Bing（免费，原生支持）
+- ~~ChatGPT网页版 GPT-3.5模型（免费，原生支持）~~
+- ~~ChatGPT网页版 GPT-4模型（需订阅Plus账户，原生支持）~~
+- ~~Bing（免费，原生支持）~~
 - Claude模型（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 - HuggingChat模型（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 - Google Bard（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
@@ -44,9 +44,9 @@
 
 
 🌍机器人支持的能力一览：
-- 同时部署机器人到QQ和QQ频道
+- 同时部署机器人到 QQ 和 QQ 频道
 - 大模型对话
-- 大模型网页搜索能力 **(目前仅支持OpenAI系的模型，最新版本下使用web on指令打开)**
+- 大模型网页搜索能力 **(目前仅支持OpenAI系的模型，最新版本下使用 web on 指令打开)**
 - 插件安装（在QQ或QQ频道聊天框内输入`plugin`了解详情）
 - 回复文字图片渲染（以图片markdown格式回复，**大幅度降低被风控概率**，需手动在`cmd_config.json`内开启qq_pic_mode）
 - 人格设置

@@ -101,7 +101,12 @@ class ProviderRevChatGPT(Provider):
         # print("[RevChatGPT] "+str(resp))
         return resp
 
-    def text_chat(self, prompt, session_id = None, image_url = None, function_call=None) -> str:
+    def text_chat(self, prompt,
+                   session_id = None,
+                   image_url = None,
+                   function_call=None,
+                   extra_conf: dict = None,
+                   default_personality: dict = None) -> str:
 
         # 选择一个人少的账号。
         selected_revstat = None

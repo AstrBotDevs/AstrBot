@@ -13,6 +13,13 @@ from cores.qqbot.personality import personalities
 from addons.baidu_aip_judge import BaiduJudge
 from model.platform.qqchan import QQChan, NakuruGuildMember, NakuruGuildMessage
 from model.platform.qq import QQ
+from model.platform.qqgroup import (
+    UnofficialQQBotSDK,
+    Event as QQEvent,
+    Message as QQMessage,
+    MessageChain,
+    PlainText
+)
 from nakuru import (
     CQHTTP,
     GroupMessage,
@@ -86,25 +93,35 @@ PLATFORM_QQCHAN = 'qqchan'
 qqchan_loop = None
 client = None
 
-# 配置
-cc.init_attributes(["qq_forward_threshold"], 200)
-cc.init_attributes(["qq_welcome"], "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
-cc.init_attributes(["bing_proxy"], "")
-cc.init_attributes(["qq_pic_mode"], False)
-cc.init_attributes(["rev_chatgpt_model"], "")
-cc.init_attributes(["rev_chatgpt_plugin_ids"], [])
-cc.init_attributes(["rev_chatgpt_PUID"], "")
-cc.init_attributes(["rev_chatgpt_unverified_plugin_domains"], [])
-cc.init_attributes(["gocq_host"], "127.0.0.1")
-cc.init_attributes(["gocq_http_port"], 5700)
-cc.init_attributes(["gocq_websocket_port"], 6700)
-cc.init_attributes(["gocq_react_group"], True)
-cc.init_attributes(["gocq_react_guild"], True)
-cc.init_attributes(["gocq_react_friend"], True)
-cc.init_attributes(["gocq_react_group_increase"], True)
-cc.init_attributes(["gocq_qqchan_admin"], "")
-cc.init_attributes(["other_admins"], [])
-cc.init_attributes(["CHATGPT_BASE_URL"], "")
+# QQ群机器人
+PLATFROM_QQBOT = 'qqbot'
+
+# CLI
+PLATFORM_CLI = 'cli'
+
+# 加载默认配置
+cc.init_attributes("qq_forward_threshold", 200)
+cc.init_attributes("qq_welcome", "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
+cc.init_attributes("bing_proxy", "")
+cc.init_attributes("qq_pic_mode", False)
+cc.init_attributes("rev_chatgpt_model", "")
+cc.init_attributes("rev_chatgpt_plugin_ids", [])
+cc.init_attributes("rev_chatgpt_PUID", "")
+cc.init_attributes("rev_chatgpt_unverified_plugin_domains", [])
+cc.init_attributes("gocq_host", "127.0.0.1")
+cc.init_attributes("gocq_http_port", 5700)
+cc.init_attributes("gocq_websocket_port", 6700)
+cc.init_attributes("gocq_react_group", True)
+cc.init_attributes("gocq_react_guild", True)
+cc.init_attributes("gocq_react_friend", True)
+cc.init_attributes("gocq_react_group_increase", True)
+cc.init_attributes("gocq_qqchan_admin", "")
+cc.init_attributes("other_admins", [])
+cc.init_attributes("CHATGPT_BASE_URL", "")
+cc.init_attributes("qqbot_appid", "")
+cc.init_attributes("qqbot_secret", "")
+cc.init_attributes("llm_env_prompt", "> hint: 末尾根据内容和心情添加 1-2 个emoji")
+cc.init_attributes("default_personality_str", "")
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
@@ -115,8 +132,14 @@ gocq_app = CQHTTP(
     port=cc.get("gocq_websocket_port", 6700),
     http_port=cc.get("gocq_http_port", 5700),
 )
+qq_bot: UnofficialQQBotSDK = UnofficialQQBotSDK(
+    cc.get("qqbot_appid", None),
+    cc.get("qqbot_secret", None)
+)
 
-gocq_loop = None
+gocq_loop: asyncio.AbstractEventLoop = None
+qqbot_loop: asyncio.AbstractEventLoop = None
+
 
 # 全局对象
 _global_object: GlobalObject = None
@@ -200,67 +223,15 @@ def initBot(cfg, prov):
     global frequency_count, frequency_time, announcement, direct_message_mode, version
     global keywords, _global_object
 
+    _event_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(_event_loop)
+
     # 初始化 global_object
     _global_object = GlobalObject()
     _global_object.base_config = cfg
 
     if 'reply_prefix' in cfg:
         _global_object.reply_prefix = cfg['reply_prefix']
-
-    
-    gu.log("--------加载机器人平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    thread_inst = None
-    admin_qq = cc.get('admin_qq', None)
-    admin_qqchan = cc.get('admin_qqchan', None)
-    if admin_qq == None:
-        gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
-        admin_qq = input("请输入管理者QQ号(必须设置): ")
-        gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-        cc.put('admin_qq', admin_qq)
-    if admin_qqchan == None:
-        gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
-        admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
-        if admin_qqchan == "":
-            gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-        else:
-            gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-            cc.put('admin_qqchan', admin_qqchan)
-    
-    gu.log("管理者QQ: " + admin_qq, gu.LEVEL_INFO)
-    gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
-    _global_object.admin_qq = admin_qq
-    _global_object.admin_qqchan = admin_qqchan
-
-    # GOCQ
-    global gocq_bot
-
-    if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
-        gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
-        
-        global gocq_app, gocq_loop
-        gocq_loop = asyncio.new_event_loop()
-        gocq_bot = QQ(True, cc, gocq_loop)
-        thread_inst = threading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=False)
-        thread_inst.start()
-    else:
-        gocq_bot = QQ(False)
-
-    _global_object.platform_qq = gocq_bot
-
-    gu.log("机器人部署教程: https://github.com/Soulter/QQChannelChatGPT/wiki/", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue或加群322154837", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-
-    # QQ频道
-    if 'qqbot' in cfg and cfg['qqbot']['enable']:
-        gu.log("- 启用QQ频道机器人 -", gu.LEVEL_INFO)
-        global qqchannel_bot, qqchan_loop
-        qqchannel_bot = QQChan()
-        qqchan_loop = asyncio.new_event_loop()
-        _global_object.platform_qqchan = qqchannel_bot
-        thread_inst = threading.Thread(target=run_qqchan_bot, args=(cfg, qqchan_loop, qqchannel_bot), daemon=False)
-        thread_inst.start()
-        # thread.join()
 
     # 语言模型提供商
     gu.log("--------加载语言模型--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
@@ -380,12 +351,110 @@ def initBot(cfg, prov):
         llm_command_instance[NONE_LLM] = _command
         chosen_provider = NONE_LLM
 
+    gu.log("--------加载机器人平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+
+    admin_qq = cc.get('admin_qq', None)
+    admin_qqchan = cc.get('admin_qqchan', None)
+    if admin_qq == None:
+        gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
+        admin_qq = input("请输入管理者QQ号(必须设置): ")
+        gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+        cc.put('admin_qq', admin_qq)
+    if admin_qqchan == None:
+        gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
+        admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
+        if admin_qqchan == "":
+            gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+        else:
+            gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+            cc.put('admin_qqchan', admin_qqchan)
+    
+    gu.log("管理者QQ: " + admin_qq, gu.LEVEL_INFO)
+    gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
+    _global_object.admin_qq = admin_qq
+    _global_object.admin_qqchan = admin_qqchan
+
+
+    global qq_bot, qqbot_loop
+    qqbot_loop = asyncio.new_event_loop()
+    if cc.get("qqbot_appid", '') != '' and cc.get("qqbot_secret", '') != '':
+        gu.log("- 启用QQ群机器人 -", gu.LEVEL_INFO)
+        thread_inst = threading.Thread(target=run_qqbot, args=(qqbot_loop, qq_bot,), daemon=True)
+        thread_inst.start()
+
+
+    # GOCQ
+    global gocq_bot
+    if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
+        gu.log("- 启用QQ机器人 -", gu.LEVEL_INFO)
+        
+        global gocq_app, gocq_loop
+        gocq_loop = asyncio.new_event_loop()
+        gocq_bot = QQ(True, cc, gocq_loop)
+        thread_inst = threading.Thread(target=run_gocq_bot, args=(gocq_loop, gocq_bot, gocq_app), daemon=True)
+        thread_inst.start()
+    else:
+        gocq_bot = QQ(False)
+
+    _global_object.platform_qq = gocq_bot
+
+    gu.log("机器人部署教程: https://github.com/Soulter/QQChannelChatGPT/wiki/", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue或加群322154837", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+
+    # QQ频道
+    if 'qqbot' in cfg and cfg['qqbot']['enable']:
+        gu.log("- 启用QQ频道机器人 -", gu.LEVEL_INFO)
+        global qqchannel_bot, qqchan_loop
+        qqchannel_bot = QQChan()
+        qqchan_loop = asyncio.new_event_loop()
+        _global_object.platform_qqchan = qqchannel_bot
+        thread_inst = threading.Thread(target=run_qqchan_bot, args=(cfg, qqchan_loop, qqchannel_bot), daemon=True)
+        thread_inst.start()
+        # thread.join()
 
     if thread_inst == None:
         input("[System-Error] 没有启用/成功启用任何机器人，程序退出")
         exit()
 
-    thread_inst.join()
+    default_personality_str = cc.get("default_personality_str", "")
+    if default_personality_str == "":
+        _global_object.default_personality = None
+    else: 
+        _global_object.default_personality = {
+            "name": "default",
+            "prompt": default_personality_str,
+        }
+
+    gu.log("🎉 项目启动完成。")
+
+    # thread_inst.join()
+    asyncio.get_event_loop().run_until_complete(cli())
+
+async def cli():
+    time.sleep(1)
+    while True:
+        prompt = input(">>> ")
+        if prompt == "":
+            continue
+        ngm = await cli_pack_message(prompt)
+        await oper_msg(ngm, True, PLATFORM_CLI)
+
+async def cli_pack_message(prompt: str) -> NakuruGuildMessage:
+    ngm = NakuruGuildMessage()
+    ngm.channel_id = 6180
+    ngm.user_id = 6180
+    ngm.message = [Plain(prompt)]
+    ngm.type = "GuildMessage"
+    ngm.self_id = 6180
+    ngm.self_tiny_id = 6180
+    ngm.guild_id = 6180
+    ngm.sender = NakuruGuildMember()
+    ngm.sender.tiny_id = 6180
+    ngm.sender.user_id = 6180
+    ngm.sender.nickname = "CLI"
+    ngm.sender.role = 0
+    return ngm
 
 '''
 运行QQ频道机器人
@@ -416,9 +485,12 @@ def run_qqchan_bot(cfg, loop, qqchannel_bot: QQChan):
 def run_gocq_bot(loop, gocq_bot, gocq_app):
     asyncio.set_event_loop(loop)
     gu.log("正在检查本地GO-CQHTTP连接...端口5700, 6700", tag="QQ")
+    noticed = False
     while True:
         if not gu.port_checker(5700, cc.get("gocq_host", "127.0.0.1")) or not gu.port_checker(6700, cc.get("gocq_host", "127.0.0.1")):
-            gu.log("与GO-CQHTTP通信失败, 请检查GO-CQHTTP是否启动并正确配置。5秒后自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
+            if not noticed:
+                noticed = True
+                gu.log("与GO-CQHTTP通信失败, 请检查GO-CQHTTP是否启动并正确配置。程序会每隔 5s 自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
             time.sleep(5)
         else:
             gu.log("检查完毕，未发现问题。", tag="QQ")
@@ -430,6 +502,15 @@ def run_gocq_bot(loop, gocq_bot, gocq_app):
         gocq_bot.run_bot(gocq_app)
     except BaseException as e:
         input("启动QQ机器人出现错误"+str(e))
+
+'''
+启动QQ群机器人(官方接口)
+'''
+def run_qqbot(loop: asyncio.AbstractEventLoop, qq_bot: UnofficialQQBotSDK):
+    asyncio.set_event_loop(loop)
+    QQBotClient()
+    qq_bot.run_bot()
+
 
 '''
 检查发言频率
@@ -469,6 +550,12 @@ async def send_message(platform, message, res, session_id = None):
         qqchannel_bot.send_qq_msg(message, res)
     if platform == PLATFORM_GOCQ:
         await gocq_bot.send_qq_msg(message, res)
+    if platform == PLATFROM_QQBOT:
+        message_chain = MessageChain()
+        message_chain.parse_from_nakuru(res)
+        await qq_bot.send(message, message_chain)
+    if platform == PLATFORM_CLI:
+        print(res)
 
 async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, NakuruGuildMessage],
              group: bool=False,
@@ -493,60 +580,59 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
 
     with_tag = False # 是否带有昵称
 
-    if platform == PLATFORM_GOCQ or platform == PLATFORM_QQCHAN:
-        _len = 0
-        for i in message.message:
-            if isinstance(i, Plain):
-                qq_msg += str(i.text).strip()
-            if isinstance(i, At):
-                # @机器人
-                if message.type == "GuildMessage":
-                    if i.qq == message.user_id or i.qq == message.self_tiny_id:
-                        with_tag = True
-                if message.type == "FriendMessage":
-                    if i.qq == message.self_id:
-                        with_tag = True
-                if message.type == "GroupMessage":
-                    if i.qq == message.self_id:
-                        with_tag = True
-           
-        for i in _global_object.nick:
-            if i != '' and qq_msg.startswith(i):
-                _len = len(i)
-                with_tag = True
-                break
-        qq_msg = qq_msg[_len:].strip()
-
-        gu.log(f"收到消息：{qq_msg}", gu.LEVEL_INFO, tag="QQ")
-        user_id = message.user_id
-
-        if group:
-            # 适配GO-CQHTTP的频道功能
-            if message.type == "GuildMessage":
-                session_id = message.channel_id
-            else:
-                session_id = message.group_id
-        else:
-            with_tag = True
-            session_id = message.user_id
-        role = "member"
-
-        if message.type == "GuildMessage":
-            sender_id = str(message.sender.tiny_id)
-        else:
-            sender_id = str(message.sender.user_id)
-        if sender_id == _global_object.admin_qq or \
-           sender_id == _global_object.admin_qqchan or \
-           sender_id in cc.get("other_admins", []) or \
-           sender_id == cc.get("gocq_qqchan_admin", ""):
-            # gu.log("检测到管理员身份", gu.LEVEL_INFO, tag="GOCQ")
-            role = "admin"
-        if _global_object.uniqueSession:
-            # 独立会话时，一个用户一个session
-            session_id = sender_id
-
-    if platform == PLATFORM_QQCHAN:
+    if platform == PLATFORM_QQCHAN or platform == PLATFROM_QQBOT or platform == PLATFORM_CLI:
         with_tag = True
+
+    _len = 0
+    for i in message.message:
+        if isinstance(i, Plain) or isinstance(i, PlainText):
+            qq_msg += str(i.text).strip()
+        if isinstance(i, At):
+            if message.type == "GuildMessage":
+                if i.qq == message.user_id or i.qq == message.self_tiny_id:
+                    with_tag = True
+            if message.type == "FriendMessage":
+                if i.qq == message.self_id:
+                    with_tag = True
+            if message.type == "GroupMessage":
+                if i.qq == message.self_id:
+                    with_tag = True
+        
+    for i in _global_object.nick:
+        if i != '' and qq_msg.startswith(i):
+            _len = len(i)
+            with_tag = True
+            break
+    qq_msg = qq_msg[_len:].strip()
+
+    gu.log(f"收到消息：{qq_msg}", gu.LEVEL_INFO, tag="QQ")
+    user_id = message.user_id
+
+    if group:
+        # 适配GO-CQHTTP的频道功能
+        if message.type == "GuildMessage":
+            session_id = message.channel_id
+        else:
+            session_id = message.group_id
+    else:
+        with_tag = True
+        session_id = message.user_id
+
+    if message.type == "GuildMessage":
+        sender_id = str(message.sender.tiny_id)
+    else:
+        sender_id = str(message.sender.user_id)
+    if sender_id == _global_object.admin_qq or \
+        sender_id == _global_object.admin_qqchan or \
+        sender_id in cc.get("other_admins", []) or \
+        sender_id == cc.get("gocq_qqchan_admin", "") or \
+        platform == PLATFORM_CLI:
+        role = "admin"
+
+    if _global_object.uniqueSession:
+        # 独立会话时，一个用户一个 session
+        session_id = sender_id
+
 
     if qq_msg == "":
         await send_message(platform, message,  f"Hi~", session_id=session_id)
@@ -603,10 +689,15 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         
     chatgpt_res = ""
 
-    if session_id in gocq_bot.waiting and gocq_bot.waiting[session_id] == '':
-        gocq_bot.waiting[session_id] = qq_msg
+    # 如果是等待回复的消息
+    if platform == PLATFORM_GOCQ and session_id in gocq_bot.waiting and gocq_bot.waiting[session_id] == '':
+        gocq_bot.waiting[session_id] = message
         return
-    hit, command_result = await llm_command_instance[chosen_provider].check_command(
+    if platform == PLATFORM_QQCHAN and session_id in qqchannel_bot.waiting and qqchannel_bot.waiting[session_id] == '':
+        qqchannel_bot.waiting[session_id] = message
+        return
+
+    hit, command_result = llm_command_instance[chosen_provider].check_command(
         qq_msg,
         session_id,
         role,
@@ -649,13 +740,13 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
                 qq_msg = qq_msg[3:]
                 web_sch_flag = True
             else:
-                qq_msg += "> hint: 末尾根据内容和心情添加1-2个emoji"
+                qq_msg += " " + cc.get("llm_env_prompt", "")
             if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
                 if _global_object.web_search or web_sch_flag:
                     official_fc = chosen_provider == OPENAI_OFFICIAL
                     chatgpt_res = gplugin.web_search(qq_msg, llm_instance[chosen_provider], session_id, official_fc)
                 else:
-                    chatgpt_res = str(llm_instance[chosen_provider].text_chat(qq_msg, session_id, image_url))
+                    chatgpt_res = str(llm_instance[chosen_provider].text_chat(qq_msg, session_id, image_url, default_personality = _global_object.default_personality))
             elif chosen_provider == REV_EDGEGPT:
                 res, res_code = await llm_instance[chosen_provider].text_chat(qq_msg, platform)
                 if res_code == 0: # bing不想继续话题，重置会话后重试。
@@ -812,3 +903,9 @@ class gocqClient():
                     new_sub_thread(oper_msg, (source, True, PLATFORM_GOCQ))
             else:
                 return
+            
+class QQBotClient():
+    @qq_bot.on('GroupMessage')
+    async def _(bot: UnofficialQQBotSDK, message: QQMessage):
+        print(message)
+        new_sub_thread(oper_msg, (message, True, PLATFROM_QQBOT))

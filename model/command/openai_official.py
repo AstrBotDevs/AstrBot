@@ -191,7 +191,7 @@ class CommandOpenAIOfficial(Command):
     def unset(self, session_id: str):
         if self.provider is None:
             return False, "未启动OpenAI ChatGPT语言模型.", "unset"
-        self.provider.now_personality = {}
+        self.provider.curr_personality = {}
         self.provider.forget(session_id)
         return True, "已清除人格并重置历史记录。", "unset"
 
@@ -202,7 +202,7 @@ class CommandOpenAIOfficial(Command):
         if len(l) == 1:
             return True, f"【人格文本由PlexPt开源项目awesome-chatgpt-pr \
         ompts-zh提供】\n设置人格: \n/set 人格名。例如/set 编剧\n人格列表: /set list\n人格详细信息: \
-        /set view 人格名\n自定义人格: /set 人格文本\n重置会话(清除人格): /reset\n重置会话(保留人格): /reset p\n【当前人格】: {str(self.provider.now_personality)}", "set"
+        /set view 人格名\n自定义人格: /set 人格文本\n重置会话(清除人格): /reset\n重置会话(保留人格): /reset p\n【当前人格】: {str(self.provider.curr_personality)}", "set"
         elif l[1] == "list":
             msg = "人格列表：\n"
             for key in personalities.keys():
@@ -223,7 +223,7 @@ class CommandOpenAIOfficial(Command):
         else:
             ps = l[1].strip()
             if ps in personalities:
-                self.provider.now_personality = {
+                self.provider.curr_personality = {
                     'name': ps,
                     'prompt': personalities[ps]
                 }
@@ -245,7 +245,7 @@ class CommandOpenAIOfficial(Command):
                 self.personality_str = message
                 return True, f"人格{ps}已设置。", "set"
             else:
-                self.provider.now_personality = {
+                self.provider.curr_personality = {
                     'name': '自定义人格',
                     'prompt': ps
                 }

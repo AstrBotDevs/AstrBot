@@ -2,6 +2,7 @@ import os, sys
 from pip._internal import main as pipmain
 import warnings
 import traceback
+import threading
 
 warnings.filterwarnings("ignore")
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
@@ -128,4 +129,7 @@ if __name__ == "__main__":
         except BaseException as e:
             print(e)
             print(f"[System-err] Replit Web保活服务启动失败:{str(e)}")
-    main()
+    
+    t = threading.Thread(target=main, daemon=False)
+    t.start()
+    t.join()

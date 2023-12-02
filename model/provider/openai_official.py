@@ -35,7 +35,7 @@ class ProviderOpenAIOfficial(Provider):
         self.api_base = None
         if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
             self.api_base = cfg['api_base']
-            print(f"设置 api_base 为: {self.api_base}")
+            gu.log(f"设置 api_base 为: {self.api_base}")
         # openai client
         self.client = OpenAI(
             api_key=self.key_list[0],
@@ -83,7 +83,7 @@ class ProviderOpenAIOfficial(Provider):
         threading.Thread(target=self.dump_history, daemon=True).start()
 
         # 人格
-        self.now_personality = {}
+        self.curr_personality = {}
 
 
     # 转储历史记录
@@ -109,11 +109,30 @@ class ProviderOpenAIOfficial(Provider):
             # 每隔10分钟转储一次
             time.sleep(10*self.history_dump_interval)
 
+    def personality_set(self, default_personality: dict, session_id: str):
+        self.curr_personality = default_personality
+        new_record = {
+            "user": {
+                "role": "user",
+                "content": default_personality['prompt'],
+            },
+            "AI": {
+                "role": "assistant",
+                "content": "好的，接下来我会扮演这个角色。"
+            },
+            'type': "personality",
+            'usage_tokens': 0,
+            'single-tokens': 0
+        }
+        self.session_dict[session_id].append(new_record)
+
+
     def text_chat(self, prompt, 
                   session_id = None, 
                   image_url = None, 
                   function_call=None,
-                  extra_conf: dict = None):
+                  extra_conf: dict = None,
+                  default_personality: dict = None):
         if session_id is None:
             session_id = "unknown"
             if "unknown" in self.session_dict:
@@ -136,6 +155,12 @@ class ProviderOpenAIOfficial(Provider):
                 f.flush()
                 f.close()
         
+        if len(self.session_dict[session_id]) == 0:
+            # 设置默认人格
+            if default_personality is not None:
+                self.personality_set(default_personality, session_id)
+
+
         # 使用 tictoken 截断消息
         _encoded_prompt = self.enc.encode(prompt)
         if self.openai_model_configs['max_tokens'] < len(_encoded_prompt):

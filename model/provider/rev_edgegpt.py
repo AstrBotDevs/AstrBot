@@ -1,15 +1,15 @@
 from model.provider.provider import Provider
-# from EdgeGPT import Chatbot, ConversationStyle
+from EdgeGPT import Chatbot, ConversationStyle
 import json
 import os
 from util import general_utils as gu
 from util.cmd_config import CmdConfig as cc
 import time
-from EdgeGPT.EdgeUtils import Query, Cookie
-from EdgeGPT.EdgeGPT import Chatbot as EdgeChatbot, ConversationStyle, NotAllowedToAccess
 
 class ProviderRevEdgeGPT(Provider):
     def __init__(self):
+        raise Exception("Bing 逆向已停止维护，不可用，请使用 ChatGPT 官方 API。")
+
         self.busy = False
         self.wait_stack = []
         with open('./cookies.json', 'r') as f:
