@@ -122,6 +122,12 @@ cc.init_attributes("qqbot_appid", "")
 cc.init_attributes("qqbot_secret", "")
 cc.init_attributes("llm_env_prompt", "> hint: 末尾根据内容和心情添加 1-2 个emoji")
 cc.init_attributes("default_personality_str", "")
+cc.init_attributes("openai_image_generate", {
+    "model": "dall-e-3",
+    "size": "1024x1024",
+    "style": "vivid",
+    "quality": "standard",
+})
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
