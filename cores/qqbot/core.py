@@ -277,7 +277,7 @@ def initBot(cfg, prov):
             llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance[OPENAI_OFFICIAL], _global_object)
             chosen_provider = OPENAI_OFFICIAL
 
-    gu.log("--------加载个性化配置--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("--------加载配置--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 得到关键词
     if os.path.exists("keyword.json"):
         with open("keyword.json", 'r', encoding='utf-8') as f:
@@ -364,24 +364,13 @@ def initBot(cfg, prov):
     admin_qq = cc.get('admin_qq', None)
     admin_qqchan = cc.get('admin_qqchan', None)
     if admin_qq == None:
-        gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
-        admin_qq = input("请输入管理者QQ号(必须设置): ")
-        gu.log("管理者QQ号设置为: " + admin_qq, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-        cc.put('admin_qq', admin_qq)
+        gu.log("未设置管理者QQ号(管理者才能使用update/plugin等指令)，如需设置，请编辑 cmd_config.json 文件", gu.LEVEL_WARNING)
+
     if admin_qqchan == None:
-        gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)", gu.LEVEL_WARNING)
-        admin_qqchan = input("请输入管理者频道用户号(不是QQ号, 可以先回车跳过然后在频道发送指令!myid获取): ")
-        if admin_qqchan == "":
-            gu.log("跳过设置管理者频道用户号", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-        else:
-            gu.log("管理者频道用户号设置为: " + admin_qqchan, gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-            cc.put('admin_qqchan', admin_qqchan)
-    
-    gu.log("管理者QQ: " + admin_qq, gu.LEVEL_INFO)
-    gu.log("管理者频道用户号: " + admin_qqchan, gu.LEVEL_INFO)
+        gu.log("未设置管理者QQ频道用户号(管理者才能使用update/plugin等指令)，如需设置，请编辑 cmd_config.json 文件。可在频道发送指令 !myid 获取", gu.LEVEL_WARNING)
+
     _global_object.admin_qq = admin_qq
     _global_object.admin_qqchan = admin_qqchan
-
 
     global qq_bot, qqbot_loop
     qqbot_loop = asyncio.new_event_loop()
@@ -389,7 +378,6 @@ def initBot(cfg, prov):
         gu.log("- 启用QQ群机器人 -", gu.LEVEL_INFO)
         thread_inst = threading.Thread(target=run_qqbot, args=(qqbot_loop, qq_bot,), daemon=True)
         thread_inst.start()
-
 
     # GOCQ
     global gocq_bot
@@ -422,8 +410,7 @@ def initBot(cfg, prov):
         # thread.join()
 
     if thread_inst == None:
-        input("[System-Error] 没有启用/成功启用任何机器人，程序退出")
-        exit()
+        raise Exception("[System-Error] 没有启用/成功启用任何机器人，程序退出")
 
     default_personality_str = cc.get("default_personality_str", "")
     if default_personality_str == "":
@@ -436,13 +423,11 @@ def initBot(cfg, prov):
 
     gu.log("🎉 项目启动完成。")
 
-    # thread_inst.join()
     asyncio.get_event_loop().run_until_complete(cli())
 
     thread_inst.join()
 
 async def cli():
-    show_hint = False
     time.sleep(1)
     while True:
         try:
@@ -452,10 +437,7 @@ async def cli():
             ngm = await cli_pack_message(prompt)
             await oper_msg(ngm, True, PLATFORM_CLI)
         except EOFError:
-            if not show_hint:
-                show_hint = True
-                gu.log("您当前所使用的环境不支持 CLI 模式，您将无法在命令行控制台中使用本程序。不影响您在 QQ 上的使用。")
-                return
+            return
 
 async def cli_pack_message(prompt: str) -> NakuruGuildMessage:
     ngm = NakuruGuildMessage()
@@ -490,11 +472,7 @@ def run_qqchan_bot(cfg, loop, qqchannel_bot: QQChan):
         gu.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
         gu.log(r"如果您是初次启动，请修改配置文件（QQChannelChatGPT/config.yaml）详情请看：https://github.com/Soulter/QQChannelChatGPT/wiki。" + str(e), gu.LEVEL_CRITICAL, tag="System")
         
-        i = input("如果本 Bot 运行在 Windows 下，可以输入 y 快捷打开配置文件。按回车退出程序。")
-        if i == "y":
-            abs_path = os.path.abspath("QQChannelChatGPT/configs/config.yaml")
-            print("配置文件地址：" + abs_path)
-            os.system(f"notepad \"{abs_path}\"")
+        i = input("按回车退出程序。\n")
 
 '''
 运行GOCQ机器人

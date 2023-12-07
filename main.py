@@ -43,7 +43,6 @@ def main():
     provider = privider_chooser(cfg)
     if len(provider) == 0:
         gu.log("注意：您目前未开启任何语言模型。", gu.LEVEL_WARNING)
-    print('[System] 开启的语言模型: ' + str(provider))
 
     # 启动主程序（cores/qqbot/core.py）
     qqBot.initBot(cfg, provider)
@@ -57,7 +56,7 @@ def privider_chooser(cfg):
         l.append('rev_ernie')
     if 'rev_edgegpt' in cfg and cfg['rev_edgegpt']['enable']:
         l.append('rev_edgegpt')
-    if 'openai' in cfg and cfg['openai']['key'] != None and len(cfg['openai']['key'])>0:
+    if 'openai' in cfg and len(cfg['openai']['key']) > 0 and cfg['openai']['key'][0] is not None:
         l.append('openai_official')
     return l
 
