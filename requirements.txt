@@ -10,6 +10,6 @@ beautifulsoup4
 googlesearch-python
 tiktoken
 readability-lxml
-EdgeGPT
 revChatGPT~=6.8.6
 baidu-aip~=4.16.9
+websockets

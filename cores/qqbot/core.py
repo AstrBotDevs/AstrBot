@@ -439,14 +439,23 @@ def initBot(cfg, prov):
     # thread_inst.join()
     asyncio.get_event_loop().run_until_complete(cli())
 
+    thread_inst.join()
+
 async def cli():
+    show_hint = False
     time.sleep(1)
     while True:
-        prompt = input(">>> ")
-        if prompt == "":
-            continue
-        ngm = await cli_pack_message(prompt)
-        await oper_msg(ngm, True, PLATFORM_CLI)
+        try:
+            prompt = input(">>> ")
+            if prompt == "":
+                continue
+            ngm = await cli_pack_message(prompt)
+            await oper_msg(ngm, True, PLATFORM_CLI)
+        except EOFError:
+            if not show_hint:
+                show_hint = True
+                gu.log("您当前所使用的环境不支持 CLI 模式，您将无法在命令行控制台中使用本程序。不影响您在 QQ 上的使用。")
+                return
 
 async def cli_pack_message(prompt: str) -> NakuruGuildMessage:
     ngm = NakuruGuildMessage()
