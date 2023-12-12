@@ -3,12 +3,17 @@ from pip._internal import main as pipmain
 import warnings
 import traceback
 import threading
+import logging
 
 warnings.filterwarnings("ignore")
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 def main():
-
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%H:%M:%S',
+    )
     # config.yaml 配置文件加载和环境确认
     try:
         import cores.qqbot.core as qqBot
@@ -112,7 +117,6 @@ def get_platform():
         print("other")
 
 if __name__ == "__main__":
-
     args = sys.argv
 
     if '-cn' in args:
@@ -123,7 +127,7 @@ if __name__ == "__main__":
     if '-replit' in args:
         print("[System] 启动Replit Web保活服务...")
         try:
-            from webapp_replit import keep_alive
+            from util.webapp_replit import keep_alive
             keep_alive()
         except BaseException as e:
             print(e)

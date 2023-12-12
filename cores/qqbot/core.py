@@ -39,7 +39,7 @@ import io
 import traceback
 from . global_object import GlobalObject
 from typing import Union, Callable
-
+from addons.dashboard.helper import DashBoardHelper
 
 # 缓存的会话
 session_dict = {}
@@ -47,9 +47,6 @@ session_dict = {}
 count = {}
 # 统计信息
 stat_file = ''
-
-# 日志记录
-# logf = open('log.log', 'a+', encoding='utf-8')
 
 # 用户发言频率
 user_frequency = {}
@@ -64,11 +61,8 @@ announcement = ""
 # 机器人私聊模式
 direct_message_mode = True
 
-# 适配pyinstaller
-abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
-
 # 版本
-version = '3.0.4'
+version = '3.1.0'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
@@ -160,27 +154,6 @@ def _runner(func: Callable, args: tuple):
     loop.run_until_complete(func(*args))
     loop.close()
 
-
-# [Deprecated] 写入统计信息
-def toggle_count(at: bool, message):
-    global stat_file
-    try: 
-        if str(message.guild_id) not in count:
-            count[str(message.guild_id)] = {
-                'count': 1,
-                'direct_count': 1,
-            }
-        else:
-            count[str(message.guild_id)]['count'] += 1
-            if not at:
-                count[str(message.guild_id)]['direct_count'] += 1
-        stat_file = open(abs_path+"configs/stat", 'w', encoding='utf-8')
-        stat_file.write(json.dumps(count))
-        stat_file.flush()
-        stat_file.close()
-    except BaseException:
-        pass
-
 # 上传统计信息并检查更新
 def upload():
     global version, gocq_bot, qqchannel_bot
@@ -228,6 +201,9 @@ def initBot(cfg, prov):
     global baidu_judge, chosen_provider
     global frequency_count, frequency_time, announcement, direct_message_mode, version
     global keywords, _global_object
+    
+    # 迁移旧配置
+    gu.try_migrate_config()
 
     _event_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(_event_loop)
@@ -410,7 +386,7 @@ def initBot(cfg, prov):
         # thread.join()
 
     if thread_inst == None:
-        raise Exception("[System-Error] 没有启用/成功启用任何机器人，程序退出")
+        gu.log("没有启用/成功启用任何机器人平台", gu.LEVEL_CRITICAL)
 
     default_personality_str = cc.get("default_personality_str", "")
     if default_personality_str == "":
@@ -420,12 +396,18 @@ def initBot(cfg, prov):
             "name": "default",
             "prompt": default_personality_str,
         }
+        
+    # 初始化dashboard
+    dashboard_helper = DashBoardHelper(_global_object.dashboard_data)
+    dashboard_helper.parse_config(cfg)
+    dashboard_thread = threading.Thread(target=dashboard_helper.run, daemon=True)
+    dashboard_thread.start()
 
     gu.log("🎉 项目启动完成。")
+    
+    # asyncio.get_event_loop().run_until_complete(cli())
 
-    asyncio.get_event_loop().run_until_complete(cli())
-
-    thread_inst.join()
+    dashboard_thread.join()
 
 async def cli():
     time.sleep(1)

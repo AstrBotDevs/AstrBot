@@ -5,6 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 import re
 import requests
+from util.cmd_config import CmdConfig
 
 PLATFORM_GOCQ = 'gocq'
 PLATFORM_QQCHAN = 'qqchan'
@@ -79,7 +80,14 @@ def log(
     if len(msg) > max_len:
         msg = msg[:max_len] + "..."
     now = datetime.datetime.now().strftime("%m-%d %H:%M:%S")
-    pre = f"[{now}] [{level}] [{tag}]: {msg}"
+    
+    pres = []
+    for line in msg.split("\n"):
+        if line == "\n":
+            pres.append("")
+        else:
+            pres.append(f"[{now}] [{level}] [{tag}]: {line}")
+
     if level == "INFO":
         if fg is None:
             fg = FG_COLORS["green"]
@@ -100,8 +108,11 @@ def log(
             fg = FG_COLORS["purple"]
         if bg is None:
             bg = BG_COLORS["default"]
-    
-    print(f"\033[{fg};{bg}m{pre}\033[0m")
+            
+    ret = ""
+    for line in pres:
+        ret += f"\033[{fg};{bg}m{line}\033[0m\n"
+    print(ret)
 
 
 def port_checker(port: int, host: str = "localhost"):
@@ -501,14 +512,12 @@ def create_markdown_image(text: str):
         return p
     except Exception as e:
         raise e
-    
-def test_markdown():
-    # 示例使用
-    markdown_text = """# Help Center
-    ! [] (https://soulter.top/helpme.jpg)
-    """
-    image = render_markdown(markdown_text)
-    image.show()
 
-# test_markdown()
 
+# 迁移配置文件到 cmd_config.json    
+def try_migrate_config(old_config: dict):
+    cc = CmdConfig()
+    if cc.get("qqbot", None) is None:
+        # 未迁移过
+        for k in old_config:
+            cc.put(k, old_config[k])
