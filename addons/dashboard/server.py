@@ -1,14 +1,16 @@
-from flask import Flask
+from flask import Flask, request
 import datetime
-from pydantic import BaseModel
 from util import general_utils as gu
+from dataclasses import dataclass
 
-class DashBoardData(BaseModel):
+@dataclass
+class DashBoardData():
     stats: dict
     configs: dict
     logs: dict
-    
-class Response(BaseModel):
+
+@dataclass
+class Response():
     status: str
     message: str
     data: dict
@@ -37,17 +39,20 @@ class AstrBotDashBoard():
             
         @self.dashboard_be.post("/configs")
         def post_configs():
-            if self.funcs["post_configs"](self.dashboard_data.configs):
+            post_configs = request.json
+            try:
+                self.funcs["post_configs"](post_configs)
                 return Response(
                     status="success",
-                    message="",
+                    message="保存成功~ 机器人正在重启以应用新的配置。",
+                    data=None
+                ).__dict__
+            except Exception as e:
+                return Response(
+                    status="error",
+                    message=e.__str__(),
                     data=self.dashboard_data.configs
                 ).__dict__
-            return Response(
-                status="error",
-                message="",
-                data=self.dashboard_data.configs
-            ).__dict__
         
         @self.dashboard_be.get("/logs")
         def get_logs():

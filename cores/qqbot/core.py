@@ -40,6 +40,7 @@ import traceback
 from . global_object import GlobalObject
 from typing import Union, Callable
 from addons.dashboard.helper import DashBoardHelper
+from addons.dashboard.server import DashBoardData
 
 # 缓存的会话
 session_dict = {}
@@ -122,6 +123,8 @@ cc.init_attributes("openai_image_generate", {
     "style": "vivid",
     "quality": "standard",
 })
+cc.init_attributes("http_proxy", "")
+cc.init_attributes("https_proxy", "")
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
@@ -203,7 +206,9 @@ def initBot(cfg, prov):
     global keywords, _global_object
     
     # 迁移旧配置
-    gu.try_migrate_config()
+    gu.try_migrate_config(cfg)
+    # 使用新配置
+    cfg = cc.get_all()
 
     _event_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(_event_loop)
@@ -213,7 +218,13 @@ def initBot(cfg, prov):
     _global_object.base_config = cfg
 
     if 'reply_prefix' in cfg:
-        _global_object.reply_prefix = cfg['reply_prefix']
+        # 适配旧版配置
+        if isinstance(cfg['reply_prefix'], dict):
+            for k in cfg['reply_prefix']:
+                _global_object.reply_prefix = cfg['reply_prefix'][k]
+                break
+        else:
+            _global_object.reply_prefix = cfg['reply_prefix']
 
     # 语言模型提供商
     gu.log("--------加载语言模型--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
@@ -398,8 +409,12 @@ def initBot(cfg, prov):
         }
         
     # 初始化dashboard
-    dashboard_helper = DashBoardHelper(_global_object.dashboard_data)
-    dashboard_helper.parse_config(cfg)
+    _global_object.dashboard_data = DashBoardData(
+        stats={},
+        configs={},
+        logs={}
+    )
+    dashboard_helper = DashBoardHelper(_global_object.dashboard_data, config=cc.get_all())
     dashboard_thread = threading.Thread(target=dashboard_helper.run, daemon=True)
     dashboard_thread.start()
 
@@ -736,8 +751,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
                         res = ""
                 chatgpt_res = str(res)
 
-            if chosen_provider in _global_object.reply_prefix:
-                chatgpt_res = _global_object.reply_prefix[chosen_provider] + chatgpt_res
+            chatgpt_res = _global_object.reply_prefix + chatgpt_res
         except BaseException as e:
             gu.log(f"调用异常：{traceback.format_exc()}", gu.LEVEL_ERROR, max_len=100000)
             gu.log("调用语言模型例程时出现异常。原因: "+str(e), gu.LEVEL_ERROR)

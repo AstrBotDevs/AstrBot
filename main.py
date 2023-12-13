@@ -33,9 +33,9 @@ def main():
         input("config.yaml 配置文件格式错误，请遵守 yaml 格式。")
 
     # 设置代理
-    if 'http_proxy' in cfg:
+    if 'http_proxy' in cfg and cfg['http_proxy'] != '':
         os.environ['HTTP_PROXY'] = cfg['http_proxy']
-    if 'https_proxy' in cfg:
+    if 'https_proxy' in cfg and cfg['https_proxy'] != '':
         os.environ['HTTPS_PROXY'] = cfg['https_proxy']
     
     os.environ['NO_PROXY'] = 'cn.bing.com,https://api.sgroup.qq.com'
