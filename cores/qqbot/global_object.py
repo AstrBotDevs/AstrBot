@@ -29,6 +29,7 @@ class GlobalObject:
     platform_qqchan: QQChan
     default_personality: dict
     dashboard_data: DashBoardData
+    stat: dict
     
     def __init__(self):
         self.nick = None # gocq 的昵称
@@ -44,6 +45,8 @@ class GlobalObject:
         self.platform_qqchan = None
         self.default_personality = None
         self.dashboard_data = None
+        self.stat = {}
+
 
 class AstrMessageEvent():
     message_str: str # 纯消息字符串

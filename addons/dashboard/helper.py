@@ -7,6 +7,14 @@ from util.cmd_config import CmdConfig
 from dataclasses import dataclass
 import sys
 import os
+import threading
+import time
+
+
+def shutdown_bot(delay_s: int):
+    time.sleep(delay_s)
+    py = sys.executable
+    os.execl(py, py, *sys.argv)
 
 @dataclass
 class DashBoardConfig():
@@ -36,8 +44,7 @@ class DashBoardHelper():
                 self.save_config(post_configs)
                 self.parse_default_config(self.dashboard_data, self.cc.get_all())
                 # 重启
-                py = sys.executable
-                os.execl(py, py, *sys.argv)
+                threading.Thread(target=shutdown_bot, args=(2,), daemon=True).start()
             except Exception as e:
                 gu.log(f"在保存配置时发生错误：{e}", gu.LEVEL_ERROR, tag="可视化面板")
                 raise e

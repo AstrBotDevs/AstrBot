@@ -41,6 +41,7 @@ from . global_object import GlobalObject
 from typing import Union, Callable
 from addons.dashboard.helper import DashBoardHelper
 from addons.dashboard.server import DashBoardData
+from cores.monitor.perf import run_monitor
 
 # 缓存的会话
 session_dict = {}
@@ -407,7 +408,6 @@ def initBot(cfg, prov):
             "name": "default",
             "prompt": default_personality_str,
         }
-        
     # 初始化dashboard
     _global_object.dashboard_data = DashBoardData(
         stats={},
@@ -418,6 +418,9 @@ def initBot(cfg, prov):
     dashboard_thread = threading.Thread(target=dashboard_helper.run, daemon=True)
     dashboard_thread.start()
 
+    # 运行 monitor
+    threading.Thread(target=run_monitor, args=(_global_object,), daemon=False).start()
+        
     gu.log("🎉 项目启动完成。")
     
     # asyncio.get_event_loop().run_until_complete(cli())
