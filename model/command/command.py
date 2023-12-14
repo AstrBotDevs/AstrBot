@@ -448,18 +448,21 @@ class Command:
         if role != "admin":
             return True, "你没有权限使用该指令", "keyword"
         l = message.split(" ")
-        if len(l) == 1:
-            # 得到本地版本号和最新版本号
+        try:
+            repo = Repo()
+        except git.exc.InvalidGitRepositoryError:
             try:
-                repo = Repo()
+                repo = Repo(path="QQChannelChatGPT")  
             except git.exc.InvalidGitRepositoryError:
-                repo = Repo(path="QQChannelChatGPT")
+                repo = Repo(path="AstrBot")
+        if len(l) == 1:
+            curr_branch = repo.active_branch.name
+            # 得到本地版本号和最新版本号
             now_commit = repo.head.commit
-
             # 得到远程3条commit列表, 包含commit信息
             origin = repo.remotes.origin
             origin.fetch()
-            commits = list(repo.iter_commits('master', max_count=3))
+            commits = list(repo.iter_commits(curr_branch, max_count=3))
             commits_log = ''
             index = 1
             for commit in commits:
@@ -469,38 +472,39 @@ class Command:
                     commits_log += f"[{index}] {commit.message}\n-----------\n"
                 index+=1
             remote_commit_hash = origin.refs.master.commit.hexsha[:6]
-
-            return True, f"当前版本: {now_commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n3条commit(非最新):\n{str(commits_log)}\n使用update latest更新至最新版本\n", "update"
+            return True, f"当前分支: {curr_branch}\n当前版本: {now_commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n3条commit(非最新):\n{str(commits_log)}\nTips:\n1. 使用 update latest 更新至最新版本；\n2. 使用 update checkout <分支名> 切换代码分支。", "update"
         else:
             if l[1] == "latest":
-                pash_tag = ""
                 try:
-                    try:
-                        repo = Repo()
-                    except git.exc.InvalidGitRepositoryError:
-                        repo = Repo(path="QQChannelChatGPT")
-                        pash_tag = "QQChannelChatGPT"+os.sep
-                    repo.remotes.origin.pull()
-
-                    try:
-                        origin = repo.remotes.origin
-                        origin.fetch()
-                        commits = list(repo.iter_commits('master', max_count=1))
-                        commit_log = commits[0].message
-                    except BaseException as e:
-                        commit_log = "无法获取commit信息"
-
+                    origin = repo.remotes.origin
+                    origin.fetch()
+                    commits = list(repo.iter_commits('master', max_count=1))
+                    commit_log = commits[0].message
                     tag = "update"
                     if len(l) == 3 and l[2] == "r":
                         tag = "update latest r"
-
                     return True, f"更新成功。新版本内容: \n{commit_log}\nps:重启后生效。输入update r重启（重启指令不返回任何确认信息）。", tag
-                    
                 except BaseException as e:
                     return False, "更新失败: "+str(e), "update"
             if l[1] == "r":
                 py = sys.executable
                 os.execl(py, py, *sys.argv)
+            if l[1] == 'checkout':
+                # 切换分支
+                if len(l) < 3:
+                    return False, "请提供分支名，如 /update checkout dev_dashboard", "update"
+                try:
+                    origin = repo.remotes.origin
+                    origin.fetch()
+                    repo.git.checkout(l[2])
+                    
+                    # 获得最新的 commit
+                    commits = list(repo.iter_commits(max_count=1))
+                    commit_log = commits[0].message
+                    
+                    return True, f"切换分支成功，机器人将在 5 秒内重新启动以应用新的功能。\n当前分支: {l[2]}\n此分支最近更新: \n{commit_log}", "update latest r"
+                except BaseException as e:
+                    return False, f"切换分支失败。原因: {str(e)}", "update"
 
     def reset(self):
         return False
