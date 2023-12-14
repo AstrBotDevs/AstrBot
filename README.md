@@ -137,6 +137,9 @@
   
 - `liferestart`: https://github.com/Soulter/liferestart | 人生重开模拟器
 
+<img width="1231" alt="image" src="https://github.com/Soulter/AstrBot/assets/37870767/824d1ff3-7b85-481c-b795-8e62dedb9fd7">
+
+
 <!-- 
 ### 指令
 
@@ -155,11 +158,6 @@
 - `/bing` 切换为bing
 - `/revgpt` 切换为ChatGPT逆向库
 - `/画` 画画
-
-#### Bing语言模型
-- `/reset`重置prompt
-- `/gpt` 切换为OpenAI官方API
-- `/revgpt` 切换为ChatGPT逆向库
 
 #### 逆向ChatGPT库语言模型
 - `/gpt` 切换为OpenAI官方API
