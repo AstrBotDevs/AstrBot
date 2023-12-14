@@ -21,12 +21,25 @@ class Response():
 class AstrBotDashBoard():
     def __init__(self, dashboard_data: DashBoardData):
         self.dashboard_data = dashboard_data
-        self.dashboard_be = Flask(__name__)
+        self.dashboard_be = Flask(__name__, static_folder="dist", static_url_path="/")
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
         self.funcs = {}
+        
+        
+        @self.dashboard_be.get("/")
+        def index():
+            # 返回页面
+            return self.dashboard_be.send_static_file("index.html")
+        
+        # 如果是以.js结尾的
+        # @self.dashboard_be.get("/<path:path>.js")
+        # def js(path):
+        #     return self.dashboard_be.send_static_file(path + ".js")
+        
+        
 
-        @self.dashboard_be.get("/stats")
+        @self.dashboard_be.get("/api/stats")
         def get_stats():
             return Response(
                 status="success",
@@ -34,7 +47,7 @@ class AstrBotDashBoard():
                 data=self.dashboard_data.stats
             ).__dict__
         
-        @self.dashboard_be.get("/configs")
+        @self.dashboard_be.get("/api/configs")
         def get_configs():
             return Response(
                 status="success",
@@ -42,7 +55,7 @@ class AstrBotDashBoard():
                 data=self.dashboard_data.configs
             ).__dict__
             
-        @self.dashboard_be.post("/configs")
+        @self.dashboard_be.post("/api/configs")
         def post_configs():
             post_configs = request.json
             try:
@@ -59,7 +72,7 @@ class AstrBotDashBoard():
                     data=self.dashboard_data.configs
                 ).__dict__
         
-        @self.dashboard_be.get("/logs")
+        @self.dashboard_be.get("/api/logs")
         def get_logs():
             return Response(
                 status="success",

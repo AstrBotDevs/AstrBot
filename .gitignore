@@ -1,3 +1,6 @@
 __pycache__
 botpy.log
 .vscode
+data.db
+configs/session
+configs/config.yaml

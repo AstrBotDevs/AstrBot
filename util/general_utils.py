@@ -112,7 +112,7 @@ def log(
     ret = ""
     for line in pres:
         ret += f"\033[{fg};{bg}m{line}\033[0m\n"
-    print(ret)
+    print(ret[:-1])
 
 
 def port_checker(port: int, host: str = "localhost"):

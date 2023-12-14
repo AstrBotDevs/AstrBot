@@ -469,6 +469,7 @@ def run_qqchan_bot(cfg, loop, qqchannel_bot: QQChan):
     try:
         qqchannel_bot.run_bot(client, cfg['qqbot']['appid'], cfg['qqbot']['token'])
     except BaseException as e:
+        raise e
         gu.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
         gu.log(r"如果您是初次启动，请修改配置文件（QQChannelChatGPT/config.yaml）详情请看：https://github.com/Soulter/QQChannelChatGPT/wiki。" + str(e), gu.LEVEL_CRITICAL, tag="System")
         
