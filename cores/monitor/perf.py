@@ -10,6 +10,7 @@ import time
 
 def run_monitor(global_object: GlobalObject):
     '''运行监测'''
+    start_time = time.time()
     while True:
         stat = global_object.dashboard_data.stats
         # 程序占用的内存大小
@@ -18,4 +19,5 @@ def run_monitor(global_object: GlobalObject):
             'memory': mem,
             'cpu': psutil.cpu_percent()
         }
+        stat['sys_start_time'] = start_time
         time.sleep(30)
