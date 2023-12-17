@@ -46,6 +46,28 @@ class GlobalObject:
         self.default_personality = None
         self.dashboard_data = None
         self.stat = {}
+        '''
+        
+        {
+            "config": {},
+            "session": [
+                {
+                    "platform": "qq",
+                    "session_id": 123456,
+                    "cnt": 0
+                },
+                {...}
+            ],
+            "message": [
+                // 以一小时为单位
+                {
+                    "ts": 1234567,
+                    "cnt": 0
+                }
+            ]
+        }
+        
+        '''
 
 
 class AstrMessageEvent():

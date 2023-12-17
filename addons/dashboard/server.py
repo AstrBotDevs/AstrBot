@@ -5,6 +5,7 @@ import datetime
 from util import general_utils as gu
 from dataclasses import dataclass
 import logging
+from cores.database.conn import dbConn
 
 @dataclass
 class DashBoardData():
@@ -36,11 +37,19 @@ class AstrBotDashBoard():
         # @self.dashboard_be.get("/<path:path>.js")
         # def js(path):
         #     return self.dashboard_be.send_static_file(path + ".js")
-        
-        
 
         @self.dashboard_be.get("/api/stats")
         def get_stats():
+            db_inst = dbConn()
+            all_session = db_inst.get_all_stat_session()
+            last_24_message = db_inst.get_last_24h_stat_message()
+            last_24_platform = db_inst.get_last_24h_stat_platform()
+            self.dashboard_data.stats["session"] = []
+            self.dashboard_data.stats["session_total"] = db_inst.get_session_cnt_total()
+            self.dashboard_data.stats["message"] = last_24_message
+            self.dashboard_data.stats["message_total"] = db_inst.get_message_cnt_total()
+            self.dashboard_data.stats["platform"] = last_24_platform
+
             return Response(
                 status="success",
                 message="",

@@ -42,6 +42,7 @@ from typing import Union, Callable
 from addons.dashboard.helper import DashBoardHelper
 from addons.dashboard.server import DashBoardData
 from cores.monitor.perf import run_monitor
+from cores.database.conn import dbConn
 
 # 缓存的会话
 session_dict = {}
@@ -158,7 +159,7 @@ def _runner(func: Callable, args: tuple):
     loop.run_until_complete(func(*args))
     loop.close()
 
-# 上传统计信息并检查更新
+# 统计消息数据
 def upload():
     global version, gocq_bot, qqchannel_bot
     while True:
@@ -197,13 +198,27 @@ def upload():
             pass
         time.sleep(10*60)
 
+
+# 语言模型选择
+def privider_chooser(cfg):
+    l = []
+    if 'rev_ChatGPT' in cfg and cfg['rev_ChatGPT']['enable']:
+        l.append('rev_chatgpt')
+    if 'rev_ernie' in cfg and cfg['rev_ernie']['enable']:
+        l.append('rev_ernie')
+    if 'rev_edgegpt' in cfg and cfg['rev_edgegpt']['enable']:
+        l.append('rev_edgegpt')
+    if 'openai' in cfg and len(cfg['openai']['key']) > 0 and cfg['openai']['key'][0] is not None:
+        l.append('openai_official')
+    return l
+
 '''
 初始化机器人
 '''
-def initBot(cfg, prov):
+def initBot(cfg):
     global llm_instance, llm_command_instance
     global baidu_judge, chosen_provider
-    global frequency_count, frequency_time, announcement, direct_message_mode, version
+    global frequency_count, frequency_time, announcement, direct_message_mode
     global keywords, _global_object
     
     # 迁移旧配置
@@ -217,6 +232,9 @@ def initBot(cfg, prov):
     # 初始化 global_object
     _global_object = GlobalObject()
     _global_object.base_config = cfg
+    _global_object.stat['session'] = {}
+    _global_object.stat['message'] = {}
+    _global_object.stat['platform'] = {}
 
     if 'reply_prefix' in cfg:
         # 适配旧版配置
@@ -229,7 +247,7 @@ def initBot(cfg, prov):
 
     # 语言模型提供商
     gu.log("--------加载语言模型--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-
+    prov = privider_chooser(cfg)
     if REV_CHATGPT in prov:
         gu.log("- 逆向ChatGPT库 -", gu.LEVEL_INFO)
         if cfg['rev_ChatGPT']['enable']:
@@ -383,8 +401,8 @@ def initBot(cfg, prov):
     _global_object.platform_qq = gocq_bot
 
     gu.log("机器人部署教程: https://github.com/Soulter/QQChannelChatGPT/wiki/", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue或加群322154837", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交 issue 或加群 322154837", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个 star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
 
     # QQ频道
     if 'qqbot' in cfg and cfg['qqbot']['enable']:
@@ -534,6 +552,8 @@ def check_frequency(id) -> bool:
 '''
 async def send_message(platform, message, res, session_id = None):
     global qqchannel_bot, qqchannel_bot, gocq_loop, session_dict
+
+    # 统计会话信息
     if session_id is not None:
         if session_id not in session_dict:
             session_dict[session_id] = {'cnt': 1}
@@ -541,15 +561,23 @@ async def send_message(platform, message, res, session_id = None):
             session_dict[session_id]['cnt'] += 1
     else:
         session_dict[session_id]['cnt'] += 1
+
+    # TODO: 这里会非常吃资源。然而 sqlite3 不支持多线程，所以暂时这样写。
+    curr_ts = int(time.time())
+    db_inst = dbConn()
+    db_inst.increment_stat_session(platform, session_id, 1)
+    db_inst.increment_stat_message(curr_ts, 1)
+    db_inst.increment_stat_platform(curr_ts, platform, 1)
+
     if platform == PLATFORM_QQCHAN:
         qqchannel_bot.send_qq_msg(message, res)
-    if platform == PLATFORM_GOCQ:
+    elif platform == PLATFORM_GOCQ:
         await gocq_bot.send_qq_msg(message, res)
-    if platform == PLATFROM_QQBOT:
+    elif platform == PLATFROM_QQBOT:
         message_chain = MessageChain()
         message_chain.parse_from_nakuru(res)
         await qq_bot.send(message, message_chain)
-    if platform == PLATFORM_CLI:
+    elif platform == PLATFORM_CLI:
         print(res)
 
 async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, NakuruGuildMessage],
@@ -769,7 +797,6 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     if hit:
         # 检查指令. command_result是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
         if command_result == None:
-            # await send_message(platform, message, "指令调用未返回任何信息。", session_id=session_id)
             return
 
         command = command_result[2]

@@ -44,26 +44,8 @@ def main():
     if not os.path.exists(abs_path + "temp"):
         os.mkdir(abs_path+"temp")
 
-    # 选择默认模型
-    provider = privider_chooser(cfg)
-    if len(provider) == 0:
-        gu.log("注意：您目前未开启任何语言模型。", gu.LEVEL_WARNING)
-
     # 启动主程序（cores/qqbot/core.py）
-    qqBot.initBot(cfg, provider)
-
-# 语言模型提供商选择器
-def privider_chooser(cfg):
-    l = []
-    if 'rev_ChatGPT' in cfg and cfg['rev_ChatGPT']['enable']:
-        l.append('rev_chatgpt')
-    if 'rev_ernie' in cfg and cfg['rev_ernie']['enable']:
-        l.append('rev_ernie')
-    if 'rev_edgegpt' in cfg and cfg['rev_edgegpt']['enable']:
-        l.append('rev_edgegpt')
-    if 'openai' in cfg and len(cfg['openai']['key']) > 0 and cfg['openai']['key'][0] is not None:
-        l.append('openai_official')
-    return l
+    qqBot.initBot(cfg)
 
 def check_env(ch_mirror=False):
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 9):
