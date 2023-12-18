@@ -24,6 +24,10 @@
 
 ## 🧩功能：
 
+✨ 最近功能：
+1. 支持切换代码分支。输入`/update checkout <分支名>`即可切换代码分支
+2. 正在测试可视化面板，输入`/update checkout dev_dashboard`后根据提示即可体验
+
 🌍支持的AI语言模型一览：
 
 **文字模型/图片理解**
@@ -133,6 +137,9 @@
   
 - `liferestart`: https://github.com/Soulter/liferestart | 人生重开模拟器
 
+<img width="1231" alt="image" src="https://github.com/Soulter/AstrBot/assets/37870767/824d1ff3-7b85-481c-b795-8e62dedb9fd7">
+
+
 <!-- 
 ### 指令
 
@@ -151,11 +158,6 @@
 - `/bing` 切换为bing
 - `/revgpt` 切换为ChatGPT逆向库
 - `/画` 画画
-
-#### Bing语言模型
-- `/reset`重置prompt
-- `/gpt` 切换为OpenAI官方API
-- `/revgpt` 切换为ChatGPT逆向库
 
 #### 逆向ChatGPT库语言模型
 - `/gpt` 切换为OpenAI官方API
