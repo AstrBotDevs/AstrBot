@@ -121,10 +121,9 @@ class Command:
 
     def plugin_reload(self, cached_plugins: dict, target: str = None, all: bool = False):
         plugins = self.get_plugin_modules()
-        fail_rec = ""
         if plugins is None:
             return False, "未找到任何插件模块"
-
+        fail_rec = ""
         for plugin in plugins:
             try:
                 p = plugin['module']

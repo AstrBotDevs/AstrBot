@@ -430,7 +430,8 @@ def initBot(cfg):
     _global_object.dashboard_data = DashBoardData(
         stats={},
         configs={},
-        logs={}
+        logs={},
+        plugins=_global_object.cached_plugins,
     )
     dashboard_helper = DashBoardHelper(_global_object.dashboard_data, config=cc.get_all())
     dashboard_thread = threading.Thread(target=dashboard_helper.run, daemon=True)

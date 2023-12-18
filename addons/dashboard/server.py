@@ -12,6 +12,7 @@ class DashBoardData():
     stats: dict
     configs: dict
     logs: dict
+    plugins: list[dict]
 
 @dataclass
 class Response():
@@ -87,6 +88,34 @@ class AstrBotDashBoard():
                 status="success",
                 message="",
                 data=self.dashboard_data.logs
+            ).__dict__
+            
+        @self.dashboard_be.get("/api/extensions")
+        def get_plugins():
+            """
+            {
+                "name": "GoodPlugins",
+                "repo": "https://gitee.com/soulter/goodplugins",
+                "author": "soulter",
+                "desc": "一些好用的插件",
+                "version": "1.0"
+            }
+            """
+            _plugin_resp = []
+            for plugin in self.dashboard_data.plugins:
+                _p = self.dashboard_data.plugins[plugin]
+                _t = {
+                    "name": _p["info"]["name"],
+                    "repo": '' if "repo" not in _p["info"] else _p["info"]["repo"],
+                    "author": _p["info"]["author"],
+                    "desc": _p["info"]["desc"],
+                    "version": _p["info"]["version"]
+                }
+                _plugin_resp.append(_t)
+            return Response(
+                status="success",
+                message="",
+                data=_plugin_resp
             ).__dict__
         
     def register(self, name: str):
