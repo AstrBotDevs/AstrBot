@@ -84,6 +84,14 @@ class DashBoardHelper():
                         path="qqbot.token",
                     ),
                     DashBoardConfig(
+                        config_type="item",
+                        val_type="string",
+                        name="QQ机器人 Secret",
+                        description="详见 q.qq.com",
+                        value=config['qqbot_secret'],
+                        path="qqbot_secret",
+                    ),
+                    DashBoardConfig(
                         config_type="divider"
                     ),
                     DashBoardConfig(
@@ -164,6 +172,14 @@ class DashBoardHelper():
                         description="对机器人 !myid 即可获得。如果此功能不可用，请加群 322154837",
                         value=config['gocq_qqchan_admin'],
                         path="gocq_qqchan_admin",
+                    ),
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="bool",
+                        name="独立会话",
+                        description="是否启用独立会话模式，即 1 个用户自然账号 1 个会话。",
+                        value=config['uniqueSessionMode'],
+                        path="uniqueSessionMode",
                     ),
                 ]
             )
