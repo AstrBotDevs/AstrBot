@@ -6,6 +6,7 @@ from util import general_utils as gu
 from dataclasses import dataclass
 import logging
 from cores.database.conn import dbConn
+from util.cmd_config import CmdConfig
 
 @dataclass
 class DashBoardData():
@@ -27,6 +28,7 @@ class AstrBotDashBoard():
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
         self.funcs = {}
+        self.cc = CmdConfig()
         
         
         @self.dashboard_be.get("/")
@@ -34,10 +36,46 @@ class AstrBotDashBoard():
             # 返回页面
             return self.dashboard_be.send_static_file("index.html")
         
-        # 如果是以.js结尾的
-        # @self.dashboard_be.get("/<path:path>.js")
-        # def js(path):
-        #     return self.dashboard_be.send_static_file(path + ".js")
+        @self.dashboard_be.post("/api/authenticate")
+        def authenticate():
+            username = self.cc.get("dashboard_username", "")
+            password = self.cc.get("dashboard_password", "")
+            # 获得请求体
+            post_data = request.json
+            if post_data["username"] == username and post_data["password"] == password:
+                return Response(
+                    status="success",
+                    message="登录成功。",
+                    data={
+                        "token": "astrbot-test-token",
+                        "username": username
+                    }
+                ).__dict__
+            else:
+                return Response(
+                    status="error",
+                    message="用户名或密码错误。",
+                    data=None
+                ).__dict__
+                
+        @self.dashboard_be.post("/api/change_password")
+        def change_password():
+            password = self.cc.get("dashboard_password", "")
+            # 获得请求体
+            post_data = request.json
+            if post_data["password"] == password:
+                self.cc.put("dashboard_password", post_data["new_password"])
+                return Response(
+                    status="success",
+                    message="修改成功。",
+                    data=None
+                ).__dict__
+            else:
+                return Response(
+                    status="error",
+                    message="原密码错误。",
+                    data=None
+                ).__dict__
 
         @self.dashboard_be.get("/api/stats")
         def get_stats():

@@ -382,6 +382,14 @@ class DashBoardHelper():
                         value=config['default_personality_str'],
                         path="default_personality_str",
                     ),
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="string",
+                        name="面板用户名",
+                        description="是的，就是你理解的这个面板的用户名",
+                        value=config['dashboard_username'],
+                        path="dashboard_username",
+                    ),
                 ]
             )
             

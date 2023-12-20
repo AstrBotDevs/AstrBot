@@ -127,6 +127,8 @@ cc.init_attributes("openai_image_generate", {
 })
 cc.init_attributes("http_proxy", "")
 cc.init_attributes("https_proxy", "")
+cc.init_attributes("dashboard_username", "")
+cc.init_attributes("dashboard_password", "")
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
