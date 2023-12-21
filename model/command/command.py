@@ -118,46 +118,6 @@ class Command:
                 return None
         except BaseException as e:
             raise e
-
-    def plugin_reload(self, cached_plugins: dict, target: str = None, all: bool = False):
-        plugins = self.get_plugin_modules()
-        if plugins is None:
-            return False, "未找到任何插件模块"
-        fail_rec = ""
-        for plugin in plugins:
-            try:
-                p = plugin['module']
-                root_dir_name = plugin['pname']
-                if p not in cached_plugins or p == target or all:
-                    module = __import__("addons.plugins." + root_dir_name + "." + p, fromlist=[p])
-                    if p in cached_plugins:
-                        module = importlib.reload(module)
-                    cls = putil.get_classes(p, module)
-                    obj = getattr(module, cls[0])()
-                    try:
-                        info = obj.info()
-                        if 'name' not in info or 'desc' not in info or 'version' not in info or 'author' not in info:
-                            fail_rec += f"载入插件{p}失败，原因: 插件信息不完整\n"
-                            continue
-                        if isinstance(info, dict) == False:
-                            fail_rec += f"载入插件{p}失败，原因: 插件信息格式不正确\n"
-                            continue
-                    except BaseException as e:
-                        fail_rec += f"调用插件{p} info失败, 原因: {str(e)}\n"
-                        continue
-                    cached_plugins[info['name']] = {
-                        "module": module,
-                        "clsobj": obj,
-                        "info": info,
-                        "name": info['name'],
-                        "root_dir_name": root_dir_name,
-                    }
-            except BaseException as e:
-                fail_rec += f"加载{p}插件出现问题，原因 {str(e)}\n"
-        if fail_rec == "":
-            return True, None
-        else:
-            return False, fail_rec
     
     '''
     插件指令
@@ -170,81 +130,28 @@ class Command:
             p = gu.create_text_image("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
             return True, [Image.fromFileSystem(p)], "plugin"
         else:
-            ppath = ""
-            if os.path.exists("addons/plugins"):
-                ppath = "addons/plugins"
-            elif os.path.exists("QQChannelChatGPT/addons/plugins"):
-                ppath = "QQChannelChatGPT/addons/plugins"
-            else:
-                return False, "未找到插件目录", "plugin"
             if l[1] == "i":
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限安装插件", "plugin"
                 try:
-                    # 删除末尾的/
-                    if l[2].endswith("/"):
-                        l[2] = l[2][:-1]
-                    # 得到url的最后一段
-                    d = l[2].split("/")[-1]
-                    # 转换非法字符：-
-                    d = d.replace("-", "_")
-                    # 创建文件夹
-                    plugin_path = os.path.join(ppath, d)
-                    if os.path.exists(plugin_path):
-                        shutil.rmtree(plugin_path)
-                    os.mkdir(plugin_path)
-                    Repo.clone_from(l[2],to_path=plugin_path,branch='master')
-
-                    # 读取插件的requirements.txt
-                    if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-                        mm = pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt")])
-                        if mm != 0:
-                            return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
-                    # 加载没缓存的插件
-                    ok, err = self.plugin_reload(cached_plugins, target=d)
-                    if ok:
-                        return True, "插件拉取并载入成功~", "plugin"
-                    else:
-                        # if os.path.exists(plugin_path):
-                        #     shutil.rmtree(plugin_path)
-                        return False, f"插件拉取载入失败。\n跟踪: \n{err}", "plugin"
+                    putil.install_plugin(l[2], cached_plugins)
+                    return True, "插件拉取并载入成功~", "plugin"
                 except BaseException as e:
                     return False, f"拉取插件失败，原因: {str(e)}", "plugin"
             elif l[1] == "d":
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限删除插件", "plugin"
-                if l[2] not in cached_plugins:
-                    return False, "未找到该插件", "plugin"
-
                 try:
-                    root_dir_name = cached_plugins[l[2]]["root_dir_name"]
-                    self.remove_dir(os.path.join(ppath, root_dir_name))
-                    del cached_plugins[l[2]]
+                    putil.uninstall_plugin(l[2], cached_plugins)
                     return True, "插件卸载成功~", "plugin"
                 except BaseException as e:
                     return False, f"卸载插件失败，原因: {str(e)}", "plugin"
             elif l[1] == "u":
-                if l[2] not in cached_plugins:
-                    return False, "未找到该插件", "plugin"
-                root_dir_name = cached_plugins[l[2]]["root_dir_name"]
-                plugin_path = os.path.join(ppath, root_dir_name)
                 try:
-                    repo = Repo(path = plugin_path)
-                    repo.remotes.origin.pull()
-                    # 读取插件的requirements.txt
-                    if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-                        mm = pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt")])
-                        if mm != 0:
-                            return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
-
-                    ok, err = self.plugin_reload(cached_plugins, target=l[2])
-                    if ok:
-                        return True, "\n更新插件成功!!", "plugin"
-                    else:
-                        return False, "更新插件成功，但是重载插件失败。\n问题跟踪: \n"+err, "plugin"
+                    putil.update_plugin(l[2], cached_plugins)
+                    return True, "\n更新插件成功!!", "plugin"
                 except BaseException as e:
-                    return False, "更新插件失败, 请使用plugin i指令覆盖安装", "plugin"
-
+                    return False, f"更新插件失败，原因: {str(e)}。\n建议: 使用 plugin i 指令进行覆盖安装(插件数据可能会丢失)", "plugin"
             elif l[1] == "l":
                 try:
                     plugin_list_info = "\n".join([f"{k}: \n名称: {v['info']['name']}\n简介: {v['info']['desc']}\n版本: {v['info']['version']}\n作者: {v['info']['author']}\n" for k, v in cached_plugins.items()])
@@ -262,45 +169,34 @@ class Command:
                         return False, "未找到该插件", "plugin"
                 except BaseException as e:
                     return False, f"获取插件信息失败，原因: {str(e)}", "plugin"
-            elif l[1] == "reload":
-                if role != "admin":
-                    return False, f"你的身份组{role}没有权限重载插件", "plugin"
-                for plugin in cached_plugins:
-                    try:
-                        print(f"更新插件 {plugin} 依赖...")
-                        plugin_path = os.path.join(ppath, cached_plugins[plugin]["root_dir_name"])
-                        if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-                            mm = pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), "--quiet"])
-                            if mm != 0:
-                                return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
-                    except BaseException as e:
-                        print(f"插件{plugin}依赖安装失败，原因: {str(e)}")
-                try:
-                    ok, err = self.plugin_reload(cached_plugins, all = True)
-                    if ok:
-                        return True, "\n重载插件成功~", "plugin"
-                    else:
-                        # if os.path.exists(plugin_path):
-                        #     shutil.rmtree(plugin_path)
-                        return False, f"插件重载失败。\n跟踪: \n{err}", "plugin"
-                except BaseException as e:
-                    return False, f"插件重载失败，原因: {str(e)}", "plugin"
-                
+            # elif l[1] == "reload":
+            #     if role != "admin":
+            #         return False, f"你的身份组{role}没有权限重载插件", "plugin"
+            #     for plugin in cached_plugins:
+            #         try:
+            #             print(f"更新插件 {plugin} 依赖...")
+            #             plugin_path = os.path.join(ppath, cached_plugins[plugin]["root_dir_name"])
+            #             if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
+            #                 mm = pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), "--quiet"])
+            #                 if mm != 0:
+            #                     return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
+            #         except BaseException as e:
+            #             print(f"插件{plugin}依赖安装失败，原因: {str(e)}")
+            #     try:
+            #         ok, err = self.plugin_reload(cached_plugins, all = True)
+            #         if ok:
+            #             return True, "\n重载插件成功~", "plugin"
+            #         else:
+            #             # if os.path.exists(plugin_path):
+            #             #     shutil.rmtree(plugin_path)
+            #             return False, f"插件重载失败。\n跟踪: \n{err}", "plugin"
+            #     except BaseException as e:
+            #         return False, f"插件重载失败，原因: {str(e)}", "plugin"
+
             elif l[1] == "dev":
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限开发者模式", "plugin"
                 return True, "cached_plugins: \n" + str(cached_plugins), "plugin"
-    
-    def remove_dir(self, file_path):        
-        while 1:
-            if not os.path.exists(file_path):
-                break
-            try:
-                shutil.rmtree(file_path)
-            except PermissionError as e:
-                err_file_path = str(e).split("\'", 2)[1]
-                if os.path.exists(err_file_path):
-                    os.chmod(err_file_path, stat.S_IWUSR)
 
     '''
     nick: 存储机器人的昵称

@@ -33,7 +33,8 @@ from model.provider.provider import Provider
 from model.command.command import Command
 from util import general_utils as gu
 from util.cmd_config import CmdConfig as cc
-import util.gplugin as gplugin
+import util.function_calling.gplugin as gplugin
+import util.plugin_util as putil
 from PIL import Image as PILImage
 import io
 import traceback
@@ -357,7 +358,7 @@ def initBot(cfg):
     gu.log("--------加载插件--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 加载插件
     _command = Command(None, _global_object)
-    ok, err = _command.plugin_reload(_global_object.cached_plugins)
+    ok, err = putil.plugin_reload(_global_object.cached_plugins)
     if ok:
         gu.log("加载插件完成", gu.LEVEL_INFO)
     else:

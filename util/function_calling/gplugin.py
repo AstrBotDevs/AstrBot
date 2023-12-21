@@ -2,7 +2,7 @@ import requests
 import util.general_utils as gu
 from bs4 import BeautifulSoup
 import time
-from util.func_call import (
+from util.function_calling.func_call import (
     FuncCall, 
     FuncCallJsonFormatError, 
     FuncNotFoundError

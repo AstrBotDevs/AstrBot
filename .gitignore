@@ -4,3 +4,5 @@ botpy.log
 data.db
 configs/session
 configs/config.yaml
+**/.DS_Store
+temp

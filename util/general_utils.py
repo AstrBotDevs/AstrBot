@@ -6,6 +6,7 @@ import os
 import re
 import requests
 from util.cmd_config import CmdConfig
+import socket
 
 PLATFORM_GOCQ = 'gocq'
 PLATFORM_QQCHAN = 'qqchan'
@@ -521,3 +522,13 @@ def try_migrate_config(old_config: dict):
         # 未迁移过
         for k in old_config:
             cc.put(k, old_config[k])
+
+def get_local_ip_addresses():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+    finally:
+        s.close()
+
+    return ip

@@ -155,6 +155,14 @@ class AstrBotDashBoard():
                 message="",
                 data=_plugin_resp
             ).__dict__
+            
+        @self.dashboard_be.post("/api/extensions/install")
+        def install_plugin():
+            pass
+        
+        @self.dashboard_be.post("/api/extensions/uninstall")
+        def uninstall_plugin():
+            pass
         
     def register(self, name: str):
         def decorator(func):
@@ -163,7 +171,9 @@ class AstrBotDashBoard():
         return decorator
 
     def run(self):
-        gu.log(f"\n\n==================\n您可以访问:\n\thttp://localhost:6185/\n来登录可视化面板。\n==================\n\n", tag="可视化面板")
+        ip_address = gu.get_local_ip_addresses()
+        ip_str = f"http://{ip_address}:6185\n\thttp://localhost:6185"
+        gu.log(f"\n\n==================\n您可以访问:\n\n\t{ip_str}\n\n来登录可视化面板。\n注意: 所有配置项现已全量迁移至 cmd_config.json 文件下。您可以登录可视化面板在线修改配置。\n==================\n\n", tag="可视化面板")
         # self.dashboard_be.run(host="0.0.0.0", port=6185)
         http_server = make_server('0.0.0.0', 6185, self.dashboard_be)
         http_server.serve_forever()
