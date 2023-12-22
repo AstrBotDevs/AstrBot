@@ -104,20 +104,6 @@ class Command:
             obj = cc.get_all()
             p = gu.create_text_image("【cmd_config.json】", json.dumps(obj, indent=4, ensure_ascii=False))
             return True, [Image.fromFileSystem(p)], "newconf"
-            
-    def get_plugin_modules(self):
-        plugins = []
-        try:
-            if os.path.exists("addons/plugins"):
-                plugins = putil.get_modules("addons/plugins")
-                return plugins
-            elif os.path.exists("QQChannelChatGPT/addons/plugins"):
-                plugins = putil.get_modules("QQChannelChatGPT/addons/plugins")
-                return plugins
-            else:
-                return None
-        except BaseException as e:
-            raise e
     
     '''
     插件指令

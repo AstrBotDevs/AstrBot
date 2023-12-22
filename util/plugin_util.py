@@ -51,9 +51,23 @@ def get_plugin_store_path():
         return "AstrBot/addons/plugins"
     else:
         raise FileNotFoundError("插件文件夹不存在。")
+            
+def get_plugin_modules():
+    plugins = []
+    try:
+        if os.path.exists("addons/plugins"):
+            plugins = get_modules("addons/plugins")
+            return plugins
+        elif os.path.exists("QQChannelChatGPT/addons/plugins"):
+            plugins = get_modules("QQChannelChatGPT/addons/plugins")
+            return plugins
+        else:
+            return None
+    except BaseException as e:
+        raise e
 
-def plugin_reload(self, cached_plugins: dict, target: str = None, all: bool = False):
-    plugins = self.get_plugin_modules()
+def plugin_reload(cached_plugins: dict, target: str = None, all: bool = False):
+    plugins = get_plugin_modules()
     if plugins is None:
         return False, "未找到任何插件模块"
     fail_rec = ""
@@ -104,11 +118,11 @@ def install_plugin(repo_url: str, cached_plugins: dict):
     # 创建文件夹
     plugin_path = os.path.join(ppath, d)
     if os.path.exists(plugin_path):
-        shutil.rmtree(plugin_path)
+        remove_dir(plugin_path)
     Repo.clone_from(repo_url, to_path=plugin_path, branch='master')
     # 读取插件的requirements.txt
     if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-        if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt")]) != 0:
+        if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), '--quiet']) != 0:
             raise Exception("插件的依赖安装失败, 需要您手动 pip 安装对应插件的依赖。")
     ok, err = plugin_reload(cached_plugins, target=d)
     if not ok: raise Exception(err)
@@ -132,12 +146,12 @@ def update_plugin(plugin_name: str, cached_plugins: dict):
     repo.remotes.origin.pull()
     # 读取插件的requirements.txt
     if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-        if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt")]) != 0:
+        if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), '--quiet']) != 0:
             raise Exception("插件依赖安装失败, 需要您手动pip安装对应插件的依赖。")
     ok, err = plugin_reload(cached_plugins, target=plugin_name)
     if not ok: raise Exception(err)
 
-def remove_dir(self, file_path) -> bool:
+def remove_dir(file_path) -> bool:
     try_cnt = 50
     while try_cnt > 0:
         if not os.path.exists(file_path):

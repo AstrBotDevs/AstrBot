@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import logging
 from cores.database.conn import dbConn
 from util.cmd_config import CmdConfig
+import util.plugin_util as putil
 
 @dataclass
 class DashBoardData():
@@ -158,11 +159,63 @@ class AstrBotDashBoard():
             
         @self.dashboard_be.post("/api/extensions/install")
         def install_plugin():
-            pass
+            post_data = request.json
+            repo_url = post_data["url"]
+            try:
+                gu.log(f"正在安装插件 {repo_url}", tag="可视化面板")
+                putil.install_plugin(repo_url, self.dashboard_data.plugins)
+                gu.log(f"安装插件 {repo_url} 成功", tag="可视化面板")
+                return Response(
+                    status="success",
+                    message="安装成功~",
+                    data=None
+                ).__dict__
+            except Exception as e:
+                return Response(
+                    status="error",
+                    message=e.__str__(),
+                    data=None
+                ).__dict__
         
         @self.dashboard_be.post("/api/extensions/uninstall")
         def uninstall_plugin():
-            pass
+            post_data = request.json
+            plugin_name = post_data["name"]
+            try:
+                gu.log(f"正在卸载插件 {plugin_name}", tag="可视化面板")
+                putil.uninstall_plugin(plugin_name, self.dashboard_data.plugins)
+                gu.log(f"卸载插件 {plugin_name} 成功", tag="可视化面板")
+                return Response(
+                    status="success",
+                    message="卸载成功~",
+                    data=None
+                ).__dict__
+            except Exception as e:
+                return Response(
+                    status="error",
+                    message=e.__str__(),
+                    data=None
+                ).__dict__
+                
+        @self.dashboard_be.post("/api/extensions/update")
+        def update_plugin():
+            post_data = request.json
+            plugin_name = post_data["name"]
+            try:
+                gu.log(f"正在更新插件 {plugin_name}", tag="可视化面板")
+                putil.update_plugin(plugin_name, self.dashboard_data.plugins)
+                gu.log(f"更新插件 {plugin_name} 成功", tag="可视化面板")
+                return Response(
+                    status="success",
+                    message="更新成功~",
+                    data=None
+                ).__dict__
+            except Exception as e:
+                return Response(
+                    status="error",
+                    message=e.__str__(),
+                    data=None
+                ).__dict__
         
     def register(self, name: str):
         def decorator(func):
