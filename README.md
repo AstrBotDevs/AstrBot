@@ -44,15 +44,16 @@
 
 
 🌍机器人支持的能力一览：
+- 可视化面板（beta）
 - 同时部署机器人到 QQ 和 QQ 频道
 - 大模型对话
-- 大模型网页搜索能力 **(目前仅支持OpenAI系的模型，最新版本下使用 web on 指令打开)**
-- 插件安装（在QQ或QQ频道聊天框内输入`plugin`了解详情）
+- 大模型网页搜索能力 **(目前仅支持OpenAI系模型，最新版本下使用 web on 指令打开)**
+- 插件（在QQ或QQ频道聊天框内输入 `plugin` 了解详情）
 - 回复文字图片渲染（以图片markdown格式回复，**大幅度降低被风控概率**，需手动在`cmd_config.json`内开启qq_pic_mode）
 - 人格设置
 - 关键词回复
 - 热更新（更新本项目时**仅需**在QQ或QQ频道聊天框内输入`update latest r`）
-- Windows一键部署（https://github.com/Soulter/QQChatGPTLauncher/releases/latest）
+- Windows一键部署 https://github.com/Soulter/QQChatGPTLauncher/releases/latest
 
 <!-- 
 ### 基本功能
