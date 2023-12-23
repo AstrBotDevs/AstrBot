@@ -32,15 +32,11 @@
 
 **文字模型/图片理解**
 
-- OpenAI GPT-3模型（原生支持）
-- OpenAI GPT-3.5模型（原生支持）
-- OpenAI GPT-4模型（原生支持）
-- ~~ChatGPT网页版 GPT-3.5模型（免费，原生支持）~~
-- ~~ChatGPT网页版 GPT-4模型（需订阅Plus账户，原生支持）~~
-- ~~Bing（免费，原生支持）~~
-- Claude模型（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
-- HuggingChat模型（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
-- Google Bard（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
+- OpenAI GPT-3（原生支持）
+- OpenAI GPT-3.5（原生支持）
+- OpenAI GPT-4（原生支持）
+- Claude（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
+- HuggingChat（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 
 **图片生成**
 
