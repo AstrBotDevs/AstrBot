@@ -91,6 +91,10 @@ class Command:
             return True, self.web_search(message)
         if self.command_start_with(message, "keyword"):
             return True, self.keyword(message_obj, role)
+        if self.command_start_with(message, "ip"):
+            ip = requests.get("https://myip.ipip.net", timeout=5).text
+            return True, f"机器人 IP 信息：{ip}", "ip"
+            
         
         return False, None
     
