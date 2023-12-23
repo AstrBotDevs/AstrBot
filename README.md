@@ -6,9 +6,18 @@
 
 # AstrBot
 
-https://github.com/Soulter/AstrBot/wiki
- 
-加群讨论 | **QQ群：322154837** | **频道: x42d56aki2** |
+
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot)](https://github.com/Soulter/AstrBot/releases/latest)
+<img src="https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/34412545-2e37-400f-bedc-42348713ac1f.svg" alt="wakatime">
+<img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="python">
+<a href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft">
+<img alt="Static Badge" src="https://img.shields.io/badge/QQ群-322154837-purple">
+</a>
+<img alt="Static Badge" src="https://img.shields.io/badge/频道-x42d56aki2-purple">
+
+<a href="https://github.com/Soulter/QQChannelChatGPT/wiki">部署文档</a> ｜
+<a href="https://github.com/Soulter/QQChannelChatGPT/issues">问题提交</a> ｜
+<a href="https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6">插件开发</a>
 
 </div>
 
@@ -132,7 +141,8 @@ https://github.com/Soulter/AstrBot/wiki
   
 - `liferestart`: https://github.com/Soulter/liferestart | 人生重开模拟器
 
-<img width="1231" alt="image" src="https://github.com/Soulter/AstrBot/assets/37870767/824d1ff3-7b85-481c-b795-8e62dedb9fd7">
+
+<img width="900" alt="image" src="https://github.com/Soulter/AstrBot/assets/37870767/824d1ff3-7b85-481c-b795-8e62dedb9fd7">
 
 
 <!-- 
