@@ -70,3 +70,16 @@ class AstrMessageEvent():
         self.global_object = global_object
         self.llm_provider = llm_provider
         self.session_id = session_id
+        
+class CommandResult():
+    '''
+    用于在Command中返回多个值
+    '''
+    def __init__(self, hit: bool, success: bool, message_chain: list, command_name: str = "unknown_command") -> None:
+        self.hit = hit
+        self.success = success
+        self.message_chain = message_chain
+        self.command_name = command_name
+        
+    def _result_tuple(self):
+        return (self.success, self.message_chain, self.command_name)
