@@ -15,6 +15,7 @@
 </a>
 <img alt="Static Badge" src="https://img.shields.io/badge/频道-x42d56aki2-purple">
 
+<a href="https://astrbot.soulter.top">项目主页(开发中)</a> ｜
 <a href="https://github.com/Soulter/QQChannelChatGPT/wiki">部署文档</a> ｜
 <a href="https://github.com/Soulter/QQChannelChatGPT/issues">问题提交</a> ｜
 <a href="https://github.com/Soulter/QQChannelChatGPT/wiki/%E5%9B%9B%E3%80%81%E5%BC%80%E5%8F%91%E6%8F%92%E4%BB%B6">插件开发</a>
