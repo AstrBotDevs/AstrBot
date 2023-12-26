@@ -18,7 +18,7 @@
 <a href="https://astrbot.soulter.top/center">项目主页(开发中)</a> ｜
 <a href="https://github.com/Soulter/QQChannelChatGPT/wiki">部署文档</a> ｜
 <a href="https://github.com/Soulter/QQChannelChatGPT/issues">问题提交</a> ｜
-<a href="https://astrbot.soulter.top/center/docs/%E5%BC%80%E5%8F%91/%E6%8F%92%E4%BB%B6%E5%BC%80%E5%8F%91">插件开发</a>
+<a href="https://astrbot.soulter.top/center/docs/%E5%BC%80%E5%8F%91/%E6%8F%92%E4%BB%B6%E5%BC%80%E5%8F%91">插件开发（最少只需 25 行，真不难！）</a>
 
 </div>
 
