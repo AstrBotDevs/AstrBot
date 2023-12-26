@@ -270,6 +270,24 @@ class dbConn():
         )
         return c.fetchall()
     
+    def get_platform_cnt_total(self) -> int:
+        conn = self.conn
+        c = conn.cursor()
+        c.execute(
+            '''
+            SELECT platform, SUM(cnt) FROM tb_stat_platform GROUP BY platform
+            '''
+        )
+        # return c.fetchall()
+        platforms = []
+        ret = c.fetchall()
+        for i in ret:
+            # platforms[i[0]] = i[1]
+            platforms.append({
+                "name": i[0],
+                "count": i[1]
+            })
+        return platforms
 
     def close(self):
         self.conn.close()

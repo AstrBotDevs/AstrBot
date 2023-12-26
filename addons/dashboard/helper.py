@@ -175,11 +175,27 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
+                        val_type="list",
+                        name="通用管理员用户 ID（同上，此项支持多个管理员）",
+                        description="",
+                        value=config['other_admins'],
+                        path="other_admins",
+                    ),
+                    DashBoardConfig(
+                        config_type="item",
                         val_type="bool",
                         name="独立会话",
                         description="是否启用独立会话模式，即 1 个用户自然账号 1 个会话。",
                         value=config['uniqueSessionMode'],
                         path="uniqueSessionMode",
+                    ),
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="bool",
+                        name="是否允许 QQ 频道私聊",
+                        description="仅针对 QQ 频道 SDK，而非 GO-CQHTTP。如果启用，那么机器人会响应私聊消息。",
+                        value=config['direct_message_mode'],
+                        path="direct_message_mode",
                     ),
                 ]
             )
@@ -244,6 +260,14 @@ class DashBoardHelper():
                         description="",
                         value=config['gocq_react_guild'],
                         path="gocq_react_guild",
+                    ),
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="int",
+                        name="转发阈值（字符数）",
+                        description="机器人回复的消息长度超出这个值后，会被折叠成转发卡片发出以减少刷屏。",
+                        value=config['qq_forward_threshold'],
+                        path="qq_forward_threshold",
                     ),
                 ]
             )
@@ -367,6 +391,51 @@ class DashBoardHelper():
                     ),
                 ]
             )
+            
+            baidu_aip_group = DashBoardConfig(
+                config_type="group",
+                name="百度内容审核",
+                description="需要去申请",
+                body=[
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="bool",
+                        name="启动百度内容审核服务",
+                        description="",
+                        value=config['baidu_aip']['enable'],
+                        path="baidu_aip.enable"
+                    ),
+                    # "app_id": null,
+                    # "api_key": null,
+                    # "secret_key": null
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="string",
+                        name="APP ID",
+                        description="",
+                        value=config['baidu_aip']['app_id'],
+                        path="baidu_aip.app_id"
+                    ),
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="string",
+                        name="API KEY",
+                        description="",
+                        value=config['baidu_aip']['api_key'],
+                        path="baidu_aip.api_key"
+                    ),
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="string",
+                        name="SECRET KEY",
+                        description="",
+                        value=config['baidu_aip']['secret_key'],
+                        path="baidu_aip.secret_key"
+                    )
+                ]
+            )
+
+
 
             other_group = DashBoardConfig(
                 config_type="group",
@@ -399,7 +468,8 @@ class DashBoardHelper():
                 gocq_platform_detail_group,
                 proxy_group,
                 llm_group,
-                other_group
+                other_group,
+                baidu_aip_group
             ]
         
         except Exception as e:
@@ -411,10 +481,6 @@ class DashBoardHelper():
         '''
         根据 path 解析并保存配置
         '''
-        # for config in dashboard_data.configs['data']:
-        #     if config['config_type'] == "group":
-        #         for item in config['body']:
-        #             queue.append(item)
         
         queue = []
         for config in post_config['data']:

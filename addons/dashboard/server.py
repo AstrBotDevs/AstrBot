@@ -83,12 +83,13 @@ class AstrBotDashBoard():
             db_inst = dbConn()
             all_session = db_inst.get_all_stat_session()
             last_24_message = db_inst.get_last_24h_stat_message()
-            last_24_platform = db_inst.get_last_24h_stat_platform()
+            # last_24_platform = db_inst.get_last_24h_stat_platform()
+            platforms = db_inst.get_platform_cnt_total()
             self.dashboard_data.stats["session"] = []
             self.dashboard_data.stats["session_total"] = db_inst.get_session_cnt_total()
             self.dashboard_data.stats["message"] = last_24_message
             self.dashboard_data.stats["message_total"] = db_inst.get_message_cnt_total()
-            self.dashboard_data.stats["platform"] = last_24_platform
+            self.dashboard_data.stats["platform"] = platforms
 
             return Response(
                 status="success",
