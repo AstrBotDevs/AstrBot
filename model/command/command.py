@@ -25,6 +25,7 @@ from nakuru.entities.components import (
 from PIL import Image as PILImage
 from cores.qqbot.global_object import GlobalObject, AstrMessageEvent
 from pip._internal import main as pipmain
+from cores.qqbot.global_object import CommandResult
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -55,7 +56,16 @@ class Command:
         )
         for k, v in cached_plugins.items():
             try:
-                hit, res = v["clsobj"].run(ame)
+                result = v["clsobj"].run(ame)
+                if isinstance(result, CommandResult):
+                    hit = result.hit
+                    res = result._result_tuple()
+                    print(hit, res)
+                elif isinstance(result, tuple):
+                    hit = result[0]
+                    res = result[1]
+                else:
+                    raise TypeError("插件返回值格式错误。")
                 if hit:
                     return True, res
             except TypeError as e:
@@ -65,9 +75,9 @@ class Command:
                     if hit:
                         return True, res
                 except BaseException as e:
-                    gu.log(f"{k}插件加载出现问题，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                    gu.log(f"{k}插件异常，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
             except BaseException as e:
-                gu.log(f"{k}插件加载出现问题，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                gu.log(f"{k} 插件异常，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
 
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform, role)
@@ -81,6 +91,10 @@ class Command:
             return True, self.web_search(message)
         if self.command_start_with(message, "keyword"):
             return True, self.keyword(message_obj, role)
+        if self.command_start_with(message, "ip"):
+            ip = requests.get("https://myip.ipip.net", timeout=5).text
+            return True, f"机器人 IP 信息：{ip}", "ip"
+            
         
         return False, None
     

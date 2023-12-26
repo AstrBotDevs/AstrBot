@@ -125,7 +125,7 @@ def web_keyword_search_via_bing(keyword) -> str:
             time.sleep(1)
             
     gu.log("fail to fetch bing info, using sougou.")
-    return google_web_search(keyword)
+    return web_keyword_search_via_sougou(keyword)
 
 def web_keyword_search_via_sougou(keyword) -> str:
     headers = {
