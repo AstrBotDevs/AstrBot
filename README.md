@@ -6,6 +6,7 @@
 
 # AstrBot
 
+*✨ 2024 - 希望成为一个跨平台、极易上手、稳定安全的机器人项目。✨*
 
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot)](https://github.com/Soulter/AstrBot/releases/latest)
 <img src="https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/34412545-2e37-400f-bedc-42348713ac1f.svg" alt="wakatime">
