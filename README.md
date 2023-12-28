@@ -11,31 +11,29 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot)](https://github.com/Soulter/AstrBot/releases/latest)
 <img src="https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/34412545-2e37-400f-bedc-42348713ac1f.svg" alt="wakatime">
 <img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="python">
+<a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg"/></a>
 <a href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft">
 <img alt="Static Badge" src="https://img.shields.io/badge/QQ群-322154837-purple">
 </a>
 <img alt="Static Badge" src="https://img.shields.io/badge/频道-x42d56aki2-purple">
 
 <a href="https://astrbot.soulter.top/center">项目主页(开发中)</a> ｜
-<a href="https://github.com/Soulter/QQChannelChatGPT/wiki">部署文档</a> ｜
+<a href="https://astrbot.soulter.top/center/docs/%E9%83%A8%E7%BD%B2/%E9%80%9A%E8%BF%87Docker%E9%83%A8%E7%BD%B2">部署文档</a> ｜
 <a href="https://github.com/Soulter/QQChannelChatGPT/issues">问题提交</a> ｜
 <a href="https://astrbot.soulter.top/center/docs/%E5%BC%80%E5%8F%91/%E6%8F%92%E4%BB%B6%E5%BC%80%E5%8F%91">插件开发（最少只需 25 行，真不难！）</a>
-
 </div>
 
-
-
 ## 🤔您可能想了解的
-- **如何部署？** [帮助文档](https://github.com/Soulter/QQChannelChatGPT/wiki) (部署不成功欢迎进群捞人解决<3)
+- **如何部署？** [帮助文档](https://astrbot.soulter.top/center/docs/%E9%83%A8%E7%BD%B2/%E9%80%9A%E8%BF%87Docker%E9%83%A8%E7%BD%B2) (部署不成功欢迎进群捞人解决<3)
 - **go-cqhttp启动不成功、报登录失败？** [在这里搜索解决方法](https://github.com/Mrs4s/go-cqhttp/issues)
 - **程序闪退/机器人启动不成功？** [提交issue或加群反馈](https://github.com/Soulter/QQChannelChatGPT/issues)
-- **如何开启ChatGPT、Bard、Claude等语言模型？** [查看帮助](https://github.com/Soulter/QQChannelChatGPT/wiki/%E8%A1%A5%E5%85%85%EF%BC%9A%E5%A6%82%E4%BD%95%E5%BC%80%E5%90%AFChatGPT%E3%80%81Bard%E3%80%81Claude%E7%AD%89%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%9E%8B%EF%BC%9F)
+- **如何开启ChatGPT、Claude等语言模型？** [查看帮助](https://github.com/Soulter/QQChannelChatGPT/wiki/%E8%A1%A5%E5%85%85%EF%BC%9A%E5%A6%82%E4%BD%95%E5%BC%80%E5%90%AFChatGPT%E3%80%81Bard%E3%80%81Claude%E7%AD%89%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%9E%8B%EF%BC%9F)
 
 ## 🧩功能：
 
 ✨ 最近功能：
-1. 支持切换代码分支。输入`/update checkout <分支名>`即可切换代码分支
-2. 正在测试可视化面板，输入`/update checkout dev_dashboard`后根据提示即可体验
+1. 可视化面板
+2. Docker 一键部署项目：[链接](https://astrbot.soulter.top/center/docs/%E9%83%A8%E7%BD%B2/%E9%80%9A%E8%BF%87Docker%E9%83%A8%E7%BD%B2)
 
 🌍支持的AI语言模型一览：
 
