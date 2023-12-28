@@ -33,13 +33,17 @@ from model.provider.provider import Provider
 from model.command.command import Command
 from util import general_utils as gu
 from util.cmd_config import CmdConfig as cc
-import util.gplugin as gplugin
+import util.function_calling.gplugin as gplugin
+import util.plugin_util as putil
 from PIL import Image as PILImage
 import io
 import traceback
 from . global_object import GlobalObject
 from typing import Union, Callable
-
+from addons.dashboard.helper import DashBoardHelper
+from addons.dashboard.server import DashBoardData
+from cores.monitor.perf import run_monitor
+from cores.database.conn import dbConn
 
 # 缓存的会话
 session_dict = {}
@@ -47,9 +51,6 @@ session_dict = {}
 count = {}
 # 统计信息
 stat_file = ''
-
-# 日志记录
-# logf = open('log.log', 'a+', encoding='utf-8')
 
 # 用户发言频率
 user_frequency = {}
@@ -64,11 +65,8 @@ announcement = ""
 # 机器人私聊模式
 direct_message_mode = True
 
-# 适配pyinstaller
-abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
-
 # 版本
-version = '3.0.4'
+version = '3.1.0'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
@@ -128,6 +126,10 @@ cc.init_attributes("openai_image_generate", {
     "style": "vivid",
     "quality": "standard",
 })
+cc.init_attributes("http_proxy", "")
+cc.init_attributes("https_proxy", "")
+cc.init_attributes("dashboard_username", "")
+cc.init_attributes("dashboard_password", "")
 # cc.init_attributes(["qq_forward_mode"], False)
 
 # QQ机器人
@@ -160,28 +162,7 @@ def _runner(func: Callable, args: tuple):
     loop.run_until_complete(func(*args))
     loop.close()
 
-
-# [Deprecated] 写入统计信息
-def toggle_count(at: bool, message):
-    global stat_file
-    try: 
-        if str(message.guild_id) not in count:
-            count[str(message.guild_id)] = {
-                'count': 1,
-                'direct_count': 1,
-            }
-        else:
-            count[str(message.guild_id)]['count'] += 1
-            if not at:
-                count[str(message.guild_id)]['direct_count'] += 1
-        stat_file = open(abs_path+"configs/stat", 'w', encoding='utf-8')
-        stat_file.write(json.dumps(count))
-        stat_file.flush()
-        stat_file.close()
-    except BaseException:
-        pass
-
-# 上传统计信息并检查更新
+# 统计消息数据
 def upload():
     global version, gocq_bot, qqchannel_bot
     while True:
@@ -220,14 +201,33 @@ def upload():
             pass
         time.sleep(10*60)
 
+
+# 语言模型选择
+def privider_chooser(cfg):
+    l = []
+    if 'rev_ChatGPT' in cfg and cfg['rev_ChatGPT']['enable']:
+        l.append('rev_chatgpt')
+    if 'rev_ernie' in cfg and cfg['rev_ernie']['enable']:
+        l.append('rev_ernie')
+    if 'rev_edgegpt' in cfg and cfg['rev_edgegpt']['enable']:
+        l.append('rev_edgegpt')
+    if 'openai' in cfg and len(cfg['openai']['key']) > 0 and cfg['openai']['key'][0] is not None:
+        l.append('openai_official')
+    return l
+
 '''
 初始化机器人
 '''
-def initBot(cfg, prov):
+def initBot(cfg):
     global llm_instance, llm_command_instance
     global baidu_judge, chosen_provider
-    global frequency_count, frequency_time, announcement, direct_message_mode, version
+    global frequency_count, frequency_time, announcement, direct_message_mode
     global keywords, _global_object
+    
+    # 迁移旧配置
+    gu.try_migrate_config(cfg)
+    # 使用新配置
+    cfg = cc.get_all()
 
     _event_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(_event_loop)
@@ -235,13 +235,22 @@ def initBot(cfg, prov):
     # 初始化 global_object
     _global_object = GlobalObject()
     _global_object.base_config = cfg
+    _global_object.stat['session'] = {}
+    _global_object.stat['message'] = {}
+    _global_object.stat['platform'] = {}
 
     if 'reply_prefix' in cfg:
-        _global_object.reply_prefix = cfg['reply_prefix']
+        # 适配旧版配置
+        if isinstance(cfg['reply_prefix'], dict):
+            for k in cfg['reply_prefix']:
+                _global_object.reply_prefix = cfg['reply_prefix'][k]
+                break
+        else:
+            _global_object.reply_prefix = cfg['reply_prefix']
 
     # 语言模型提供商
     gu.log("--------加载语言模型--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-
+    prov = privider_chooser(cfg)
     if REV_CHATGPT in prov:
         gu.log("- 逆向ChatGPT库 -", gu.LEVEL_INFO)
         if cfg['rev_ChatGPT']['enable']:
@@ -349,7 +358,7 @@ def initBot(cfg, prov):
     gu.log("--------加载插件--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 加载插件
     _command = Command(None, _global_object)
-    ok, err = _command.plugin_reload(_global_object.cached_plugins)
+    ok, err = putil.plugin_reload(_global_object.cached_plugins)
     if ok:
         gu.log("加载插件完成", gu.LEVEL_INFO)
     else:
@@ -395,8 +404,8 @@ def initBot(cfg, prov):
     _global_object.platform_qq = gocq_bot
 
     gu.log("机器人部署教程: https://github.com/Soulter/QQChannelChatGPT/wiki/", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交issue或加群322154837", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("如果有任何问题, 请在 https://github.com/Soulter/QQChannelChatGPT 上提交 issue 或加群 322154837", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    gu.log("请给 https://github.com/Soulter/QQChannelChatGPT 点个 star!", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
 
     # QQ频道
     if 'qqbot' in cfg and cfg['qqbot']['enable']:
@@ -410,7 +419,7 @@ def initBot(cfg, prov):
         # thread.join()
 
     if thread_inst == None:
-        raise Exception("[System-Error] 没有启用/成功启用任何机器人，程序退出")
+        gu.log("没有启用/成功启用任何机器人平台", gu.LEVEL_CRITICAL)
 
     default_personality_str = cc.get("default_personality_str", "")
     if default_personality_str == "":
@@ -420,12 +429,25 @@ def initBot(cfg, prov):
             "name": "default",
             "prompt": default_personality_str,
         }
+    # 初始化dashboard
+    _global_object.dashboard_data = DashBoardData(
+        stats={},
+        configs={},
+        logs={},
+        plugins=_global_object.cached_plugins,
+    )
+    dashboard_helper = DashBoardHelper(_global_object.dashboard_data, config=cc.get_all())
+    dashboard_thread = threading.Thread(target=dashboard_helper.run, daemon=True)
+    dashboard_thread.start()
 
+    # 运行 monitor
+    threading.Thread(target=run_monitor, args=(_global_object,), daemon=False).start()
+        
     gu.log("🎉 项目启动完成。")
+    
+    # asyncio.get_event_loop().run_until_complete(cli())
 
-    asyncio.get_event_loop().run_until_complete(cli())
-
-    thread_inst.join()
+    dashboard_thread.join()
 
 async def cli():
     time.sleep(1)
@@ -534,6 +556,8 @@ def check_frequency(id) -> bool:
 '''
 async def send_message(platform, message, res, session_id = None):
     global qqchannel_bot, qqchannel_bot, gocq_loop, session_dict
+
+    # 统计会话信息
     if session_id is not None:
         if session_id not in session_dict:
             session_dict[session_id] = {'cnt': 1}
@@ -541,15 +565,23 @@ async def send_message(platform, message, res, session_id = None):
             session_dict[session_id]['cnt'] += 1
     else:
         session_dict[session_id]['cnt'] += 1
+
+    # TODO: 这里会非常吃资源。然而 sqlite3 不支持多线程，所以暂时这样写。
+    curr_ts = int(time.time())
+    db_inst = dbConn()
+    db_inst.increment_stat_session(platform, session_id, 1)
+    db_inst.increment_stat_message(curr_ts, 1)
+    db_inst.increment_stat_platform(curr_ts, platform, 1)
+
     if platform == PLATFORM_QQCHAN:
         qqchannel_bot.send_qq_msg(message, res)
-    if platform == PLATFORM_GOCQ:
+    elif platform == PLATFORM_GOCQ:
         await gocq_bot.send_qq_msg(message, res)
-    if platform == PLATFROM_QQBOT:
+    elif platform == PLATFROM_QQBOT:
         message_chain = MessageChain()
         message_chain.parse_from_nakuru(res)
         await qq_bot.send(message, message_chain)
-    if platform == PLATFORM_CLI:
+    elif platform == PLATFORM_CLI:
         print(res)
 
 async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, NakuruGuildMessage],
@@ -754,8 +786,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
                         res = ""
                 chatgpt_res = str(res)
 
-            if chosen_provider in _global_object.reply_prefix:
-                chatgpt_res = _global_object.reply_prefix[chosen_provider] + chatgpt_res
+            chatgpt_res = _global_object.reply_prefix + chatgpt_res
         except BaseException as e:
             gu.log(f"调用异常：{traceback.format_exc()}", gu.LEVEL_ERROR, max_len=100000)
             gu.log("调用语言模型例程时出现异常。原因: "+str(e), gu.LEVEL_ERROR)
@@ -770,7 +801,6 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     if hit:
         # 检查指令. command_result是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
         if command_result == None:
-            # await send_message(platform, message, "指令调用未返回任何信息。", session_id=session_id)
             return
 
         command = command_result[2]

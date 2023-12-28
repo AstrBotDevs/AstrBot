@@ -4,6 +4,5 @@ WORKDIR /AstrBot
 COPY . /AstrBot/
 
 RUN python -m pip install -r requirements.txt
-RUN python -m pip install
 
 CMD [ "python", "main.py" ]

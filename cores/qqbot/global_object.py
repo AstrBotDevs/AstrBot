@@ -1,6 +1,7 @@
 from model.platform.qqchan import QQChan, NakuruGuildMember, NakuruGuildMessage
 from model.platform.qq import QQ
 from model.provider.provider import Provider
+from addons.dashboard.server import DashBoardData
 from nakuru import (
     CQHTTP,
     GroupMessage,
@@ -27,6 +28,8 @@ class GlobalObject:
     platform_qq: QQ
     platform_qqchan: QQChan
     default_personality: dict
+    dashboard_data: DashBoardData
+    stat: dict
     
     def __init__(self):
         self.nick = None # gocq 的昵称
@@ -41,6 +44,31 @@ class GlobalObject:
         self.platform_qq = None
         self.platform_qqchan = None
         self.default_personality = None
+        self.dashboard_data = None
+        self.stat = {}
+        '''
+        
+        {
+            "config": {},
+            "session": [
+                {
+                    "platform": "qq",
+                    "session_id": 123456,
+                    "cnt": 0
+                },
+                {...}
+            ],
+            "message": [
+                // 以一小时为单位
+                {
+                    "ts": 1234567,
+                    "cnt": 0
+                }
+            ]
+        }
+        
+        '''
+
 
 class AstrMessageEvent():
     message_str: str # 纯消息字符串

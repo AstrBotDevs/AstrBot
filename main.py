@@ -3,12 +3,17 @@ from pip._internal import main as pipmain
 import warnings
 import traceback
 import threading
+import logging
 
 warnings.filterwarnings("ignore")
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 def main():
-
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%H:%M:%S',
+    )
     # config.yaml 配置文件加载和环境确认
     try:
         import cores.qqbot.core as qqBot
@@ -28,9 +33,9 @@ def main():
         input("config.yaml 配置文件格式错误，请遵守 yaml 格式。")
 
     # 设置代理
-    if 'http_proxy' in cfg:
+    if 'http_proxy' in cfg and cfg['http_proxy'] != '':
         os.environ['HTTP_PROXY'] = cfg['http_proxy']
-    if 'https_proxy' in cfg:
+    if 'https_proxy' in cfg and cfg['https_proxy'] != '':
         os.environ['HTTPS_PROXY'] = cfg['https_proxy']
     
     os.environ['NO_PROXY'] = 'cn.bing.com,https://api.sgroup.qq.com'
@@ -39,26 +44,8 @@ def main():
     if not os.path.exists(abs_path + "temp"):
         os.mkdir(abs_path+"temp")
 
-    # 选择默认模型
-    provider = privider_chooser(cfg)
-    if len(provider) == 0:
-        gu.log("注意：您目前未开启任何语言模型。", gu.LEVEL_WARNING)
-
     # 启动主程序（cores/qqbot/core.py）
-    qqBot.initBot(cfg, provider)
-
-# 语言模型提供商选择器
-def privider_chooser(cfg):
-    l = []
-    if 'rev_ChatGPT' in cfg and cfg['rev_ChatGPT']['enable']:
-        l.append('rev_chatgpt')
-    if 'rev_ernie' in cfg and cfg['rev_ernie']['enable']:
-        l.append('rev_ernie')
-    if 'rev_edgegpt' in cfg and cfg['rev_edgegpt']['enable']:
-        l.append('rev_edgegpt')
-    if 'openai' in cfg and len(cfg['openai']['key']) > 0 and cfg['openai']['key'][0] is not None:
-        l.append('openai_official')
-    return l
+    qqBot.initBot(cfg)
 
 def check_env(ch_mirror=False):
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 9):
@@ -112,7 +99,6 @@ def get_platform():
         print("other")
 
 if __name__ == "__main__":
-
     args = sys.argv
 
     if '-cn' in args:
@@ -123,7 +109,7 @@ if __name__ == "__main__":
     if '-replit' in args:
         print("[System] 启动Replit Web保活服务...")
         try:
-            from webapp_replit import keep_alive
+            from util.webapp_replit import keep_alive
             keep_alive()
         except BaseException as e:
             print(e)

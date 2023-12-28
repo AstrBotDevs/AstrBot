@@ -13,3 +13,5 @@ readability-lxml
 revChatGPT~=6.8.6
 baidu-aip~=4.16.9
 websockets
+flask
+psutil

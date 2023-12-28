@@ -37,6 +37,25 @@ class CmdConfig():
             with open(cpath, "w", encoding="utf-8-sig") as f:
                 json.dump(d, f, indent=4, ensure_ascii=False)
                 f.flush()
+                
+    @staticmethod
+    def put_by_dot_str(key: str, value):
+        '''
+        根据点分割的字符串，将值写入配置文件
+        '''
+        check_exist()
+        with open(cpath, "r", encoding="utf-8-sig") as f:
+            d = json.load(f)
+            _d = d
+            _ks = key.split(".")
+            for i in range(len(_ks)):
+                if i == len(_ks) - 1:
+                    _d[_ks[i]] = value
+                else:
+                    _d = _d[_ks[i]]
+            with open(cpath, "w", encoding="utf-8-sig") as f:
+                json.dump(d, f, indent=4, ensure_ascii=False)
+                f.flush()
 
     @staticmethod
     def init_attributes(key: Union[str, list], init_val = ""):
