@@ -1,7 +1,7 @@
 pydantic~=1.10.4
 requests~=2.28.1
 openai~=1.2.3
-qq-botpy==1.1.2
+qq-botpy
 chardet~=5.1.0
 Pillow~=9.4.0
 GitPython~=3.1.31

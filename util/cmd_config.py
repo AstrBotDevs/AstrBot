@@ -81,3 +81,42 @@ class CmdConfig():
             with open(cpath, "w", encoding="utf-8-sig") as f:
                 json.dump(d, f, indent=4, ensure_ascii=False)
                 f.flush()
+
+def init_astrbot_config_items():
+    # 加载默认配置
+    cc = CmdConfig()
+    cc.init_attributes("qq_forward_threshold", 200)
+    cc.init_attributes("qq_welcome", "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
+    cc.init_attributes("bing_proxy", "")
+    cc.init_attributes("qq_pic_mode", False)
+    cc.init_attributes("rev_chatgpt_model", "")
+    cc.init_attributes("rev_chatgpt_plugin_ids", [])
+    cc.init_attributes("rev_chatgpt_PUID", "")
+    cc.init_attributes("rev_chatgpt_unverified_plugin_domains", [])
+    cc.init_attributes("gocq_host", "127.0.0.1")
+    cc.init_attributes("gocq_http_port", 5700)
+    cc.init_attributes("gocq_websocket_port", 6700)
+    cc.init_attributes("gocq_react_group", True)
+    cc.init_attributes("gocq_react_guild", True)
+    cc.init_attributes("gocq_react_friend", True)
+    cc.init_attributes("gocq_react_group_increase", True)
+    cc.init_attributes("gocq_qqchan_admin", "")
+    cc.init_attributes("other_admins", [])
+    cc.init_attributes("CHATGPT_BASE_URL", "")
+    cc.init_attributes("qqbot_appid", "")
+    cc.init_attributes("qqbot_secret", "")
+    cc.init_attributes("admin_qq", "")
+    cc.init_attributes("admin_qqchan", "")
+    cc.init_attributes("llm_env_prompt", "> hint: 末尾根据内容和心情添加 1-2 个emoji")
+    cc.init_attributes("default_personality_str", "")
+    cc.init_attributes("openai_image_generate", {
+        "model": "dall-e-3",
+        "size": "1024x1024",
+        "style": "vivid",
+        "quality": "standard",
+    })
+    cc.init_attributes("http_proxy", "")
+    cc.init_attributes("https_proxy", "")
+    cc.init_attributes("dashboard_username", "")
+    cc.init_attributes("dashboard_password", "")
+    # cc.init_attributes(["qq_forward_mode"], False)

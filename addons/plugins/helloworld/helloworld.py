@@ -4,7 +4,6 @@ from nakuru import (
     FriendMessage
 )
 from botpy.message import Message, DirectMessage
-from model.platform.qq import QQ
 from cores.qqbot.global_object import (
     AstrMessageEvent,
     CommandResult

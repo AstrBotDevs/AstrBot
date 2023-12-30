@@ -9,11 +9,6 @@ warnings.filterwarnings("ignore")
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%H:%M:%S',
-    )
     # config.yaml 配置文件加载和环境确认
     try:
         import cores.qqbot.core as qqBot
@@ -23,6 +18,7 @@ def main():
         ymlfile =  open(abs_path+"configs/config.yaml", 'r', encoding='utf-8')
         cfg = yaml.safe_load(ymlfile)
     except ImportError as import_error:
+        traceback.print_exc()
         print(import_error)
         input("第三方库未完全安装完毕，请退出程序重试。")
     except FileNotFoundError as file_not_found:
@@ -85,18 +81,6 @@ def check_env(ch_mirror=False):
             else:
                 break
     print("第三方库检查完毕。")
-
-def get_platform():
-    import platform
-    sys_platform = platform.platform().lower()
-    if "windows" in sys_platform:
-        return "win"
-    elif "macos" in sys_platform:
-        return "mac"
-    elif "linux" in sys_platform:
-        return "linux"
-    else:
-        print("other")
 
 if __name__ == "__main__":
     args = sys.argv

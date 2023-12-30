@@ -1,5 +1,5 @@
-from model.platform.qqchan import QQChan, NakuruGuildMember, NakuruGuildMessage
-from model.platform.qq import QQ
+from model.platform.qq_official import QQOfficial, NakuruGuildMember, NakuruGuildMessage
+from model.platform.qq_gocq import QQGOCQ
 from model.provider.provider import Provider
 from addons.dashboard.server import DashBoardData
 from nakuru import (
@@ -17,7 +17,7 @@ class GlobalObject:
     存放一些公用的数据，用于在不同模块(如core与command)之间传递
     '''
     nick: str # gocq 的昵称
-    base_config: dict # config.yaml
+    base_config: dict # config.json
     cached_plugins: dict # 缓存的插件
     web_search: bool # 是否开启了网页搜索
     reply_prefix: str
@@ -25,8 +25,8 @@ class GlobalObject:
     admin_qqchan: str
     uniqueSession: bool
     cnt_total: int
-    platform_qq: QQ
-    platform_qqchan: QQChan
+    platform_qq: QQGOCQ
+    platform_qqchan: QQOfficial
     default_personality: dict
     dashboard_data: DashBoardData
     stat: dict
@@ -46,35 +46,13 @@ class GlobalObject:
         self.default_personality = None
         self.dashboard_data = None
         self.stat = {}
-        '''
-        
-        {
-            "config": {},
-            "session": [
-                {
-                    "platform": "qq",
-                    "session_id": 123456,
-                    "cnt": 0
-                },
-                {...}
-            ],
-            "message": [
-                // 以一小时为单位
-                {
-                    "ts": 1234567,
-                    "cnt": 0
-                }
-            ]
-        }
-        
-        '''
 
 
 class AstrMessageEvent():
     message_str: str # 纯消息字符串
     message_obj: Union[GroupMessage, FriendMessage, GuildMessage, NakuruGuildMessage] # 消息对象
-    gocq_platform: QQ
-    qq_sdk_platform: QQChan
+    gocq_platform: QQGOCQ
+    qq_sdk_platform: QQOfficial
     platform: str # `gocq` 或 `qqchan`
     role: str # `admin` 或 `member`
     global_object: GlobalObject # 一些公用数据
@@ -82,8 +60,8 @@ class AstrMessageEvent():
 
     def __init__(self, message_str: str, 
                  message_obj: Union[GroupMessage, FriendMessage, GuildMessage, NakuruGuildMessage], 
-                 gocq_platform: QQ, 
-                 qq_sdk_platform: QQChan, 
+                 gocq_platform: QQGOCQ, 
+                 qq_sdk_platform: QQOfficial, 
                  platform: str, 
                  role: str, 
                  global_object: GlobalObject,
