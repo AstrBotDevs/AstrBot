@@ -68,16 +68,6 @@ init_astrbot_config_items()
 # 全局对象
 _global_object: GlobalObject = None
 
-# def new_sub_thread(func, args=()):
-#     thread = threading.Thread(target=_runner, args=(func, args), daemon=True)
-#     thread.start()
-
-# def _runner(func: Callable, args: tuple):
-#     loop = asyncio.new_event_loop()
-#     asyncio.set_event_loop(loop)
-#     loop.run_until_complete(func(*args))
-#     loop.close()
-
 # 统计消息数据
 def upload():
     global version

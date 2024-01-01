@@ -29,14 +29,16 @@ class botClient(Client):
         # 转换层
         nakuru_guild_message = gocq_compatible_receive(message)
         gu.log(f"转换后: {str(nakuru_guild_message)}", gu.LEVEL_DEBUG, max_len=9999)
-        await self.platform.handle_msg(nakuru_guild_message, is_group=True)
+        # await self.platform.handle_msg(nakuru_guild_message, is_group=True)
+        self.platform.new_sub_thread(self.platform.handle_msg, (nakuru_guild_message, True))
 
     # 收到私聊消息
     async def on_direct_message_create(self, message: DirectMessage):
         # 转换层
         nakuru_guild_message = gocq_compatible_receive(message)
         gu.log(f"转换后: {str(nakuru_guild_message)}", gu.LEVEL_DEBUG, max_len=9999)
-        await self.platform.handle_msg(nakuru_guild_message, is_group=False)
+        # await self.platform.handle_msg(nakuru_guild_message, is_group=False)
+        self.platform.new_sub_thread(self.platform.handle_msg, (nakuru_guild_message, False))
 
 class QQOfficial(Platform):
 
@@ -109,7 +111,7 @@ class QQOfficial(Platform):
         if message_result is None:
             return
 
-        await self.reply_msg(message, message_result.result_message)
+        self.reply_msg(message, message_result.result_message)
         if message_result.callback is not None:
             message_result.callback()
 
@@ -117,7 +119,7 @@ class QQOfficial(Platform):
         if session_id in self.waiting and self.waiting[session_id] == '':
             self.waiting[session_id] = message
 
-    async def reply_msg(self, 
+    def reply_msg(self, 
                     message: NakuruGuildMessage, 
                     res: list):
         '''
@@ -158,7 +160,8 @@ class QQOfficial(Platform):
             data['file_image'] = image_path
 
         try:
-            await self._send_wrapper(**data)
+            # await self._send_wrapper(**data)
+            self._send_wrapper(**data)
         except BaseException as e:
             print(e)
             # 分割过长的消息
@@ -168,40 +171,48 @@ class QQOfficial(Platform):
                 split_res.append(plain_text[len(plain_text)//2:])
                 for i in split_res:
                     data['content'] = i
-                    await self._send_wrapper(**data)
+                    # await self._send_wrapper(**data)
+                    self._send_wrapper(**data)
             else:
                 # 发送qq信息
                 try:
                     # 防止被qq频道过滤消息
                     plain_text = plain_text.replace(".", " . ")
-                    await self._send_wrapper(**data)
+                    # await self._send_wrapper(**data)
+                    self._send_wrapper(**data)
+
                 except BaseException as e:
                     try:
                         data['content'] = str.join(" ", plain_text)
-                        await self._send_wrapper(**data)
+                        # await self._send_wrapper(**data)
+                        self._send_wrapper(**data)
                     except BaseException as e:
                         plain_text = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
                         plain_text = plain_text.replace(".", "·")
                         data['content'] = plain_text
-                        await self._send_wrapper(**data)
+                        # await self._send_wrapper(**data)
+                        self._send_wrapper(**data)
  
-    async def _send_wrapper(self, **kwargs):
-        await self.client.api.post_message(**kwargs)
+    def _send_wrapper(self, **kwargs):
+        # await self.client.api.post_message(**kwargs)
+        asyncio.run_coroutine_threadsafe(self.client.api.post_message(**kwargs), self.loop).result()
 
-    async def send_msg(self, channel_id: int, message_chain: list, message_id: int = None):
+    def send_msg(self, channel_id: int, message_chain: list, message_id: int = None):
         '''
-        推送消息, 如果有 message_id，那么就是回复消息。
+        推送消息, 如果有 message_id，那么就是回复消息。非异步。
         '''
         _n = NakuruGuildMessage()
         _n.channel_id = channel_id
         _n.message_id = message_id
-        await self.reply_msg(_n, message_chain)
+        # await self.reply_msg(_n, message_chain)
+        self.reply_msg(_n, message_chain)
 
-    async def send(self, message_obj, message_chain: list):
+    def send(self, message_obj, message_chain: list):
         '''
-        发送信息。内容同 reply_msg
+        发送信息。内容同 reply_msg。非异步。
         '''
-        await self.reply_msg(message_obj, message_chain)
+        # await self.reply_msg(message_obj, message_chain)
+        self.reply_msg(message_obj, message_chain)
 
     def wait_for_message(self, channel_id: int) -> NakuruGuildMessage:
         '''

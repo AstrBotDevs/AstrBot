@@ -25,7 +25,9 @@ class FakeSource:
 class QQGOCQ(Platform):
     def __init__(self, cfg: dict, message_handler: callable) -> None:
         super().__init__(message_handler)
-        asyncio.set_event_loop(asyncio.new_event_loop())
+
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
 
         self.waiting = {}
         self.gocq_cnt = 0
@@ -57,10 +59,12 @@ class QQGOCQ(Platform):
         async def _(app: CQHTTP, source: GroupMessage):
             if self.cc.get("gocq_react_group", True):
                 if isinstance(source.message[0], Plain):
-                    await self.handle_msg(source, True)
+                    # await self.handle_msg(source, True)
+                    self.new_sub_thread(self.handle_msg, (source, True))
                 elif isinstance(source.message[0], At):
                     if source.message[0].qq == source.self_id:
-                        await self.handle_msg(source, True)
+                        # await self.handle_msg(source, True)
+                        self.new_sub_thread(self.handle_msg, (source, True))
                 else:
                     return
             
@@ -68,7 +72,8 @@ class QQGOCQ(Platform):
         async def _(app: CQHTTP, source: FriendMessage):
             if self.cc.get("gocq_react_friend", True):
                 if isinstance(source.message[0], Plain):
-                    await self.handle_msg(source, False)
+                    # await self.handle_msg(source, False)
+                    self.new_sub_thread(self.handle_msg, (source, False))
                 else:
                     return
             
@@ -84,16 +89,19 @@ class QQGOCQ(Platform):
         async def _(app: CQHTTP, source: Notify):
             print(source)
             if source.sub_type == "poke" and source.target_id == source.self_id:
-                await self.handle_msg(source, False)
+                # await self.handle_msg(source, False)
+                self.new_sub_thread(self.handle_msg, (source, False))
 
         @gocq_app.receiver("GuildMessage")
         async def _(app: CQHTTP, source: GuildMessage):
             if self.cc.get("gocq_react_guild", True):
                 if isinstance(source.message[0], Plain):
-                    await self.handle_msg(source, True)
+                    # await self.handle_msg(source, True)
+                    self.new_sub_thread(self.handle_msg, (source, True))
                 elif isinstance(source.message[0], At):
                     if source.message[0].qq == source.self_tiny_id:
-                        await self.handle_msg(source, True)
+                        # await self.handle_msg(source, True)
+                        self.new_sub_thread(self.handle_msg, (source, True))
                 else:
                     return
         
@@ -149,7 +157,7 @@ class QQGOCQ(Platform):
 
         if message_result is None:
             return
-        await self.reply_msg(message, message_result.result_message)
+        self.reply_msg(message, message_result.result_message)
         if message_result.callback is not None:
             message_result.callback()
         
@@ -157,7 +165,7 @@ class QQGOCQ(Platform):
         if session_id in self.waiting and self.waiting[session_id] == '':
             self.waiting[session_id] = message
 
-    async def reply_msg(self,
+    def reply_msg(self,
                         message: Union[GroupMessage, FriendMessage, GuildMessage, Notify],
                         result_message: list):
         """
@@ -199,10 +207,12 @@ class QQGOCQ(Platform):
         # 回复消息链
         if isinstance(res, list) and len(res) > 0:
             if source.type == "GuildMessage":
-                await self.client.sendGuildChannelMessage(source.guild_id, source.channel_id, res)
+                # await self.client.sendGuildChannelMessage(source.guild_id, source.channel_id, res)
+                asyncio.run_coroutine_threadsafe(self.client.sendGuildChannelMessage(source.guild_id, source.channel_id, res), self.loop).result()
                 return
             elif source.type == "FriendMessage":
-                await self.client.sendFriendMessage(source.user_id, res)
+                # await self.client.sendFriendMessage(source.user_id, res)
+                asyncio.run_coroutine_threadsafe(self.client.sendFriendMessage(source.user_id, res), self.loop).result()
                 return
             elif source.type == "GroupMessage":
                 # 过长时forward发送
@@ -225,29 +235,35 @@ class QQGOCQ(Platform):
                     node.time = int(time.time())
                     # print(node)
                     nodes=[node]
-                    await self.client.sendGroupForwardMessage(source.group_id, nodes)
+                    # await self.client.sendGroupForwardMessage(source.group_id, nodes)
+                    asyncio.run_coroutine_threadsafe(self.client.sendGroupForwardMessage(source.group_id, nodes), self.loop).result()
                     return
-                await self.client.sendGroupMessage(source.group_id, res)
+                # await self.client.sendGroupMessage(source.group_id, res)
+                asyncio.run_coroutine_threadsafe(self.client.sendGroupMessage(source.group_id, res), self.loop).result()
                 return
 
-    async def send_msg(self, message: Union[GroupMessage, FriendMessage, GuildMessage, Notify], result_message: list):
+    def send_msg(self, message: Union[GroupMessage, FriendMessage, GuildMessage, Notify], result_message: list):
         '''
         提供给插件的发送QQ消息接口。
         参数说明：第一个参数可以是消息对象，也可以是QQ群号。第二个参数是消息内容（消息内容可以是消息链列表，也可以是纯文字信息）。
+        非异步
         '''
         try:
-            await self.reply_msg(message, result_message)
+            # await self.reply_msg(message, result_message)
+            self.reply_msg(message, result_message)
         except BaseException as e:
             raise e
     
-    async def send(self, 
+    def send(self, 
             to,
             res):
         '''
         同 send_msg()
+        非异步
         '''
         try:
-            await self.send_msg(to, res)
+            # await self.send_msg(to, res)
+            self.reply_msg(to, res)
         except BaseException as e:
             raise e
 
@@ -293,7 +309,7 @@ class QQGOCQ(Platform):
         返回一个方法调用器，可以用来立即调用nakuru的方法。
         """
         try:
-            ret = asyncio.run_coroutine_threadsafe(func(*args, **kwargs), self.gocq_loop).result()
+            ret = asyncio.run_coroutine_threadsafe(func(*args, **kwargs), self.loop).result()
             return ret
         except BaseException as e:
             raise e
