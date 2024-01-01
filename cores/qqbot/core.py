@@ -54,6 +54,7 @@ chosen_provider = None
 # 语言模型对象
 llm_instance: dict[str, Provider] = {}
 llm_command_instance: dict[str, Command] = {}
+llm_wake_prefix = ""
 
 # 百度内容审核实例
 baidu_judge = None
@@ -240,7 +241,9 @@ def initBot(cfg):
         nick_qq = tuple(nick_qq)
     _global_object.nick = nick_qq
 
-    thread_inst = None
+    # 语言模型唤醒词
+    global llm_wake_prefix
+    llm_wake_prefix = cc.get("llm_wake_prefix", "")
 
     gu.log("--------加载插件--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 加载插件
@@ -481,7 +484,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         for i in uw.unfit_words_q:
             matches = re.match(i, message_str.strip(), re.I | re.M)
             if matches:
-                return MessageResult(f"你的提问得到的回复未通过【自有关键词拦截】服务, 不予回复。")
+                return MessageResult(f"你的提问得到的回复未通过【默认关键词拦截】服务, 不予回复。")
         if baidu_judge != None:
             check, msg = baidu_judge.judge(message_str)
             if not check:
@@ -489,6 +492,8 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         if chosen_provider == None:
             return MessageResult(f"管理员未启动任何语言模型或者语言模型初始化时失败。")
         try:
+            if llm_wake_prefix != "" and not message_str.startswith(llm_wake_prefix):
+                return
             # check image url
             image_url = None
             for comp in message.message:

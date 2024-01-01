@@ -197,6 +197,14 @@ class DashBoardHelper():
                         value=config['direct_message_mode'],
                         path="direct_message_mode",
                     ),
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="string",
+                        name="LLM 唤醒词",
+                        description="如果不为空, 那么只有当消息以此词开头时，才会调用大语言模型进行回复。如设置为 /chat，那么只有当消息以 /chat 开头时，才会调用大语言模型进行回复。",
+                        value=config['llm_wake_prefix'],
+                        path="llm_wake_prefix",
+                    )
                 ]
             )
             

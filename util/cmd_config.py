@@ -108,6 +108,7 @@ def init_astrbot_config_items():
     cc.init_attributes("admin_qq", "")
     cc.init_attributes("admin_qqchan", "")
     cc.init_attributes("llm_env_prompt", "> hint: 末尾根据内容和心情添加 1-2 个emoji")
+    cc.init_attributes("llm_wake_prefix", "")
     cc.init_attributes("default_personality_str", "")
     cc.init_attributes("openai_image_generate", {
         "model": "dall-e-3",
@@ -119,4 +120,5 @@ def init_astrbot_config_items():
     cc.init_attributes("https_proxy", "")
     cc.init_attributes("dashboard_username", "")
     cc.init_attributes("dashboard_password", "")
+    
     # cc.init_attributes(["qq_forward_mode"], False)
