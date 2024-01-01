@@ -1,6 +1,5 @@
 from model.command.command import Command
 from model.provider.rev_chatgpt import ProviderRevChatGPT
-from model.platform.qq import QQ
 from cores.qqbot.personality import personalities
 from cores.qqbot.global_object import GlobalObject
 

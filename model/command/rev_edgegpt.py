@@ -1,7 +1,6 @@
 from model.command.command import Command
 from model.provider.rev_edgegpt import ProviderRevEdgeGPT
 import asyncio
-from model.platform.qq import QQ
 from cores.qqbot.global_object import GlobalObject
 
 class CommandRevEdgeGPT(Command):

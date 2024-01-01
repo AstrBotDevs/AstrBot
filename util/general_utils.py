@@ -129,18 +129,23 @@ def port_checker(port: int, host: str = "localhost"):
         sk.close()
         return False
     
-def word2img(title: str, text: str, max_width=30, font_size=20):
+def get_font_path() -> str:
     if os.path.exists("resources/fonts/syst.otf"):
         font_path = "resources/fonts/syst.otf"
     elif os.path.exists("QQChannelChatGPT/resources/fonts/syst.otf"):
         font_path = "QQChannelChatGPT/resources/fonts/syst.otf"
+    elif os.path.exists("AstrBot/resources/fonts/syst.otf"):
+        font_path = "AstrBot/resources/fonts/syst.otf"
     elif os.path.exists("C:/Windows/Fonts/simhei.ttf"):
         font_path = "C:/Windows/Fonts/simhei.ttf"
     elif os.path.exists("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"):
         font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
     else:
         raise Exception("找不到字体文件")
+    return font_path
     
+def word2img(title: str, text: str, max_width=30, font_size=20):
+    font_path = get_font_path()
     width_factor = 1.0
     height_factor = 1.5
     # 格式化文本宽度最大为30
@@ -149,8 +154,6 @@ def word2img(title: str, text: str, max_width=30, font_size=20):
     length = len(lines)
     for l in lines:
         if len(l) > max_width:
-            # lines[i] = l[:max_width] + '\n' + l[max_width:]
-            # for
             cp = l
             for ii in range(len(l)):
                 if ii % max_width == 0:
@@ -214,24 +217,9 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     # 用于匹配图片的正则表达式
     IMAGE_REGEX = r"!\s*\[.*?\]\s*\((.*?)\)"
 
-    
-    if os.path.exists("resources/fonts/syst.otf"):
-        font_path = "resources/fonts/syst.otf"
-    elif os.path.exists("QQChannelChatGPT/resources/fonts/syst.otf"):
-        font_path = "QQChannelChatGPT/resources/fonts/syst.otf"
-    elif os.path.exists("C:/Windows/Fonts/simhei.ttf"):
-        font_path = "C:/Windows/Fonts/simhei.ttf"
-    elif os.path.exists("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"):
-        font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-    else:
-        raise Exception("找不到字体文件")
-    # backup
-    if os.path.exists("resources/fonts/simhei.ttf"):
-        font_path1 = "resources/fonts/simhei.ttf"
-    elif os.path.exists("QQChannelChatGPT/resources/fonts/simhei.ttf"):
-        font_path1 = "QQChannelChatGPT/resources/fonts/simhei.ttf"
-    else:
-        font_path1 = font_path
+    font_path = get_font_path()
+    font_path1 = font_path
+
     # 加载字体
     font = ImageFont.truetype(font_path, font_size)
     
