@@ -7,6 +7,8 @@ import re
 import requests
 from util.cmd_config import CmdConfig
 import socket
+from cores.qqbot.global_object import GlobalObject
+import platform
 
 PLATFORM_GOCQ = 'gocq'
 PLATFORM_QQCHAN = 'qqchan'
@@ -532,3 +534,17 @@ def get_local_ip_addresses():
         s.close()
 
     return ip
+
+def get_sys_info(global_object: GlobalObject):
+    mem = None
+    stats = global_object.dashboard_data.stats
+    os_name = platform.system()
+    os_version = platform.version()
+
+    if 'sys_perf' in stats and 'memory' in stats['sys_perf']:
+        mem = stats['sys_perf']['memory']
+    return {
+        'mem': mem,
+        'os': os_name + '_' + os_version,
+        'py': platform.python_version(),
+    }

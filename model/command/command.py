@@ -16,7 +16,6 @@ import util.plugin_util as putil
 import shutil
 import importlib
 from util.cmd_config import CmdConfig as cc
-from model.platform.qq import QQ
 import stat
 from nakuru.entities.components import (
     Plain,
@@ -60,7 +59,6 @@ class Command:
                 if isinstance(result, CommandResult):
                     hit = result.hit
                     res = result._result_tuple()
-                    print(hit, res)
                 elif isinstance(result, tuple):
                     hit = result[0]
                     res = result[1]

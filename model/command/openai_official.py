@@ -1,9 +1,6 @@
 from model.command.command import Command
 from model.provider.openai_official import ProviderOpenAIOfficial
 from cores.qqbot.personality import personalities
-
-from model.platform.qq import QQ
-from util import general_utils as gu
 from cores.qqbot.global_object import GlobalObject
 
 class CommandOpenAIOfficial(Command):
