@@ -364,14 +364,16 @@ class Command:
                 else:
                     commits_log += f"[{index}] {commit.message}\n-----------\n"
                 index+=1
-            remote_commit_hash = origin.refs.master.commit.hexsha[:6]
+            # remote_commit_hash = origin.refs.master.commit.hexsha[:6]
+            remote_commit_hash = origin.refs[curr_branch].commit.hexsha[:6]
             return True, f"当前分支: {curr_branch}\n当前版本: {now_commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n3条commit(非最新):\n{str(commits_log)}\nTips:\n1. 使用 update latest 更新至最新版本；\n2. 使用 update checkout <分支名> 切换代码分支。", "update"
         else:
             if l[1] == "latest":
                 try:
+                    curr_branch = repo.active_branch.name
                     origin = repo.remotes.origin
-                    origin.fetch()
-                    commits = list(repo.iter_commits('master', max_count=1))
+                    repo.git.pull("origin", curr_branch, "-f")
+                    commits = list(repo.iter_commits(curr_branch, max_count=1))
                     commit_log = commits[0].message
                     tag = "update"
                     if len(l) == 3 and l[2] == "r":
@@ -390,6 +392,9 @@ class Command:
                     origin = repo.remotes.origin
                     origin.fetch()
                     repo.git.checkout(l[2])
+
+                    # 更新分支（强制）
+                    repo.git.pull("origin", l[2], "-f")
                     
                     # 获得最新的 commit
                     commits = list(repo.iter_commits(max_count=1))
