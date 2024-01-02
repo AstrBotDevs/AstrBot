@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - dev_dashboard
     paths-ignore:
       - '**/*.md'
   workflow_dispatch:
@@ -18,8 +17,8 @@ jobs:
         uses: actions/checkout@v2
       - name: Build image
         run: |
-          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:v1 .
+          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:latest .
       - name: Publish image
         run: |
           docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} -p ${{ secrets.DOCKER_HUB_PASSWORD }}
-          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:v1
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:latest
