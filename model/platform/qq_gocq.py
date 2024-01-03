@@ -123,10 +123,11 @@ class QQGOCQ(Platform):
                 if message.type == "GroupMessage":
                     if i.qq == message.self_id:
                         resp = True
-        for i in self.nick_qq:
-            if i != '' and i in message.message[0].text:
-                resp = True
-                break
+            elif isinstance(i, Plain):
+                for nick in self.nick_qq:
+                    if nick != '' and message.message[0].text.strip().startwith(nick):
+                        resp = True
+                        break
                 
         if not resp: return
         
