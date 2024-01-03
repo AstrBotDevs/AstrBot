@@ -125,7 +125,7 @@ class QQGOCQ(Platform):
                         resp = True
             elif isinstance(i, Plain):
                 for nick in self.nick_qq:
-                    if nick != '' and message.message[0].text.strip().startswith(nick):
+                    if nick != '' and i.text.strip().startswith(nick):
                         resp = True
                         break
                 
