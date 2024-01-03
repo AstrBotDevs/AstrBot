@@ -34,10 +34,11 @@ class QQGOCQ(Platform):
         self.cc = CmdConfig()
         self.cfg = cfg
 
-        self.nick_qq = cfg['nick_qq']
+        try:
+            self.nick_qq = cfg['nick_qq']
+        except:
+            self.nick_qq = ("ai","!","！")
         nick_qq = self.nick_qq
-        if nick_qq == None:
-            nick_qq = ("ai","!","！")
         if isinstance(nick_qq, str):
             nick_qq = (nick_qq,)
         if isinstance(nick_qq, list):
