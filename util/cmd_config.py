@@ -106,6 +106,7 @@ def init_astrbot_config_items():
     cc.init_attributes("qqbot_appid", "")
     cc.init_attributes("qqbot_secret", "")
     cc.init_attributes("admin_qq", "")
+    cc.init_attributes("nick_qq", ["!", "！", "ai"])
     cc.init_attributes("admin_qqchan", "")
     cc.init_attributes("llm_env_prompt", "> hint: 末尾根据内容和心情添加 1-2 个emoji")
     cc.init_attributes("llm_wake_prefix", "")
@@ -120,5 +121,6 @@ def init_astrbot_config_items():
     cc.init_attributes("https_proxy", "")
     cc.init_attributes("dashboard_username", "")
     cc.init_attributes("dashboard_password", "")
+    
     
     # cc.init_attributes(["qq_forward_mode"], False)
