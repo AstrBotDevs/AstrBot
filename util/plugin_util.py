@@ -12,33 +12,40 @@ import shutil
 from pip._internal import main as pipmain
 import importlib
 import stat
-
+import traceback
+from types import ModuleType
 
 # 找出模块里所有的类名
-def get_classes(p_name, arg):
+def get_classes(p_name, arg: ModuleType):
     classes = []
     clsmembers = inspect.getmembers(arg, inspect.isclass)
     for (name, _) in clsmembers:
-        # print(name, p_name)
-        if p_name.lower() == name.lower()[:-6] or name.lower() == "main":
+        if name.lower().endswith("plugin") or name.lower() == "main":
             classes.append(name)
             break
+        # if p_name.lower() == name.lower()[:-6] or name.lower() == "main":
     return classes
 
 # 获取一个文件夹下所有的模块, 文件名和文件夹名相同
 def get_modules(path):
     modules = []
-    for root, dirs, files in os.walk(path):
-        # 获得所在目录名
-        p_name = os.path.basename(root)
-        for file in files:
-            """
-            与文件夹名（不计大小写）相同或者是main.py的，都算启动模块
-            """
-            if file.endswith(".py") and not file.startswith("__") and (p_name.lower() == file[:-3].lower() or file[:-3].lower() == "main"):
+
+    # 得到其下的所有文件夹
+    dirs = os.listdir(path)
+    # 遍历文件夹，找到 main.py 或者和文件夹同名的文件
+    for d in dirs:
+        if os.path.isdir(os.path.join(path, d)):
+            if os.path.exists(os.path.join(path, d, "main.py")):
+                module_str = 'main'
+            elif os.path.exists(os.path.join(path, d, d + ".py")):
+                module_str = d
+            else:
+                print(f"插件 {d} 未找到 main.py 或者 {d}.py，跳过。")
+                continue
+            if os.path.exists(os.path.join(path, d, "main.py")) or os.path.exists(os.path.join(path, d, d + ".py")):
                 modules.append({
-                    "pname": p_name,
-                    "module": file[:-3],
+                    "pname": d,
+                    "module": module_str
                 })
     return modules
 
@@ -100,6 +107,7 @@ def plugin_reload(cached_plugins: dict, target: str = None, all: bool = False):
                     "root_dir_name": root_dir_name,
                 }
         except BaseException as e:
+            traceback.print_exc()
             fail_rec += f"加载{p}插件出现问题，原因 {str(e)}\n"
     if fail_rec == "":
         return True, None
