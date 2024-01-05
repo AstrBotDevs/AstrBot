@@ -136,14 +136,26 @@ class QQOfficial(Platform):
             plain_text, image_path = gocq_compatible_send(res)
         elif isinstance(res, str):
             plain_text = res
-        
-        if image_path is not None and image_path != '':
-            msg_ref = None
-            if image_path.startswith("http"):
-                pic_res = requests.get(image_path, stream = True)
-                if pic_res.status_code == 200:
-                    image = PILImage.open(io.BytesIO(pic_res.content))
-                    image_path = gu.save_temp_img(image)
+            
+        if self.cfg['qq_pic_mode']:
+            # 文本转图片，并且加上原来的图片
+            if plain_text != '' or image_path != '':
+                if image_path is not None and image_path != '':
+                    if image_path.startswith("http"):
+                        plain_text += "\n\n" + "![](" + image_path + ")"
+                    else:
+                        plain_text += "\n\n" + "![](file:///" + image_path + ")"
+                image_path = gu.create_markdown_image("".join(plain_text))
+                plain_text = ""
+
+        else:
+            if image_path is not None and image_path != '':
+                msg_ref = None
+                if image_path.startswith("http"):
+                    pic_res = requests.get(image_path, stream = True)
+                    if pic_res.status_code == 200:
+                        image = PILImage.open(io.BytesIO(pic_res.content))
+                        image_path = gu.save_temp_img(image)
 
         if message.raw_message is not None and image_path == '': # file_image与message_reference不能同时传入
             msg_ref = Reference(message_id=message.raw_message.id, ignore_get_message_error=False)
