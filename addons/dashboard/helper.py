@@ -282,14 +282,14 @@ class DashBoardHelper():
 
             llm_group = DashBoardConfig(
                 config_type="group",
-                name="LLM 配置",
+                name="OpenAI 官方接口类设置",
                 description="",
                 body=[
                     DashBoardConfig(
                         config_type="item",
                         val_type="list",
                         name="OpenAI API KEY",
-                        description="OpenAI API 的 KEY。支持使用非官方但是兼容的 API。",
+                        description="OpenAI API 的 KEY。支持使用非官方但是兼容的 API（第三方中转key）。",
                         value=config['openai']['key'],
                         path="openai.key",
                     ),
@@ -400,6 +400,47 @@ class DashBoardHelper():
                 ]
             )
             
+            rev_chatgpt_accounts = config['rev_ChatGPT']['account']
+            new_accs = []
+            for i in rev_chatgpt_accounts:
+                if isinstance(i, dict) and 'access_token' in i:
+                    new_accs.append(i['access_token'])
+                elif isinstance(i, str):
+                    new_accs.append(i)
+            config['rev_ChatGPT']['account'] = new_accs
+            
+            rev_chatgpt_group = DashBoardConfig(
+                config_type="group",
+                name="逆向语言模型服务设置",
+                description="",
+                body=[
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="bool",
+                        name="启用逆向语言模型服务",
+                        description="",
+                        value=config['rev_ChatGPT']['enable'],
+                        path="rev_ChatGPT.enable",
+                    ), 
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="string",
+                        name="终结点（Endpoint）地址",
+                        description="逆向服务的终结点服务器的地址。",
+                        value=config['CHATGPT_BASE_URL'],
+                        path="CHATGPT_BASE_URL",
+                    ), 
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="list",
+                        name="assess_token",
+                        description="assess_token",
+                        value=config['rev_ChatGPT']['account'],
+                        path="rev_ChatGPT.account",
+                    ),
+                ]
+            )
+            
             baidu_aip_group = DashBoardConfig(
                 config_type="group",
                 name="百度内容审核",
@@ -476,6 +517,7 @@ class DashBoardHelper():
                 gocq_platform_detail_group,
                 proxy_group,
                 llm_group,
+                rev_chatgpt_group,
                 other_group,
                 baidu_aip_group
             ]

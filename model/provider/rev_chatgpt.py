@@ -15,13 +15,19 @@ class ProviderRevChatGPT(Provider):
         for i in range(0, len(config['account'])):
             try:
                 gu.log(f"创建逆向ChatGPT负载{str(i+1)}中...", level=gu.LEVEL_INFO, tag="RevChatGPT")
-
-                if 'password' in config['account'][i]:
-                    gu.log(f"创建逆向ChatGPT负载{str(i+1)}失败: 已不支持账号密码登录，请使用access_token方式登录。", level=gu.LEVEL_ERROR, tag="RevChatGPT")
-                    continue
-                rev_account_config = {
-                    'access_token': config['account'][i]['access_token'],
-                }
+                
+                if isinstance(config['account'][i], str):
+                    # 默认是 access_token
+                    rev_account_config = {
+                        'access_token': config['account'][i],
+                    }
+                else:
+                    if 'password' in config['account'][i]:
+                        gu.log(f"创建逆向ChatGPT负载{str(i+1)}失败: 已不支持账号密码登录，请使用access_token方式登录。", level=gu.LEVEL_ERROR, tag="RevChatGPT")
+                        continue
+                    rev_account_config = {
+                        'access_token': config['account'][i]['access_token'],
+                    }
                 if self.cc.get("rev_chatgpt_model") != "":
                     rev_account_config['model'] = self.cc.get("rev_chatgpt_model")
                 if len(self.cc.get("rev_chatgpt_plugin_ids")) > 0:
