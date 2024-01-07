@@ -108,7 +108,7 @@ def init_astrbot_config_items():
     cc.init_attributes("admin_qq", "")
     cc.init_attributes("nick_qq", ["!", "！", "ai"])
     cc.init_attributes("admin_qqchan", "")
-    cc.init_attributes("llm_env_prompt", "> hint: 末尾根据内容和心情添加 1-2 个emoji")
+    cc.init_attributes("llm_env_prompt", "")
     cc.init_attributes("llm_wake_prefix", "")
     cc.init_attributes("default_personality_str", "")
     cc.init_attributes("openai_image_generate", {
