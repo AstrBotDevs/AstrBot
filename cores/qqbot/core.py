@@ -347,16 +347,16 @@ def run_qqchan_bot(cfg: dict, global_object: GlobalObject):
 def run_gocq_bot(cfg: dict, _global_object: GlobalObject):
     from model.platform.qq_gocq import QQGOCQ
     
-    gu.log("正在检查本地GO-CQHTTP连接...端口5700, 6700", tag="QQ")
+    gu.log("正在检查与 go-cqhttp 的连接...端口5700, 6700", tag="QQ")
     noticed = False
     while True:
         if not gu.port_checker(5700, cc.get("gocq_host", "127.0.0.1")) or not gu.port_checker(6700, cc.get("gocq_host", "127.0.0.1")):
             if not noticed:
                 noticed = True
-                gu.log("与GO-CQHTTP通信失败, 请检查GO-CQHTTP是否启动并正确配置。程序会每隔 5s 自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
+                gu.log("与 go-cqhttp 通信失败, 请检查 go-cqhttp 是否启动并正确配置。程序会每隔 5s 自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
             time.sleep(5)
         else:
-            gu.log("检查完毕，未发现问题。", tag="QQ")
+            gu.log("成功连接到 go-cqhttp。", tag="QQ")
             break
     try:
         qq_gocq = QQGOCQ(cfg=cfg, message_handler=oper_msg)
