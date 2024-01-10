@@ -53,6 +53,7 @@ def google_web_search(keyword) -> str:
         for i in ls:
             desc = i.description
             try:
+                gu.log(f"搜索网页: {i.url}", tag="网页搜索", level=gu.LEVEL_INFO)
                 desc = fetch_website_content(i.url)
             except BaseException as e:
                 print(f"(google) fetch_website_content err: {str(e)}")
@@ -74,51 +75,54 @@ def web_keyword_search_via_bing(keyword) -> str:
     }
     url = "https://www.bing.com/search?q="+keyword
     _cnt = 0
-    _detail_store = []
+    # _detail_store = []
     while _cnt < 5:
         try:
             response = requests.get(url, headers=headers)
             response.encoding = "utf-8"
             gu.log(f"bing response: {response.text}", tag="bing", level=gu.LEVEL_DEBUG, max_len=9999)
             soup = BeautifulSoup(response.text, "html.parser")
-            res = []
+            res = ""
+            result_cnt = 0
             ols = soup.find(id="b_results")
             for i in ols.find_all("li", class_="b_algo"):
                 try:
                     title = i.find("h2").text
                     desc = i.find("p").text
                     link = i.find("h2").find("a").get("href")
-                    res.append({
-                        "title": title,
-                        "desc": desc,
-                        "link": link,
-                    })
-                    if len(res) >= 5: # 限制5条
-                        break
-                    if len(_detail_store) >= 3:
-                        continue
+                    # res.append({
+                    #     "title": title,
+                    #     "desc": desc,
+                    #     "link": link,
+                    # })
+                    try:
+                        gu.log(f"搜索网页: {link}", tag="网页搜索", level=gu.LEVEL_INFO)
+                        desc = fetch_website_content(link)
+                    except BaseException as e:
+                        print(f"(bing) fetch_website_content err: {str(e)}")
 
-                    # 爬取前两条的网页内容
-                    if "zhihu.com" in link:
-                        try:
-                            _detail_store.append(special_fetch_zhihu(link))
-                        except BaseException as e:
-                            print(f"zhihu parse err: {str(e)}")
-                    else:
-                        try:
-                            _detail_store.append(fetch_website_content(link))
-                        except BaseException as e:
-                            print(f"fetch_website_content err: {str(e)}")
+                    res += f"# No.{str(result_cnt + 1)}\ntitle: {title}\nurl: {link}\ncontent: {desc}\n\n"
+                    result_cnt += 1
+                    if result_cnt > 5: break
+
+                    # if len(_detail_store) >= 3:
+                    #     continue
+                    # # 爬取前两条的网页内容
+                    # if "zhihu.com" in link:
+                    #     try:
+                    #         _detail_store.append(special_fetch_zhihu(link))
+                    #     except BaseException as e:
+                    #         print(f"zhihu parse err: {str(e)}")
+                    # else:
+                    #     try:
+                    #         _detail_store.append(fetch_website_content(link))
+                    #     except BaseException as e:
+                    #         print(f"fetch_website_content err: {str(e)}")
 
                 except Exception as e:
                     print(f"bing parse err: {str(e)}")
-            if len(res) == 0:
-                break
-            if len(_detail_store) > 0:
-                ret = f"{str(res)} \n具体网页内容: {str(_detail_store)}"
-            else:
-                ret = f"{str(res)}"
-            return str(ret)
+            if result_cnt == 0: break
+            return res
         except Exception as e:
             gu.log(f"bing fetch err: {str(e)}")
             _cnt += 1
@@ -175,26 +179,6 @@ def fetch_website_content(url):
     }
     response = requests.get(url, headers=headers, timeout=3)
     response.encoding = "utf-8"
-    # soup = BeautifulSoup(response.text, "html.parser")
-    # # 如果有container / content / main等的话，就只取这些部分
-    # has = False
-    # beleive_ls = ["container", "content", "main"]
-    # res = ""
-    # for cls in beleive_ls:
-    #     for i in soup.find_all(class_=cls):
-    #         has = True
-    #         res += i.text
-    # if not has:
-    #     res = soup.text
-    # res = res.replace("\n", "").replace("  ", " ").replace("\r", "").replace("\t", "")
-    # if not has:
-    #     res = res[300:1100]
-    # else:
-    #     res = res[100:800]
-    # # with open(f"temp_{time.time()}.html", "w", encoding="utf-8") as f:
-    # #     f.write(res)
-    # gu.log(f"fetch_website_content: end", tag="fetch_website_content", level=gu.LEVEL_DEBUG)
-    # return res
     doc = Document(response.content)
     # print('title:', doc.title())
     ret = doc.summary(html_partial=True)
@@ -213,7 +197,7 @@ def web_search(question, provider: Provider, session_id, official_fc=False):
         "description": "google search query (分词，尽量保留所有信息)"
         }],
     "通过搜索引擎搜索。如果问题需要在网页上搜索(如天气、新闻或任何需要通过网页获取信息的问题)，则调用此函数；如果没有，不要调用此函数。",
-    google_web_search
+    web_keyword_search_via_bing
     )
     new_func_call.add_func("fetch_website_content", [{
         "type": "string",
@@ -259,13 +243,20 @@ def web_search(question, provider: Provider, session_id, official_fc=False):
 
     if has_func:
         provider.forget(session_id)
-        question3 = f"""请你用活泼的语气回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行总结回答。在文章末尾加上各参考链接，如`[1] <title> <url>`；不要提到任何函数调用的信息；在总结的末尾加上1或2个相关的emoji。```\n{function_invoked_ret}\n```\n"""
+        question3 = f"""
+以下是相关材料，你的任务是：
+1. 根据材料对问题`{question}`做切题的总结回答;
+2. 发表你对这个问题的看法.
+你的总结末尾应当有对材料的引用, 如果有链接, 请在末尾附上引用网页链接。引用格式严格按照 `\n[1] title url \n`。
+不要提到任何函数调用的信息。以下是相关材料：
+"""
+        
         gu.log(f"web_search: {question3}", tag="web_search", level=gu.LEVEL_DEBUG, max_len=99999)
         _c = 0
         while _c < 3:
             try:
                 print('text chat')
-                final_ret = provider.text_chat(question3)
+                final_ret = provider.text_chat(question3 + "```" + function_invoked_ret + "```", session_id)
                 return final_ret
             except Exception as e:
                 print(e)
@@ -275,5 +266,4 @@ def web_search(question, provider: Provider, session_id, official_fc=False):
                     provider.forget(session_id)
                     function_invoked_ret = function_invoked_ret[:int(len(function_invoked_ret) / 2)]
                     time.sleep(3)
-                    question3 = f"""请回答`{question}`问题。\n以下是相关材料，请直接拿此材料针对问题进行回答，再给参考链接, 参考链接首末有空格。```\n{function_invoked_ret}\n```\n"""
     return function_invoked_ret
