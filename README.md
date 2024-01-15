@@ -6,8 +6,6 @@
 
 # AstrBot
 
-*✨ 2024 - 希望成为一个跨平台、极易上手、稳定安全的机器人项目。✨*
-
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot)](https://github.com/Soulter/AstrBot/releases/latest)
 <img src="https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/34412545-2e37-400f-bedc-42348713ac1f.svg" alt="wakatime">
 <img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="python">
@@ -17,10 +15,9 @@
 </a>
 <img alt="Static Badge" src="https://img.shields.io/badge/频道-x42d56aki2-purple">
 
-<a href="https://astrbot.soulter.top/center">项目主页(开发中)</a> ｜
-<a href="https://astrbot.soulter.top/center/docs/%E9%83%A8%E7%BD%B2/%E9%80%9A%E8%BF%87Docker%E9%83%A8%E7%BD%B2">部署文档</a> ｜
+<a href="https://astrbot.soulter.top/center">项目部署</a> ｜
 <a href="https://github.com/Soulter/QQChannelChatGPT/issues">问题提交</a> ｜
-<a href="https://astrbot.soulter.top/center/docs/%E5%BC%80%E5%8F%91/%E6%8F%92%E4%BB%B6%E5%BC%80%E5%8F%91">插件开发（最少只需 25 行，真不难！）</a>
+<a href="https://astrbot.soulter.top/center/docs/%E5%BC%80%E5%8F%91/%E6%8F%92%E4%BB%B6%E5%BC%80%E5%8F%91">插件开发（最少只需 25 行）</a>
 </div>
 
 ## 🤔您可能想了解的
