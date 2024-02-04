@@ -19,6 +19,7 @@ from nakuru.entities.components import Plain,At,Image
 from model.provider.provider import Provider
 from model.command.command import Command
 from util import general_utils as gu
+from util.general_utils import Logger
 from util.cmd_config import CmdConfig as cc
 from util.cmd_config import init_astrbot_config_items
 import util.function_calling.gplugin as gplugin
@@ -68,6 +69,7 @@ init_astrbot_config_items()
 
 # 全局对象
 _global_object: GlobalObject = None
+logger: Logger = Logger()
 
 # 统计消息数据
 def upload():
@@ -90,7 +92,7 @@ def upload():
                 "others": o_j,
                 "sys": sys.platform,
             }
-            gu.log(res, gu.LEVEL_DEBUG, tag="Upload", fg = gu.FG_COLORS['yellow'], bg=gu.BG_COLORS['black'])
+            logger.log(res, gu.LEVEL_DEBUG, tag="Uploader")
             resp = requests.post('https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
             if resp.status_code == 200:
                 ok = resp.json()
@@ -98,8 +100,7 @@ def upload():
                     _global_object.cnt_total = 0
                     
         except BaseException as e:
-            gu.log("上传统计信息时出现错误: " + str(e), gu.LEVEL_ERROR, tag="Upload")
-            pass
+            logger.log("上传统计信息时出现错误: " + str(e), gu.LEVEL_ERROR, tag="Uploader")
         time.sleep(10*60)
 
 # 语言模型选择
@@ -123,6 +124,7 @@ def initBot(cfg):
     global baidu_judge, chosen_provider
     global frequency_count, frequency_time
     global keywords, _global_object
+    global logger
     
     # 迁移旧配置
     gu.try_migrate_config(cfg)
@@ -138,6 +140,8 @@ def initBot(cfg):
     _global_object.stat['session'] = {}
     _global_object.stat['message'] = {}
     _global_object.stat['platform'] = {}
+    _global_object.logger = logger
+    logger.log("AstrBot v"+version, gu.LEVEL_INFO)
 
     if 'reply_prefix' in cfg:
         # 适配旧版配置
@@ -149,10 +153,10 @@ def initBot(cfg):
             _global_object.reply_prefix = cfg['reply_prefix']
 
     # 语言模型提供商
-    gu.log("--------加载语言模型--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    logger.log("正在载入语言模型...", gu.LEVEL_INFO)
     prov = privider_chooser(cfg)
     if REV_CHATGPT in prov:
-        gu.log("- 逆向ChatGPT库 -", gu.LEVEL_INFO)
+        logger.log("初始化：逆向 ChatGPT", gu.LEVEL_INFO)
         if cfg['rev_ChatGPT']['enable']:
             if 'account' in cfg['rev_ChatGPT']:
                 from model.provider.rev_chatgpt import ProviderRevChatGPT
@@ -161,11 +165,11 @@ def initBot(cfg):
                 llm_command_instance[REV_CHATGPT] = CommandRevChatGPT(llm_instance[REV_CHATGPT], _global_object)
                 chosen_provider = REV_CHATGPT
             else:
-                input("[System-err] 请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")    
+                input("请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")    
     if REV_EDGEGPT in prov:
-        gu.log("- New Bing -", gu.LEVEL_INFO)
+        logger.log("初始化：New Bing", gu.LEVEL_INFO)
         if not os.path.exists('./cookies.json'):
-            input("[System-err] 导入Bing模型时发生错误, 没有找到cookies文件或者cookies文件放置位置错误。windows启动器启动的用户请把cookies.json文件放到和启动器相同的目录下。\n如何获取请看https://github.com/Soulter/QQChannelChatGPT仓库介绍。")
+            input("导入Bing模型时发生错误, 没有找到cookies文件或者cookies文件放置位置错误。windows启动器启动的用户请把cookies.json文件放到和启动器相同的目录下。\n如何获取请看https://github.com/Soulter/QQChannelChatGPT仓库介绍。")
         else:
             if cfg['rev_edgegpt']['enable']:
                 try:
@@ -176,9 +180,9 @@ def initBot(cfg):
                     chosen_provider = REV_EDGEGPT
                 except BaseException as e:
                     print(traceback.format_exc())
-                    gu.log("加载Bing模型时发生错误, 请检查1. cookies文件是否正确放置 2. 是否设置了代理（梯子）。", gu.LEVEL_ERROR, max_len=60)
+                    logger.log("加载Bing模型时发生错误, 请检查1. cookies文件是否正确放置 2. 是否设置了代理（梯子）。", gu.LEVEL_ERROR)
     if OPENAI_OFFICIAL in prov:
-        gu.log("- OpenAI官方 -", gu.LEVEL_INFO)
+        logger.log("初始化：OpenAI官方", gu.LEVEL_INFO)
         if cfg['openai']['key'] is not None and cfg['openai']['key'] != [None]:
             from model.provider.openai_official import ProviderOpenAIOfficial
             from model.command.openai_official import CommandOpenAIOfficial
@@ -186,7 +190,6 @@ def initBot(cfg):
             llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance[OPENAI_OFFICIAL], _global_object)
             chosen_provider = OPENAI_OFFICIAL
 
-    gu.log("--------加载配置--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
     # 得到关键词
     if os.path.exists("keyword.json"):
         with open("keyword.json", 'r', encoding='utf-8') as f:
@@ -196,25 +199,19 @@ def initBot(cfg):
     p = cc.get("chosen_provider", None)
     if p is not None and p in llm_instance:
         chosen_provider = p
-    gu.log(f"将使用 {chosen_provider} 语言模型。", gu.LEVEL_INFO)
     
     # 百度内容审核
     if 'baidu_aip' in cfg and 'enable' in cfg['baidu_aip'] and cfg['baidu_aip']['enable']:
         try: 
             baidu_judge = BaiduJudge(cfg['baidu_aip'])
-            gu.log("百度内容审核初始化成功", gu.LEVEL_INFO)
+            logger.log("百度内容审核初始化成功", gu.LEVEL_INFO)
         except BaseException as e:
-            gu.log("百度内容审核初始化失败", gu.LEVEL_ERROR)
+            logger.log("百度内容审核初始化失败", gu.LEVEL_ERROR)
         
     threading.Thread(target=upload, daemon=True).start()
-    
-    # 得到私聊模式配置
-    if 'direct_message_mode' in cfg:
-        gu.log("私聊功能: "+str(cfg['direct_message_mode']), gu.LEVEL_INFO)
 
     # 得到发言频率配置
     if 'limit' in cfg:
-        gu.log("发言频率配置: "+str(cfg['limit']), gu.LEVEL_INFO)
         if 'count' in cfg['limit']:
             frequency_count = cfg['limit']['count']
         if 'time' in cfg['limit']:
@@ -225,12 +222,8 @@ def initBot(cfg):
             _global_object.uniqueSession = True
         else:
             _global_object.uniqueSession = False
-        gu.log("独立会话: "+str(_global_object.uniqueSession), gu.LEVEL_INFO)
     except BaseException as e:
-        gu.log("独立会话配置错误: "+str(e), gu.LEVEL_ERROR)
-
-    if chosen_provider is None:
-        gu.log("检测到没有启动任何语言模型。", gu.LEVEL_CRITICAL)
+        logger.log("独立会话配置错误: "+str(e), gu.LEVEL_ERROR)
 
     nick_qq = cc.get("nick_qq", None)
     if nick_qq == None:
@@ -245,32 +238,33 @@ def initBot(cfg):
     global llm_wake_prefix
     llm_wake_prefix = cc.get("llm_wake_prefix", "")
 
-    gu.log("--------加载插件--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
+    logger.log("正在载入插件...", gu.LEVEL_INFO)
     # 加载插件
     _command = Command(None, _global_object)
     ok, err = putil.plugin_reload(_global_object.cached_plugins)
     if ok:
-        gu.log("加载插件完成", gu.LEVEL_INFO)
+        logger.log(f"成功载入{len(_global_object.cached_plugins)}个插件", gu.LEVEL_INFO)
     else:
-        gu.log(err, gu.LEVEL_ERROR)
+        logger.log(err, gu.LEVEL_ERROR)
     
     if chosen_provider is None:
         llm_command_instance[NONE_LLM] = _command
         chosen_provider = NONE_LLM
 
-    gu.log("--------加载机器人平台--------", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-
-    gu.log("提示：需要添加管理员 ID 才能使用 update/plugin 等指令)，可在可视化面板添加。（如已添加可忽略）", gu.LEVEL_WARNING)
-
+    logger.log("正在载入机器人消息平台", gu.LEVEL_INFO)
+    # logger.log("提示：需要添加管理员 ID 才能使用 update/plugin 等指令)，可在可视化面板添加。（如已添加可忽略）", gu.LEVEL_WARNING)
+    platform_str = ""
     # GOCQ
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
-        gu.log("- 启用 QQ_GOCQ 机器人 -", gu.LEVEL_INFO)
+        logger.log("启用 QQ_GOCQ 机器人消息平台", gu.LEVEL_INFO)
         threading.Thread(target=run_gocq_bot, args=(cfg, _global_object), daemon=True).start()
+        platform_str += "QQ_GOCQ,"
 
     # QQ频道
-    if 'qqbot' in cfg and cfg['qqbot']['enable']:
-        gu.log("- 启用 QQ_OFFICIAL 机器人 -", gu.LEVEL_INFO)
+    if 'qqbot' in cfg and cfg['qqbot']['enable'] and cfg['qqbot']['appid'] != None:
+        logger.log("启用 QQ_OFFICIAL 机器人消息平台", gu.LEVEL_INFO)
         threading.Thread(target=run_qqchan_bot, args=(cfg, _global_object), daemon=True).start()
+        platform_str += "QQ_OFFICIAL,"
 
     default_personality_str = cc.get("default_personality_str", "")
     if default_personality_str == "":
@@ -287,16 +281,21 @@ def initBot(cfg):
         logs={},
         plugins=_global_object.cached_plugins,
     )
-    dashboard_helper = DashBoardHelper(_global_object.dashboard_data, config=cc.get_all())
+    dashboard_helper = DashBoardHelper(_global_object, config=cc.get_all())
     dashboard_thread = threading.Thread(target=dashboard_helper.run, daemon=True)
     dashboard_thread.start()
 
     # 运行 monitor
     threading.Thread(target=run_monitor, args=(_global_object,), daemon=False).start()
 
-    gu.log("如果有任何问题, 请在 https://github.com/Soulter/AstrBot 上提交 issue 或加群 322154837。", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("请给 https://github.com/Soulter/AstrBot 点个 star。", gu.LEVEL_INFO, fg=gu.FG_COLORS['yellow'])
-    gu.log("🎉 项目启动完成。")
+    logger.log("如果有任何问题, 请在 https://github.com/Soulter/AstrBot 上提交 issue 或加群 322154837。", gu.LEVEL_INFO)
+    logger.log("请给 https://github.com/Soulter/AstrBot 点个 star。", gu.LEVEL_INFO)
+    if platform_str == '':
+        platform_str = "(未启动任何平台，请前往面板添加)"
+    logger.log(f"🎉 项目启动完成\n - 启动的LLM: {len(llm_instance)}个\n - 启动的平台: {platform_str}\n - 启动的插件: {len(_global_object.cached_plugins)}个")
+    
+    if chosen_provider is None:
+        logger.log("没有启动任何语言模型。", gu.LEVEL_WARNING)
     
     dashboard_thread.join()
 
@@ -338,8 +337,8 @@ def run_qqchan_bot(cfg: dict, global_object: GlobalObject):
         global_object.platform_qqchan = qqchannel_bot
         qqchannel_bot.run()
     except BaseException as e:
-        gu.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
-        gu.log(r"如果您是初次启动，请前往可视化面板填写配置。详情请看：https://astrbot.soulter.top/center/。" + str(e), gu.LEVEL_CRITICAL, tag="System")
+        logger.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
+        logger.log(r"如果您是初次启动，请前往可视化面板填写配置。详情请看：https://astrbot.soulter.top/center/。" + str(e), gu.LEVEL_CRITICAL)
 
 '''
 运行 QQ_GOCQ 机器人
@@ -347,16 +346,16 @@ def run_qqchan_bot(cfg: dict, global_object: GlobalObject):
 def run_gocq_bot(cfg: dict, _global_object: GlobalObject):
     from model.platform.qq_gocq import QQGOCQ
     
-    gu.log("正在检查本地GO-CQHTTP连接...端口5700, 6700", tag="QQ")
+    logger.log("正在检查本地GO-CQHTTP连接...端口5700, 6700", tag="QQ")
     noticed = False
     while True:
         if not gu.port_checker(5700, cc.get("gocq_host", "127.0.0.1")) or not gu.port_checker(6700, cc.get("gocq_host", "127.0.0.1")):
             if not noticed:
                 noticed = True
-                gu.log("与GO-CQHTTP通信失败, 请检查GO-CQHTTP是否启动并正确配置。程序会每隔 5s 自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
+                logger.log("与GO-CQHTTP通信失败, 请检查GO-CQHTTP是否启动并正确配置。程序会每隔 5s 自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
             time.sleep(5)
         else:
-            gu.log("检查完毕，未发现问题。", tag="QQ")
+            logger.log("检查完毕，未发现问题。", tag="QQ")
             break
     try:
         qq_gocq = QQGOCQ(cfg=cfg, message_handler=oper_msg)
@@ -422,7 +421,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     for i in message.message:
         if isinstance(i, Plain):
             message_str += i.text.strip()
-    gu.log(f"收到消息：{message_str}", gu.LEVEL_INFO, tag=platform)
+    logger.log(message_str, gu.LEVEL_INFO, tag=platform)
     if message_str == "":
         return MessageResult("Hi~")
     
@@ -522,7 +521,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
 
             llm_result_str = _global_object.reply_prefix + llm_result_str
         except BaseException as e:
-            gu.log(f"调用异常：{traceback.format_exc()}", gu.LEVEL_ERROR, max_len=100000)
+            logger.log(f"调用异常：{traceback.format_exc()}", gu.LEVEL_ERROR)
             return MessageResult(f"调用语言模型例程时出现异常。原因: {str(e)}")
 
     # 切换回原来的语言模型
@@ -585,4 +584,4 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     try:
         return MessageResult(llm_result_str)
     except BaseException as e:
-        gu.log("回复消息错误: \n"+str(e), gu.LEVEL_ERROR)
+        logger.log("回复消息错误: \n"+str(e), gu.LEVEL_ERROR)

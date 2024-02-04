@@ -3,7 +3,6 @@ from pip._internal import main as pipmain
 import warnings
 import traceback
 import threading
-import logging
 
 warnings.filterwarnings("ignore")
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
@@ -53,13 +52,13 @@ def check_env(ch_mirror=False):
         pth = 'requirements.txt'
     else:
         pth = 'QQChannelChatGPT'+ os.sep +'requirements.txt'
-    print("正在检查更新第三方库...")
+    print("正在检查或下载第三方库，请耐心等待...")
     try:
         if ch_mirror:
             print("使用阿里云镜像")
-            pipmain(['install', '-r', pth, '-i', 'https://mirrors.aliyun.com/pypi/simple/', '--quiet'])
+            pipmain(['install', '-r', pth, '-i', 'https://mirrors.aliyun.com/pypi/simple/'])
         else:
-            pipmain(['install', '-r', pth, '--quiet'])
+            pipmain(['install', '-r', pth])
     except BaseException as e:
         print(e)
         while True:

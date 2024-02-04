@@ -9,6 +9,8 @@ from util.cmd_config import CmdConfig
 import socket
 from cores.qqbot.global_object import GlobalObject
 import platform
+import requests
+import logging
 
 PLATFORM_GOCQ = 'gocq'
 PLATFORM_QQCHAN = 'qqchan'
@@ -39,83 +41,96 @@ BG_COLORS = {
 
 LEVEL_DEBUG = "DEBUG"
 LEVEL_INFO = "INFO"
-LEVEL_WARNING = "WARNING"
+LEVEL_WARNING = "WARN"
 LEVEL_ERROR = "ERROR"
 LEVEL_CRITICAL = "CRITICAL"
 
+# 为了兼容旧版
 level_codes = {
-    LEVEL_DEBUG: 0,
-    LEVEL_INFO: 1,
-    LEVEL_WARNING: 2,
-    LEVEL_ERROR: 3,
-    LEVEL_CRITICAL: 4
+    LEVEL_DEBUG: logging.DEBUG,
+    LEVEL_INFO: logging.INFO,
+    LEVEL_WARNING: logging.WARNING,
+    LEVEL_ERROR: logging.ERROR,
+    LEVEL_CRITICAL: logging.CRITICAL,
 }
 
 level_colors = {
     "INFO": "green",
-    "WARNING": "yellow",
+    "WARN": "yellow",
     "ERROR": "red",
     "CRITICAL": "purple",
 }
 
-def log(
-        msg: str,
-        level: str = "INFO",
-        tag: str = "System",
-        fg: str = None,
-        bg: str = None,
-        max_len: int = 500,
-        err: Exception = None,):
-    """
-    日志打印函数
-    """
-    _set_level_code = level_codes[LEVEL_INFO]
-    if 'LOG_LEVEL' in os.environ and os.environ['LOG_LEVEL'] in level_codes:
-        _set_level_code = level_codes[os.environ['LOG_LEVEL']]
-
-    if level in level_codes and level_codes[level] < _set_level_code:
-        return
+class Logger:
+    def __init__(self) -> None:
+        self.history = []
     
-    if err is not None:
-        msg += "\n异常原因: " + str(err)
-        level = LEVEL_ERROR
+    def log(
+            self,
+            msg: str,
+            level: str = "INFO",
+            tag: str = "System",
+            fg: str = None,
+            bg: str = None,
+            max_len: int = 50000,
+            err: Exception = None,):
+        """
+        日志打印函数
+        """
+        _set_level_code = level_codes[LEVEL_INFO]
+        if 'LOG_LEVEL' in os.environ and os.environ['LOG_LEVEL'] in level_codes:
+            _set_level_code = level_codes[os.environ['LOG_LEVEL']]
 
-    if len(msg) > max_len:
-        msg = msg[:max_len] + "..."
-    now = datetime.datetime.now().strftime("%m-%d %H:%M:%S")
-    
-    pres = []
-    for line in msg.split("\n"):
-        if line == "\n":
-            pres.append("")
-        else:
-            pres.append(f"[{now}] [{level}] [{tag}]: {line}")
+        if level in level_codes and level_codes[level] < _set_level_code:
+            return
+        
+        if err is not None:
+            msg += "\n异常原因: " + str(err)
+            level = LEVEL_ERROR
 
-    if level == "INFO":
-        if fg is None:
-            fg = FG_COLORS["green"]
-        if bg is None:
-            bg = BG_COLORS["default"]
-    elif level == "WARNING":
-        if fg is None:
-            fg = FG_COLORS["yellow"]
-        if bg is None:
-            bg = BG_COLORS["default"]
-    elif level == "ERROR":
-        if fg is None:
-            fg = FG_COLORS["red"]
-        if bg is None:
-            bg = BG_COLORS["default"]
-    elif level == "CRITICAL":
-        if fg is None:
-            fg = FG_COLORS["purple"]
-        if bg is None:
-            bg = BG_COLORS["default"]
-            
-    ret = ""
-    for line in pres:
-        ret += f"\033[{fg};{bg}m{line}\033[0m\n"
-    print(ret[:-1])
+        if len(msg) > max_len:
+            msg = msg[:max_len] + "..."
+        now = datetime.datetime.now().strftime("%H:%M:%S")
+        
+        pres = []
+        for line in msg.split("\n"):
+            if line == "\n":
+                pres.append("")
+            else:
+                pres.append(f"[{now}] [{tag}/{level}] {line}")
+
+        if level == "INFO":
+            if fg is None:
+                fg = FG_COLORS["green"]
+            if bg is None:
+                bg = BG_COLORS["default"]
+        elif level == "WARN":
+            if fg is None:
+                fg = FG_COLORS["yellow"]
+            if bg is None:
+                bg = BG_COLORS["default"]
+        elif level == "ERROR":
+            if fg is None:
+                fg = FG_COLORS["red"]
+            if bg is None:
+                bg = BG_COLORS["default"]
+        elif level == "CRITICAL":
+            if fg is None:
+                fg = FG_COLORS["purple"]
+            if bg is None:
+                bg = BG_COLORS["default"]
+                
+        ret = ""
+        for line in pres:
+            ret += f"\033[{fg};{bg}m{line}\033[0m\n"
+        try:
+            requests.post("http://localhost:6185/api/log", data=ret[:-1].encode())
+        except BaseException as e:
+            pass
+        self.history.append(ret)
+        if len(self.history) > 100:
+            self.history = self.history[-100:]
+        print(ret[:-1])
 
 
 def port_checker(port: int, host: str = "localhost"):
@@ -466,7 +481,7 @@ def save_temp_img(img: Image) -> str:
                 if time.time() - ctime > 3600:
                     os.remove(path)
     except Exception as e:
-        log(f"清除临时文件失败: {e}", level=LEVEL_WARNING, tag="GeneralUtils")
+        print(f"清除临时文件失败: {e}", level=LEVEL_WARNING, tag="GeneralUtils")
 
     # 获得时间戳
     timestamp = int(time.time())
@@ -514,13 +529,15 @@ def try_migrate_config(old_config: dict):
             cc.put(k, old_config[k])
 
 def get_local_ip_addresses():
+    ip = ''
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('8.8.8.8', 80))
         ip = s.getsockname()[0]
+    except BaseException as e:
+        pass
     finally:
         s.close()
-
     return ip
 
 def get_sys_info(global_object: GlobalObject):

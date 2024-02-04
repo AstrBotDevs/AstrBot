@@ -13,9 +13,9 @@ import time
 from ._platfrom import Platform
 from ._nakuru_translation_layer import(
     NakuruGuildMessage, 
+    NakuruGuildMember,
     gocq_compatible_receive, 
-    gocq_compatible_send, 
-    NakuruGuildMember
+    gocq_compatible_send
 ) 
 
 # QQ 机器人官方框架
@@ -56,6 +56,7 @@ class QQOfficial(Platform):
         self.token = cfg['qqbot']['token']
         self.secret = cfg['qqbot_secret']
         self.unique_session = cfg['uniqueSessionMode']
+        self.logger = gu.Logger()
 
         self.intents = botpy.Intents(
             public_guild_messages=True,
@@ -125,7 +126,7 @@ class QQOfficial(Platform):
         '''
         回复频道消息
         '''
-        gu.log("回复QQ频道消息: "+str(res), level=gu.LEVEL_INFO, tag="QQ频道", max_len=500)
+        self.logger.log(f"{message.sender.nickname}({message.sender.tiny_id}) <- {res}", tag="QQ频道")
         self.qqchan_cnt += 1
 
         plain_text = ''

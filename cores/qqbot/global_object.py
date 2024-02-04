@@ -30,6 +30,7 @@ class GlobalObject:
     default_personality: dict
     dashboard_data: DashBoardData
     stat: dict
+    logger: None
     
     def __init__(self):
         self.nick = None # gocq 的昵称

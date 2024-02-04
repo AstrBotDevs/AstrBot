@@ -33,6 +33,7 @@ class QQGOCQ(Platform):
         self.gocq_cnt = 0
         self.cc = CmdConfig()
         self.cfg = cfg
+        self.logger = gu.Logger()
 
         try:
             self.nick_qq = cfg['nick_qq']
@@ -177,8 +178,8 @@ class QQGOCQ(Platform):
         res = result_message
 
         self.gocq_cnt += 1
-
-        gu.log("回复GOCQ消息: "+str(res), level=gu.LEVEL_INFO, tag="GOCQ", max_len=300)
+        
+        self.logger.log(f"{source.user_id} <- {res}", tag="GOCQ")
 
         if isinstance(source, int):
             source = FakeSource("GroupMessage", source)

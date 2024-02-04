@@ -8,6 +8,11 @@ import logging
 from cores.database.conn import dbConn
 from util.cmd_config import CmdConfig
 import util.plugin_util as putil
+import websockets
+import json
+import threading
+import asyncio
+import time
 
 @dataclass
 class DashBoardData():
@@ -23,14 +28,19 @@ class Response():
     data: dict
     
 class AstrBotDashBoard():
-    def __init__(self, dashboard_data: DashBoardData):
-        self.dashboard_data = dashboard_data
+    def __init__(self, global_object):
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.dashboard_data = global_object.dashboard_data
         self.dashboard_be = Flask(__name__, static_folder="dist", static_url_path="/")
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
         self.funcs = {}
         self.cc = CmdConfig()
-        
+        self.logger = global_object.logger
+        self.ws_clients = {} # remote_ip: ws
+        # 启动 websocket 服务器
+        self.ws_server = websockets.serve(self.__handle_msg, "localhost", 6186)
         
         @self.dashboard_be.get("/")
         def index():
@@ -132,15 +142,6 @@ class AstrBotDashBoard():
             
         @self.dashboard_be.get("/api/extensions")
         def get_plugins():
-            """
-            {
-                "name": "GoodPlugins",
-                "repo": "https://gitee.com/soulter/goodplugins",
-                "author": "soulter",
-                "desc": "一些好用的插件",
-                "version": "1.0"
-            }
-            """
             _plugin_resp = []
             for plugin in self.dashboard_data.plugins:
                 _p = self.dashboard_data.plugins[plugin]
@@ -163,9 +164,9 @@ class AstrBotDashBoard():
             post_data = request.json
             repo_url = post_data["url"]
             try:
-                gu.log(f"正在安装插件 {repo_url}", tag="可视化面板")
+                self.logger.log(f"正在安装插件 {repo_url}", tag="可视化面板")
                 putil.install_plugin(repo_url, self.dashboard_data.plugins)
-                gu.log(f"安装插件 {repo_url} 成功", tag="可视化面板")
+                self.logger.log(f"安装插件 {repo_url} 成功", tag="可视化面板")
                 return Response(
                     status="success",
                     message="安装成功~",
@@ -183,9 +184,9 @@ class AstrBotDashBoard():
             post_data = request.json
             plugin_name = post_data["name"]
             try:
-                gu.log(f"正在卸载插件 {plugin_name}", tag="可视化面板")
+                self.logger.log(f"正在卸载插件 {plugin_name}", tag="可视化面板")
                 putil.uninstall_plugin(plugin_name, self.dashboard_data.plugins)
-                gu.log(f"卸载插件 {plugin_name} 成功", tag="可视化面板")
+                self.logger.log(f"卸载插件 {plugin_name} 成功", tag="可视化面板")
                 return Response(
                     status="success",
                     message="卸载成功~",
@@ -203,9 +204,9 @@ class AstrBotDashBoard():
             post_data = request.json
             plugin_name = post_data["name"]
             try:
-                gu.log(f"正在更新插件 {plugin_name}", tag="可视化面板")
+                self.logger.log(f"正在更新插件 {plugin_name}", tag="可视化面板")
                 putil.update_plugin(plugin_name, self.dashboard_data.plugins)
-                gu.log(f"更新插件 {plugin_name} 成功", tag="可视化面板")
+                self.logger.log(f"更新插件 {plugin_name} 成功", tag="可视化面板")
                 return Response(
                     status="success",
                     message="更新成功~",
@@ -217,6 +218,15 @@ class AstrBotDashBoard():
                     message=e.__str__(),
                     data=None
                 ).__dict__
+                
+        @self.dashboard_be.post("/api/log")
+        def log():
+            for item in self.ws_clients:
+                try:
+                    asyncio.run_coroutine_threadsafe(self.ws_clients[item].send(request.data.decode()), self.loop)
+                except Exception as e:
+                    pass
+            return 'ok'
         
     def register(self, name: str):
         def decorator(func):
@@ -224,10 +234,35 @@ class AstrBotDashBoard():
             return func
         return decorator
 
+    async def __handle_msg(self, websocket, path):
+        address = websocket.remote_address
+        # self.logger.log(f"和 {address} 建立了 websocket 连接", tag="可视化面板")
+        self.ws_clients[address] = websocket
+        data = ''.join(self.logger.history).replace('\n', '\r\n')
+        await websocket.send(data)
+        while True:
+            try:
+                msg = await websocket.recv()
+            except websockets.exceptions.ConnectionClosedError:
+                # self.logger.log(f"和 {address} 的 websocket 连接已断开", tag="可视化面板")
+                del self.ws_clients[address]
+                break
+            except Exception as e:
+                # self.logger.log(f"和 {path} 的 websocket 连接发生了错误: {e.__str__()}", tag="可视化面板")
+                del self.ws_clients[address]
+                break
+        
+    def run_ws_server(self, loop):
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self.ws_server)
+        loop.run_forever()
+
     def run(self):
+        threading.Thread(target=self.run_ws_server, args=(self.loop,)).start()
+        self.logger.log("已启动 websocket 服务器", tag="可视化面板")
         ip_address = gu.get_local_ip_addresses()
         ip_str = f"http://{ip_address}:6185\n\thttp://localhost:6185"
-        gu.log(f"\n\n==================\n您可以访问:\n\n\t{ip_str}\n\n来登录可视化面板。\n注意: 所有配置项现已全量迁移至 cmd_config.json 文件下。您可以登录可视化面板在线修改配置。\n==================\n\n", tag="可视化面板")
-        # self.dashboard_be.run(host="0.0.0.0", port=6185)
+        self.logger.log(f"\n==================\n您可访问:\n\n\t{ip_str}\n\n来登录可视化面板，默认账号密码为空。\n注意: 所有配置项现已全量迁移至 cmd_config.json 文件下，可登录可视化面板在线修改配置。\n==================\n", tag="可视化面板")
         http_server = make_server('0.0.0.0', 6185, self.dashboard_be)
         http_server.serve_forever()
+

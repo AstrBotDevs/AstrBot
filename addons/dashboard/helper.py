@@ -27,13 +27,14 @@ class DashBoardConfig():
     val_type: Optional[str] = None # 仅 item 才需要
 
 class DashBoardHelper():
-    def __init__(self, dashboard_data: DashBoardData, config: dict):
+    def __init__(self, global_object, config: dict):
+        dashboard_data = global_object.dashboard_data
         dashboard_data.configs = {
             "data": []
         }
         self.parse_default_config(dashboard_data, config)
         self.dashboard_data: DashBoardData = dashboard_data
-        self.dashboard = AstrBotDashBoard(self.dashboard_data)
+        self.dashboard = AstrBotDashBoard(global_object)
         self.key_map = {} # key: uuid, value: config key name
         self.cc = CmdConfig()
         
