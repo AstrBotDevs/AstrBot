@@ -31,7 +31,7 @@ class ProviderOpenAIOfficial(Provider):
         if cfg['key'] != '' and cfg['key'] != None:
             self.key_list = cfg['key']
         else:
-            input("[System] 请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
+            input("[System] 请先填写 Key。详情请前往 https://beta.openai.com/account/api-keys 或使用中转 Key 方案。")
         if len(self.key_list) == 0:
             raise Exception("您打开了 OpenAI 模型服务，但是未填写 key。请前往填写。")
         

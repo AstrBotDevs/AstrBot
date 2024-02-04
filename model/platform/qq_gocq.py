@@ -8,7 +8,8 @@ from nakuru import (
     GroupMessage,
     FriendMessage,
     GroupMemberIncrease,
-    Notify
+    Notify,
+    Member
 )
 from typing import Union
 import time
@@ -38,12 +39,10 @@ class QQGOCQ(Platform):
         try:
             self.nick_qq = cfg['nick_qq']
         except:
-            self.nick_qq = ("ai","!","！")
+            self.nick_qq = ["ai","!","！"]
         nick_qq = self.nick_qq
         if isinstance(nick_qq, str):
-            nick_qq = (nick_qq,)
-        if isinstance(nick_qq, list):
-            nick_qq = tuple(nick_qq)
+            nick_qq = [nick_qq]
         
         self.unique_session = cfg['uniqueSessionMode']
         self.pic_mode = cfg['qq_pic_mode']
@@ -61,11 +60,9 @@ class QQGOCQ(Platform):
         async def _(app: CQHTTP, source: GroupMessage):
             if self.cc.get("gocq_react_group", True):
                 if isinstance(source.message[0], Plain):
-                    # await self.handle_msg(source, True)
                     self.new_sub_thread(self.handle_msg, (source, True))
                 elif isinstance(source.message[0], At):
                     if source.message[0].qq == source.self_id:
-                        # await self.handle_msg(source, True)
                         self.new_sub_thread(self.handle_msg, (source, True))
                 else:
                     return
@@ -74,7 +71,6 @@ class QQGOCQ(Platform):
         async def _(app: CQHTTP, source: FriendMessage):
             if self.cc.get("gocq_react_friend", True):
                 if isinstance(source.message[0], Plain):
-                    # await self.handle_msg(source, False)
                     self.new_sub_thread(self.handle_msg, (source, False))
                 else:
                     return
@@ -113,22 +109,25 @@ class QQGOCQ(Platform):
     async def handle_msg(self, message: Union[GroupMessage, FriendMessage, GuildMessage, Notify], is_group: bool):
         # 判断是否响应消息
         resp = False
-        for i in message.message:
-            if isinstance(i, At):
-                if message.type == "GuildMessage":
-                    if i.qq == message.user_id or i.qq == message.self_tiny_id:
-                        resp = True
-                if message.type == "FriendMessage":
-                    if i.qq == message.self_id:
-                        resp = True
-                if message.type == "GroupMessage":
-                    if i.qq == message.self_id:
-                        resp = True
-            elif isinstance(i, Plain):
-                for nick in self.nick_qq:
-                    if nick != '' and i.text.strip().startswith(nick):
-                        resp = True
-                        break
+        if not is_group:
+            resp = True
+        else:
+            for i in message.message:
+                if isinstance(i, At):
+                    if message.type == "GuildMessage":
+                        if i.qq == message.user_id or i.qq == message.self_tiny_id:
+                            resp = True
+                    if message.type == "FriendMessage":
+                        if i.qq == message.self_id:
+                            resp = True
+                    if message.type == "GroupMessage":
+                        if i.qq == message.self_id:
+                            resp = True
+                elif isinstance(i, Plain):
+                    for nick in self.nick_qq:
+                        if nick != '' and i.text.strip().startswith(nick):
+                            resp = True
+                            break
                 
         if not resp: return
         
