@@ -87,7 +87,7 @@ class QQOfficial(Platform):
         self.logger.log(f"{message.sender.nickname}({message.sender.tiny_id}{_t}) -> {self.parse_message_outline(message)}", tag="QQ_OFFICIAL")
         # 解析出 session_id
         if self.unique_session or not is_group:
-            session_id = message.sesnder.user_id
+            session_id = message.sender.user_id
         else:
             session_id = message.channel_id
 
