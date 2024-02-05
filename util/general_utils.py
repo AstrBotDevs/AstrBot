@@ -124,7 +124,7 @@ class Logger:
         for line in pres:
             ret += f"\033[{fg};{bg}m{line}\033[0m\n"
         try:
-            requests.post("http://localhost:6185/api/log", data=ret[:-1].encode())
+            requests.post("http://localhost:6185/api/log", data=ret[:-1].encode(), timeout=1)
         except BaseException as e:
             pass
         self.history.append(ret)
@@ -132,6 +132,7 @@ class Logger:
             self.history = self.history[-100:]
         print(ret[:-1])
 
+log = Logger()
 
 def port_checker(port: int, host: str = "localhost"):
     sk = socket.socket(socket.AF_INET,socket.SOCK_STREAM)

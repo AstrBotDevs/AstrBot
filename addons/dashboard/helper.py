@@ -9,6 +9,7 @@ import sys
 import os
 import threading
 import time
+import asyncio
 
 
 def shutdown_bot(delay_s: int):
@@ -28,6 +29,9 @@ class DashBoardConfig():
 
 class DashBoardHelper():
     def __init__(self, global_object, config: dict):
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.logger = global_object.logger
         dashboard_data = global_object.dashboard_data
         dashboard_data.configs = {
             "data": []
@@ -41,13 +45,13 @@ class DashBoardHelper():
         @self.dashboard.register("post_configs")
         def on_post_configs(post_configs: dict):
             try:
-                gu.log(f"收到配置更新请求", gu.LEVEL_INFO, tag="可视化面板")
+                self.logger.log(f"收到配置更新请求", gu.LEVEL_INFO, tag="可视化面板")
                 self.save_config(post_configs)
                 self.parse_default_config(self.dashboard_data, self.cc.get_all())
                 # 重启
                 threading.Thread(target=shutdown_bot, args=(2,), daemon=True).start()
             except Exception as e:
-                gu.log(f"在保存配置时发生错误：{e}", gu.LEVEL_ERROR, tag="可视化面板")
+                self.logger.log(f"在保存配置时发生错误：{e}", gu.LEVEL_ERROR, tag="可视化面板")
                 raise e
 
         
@@ -524,7 +528,7 @@ class DashBoardHelper():
             ]
         
         except Exception as e:
-            gu.log(f"配置文件解析错误：{e}", gu.LEVEL_ERROR)
+            self.logger.log(f"配置文件解析错误：{e}", gu.LEVEL_ERROR)
             raise e
         
     

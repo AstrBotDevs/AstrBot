@@ -17,6 +17,7 @@ from ._nakuru_translation_layer import(
     gocq_compatible_receive, 
     gocq_compatible_send
 ) 
+from typing import Union
 
 # QQ 机器人官方框架
 class botClient(Client):
@@ -25,24 +26,19 @@ class botClient(Client):
 
     # 收到频道消息
     async def on_at_message_create(self, message: Message):
-        gu.log(str(message), gu.LEVEL_DEBUG, max_len=9999)
         # 转换层
         nakuru_guild_message = gocq_compatible_receive(message)
-        gu.log(f"转换后: {str(nakuru_guild_message)}", gu.LEVEL_DEBUG, max_len=9999)
-        # await self.platform.handle_msg(nakuru_guild_message, is_group=True)
         self.platform.new_sub_thread(self.platform.handle_msg, (nakuru_guild_message, True))
 
     # 收到私聊消息
     async def on_direct_message_create(self, message: DirectMessage):
         # 转换层
         nakuru_guild_message = gocq_compatible_receive(message)
-        gu.log(f"转换后: {str(nakuru_guild_message)}", gu.LEVEL_DEBUG, max_len=9999)
-        # await self.platform.handle_msg(nakuru_guild_message, is_group=False)
         self.platform.new_sub_thread(self.platform.handle_msg, (nakuru_guild_message, False))
 
 class QQOfficial(Platform):
 
-    def __init__(self, cfg: dict, message_handler: callable) -> None:
+    def __init__(self, cfg: dict, message_handler: callable, global_object) -> None:
         super().__init__(message_handler)
 
         self.loop = asyncio.new_event_loop()
@@ -56,7 +52,7 @@ class QQOfficial(Platform):
         self.token = cfg['qqbot']['token']
         self.secret = cfg['qqbot_secret']
         self.unique_session = cfg['uniqueSessionMode']
-        self.logger = gu.Logger()
+        self.logger: gu.Logger = global_object.logger
 
         self.intents = botpy.Intents(
             public_guild_messages=True,
@@ -87,10 +83,11 @@ class QQOfficial(Platform):
             )
 
     async def handle_msg(self, message: NakuruGuildMessage, is_group: bool):
-        
+        _t = "/私聊" if not is_group else ""
+        self.logger.log(f"{message.sender.nickname}({message.sender.tiny_id}{_t}) -> {self.parse_message_outline(message)}", tag="QQ_OFFICIAL")
         # 解析出 session_id
         if self.unique_session or not is_group:
-            session_id = message.sender.user_id
+            session_id = message.sesnder.user_id
         else:
             session_id = message.channel_id
 
@@ -112,7 +109,7 @@ class QQOfficial(Platform):
         if message_result is None:
             return
 
-        self.reply_msg(message, message_result.result_message)
+        self.reply_msg(is_group, message, message_result.result_message)
         if message_result.callback is not None:
             message_result.callback()
 
@@ -121,12 +118,13 @@ class QQOfficial(Platform):
             self.waiting[session_id] = message
 
     def reply_msg(self, 
-                    message: NakuruGuildMessage, 
-                    res: list):
+                is_group: bool,
+                message: NakuruGuildMessage, 
+                res: Union[str, list]):
         '''
         回复频道消息
         '''
-        self.logger.log(f"{message.sender.nickname}({message.sender.tiny_id}) <- {res}", tag="QQ频道")
+        self.logger.log(f"{message.sender.nickname}({message.sender.tiny_id}) <- {self.parse_message_outline(res)}", tag="QQ_OFFICIAL")
         self.qqchan_cnt += 1
 
         plain_text = ''
@@ -162,13 +160,15 @@ class QQOfficial(Platform):
             msg_ref = Reference(message_id=message.raw_message.id, ignore_get_message_error=False)
         
         # 到这里，我们得到了 plain_text，image_path，msg_ref
-            
         data = {
-            'channel_id': str(message.channel_id),
             'content': plain_text,
             'msg_id': message.message_id,
             'message_reference': msg_ref
         }
+        if is_group:
+            data['channel_id'] = message.channel_id
+        else:
+            data['guild_id'] = message.guild_id
         if image_path != '':
             data['file_image'] = image_path
 
@@ -207,8 +207,11 @@ class QQOfficial(Platform):
                         self._send_wrapper(**data)
  
     def _send_wrapper(self, **kwargs):
-        # await self.client.api.post_message(**kwargs)
-        asyncio.run_coroutine_threadsafe(self.client.api.post_message(**kwargs), self.loop).result()
+        if 'channel_id' in kwargs:
+            asyncio.run_coroutine_threadsafe(self.client.api.post_message(**kwargs), self.loop).result()
+        else:
+            asyncio.run_coroutine_threadsafe(self.client.api.post_dms(**kwargs), self.loop).result()
+
 
     def send_msg(self, channel_id: int, message_chain: list, message_id: int = None):
         '''

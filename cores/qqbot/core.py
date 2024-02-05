@@ -294,9 +294,6 @@ def initBot(cfg):
         platform_str = "(未启动任何平台，请前往面板添加)"
     logger.log(f"🎉 项目启动完成\n - 启动的LLM: {len(llm_instance)}个\n - 启动的平台: {platform_str}\n - 启动的插件: {len(_global_object.cached_plugins)}个")
     
-    if chosen_provider is None:
-        logger.log("没有启动任何语言模型。", gu.LEVEL_WARNING)
-    
     dashboard_thread.join()
 
 async def cli():
@@ -333,7 +330,7 @@ async def cli_pack_message(prompt: str) -> NakuruGuildMessage:
 def run_qqchan_bot(cfg: dict, global_object: GlobalObject):
     try:
         from model.platform.qq_official import QQOfficial
-        qqchannel_bot = QQOfficial(cfg=cfg, message_handler=oper_msg)
+        qqchannel_bot = QQOfficial(cfg=cfg, message_handler=oper_msg, global_object=global_object)
         global_object.platform_qqchan = qqchannel_bot
         qqchannel_bot.run()
     except BaseException as e:
@@ -358,7 +355,7 @@ def run_gocq_bot(cfg: dict, _global_object: GlobalObject):
             logger.log("检查完毕，未发现问题。", tag="QQ")
             break
     try:
-        qq_gocq = QQGOCQ(cfg=cfg, message_handler=oper_msg)
+        qq_gocq = QQGOCQ(cfg=cfg, message_handler=oper_msg, global_object=_global_object)
         _global_object.platform_qq = qq_gocq
         qq_gocq.run()
     except BaseException as e:
@@ -421,7 +418,6 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     for i in message.message:
         if isinstance(i, Plain):
             message_str += i.text.strip()
-    logger.log(message_str, gu.LEVEL_INFO, tag=platform)
     if message_str == "":
         return MessageResult("Hi~")
     
@@ -488,8 +484,8 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
             check, msg = baidu_judge.judge(message_str)
             if not check:
                 return MessageResult(f"你的提问得到的回复未通过【百度AI内容审核】服务, 不予回复。\n\n{msg}")
-        if chosen_provider == None:
-            return MessageResult(f"管理员未启动任何语言模型或者语言模型初始化时失败。")
+        if chosen_provider == NONE_LLM:
+            return MessageResult("没有启动任何 LLM 并且未触发任何指令。")
         try:
             if llm_wake_prefix != "" and not message_str.startswith(llm_wake_prefix):
                 return

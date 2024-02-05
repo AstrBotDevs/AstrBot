@@ -29,7 +29,7 @@ class Response():
     
 class AstrBotDashBoard():
     def __init__(self, global_object):
-        self.loop = asyncio.new_event_loop()
+        self.loop = asyncio.get_event_loop()
         asyncio.set_event_loop(self.loop)
         self.dashboard_data = global_object.dashboard_data
         self.dashboard_be = Flask(__name__, static_folder="dist", static_url_path="/")

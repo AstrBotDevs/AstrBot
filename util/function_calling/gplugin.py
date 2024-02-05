@@ -156,6 +156,7 @@ def web_keyword_search_via_sougou(keyword) -> str:
             if len(res) >= 5: # 限制5条
                 break
         except Exception as e:
+            pass
             gu.log(f"sougou parse err: {str(e)}", tag="web_keyword_search_via_sougou", level=gu.LEVEL_ERROR)
     # 爬取网页内容
     _detail_store = []

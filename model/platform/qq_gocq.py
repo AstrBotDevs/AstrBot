@@ -24,7 +24,7 @@ class FakeSource:
 
     
 class QQGOCQ(Platform):
-    def __init__(self, cfg: dict, message_handler: callable) -> None:
+    def __init__(self, cfg: dict, message_handler: callable, global_object) -> None:
         super().__init__(message_handler)
 
         self.loop = asyncio.new_event_loop()
@@ -34,7 +34,7 @@ class QQGOCQ(Platform):
         self.gocq_cnt = 0
         self.cc = CmdConfig()
         self.cfg = cfg
-        self.logger = gu.Logger()
+        self.logger: gu.Logger = global_object.logger
 
         try:
             self.nick_qq = cfg['nick_qq']
@@ -107,6 +107,7 @@ class QQGOCQ(Platform):
         self.client.run()
                 
     async def handle_msg(self, message: Union[GroupMessage, FriendMessage, GuildMessage, Notify], is_group: bool):
+        self.logger.log(f"{message.user_id} -> {self.parse_message_outline(message)}", tag="QQ_GOCQ")
         # 判断是否响应消息
         resp = False
         if not is_group:
@@ -178,7 +179,7 @@ class QQGOCQ(Platform):
 
         self.gocq_cnt += 1
         
-        self.logger.log(f"{source.user_id} <- {res}", tag="GOCQ")
+        self.logger.log(f"{source.user_id} <- {self.parse_message_outline(res)}", tag="QQ_GOCQ")
 
         if isinstance(source, int):
             source = FakeSource("GroupMessage", source)

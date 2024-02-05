@@ -1,7 +1,17 @@
 import abc
 import threading
 import asyncio
-from typing import Callable
+from typing import Callable, Union
+from nakuru import (
+    GuildMessage,
+    GroupMessage,
+    FriendMessage,
+)
+from ._nakuru_translation_layer import (
+    NakuruGuildMessage,
+)
+from nakuru.entities.components import Plain, At, Image, Node
+
 
 class Platform():
     def __init__(self, message_handler: callable) -> None:
@@ -38,6 +48,28 @@ class Platform():
         发送消息（主动发送）同 send_msg()
         '''
         pass
+    
+    def parse_message_outline(self, message: Union[GuildMessage, GroupMessage, FriendMessage, str]) -> NakuruGuildMessage:
+        '''
+        将消息解析成大纲消息形式。
+        如: xxxxx[图片]xxxxx
+        '''
+        if isinstance(message, str):
+            return message
+        ret = ''
+        try:
+            for node in message.message:
+                if isinstance(node, Plain):
+                    ret += node.text
+                elif isinstance(node, At):
+                    ret += f'[At: {node.name}/{node.qq}]'
+                elif isinstance(node, Image):
+                    ret += f'[图片]'
+        except Exception as e:
+            pass
+        ret.replace('\n', '')
+        return ret
+
 
     def new_sub_thread(self, func, args=()):
         thread = threading.Thread(target=self._runner, args=(func, args), daemon=True)
