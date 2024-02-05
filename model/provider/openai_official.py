@@ -23,7 +23,7 @@ class ProviderOpenAIOfficial(Provider):
         self.logger = Logger()
 
         self.key_list = []
-        # 如果 cfg['key']中有长度为1的字符串，那么是格式错误，直接报错
+        # 如果 cfg['key'] 中有长度为 1 的字符串，那么是格式错误，直接报错
         for key in cfg['key']:
             if len(key) == 1:
                 input("检查到了长度为 1 的Key。配置文件中的 openai.key 处的格式错误 (符号 - 的后面要加空格)，请退出程序并检查配置文件，按回车跳过。")
@@ -43,7 +43,8 @@ class ProviderOpenAIOfficial(Provider):
         if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
             self.api_base = cfg['api_base']
             self.logger.log(f"设置 api_base 为: {self.api_base}", tag="OpenAI")
-        # openai client
+            
+        # 创建 OpenAI Client
         self.client = OpenAI(
             api_key=self.key_list[0],
             base_url=self.api_base
@@ -61,7 +62,7 @@ class ProviderOpenAIOfficial(Provider):
 
         self.enc = tiktoken.get_encoding("cl100k_base")
 
-        # 读取历史记录
+        # 从 SQLite DB 读取历史记录
         try:
             db1 = dbConn()
             for session in db1.get_all_session():
@@ -70,28 +71,11 @@ class ProviderOpenAIOfficial(Provider):
         except BaseException as e:
             self.logger.log("读取历史记录失败，但不影响使用。", level=gu.LEVEL_ERROR, tag="OpenAI")
 
-
-        # 读取统计信息
-        if not os.path.exists(abs_path+"configs/stat"):
-            with open(abs_path+"configs/stat", 'w', encoding='utf-8') as f:
-                    json.dump({}, f)
-        self.stat_file = open(abs_path+"configs/stat", 'r', encoding='utf-8')
-        global count
-        res = self.stat_file.read()
-        if res == '':
-            count = {}
-        else:
-            try: 
-                count = json.loads(res)
-            except BaseException:
-                pass
-
         # 创建转储定时器线程
         threading.Thread(target=self.dump_history, daemon=True).start()
 
         # 人格
         self.curr_personality = {}
-
 
     # 转储历史记录
     def dump_history(self):
@@ -101,7 +85,6 @@ class ProviderOpenAIOfficial(Provider):
             try:
                 # print("转储历史记录...")
                 for key in self.session_dict:
-                    # print("TEST: "+str(db.get_session(key)))
                     data = self.session_dict[key]
                     data_json = {
                         'data': data
@@ -146,20 +129,6 @@ class ProviderOpenAIOfficial(Provider):
         # 会话机制
         if session_id not in self.session_dict:
             self.session_dict[session_id] = []
-
-            fjson = {}
-            try:
-                f = open(abs_path+"configs/session", "r", encoding="utf-8")
-                fjson = json.loads(f.read())
-                f.close()
-            except:
-                pass
-            finally:
-                fjson[session_id] = 'true'
-                f = open(abs_path+"configs/session", "w", encoding="utf-8")
-                f.write(json.dumps(fjson))
-                f.flush()
-                f.close()
         
         if len(self.session_dict[session_id]) == 0:
             # 设置默认人格
@@ -362,34 +331,6 @@ class ProviderOpenAIOfficial(Provider):
             usage_tokens += int(item['single_tokens'])
         return usage_tokens
         
-    '''
-    获取统计信息
-    '''
-    def get_stat(self):
-        try:
-            f = open(abs_path+"configs/stat", "r", encoding="utf-8")
-            fjson = json.loads(f.read())
-            f.close()
-            guild_count = 0
-            guild_msg_count = 0
-            guild_direct_msg_count = 0
-
-            for k,v in fjson.items():
-                guild_count += 1
-                guild_msg_count += v['count']
-                guild_direct_msg_count += v['direct_count']
-            
-            session_count = 0
-
-            f = open(abs_path+"configs/session", "r", encoding="utf-8")
-            fjson = json.loads(f.read())
-            f.close()
-            for k,v in fjson.items():
-                session_count += 1
-            return guild_count, guild_msg_count, guild_direct_msg_count, session_count
-        except:
-            return -1, -1, -1, -1
-
     # 包装信息
     def wrap(self, prompt, session_id, image_url = None):
         if image_url is not None:

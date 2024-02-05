@@ -12,7 +12,6 @@ def main():
     try:
         import cores.qqbot.core as qqBot
         import yaml
-        from yaml.scanner import ScannerError
         import util.general_utils as gu
         ymlfile =  open(abs_path+"configs/config.yaml", 'r', encoding='utf-8')
         cfg = yaml.safe_load(ymlfile)
@@ -23,17 +22,16 @@ def main():
     except FileNotFoundError as file_not_found:
         print(file_not_found)
         input("配置文件不存在，请检查是否已经下载配置文件。")
-    except ScannerError as e:
-        print(traceback.format_exc())
-        input("config.yaml 配置文件格式错误，请遵守 yaml 格式。")
-
+    except BaseException as e:
+        print(e)
+        
     # 设置代理
     if 'http_proxy' in cfg and cfg['http_proxy'] != '':
         os.environ['HTTP_PROXY'] = cfg['http_proxy']
     if 'https_proxy' in cfg and cfg['https_proxy'] != '':
         os.environ['HTTPS_PROXY'] = cfg['https_proxy']
     
-    os.environ['NO_PROXY'] = 'cn.bing.com,https://api.sgroup.qq.com'
+    os.environ['NO_PROXY'] = 'https://api.sgroup.qq.com'
 
     # 检查并创建 temp 文件夹
     if not os.path.exists(abs_path + "temp"):
@@ -88,15 +86,6 @@ if __name__ == "__main__":
         check_env(True)
     else:
         check_env()
-
-    if '-replit' in args:
-        print("[System] 启动Replit Web保活服务...")
-        try:
-            from util.webapp_replit import keep_alive
-            keep_alive()
-        except BaseException as e:
-            print(e)
-            print(f"[System-err] Replit Web保活服务启动失败:{str(e)}")
     
     t = threading.Thread(target=main, daemon=False)
     t.start()

@@ -263,6 +263,6 @@ class AstrBotDashBoard():
         ip_address = gu.get_local_ip_addresses()
         ip_str = f"http://{ip_address}:6185\n\thttp://localhost:6185"
         self.logger.log(f"\n==================\n您可访问:\n\n\t{ip_str}\n\n来登录可视化面板，默认账号密码为空。\n注意: 所有配置项现已全量迁移至 cmd_config.json 文件下，可登录可视化面板在线修改配置。\n==================\n", tag="可视化面板")
-        http_server = make_server('0.0.0.0', 6185, self.dashboard_be, processes=10)
+        http_server = make_server('0.0.0.0', 6185, self.dashboard_be, threaded=True, processes=10)
         http_server.serve_forever()
 

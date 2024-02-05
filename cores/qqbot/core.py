@@ -43,13 +43,12 @@ frequency_time = 60
 frequency_count = 2
 
 # 版本
-version = '3.1.1'
+version = '3.1.2'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
 OPENAI_OFFICIAL = 'openai_official'
 REV_ERNIE = 'rev_ernie'
-REV_EDGEGPT = 'rev_edgegpt'
 NONE_LLM = 'none_llm'
 chosen_provider = None
 # 语言模型对象
@@ -77,7 +76,6 @@ def upload():
     while True:
         addr_ip = ''
         try:
-
             o = {
                 "cnt_total": _global_object.cnt_total,
                 "admin": _global_object.admin_qq, 
@@ -98,9 +96,8 @@ def upload():
                 ok = resp.json()
                 if ok['status'] == 'ok':
                     _global_object.cnt_total = 0
-                    
         except BaseException as e:
-            logger.log("上传统计信息时出现错误: " + str(e), gu.LEVEL_ERROR, tag="Uploader")
+            pass
         time.sleep(10*60)
 
 # 语言模型选择
@@ -108,10 +105,6 @@ def privider_chooser(cfg):
     l = []
     if 'rev_ChatGPT' in cfg and cfg['rev_ChatGPT']['enable']:
         l.append('rev_chatgpt')
-    if 'rev_ernie' in cfg and cfg['rev_ernie']['enable']:
-        l.append('rev_ernie')
-    if 'rev_edgegpt' in cfg and cfg['rev_edgegpt']['enable']:
-        l.append('rev_edgegpt')
     if 'openai' in cfg and len(cfg['openai']['key']) > 0 and cfg['openai']['key'][0] is not None:
         l.append('openai_official')
     return l
@@ -165,22 +158,7 @@ def initBot(cfg):
                 llm_command_instance[REV_CHATGPT] = CommandRevChatGPT(llm_instance[REV_CHATGPT], _global_object)
                 chosen_provider = REV_CHATGPT
             else:
-                input("请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")    
-    if REV_EDGEGPT in prov:
-        logger.log("初始化：New Bing", gu.LEVEL_INFO)
-        if not os.path.exists('./cookies.json'):
-            input("导入Bing模型时发生错误, 没有找到cookies文件或者cookies文件放置位置错误。windows启动器启动的用户请把cookies.json文件放到和启动器相同的目录下。\n如何获取请看https://github.com/Soulter/QQChannelChatGPT仓库介绍。")
-        else:
-            if cfg['rev_edgegpt']['enable']:
-                try:
-                    from model.provider.rev_edgegpt import ProviderRevEdgeGPT
-                    from model.command.rev_edgegpt import CommandRevEdgeGPT
-                    llm_instance[REV_EDGEGPT] = ProviderRevEdgeGPT()
-                    llm_command_instance[REV_EDGEGPT] = CommandRevEdgeGPT(llm_instance[REV_EDGEGPT], _global_object)
-                    chosen_provider = REV_EDGEGPT
-                except BaseException as e:
-                    print(traceback.format_exc())
-                    logger.log("加载Bing模型时发生错误, 请检查1. cookies文件是否正确放置 2. 是否设置了代理（梯子）。", gu.LEVEL_ERROR)
+                input("请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
     if OPENAI_OFFICIAL in prov:
         logger.log("初始化：OpenAI官方", gu.LEVEL_INFO)
         if cfg['openai']['key'] is not None and cfg['openai']['key'] != [None]:
@@ -404,15 +382,14 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     role: member | admin
     platform: 平台(gocq, qqchan)
     """
-    global chosen_provider, keywords
-    global _global_object
+    global chosen_provider, keywords, _global_object
     message_str = ''
     session_id = session_id
     role = role
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
-    message_result = None # 消息返回结果
-
+    
+    # 统计数据，如频道消息量
     record_message(platform, session_id)
 
     for i in message.message:
@@ -444,11 +421,9 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     
     # 检查是否是更换语言模型的请求
     temp_switch = ""
-    if message_str.startswith('/bing') or message_str.startswith('/gpt') or message_str.startswith('/revgpt'):
+    if message_str.startswith('/gpt') or message_str.startswith('/revgpt'):
         target = chosen_provider
-        if message_str.startswith('/bing'):
-            target = REV_EDGEGPT
-        elif message_str.startswith('/gpt'):
+        if message_str.startswith('/gpt'):
             target = OPENAI_OFFICIAL
         elif message_str.startswith('/revgpt'):
             target = REV_CHATGPT
@@ -512,8 +487,6 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
                     llm_result_str = gplugin.web_search(message_str, llm_instance[chosen_provider], session_id, official_fc)
                 else:
                     llm_result_str = str(llm_instance[chosen_provider].text_chat(message_str, session_id, image_url, default_personality = _global_object.default_personality))
-            elif chosen_provider == REV_EDGEGPT:
-                return MessageResult("AstrBot 不再默认支持 NewBing 模型。")
 
             llm_result_str = _global_object.reply_prefix + llm_result_str
         except BaseException as e:
@@ -526,7 +499,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         
     # 指令回复
     if hit:
-        # 检查指令。 command_result 是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
+        # 检查指令。command_result 是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
         if command_result == None:
             return
         command = command_result[2]

@@ -171,30 +171,6 @@ class Command:
                         return False, "未找到该插件", "plugin"
                 except BaseException as e:
                     return False, f"获取插件信息失败，原因: {str(e)}", "plugin"
-            # elif l[1] == "reload":
-            #     if role != "admin":
-            #         return False, f"你的身份组{role}没有权限重载插件", "plugin"
-            #     for plugin in cached_plugins:
-            #         try:
-            #             print(f"更新插件 {plugin} 依赖...")
-            #             plugin_path = os.path.join(ppath, cached_plugins[plugin]["root_dir_name"])
-            #             if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-            #                 mm = pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), "--quiet"])
-            #                 if mm != 0:
-            #                     return False, "插件依赖安装失败，需要您手动pip安装对应插件的依赖。", "plugin"
-            #         except BaseException as e:
-            #             print(f"插件{plugin}依赖安装失败，原因: {str(e)}")
-            #     try:
-            #         ok, err = self.plugin_reload(cached_plugins, all = True)
-            #         if ok:
-            #             return True, "\n重载插件成功~", "plugin"
-            #         else:
-            #             # if os.path.exists(plugin_path):
-            #             #     shutil.rmtree(plugin_path)
-            #             return False, f"插件重载失败。\n跟踪: \n{err}", "plugin"
-            #     except BaseException as e:
-            #         return False, f"插件重载失败，原因: {str(e)}", "plugin"
-
             elif l[1] == "dev":
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限开发者模式", "plugin"
@@ -229,7 +205,6 @@ class Command:
             "nick": "设置机器人昵称",
             "plugin": "插件安装、卸载和重载",
             "web on/off": "启动或关闭网页搜索能力",
-            "/bing": "切换到bing模型",
             "/gpt": "切换到OpenAI ChatGPT API",
             "/revgpt": "切换到网页版ChatGPT",
         }
@@ -288,8 +263,7 @@ class Command:
         l = plain_text.split(" ")
 
         if len(l) < 3 and image_url == "":
-            return True, """
-【设置关键词回复】示例：
+            return True, """【设置关键词回复】示例：
 1. keyword hi 你好
 当发送hi的时候会回复你好
 2. keyword /hi 你好

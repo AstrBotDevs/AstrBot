@@ -87,7 +87,6 @@ def init_astrbot_config_items():
     cc = CmdConfig()
     cc.init_attributes("qq_forward_threshold", 200)
     cc.init_attributes("qq_welcome", "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
-    cc.init_attributes("bing_proxy", "")
     cc.init_attributes("qq_pic_mode", False)
     cc.init_attributes("rev_chatgpt_model", "")
     cc.init_attributes("rev_chatgpt_plugin_ids", [])
@@ -121,6 +120,3 @@ def init_astrbot_config_items():
     cc.init_attributes("https_proxy", "")
     cc.init_attributes("dashboard_username", "")
     cc.init_attributes("dashboard_password", "")
-    
-    
-    # cc.init_attributes(["qq_forward_mode"], False)

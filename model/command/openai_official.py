@@ -38,8 +38,6 @@ class CommandOpenAIOfficial(Command):
             return True, self.gpt()
         elif self.command_start_with(message, "status"):
             return True, self.status()
-        elif self.command_start_with(message, "count"):
-            return True, self.count()
         elif self.command_start_with(message, "help", "帮助"):
             return True, self.help()
         elif self.command_start_with(message, "unset"):
@@ -130,12 +128,6 @@ class CommandOpenAIOfficial(Command):
             chatgpt_cfg_str += f"  |-{index}: {key[-8:]} {key_stat[key]['used']}/{max} {sponsor}{tag}\n"
             index += 1
         return True, f"⭐使用情况({str(gg_count)}个已用):\n{chatgpt_cfg_str}", "status"
-
-    def count(self):
-        if self.provider is None:
-            return False, "未启动OpenAI ChatGPT语言模型。", "reset"
-        guild_count, guild_msg_count, guild_direct_msg_count, session_count = self.provider.get_stat()
-        return True, f"【本指令部分统计可能已经过时】\n当前会话数: {len(self.provider.session_dict)}\n共有频道数: {guild_count} \n共有消息数: {guild_msg_count}\n私信数: {guild_direct_msg_count}\n历史会话数: {session_count}", "count"
 
     def key(self, message: str):
         if self.provider is None:
