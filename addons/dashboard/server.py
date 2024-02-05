@@ -40,7 +40,7 @@ class AstrBotDashBoard():
         self.logger = global_object.logger
         self.ws_clients = {} # remote_ip: ws
         # 启动 websocket 服务器
-        self.ws_server = websockets.serve(self.__handle_msg, "localhost", 6186)
+        self.ws_server = websockets.serve(self.__handle_msg, "0.0.0.0", 6186)
         
         @self.dashboard_be.get("/")
         def index():
