@@ -166,9 +166,9 @@ class QQOfficial(Platform):
             'message_reference': msg_ref
         }
         if is_group:
-            data['channel_id'] = message.channel_id
+            data['channel_id'] = str(message.channel_id)
         else:
-            data['guild_id'] = message.guild_id
+            data['guild_id'] = str(message.guild_id)
         if image_path != '':
             data['file_image'] = image_path
 
@@ -207,6 +207,7 @@ class QQOfficial(Platform):
                         self._send_wrapper(**data)
  
     def _send_wrapper(self, **kwargs):
+        print(kwargs)
         if 'channel_id' in kwargs:
             asyncio.run_coroutine_threadsafe(self.client.api.post_message(**kwargs), self.loop).result()
         else:
