@@ -324,7 +324,7 @@ class Command:
         if len(l) == 1:
             try:
                 update_info = util.updator.check_update()
-                update_info += "\nTips:\n输入「update latest」更新到最新版本\n输入「update r」重启机器人\n"
+                update_info += "\nTips:\n输入「update latest」更新到最新版本\n输入「update <版本号如v3.1.3>」切换到指定版本\n输入「update r」重启机器人\n"
                 return True, update_info, "update"
             except BaseException as e:
                 return False, "检查更新失败: "+str(e), "update"
@@ -336,8 +336,18 @@ class Command:
                     return True, "更新成功，重启生效。可输入「update r」重启", "update"
                 except BaseException as e:
                     return False, "更新失败: "+str(e), "update"
-            if l[1] == "r":
+            elif l[1] == "r":
                 util.updator._reboot()
+            else:
+                if l[1].lower().startswith('v'):
+                    try:
+                        release_data = util.updator.request_release_info(latest=False)
+                        util.updator.update_project(release_data, latest=False, version=l[1])
+                        return True, "更新成功，重启生效。可输入「update r」重启", "update"
+                    except BaseException as e:
+                        return False, "更新失败: "+str(e), "update"
+                else:
+                    return False, "版本号格式错误", "update"
 
     def reset(self):
         return False
@@ -365,5 +375,3 @@ class Command:
     
     def draw(self):
         return False
-    
-    
