@@ -45,13 +45,13 @@ class DashBoardHelper():
         @self.dashboard.register("post_configs")
         def on_post_configs(post_configs: dict):
             try:
-                self.logger.log(f"收到配置更新请求", gu.LEVEL_INFO, tag="可视化面板")
+                # self.logger.log(f"收到配置更新请求", gu.LEVEL_INFO, tag="可视化面板")
                 self.save_config(post_configs)
                 self.parse_default_config(self.dashboard_data, self.cc.get_all())
                 # 重启
                 threading.Thread(target=shutdown_bot, args=(2,), daemon=True).start()
             except Exception as e:
-                self.logger.log(f"在保存配置时发生错误：{e}", gu.LEVEL_ERROR, tag="可视化面板")
+                # self.logger.log(f"在保存配置时发生错误：{e}", gu.LEVEL_ERROR, tag="可视化面板")
                 raise e
 
         
