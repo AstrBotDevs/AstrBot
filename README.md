@@ -24,7 +24,7 @@
 - **如何部署？** [帮助文档](https://astrbot.soulter.top/center/docs/%E9%83%A8%E7%BD%B2/%E9%80%9A%E8%BF%87Docker%E9%83%A8%E7%BD%B2) (部署不成功欢迎进群捞人解决<3)
 - **go-cqhttp启动不成功、报登录失败？** [在这里搜索解决方法](https://github.com/Mrs4s/go-cqhttp/issues)
 - **程序闪退/机器人启动不成功？** [提交issue或加群反馈](https://github.com/Soulter/QQChannelChatGPT/issues)
-- **如何开启ChatGPT、Claude等语言模型？** [查看帮助](https://astrbot.soulter.top/center/docs/%E4%BD%BF%E7%94%A8/%E5%A4%A7%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%9E%8B)
+- **如何开启 ChatGPT、Claude、HuggingChat 等语言模型？** [查看帮助](https://astrbot.soulter.top/center/docs/%E4%BD%BF%E7%94%A8/%E5%A4%A7%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%9E%8B)
 
 ## 🧩功能：
 
@@ -43,9 +43,8 @@
 - HuggingChat（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 
 **图片生成**
-
+- OpenAI Dalle 接口
 - NovelAI/Naifu (免费，由[AIDraw插件](https://github.com/Soulter/aidraw)支持)
-
 
 🌍机器人支持的能力一览：
 - 可视化面板（beta）
