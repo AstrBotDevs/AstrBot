@@ -14,6 +14,7 @@ import json
 import util.plugin_util as putil
 from util.cmd_config import CmdConfig as cc
 from util.general_utils import Logger
+import util.updator
 from nakuru.entities.components import (
     Plain,
     Image
@@ -112,8 +113,8 @@ class Command:
         elif platform == PLATFORM_GOCQ:
             user_id = str(message_obj.user_id)
 
-        return True, f"你的ID：{user_id}", "plugin"
-            
+        return True, f"你在此平台上的ID：{user_id}", "plugin"
+
     def get_new_conf(self, message, role):
         if role != "admin":
             return False, f"你的身份组{role}没有权限使用此指令。", "newconf"
@@ -200,14 +201,12 @@ class Command:
         return {
             "help": "帮助",
             "keyword": "设置关键词/关键指令回复",
-            "update": "更新面板",
-            "update latest": "更新到最新版本",
-            "update r": "重启机器人",
-            "reset": "重置会话",
+            "update": "更新项目",
             "nick": "设置机器人昵称",
             "plugin": "插件安装、卸载和重载",
-            "web on/off": "启动或关闭网页搜索能力",
-            "/gpt": "切换到OpenAI ChatGPT API",
+            "web on/off": "LLM 网页搜索能力",
+            "reset": "重置 LLM 对话",
+            "/gpt": "切换到 OpenAI 官方接口",
             "/revgpt": "切换到网页版ChatGPT",
         }
     
@@ -238,8 +237,10 @@ class Command:
         finally:
             return msg
     
-    # 接受可变参数
     def command_start_with(self, message: str, *args):
+        '''
+        当消息以指定的指令开头时返回True
+        '''
         for arg in args:
             if message.startswith(arg) or message.startswith('/'+arg):
                 return True
@@ -273,8 +274,7 @@ class Command:
 3. keyword d hi
 删除hi关键词的回复
 4. keyword hi <图片>
-当发送hi时会回复图片
-""", "keyword"
+当发送hi时会回复图片""", "keyword"
         
         del_mode = False
         if l[1] == "d":
@@ -321,68 +321,23 @@ class Command:
         if role != "admin":
             return True, "你没有权限使用该指令", "keyword"
         l = message.split(" ")
-        try:
-            repo = Repo()
-        except git.exc.InvalidGitRepositoryError:
-            try:
-                repo = Repo(path="QQChannelChatGPT")  
-            except git.exc.InvalidGitRepositoryError:
-                repo = Repo(path="AstrBot")
         if len(l) == 1:
-            curr_branch = repo.active_branch.name
-            # 得到本地版本号和最新版本号
-            now_commit = repo.head.commit
-            # 得到远程3条commit列表, 包含commit信息
-            origin = repo.remotes.origin
-            origin.fetch()
-            commits = list(repo.iter_commits(curr_branch, max_count=3))
-            commits_log = ''
-            index = 1
-            for commit in commits:
-                if commit.message.endswith("\n"):
-                    commits_log += f"[{index}] {commit.message}-----------\n"
-                else:
-                    commits_log += f"[{index}] {commit.message}\n-----------\n"
-                index+=1
-            # remote_commit_hash = origin.refs.master.commit.hexsha[:6]
-            remote_commit_hash = origin.refs[curr_branch].commit.hexsha[:6]
-            return True, f"当前分支: {curr_branch}\n当前版本: {now_commit.hexsha[:6]}\n最新版本: {remote_commit_hash}\n\n3条commit(非最新):\n{str(commits_log)}\nTips:\n1. 使用 update latest 更新至最新版本；\n2. 使用 update checkout <分支名> 切换代码分支。", "update"
+            try:
+                update_info = util.updator.check_update()
+                update_info += "\nTips:\n输入「update latest」更新到最新版本\n输入「update r」重启机器人\n"
+                return True, update_info, "update"
+            except BaseException as e:
+                return False, "检查更新失败: "+str(e), "update"
         else:
             if l[1] == "latest":
                 try:
-                    curr_branch = repo.active_branch.name
-                    origin = repo.remotes.origin
-                    repo.git.pull("origin", curr_branch, "-f")
-                    commits = list(repo.iter_commits(curr_branch, max_count=1))
-                    commit_log = commits[0].message
-                    tag = "update"
-                    if len(l) == 3 and l[2] == "r":
-                        tag = "update latest r"
-                    return True, f"更新成功。新版本内容: \n{commit_log}\nps:重启后生效。输入update r重启（重启指令不返回任何确认信息）。", tag
+                    release_data = util.updator.request_release_info()
+                    util.updator.update_project(release_data)
+                    return True, "更新成功，重启生效。可输入「update r」重启", "update"
                 except BaseException as e:
                     return False, "更新失败: "+str(e), "update"
             if l[1] == "r":
-                py = sys.executable
-                os.execl(py, py, *sys.argv)
-            if l[1] == 'checkout':
-                # 切换分支
-                if len(l) < 3:
-                    return False, "请提供分支名，如 /update checkout dev_dashboard", "update"
-                try:
-                    origin = repo.remotes.origin
-                    origin.fetch()
-                    repo.git.checkout(l[2])
-
-                    # 更新分支（强制）
-                    repo.git.pull("origin", l[2], "-f")
-                    
-                    # 获得最新的 commit
-                    commits = list(repo.iter_commits(max_count=1))
-                    commit_log = commits[0].message
-                    
-                    return True, f"切换分支成功，机器人将在 5 秒内重新启动以应用新的功能。\n当前分支: {l[2]}\n此分支最近更新: \n{commit_log}", "update latest r"
-                except BaseException as e:
-                    return False, f"切换分支失败。原因: {str(e)}", "update"
+                util.updator._reboot()
 
     def reset(self):
         return False

@@ -207,7 +207,6 @@ class QQOfficial(Platform):
                         self._send_wrapper(**data)
  
     def _send_wrapper(self, **kwargs):
-        print(kwargs)
         if 'channel_id' in kwargs:
             asyncio.run_coroutine_threadsafe(self.client.api.post_message(**kwargs), self.loop).result()
         else:
