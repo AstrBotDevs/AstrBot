@@ -95,13 +95,15 @@ class Command:
         return False, None
     
     def web_search(self, message):
-        if message == "web on":
+        l = message.split(' ')
+        if len(l) == 1:
+            return True, f"网页搜索功能当前状态: {self.global_object.web_search}", "web"
+        elif l[1] == 'on':
             self.global_object.web_search = True
             return True, "已开启网页搜索", "web"
-        elif message == "web off":
+        elif l[1] == 'off':
             self.global_object.web_search = False
             return True, "已关闭网页搜索", "web"
-        return True, f"网页搜索功能当前状态: {self.global_object.web_search}", "web"
 
     def get_my_id(self, message_obj, platform):
         user_id = "Unknown"
