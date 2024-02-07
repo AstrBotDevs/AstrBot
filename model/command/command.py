@@ -1,13 +1,6 @@
 import json
 from util import general_utils as gu
-has_git = True
-try:
-    import git.exc
-    from git.repo import Repo
-except BaseException as e:
-    has_git = False
 import os
-import sys
 import requests
 from model.provider.provider import Provider
 import json
@@ -19,9 +12,7 @@ from nakuru.entities.components import (
     Plain,
     Image
 )
-from PIL import Image as PILImage
 from cores.qqbot.global_object import GlobalObject, AstrMessageEvent
-from pip._internal import main as pipmain
 from cores.qqbot.global_object import CommandResult
 
 PLATFORM_QQCHAN = 'qqchan'
@@ -42,6 +33,7 @@ class Command:
                       message_obj):
         # 插件
         cached_plugins = self.global_object.cached_plugins
+        # 将消息封装成 AstrMessageEvent 对象
         ame = AstrMessageEvent(
             message_str=message,
             message_obj=message_obj,
@@ -52,6 +44,7 @@ class Command:
             global_object=self.global_object,
             session_id = session_id
         )
+        # 从已启动的插件中查找是否有匹配的指令
         for k, v in cached_plugins.items():
             try:
                 result = v["clsobj"].run(ame)
@@ -91,7 +84,6 @@ class Command:
         if self.command_start_with(message, "ip"):
             ip = requests.get("https://myip.ipip.net", timeout=5).text
             return True, f"机器人 IP 信息：{ip}", "ip"
-            
         
         return False, None
     
@@ -128,8 +120,6 @@ class Command:
     插件指令
     '''
     def plugin_oper(self, message: str, role: str, cached_plugins: dict, platform: str):
-        if not has_git:
-            return False, "你正在运行在无Git环境下，暂时将无法使用插件、热更新功能。", "plugin"
         l = message.split(" ")
         if len(l) < 2:
             p = gu.create_text_image("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
@@ -316,8 +306,6 @@ class Command:
             return False, "设置失败: "+str(e), "keyword"
     
     def update(self, message: str, role: str):
-        if not has_git:
-            return False, "你正在运行在无Git环境下，暂时将无法使用插件、热更新功能。", "update"
         if role != "admin":
             return True, "你没有权限使用该指令", "keyword"
         l = message.split(" ")

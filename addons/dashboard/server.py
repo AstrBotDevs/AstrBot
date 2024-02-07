@@ -1,7 +1,6 @@
 from flask import Flask, request
 from flask.logging import default_handler
 from werkzeug.serving import make_server
-import datetime
 from util import general_utils as gu
 from dataclasses import dataclass
 import logging
@@ -12,7 +11,7 @@ import websockets
 import json
 import threading
 import asyncio
-import time
+import os
 
 @dataclass
 class DashBoardData():
@@ -109,10 +108,59 @@ class AstrBotDashBoard():
         
         @self.dashboard_be.get("/api/configs")
         def get_configs():
+            # 如果params中有namespace，则返回该namespace下的配置
+            # 否则返回所有配置
+            namespace = "" if "namespace" not in request.args else request.args["namespace"]
+            conf = self._get_configs(namespace)
             return Response(
                 status="success",
                 message="",
-                data=self.dashboard_data.configs
+                data=conf
+            ).__dict__
+            
+        @self.dashboard_be.get("/api/config_outline")
+        def get_config_outline():
+            sample = [
+                {
+                "name": "配置通用消息平台",
+                "body": [
+                    {
+                    "title": "通用",
+                    "desc": "通用平台配置",
+                    "namespace": "internal_platform_general"
+                    },
+                    {
+                    "title": "QQ_OFFICIAL",
+                    "desc": "QQ官方API，仅支持频道",
+                    "namespace": "internal_platform_qq_official"
+                    },
+                    {
+                    "title": "QQ_GOCQ",
+                    "desc": "go-cqhttp",
+                    "namespace": "internal_platform_qq_gocq"
+                    }
+                ]
+                },
+                {
+                    "name": "配置 LLM",
+                    "body": [
+                        {
+                            "title": "OpenAI Official",
+                            "desc": "也支持使用官方接口的中转服务",
+                            "namespace": "internal_llm_openai_official"
+                        },
+                        {
+                            "title": "Rev ChatGPT",
+                            "desc": "早期的逆向ChatGPT，不推荐",
+                            "namespace": "internal_llm_rev_chatgpt"
+                        }
+                    ]
+                }
+            ]
+            return Response(
+                status="success",
+                message="",
+                data=sample
             ).__dict__
             
         @self.dashboard_be.post("/api/configs")
@@ -228,6 +276,34 @@ class AstrBotDashBoard():
                     pass
             return 'ok'
         
+    def _get_configs(self, namespace: str):
+        if namespace == "":
+            ret = [self.dashboard_data.configs['data'][5], 
+                    self.dashboard_data.configs['data'][6],]
+        elif namespace == "internal_platform_qq_official":
+            ret = [self.dashboard_data.configs['data'][0],]
+        elif namespace == "internal_platform_qq_gocq":
+            ret = [self.dashboard_data.configs['data'][1],]
+        elif namespace == "internal_platform_general": # 全局平台配置
+            ret = [self.dashboard_data.configs['data'][2],]
+        elif namespace == "internal_llm_openai_official":
+            ret = [self.dashboard_data.configs['data'][3],]
+        elif namespace == "internal_llm_rev_chatgpt":
+            ret = [self.dashboard_data.configs['data'][4],]
+        else:
+            path = f"data/config/{namespace}.json"
+            if not os.path.exists(path):
+                return []
+            with open(path, "r", encoding="utf-8-sig") as f:
+                ret = {
+                    "config_type": "group",
+                    "name": namespace + " 插件配置",
+                    "description": "",
+                    "body": list(json.load(f).values())
+                }
+        return ret
+
+    
     def register(self, name: str):
         def decorator(func):
             self.funcs[name] = func

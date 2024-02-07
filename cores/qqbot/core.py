@@ -139,9 +139,9 @@ def initBot(cfg):
     if 'reply_prefix' in cfg:
         # 适配旧版配置
         if isinstance(cfg['reply_prefix'], dict):
-            for k in cfg['reply_prefix']:
-                _global_object.reply_prefix = cfg['reply_prefix'][k]
-                break
+            _global_object.reply_prefix = ""
+            cfg['reply_prefix'] = ""
+            cc.put("reply_prefix", "")
         else:
             _global_object.reply_prefix = cfg['reply_prefix']
 

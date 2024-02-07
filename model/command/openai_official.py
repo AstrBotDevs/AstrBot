@@ -18,6 +18,8 @@ class CommandOpenAIOfficial(Command):
                       platform: str,
                       message_obj):
         self.platform = platform
+        
+        # 检查基础指令
         hit, res = super().check_command(
             message,
             session_id,
@@ -26,6 +28,7 @@ class CommandOpenAIOfficial(Command):
             message_obj
         )
         
+        # 这里是这个 LLM 的专属指令
         if hit:
             return True, res
         if self.command_start_with(message, "reset", "重置"):

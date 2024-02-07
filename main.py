@@ -36,6 +36,10 @@ def main():
     # 检查并创建 temp 文件夹
     if not os.path.exists(abs_path + "temp"):
         os.mkdir(abs_path+"temp")
+    if not os.path.exists(abs_path + "data"):
+        os.mkdir(abs_path+"data")
+    if not os.path.exists(abs_path + "data/config"):
+        os.mkdir(abs_path+"data/config")
 
     # 启动主程序（cores/qqbot/core.py）
     qqBot.initBot(cfg)

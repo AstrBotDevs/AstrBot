@@ -145,7 +145,6 @@ class QQGOCQ(Platform):
         # 解析 role
         sender_id = str(message.user_id)
         if sender_id == self.cc.get('admin_qq', '') or \
-        sender_id == self.cc.get('gocq_qqchan_admin', '') or \
         sender_id in self.cc.get('other_admins', []):
             role = 'admin'
         else:
