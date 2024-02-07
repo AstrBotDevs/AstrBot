@@ -8,3 +8,4 @@ configs/config.yaml
 temp
 cmd_config.json
 addons/plugins/
+data/
