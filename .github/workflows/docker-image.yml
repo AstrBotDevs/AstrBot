@@ -1,11 +1,8 @@
 name: Docker Image CI/CD
 
 on:
-  push:
-    branches:
-      - master
-    paths-ignore:
-      - '**/*.md'
+  release:
+    types: [published]
   workflow_dispatch:
 jobs:
   publish-latest-docker-image:
