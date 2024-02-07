@@ -12,12 +12,6 @@ import time
 import asyncio
 from util.plugin_dev.api.v1.config import update_config
 
-
-def shutdown_bot(delay_s: int):
-    time.sleep(delay_s)
-    py = sys.executable
-    os.execl(py, py, *sys.argv)
-
 @dataclass
 class DashBoardConfig():
     config_type: str
@@ -47,11 +41,12 @@ class DashBoardHelper():
         def on_post_configs(post_configs: dict):
             try:
                 # self.logger.log(f"收到配置更新请求", gu.LEVEL_INFO, tag="可视化面板")
-                self.save_config(post_configs['base_config'], namespace='') # 基础配置
+                if 'base_config' in post_configs:
+                    self.save_config(post_configs['base_config'], namespace='') # 基础配置
                 self.save_config(post_configs['config'], namespace=post_configs['namespace']) # 选定配置
                 self.parse_default_config(self.dashboard_data, self.cc.get_all())
                 # 重启
-                threading.Thread(target=shutdown_bot, args=(2,), daemon=True).start()
+                threading.Thread(target=self.dashboard.shutdown_bot, args=(2,), daemon=True).start()
             except Exception as e:
                 # self.logger.log(f"在保存配置时发生错误：{e}", gu.LEVEL_ERROR, tag="可视化面板")
                 raise e
@@ -75,7 +70,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="QQ机器人APPID",
                         description="详见 q.qq.com",
                         value=config['qqbot']['appid'],
@@ -83,7 +78,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="QQ机器人令牌",
                         description="详见 q.qq.com",
                         value=config['qqbot']['token'],
@@ -91,7 +86,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="QQ机器人 Secret",
                         description="详见 q.qq.com",
                         value=config['qqbot_secret'],
@@ -122,7 +117,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="HTTP 服务器地址",
                         description="",
                         value=config['gocq_host'],
@@ -218,7 +213,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="回复前缀",
                         description="[xxxx] 你好！ 其中xxxx是你可以填写的前缀。如果为空则不显示。",
                         value=config['reply_prefix'],
@@ -242,7 +237,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="LLM 唤醒词",
                         description="如果不为空, 那么只有当消息以此词开头时，才会调用大语言模型进行回复。如设置为 /chat，那么只有当消息以 /chat 开头时，才会调用大语言模型进行回复。",
                         value=config['llm_wake_prefix'],
@@ -266,7 +261,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="OpenAI API 节点地址(api base)",
                         description="OpenAI API 的节点地址，配合非官方 API 使用。如果不想填写，那么请填写 none",
                         value=config['openai']['api_base'],
@@ -274,7 +269,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="OpenAI model",
                         description="OpenAI LLM 模型。详见 https://platform.openai.com/docs/api-reference/chat",
                         value=config['openai']['chatGPTConfigs']['model'],
@@ -330,7 +325,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="OpenAI 图像生成模型",
                         description="OpenAI 图像生成模型。",
                         value=config['openai_image_generate']['model'],
@@ -338,7 +333,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="OpenAI 图像生成大小",
                         description="OpenAI 图像生成大小。",
                         value=config['openai_image_generate']['size'],
@@ -346,7 +341,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="OpenAI 图像生成风格",
                         description="OpenAI 图像生成风格。修改前请参考 OpenAI 官方文档",
                         value=config['openai_image_generate']['style'],
@@ -354,7 +349,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="OpenAI 图像生成质量",
                         description="OpenAI 图像生成质量。修改前请参考 OpenAI 官方文档",
                         value=config['openai_image_generate']['quality'],
@@ -362,7 +357,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="问题题首提示词",
                         description="如果填写了此项，在每个对大语言模型的请求中，都会在问题前加上此提示词。",
                         value=config['llm_env_prompt'],
@@ -370,7 +365,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="默认人格文本",
                         description="默认人格文本",
                         value=config['default_personality_str'],
@@ -403,7 +398,7 @@ class DashBoardHelper():
                     ), 
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="终结点（Endpoint）地址",
                         description="逆向服务的终结点服务器的地址。",
                         value=config['CHATGPT_BASE_URL'],
@@ -438,7 +433,7 @@ class DashBoardHelper():
                     # "secret_key": null
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="APP ID",
                         description="",
                         value=config['baidu_aip']['app_id'],
@@ -446,7 +441,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="API KEY",
                         description="",
                         value=config['baidu_aip']['api_key'],
@@ -454,7 +449,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="SECRET KEY",
                         description="",
                         value=config['baidu_aip']['secret_key'],
@@ -470,7 +465,7 @@ class DashBoardHelper():
                 body=[
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="HTTP 代理地址",
                         description="建议上下一致",
                         value=config['http_proxy'],
@@ -478,7 +473,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="HTTPS 代理地址",
                         description="建议上下一致",
                         value=config['https_proxy'],
@@ -486,7 +481,7 @@ class DashBoardHelper():
                     ),
                     DashBoardConfig(
                         config_type="item",
-                        val_type="string",
+                        val_type="str",
                         name="面板用户名",
                         description="是的，就是你理解的这个面板的用户名",
                         value=config['dashboard_username'],
@@ -531,7 +526,7 @@ class DashBoardHelper():
                 
                 if config['val_type'] == "bool":
                     self._write_config(namespace, config['path'], config['value'])
-                elif config['val_type'] == "string":
+                elif config['val_type'] == "str":
                     self._write_config(namespace, config['path'], config['value'])
                 elif config['val_type'] == "int":
                     try:

@@ -6,12 +6,14 @@ from dataclasses import dataclass
 import logging
 from cores.database.conn import dbConn
 from util.cmd_config import CmdConfig
+from util.updator import check_update, update_project, request_release_info
 import util.plugin_util as putil
 import websockets
 import json
 import threading
 import asyncio
-import os
+import os, sys
+import time
 
 @dataclass
 class DashBoardData():
@@ -27,7 +29,8 @@ class Response():
     data: dict
     
 class AstrBotDashBoard():
-    def __init__(self, global_object):
+    def __init__(self, global_object: 'gu.GlobalObject'):
+        self.global_object = global_object
         self.loop = asyncio.get_event_loop()
         asyncio.set_event_loop(self.loop)
         self.dashboard_data = global_object.dashboard_data
@@ -120,47 +123,11 @@ class AstrBotDashBoard():
             
         @self.dashboard_be.get("/api/config_outline")
         def get_config_outline():
-            sample = [
-                {
-                "name": "配置通用消息平台",
-                "body": [
-                    {
-                    "title": "通用",
-                    "desc": "通用平台配置",
-                    "namespace": "internal_platform_general"
-                    },
-                    {
-                    "title": "QQ_OFFICIAL",
-                    "desc": "QQ官方API，仅支持频道",
-                    "namespace": "internal_platform_qq_official"
-                    },
-                    {
-                    "title": "QQ_GOCQ",
-                    "desc": "go-cqhttp",
-                    "namespace": "internal_platform_qq_gocq"
-                    }
-                ]
-                },
-                {
-                    "name": "配置 LLM",
-                    "body": [
-                        {
-                            "title": "OpenAI Official",
-                            "desc": "也支持使用官方接口的中转服务",
-                            "namespace": "internal_llm_openai_official"
-                        },
-                        {
-                            "title": "Rev ChatGPT",
-                            "desc": "早期的逆向ChatGPT，不推荐",
-                            "namespace": "internal_llm_rev_chatgpt"
-                        }
-                    ]
-                }
-            ]
+            outline = self._generate_outline()
             return Response(
                 status="success",
                 message="",
-                data=sample
+                data=outline
             ).__dict__
             
         @self.dashboard_be.post("/api/configs")
@@ -179,14 +146,6 @@ class AstrBotDashBoard():
                     message=e.__str__(),
                     data=self.dashboard_data.configs
                 ).__dict__
-        
-        @self.dashboard_be.get("/api/logs")
-        def get_logs():
-            return Response(
-                status="success",
-                message="",
-                data=self.dashboard_data.logs
-            ).__dict__
             
         @self.dashboard_be.get("/api/extensions")
         def get_plugins():
@@ -276,6 +235,53 @@ class AstrBotDashBoard():
                     pass
             return 'ok'
         
+        @self.dashboard_be.get("/api/check_update")
+        def get_update_info():
+            try:
+                ret = check_update()
+                return Response(
+                    status="success",
+                    message=ret,
+                    data={
+                        "has_new_version": ret != "当前已经是最新版本。" # 先这样吧，累了=.=
+                    }
+                ).__dict__
+            except Exception as e:
+                return Response(
+                    status="error",
+                    message=e.__str__(),
+                    data=None
+                ).__dict__
+                
+        @self.dashboard_be.post("/api/update_project")
+        def update_project_api():
+            version = request.json['version']
+            if version == "" or version == "latest":
+                latest = True
+                version = ''
+            else:
+                latest = False
+                version = request.json["version"]
+            try:
+                update_project(request_release_info(), latest=latest, version=version)
+                threading.Thread(target=self.shutdown_bot, args=(3,)).start()
+                return Response(
+                    status="success",
+                    message="更新成功，机器人将在 3 秒内重启。",
+                    data=None
+                ).__dict__
+            except Exception as e:
+                return Response(
+                    status="error",
+                    message=e.__str__(),
+                    data=None
+                ).__dict__
+            
+    def shutdown_bot(self, delay_s: int):
+        time.sleep(delay_s)
+        py = sys.executable
+        os.execl(py, py, *sys.argv)
+    
     def _get_configs(self, namespace: str):
         if namespace == "":
             ret = [self.dashboard_data.configs['data'][5], 
@@ -295,15 +301,77 @@ class AstrBotDashBoard():
             if not os.path.exists(path):
                 return []
             with open(path, "r", encoding="utf-8-sig") as f:
-                ret = {
+                ret = [{
                     "config_type": "group",
                     "name": namespace + " 插件配置",
                     "description": "",
                     "body": list(json.load(f).values())
-                }
+                },]
         return ret
 
-    
+    def _generate_outline(self):
+        '''
+        生成配置大纲。目前分为 platform(消息平台配置) 和 llm(语言模型配置) 两大类。
+        插件的info函数中如果带了plugin_type字段，则会被归类到对应的大纲中。目前仅支持 platform 和 llm 两种类型。
+        '''
+        outline = [
+            {
+            "type": "platform",
+            "name": "配置通用消息平台",
+            "body": [
+                {
+                "title": "通用",
+                "desc": "通用平台配置",
+                "namespace": "internal_platform_general",
+                "tag": ""
+                },
+                {
+                "title": "QQ_OFFICIAL",
+                "desc": "QQ官方API，仅支持频道",
+                "namespace": "internal_platform_qq_official",
+                "tag": ""
+                },
+                {
+                "title": "QQ_GOCQ",
+                "desc": "go-cqhttp",
+                "namespace": "internal_platform_qq_gocq",
+                "tag": ""
+                }
+            ]
+            },
+            {
+                "type": "llm",
+                "name": "配置 LLM",
+                "body": [
+                    {
+                        "title": "OpenAI Official",
+                        "desc": "也支持使用官方接口的中转服务",
+                        "namespace": "internal_llm_openai_official",
+                        "tag": ""
+                    },
+                    {
+                        "title": "Rev ChatGPT",
+                        "desc": "早期的逆向ChatGPT，不推荐",
+                        "namespace": "internal_llm_rev_chatgpt",
+                        "tag": ""
+                    }
+                ]
+            }
+        ]
+        for plugin in self.global_object.cached_plugins:
+            # 从插件信息中获取 plugin_type 字段，如果有则归类到对应的大纲中
+            if "plugin_type" in self.global_object.cached_plugins[plugin]["info"]:
+                _t = self.global_object.cached_plugins[plugin]["info"]["plugin_type"]
+                for item in outline:
+                    if item["type"] == _t:
+                        item["body"].append({
+                            "title": self.global_object.cached_plugins[plugin]["info"]["name"],
+                            "desc": self.global_object.cached_plugins[plugin]["info"]["desc"],
+                            "namespace": plugin,
+                            "tag": plugin,
+                        })
+        return outline
+
     def register(self, name: str):
         def decorator(func):
             self.funcs[name] = func

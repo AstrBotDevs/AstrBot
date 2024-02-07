@@ -22,13 +22,14 @@ def load_config(namespace: str) -> Union[dict, bool]:
 
 def put_config(namespace: str, name: str, key: str, value, description: str):
     '''
-    将配置写入配置文件。当前 value 仅支持 str, int, float, bool, list 类型（暂不支持 dict）。
+    将配置项写入以namespace为名字的配置文件，如果key不存在于目标配置文件中。当前 value 仅支持 str, int, float, bool, list 类型（暂不支持 dict）。
     namespace: str, 配置的唯一识别符，也就是配置文件的名字。
     name: str, 配置项的显示名字。
     key: str, 配置项的键。
     value: str, int, float, bool, list, 配置项的值。
     description: str, 配置项的描述。
     注意：只有当 namespace 为插件名(info 函数中的 name)时，该配置才会显示到可视化面板上。
+    注意：value一定要是该配置项对应类型的值，否则类型判断会乱。
     '''
     if namespace == "":
         raise ValueError("namespace 不能为空。")
@@ -45,17 +46,18 @@ def put_config(namespace: str, name: str, key: str, value, description: str):
     with open(path, "r", encoding="utf-8-sig") as f:
         d = json.load(f)
     assert(isinstance(d, dict))
-    d[key] = {
-        "config_type": "item",
-        "name": name,
-        "description": description,
-        "path": key,
-        "value": value,
-        "val_type": type(value).__name__
-    }
-    with open(path, "w", encoding="utf-8-sig") as f:
-        json.dump(d, f, indent=2, ensure_ascii=False)
-        f.flush()
+    if key not in d:
+        d[key] = {
+            "config_type": "item",
+            "name": name,
+            "description": description,
+            "path": key,
+            "value": value,
+            "val_type": type(value).__name__
+        }
+        with open(path, "w", encoding="utf-8-sig") as f:
+            json.dump(d, f, indent=2, ensure_ascii=False)
+            f.flush()
         
 def update_config(namespace: str, key: str, value):
     '''
