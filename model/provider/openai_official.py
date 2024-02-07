@@ -26,12 +26,9 @@ class ProviderOpenAIOfficial(Provider):
         # 如果 cfg['key'] 中有长度为 1 的字符串，那么是格式错误，直接报错
         for key in cfg['key']:
             if len(key) == 1:
-                input("检查到了长度为 1 的Key。配置文件中的 openai.key 处的格式错误 (符号 - 的后面要加空格)，请退出程序并检查配置文件，按回车跳过。")
-                raise BaseException("配置文件格式错误")
+                raise BaseException("检查到了长度为 1 的Key。配置文件中的 openai.key 处的格式错误 (符号 - 的后面要加空格)。")
         if cfg['key'] != '' and cfg['key'] != None:
             self.key_list = cfg['key']
-        else:
-            input("[System] 请先填写 Key。详情请前往 https://beta.openai.com/account/api-keys 或使用中转 Key 方案。")
         if len(self.key_list) == 0:
             raise Exception("您打开了 OpenAI 模型服务，但是未填写 key。请前往填写。")
         

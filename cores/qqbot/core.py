@@ -43,12 +43,11 @@ frequency_time = 60
 frequency_count = 2
 
 # 版本
-version = '3.1.2'
+version = '3.1.4'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
 OPENAI_OFFICIAL = 'openai_official'
-REV_ERNIE = 'rev_ernie'
 NONE_LLM = 'none_llm'
 chosen_provider = None
 # 语言模型对象
@@ -270,7 +269,7 @@ def initBot(cfg):
     logger.log("请给 https://github.com/Soulter/AstrBot 点个 star。", gu.LEVEL_INFO)
     if platform_str == '':
         platform_str = "(未启动任何平台，请前往面板添加)"
-    logger.log(f"🎉 项目启动完成\n - 启动的LLM: {len(llm_instance)}个\n - 启动的平台: {platform_str}\n - 启动的插件: {len(_global_object.cached_plugins)}个")
+    logger.log(f"🎉 项目启动完成")
     
     dashboard_thread.join()
 
