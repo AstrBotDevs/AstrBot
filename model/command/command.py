@@ -31,6 +31,7 @@ class Command:
                       role, 
                       platform, 
                       message_obj):
+        self.platform = platform
         # 插件
         cached_plugins = self.global_object.cached_plugins
         # 将消息封装成 AstrMessageEvent 对象
@@ -46,6 +47,9 @@ class Command:
         )
         # 从已启动的插件中查找是否有匹配的指令
         for k, v in cached_plugins.items():
+            # 过滤掉平台类插件
+            if "type" in v["info"] and v["info"]["plugin_type"] == "platform":
+                continue
             try:
                 result = v["clsobj"].run(ame)
                 if isinstance(result, CommandResult):
@@ -84,6 +88,8 @@ class Command:
         if self.command_start_with(message, "ip"):
             ip = requests.get("https://myip.ipip.net", timeout=5).text
             return True, f"机器人 IP 信息：{ip}", "ip"
+        if not self.provider and self.command_start_with(message, "help"):
+            return True, self.help()
         
         return False, None
     
@@ -99,13 +105,11 @@ class Command:
             return True, "已关闭网页搜索", "web"
 
     def get_my_id(self, message_obj, platform):
-        user_id = "Unknown"
-        if platform == PLATFORM_QQCHAN:
-            user_id = str(message_obj.sender.tiny_id)
-        elif platform == PLATFORM_GOCQ:
+        try:
             user_id = str(message_obj.user_id)
-
-        return True, f"你在此平台上的ID：{user_id}", "plugin"
+            return True, f"你在此平台上的ID：{user_id}", "plugin"
+        except BaseException as e:
+            return False, f"在{platform}上获取你的ID失败，原因: {str(e)}", "plugin"
 
     def get_new_conf(self, message, role):
         if role != "admin":
@@ -207,7 +211,6 @@ class Command:
         except BaseException as e:
             notice = ""
         msg = "# Help Center\n## 指令列表\n"
-        # msg = "Github项目名QQChannelChatGPT, 有问题提交issue, 欢迎Star\n【指令列表】\n"
         for key, value in commands.items():
             msg += f"`{key}` - {value}\n"
         # plugins
@@ -219,12 +222,10 @@ class Command:
         msg += notice
 
         try:
-            # p = gu.create_text_image("【Help Center】", msg)
             p = gu.create_markdown_image(msg)
-            return [Image.fromFileSystem(p)]
+            return [Image.fromFileSystem(p),]
         except BaseException as e:
             self.logger.log(str(e))
-        finally:
             return msg
     
     def command_start_with(self, message: str, *args):
@@ -350,7 +351,8 @@ class Command:
         return False
     
     def help(self):
-        return False
+        return True, self.help_messager(self.general_commands(), self.platform, self.global_object.cached_plugins), "help"
+
     
     def status(self):
         return False

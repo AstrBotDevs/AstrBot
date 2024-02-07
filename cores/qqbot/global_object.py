@@ -23,7 +23,7 @@ class GlobalObject:
     reply_prefix: str
     admin_qq: str
     admin_qqchan: str
-    uniqueSession: bool
+    unique_session: bool
     cnt_total: int
     platform_qq: QQGOCQ
     platform_qqchan: QQOfficial
@@ -40,7 +40,7 @@ class GlobalObject:
         self.reply_prefix = None
         self.admin_qq = "123456"
         self.admin_qqchan = "123456"
-        self.uniqueSession = False
+        self.unique_session = False
         self.cnt_total = 0
         self.platform_qq = None
         self.platform_qqchan = None
@@ -57,7 +57,7 @@ class AstrMessageEvent():
     platform: str # `gocq` 或 `qqchan`
     role: str # `admin` 或 `member`
     global_object: GlobalObject # 一些公用数据
-    session_id: int # 会话id (可能是群id，也可能是某个user的id。取决于是否开启了 uniqueSession)
+    session_id: int # 会话id (可能是群id，也可能是某个user的id。取决于是否开启了 unique_session)
 
     def __init__(self, message_str: str, 
                  message_obj: Union[GroupMessage, FriendMessage, GuildMessage, NakuruGuildMessage], 

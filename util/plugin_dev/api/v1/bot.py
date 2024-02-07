@@ -1,0 +1,1 @@
+from cores.qqbot.global_object import GlobalObject

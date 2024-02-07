@@ -196,9 +196,9 @@ def initBot(cfg):
     
     try:
         if 'uniqueSessionMode' in cfg and cfg['uniqueSessionMode']:
-            _global_object.uniqueSession = True
+            _global_object.unique_session = True
         else:
-            _global_object.uniqueSession = False
+            _global_object.unique_session = False
     except BaseException as e:
         logger.log("独立会话配置错误: "+str(e), gu.LEVEL_ERROR)
 
