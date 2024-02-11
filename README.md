@@ -46,6 +46,7 @@
 - OpenAI GPT-4（原生支持）
 - Claude（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 - HuggingChat（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
+- Gemini（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 
 **图片生成**
 - OpenAI Dalle 接口
