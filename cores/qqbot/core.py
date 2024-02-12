@@ -7,19 +7,18 @@ import requests
 import util.unfit_words as uw
 import os
 import sys
-from cores.qqbot.personality import personalities
 from addons.baidu_aip_judge import BaiduJudge
 from nakuru import (
     GroupMessage,
     FriendMessage,
     GuildMessage,
 )
-from model.platform._nakuru_translation_layer import NakuruGuildMember, NakuruGuildMessage
+from model.platform._nakuru_translation_layer import NakuruGuildMessage
 from nakuru.entities.components import Plain,At,Image
 from model.provider.provider import Provider
 from model.command.command import Command
 from util import general_utils as gu
-from util.general_utils import Logger
+from util.general_utils import Logger, upload, run_monitor
 from util.cmd_config import CmdConfig as cc
 from util.cmd_config import init_astrbot_config_items
 import util.function_calling.gplugin as gplugin
@@ -31,7 +30,6 @@ from . global_object import GlobalObject
 from typing import Union
 from addons.dashboard.helper import DashBoardHelper
 from addons.dashboard.server import DashBoardData
-from cores.monitor.perf import run_monitor
 from cores.database.conn import dbConn
 from model.platform._message_result import MessageResult
 
@@ -40,7 +38,7 @@ user_frequency = {}
 # 时间默认值
 frequency_time = 60
 # 计数默认值
-frequency_count = 2
+frequency_count = 10
 
 # 版本
 version = '3.1.5'
@@ -57,8 +55,6 @@ llm_wake_prefix = ""
 
 # 百度内容审核实例
 baidu_judge = None
-# 关键词回复
-keywords = {}
 
 # CLI
 PLATFORM_CLI = 'cli'
@@ -68,36 +64,6 @@ init_astrbot_config_items()
 # 全局对象
 _global_object: GlobalObject = None
 logger: Logger = Logger()
-
-# 统计消息数据
-def upload():
-    global version
-    while True:
-        addr_ip = ''
-        try:
-            o = {
-                "cnt_total": _global_object.cnt_total,
-                "admin": _global_object.admin_qq, 
-            }
-            o_j = json.dumps(o)
-            res = {
-                "version": version, 
-                "count": _global_object.cnt_total,
-                "cntqc": -1,
-                "cntgc": -1,
-                "ip": addr_ip,
-                "others": o_j,
-                "sys": sys.platform,
-            }
-            logger.log(res, gu.LEVEL_DEBUG, tag="Uploader")
-            resp = requests.post('https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
-            if resp.status_code == 200:
-                ok = resp.json()
-                if ok['status'] == 'ok':
-                    _global_object.cnt_total = 0
-        except BaseException as e:
-            pass
-        time.sleep(10*60)
 
 # 语言模型选择
 def privider_chooser(cfg):
@@ -111,11 +77,11 @@ def privider_chooser(cfg):
 '''
 初始化机器人
 '''
-def initBot(cfg):
+def init(cfg):
     global llm_instance, llm_command_instance
     global baidu_judge, chosen_provider
     global frequency_count, frequency_time
-    global keywords, _global_object
+    global _global_object
     global logger
     
     # 迁移旧配置
@@ -128,6 +94,7 @@ def initBot(cfg):
 
     # 初始化 global_object
     _global_object = GlobalObject()
+    _global_object.version = version
     _global_object.base_config = cfg
     _global_object.stat['session'] = {}
     _global_object.stat['message'] = {}
@@ -167,11 +134,6 @@ def initBot(cfg):
             llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance[OPENAI_OFFICIAL], _global_object)
             chosen_provider = OPENAI_OFFICIAL
 
-    # 得到关键词
-    if os.path.exists("keyword.json"):
-        with open("keyword.json", 'r', encoding='utf-8') as f:
-            keywords = json.load(f)
-
     # 检查provider设置偏好
     p = cc.get("chosen_provider", None)
     if p is not None and p in llm_instance:
@@ -185,7 +147,7 @@ def initBot(cfg):
         except BaseException as e:
             logger.log("百度内容审核初始化失败", gu.LEVEL_ERROR)
         
-    threading.Thread(target=upload, daemon=True).start()
+    threading.Thread(target=upload, args=(_global_object, ), daemon=True).start()
 
     # 得到发言频率配置
     if 'limit' in cfg:
@@ -273,34 +235,6 @@ def initBot(cfg):
     
     dashboard_thread.join()
 
-async def cli():
-    time.sleep(1)
-    while True:
-        try:
-            prompt = input(">>> ")
-            if prompt == "":
-                continue
-            ngm = await cli_pack_message(prompt)
-            await oper_msg(ngm, True, PLATFORM_CLI)
-        except EOFError:
-            return
-
-async def cli_pack_message(prompt: str) -> NakuruGuildMessage:
-    ngm = NakuruGuildMessage()
-    ngm.channel_id = 6180
-    ngm.user_id = 6180
-    ngm.message = [Plain(prompt)]
-    ngm.type = "GuildMessage"
-    ngm.self_id = 6180
-    ngm.self_tiny_id = 6180
-    ngm.guild_id = 6180
-    ngm.sender = NakuruGuildMember()
-    ngm.sender.tiny_id = 6180
-    ngm.sender.user_id = 6180
-    ngm.sender.nickname = "CLI"
-    ngm.sender.role = 0
-    return ngm
-
 '''
 运行 QQ_OFFICIAL 机器人
 '''
@@ -337,7 +271,6 @@ def run_gocq_bot(cfg: dict, _global_object: GlobalObject):
         qq_gocq.run()
     except BaseException as e:
         input("启动QQ机器人出现错误"+str(e))
-
 
 '''
 检查发言频率
@@ -381,7 +314,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     role: member | admin
     platform: 平台(gocq, qqchan)
     """
-    global chosen_provider, keywords, _global_object
+    global chosen_provider, _global_object
     message_str = ''
     session_id = session_id
     role = role
@@ -401,22 +334,6 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     user_id = message.user_id
     if not check_frequency(user_id):
         return MessageResult(f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。')
-
-    # 关键词回复
-    for k in keywords:
-        if message_str == k:
-            plain_text = ""
-            if 'plain_text' in keywords[k]:
-                plain_text = keywords[k]['plain_text']
-            else:
-                plain_text = keywords[k]
-            image_url = ""
-            if 'image_url' in keywords[k]:
-                image_url = keywords[k]['image_url']
-            if image_url != "":
-                res = [Plain(plain_text), Image.fromURL(image_url)]
-                return MessageResult(res)
-            return MessageResult(plain_text)
     
     # 检查是否是更换语言模型的请求
     temp_switch = ""
@@ -502,16 +419,6 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         if command_result == None:
             return
         command = command_result[2]
-
-        if command == "keyword":
-            if os.path.exists("keyword.json"):
-                with open("keyword.json", "r", encoding="utf-8") as f:
-                    keywords = json.load(f)
-            else:
-                try:
-                    return MessageResult(command_result[1])
-                except BaseException as e:
-                    return MessageResult(f"回复消息出错: {str(e)}")
 
         if command == "update latest r":
             def update_restart():

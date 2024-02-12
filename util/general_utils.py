@@ -11,6 +11,9 @@ from cores.qqbot.global_object import GlobalObject
 import platform
 import requests
 import logging
+import json
+import sys
+import psutil
 
 PLATFORM_GOCQ = 'gocq'
 PLATFORM_QQCHAN = 'qqchan'
@@ -193,7 +196,6 @@ def word2img(title: str, text: str, max_width=30, font_size=20):
 
     return image
 
-
 def render_markdown(markdown_text, image_width=800, image_height=600, font_size=26, font_color=(0, 0, 0), bg_color=(255, 255, 255)):
 
     HEADER_MARGIN = 20
@@ -322,7 +324,6 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             height += font_size + TEXT_LINE_MARGIN*2
 
     markdown_text = '\n'.join(pre_lines)
-    print("Pre process done, height: ", height)
     image_height = height
     if image_height < 100:
         image_height = 100
@@ -331,13 +332,6 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     # 创建空白图像
     image = Image.new('RGB', (image_width, image_height), bg_color)
     draw = ImageDraw.Draw(image)
-
-
-    # # get all the emojis unicode in the markdown text
-    # unicode_text = markdown_text.encode('unicode_escape').decode()
-    # # print(unicode_text)
-    # unicode_emojis = re.findall(r'\\U\w{8}', unicode_text)
-    # emoji_base_url = "https://abs.twimg.com/emoji/v1/72x72/{unicode_emoji}.png"
 
     # 设置初始位置
     x, y = 10, 10
@@ -360,25 +354,10 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
         line = line.strip()
 
         if line.startswith("#"):
-            # unicode_emojis = re.findall(r'\\U0001\w{4}', line)
-            # for unicode_emoji in unicode_emojis:
-            #     line = line.replace(unicode_emoji, "")
-            # unicode_emoji = ""
-            # if len(unicode_emojis) > 0:
-            #     unicode_emoji = unicode_emojis[0]
-            
             # 处理标题
             header_level = line.count("#")
             line = line.strip("#").strip()
             font_size_header = HEADER_FONT_STANDARD_SIZE - header_level * 4
-
-            # if unicode_emoji != "":
-            #     emoji_url = emoji_base_url.format(unicode_emoji=unicode_emoji[-5:])
-            #     emoji = Image.open(requests.get(emoji_url, stream=True).raw)
-            #     emoji = emoji.resize((font_size, font_size))
-            #     image.paste(emoji, (x, y))
-            #     x += font_size
-
             font = ImageFont.truetype(font_path, font_size_header)
             y += HEADER_MARGIN # 上边距
             # 字间距
@@ -389,10 +368,6 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
         elif line.startswith(">"):
             # 处理引用
             quote_text = line.strip(">")
-            # quote_width = image_width - 20  # 引用框的宽度为图像宽度减去左右边距
-            # quote_height = font_size + 10  # 引用框的高度为字体大小加上上下边距
-            # quote_box = (x, y, x + quote_width, y + quote_height)
-            # draw.rounded_rectangle(quote_box, radius=5, fill=(230, 230, 230), width=2)  # 使用灰色填充矩形框作为引用背景
             y+=QUOTE_LEFT_LINE_MARGIN
             draw.line((x, y, x, y + QUOTE_LEFT_LINE_HEIGHT), fill=QUOTE_LEFT_LINE_COLOR, width=QUOTE_LEFT_LINE_WIDTH)
             font = ImageFont.truetype(font_path, QUOTE_FONT_SIZE)
@@ -468,7 +443,6 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             y += image_res.size[1] + IMAGE_MARGIN*2
     return image
 
-
 def save_temp_img(img: Image) -> str:
     if not os.path.exists("temp"):
         os.makedirs("temp")
@@ -489,7 +463,6 @@ def save_temp_img(img: Image) -> str:
     p = f"temp/{timestamp}.png"
     img.save(p)
     return p
-
 
 def create_text_image(title: str, text: str, max_width=30, font_size=20):
     '''
@@ -520,9 +493,10 @@ def create_markdown_image(text: str):
     except Exception as e:
         raise e
 
-
-# 迁移配置文件到 cmd_config.json    
 def try_migrate_config(old_config: dict):
+    '''
+    迁移配置文件到 cmd_config.json    
+    '''
     cc = CmdConfig()
     if cc.get("qqbot", None) is None:
         # 未迁移过
@@ -554,3 +528,41 @@ def get_sys_info(global_object: GlobalObject):
         'os': os_name + '_' + os_version,
         'py': platform.python_version(),
     }
+    
+def upload(_global_object: GlobalObject):
+    while True:
+        addr_ip = ''
+        try:
+            res = {
+                "version": _global_object.version, 
+                "count": _global_object.cnt_total,
+                "ip": addr_ip,
+                "sys": sys.platform,
+                "admin": _global_object.admin_qq, 
+            }
+            resp = requests.post('https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
+            if resp.status_code == 200:
+                ok = resp.json()
+                if ok['status'] == 'ok':
+                    _global_object.cnt_total = 0
+        except BaseException as e:
+            pass
+        time.sleep(10*60)
+
+def run_monitor(global_object: GlobalObject):
+    '''
+    监测机器性能
+    - Bot 内存使用量
+    - CPU 占用率
+    '''
+    start_time = time.time()
+    while True:
+        stat = global_object.dashboard_data.stats
+        # 程序占用的内存大小
+        mem = psutil.Process().memory_info().rss / 1024 / 1024 # MB
+        stat['sys_perf'] = {
+            'memory': mem,
+            'cpu': psutil.cpu_percent()
+        }
+        stat['sys_start_time'] = start_time
+        time.sleep(30)

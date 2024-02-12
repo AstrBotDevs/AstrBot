@@ -8,8 +8,7 @@ from nakuru import (
     GroupMessage,
     FriendMessage,
     GroupMemberIncrease,
-    Notify,
-    Member
+    Notify
 )
 from typing import Union
 import time
@@ -31,7 +30,6 @@ class QQGOCQ(Platform):
         asyncio.set_event_loop(self.loop)
 
         self.waiting = {}
-        self.gocq_cnt = 0
         self.cc = CmdConfig()
         self.cfg = cfg
         self.logger: gu.Logger = global_object.logger
@@ -175,8 +173,6 @@ class QQGOCQ(Platform):
         """
         source = message
         res = result_message
-
-        self.gocq_cnt += 1
         
         self.logger.log(f"{source.user_id} <- {self.parse_message_outline(res)}", tag="QQ_GOCQ")
 
@@ -316,8 +312,3 @@ class QQGOCQ(Platform):
         except BaseException as e:
             raise e
     
-    def get_cnt(self):
-        return self.gocq_cnt
-    
-    def set_cnt(self, cnt):
-        self.gocq_cnt = cnt

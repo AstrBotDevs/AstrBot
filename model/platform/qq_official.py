@@ -13,7 +13,6 @@ import time
 from ._platfrom import Platform
 from ._nakuru_translation_layer import(
     NakuruGuildMessage, 
-    NakuruGuildMember,
     gocq_compatible_receive, 
     gocq_compatible_send
 ) 
@@ -44,7 +43,6 @@ class QQOfficial(Platform):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         
-        self.qqchan_cnt = 0
         self.waiting: dict = {}
 
         self.cfg = cfg
@@ -125,7 +123,6 @@ class QQOfficial(Platform):
         回复频道消息
         '''
         self.logger.log(f"{message.sender.nickname}({message.sender.tiny_id}) <- {self.parse_message_outline(res)}", tag="QQ_OFFICIAL")
-        self.qqchan_cnt += 1
 
         plain_text = ''
         image_path = ''
@@ -246,9 +243,3 @@ class QQOfficial(Platform):
             if cnt > 300:
                 raise Exception("等待消息超时。")
             time.sleep(1)
-        
-    def get_cnt(self):
-        return self.qqchan_cnt
-    
-    def set_cnt(self, cnt):
-        self.qqchan_cnt = cnt

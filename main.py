@@ -42,7 +42,7 @@ def main():
         os.mkdir(abs_path+"data/config")
 
     # 启动主程序（cores/qqbot/core.py）
-    qqBot.initBot(cfg)
+    qqBot.init(cfg)
 
 def check_env(ch_mirror=False):
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 9):

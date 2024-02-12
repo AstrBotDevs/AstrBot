@@ -10,7 +10,7 @@ from nakuru import (
 from ._nakuru_translation_layer import (
     NakuruGuildMessage,
 )
-from nakuru.entities.components import Plain, At, Image, Node
+from nakuru.entities.components import Plain, At, Image
 
 
 class Platform():
@@ -49,7 +49,7 @@ class Platform():
         '''
         pass
     
-    def parse_message_outline(self, message: Union[GuildMessage, GroupMessage, FriendMessage, str]) -> NakuruGuildMessage:
+    def parse_message_outline(self, message: Union[GuildMessage, GroupMessage, FriendMessage, str, list]) -> str:
         '''
         将消息解析成大纲消息形式。
         如: xxxxx[图片]xxxxx
@@ -57,14 +57,15 @@ class Platform():
         if isinstance(message, str):
             return message
         ret = ''
+        ls_to_parse = message if isinstance(message, list) else message.message
         try:
-            for node in message.message:
+            for node in ls_to_parse:
                 if isinstance(node, Plain):
                     ret += node.text
                 elif isinstance(node, At):
                     ret += f'[At: {node.name}/{node.qq}]'
                 elif isinstance(node, Image):
-                    ret += f'[图片]'
+                    ret += '[图片]'
         except Exception as e:
             pass
         ret.replace('\n', '')

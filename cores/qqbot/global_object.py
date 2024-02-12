@@ -1,14 +1,11 @@
-from model.platform.qq_official import QQOfficial, NakuruGuildMember, NakuruGuildMessage
+from model.platform.qq_official import QQOfficial, NakuruGuildMessage
 from model.platform.qq_gocq import QQGOCQ
 from model.provider.provider import Provider
 from addons.dashboard.server import DashBoardData
 from nakuru import (
-    CQHTTP,
     GroupMessage,
-    GroupMemberIncrease,
     FriendMessage,
     GuildMessage,
-    Notify
 )
 from typing import Union
 
@@ -16,6 +13,7 @@ class GlobalObject:
     '''
     存放一些公用的数据，用于在不同模块(如core与command)之间传递
     '''
+    version: str
     nick: str # gocq 的昵称
     base_config: dict # config.json
     cached_plugins: dict # 缓存的插件

@@ -8,6 +8,8 @@ from cores.qqbot.global_object import (
     AstrMessageEvent,
     CommandResult
 )
+import os
+import shutil
 
 '''
 注意改插件名噢！格式：XXXPlugin 或 Main
@@ -18,7 +20,14 @@ class HelloWorldPlugin:
     初始化函数, 可以选择直接pass
     """
     def __init__(self) -> None:
-        print("hello, world!")
+        # 复制旧配置文件到 data 目录下。
+        if os.path.exists("keyword.json"):
+            shutil.move("keyword.json", "data/keyword.json")
+        self.keywords = {}
+        if os.path.exists("data/keyword.json"):
+            self.keywords = json.load(open("data/keyword.json", "r"))
+        else:
+            self.save_keyword()
 
     """
     机器人程序会调用此函数。
@@ -28,20 +37,106 @@ class HelloWorldPlugin:
     """
     def run(self, ame: AstrMessageEvent):
         if ame.message_str == "helloworld":
-            # return True, tuple([True, "Hello World!!", "helloworld"])
             return CommandResult(
                 hit=True,
                 success=True,
                 message_chain=[Plain("Hello World!!")],
                 command_name="helloworld"
             )
+        if ame.message_str.startswith("/keyword") or ame.message_str.startswith("keyword"):
+            return self.handle_keyword_command(ame)
+            
+        ret = self.check_keyword(ame.message_str)
+        if ret: return ret
+
+        return CommandResult(
+            hit=False,
+            success=False,
+            message_chain=None,
+            command_name=None
+        )
+        
+    def handle_keyword_command(self, ame: AstrMessageEvent):
+        l = ame.message_str.split(" ")
+        
+        # 获取图片
+        image_url = ""
+        for comp in ame.message_obj.message:
+            if isinstance(comp, Image) and image_url == "":
+                if comp.url is None:
+                    image_url = comp.file
+                else:
+                    image_url = comp.url
+    
+        command_result = CommandResult(
+            hit=True,
+            success=False,
+            message_chain=None,
+            command_name="keyword"
+        )
+        if len(l) == 1 or (len(l) == 2 and image_url == ""):
+            ret = """【设置关键词回复】
+示例：
+1. keyword <触发词> <回复词>
+keyword hi 你好
+发送 hi 回复你好
+* 回复词支持图片
+
+2. keyword d <触发词>
+keyword d hi
+删除 hi 触发词产生的回复"""
+            command_result.success = True
+            command_result.message_chain = [Plain(ret)]
+            return command_result
+        elif len(l) == 3 and l[1] == "d":
+            if l[2] not in self.keywords:
+                command_result.message_chain = [Plain(f"关键词 {l[2]} 不存在")]
+                return command_result
+            self.keywords.pop(l[2])
+            self.save_keyword()
+            command_result.success = True
+            command_result.message_chain = [Plain("删除成功")]
+            return command_result
         else:
-            return CommandResult(
-                hit=False,
-                success=False,
-                message_chain=None,
-                command_name=None
-            )
+            self.keywords[l[1]] = {
+                "plain_text": " ".join(l[2:]),
+                "image_url": image_url
+            }
+            self.save_keyword()
+            command_result.success = True
+            command_result.message_chain = [Plain("设置成功")]
+            return command_result
+        
+    def save_keyword(self):
+        json.dump(self.keywords, open("data/keyword.json", "w"), ensure_ascii=False)
+        
+        
+    def check_keyword(self, message_str: str):
+        for k in self.keywords:
+            if message_str == k:
+                plain_text = ""
+                if 'plain_text' in self.keywords[k]:
+                    plain_text = self.keywords[k]['plain_text']
+                else:
+                    plain_text = self.keywords[k]
+                image_url = ""
+                if 'image_url' in self.keywords[k]:
+                    image_url = self.keywords[k]['image_url']
+                if image_url != "":
+                    res = [Plain(plain_text), Image.fromURL(image_url)]
+                    return CommandResult(
+                        hit=True,
+                        success=True,
+                        message_chain=res,
+                        command_name="keyword"
+                    )
+                return CommandResult(
+                    hit=True,
+                    success=True,
+                    message_chain=[Plain(plain_text)],
+                    command_name="keyword"
+                )
+
     """
     插件元信息。
     当用户输入 plugin v 插件名称 时，会调用此函数，返回帮助信息。
@@ -58,8 +153,8 @@ class HelloWorldPlugin:
     def info(self):
         return {
             "name": "helloworld",
-            "desc": "测试插件",
-            "help": "测试插件, 回复 helloworld 即可触发",
-            "version": "v1.2",
+            "desc": "这是 AstrBot 的默认插件，支持关键词回复。",
+            "help": "输入 /keyword 查看关键词回复帮助。",
+            "version": "v1.3",
             "author": "Soulter"
         }

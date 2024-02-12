@@ -83,8 +83,6 @@ class Command:
             return True, self.get_new_conf(message, role)
         if self.command_start_with(message, "web"): # 网页搜索
             return True, self.web_search(message)
-        if self.command_start_with(message, "keyword"):
-            return True, self.keyword(message_obj, role)
         if self.command_start_with(message, "ip"):
             ip = requests.get("https://myip.ipip.net", timeout=5).text
             return True, f"机器人 IP 信息：{ip}", "ip"
@@ -237,78 +235,9 @@ class Command:
                 return True
         return False
     
-    # keyword: 关键字
-    def keyword(self, message_obj, role: str):
-        if role != "admin":
-            return True, "你没有权限使用该指令", "keyword"
-        
-        plain_text = ""
-        image_url = ""
-
-        for comp in message_obj.message:
-            if isinstance(comp, Plain):
-                plain_text += comp.text
-            elif isinstance(comp, Image) and image_url == "":
-                if comp.url is None:
-                    image_url = comp.file
-                else:
-                    image_url = comp.url
-
-        l = plain_text.split(" ")
-
-        if len(l) < 3 and image_url == "":
-            return True, """【设置关键词回复】示例：
-1. keyword hi 你好
-当发送hi的时候会回复你好
-2. keyword /hi 你好
-当发送/hi时会回复你好
-3. keyword d hi
-删除hi关键词的回复
-4. keyword hi <图片>
-当发送hi时会回复图片""", "keyword"
-        
-        del_mode = False
-        if l[1] == "d":
-            del_mode = True    
-
-        try:
-            if os.path.exists("keyword.json"):
-                with open("keyword.json", "r", encoding="utf-8") as f:
-                    keyword = json.load(f)
-                    if del_mode:
-                        # 删除关键词
-                        if l[2] not in keyword:
-                            return False, "该关键词不存在", "keyword"
-                        else: del keyword[l[2]]
-                    else:
-                        keyword[l[1]] = {
-                            "plain_text": " ".join(l[2:]),
-                            "image_url": image_url
-                        }
-            else:
-                if del_mode:
-                    return False, "该关键词不存在", "keyword"
-                keyword = {
-                    l[1]: {
-                    "plain_text": " ".join(l[2:]),
-                    "image_url": image_url
-                    }
-                }
-            with open("keyword.json", "w", encoding="utf-8") as f:
-                json.dump(keyword, f, ensure_ascii=False, indent=4)
-                f.flush()
-            if del_mode:
-                return True, "删除成功: "+l[2], "keyword"
-            if image_url == "":
-                return True, "设置成功: "+l[1]+" "+" ".join(l[2:]), "keyword"
-            else:
-                return True, [Plain("设置成功: "+l[1]+" "+" ".join(l[2:])), Image.fromURL(image_url)], "keyword"
-        except BaseException as e:
-            return False, "设置失败: "+str(e), "keyword"
-    
     def update(self, message: str, role: str):
         if role != "admin":
-            return True, "你没有权限使用该指令", "keyword"
+            return True, "你没有权限使用该指令", "update"
         l = message.split(" ")
         if len(l) == 1:
             try:
