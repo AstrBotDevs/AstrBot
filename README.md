@@ -32,6 +32,11 @@
 1. 可视化面板
 2. Docker 一键部署项目：[链接](https://astrbot.soulter.top/center/docs/%E9%83%A8%E7%BD%B2/%E9%80%9A%E8%BF%87Docker%E9%83%A8%E7%BD%B2)
 
+🌍支持的消息平台/接口
+- go-cqhttp（QQ、QQ频道）
+- QQ 官方机器人接口
+- Telegram（由 [astrbot_plugin_telegram](https://github.com/Soulter/astrbot_plugin_telegram) 插件支持）
+
 🌍支持的AI语言模型一览：
 
 **文字模型/图片理解**
@@ -41,6 +46,7 @@
 - OpenAI GPT-4（原生支持）
 - Claude（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 - HuggingChat（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
+- Gemini（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 
 **图片生成**
 - OpenAI Dalle 接口
