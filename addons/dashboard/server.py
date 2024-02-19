@@ -332,8 +332,8 @@ class AstrBotDashBoard():
                 "tag": ""
                 },
                 {
-                "title": "QQ_GOCQ",
-                "desc": "go-cqhttp",
+                "title": "OneBot协议",
+                "desc": "支持cq-http、shamrock等（目前仅支持QQ平台）",
                 "namespace": "internal_platform_qq_gocq",
                 "tag": ""
                 }

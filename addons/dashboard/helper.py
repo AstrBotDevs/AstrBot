@@ -104,14 +104,14 @@ class DashBoardHelper():
             )
             qq_gocq_platform_group = DashBoardConfig(
                 config_type="group",
-                name="GO-CQHTTP 平台配置",
+                name="OneBot协议平台配置",
                 description="",
                 body=[
                     DashBoardConfig(
                         config_type="item",
                         val_type="bool",
-                        name="启用 GO-CQHTTP 平台",
-                        description="gocq 是一个基于 HTTP 协议的 CQHTTP 协议的实现。详见 github.com/Mrs4s/go-cqhttp",
+                        name="启用",
+                        description="支持cq-http、shamrock等（目前仅支持QQ平台）",
                         value=config['gocqbot']['enable'],
                         path="gocqbot.enable",
                     ),
@@ -135,7 +135,7 @@ class DashBoardHelper():
                         config_type="item",
                         val_type="int",
                         name="WebSocket 服务器端口",
-                        description="",
+                        description="目前仅支持正向 WebSocket",
                         value=config['gocq_websocket_port'],
                         path="gocq_websocket_port",
                     ),
