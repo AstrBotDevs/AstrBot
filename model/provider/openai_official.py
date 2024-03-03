@@ -1,18 +1,21 @@
-from openai import OpenAI
-from openai.types.chat.chat_completion import ChatCompletion
-from openai.types.images_response import ImagesResponse
-import json
-import time
 import os
 import sys
+import json
+import time
+import tiktoken
+import threading
+import traceback
+
+from openai import AsyncOpenAI
+from openai.types.images_response import ImagesResponse
+from openai.types.chat.chat_completion import ChatCompletion
+
 from cores.database.conn import dbConn
 from model.provider.provider import Provider
-import threading
 from util import general_utils as gu
 from util.cmd_config import CmdConfig
 from util.general_utils import Logger
-import traceback
-import tiktoken
+
 
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
@@ -42,7 +45,7 @@ class ProviderOpenAIOfficial(Provider):
             self.logger.log(f"设置 api_base 为: {self.api_base}", tag="OpenAI")
             
         # 创建 OpenAI Client
-        self.client = OpenAI(
+        self.client = AsyncOpenAI(
             api_key=self.key_list[0],
             base_url=self.api_base
         )
@@ -113,7 +116,7 @@ class ProviderOpenAIOfficial(Provider):
         }
         self.session_dict[session_id].append(new_record)
 
-    def text_chat(self, prompt, 
+    async def text_chat(self, prompt, 
                   session_id = None, 
                   image_url = None, 
                   function_call=None,
@@ -132,7 +135,6 @@ class ProviderOpenAIOfficial(Provider):
             if default_personality is not None:
                 self.personality_set(default_personality, session_id)
 
-
         # 使用 tictoken 截断消息
         _encoded_prompt = self.enc.encode(prompt)
         if self.openai_model_configs['max_tokens'] < len(_encoded_prompt):
@@ -140,8 +142,8 @@ class ProviderOpenAIOfficial(Provider):
             self.logger.log(f"注意，有一部分 prompt 文本由于超出 token 限制而被截断。", level=gu.LEVEL_WARNING, tag="OpenAI")
 
         cache_data_list, new_record, req = self.wrap(prompt, session_id, image_url)
-        self.logger.log(f"CACHE_DATA_: {str(cache_data_list)}", level=gu.LEVEL_DEBUG, tag="OpenAI")
-        self.logger.log(f"OPENAI REQUEST: {str(req)}", level=gu.LEVEL_DEBUG, tag="OpenAI")
+        self.logger.log(f"cache: {str(cache_data_list)}", level=gu.LEVEL_DEBUG, tag="OpenAI")
+        self.logger.log(f"request: {str(req)}", level=gu.LEVEL_DEBUG, tag="OpenAI")
         retry = 0
         response = None
         err = ''
@@ -168,19 +170,19 @@ class ProviderOpenAIOfficial(Provider):
         while retry < 10:
             try:
                 if function_call is None:
-                    response = self.client.chat.completions.create(
+                    response = await self.client.chat.completions.create(
                         messages=req,
                         **conf
                     )
                 else:
-                    response = self.client.chat.completions.create(
+                    response = await self.client.chat.completions.create(
                         messages=req,
                         tools = function_call,
                         **conf
                     )
                 break
             except Exception as e:
-                print(traceback.format_exc())
+                traceback.print_exc()
                 if 'Invalid content type. image_url is only supported by certain models.' in str(e):
                     raise e
                 if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(e) or 'No API key provided' in str(e) or 'Incorrect API key provided' in str(e):
@@ -188,7 +190,6 @@ class ProviderOpenAIOfficial(Provider):
                     self.key_stat[self.client.api_key]['exceed'] = True
                     is_switched = self.handle_switch_key()
                     if not is_switched:
-                        # 所有Key都超额或不正常
                         raise e
                     retry -= 1
                 elif 'maximum context length' in str(e):
@@ -239,7 +240,6 @@ class ProviderOpenAIOfficial(Provider):
                     index += 1
             # 删除完后更新相关字段
             self.session_dict[session_id] = cache_data_list
-            # cache_prompt = get_prompts_by_cache_list(cache_data_list)
 
         # 添加新条目进入缓存的prompt
         new_record['AI'] = {
@@ -258,7 +258,7 @@ class ProviderOpenAIOfficial(Provider):
 
         return chatgpt_res
         
-    def image_chat(self, prompt, img_num = 1, img_size = "1024x1024"):
+    async def image_chat(self, prompt, img_num = 1, img_size = "1024x1024"):
         retry = 0
         image_url = ''
 
@@ -266,7 +266,7 @@ class ProviderOpenAIOfficial(Provider):
         
         while retry < 5:
             try:
-                response: ImagesResponse = self.client.images.generate(
+                response: ImagesResponse = await self.client.images.generate(
                     prompt=prompt,
                     **image_generate_configs
                 )
@@ -282,7 +282,6 @@ class ProviderOpenAIOfficial(Provider):
                     self.key_stat[self.client.api_key]['exceed'] = True
                     is_switched = self.handle_switch_key()
                     if not is_switched:
-                        # 所有Key都超额或不正常
                         raise e
                 elif 'Your request was rejected as a result of our safety system.' in str(e):
                     self.logger.log("您的请求被 OpenAI 安全系统拒绝, 请稍后再试", level=gu.LEVEL_WARNING, tag="OpenAI")
@@ -294,16 +293,16 @@ class ProviderOpenAIOfficial(Provider):
                 
         return image_url
 
-    def forget(self, session_id = None) -> bool:
+    async def forget(self, session_id = None) -> bool:
         if session_id is None:
             return False
         self.session_dict[session_id] = []
         return True
     
-    '''
-    获取缓存的会话
-    '''
     def get_prompts_by_cache_list(self, cache_data_list, divide=False, paging=False, size=5, page=1):
+        '''
+        获取缓存的会话
+        '''
         prompts = ""
         if paging:
             page_begin = (page-1)*size
@@ -320,15 +319,7 @@ class ProviderOpenAIOfficial(Provider):
             if divide:
                 prompts += "----------\n"
         return prompts
-    
-        
-    def get_user_usage_tokens(self,cache_list):
-        usage_tokens = 0
-        for item in cache_list:
-            usage_tokens += int(item['single_tokens'])
-        return usage_tokens
-        
-    # 包装信息
+
     def wrap(self, prompt, session_id, image_url = None):
         if image_url is not None:
             prompt = [
@@ -364,7 +355,6 @@ class ProviderOpenAIOfficial(Provider):
         return context, new_record, req_list
     
     def handle_switch_key(self):
-        # messages = [{"role": "user", "content": prompt}]
         is_all_exceed = True
         for key in self.key_stat:
             if key == None or self.key_stat[key]['exceed']:
@@ -399,13 +389,13 @@ class ProviderOpenAIOfficial(Provider):
         self.key_stat[key] = {'exceed': False, 'used': 0, 'sponsor': sponsor}
 
     # 检查key是否可用
-    def check_key(self, key):
-        client_ = OpenAI(
+    async def check_key(self, key):
+        client_ = AsyncOpenAI(
             api_key=key,
             base_url=self.api_base
         )
         messages = [{"role": "user", "content": "please just echo `test`"}]
-        client_.chat.completions.create(
+        await client_.chat.completions.create(
             messages=messages,
             **self.openai_model_configs
         )

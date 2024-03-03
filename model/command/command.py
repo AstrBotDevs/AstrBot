@@ -1,17 +1,19 @@
 import json
-from util import general_utils as gu
-import os
-import requests
-from model.provider.provider import Provider
+import inspect
+import aiohttp
 import json
+
 import util.plugin_util as putil
-from util.cmd_config import CmdConfig as cc
-from util.general_utils import Logger
 import util.updator
+
 from nakuru.entities.components import (
     Plain,
     Image
 )
+from util import general_utils as gu
+from model.provider.provider import Provider
+from util.cmd_config import CmdConfig as cc
+from util.general_utils import Logger
 from cores.qqbot.global_object import GlobalObject, AstrMessageEvent
 from cores.qqbot.global_object import CommandResult
 
@@ -25,7 +27,7 @@ class Command:
         self.global_object = global_object
         self.logger: Logger = global_object.logger
 
-    def check_command(self, 
+    async def check_command(self, 
                       message, 
                       session_id: str,
                       role, 
@@ -51,7 +53,10 @@ class Command:
             if "type" in v["info"] and v["info"]["plugin_type"] == "platform":
                 continue
             try:
-                result = v["clsobj"].run(ame)
+                if inspect.iscoroutinefunction(v["clsobj"].run):
+                    result = await v["clsobj"].run(ame)
+                else:
+                    result = v["clsobj"].run(ame)
                 if isinstance(result, CommandResult):
                     hit = result.hit
                     res = result._result_tuple()
@@ -65,13 +70,16 @@ class Command:
             except TypeError as e:
                 # 参数不匹配，尝试使用旧的参数方案
                 try:
-                    hit, res = v["clsobj"].run(message, role, platform, message_obj, self.global_object.platform_qq)
+                    if inspect.iscoroutinefunction(v["clsobj"].run):
+                        hit, res = await v["clsobj"].run(message, role, platform, message_obj, self.global_object.platform_qq)
+                    else:
+                        hit, res = v["clsobj"].run(message, role, platform, message_obj, self.global_object.platform_qq)
                     if hit:
                         return True, res
                 except BaseException as e:
-                    self.logger.log(f"{k}插件异常，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                    self.logger.log(f"{k} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
             except BaseException as e:
-                self.logger.log(f"{k} 插件异常，原因: {str(e)}\n已安装插件: {cached_plugins.keys}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                self.logger.log(f"{k} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
 
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform, role)
@@ -79,18 +87,13 @@ class Command:
             return True, self.plugin_oper(message, role, cached_plugins, platform)
         if self.command_start_with(message, "myid") or self.command_start_with(message, "!myid"):
             return True, self.get_my_id(message_obj, platform)
-        if self.command_start_with(message, "nconf") or self.command_start_with(message, "newconf"):
-            return True, self.get_new_conf(message, role)
         if self.command_start_with(message, "web"): # 网页搜索
             return True, self.web_search(message)
-        if self.command_start_with(message, "ip"):
-            ip = requests.get("https://myip.ipip.net", timeout=5).text
-            return True, f"机器人 IP 信息：{ip}", "ip"
         if not self.provider and self.command_start_with(message, "help"):
-            return True, self.help()
+            return True, await self.help()
         
         return False, None
-    
+
     def web_search(self, message):
         l = message.split(' ')
         if len(l) == 1:
@@ -202,10 +205,11 @@ class Command:
             "/revgpt": "切换到网页版ChatGPT",
         }
     
-    def help_messager(self, commands: dict, platform: str, cached_plugins: dict = None):
+    async def help_messager(self, commands: dict, platform: str, cached_plugins: dict = None):
         try:
-            resp = requests.get("https://soulter.top/channelbot/notice.json").text
-            notice = json.loads(resp)["notice"]
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://soulter.top/channelbot/notice.json") as resp:
+                    notice = (await resp.json())["notice"]
         except BaseException as e:
             notice = ""
         msg = "# Help Center\n## 指令列表\n"
@@ -279,9 +283,9 @@ class Command:
     def key(self):
         return False
     
-    def help(self):
-        return True, self.help_messager(self.general_commands(), self.platform, self.global_object.cached_plugins), "help"
-
+    async def help(self):
+        ret = await self.help_messager(self.general_commands(), self.platform, self.global_object.cached_plugins)
+        return True, ret, "help"
     
     def status(self):
         return False

@@ -11,7 +11,7 @@ class CommandOpenAIOfficial(Command):
         self.personality_str = ""
         super().__init__(provider, global_object)
         
-    def check_command(self, 
+    async def check_command(self, 
                       message: str, 
                       session_id: str, 
                       role: str, 
@@ -20,7 +20,7 @@ class CommandOpenAIOfficial(Command):
         self.platform = platform
         
         # 检查基础指令
-        hit, res = super().check_command(
+        hit, res = await super().check_command(
             message,
             session_id,
             role,
@@ -32,7 +32,7 @@ class CommandOpenAIOfficial(Command):
         if hit:
             return True, res
         if self.command_start_with(message, "reset", "重置"):
-            return True, self.reset(session_id, message)
+            return True, await self.reset(session_id, message)
         elif self.command_start_with(message, "his", "历史"):
             return True, self.his(message, session_id)
         elif self.command_start_with(message, "token"):
@@ -42,7 +42,7 @@ class CommandOpenAIOfficial(Command):
         elif self.command_start_with(message, "status"):
             return True, self.status()
         elif self.command_start_with(message, "help", "帮助"):
-            return True, self.help()
+            return True, await self.help()
         elif self.command_start_with(message, "unset"):
             return True, self.unset(session_id)
         elif self.command_start_with(message, "set"):
@@ -54,11 +54,11 @@ class CommandOpenAIOfficial(Command):
         elif self.command_start_with(message, "key"):
             return True, self.key(message)
         elif self.command_start_with(message, "switch"):
-            return True, self.switch(message)
+            return True, await self.switch(message)
         
         return False, None
     
-    def help(self):
+    async def help(self):
         commands = super().general_commands()
         commands['画'] = '画画'
         commands['key'] = '添加OpenAI key'
@@ -66,15 +66,15 @@ class CommandOpenAIOfficial(Command):
         commands['gpt'] = '查看gpt配置信息'
         commands['status'] = '查看key使用状态'
         commands['token'] = '查看本轮会话token'
-        return True, super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"
+        return True, await super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"
 
         
-    def reset(self, session_id: str, message: str = "reset"):
+    async def reset(self, session_id: str, message: str = "reset"):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "reset"
         l = message.split(" ")
         if len(l) == 1:
-            self.provider.forget(session_id)
+            await self.provider.forget(session_id)
             return True, "重置成功", "reset"
         if len(l) == 2 and l[1] == "p":
             self.provider.forget(session_id)
@@ -146,7 +146,7 @@ class CommandOpenAIOfficial(Command):
         else:
             return True, "该Key被验证为无效。也许是输入错误了，或者重试。", "key"
 
-    def switch(self, message: str):
+    async def switch(self, message: str):
         '''
         切换账号
         '''
@@ -168,7 +168,7 @@ class CommandOpenAIOfficial(Command):
                 else:
                     try:
                         new_key = list(key_stat.keys())[index-1]
-                        ret = self.provider.check_key(new_key)
+                        ret = await self.provider.check_key(new_key)
                         self.provider.set_key(new_key)
                     except BaseException as e:
                         return True, "账号切换失败，原因: " + str(e), "switch"

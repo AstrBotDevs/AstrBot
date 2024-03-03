@@ -1,33 +1,35 @@
 import re
-import json
 import threading
 import asyncio
 import time
-import requests
+import aiohttp
 import util.unfit_words as uw
 import os
 import sys
-from addons.baidu_aip_judge import BaiduJudge
+import io
+import traceback
+
+import util.function_calling.gplugin as gplugin
+import util.plugin_util as putil
+
+from PIL import Image as PILImage
+from typing import Union
 from nakuru import (
     GroupMessage,
     FriendMessage,
     GuildMessage,
 )
+from nakuru.entities.components import Plain, At, Image
+
+from addons.baidu_aip_judge import BaiduJudge
 from model.platform._nakuru_translation_layer import NakuruGuildMessage
-from nakuru.entities.components import Plain,At,Image
 from model.provider.provider import Provider
 from model.command.command import Command
 from util import general_utils as gu
 from util.general_utils import Logger, upload, run_monitor
 from util.cmd_config import CmdConfig as cc
 from util.cmd_config import init_astrbot_config_items
-import util.function_calling.gplugin as gplugin
-import util.plugin_util as putil
-from PIL import Image as PILImage
-import io
-import traceback
 from . global_object import GlobalObject
-from typing import Union
 from addons.dashboard.helper import DashBoardHelper
 from addons.dashboard.server import DashBoardData
 from cores.database.conn import dbConn
@@ -41,7 +43,7 @@ frequency_time = 60
 frequency_count = 10
 
 # 版本
-version = '3.1.5'
+version = '3.1.6'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
@@ -325,7 +327,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     command_result = () # 调用指令返回的结果
     
     # 统计数据，如频道消息量
-    record_message(platform, session_id)
+    await record_message(platform, session_id)
 
     for i in message.message:
         if isinstance(i, Plain):
@@ -334,8 +336,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         return MessageResult("Hi~")
     
     # 检查发言频率
-    user_id = message.user_id
-    if not check_frequency(user_id):
+    if not check_frequency(message.user_id):
         return MessageResult(f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。')
     
     # 检查是否是更换语言模型的请求
@@ -359,7 +360,8 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
 
     llm_result_str = ""
 
-    hit, command_result = llm_command_instance[chosen_provider].check_command(
+    # check commands and plugins
+    hit, command_result = await llm_command_instance[chosen_provider].check_command(
         message_str,
         session_id,
         role,
@@ -375,11 +377,12 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
             if matches:
                 return MessageResult(f"你的提问得到的回复未通过【默认关键词拦截】服务, 不予回复。")
         if baidu_judge != None:
-            check, msg = baidu_judge.judge(message_str)
+            check, msg = await asyncio.to_thread(baidu_judge.judge, message_str)
             if not check:
                 return MessageResult(f"你的提问得到的回复未通过【百度AI内容审核】服务, 不予回复。\n\n{msg}")
         if chosen_provider == NONE_LLM:
-            return MessageResult("没有启动任何 LLM 并且未触发任何指令。")
+            logger.log("一条消息由于 Bot 未启动任何语言模型并且未触发指令而将被忽略。", gu.LEVEL_WARNING)
+            return
         try:
             if llm_wake_prefix != "" and not message_str.startswith(llm_wake_prefix):
                 return
@@ -403,9 +406,9 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
             if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
                 if _global_object.web_search or web_sch_flag:
                     official_fc = chosen_provider == OPENAI_OFFICIAL
-                    llm_result_str = gplugin.web_search(message_str, llm_instance[chosen_provider], session_id, official_fc)
+                    llm_result_str = await gplugin.web_search(message_str, llm_instance[chosen_provider], session_id, official_fc)
                 else:
-                    llm_result_str = str(llm_instance[chosen_provider].text_chat(message_str, session_id, image_url, default_personality = _global_object.default_personality))
+                    llm_result_str = await llm_instance[chosen_provider].text_chat(message_str, session_id, image_url, default_personality = _global_object.default_personality)
 
             llm_result_str = _global_object.reply_prefix + llm_result_str
         except BaseException as e:
@@ -416,9 +419,9 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     if temp_switch != "":
         chosen_provider = temp_switch
         
-    # 指令回复
     if hit:
-        # 检查指令。command_result 是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
+        # 有指令或者插件触发
+        # command_result 是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
         if command_result == None:
             return
         command = command_result[2]
@@ -436,11 +439,11 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         if isinstance(command_result[1], list) and len(command_result) == 3 and command == 'draw':
             for i in command_result[1]:
                 # 保存到本地
-                pic_res = requests.get(i, stream = True)
-                if pic_res.status_code == 200:
-                    image = PILImage.open(io.BytesIO(pic_res.content))
-                    return MessageResult([Image.fromFileSystem(gu.save_temp_img(image))])
-        
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(i) as resp:
+                        if resp.status == 200:
+                            image = PILImage.open(io.BytesIO(await resp.read()))
+                            return MessageResult([Image.fromFileSystem(gu.save_temp_img(image))])
         # 其他指令
         else:
             try:
@@ -455,7 +458,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         llm_result_str = re.sub(i, "***", llm_result_str)
     # 百度内容审核服务二次审核
     if baidu_judge != None:
-        check, msg = baidu_judge.judge(llm_result_str)
+        check, msg = await asyncio.to_thread(baidu_judge.judge, llm_result_str)
         if not check:
             return MessageResult(f"你的提问得到的回复【百度内容审核】未通过，不予回复。\n\n{msg}")
     # 发送信息

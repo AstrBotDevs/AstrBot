@@ -4,7 +4,7 @@ from PIL import Image as PILImage
 from botpy.message import Message, DirectMessage
 import re
 import asyncio
-import requests
+import aiohttp
 from util import general_utils as gu
 
 from botpy.types.message import Reference
@@ -15,7 +15,7 @@ from ._nakuru_translation_layer import(
     NakuruGuildMessage, 
     gocq_compatible_receive, 
     gocq_compatible_send
-) 
+)
 from typing import Union
 
 # QQ 机器人官方框架
@@ -27,13 +27,13 @@ class botClient(Client):
     async def on_at_message_create(self, message: Message):
         # 转换层
         nakuru_guild_message = gocq_compatible_receive(message)
-        self.platform.new_sub_thread(self.platform.handle_msg, (nakuru_guild_message, True))
+        await self.platform.handle_msg(nakuru_guild_message, True)
 
     # 收到私聊消息
     async def on_direct_message_create(self, message: DirectMessage):
         # 转换层
         nakuru_guild_message = gocq_compatible_receive(message)
-        self.platform.new_sub_thread(self.platform.handle_msg, (nakuru_guild_message, False))
+        await self.platform.handle_msg(nakuru_guild_message, False)
 
 class QQOfficial(Platform):
 
@@ -107,7 +107,7 @@ class QQOfficial(Platform):
         if message_result is None:
             return
 
-        self.reply_msg(is_group, message, message_result.result_message)
+        await self.reply_msg(is_group, message, message_result.result_message)
         if message_result.callback is not None:
             message_result.callback()
 
@@ -115,7 +115,7 @@ class QQOfficial(Platform):
         if session_id in self.waiting and self.waiting[session_id] == '':
             self.waiting[session_id] = message
 
-    def reply_msg(self, 
+    async def reply_msg(self, 
                 is_group: bool,
                 message: NakuruGuildMessage, 
                 res: Union[str, list]):
@@ -148,10 +148,11 @@ class QQOfficial(Platform):
             if image_path is not None and image_path != '':
                 msg_ref = None
                 if image_path.startswith("http"):
-                    pic_res = requests.get(image_path, stream = True)
-                    if pic_res.status_code == 200:
-                        image = PILImage.open(io.BytesIO(pic_res.content))
-                        image_path = gu.save_temp_img(image)
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(image_path) as response:
+                            if response.status == 200:
+                                image = PILImage.open(io.BytesIO(await response.read()))
+                                image_path = gu.save_temp_img(image)
 
         if message.raw_message is not None and image_path == '': # file_image与message_reference不能同时传入
             msg_ref = Reference(message_id=message.raw_message.id, ignore_get_message_error=False)
@@ -170,8 +171,7 @@ class QQOfficial(Platform):
             data['file_image'] = image_path
 
         try:
-            # await self._send_wrapper(**data)
-            self._send_wrapper(**data)
+            await self._send_wrapper(**data)
         except BaseException as e:
             print(e)
             # 分割过长的消息
@@ -181,51 +181,44 @@ class QQOfficial(Platform):
                 split_res.append(plain_text[len(plain_text)//2:])
                 for i in split_res:
                     data['content'] = i
-                    # await self._send_wrapper(**data)
-                    self._send_wrapper(**data)
+                    await self._send_wrapper(**data)
             else:
                 # 发送qq信息
                 try:
                     # 防止被qq频道过滤消息
                     plain_text = plain_text.replace(".", " . ")
-                    # await self._send_wrapper(**data)
-                    self._send_wrapper(**data)
+                    await self._send_wrapper(**data)
 
                 except BaseException as e:
                     try:
                         data['content'] = str.join(" ", plain_text)
-                        # await self._send_wrapper(**data)
-                        self._send_wrapper(**data)
+                        await self._send_wrapper(**data)
                     except BaseException as e:
                         plain_text = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
                         plain_text = plain_text.replace(".", "·")
                         data['content'] = plain_text
-                        # await self._send_wrapper(**data)
-                        self._send_wrapper(**data)
+                        await self._send_wrapper(**data)
  
-    def _send_wrapper(self, **kwargs):
+    async def _send_wrapper(self, **kwargs):
         if 'channel_id' in kwargs:
-            asyncio.run_coroutine_threadsafe(self.client.api.post_message(**kwargs), self.loop).result()
+            await self.client.api.post_message(**kwargs)
         else:
-            asyncio.run_coroutine_threadsafe(self.client.api.post_dms(**kwargs), self.loop).result()
+            await self.client.api.post_dms(**kwargs)
 
-
-    def send_msg(self, channel_id: int, message_chain: list, message_id: int = None):
+    async def send_msg(self, channel_id: int, message_chain: list, message_id: int = None):
         '''
-        推送消息, 如果有 message_id，那么就是回复消息。非异步。
+        推送消息, 如果有 message_id，那么就是回复消息。
         '''
         _n = NakuruGuildMessage()
         _n.channel_id = channel_id
         _n.message_id = message_id
-        # await self.reply_msg(_n, message_chain)
-        self.reply_msg(_n, message_chain)
+        await self.reply_msg(_n, message_chain)
 
-    def send(self, message_obj, message_chain: list):
+    async def send(self, message_obj, message_chain: list):
         '''
-        发送信息。内容同 reply_msg。非异步。
+        发送信息。内容同 reply_msg。
         '''
-        # await self.reply_msg(message_obj, message_chain)
-        self.reply_msg(message_obj, message_chain)
+        await self.reply_msg(message_obj, message_chain)
 
     def wait_for_message(self, channel_id: int) -> NakuruGuildMessage:
         '''

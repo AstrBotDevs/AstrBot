@@ -1,7 +1,5 @@
 import abc
-import threading
-import asyncio
-from typing import Callable, Union
+from typing import Union
 from nakuru import (
     GuildMessage,
     GroupMessage,
@@ -70,14 +68,3 @@ class Platform():
             pass
         ret.replace('\n', '')
         return ret
-
-
-    def new_sub_thread(self, func, args=()):
-        thread = threading.Thread(target=self._runner, args=(func, args), daemon=True)
-        thread.start()
-
-    def _runner(self, func: Callable, args: tuple):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(func(*args))
-        loop.close()

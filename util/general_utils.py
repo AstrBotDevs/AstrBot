@@ -9,7 +9,6 @@ from util.cmd_config import CmdConfig
 import socket
 from cores.qqbot.global_object import GlobalObject
 import platform
-import requests
 import logging
 import json
 import sys

@@ -1,18 +1,19 @@
 import requests
 import util.general_utils as gu
-from bs4 import BeautifulSoup
+import traceback
 import time
+import json
+import asyncio
+from googlesearch import search, SearchResult
+from readability import Document
+from bs4 import BeautifulSoup
+from openai.types.chat.chat_completion_message_tool_call import Function
 from util.function_calling.func_call import (
     FuncCall, 
     FuncCallJsonFormatError, 
     FuncNotFoundError
 )
-from openai.types.chat.chat_completion_message_tool_call import Function
-import traceback
-from googlesearch import search, SearchResult
 from model.provider.provider import Provider
-import json
-from readability import Document
 
 
 def tidy_text(text: str) -> str:
@@ -53,11 +54,11 @@ def google_web_search(keyword) -> str:
         for i in ls:
             desc = i.description
             try:
-                gu.log(f"搜索网页: {i.url}", tag="网页搜索", level=gu.LEVEL_INFO)
+                # gu.log(f"搜索网页: {i.url}", tag="网页搜索", level=gu.LEVEL_INFO)
                 desc = fetch_website_content(i.url)
             except BaseException as e:
                 print(f"(google) fetch_website_content err: {str(e)}")
-            gu.log(f"# No.{str(index)}\ntitle: {i.title}\nurl: {i.url}\ncontent: {desc}\n\n", level=gu.LEVEL_DEBUG, max_len=9999)
+            # gu.log(f"# No.{str(index)}\ntitle: {i.title}\nurl: {i.url}\ncontent: {desc}\n\n", level=gu.LEVEL_DEBUG, max_len=9999)
             ret += f"# No.{str(index)}\ntitle: {i.title}\nurl: {i.url}\ncontent: {desc}\n\n"
             index += 1
     except Exception as e:
@@ -80,7 +81,7 @@ def web_keyword_search_via_bing(keyword) -> str:
         try:
             response = requests.get(url, headers=headers)
             response.encoding = "utf-8"
-            gu.log(f"bing response: {response.text}", tag="bing", level=gu.LEVEL_DEBUG, max_len=9999)
+            # gu.log(f"bing response: {response.text}", tag="bing", level=gu.LEVEL_DEBUG, max_len=9999)
             soup = BeautifulSoup(response.text, "html.parser")
             res = ""
             result_cnt = 0
@@ -96,7 +97,7 @@ def web_keyword_search_via_bing(keyword) -> str:
                     #     "link": link,
                     # })
                     try:
-                        gu.log(f"搜索网页: {link}", tag="网页搜索", level=gu.LEVEL_INFO)
+                        # gu.log(f"搜索网页: {link}", tag="网页搜索", level=gu.LEVEL_INFO)
                         desc = fetch_website_content(link)
                     except BaseException as e:
                         print(f"(bing) fetch_website_content err: {str(e)}")
@@ -124,11 +125,11 @@ def web_keyword_search_via_bing(keyword) -> str:
             if result_cnt == 0: break
             return res
         except Exception as e:
-            gu.log(f"bing fetch err: {str(e)}")
+            # gu.log(f"bing fetch err: {str(e)}")
             _cnt += 1
             time.sleep(1)
             
-    gu.log("fail to fetch bing info, using sougou.")
+    # gu.log("fail to fetch bing info, using sougou.")
     return web_keyword_search_via_sougou(keyword)
 
 def web_keyword_search_via_sougou(keyword) -> str:
@@ -157,7 +158,7 @@ def web_keyword_search_via_sougou(keyword) -> str:
                 break
         except Exception as e:
             pass
-            gu.log(f"sougou parse err: {str(e)}", tag="web_keyword_search_via_sougou", level=gu.LEVEL_ERROR)
+            # gu.log(f"sougou parse err: {str(e)}", tag="web_keyword_search_via_sougou", level=gu.LEVEL_ERROR)
     # 爬取网页内容
     _detail_store = []
     for i in res:
@@ -173,7 +174,7 @@ def web_keyword_search_via_sougou(keyword) -> str:
     return ret
 
 def fetch_website_content(url):
-    gu.log(f"fetch_website_content: {url}", tag="fetch_website_content", level=gu.LEVEL_DEBUG)
+    # gu.log(f"fetch_website_content: {url}", tag="fetch_website_content", level=gu.LEVEL_DEBUG)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
             AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -187,7 +188,7 @@ def fetch_website_content(url):
     ret = tidy_text(soup.get_text())
     return ret
 
-def web_search(question, provider: Provider, session_id, official_fc=False):
+async def web_search(question, provider: Provider, session_id, official_fc=False):
     '''
     official_fc: 使用官方 function-calling
     '''
@@ -197,7 +198,7 @@ def web_search(question, provider: Provider, session_id, official_fc=False):
         "name": "keyword",
         "description": "google search query (分词，尽量保留所有信息)"
         }],
-    "通过搜索引擎搜索。如果问题需要在网页上搜索(如天气、新闻或任何需要通过网页获取信息的问题)，则调用此函数；如果没有，不要调用此函数。",
+    "通过搜索引擎搜索。如果问题需要获取近期、实时的消息，在网页上搜索(如天气、新闻或任何需要通过网页获取信息的问题)，则调用此函数；如果没有，不要调用此函数。",
     web_keyword_search_via_bing
     )
     new_func_call.add_func("fetch_website_content", [{
@@ -205,16 +206,16 @@ def web_search(question, provider: Provider, session_id, official_fc=False):
         "name": "url",
         "description": "网址"
         }],
-    "获取网页的内容。如果问题带有合法的网页链接(例如: `帮我总结一下https://github.com的内容`), 就调用此函数。如果没有，不要调用此函数。",
+    "获取网页的内容。如果问题带有合法的网页链接(例如: `帮我总结一下 https://github.com 的内容`), 就调用此函数。如果没有，不要调用此函数。",
     fetch_website_content
     )
     question1 = f"{question} \n> hint: 最多只能调用1个function, 并且存在不会调用任何function的可能性。"
     has_func = False
     function_invoked_ret = ""
     if official_fc:
-        func = provider.text_chat(question1, session_id, function_call=new_func_call.get_func())
+        # we use official function-calling
+        func = await provider.text_chat(question1, session_id, function_call=new_func_call.get_func())
         if isinstance(func, Function):
-            # arguments='{\n  "keyword": "北京今天的天气"\n}', name='google_web_search'
             # 执行对应的结果：
             func_obj = None
             for i in new_func_call.func_list:
@@ -222,49 +223,68 @@ def web_search(question, provider: Provider, session_id, official_fc=False):
                     func_obj = i["func_obj"]
                     break
             if not func_obj:
-                gu.log("找不到返回的 func name " + func.name, level=gu.LEVEL_ERROR)
-                return provider.text_chat(question1, session_id) + "\n(网页搜索失败, 此为默认回复)"
+                # gu.log("找不到返回的 func name " + func.name, level=gu.LEVEL_ERROR)
+                return await provider.text_chat(question1, session_id) + "\n(网页搜索失败, 此为默认回复)"
             try:
                 args = json.loads(func.arguments)
-                function_invoked_ret = func_obj(**args)
+                # we use to_thread to avoid blocking the event loop
+                function_invoked_ret = await asyncio.to_thread(func_obj, **args)
                 has_func = True
             except BaseException as e:
                 traceback.print_exc()
-                return provider.text_chat(question1, session_id) + "\n(网页搜索失败, 此为默认回复)"
+                return await provider.text_chat(question1, session_id) + "\n(网页搜索失败, 此为默认回复)"
         else:
             # now func is a string
             return func
     else:
+        # we use our own function-calling
         try:
-            function_invoked_ret, has_func = new_func_call.func_call(question1, new_func_call.func_dump(), is_task=False, is_summary=False)
+            args = {
+                'question': question1,
+                'func_definition': new_func_call.func_dump(),
+                'is_task': False,
+                'is_summary': False,
+            }
+            function_invoked_ret, has_func = await asyncio.to_thread(new_func_call.func_call, **args)
         except BaseException as e:
-            res = provider.text_chat(question) + "\n(网页搜索失败, 此为默认回复)"
+            res = await provider.text_chat(question) + "\n(网页搜索失败, 此为默认回复)"
             return res
         has_func = True
 
     if has_func:
-        provider.forget(session_id)
+        await provider.forget(session_id)
         question3 = f"""
-以下是相关材料，你的任务是：
-1. 根据材料对问题`{question}`做切题的总结回答;
-2. 发表你对这个问题的看法.
+你的任务是：
+1. 根据末尾的材料对问题`{question}`做切题的总结（详细）;
+2. 简单地发表你对这个问题的看法（简略）。
 你的总结末尾应当有对材料的引用, 如果有链接, 请在末尾附上引用网页链接。引用格式严格按照 `\n[1] title url \n`。
-不要提到任何函数调用的信息。以下是相关材料：
+不要提到任何函数调用的信息。
+
+一些回复的消息模板：
+模板1:
+```
+从网上的信息来看，可以知道...我个人认为...你觉得呢？
+```
+模板2:
+```
+根据网上的最新信息，可以得知...我觉得...你怎么看？
+```
+你可以根据这些模板来组织回答，但可以不照搬，要根据问题的内容来回答。
+
+以下是相关材料：
 """
-        
-        gu.log(f"web_search: {question3}", tag="web_search", level=gu.LEVEL_DEBUG, max_len=99999)
         _c = 0
         while _c < 3:
             try:
                 print('text chat')
-                final_ret = provider.text_chat(question3 + "```" + function_invoked_ret + "```", session_id)
+                final_ret = await provider.text_chat(question3 + "```" + function_invoked_ret + "```", session_id)
                 return final_ret
             except Exception as e:
                 print(e)
                 _c += 1
                 if _c == 3: raise e
                 if "The message you submitted was too long" in str(e):
-                    provider.forget(session_id)
+                    await provider.forget(session_id)
                     function_invoked_ret = function_invoked_ret[:int(len(function_invoked_ret) / 2)]
                     time.sleep(3)
     return function_invoked_ret

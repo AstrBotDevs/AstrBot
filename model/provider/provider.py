@@ -5,9 +5,9 @@ class Provider:
         pass
     
     @abc.abstractmethod
-    def text_chat(self, prompt, session_id, image_url: None, function_call: None, extra_conf: dict = None, default_personality: dict = None) -> str:
+    async def text_chat(self, prompt, session_id, image_url: None, function_call: None, extra_conf: dict = None, default_personality: dict = None) -> str:
         pass
 
     @abc.abstractmethod
-    def forget(self, session_id = None) -> bool:
+    async def forget(self, session_id = None) -> bool:
         pass

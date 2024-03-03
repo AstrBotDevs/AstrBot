@@ -11,14 +11,14 @@ class CommandRevChatGPT(Command):
         self.personality_str = ""
         super().__init__(provider, global_object)
 
-    def check_command(self, 
+    async def check_command(self, 
                       message: str, 
                       session_id: str,
                       role: str, 
                       platform: str,
                       message_obj):
         self.platform = platform
-        hit, res = super().check_command(
+        hit, res = await super().check_command(
             message,
             session_id,
             role,
@@ -29,7 +29,7 @@ class CommandRevChatGPT(Command):
         if hit:
             return True, res
         if self.command_start_with(message, "help", "帮助"):
-            return True, self.help()
+            return True, await self.help()
         elif self.command_start_with(message, "reset"):
             return True, self.reset(session_id, message)
         elif self.command_start_with(message, "update"):
@@ -127,7 +127,7 @@ class CommandRevChatGPT(Command):
         else:
             return True, "参数过多。", "switch"
 
-    def help(self):
+    async def help(self):
         commands = super().general_commands()
         commands['set'] = '设置人格'
-        return True, super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"
+        return True, await super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"
