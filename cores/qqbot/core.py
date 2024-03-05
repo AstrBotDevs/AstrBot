@@ -262,7 +262,7 @@ def run_gocq_bot(cfg: dict, _global_object: GlobalObject):
     http_port = cc.get("gocq_http_port", 5700)
     logger.log(f"正在检查连接...host: {host}, ws port: {port}, http port: {http_port}", tag="QQ")
     while True:
-        if not gu.port_checker(port=port, host=host) or gu.port_checker(port=http_port, host=host):
+        if not gu.port_checker(port=port, host=host) or not gu.port_checker(port=http_port, host=host):
             if not noticed:
                 noticed = True
                 logger.log(f"连接到{host}:{port}（或{http_port}）失败。程序会每隔 5s 自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
