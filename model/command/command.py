@@ -1,6 +1,7 @@
 import json
 import inspect
 import aiohttp
+import asyncio
 import json
 
 import util.plugin_util as putil
@@ -56,7 +57,7 @@ class Command:
                 if inspect.iscoroutinefunction(v["clsobj"].run):
                     result = await v["clsobj"].run(ame)
                 else:
-                    result = v["clsobj"].run(ame)
+                    result = asyncio.to_thread(v["clsobj"].run, ame=ame)
                 if isinstance(result, CommandResult):
                     hit = result.hit
                     res = result._result_tuple()
