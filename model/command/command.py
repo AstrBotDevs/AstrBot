@@ -57,7 +57,7 @@ class Command:
                 if inspect.iscoroutinefunction(v["clsobj"].run):
                     result = await v["clsobj"].run(ame)
                 else:
-                    result = asyncio.to_thread(v["clsobj"].run, ame=ame)
+                    result = await asyncio.to_thread(v["clsobj"].run, ame)
                 if isinstance(result, CommandResult):
                     hit = result.hit
                     res = result._result_tuple()
@@ -74,7 +74,7 @@ class Command:
                     if inspect.iscoroutinefunction(v["clsobj"].run):
                         hit, res = await v["clsobj"].run(message, role, platform, message_obj, self.global_object.platform_qq)
                     else:
-                        hit, res = v["clsobj"].run(message, role, platform, message_obj, self.global_object.platform_qq)
+                        hit, res = await asyncio.to_thread(v["clsobj"].run, message, role, platform, message_obj, self.global_object.platform_qq)
                     if hit:
                         return True, res
                 except BaseException as e:
