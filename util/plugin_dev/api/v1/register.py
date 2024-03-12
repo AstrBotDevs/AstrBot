@@ -21,13 +21,6 @@ def register_platform(platform_name: str, platform_instance: Platform, context: 
         if platform.platform_name == platform_name:
             raise ValueError(f"Platform {platform_name} has been registered.")
     
-    # check
-    should_attrs = Platform.__dir__()
-    has_attrs = platform_instance.__dir__()
-    
-    if not all([attr in has_attrs for attr in should_attrs]):
-        raise ValueError(f"Platform {platform_name} should implement all methods in LLMProvider.")
-    
     context.platforms.append(RegisteredPlatform(platform_name, platform_instance))
     
 def register_llm(llm_name: str, llm_instance: LLMProvider, context: GlobalObject) -> None:
@@ -42,13 +35,6 @@ def register_llm(llm_name: str, llm_instance: LLMProvider, context: GlobalObject
     for llm in context.llms:
         if llm.llm_name == llm_name:
             raise ValueError(f"LLMProvider {llm_name} has been registered.")
-    
-    # check
-    should_attrs = LLMProvider.__dir__()
-    has_attrs = llm_instance.__dir__()
-    
-    if not all([attr in has_attrs for attr in should_attrs]):
-        raise ValueError(f"LLMProvider {llm_name} should implement all methods in LLMProvider.")
     
     context.llms.append(RegisteredLLM(llm_name, llm_instance))
 
