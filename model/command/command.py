@@ -8,15 +8,22 @@ import util.plugin_util as putil
 import util.updator
 
 from nakuru.entities.components import (
-    Plain,
     Image
 )
 from util import general_utils as gu
 from model.provider.provider import Provider
 from util.cmd_config import CmdConfig as cc
 from util.general_utils import Logger
-from cores.qqbot.global_object import GlobalObject, AstrMessageEvent
-from cores.qqbot.global_object import CommandResult
+from cores.qqbot.types import (
+    GlobalObject,
+    AstrMessageEvent,
+    PluginType,
+    CommandResult,
+    RegisteredPlugin,
+    RegisteredPlatform
+)
+
+from typing import List, Tuple
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -31,8 +38,8 @@ class Command:
     async def check_command(self, 
                       message, 
                       session_id: str,
-                      role, 
-                      platform, 
+                      role: str, 
+                      platform: RegisteredPlatform, 
                       message_obj):
         self.platform = platform
         # 插件
@@ -41,23 +48,21 @@ class Command:
         ame = AstrMessageEvent(
             message_str=message,
             message_obj=message_obj,
-            gocq_platform=self.global_object.platform_qq,
-            qq_sdk_platform=self.global_object.platform_qqchan,
             platform=platform,
             role=role,
-            global_object=self.global_object,
+            context=self.global_object,
             session_id = session_id
         )
         # 从已启动的插件中查找是否有匹配的指令
-        for k, v in cached_plugins.items():
+        for plugin in cached_plugins:
             # 过滤掉平台类插件
-            if "type" in v["info"] and v["info"]["plugin_type"] == "platform":
+            if plugin.metadata.plugin_type == PluginType.PLATFORM:
                 continue
             try:
-                if inspect.iscoroutinefunction(v["clsobj"].run):
-                    result = await v["clsobj"].run(ame)
+                if inspect.iscoroutinefunction(plugin.plugin_instance.run):
+                    result = await plugin.plugin_instance.run(ame)
                 else:
-                    result = await asyncio.to_thread(v["clsobj"].run, ame)
+                    result = await asyncio.to_thread(plugin.plugin_instance.run, ame)
                 if isinstance(result, CommandResult):
                     hit = result.hit
                     res = result._result_tuple()
@@ -71,16 +76,16 @@ class Command:
             except TypeError as e:
                 # 参数不匹配，尝试使用旧的参数方案
                 try:
-                    if inspect.iscoroutinefunction(v["clsobj"].run):
-                        hit, res = await v["clsobj"].run(message, role, platform, message_obj, self.global_object.platform_qq)
+                    if inspect.iscoroutinefunction(plugin.plugin_instance.run):
+                        hit, res = await plugin.plugin_instance.run(message, role, platform, message_obj, self.global_object.platform_qq)
                     else:
-                        hit, res = await asyncio.to_thread(v["clsobj"].run, message, role, platform, message_obj, self.global_object.platform_qq)
+                        hit, res = await asyncio.to_thread(plugin.plugin_instance.run, message, role, platform, message_obj, self.global_object.platform_qq)
                     if hit:
                         return True, res
                 except BaseException as e:
-                    self.logger.log(f"{k} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                    self.logger.log(f"{plugin.metadata.plugin_name} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
             except BaseException as e:
-                self.logger.log(f"{k} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                self.logger.log(f"{plugin.metadata.plugin_name} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
 
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform, role)
@@ -125,7 +130,7 @@ class Command:
     '''
     插件指令
     '''
-    def plugin_oper(self, message: str, role: str, cached_plugins: dict, platform: str):
+    def plugin_oper(self, message: str, role: str, cached_plugins: List[RegisteredPlugin], platform: str):
         l = message.split(" ")
         if len(l) < 2:
             p = gu.create_text_image("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
@@ -155,25 +160,27 @@ class Command:
                     return False, f"更新插件失败，原因: {str(e)}。\n建议: 使用 plugin i 指令进行覆盖安装(插件数据可能会丢失)", "plugin"
             elif l[1] == "l":
                 try:
-                    plugin_list_info = "\n".join([f"{k}: \n名称: {v['info']['name']}\n简介: {v['info']['desc']}\n版本: {v['info']['version']}\n作者: {v['info']['author']}\n" for k, v in cached_plugins.items()])
+                    plugin_list_info = ""
+                    for plugin in cached_plugins:
+                        plugin_list_info += f"{plugin.metadata.plugin_name}: \n名称: {plugin.metadata.plugin_name}\n简介: {plugin.metadata.plugin_desc}\n版本: {plugin.metadata.version}\n作者: {plugin.metadata.author}\n"
                     p = gu.create_text_image("【已激活插件列表】", plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n")
                     return True, [Image.fromFileSystem(p)], "plugin"
                 except BaseException as e:
                     return False, f"获取插件列表失败，原因: {str(e)}", "plugin"
             elif l[1] == "v":
                 try:
-                    if l[2] in cached_plugins:
-                        info = cached_plugins[l[2]]["info"]
+                    info = None
+                    for i in cached_plugins:
+                        if i.metadata.plugin_name == l[2]:
+                            info = i.metadata
+                            break
+                    if info:
                         p = gu.create_text_image(f"【插件信息】", f"名称: {info['name']}\n{info['desc']}\n版本: {info['version']}\n作者: {info['author']}\n\n帮助:\n{info['help']}")
                         return True, [Image.fromFileSystem(p)], "plugin"
                     else:
                         return False, "未找到该插件", "plugin"
                 except BaseException as e:
                     return False, f"获取插件信息失败，原因: {str(e)}", "plugin"
-            elif l[1] == "dev":
-                if role != "admin":
-                    return False, f"你的身份组{role}没有权限开发者模式", "plugin"
-                return True, "cached_plugins: \n" + str(cached_plugins), "plugin"
 
     '''
     nick: 存储机器人的昵称
@@ -206,7 +213,7 @@ class Command:
             "/revgpt": "切换到网页版ChatGPT",
         }
     
-    async def help_messager(self, commands: dict, platform: str, cached_plugins: dict = None):
+    async def help_messager(self, commands: dict, platform: str, cached_plugins: List[RegisteredPlugin] = None):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get("https://soulter.top/channelbot/notice.json") as resp:
@@ -218,7 +225,9 @@ class Command:
             msg += f"`{key}` - {value}\n"
         # plugins
         if cached_plugins != None:
-            plugin_list_info = "\n".join([f"`{k}` {v['info']['name']}\n{v['info']['desc']}\n" for k, v in cached_plugins.items()])
+            plugin_list_info = ""
+            for plugin in cached_plugins:
+                plugin_list_info += f"`{plugin.metadata.plugin_name}` {plugin.metadata.desc}\n"
             if plugin_list_info.strip() != "":
                 msg += "\n## 插件列表\n> 使用plugin v 插件名 查看插件帮助\n"
                 msg += plugin_list_info

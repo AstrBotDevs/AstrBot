@@ -1,5 +1,5 @@
 from cores.qqbot.core import oper_msg
-from cores.qqbot.global_object import AstrMessageEvent, CommandResult
+from cores.qqbot.types import AstrMessageEvent, CommandResult
 from model.platform._message_result import MessageResult
 
 '''

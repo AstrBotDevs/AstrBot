@@ -9,11 +9,19 @@ try:
 except ImportError:
     pass
 import shutil
-from pip._internal import main as pipmain
 import importlib
 import stat
 import traceback
 from types import ModuleType
+from typing import List
+from pip._internal import main as pipmain
+from cores.qqbot.types import (
+    PluginMetadata,
+    PluginType,
+    RegisteredPlugin,
+    RegisteredPlugins
+)
+
 
 # 找出模块里所有的类名
 def get_classes(p_name, arg: ModuleType):
@@ -45,7 +53,8 @@ def get_modules(path):
             if os.path.exists(os.path.join(path, d, "main.py")) or os.path.exists(os.path.join(path, d, d + ".py")):
                 modules.append({
                     "pname": d,
-                    "module": module_str
+                    "module": module_str,
+                    "module_path": os.path.join(path, d, module_str)
                 })
     return modules
 
@@ -73,39 +82,62 @@ def get_plugin_modules():
     except BaseException as e:
         raise e
 
-def plugin_reload(cached_plugins: dict, target: str = None, all: bool = False):
+def plugin_reload(cached_plugins: RegisteredPlugins):
     plugins = get_plugin_modules()
     if plugins is None:
         return False, "未找到任何插件模块"
     fail_rec = ""
+    
+    registered_map = {}
+    for p in cached_plugins:
+        registered_map[p.module_path] = None
+    
     for plugin in plugins:
         try:
             p = plugin['module']
+            module_path = plugin['module_path']
             root_dir_name = plugin['pname']
-            if p not in cached_plugins or p == target or all:
+            
+            if module_path in registered_map:
+                # 之前注册过
+                module = importlib.reload(module)
+            else:
                 module = __import__("addons.plugins." + root_dir_name + "." + p, fromlist=[p])
-                if p in cached_plugins:
-                    module = importlib.reload(module)
-                cls = get_classes(p, module)
-                obj = getattr(module, cls[0])()
-                try:
-                    info = obj.info()
+
+            cls = get_classes(p, module)
+            obj = getattr(module, cls[0])()
+            
+            metadata = None
+            try:
+                info = obj.info()
+                if isinstance(info, dict):
                     if 'name' not in info or 'desc' not in info or 'version' not in info or 'author' not in info:
-                        fail_rec += f"载入插件{p}失败，原因: 插件信息不完整\n"
+                        fail_rec += f"注册插件 {module_path} 失败，原因: 插件信息不完整\n"
                         continue
-                    if isinstance(info, dict) == False:
-                        fail_rec += f"载入插件{p}失败，原因: 插件信息格式不正确\n"
-                        continue
-                except BaseException as e:
-                    fail_rec += f"调用插件{p} info失败, 原因: {str(e)}\n"
+                    else:
+                        metadata = PluginMetadata(
+                            plugin_name=info['name'],
+                            plugin_type=PluginType.COMMON if 'plugin_type' not in info else PluginType(info['plugin_type']),
+                            author=info['author'],
+                            desc=info['desc'],
+                            version=info['version'],
+                            repo=info['repo'] if 'repo' in info else None
+                        )
+                elif isinstance(info, PluginMetadata):
+                    metadata = info
+                else:
+                    fail_rec += f"注册插件 {module_path} 失败，原因: info 函数返回值类型错误\n"
                     continue
-                cached_plugins[info['name']] = {
-                    "module": module,
-                    "clsobj": obj,
-                    "info": info,
-                    "name": info['name'],
-                    "root_dir_name": root_dir_name,
-                }
+            except BaseException as e:
+                fail_rec += f"注册插件 {module_path} 失败, 原因: {str(e)}\n"
+                continue
+            cached_plugins.append(RegisteredPlugin(
+                metadata=metadata,
+                plugin_instance=obj,
+                module=module,
+                module_path=module_path,
+                root_dir_name=root_dir_name
+            ))
         except BaseException as e:
             traceback.print_exc()
             fail_rec += f"加载{p}插件出现问题，原因 {str(e)}\n"
@@ -114,7 +146,7 @@ def plugin_reload(cached_plugins: dict, target: str = None, all: bool = False):
     else:
         return False, fail_rec
 
-def install_plugin(repo_url: str, cached_plugins: dict):
+def install_plugin(repo_url: str, cached_plugins: RegisteredPlugins):
     ppath = get_plugin_store_path()
     # 删除末尾的 /
     if repo_url.endswith("/"):
@@ -132,23 +164,33 @@ def install_plugin(repo_url: str, cached_plugins: dict):
     if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
         if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), '--quiet']) != 0:
             raise Exception("插件的依赖安装失败, 需要您手动 pip 安装对应插件的依赖。")
-    ok, err = plugin_reload(cached_plugins, target=d)
+    ok, err = plugin_reload(cached_plugins)
     if not ok: raise Exception(err)
+    
+def get_registered_plugin(plugin_name: str, cached_plugins: RegisteredPlugins) -> RegisteredPlugin:
+    ret = None
+    for p in cached_plugins:
+        if p.metadata.plugin_name == plugin_name:
+            ret = p
+            break
+    return ret
 
-def uninstall_plugin(plugin_name: str, cached_plugins: dict):
-    if plugin_name not in cached_plugins:
+def uninstall_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
+    plugin = get_registered_plugin(plugin_name, cached_plugins)
+    if not plugin:
         raise Exception("插件不存在。")
-    root_dir_name = cached_plugins[plugin_name]["root_dir_name"]
+    root_dir_name = plugin.root_dir_name
     ppath = get_plugin_store_path()
-    del cached_plugins[plugin_name]
+    cached_plugins.remove(plugin)
     if not remove_dir(os.path.join(ppath, root_dir_name)):
         raise Exception("移除插件成功，但是删除插件文件夹失败。您可以手动删除该文件夹，位于 addons/plugins/ 下。")
 
-def update_plugin(plugin_name: str, cached_plugins: dict):
-    if plugin_name not in cached_plugins:
+def update_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
+    plugin = get_registered_plugin(plugin_name, cached_plugins)
+    if not plugin:
         raise Exception("插件不存在。")
     ppath = get_plugin_store_path()
-    root_dir_name = cached_plugins[plugin_name]["root_dir_name"]
+    root_dir_name = plugin.root_dir_name
     plugin_path = os.path.join(ppath, root_dir_name)
     repo = Repo(path = plugin_path)
     repo.remotes.origin.pull()
@@ -156,7 +198,7 @@ def update_plugin(plugin_name: str, cached_plugins: dict):
     if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
         if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), '--quiet']) != 0:
             raise Exception("插件依赖安装失败, 需要您手动pip安装对应插件的依赖。")
-    ok, err = plugin_reload(cached_plugins, target=plugin_name)
+    ok, err = plugin_reload(cached_plugins)
     if not ok: raise Exception(err)
 
 def remove_dir(file_path) -> bool:

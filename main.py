@@ -23,7 +23,7 @@ def main():
         print(file_not_found)
         input("配置文件不存在，请检查是否已经下载配置文件。")
     except BaseException as e:
-        print(e)
+        raise e
         
     # 设置代理
     if 'http_proxy' in cfg and cfg['http_proxy'] != '':

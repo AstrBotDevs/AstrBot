@@ -7,7 +7,7 @@ import re
 import requests
 from util.cmd_config import CmdConfig
 import socket
-from cores.qqbot.global_object import GlobalObject
+from cores.qqbot.types import GlobalObject
 import platform
 import logging
 import json
@@ -537,7 +537,7 @@ def upload(_global_object: GlobalObject):
                 "count": _global_object.cnt_total,
                 "ip": addr_ip,
                 "sys": sys.platform,
-                "admin": _global_object.admin_qq, 
+                "admin": "null",
             }
             resp = requests.post('https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
             if resp.status_code == 200:

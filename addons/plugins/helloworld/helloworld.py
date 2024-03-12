@@ -1,15 +1,25 @@
+import os
+import shutil
 from nakuru.entities.components import *
 from nakuru import (
     GroupMessage,
     FriendMessage
 )
 from botpy.message import Message, DirectMessage
-from cores.qqbot.global_object import (
-    AstrMessageEvent,
-    CommandResult
-)
-import os
-import shutil
+flag_not_support = False
+try:
+    from util.plugin_dev.api.v1.config import *
+    from util.plugin_dev.api.v1.bot import (
+        PluginMetadata,
+        PluginType,
+        AstrMessageEvent,
+        CommandResult,
+    )
+    from util.plugin_dev.api.v1.register import register_llm, unregister_llm
+except ImportError:
+    flag_not_support = True
+    print("llms: 导入接口失败。请升级到 AstrBot 最新版本。")
+
 
 '''
 注意改插件名噢！格式：XXXPlugin 或 Main

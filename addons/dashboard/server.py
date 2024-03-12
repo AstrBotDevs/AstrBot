@@ -7,6 +7,7 @@ import logging
 from cores.database.conn import dbConn
 from util.cmd_config import CmdConfig
 from util.updator import check_update, update_project, request_release_info
+from cores.qqbot.types import *
 import util.plugin_util as putil
 import websockets
 import json
@@ -20,7 +21,7 @@ class DashBoardData():
     stats: dict
     configs: dict
     logs: dict
-    plugins: list[dict]
+    plugins: List[RegisteredPlugin]
 
 @dataclass
 class Response():
@@ -33,7 +34,7 @@ class AstrBotDashBoard():
         self.global_object = global_object
         self.loop = asyncio.get_event_loop()
         asyncio.set_event_loop(self.loop)
-        self.dashboard_data = global_object.dashboard_data
+        self.dashboard_data: DashBoardData = global_object.dashboard_data
         self.dashboard_be = Flask(__name__, static_folder="dist", static_url_path="/")
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
@@ -151,13 +152,13 @@ class AstrBotDashBoard():
         def get_plugins():
             _plugin_resp = []
             for plugin in self.dashboard_data.plugins:
-                _p = self.dashboard_data.plugins[plugin]
+                _p = plugin.metadata
                 _t = {
-                    "name": _p["info"]["name"],
-                    "repo": '' if "repo" not in _p["info"] else _p["info"]["repo"],
-                    "author": _p["info"]["author"],
-                    "desc": _p["info"]["desc"],
-                    "version": _p["info"]["version"]
+                    "name": _p.plugin_name,
+                    "repo": '' if _p.repo is None else _p.repo,
+                    "author": _p.author,
+                    "desc": _p.desc,
+                    "version": _p.version
                 }
                 _plugin_resp.append(_t)
             return Response(
@@ -359,17 +360,14 @@ class AstrBotDashBoard():
             }
         ]
         for plugin in self.global_object.cached_plugins:
-            # 从插件信息中获取 plugin_type 字段，如果有则归类到对应的大纲中
-            if "plugin_type" in self.global_object.cached_plugins[plugin]["info"]:
-                _t = self.global_object.cached_plugins[plugin]["info"]["plugin_type"]
-                for item in outline:
-                    if item["type"] == _t:
-                        item["body"].append({
-                            "title": self.global_object.cached_plugins[plugin]["info"]["name"],
-                            "desc": self.global_object.cached_plugins[plugin]["info"]["desc"],
-                            "namespace": plugin,
-                            "tag": plugin,
-                        })
+            for item in outline:
+                if item['type'] == plugin.metadata.plugin_type:
+                    item['body'].append({
+                        "title": plugin.metadata.plugin_name,
+                        "desc": plugin.metadata.desc,
+                        "namespace": plugin.metadata.plugin_name,
+                        "tag": plugin.metadata.plugin_name
+                    })
         return outline
 
     def register(self, name: str):

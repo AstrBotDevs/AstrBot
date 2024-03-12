@@ -1,12 +1,11 @@
 from model.command.command import Command
 from model.provider.rev_chatgpt import ProviderRevChatGPT
 from cores.qqbot.personality import personalities
-from cores.qqbot.global_object import GlobalObject
+from cores.qqbot.types import GlobalObject
 
 class CommandRevChatGPT(Command):
     def __init__(self, provider: ProviderRevChatGPT, global_object: GlobalObject):
         self.provider = provider
-        self.cached_plugins = {}
         self.global_object = global_object
         self.personality_str = ""
         super().__init__(provider, global_object)

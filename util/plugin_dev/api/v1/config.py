@@ -1,4 +1,3 @@
-from cores.qqbot.global_object import GlobalObject
 from typing import Union
 import os
 import json
@@ -19,7 +18,6 @@ def load_config(namespace: str) -> Union[dict, bool]:
             ret[k] = data[k]["value"]
         return ret
         
-
 def put_config(namespace: str, name: str, key: str, value, description: str):
     '''
     将配置项写入以namespace为名字的配置文件，如果key不存在于目标配置文件中。当前 value 仅支持 str, int, float, bool, list 类型（暂不支持 dict）。

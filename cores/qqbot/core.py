@@ -29,11 +29,12 @@ from util import general_utils as gu
 from util.general_utils import Logger, upload, run_monitor
 from util.cmd_config import CmdConfig as cc
 from util.cmd_config import init_astrbot_config_items
-from . global_object import GlobalObject
+from .types import *
 from addons.dashboard.helper import DashBoardHelper
 from addons.dashboard.server import DashBoardData
 from cores.database.conn import dbConn
 from model.platform._message_result import MessageResult
+
 
 # 用户发言频率
 user_frequency = {}
@@ -43,7 +44,7 @@ frequency_time = 60
 frequency_count = 10
 
 # 版本
-version = '3.1.6'
+version = '3.1.7'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
@@ -98,9 +99,6 @@ def init(cfg):
     _global_object = GlobalObject()
     _global_object.version = version
     _global_object.base_config = cfg
-    _global_object.stat['session'] = {}
-    _global_object.stat['message'] = {}
-    _global_object.stat['platform'] = {}
     _global_object.logger = logger
     logger.log("AstrBot v"+version, gu.LEVEL_INFO)
 
@@ -125,6 +123,7 @@ def init(cfg):
                 llm_instance[REV_CHATGPT] = ProviderRevChatGPT(cfg['rev_ChatGPT'], base_url=cc.get("CHATGPT_BASE_URL", None))
                 llm_command_instance[REV_CHATGPT] = CommandRevChatGPT(llm_instance[REV_CHATGPT], _global_object)
                 chosen_provider = REV_CHATGPT
+                _global_object.llms.append(RegisteredLLM(llm_name=REV_CHATGPT, llm_instance=llm_instance[REV_CHATGPT], origin="internal"))
             else:
                 input("请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
     if OPENAI_OFFICIAL in prov:
@@ -134,6 +133,7 @@ def init(cfg):
             from model.command.openai_official import CommandOpenAIOfficial
             llm_instance[OPENAI_OFFICIAL] = ProviderOpenAIOfficial(cfg['openai'])
             llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance[OPENAI_OFFICIAL], _global_object)
+            _global_object.llms.append(RegisteredLLM(llm_name=OPENAI_OFFICIAL, llm_instance=llm_instance[OPENAI_OFFICIAL], origin="internal"))
             chosen_provider = OPENAI_OFFICIAL
 
     # 检查provider设置偏好
@@ -184,7 +184,7 @@ def init(cfg):
     _command = Command(None, _global_object)
     ok, err = putil.plugin_reload(_global_object.cached_plugins)
     if ok:
-        logger.log(f"成功载入{len(_global_object.cached_plugins)}个插件", gu.LEVEL_INFO)
+        logger.log(f"成功载入 {len(_global_object.cached_plugins)} 个插件", gu.LEVEL_INFO)
     else:
         logger.log(err, gu.LEVEL_ERROR)
     
@@ -244,7 +244,7 @@ def run_qqchan_bot(cfg: dict, global_object: GlobalObject):
     try:
         from model.platform.qq_official import QQOfficial
         qqchannel_bot = QQOfficial(cfg=cfg, message_handler=oper_msg, global_object=global_object)
-        global_object.platform_qqchan = qqchannel_bot
+        global_object.platforms.append(RegisteredPlatform(platform_name="qq_official", platform_instance=qqchannel_bot, origin="internal"))
         qqchannel_bot.run()
     except BaseException as e:
         logger.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
@@ -272,7 +272,7 @@ def run_gocq_bot(cfg: dict, _global_object: GlobalObject):
             break
     try:
         qq_gocq = QQGOCQ(cfg=cfg, message_handler=oper_msg, global_object=_global_object)
-        _global_object.platform_qq = qq_gocq
+        _global_object.platforms.append(RegisteredPlatform(platform_name="gocq", platform_instance=qq_gocq, origin="internal"))
         qq_gocq.run()
     except BaseException as e:
         input("启动QQ机器人出现错误"+str(e))
@@ -317,7 +317,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     message: 消息对象
     session_id: 该消息源的唯一识别号
     role: member | admin
-    platform: 平台(gocq, qqchan)
+    platform: str 所注册的平台的名称。如果没有注册，将抛出一个异常。
     """
     global chosen_provider, _global_object
     message_str = ''
@@ -325,6 +325,16 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
     role = role
     hit = False # 是否命中指令
     command_result = () # 调用指令返回的结果
+    
+    # 获取平台实例
+    reg_platform: RegisteredPlatform = None
+    for p in _global_object.platforms:
+        if p.platform_name == platform:
+            reg_platform = p
+            break
+    if not reg_platform:
+        _global_object.logger.log(f"未找到平台 {platform} 的实例。", gu.LEVEL_ERROR)
+        raise Exception(f"未找到平台 {platform} 的实例。")
     
     # 统计数据，如频道消息量
     await record_message(platform, session_id)
@@ -365,7 +375,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         message_str,
         session_id,
         role,
-        platform,
+        reg_platform,
         message,
     )
 

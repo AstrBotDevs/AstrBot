@@ -20,28 +20,28 @@ class Platform():
         pass
 
     @abc.abstractmethod
-    def handle_msg():
+    async def handle_msg():
         '''
         处理到来的消息
         '''
         pass
 
     @abc.abstractmethod
-    def reply_msg():
+    async def reply_msg():
         '''
         回复消息（被动发送）
         '''
         pass
 
     @abc.abstractmethod
-    def send_msg():
+    async def send_msg(target: Union[GuildMessage, GroupMessage, FriendMessage, str], message: Union[str, list]):
         '''
         发送消息（主动发送）
         '''
         pass
 
     @abc.abstractmethod
-    def send():
+    async def send(target: Union[GuildMessage, GroupMessage, FriendMessage, str], message: Union[str, list]):
         '''
         发送消息（主动发送）同 send_msg()
         '''
