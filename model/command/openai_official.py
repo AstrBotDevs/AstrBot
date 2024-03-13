@@ -49,7 +49,7 @@ class CommandOpenAIOfficial(Command):
         elif self.command_start_with(message, "update"):
             return True, self.update(message, role)
         elif self.command_start_with(message, "画", "draw"):
-            return True, self.draw(message)
+            return True, await self.draw(message)
         elif self.command_start_with(message, "key"):
             return True, self.key(message)
         elif self.command_start_with(message, "switch"):
@@ -256,7 +256,7 @@ class CommandOpenAIOfficial(Command):
                 self.personality_str = message
                 return True, f"自定义人格已设置。 \n人格信息: {ps}", "set"
             
-    def draw(self, message):
+    async def draw(self, message):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "draw"
         if message.startswith("/画"):
@@ -265,7 +265,7 @@ class CommandOpenAIOfficial(Command):
             message = message[1:]
         try:
             # 画图模式传回3个参数
-            img_url = self.provider.image_chat(message)
+            img_url = await self.provider.image_chat(message)
             return True, img_url, "draw"
         except Exception as e:
             if 'exceeded' in str(e):
