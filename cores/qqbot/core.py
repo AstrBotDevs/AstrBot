@@ -44,7 +44,7 @@ frequency_time = 60
 frequency_count = 10
 
 # 版本
-version = '3.1.7'
+version = '3.1.8'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
@@ -244,7 +244,7 @@ def run_qqchan_bot(cfg: dict, global_object: GlobalObject):
     try:
         from model.platform.qq_official import QQOfficial
         qqchannel_bot = QQOfficial(cfg=cfg, message_handler=oper_msg, global_object=global_object)
-        global_object.platforms.append(RegisteredPlatform(platform_name="qq_official", platform_instance=qqchannel_bot, origin="internal"))
+        global_object.platforms.append(RegisteredPlatform(platform_name="qqchan", platform_instance=qqchannel_bot, origin="internal"))
         qqchannel_bot.run()
     except BaseException as e:
         logger.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
