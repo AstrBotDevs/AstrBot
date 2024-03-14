@@ -5,9 +5,6 @@ from nakuru import (
     GroupMessage,
     FriendMessage,
 )
-from ._nakuru_translation_layer import (
-    NakuruGuildMessage,
-)
 from nakuru.entities.components import Plain, At, Image
 
 

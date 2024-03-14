@@ -14,6 +14,8 @@ from typing import Union
 import time
 
 from ._platfrom import Platform
+from ._message_parse import nakuru_message_parse_rev
+from cores.qqbot.types import MessageType, AstrBotMessage, MessageMember
 
 
 class FakeSource:
@@ -57,52 +59,58 @@ class QQGOCQ(Platform):
         @gocq_app.receiver("GroupMessage")
         async def _(app: CQHTTP, source: GroupMessage):
             if self.cc.get("gocq_react_group", True):
+                abm = nakuru_message_parse_rev(source)
                 if isinstance(source.message[0], Plain):
-                    await self.handle_msg(source, True)
+                    await self.handle_msg(abm)
                 elif isinstance(source.message[0], At):
                     if source.message[0].qq == source.self_id:
-                        await self.handle_msg(source, True)
+                        await self.handle_msg(abm)
                 else:
                     return
             
         @gocq_app.receiver("FriendMessage")
         async def _(app: CQHTTP, source: FriendMessage):
             if self.cc.get("gocq_react_friend", True):
+                abm = nakuru_message_parse_rev(source)
                 if isinstance(source.message[0], Plain):
-                    await self.handle_msg(source, False)
+                    await self.handle_msg(abm)
                 else:
                     return
             
         @gocq_app.receiver("GroupMemberIncrease")
         async def _(app: CQHTTP, source: GroupMemberIncrease):
             if self.cc.get("gocq_react_group_increase", True):
-
                 await app.sendGroupMessage(source.group_id, [
                     Plain(text = self.announcement)
                 ])
 
-        @gocq_app.receiver("Notify")
-        async def _(app: CQHTTP, source: Notify):
-            print(source)
-            if source.sub_type == "poke" and source.target_id == source.self_id:
-                await self.handle_msg(source, False)
+        # @gocq_app.receiver("Notify")
+        # async def _(app: CQHTTP, source: Notify):
+        #     print(source)
+        #     if source.sub_type == "poke" and source.target_id == source.self_id:
+        #         await self.handle_msg(source)
 
         @gocq_app.receiver("GuildMessage")
         async def _(app: CQHTTP, source: GuildMessage):
             if self.cc.get("gocq_react_guild", True):
+                abm = nakuru_message_parse_rev(source)
                 if isinstance(source.message[0], Plain):
-                    await self.handle_msg(source, True)
+                    await self.handle_msg(abm)
                 elif isinstance(source.message[0], At):
                     if source.message[0].qq == source.self_tiny_id:
-                        await self.handle_msg(source, True)
+                        await self.handle_msg(abm)
                 else:
                     return
         
     def run(self):
         self.client.run()
                 
-    async def handle_msg(self, message: Union[GroupMessage, FriendMessage, GuildMessage, Notify], is_group: bool):
-        self.logger.log(f"{message.user_id} -> {self.parse_message_outline(message)}", tag="QQ_GOCQ")
+    async def handle_msg(self, message: AstrBotMessage):
+        self.logger.log(f"{message.sender.nickname}/{message.sender.user_id} -> {self.parse_message_outline(message)}", tag="QQ_GOCQ")
+        
+        assert isinstance(message.raw_message, (GroupMessage, FriendMessage, GuildMessage))
+        is_group = message.type != MessageType.FRIEND_MESSAGE
+        
         # 判断是否响应消息
         resp = False
         if not is_group:
@@ -111,7 +119,7 @@ class QQGOCQ(Platform):
             for i in message.message:
                 if isinstance(i, At):
                     if message.type == "GuildMessage":
-                        if i.qq == message.user_id or i.qq == message.self_tiny_id:
+                        if i.qq == message.raw_message.user_id or i.qq == message.raw_message.self_tiny_id:
                             resp = True
                     if message.type == "FriendMessage":
                         if i.qq == message.self_id:
@@ -129,16 +137,18 @@ class QQGOCQ(Platform):
         
         # 解析 session_id
         if self.unique_session or not is_group:
-            session_id = message.user_id
-        elif message.type == "GroupMessage":
-            session_id = message.group_id
-        elif message.type == "GuildMessage":
-            session_id = message.channel_id
+            session_id = message.raw_message.user_id
+        elif message.type == MessageType.GROUP_MESSAGE:
+            session_id = message.raw_message.group_id
+        elif message.type == MessageType.GUILD_MESSAGE:
+            session_id = message.raw_message.channel_id
         else:
-            session_id = message.user_id
+            session_id = message.raw_message.user_id
+            
+        message.session_id = session_id
 
         # 解析 role
-        sender_id = str(message.user_id)
+        sender_id = str(message.raw_message.user_id)
         if sender_id == self.cc.get('admin_qq', '') or \
         sender_id in self.cc.get('other_admins', []):
             role = 'admin'
@@ -163,12 +173,16 @@ class QQGOCQ(Platform):
             self.waiting[session_id] = message
 
     async def reply_msg(self,
-                        message: Union[GroupMessage, FriendMessage, GuildMessage, Notify],
+                        message: Union[AstrBotMessage, GuildMessage, GroupMessage, FriendMessage],
                         result_message: list):
         """
         插件开发者请使用send方法, 可以不用直接调用这个方法。
         """
-        source = message
+        if isinstance(message, AstrBotMessage):
+            source = message.raw_message
+        else:
+            source = message
+        
         res = result_message
         
         self.logger.log(f"{source.user_id} <- {self.parse_message_outline(res)}", tag="QQ_GOCQ")
@@ -233,7 +247,7 @@ class QQGOCQ(Platform):
                 await self.client.sendGroupMessage(source.group_id, res)
                 return
 
-    async def send_msg(self, message: Union[GroupMessage, FriendMessage, GuildMessage, Notify], result_message: list):
+    async def send_msg(self, message: Union[GroupMessage, FriendMessage, GuildMessage, AstrBotMessage], result_message: list):
         '''
         提供给插件的发送QQ消息接口。
         参数说明：第一个参数可以是消息对象，也可以是QQ群号。第二个参数是消息内容（消息内容可以是消息链列表，也可以是纯文字信息）。

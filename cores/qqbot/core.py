@@ -22,7 +22,6 @@ from nakuru import (
 from nakuru.entities.components import Plain, At, Image
 
 from addons.baidu_aip_judge import BaiduJudge
-from model.platform._nakuru_translation_layer import NakuruGuildMessage
 from model.provider.provider import Provider
 from model.command.command import Command
 from util import general_utils as gu
@@ -44,7 +43,7 @@ frequency_time = 60
 frequency_count = 10
 
 # 版本
-version = '3.1.9'
+version = '3.1.10'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
@@ -307,7 +306,7 @@ async def record_message(platform: str, session_id: str):
     db_inst.increment_stat_platform(curr_ts, platform, 1)
     _global_object.cnt_total += 1
 
-async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, NakuruGuildMessage],
+async def oper_msg(message: AstrBotMessage,
              session_id: str,
              role: str = 'member',
              platform: str = None,
@@ -346,7 +345,7 @@ async def oper_msg(message: Union[GroupMessage, FriendMessage, GuildMessage, Nak
         return MessageResult("Hi~")
     
     # 检查发言频率
-    if not check_frequency(message.user_id):
+    if not check_frequency(message.sender.user_id):
         return MessageResult(f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。')
     
     # 检查是否是更换语言模型的请求
