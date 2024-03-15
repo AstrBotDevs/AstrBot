@@ -15,7 +15,7 @@ from ._message_parse import(
     qq_official_message_parse_rev,
     qq_official_message_parse
 )
-from cores.qqbot.types import MessageType, AstrBotMessage, MessageMember
+from cores.astrbot.types import MessageType, AstrBotMessage, MessageMember
 from typing import Union, List
 from nakuru.entities.components import BaseMessageComponent
 

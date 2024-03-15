@@ -10,7 +10,7 @@ abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 def main():
     # config.yaml 配置文件加载和环境确认
     try:
-        import cores.qqbot.core as qqBot
+        import cores.astrbot.core as qqBot
         import yaml
         import util.general_utils as gu
         ymlfile =  open(abs_path+"configs/config.yaml", 'r', encoding='utf-8')

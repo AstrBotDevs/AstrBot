@@ -15,7 +15,7 @@ import traceback
 from types import ModuleType
 from typing import List
 from pip._internal import main as pipmain
-from cores.qqbot.types import (
+from cores.astrbot.types import (
     PluginMetadata,
     PluginType,
     RegisteredPlugin,

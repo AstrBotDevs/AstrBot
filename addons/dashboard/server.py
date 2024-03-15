@@ -7,7 +7,7 @@ import logging
 from cores.database.conn import dbConn
 from util.cmd_config import CmdConfig
 from util.updator import check_update, update_project, request_release_info
-from cores.qqbot.types import *
+from cores.astrbot.types import *
 import util.plugin_util as putil
 import websockets
 import json

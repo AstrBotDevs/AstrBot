@@ -1,7 +1,7 @@
 from model.command.command import Command
 from model.provider.rev_chatgpt import ProviderRevChatGPT
-from cores.qqbot.personality import personalities
-from cores.qqbot.types import GlobalObject
+from util.personality import personalities
+from cores.astrbot.types import GlobalObject
 
 class CommandRevChatGPT(Command):
     def __init__(self, provider: ProviderRevChatGPT, global_object: GlobalObject):

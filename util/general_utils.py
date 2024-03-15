@@ -7,7 +7,7 @@ import re
 import requests
 from util.cmd_config import CmdConfig
 import socket
-from cores.qqbot.types import GlobalObject
+from cores.astrbot.types import GlobalObject
 import platform
 import logging
 import json

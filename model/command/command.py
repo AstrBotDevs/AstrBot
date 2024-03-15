@@ -14,7 +14,7 @@ from util import general_utils as gu
 from model.provider.provider import Provider
 from util.cmd_config import CmdConfig as cc
 from util.general_utils import Logger
-from cores.qqbot.types import (
+from cores.astrbot.types import (
     GlobalObject,
     AstrMessageEvent,
     PluginType,

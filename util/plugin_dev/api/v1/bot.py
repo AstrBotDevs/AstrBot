@@ -1,4 +1,4 @@
-from cores.qqbot.types import (
+from cores.astrbot.types import (
     PluginMetadata,
     RegisteredLLM,
     RegisteredPlugin,

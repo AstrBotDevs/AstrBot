@@ -1,7 +1,7 @@
 from model.command.command import Command
 from model.provider.openai_official import ProviderOpenAIOfficial
-from cores.qqbot.personality import personalities
-from cores.qqbot.types import GlobalObject
+from util.personality import personalities
+from cores.astrbot.types import GlobalObject
 
 class CommandOpenAIOfficial(Command):
     def __init__(self, provider: ProviderOpenAIOfficial, global_object: GlobalObject):

@@ -233,6 +233,8 @@ def init(cfg):
     if platform_str == '':
         platform_str = "(未启动任何平台，请前往面板添加)"
     logger.log(f"🎉 项目启动完成")
+    
+    dashboard_thread.join()
 
 '''
 运行 QQ_OFFICIAL 机器人

@@ -5,7 +5,7 @@
 '''
 from model.provider.provider import Provider as LLMProvider
 from model.platform._platfrom import Platform
-from cores.qqbot.types import GlobalObject, RegisteredPlatform, RegisteredLLM
+from cores.astrbot.types import GlobalObject, RegisteredPlatform, RegisteredLLM
 
 def register_platform(platform_name: str, platform_instance: Platform, context: GlobalObject) -> None:
     '''

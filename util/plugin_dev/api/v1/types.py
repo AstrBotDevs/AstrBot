@@ -2,4 +2,4 @@
 插件类型
 '''
 
-from cores.qqbot.types import PluginType
+from cores.astrbot.types import PluginType
