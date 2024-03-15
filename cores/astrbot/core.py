@@ -43,7 +43,7 @@ frequency_time = 60
 frequency_count = 10
 
 # 版本
-version = '3.1.10'
+version = '3.1.11'
 
 # 语言模型
 REV_CHATGPT = 'rev_chatgpt'
