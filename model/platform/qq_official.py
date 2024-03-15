@@ -56,26 +56,24 @@ class QQOfficial(Platform):
         self.secret = cfg['qqbot_secret']
         self.unique_session = cfg['uniqueSessionMode']
         self.logger: gu.Logger = global_object.logger
+        qq_group = cfg['qqofficial_enable_group_message']
         
-        try:
+        if qq_group:
             self.intents = botpy.Intents(
                 public_messages=True,
                 public_guild_messages=True,
                 direct_message=cfg['direct_message_mode']
             )
-            self.client = botClient(
-                intents=self.intents,
-                bot_log=False
-            )
-        except BaseException:
+        else:
             self.intents = botpy.Intents(
                 public_guild_messages=True,
                 direct_message=cfg['direct_message_mode']
             )
-            self.client = botClient(
-                intents=self.intents,
-                bot_log=False
-            )
+        self.client = botClient(
+            intents=self.intents,
+            bot_log=False
+        )
+
         self.client.set_platform(self)
 
     def run(self):

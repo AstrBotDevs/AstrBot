@@ -102,6 +102,7 @@ def init_astrbot_config_items():
     cc.init_attributes("other_admins", [])
     cc.init_attributes("CHATGPT_BASE_URL", "")
     cc.init_attributes("qqbot_secret", "")
+    cc.init_attributes("qqofficial_enable_group_message", False)
     cc.init_attributes("admin_qq", "")
     cc.init_attributes("nick_qq", ["!", "！", "ai"])
     cc.init_attributes("admin_qqchan", "")

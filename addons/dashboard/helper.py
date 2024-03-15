@@ -100,6 +100,14 @@ class DashBoardHelper():
                         value=config['direct_message_mode'],
                         path="direct_message_mode",
                     ),
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="bool",
+                        name="是否接收QQ群消息",
+                        description="需要机器人有相应的群消息接收权限。在 q.qq.com 上查看。",
+                        value=config['qqofficial_enable_group_message'],
+                        path="qqofficial_enable_group_message",
+                    ),
                 ]
             )
             qq_gocq_platform_group = DashBoardConfig(
