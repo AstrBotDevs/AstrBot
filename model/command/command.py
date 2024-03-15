@@ -95,6 +95,8 @@ class Command:
             return True, self.get_my_id(message_obj, platform)
         if self.command_start_with(message, "web"): # 网页搜索
             return True, self.web_search(message)
+        if self.command_start_with(message, "update"):
+            return True, self.update(message, role)
         if not self.provider and self.command_start_with(message, "help"):
             return True, await self.help()
         
