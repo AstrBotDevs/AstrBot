@@ -262,9 +262,8 @@ class AstrBotDashBoard():
                 version = ''
             else:
                 latest = False
-                version = request.json["version"]
             try:
-                update_project(request_release_info(), latest=latest, version=version)
+                update_project(request_release_info(latest), latest=latest, version=version)
                 threading.Thread(target=self.shutdown_bot, args=(3,)).start()
                 return Response(
                     status="success",

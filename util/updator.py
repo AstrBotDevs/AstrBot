@@ -119,6 +119,7 @@ def update_project(update_data: list,
     else:
         # 更新到指定版本
         flag = False
+        print(f"请求更新到指定版本: {version}")
         for data in update_data:
             if data['tag_name'] == version:
                 try:
@@ -128,8 +129,6 @@ def update_project(update_data: list,
                     if reboot: _reboot()
                 except BaseException as e:
                     raise e
-            else:
-                continue
         if not flag:
             raise Exception("未找到指定版本。")
     
