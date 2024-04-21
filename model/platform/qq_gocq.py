@@ -120,14 +120,14 @@ class QQGOCQ(Platform):
         else:
             for i in message.message:
                 if isinstance(i, At):
-                    if message.type == "GuildMessage":
-                        if i.qq == message.raw_message.user_id or i.qq == message.raw_message.self_tiny_id:
+                    if message.type.value == "GuildMessage":
+                        if str(i.qq) == str(message.raw_message.user_id) or str(i.qq) == str(message.raw_message.self_tiny_id):
                             resp = True
-                    if message.type == "FriendMessage":
-                        if i.qq == message.self_id:
+                    if message.type.value == "FriendMessage":
+                        if str(i.qq) == str(message.self_id):
                             resp = True
-                    if message.type == "GroupMessage":
-                        if i.qq == message.self_id:
+                    if message.type.value == "GroupMessage":
+                        if str(i.qq) == str(message.self_id):
                             resp = True
                 elif isinstance(i, Plain):
                     for nick in self.nick_qq:
