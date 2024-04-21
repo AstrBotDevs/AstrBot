@@ -16,3 +16,4 @@ baidu-aip~=4.16.9
 websockets
 flask
 psutil
+lxml_html_clean
