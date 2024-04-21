@@ -29,18 +29,20 @@ PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
 
 # 指令功能的基类，通用的（不区分语言模型）的指令就在这实现
+
+
 class Command:
     def __init__(self, provider: Provider, global_object: GlobalObject = None):
         self.provider = provider
         self.global_object = global_object
         self.logger: Logger = global_object.logger
 
-    async def check_command(self, 
-                      message, 
-                      session_id: str,
-                      role: str, 
-                      platform: RegisteredPlatform, 
-                      message_obj):
+    async def check_command(self,
+                            message,
+                            session_id: str,
+                            role: str,
+                            platform: RegisteredPlatform,
+                            message_obj):
         self.platform = platform
         # 插件
         cached_plugins = self.global_object.cached_plugins
@@ -51,7 +53,7 @@ class Command:
             platform=platform,
             role=role,
             context=self.global_object,
-            session_id = session_id
+            session_id=session_id
         )
         # 从已启动的插件中查找是否有匹配的指令
         for plugin in cached_plugins:
@@ -83,9 +85,11 @@ class Command:
                     if hit:
                         return True, res
                 except BaseException as e:
-                    self.logger.log(f"{plugin.metadata.plugin_name} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                    self.logger.log(
+                        f"{plugin.metadata.plugin_name} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
             except BaseException as e:
-                self.logger.log(f"{plugin.metadata.plugin_name} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                self.logger.log(
+                    f"{plugin.metadata.plugin_name} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
 
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform, role)
@@ -93,13 +97,13 @@ class Command:
             return True, self.plugin_oper(message, role, cached_plugins, platform)
         if self.command_start_with(message, "myid") or self.command_start_with(message, "!myid"):
             return True, self.get_my_id(message_obj, platform)
-        if self.command_start_with(message, "web"): # 网页搜索
+        if self.command_start_with(message, "web"):  # 网页搜索
             return True, self.web_search(message)
         if self.command_start_with(message, "update"):
             return True, self.update(message, role)
         if not self.provider and self.command_start_with(message, "help"):
             return True, await self.help()
-        
+
         return False, None
 
     def web_search(self, message):
@@ -126,16 +130,19 @@ class Command:
         l = message.split(" ")
         if len(l) <= 1:
             obj = cc.get_all()
-            p = gu.create_text_image("【cmd_config.json】", json.dumps(obj, indent=4, ensure_ascii=False))
+            p = gu.create_text_image("【cmd_config.json】", json.dumps(
+                obj, indent=4, ensure_ascii=False))
             return True, [Image.fromFileSystem(p)], "newconf"
-    
+
     '''
     插件指令
     '''
+
     def plugin_oper(self, message: str, role: str, cached_plugins: List[RegisteredPlugin], platform: str):
         l = message.split(" ")
         if len(l) < 2:
-            p = gu.create_text_image("【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
+            p = gu.create_text_image(
+                "【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
             return True, [Image.fromFileSystem(p)], "plugin"
         else:
             if l[1] == "i":
@@ -165,7 +172,8 @@ class Command:
                     plugin_list_info = ""
                     for plugin in cached_plugins:
                         plugin_list_info += f"{plugin.metadata.plugin_name}: \n名称: {plugin.metadata.plugin_name}\n简介: {plugin.metadata.plugin_desc}\n版本: {plugin.metadata.version}\n作者: {plugin.metadata.author}\n"
-                    p = gu.create_text_image("【已激活插件列表】", plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n")
+                    p = gu.create_text_image(
+                        "【已激活插件列表】", plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n")
                     return True, [Image.fromFileSystem(p)], "plugin"
                 except BaseException as e:
                     return False, f"获取插件列表失败，原因: {str(e)}", "plugin"
@@ -177,7 +185,8 @@ class Command:
                             info = i.metadata
                             break
                     if info:
-                        p = gu.create_text_image(f"【插件信息】", f"名称: {info['name']}\n{info['desc']}\n版本: {info['version']}\n作者: {info['author']}\n\n帮助:\n{info['help']}")
+                        p = gu.create_text_image(
+                            f"【插件信息】", f"名称: {info['name']}\n{info['desc']}\n版本: {info['version']}\n作者: {info['author']}\n\n帮助:\n{info['help']}")
                         return True, [Image.fromFileSystem(p)], "plugin"
                     else:
                         return False, "未找到该插件", "plugin"
@@ -187,6 +196,7 @@ class Command:
     '''
     nick: 存储机器人的昵称
     '''
+
     def set_nick(self, message: str, platform: str, role: str = "member"):
         if role != "admin":
             return True, "你无权使用该指令 :P", "nick"
@@ -213,7 +223,7 @@ class Command:
             "reset": "重置 LLM 对话",
             "/gpt": "切换到 OpenAI 官方接口"
         }
-    
+
     async def help_messager(self, commands: dict, platform: str, cached_plugins: List[RegisteredPlugin] = None):
         try:
             async with aiohttp.ClientSession() as session:
@@ -240,7 +250,7 @@ class Command:
         except BaseException as e:
             self.logger.log(str(e))
             return msg
-    
+
     def command_start_with(self, message: str, *args):
         '''
         当消息以指定的指令开头时返回True
@@ -249,7 +259,7 @@ class Command:
             if message.startswith(arg) or message.startswith('/'+arg):
                 return True
         return False
-    
+
     def update(self, message: str, role: str):
         if role != "admin":
             return True, "你没有权限使用该指令", "update"
@@ -274,8 +284,10 @@ class Command:
             else:
                 if l[1].lower().startswith('v'):
                     try:
-                        release_data = util.updator.request_release_info(latest=False)
-                        util.updator.update_project(release_data, latest=False, version=l[1])
+                        release_data = util.updator.request_release_info(
+                            latest=False)
+                        util.updator.update_project(
+                            release_data, latest=False, version=l[1])
                         return True, "更新成功，重启生效。可输入「update r」重启", "update"
                     except BaseException as e:
                         return False, "更新失败: "+str(e), "update"
@@ -284,28 +296,28 @@ class Command:
 
     def reset(self):
         return False
-    
+
     def set(self):
         return False
-    
+
     def unset(self):
         return False
-    
+
     def key(self):
         return False
-    
+
     async def help(self):
         ret = await self.help_messager(self.general_commands(), self.platform, self.global_object.cached_plugins)
         return True, ret, "help"
-    
+
     def status(self):
         return False
-    
+
     def token(self):
         return False
-    
+
     def his(self):
         return False
-    
+
     def draw(self):
         return False

@@ -4,11 +4,13 @@ from typing import Union
 
 cpath = "cmd_config.json"
 
+
 def check_exist():
     if not os.path.exists(cpath):
         with open(cpath, "w", encoding="utf-8-sig") as f:
             json.dump({}, f, indent=4, ensure_ascii=False)
             f.flush()
+
 
 class CmdConfig():
 
@@ -21,13 +23,13 @@ class CmdConfig():
                 return d[key]
             else:
                 return default
-            
+
     @staticmethod
     def get_all():
         check_exist()
         with open(cpath, "r", encoding="utf-8-sig") as f:
             return json.load(f)
-        
+
     @staticmethod
     def put(key, value):
         check_exist()
@@ -37,7 +39,7 @@ class CmdConfig():
             with open(cpath, "w", encoding="utf-8-sig") as f:
                 json.dump(d, f, indent=4, ensure_ascii=False)
                 f.flush()
-                
+
     @staticmethod
     def put_by_dot_str(key: str, value):
         '''
@@ -58,11 +60,11 @@ class CmdConfig():
                 f.flush()
 
     @staticmethod
-    def init_attributes(key: Union[str, list], init_val = ""):
+    def init_attributes(key: Union[str, list], init_val=""):
         check_exist()
         conf_str = ''
         with open(cpath, "r", encoding="utf-8-sig") as f:
-             conf_str = f.read()
+            conf_str = f.read()
         if conf_str.startswith(u'/ufeff'):
             conf_str = conf_str.encode('utf8')[3:].decode('utf8')
         d = json.loads(conf_str)
@@ -82,11 +84,13 @@ class CmdConfig():
                 json.dump(d, f, indent=4, ensure_ascii=False)
                 f.flush()
 
+
 def init_astrbot_config_items():
     # 加载默认配置
     cc = CmdConfig()
     cc.init_attributes("qq_forward_threshold", 200)
-    cc.init_attributes("qq_welcome", "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
+    cc.init_attributes(
+        "qq_welcome", "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
     cc.init_attributes("qq_pic_mode", False)
     cc.init_attributes("gocq_host", "127.0.0.1")
     cc.init_attributes("gocq_http_port", 5700)

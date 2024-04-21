@@ -3,21 +3,22 @@ from model.provider.openai_official import ProviderOpenAIOfficial
 from util.personality import personalities
 from cores.astrbot.types import GlobalObject
 
+
 class CommandOpenAIOfficial(Command):
     def __init__(self, provider: ProviderOpenAIOfficial, global_object: GlobalObject):
         self.provider = provider
         self.global_object = global_object
         self.personality_str = ""
         super().__init__(provider, global_object)
-        
-    async def check_command(self, 
-                      message: str, 
-                      session_id: str, 
-                      role: str, 
-                      platform: str,
-                      message_obj):
+
+    async def check_command(self,
+                            message: str,
+                            session_id: str,
+                            role: str,
+                            platform: str,
+                            message_obj):
         self.platform = platform
-        
+
         # 检查基础指令
         hit, res = await super().check_command(
             message,
@@ -26,7 +27,7 @@ class CommandOpenAIOfficial(Command):
             platform,
             message_obj
         )
-        
+
         # 这里是这个 LLM 的专属指令
         if hit:
             return True, res
@@ -54,9 +55,9 @@ class CommandOpenAIOfficial(Command):
             return True, self.key(message)
         elif self.command_start_with(message, "switch"):
             return True, await self.switch(message)
-        
+
         return False, None
-    
+
     async def help(self):
         commands = super().general_commands()
         commands['画'] = '画画'
@@ -67,7 +68,6 @@ class CommandOpenAIOfficial(Command):
         commands['token'] = '查看本轮会话token'
         return True, await super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"
 
-        
     async def reset(self, session_id: str, message: str = "reset"):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "reset"
@@ -78,13 +78,13 @@ class CommandOpenAIOfficial(Command):
         if len(l) == 2 and l[1] == "p":
             self.provider.forget(session_id)
             if self.personality_str != "":
-                self.set(self.personality_str, session_id) # 重新设置人格
+                self.set(self.personality_str, session_id)  # 重新设置人格
             return True, "重置成功", "reset"
-    
+
     def his(self, message: str, session_id: str):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "his"
-        #分页，每页5条
+        # 分页，每页5条
         msg = ''
         size_per_page = 3
         page = 1
@@ -95,10 +95,12 @@ class CommandOpenAIOfficial(Command):
             msg = f"历史记录为空"
             return True, msg, "his"
         l = self.provider.session_dict[session_id]
-        max_page = len(l)//size_per_page + 1 if len(l)%size_per_page != 0 else len(l)//size_per_page
-        p = self.provider.get_prompts_by_cache_list(self.provider.session_dict[session_id], divide=True, paging=True, size=size_per_page, page=page)
+        max_page = len(l)//size_per_page + \
+            1 if len(l) % size_per_page != 0 else len(l)//size_per_page
+        p = self.provider.get_prompts_by_cache_list(
+            self.provider.session_dict[session_id], divide=True, paging=True, size=size_per_page, page=page)
         return True, f"历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页", "his"
-    
+
     def token(self, session_id: str):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "token"
@@ -108,7 +110,7 @@ class CommandOpenAIOfficial(Command):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "gpt"
         return True, f"OpenAI GPT配置:\n {self.provider.chatGPT_configs}", "gpt"
-    
+
     def status(self):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "status"
@@ -255,7 +257,7 @@ class CommandOpenAIOfficial(Command):
                 self.provider.session_dict[session_id].append(new_record)
                 self.personality_str = message
                 return True, f"自定义人格已设置。 \n人格信息: {ps}", "set"
-            
+
     async def draw(self, message):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "draw"

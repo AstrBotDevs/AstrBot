@@ -35,6 +35,8 @@ def get_classes(p_name, arg: ModuleType):
     return classes
 
 # 获取一个文件夹下所有的模块, 文件名和文件夹名相同
+
+
 def get_modules(path):
     modules = []
 
@@ -58,6 +60,7 @@ def get_modules(path):
                 })
     return modules
 
+
 def get_plugin_store_path():
     if os.path.exists("addons/plugins"):
         return "addons/plugins"
@@ -67,7 +70,8 @@ def get_plugin_store_path():
         return "AstrBot/addons/plugins"
     else:
         raise FileNotFoundError("插件文件夹不存在。")
-            
+
+
 def get_plugin_modules():
     plugins = []
     try:
@@ -82,31 +86,33 @@ def get_plugin_modules():
     except BaseException as e:
         raise e
 
+
 def plugin_reload(cached_plugins: RegisteredPlugins):
     plugins = get_plugin_modules()
     if plugins is None:
         return False, "未找到任何插件模块"
     fail_rec = ""
-    
+
     registered_map = {}
     for p in cached_plugins:
         registered_map[p.module_path] = None
-    
+
     for plugin in plugins:
         try:
             p = plugin['module']
             module_path = plugin['module_path']
             root_dir_name = plugin['pname']
-            
+
             if module_path in registered_map:
                 # 之前注册过
                 module = importlib.reload(module)
             else:
-                module = __import__("addons.plugins." + root_dir_name + "." + p, fromlist=[p])
+                module = __import__("addons.plugins." +
+                                    root_dir_name + "." + p, fromlist=[p])
 
             cls = get_classes(p, module)
             obj = getattr(module, cls[0])()
-            
+
             metadata = None
             try:
                 info = obj.info()
@@ -117,7 +123,8 @@ def plugin_reload(cached_plugins: RegisteredPlugins):
                     else:
                         metadata = PluginMetadata(
                             plugin_name=info['name'],
-                            plugin_type=PluginType.COMMON if 'plugin_type' not in info else PluginType(info['plugin_type']),
+                            plugin_type=PluginType.COMMON if 'plugin_type' not in info else PluginType(
+                                info['plugin_type']),
                             author=info['author'],
                             desc=info['desc'],
                             version=info['version'],
@@ -146,6 +153,7 @@ def plugin_reload(cached_plugins: RegisteredPlugins):
     else:
         return False, fail_rec
 
+
 def install_plugin(repo_url: str, cached_plugins: RegisteredPlugins):
     ppath = get_plugin_store_path()
     # 删除末尾的 /
@@ -165,8 +173,10 @@ def install_plugin(repo_url: str, cached_plugins: RegisteredPlugins):
         if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), '--quiet']) != 0:
             raise Exception("插件的依赖安装失败, 需要您手动 pip 安装对应插件的依赖。")
     ok, err = plugin_reload(cached_plugins)
-    if not ok: raise Exception(err)
-    
+    if not ok:
+        raise Exception(err)
+
+
 def get_registered_plugin(plugin_name: str, cached_plugins: RegisteredPlugins) -> RegisteredPlugin:
     ret = None
     for p in cached_plugins:
@@ -174,6 +184,7 @@ def get_registered_plugin(plugin_name: str, cached_plugins: RegisteredPlugins) -
             ret = p
             break
     return ret
+
 
 def uninstall_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
     plugin = get_registered_plugin(plugin_name, cached_plugins)
@@ -185,6 +196,7 @@ def uninstall_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
     if not remove_dir(os.path.join(ppath, root_dir_name)):
         raise Exception("移除插件成功，但是删除插件文件夹失败。您可以手动删除该文件夹，位于 addons/plugins/ 下。")
 
+
 def update_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
     plugin = get_registered_plugin(plugin_name, cached_plugins)
     if not plugin:
@@ -192,14 +204,16 @@ def update_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
     ppath = get_plugin_store_path()
     root_dir_name = plugin.root_dir_name
     plugin_path = os.path.join(ppath, root_dir_name)
-    repo = Repo(path = plugin_path)
+    repo = Repo(path=plugin_path)
     repo.remotes.origin.pull()
     # 读取插件的requirements.txt
     if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
         if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), '--quiet']) != 0:
             raise Exception("插件依赖安装失败, 需要您手动pip安装对应插件的依赖。")
     ok, err = plugin_reload(cached_plugins)
-    if not ok: raise Exception(err)
+    if not ok:
+        raise Exception(err)
+
 
 def remove_dir(file_path) -> bool:
     try_cnt = 50

@@ -9,8 +9,8 @@ from readability import Document
 from bs4 import BeautifulSoup
 from openai.types.chat.chat_completion_message_tool_call import Function
 from util.function_calling.func_call import (
-    FuncCall, 
-    FuncCallJsonFormatError, 
+    FuncCall,
+    FuncCallJsonFormatError,
     FuncNotFoundError
 )
 from model.provider.provider import Provider
@@ -21,6 +21,7 @@ def tidy_text(text: str) -> str:
     清理文本，去除空格、换行符等
     '''
     return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
+
 
 def special_fetch_zhihu(link: str) -> str:
     '''
@@ -42,6 +43,7 @@ def special_fetch_zhihu(link: str) -> str:
         print("debug: zhihu none")
         raise Exception("zhihu none")
     return tidy_text(r.text)
+
 
 def google_web_search(keyword) -> str:
     '''
@@ -65,6 +67,7 @@ def google_web_search(keyword) -> str:
         print(f"google search err: {str(e)}")
         return web_keyword_search_via_bing(keyword)
     return ret
+
 
 def web_keyword_search_via_bing(keyword) -> str:
     '''
@@ -104,7 +107,8 @@ def web_keyword_search_via_bing(keyword) -> str:
 
                     res += f"# No.{str(result_cnt + 1)}\ntitle: {title}\nurl: {link}\ncontent: {desc}\n\n"
                     result_cnt += 1
-                    if result_cnt > 5: break
+                    if result_cnt > 5:
+                        break
 
                     # if len(_detail_store) >= 3:
                     #     continue
@@ -122,15 +126,17 @@ def web_keyword_search_via_bing(keyword) -> str:
 
                 except Exception as e:
                     print(f"bing parse err: {str(e)}")
-            if result_cnt == 0: break
+            if result_cnt == 0:
+                break
             return res
         except Exception as e:
             # gu.log(f"bing fetch err: {str(e)}")
             _cnt += 1
             time.sleep(1)
-            
+
     # gu.log("fail to fetch bing info, using sougou.")
     return web_keyword_search_via_sougou(keyword)
+
 
 def web_keyword_search_via_sougou(keyword) -> str:
     headers = {
@@ -141,7 +147,7 @@ def web_keyword_search_via_sougou(keyword) -> str:
     response = requests.get(url, headers=headers)
     response.encoding = "utf-8"
     soup = BeautifulSoup(response.text, "html.parser")
-    
+
     res = []
     results = soup.find("div", class_="results")
     for i in results.find_all("div", class_="vrwrap"):
@@ -154,7 +160,7 @@ def web_keyword_search_via_sougou(keyword) -> str:
                 "title": title,
                 "link": link,
             })
-            if len(res) >= 5: # 限制5条
+            if len(res) >= 5:  # 限制5条
                 break
         except Exception as e:
             pass
@@ -173,6 +179,7 @@ def web_keyword_search_via_sougou(keyword) -> str:
         ret += f"\n网页内容: {str(_detail_store)}"
     return ret
 
+
 def fetch_website_content(url):
     # gu.log(f"fetch_website_content: {url}", tag="fetch_website_content", level=gu.LEVEL_DEBUG)
     headers = {
@@ -188,6 +195,7 @@ def fetch_website_content(url):
     ret = tidy_text(soup.get_text())
     return ret
 
+
 async def web_search(question, provider: Provider, session_id, official_fc=False):
     '''
     official_fc: 使用官方 function-calling
@@ -197,17 +205,17 @@ async def web_search(question, provider: Provider, session_id, official_fc=False
         "type": "string",
         "name": "keyword",
         "description": "google search query (分词，尽量保留所有信息)"
-        }],
-    "通过搜索引擎搜索。如果问题需要获取近期、实时的消息，在网页上搜索(如天气、新闻或任何需要通过网页获取信息的问题)，则调用此函数；如果没有，不要调用此函数。",
-    web_keyword_search_via_bing
+    }],
+        "通过搜索引擎搜索。如果问题需要获取近期、实时的消息，在网页上搜索(如天气、新闻或任何需要通过网页获取信息的问题)，则调用此函数；如果没有，不要调用此函数。",
+        web_keyword_search_via_bing
     )
     new_func_call.add_func("fetch_website_content", [{
         "type": "string",
         "name": "url",
         "description": "网址"
-        }],
-    "获取网页的内容。如果问题带有合法的网页链接(例如: `帮我总结一下 https://github.com 的内容`), 就调用此函数。如果没有，不要调用此函数。",
-    fetch_website_content
+    }],
+        "获取网页的内容。如果问题带有合法的网页链接(例如: `帮我总结一下 https://github.com 的内容`), 就调用此函数。如果没有，不要调用此函数。",
+        fetch_website_content
     )
     question1 = f"{question} \n> hint: 最多只能调用1个function, 并且存在不会调用任何function的可能性。"
     has_func = False
@@ -282,9 +290,11 @@ async def web_search(question, provider: Provider, session_id, official_fc=False
             except Exception as e:
                 print(e)
                 _c += 1
-                if _c == 3: raise e
+                if _c == 3:
+                    raise e
                 if "The message you submitted was too long" in str(e):
                     await provider.forget(session_id)
-                    function_invoked_ret = function_invoked_ret[:int(len(function_invoked_ret) / 2)]
+                    function_invoked_ret = function_invoked_ret[:int(
+                        len(function_invoked_ret) / 2)]
                     time.sleep(3)
     return function_invoked_ret

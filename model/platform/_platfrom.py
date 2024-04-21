@@ -43,7 +43,7 @@ class Platform():
         发送消息（主动发送）同 send_msg()
         '''
         pass
-    
+
     def parse_message_outline(self, message: Union[GuildMessage, GroupMessage, FriendMessage, str, list]) -> str:
         '''
         将消息解析成大纲消息形式。

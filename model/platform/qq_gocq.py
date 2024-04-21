@@ -23,7 +23,7 @@ class FakeSource:
         self.type = type
         self.group_id = group_id
 
-    
+
 class QQGOCQ(Platform):
     def __init__(self, cfg: dict, message_handler: callable, global_object) -> None:
         super().__init__(message_handler)
@@ -39,11 +39,11 @@ class QQGOCQ(Platform):
         try:
             self.nick_qq = cfg['nick_qq']
         except:
-            self.nick_qq = ["ai","!","！"]
+            self.nick_qq = ["ai", "!", "！"]
         nick_qq = self.nick_qq
         if isinstance(nick_qq, str):
             nick_qq = [nick_qq]
-        
+
         self.unique_session = cfg['uniqueSessionMode']
         self.pic_mode = cfg['qq_pic_mode']
 
@@ -67,7 +67,7 @@ class QQGOCQ(Platform):
                         await self.handle_msg(abm)
                 else:
                     return
-            
+
         @gocq_app.receiver("FriendMessage")
         async def _(app: CQHTTP, source: FriendMessage):
             if self.cc.get("gocq_react_friend", True):
@@ -76,12 +76,12 @@ class QQGOCQ(Platform):
                     await self.handle_msg(abm)
                 else:
                     return
-            
+
         @gocq_app.receiver("GroupMemberIncrease")
         async def _(app: CQHTTP, source: GroupMemberIncrease):
             if self.cc.get("gocq_react_group_increase", True):
                 await app.sendGroupMessage(source.group_id, [
-                    Plain(text = self.announcement)
+                    Plain(text=self.announcement)
                 ])
 
         # @gocq_app.receiver("Notify")
@@ -101,16 +101,18 @@ class QQGOCQ(Platform):
                         await self.handle_msg(abm)
                 else:
                     return
-        
+
     def run(self):
         self.client.run()
-                
+
     async def handle_msg(self, message: AstrBotMessage):
-        self.logger.log(f"{message.sender.nickname}/{message.sender.user_id} -> {self.parse_message_outline(message)}", tag="QQ_GOCQ")
-        
-        assert isinstance(message.raw_message, (GroupMessage, FriendMessage, GuildMessage))
+        self.logger.log(
+            f"{message.sender.nickname}/{message.sender.user_id} -> {self.parse_message_outline(message)}", tag="QQ_GOCQ")
+
+        assert isinstance(message.raw_message,
+                          (GroupMessage, FriendMessage, GuildMessage))
         is_group = message.type != MessageType.FRIEND_MESSAGE
-        
+
         # 判断是否响应消息
         resp = False
         if not is_group:
@@ -132,9 +134,10 @@ class QQGOCQ(Platform):
                         if nick != '' and i.text.strip().startswith(nick):
                             resp = True
                             break
-                
-        if not resp: return
-        
+
+        if not resp:
+            return
+
         # 解析 session_id
         if self.unique_session or not is_group:
             session_id = message.raw_message.user_id
@@ -144,13 +147,13 @@ class QQGOCQ(Platform):
             session_id = message.raw_message.channel_id
         else:
             session_id = message.raw_message.user_id
-            
+
         message.session_id = session_id
 
         # 解析 role
         sender_id = str(message.raw_message.user_id)
         if sender_id == self.cc.get('admin_qq', '') or \
-        sender_id in self.cc.get('other_admins', []):
+                sender_id in self.cc.get('other_admins', []):
             role = 'admin'
         else:
             role = 'member'
@@ -167,7 +170,7 @@ class QQGOCQ(Platform):
         await self.reply_msg(message, message_result.result_message)
         if message_result.callback is not None:
             message_result.callback()
-        
+
         # 如果是等待回复的消息
         if session_id in self.waiting and self.waiting[session_id] == '':
             self.waiting[session_id] = message
@@ -182,14 +185,15 @@ class QQGOCQ(Platform):
             source = message.raw_message
         else:
             source = message
-        
+
         res = result_message
-        
-        self.logger.log(f"{source.user_id} <- {self.parse_message_outline(res)}", tag="QQ_GOCQ")
+
+        self.logger.log(
+            f"{source.user_id} <- {self.parse_message_outline(res)}", tag="QQ_GOCQ")
 
         if isinstance(source, int):
             source = FakeSource("GroupMessage", source)
-        
+
         # str convert to CQ Message Chain
         if isinstance(res, str):
             res_str = res
@@ -241,7 +245,7 @@ class QQGOCQ(Platform):
                     node.name = f"bot"
                     node.time = int(time.time())
                     # print(node)
-                    nodes=[node]
+                    nodes = [node]
                     await self.client.sendGroupForwardMessage(source.group_id, nodes)
                     return
                 await self.client.sendGroupMessage(source.group_id, res)
@@ -256,10 +260,10 @@ class QQGOCQ(Platform):
             await self.reply_msg(message, result_message)
         except BaseException as e:
             raise e
-    
-    async def send(self, 
-            to,
-            res):
+
+    async def send(self,
+                   to,
+                   res):
         '''
         同 send_msg()
         '''
@@ -311,4 +315,3 @@ class QQGOCQ(Platform):
             return ret
         except BaseException as e:
             raise e
-    

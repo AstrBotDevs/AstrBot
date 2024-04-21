@@ -17,10 +17,13 @@ except ImportError:
 注意改插件名噢！格式：XXXPlugin 或 Main
 小提示：把此模板仓库 fork 之后 clone 到机器人文件夹下的 addons/plugins/ 目录下，然后用 Pycharm/VSC 等工具打开可获更棒的编程体验（自动补全等）
 '''
+
+
 class HelloWorldPlugin:
     """
     初始化函数, 可以选择直接pass
     """
+
     def __init__(self) -> None:
         # 复制旧配置文件到 data 目录下。
         if os.path.exists("keyword.json"):
@@ -37,6 +40,7 @@ class HelloWorldPlugin:
              Tuple: Non e或者长度为 3 的元组。如果不响应, 返回 None； 如果响应, 第 1 个参数为指令是否调用成功, 第 2 个参数为返回的消息链列表, 第 3 个参数为指令名称
     例子：一个名为"yuanshen"的插件；当接收到消息为“原神 可莉”, 如果不想要处理此消息，则返回False, None；如果想要处理，但是执行失败了，返回True, tuple([False, "请求失败。", "yuanshen"]) ；执行成功了，返回True, tuple([True, "结果文本", "yuanshen"])
     """
+
     def run(self, ame: AstrMessageEvent):
         if ame.message_str == "helloworld":
             return CommandResult(
@@ -47,9 +51,10 @@ class HelloWorldPlugin:
             )
         if ame.message_str.startswith("/keyword") or ame.message_str.startswith("keyword"):
             return self.handle_keyword_command(ame)
-            
+
         ret = self.check_keyword(ame.message_str)
-        if ret: return ret
+        if ret:
+            return ret
 
         return CommandResult(
             hit=False,
@@ -57,10 +62,10 @@ class HelloWorldPlugin:
             message_chain=None,
             command_name=None
         )
-        
+
     def handle_keyword_command(self, ame: AstrMessageEvent):
         l = ame.message_str.split(" ")
-        
+
         # 获取图片
         image_url = ""
         for comp in ame.message_obj.message:
@@ -69,7 +74,7 @@ class HelloWorldPlugin:
                     image_url = comp.file
                 else:
                     image_url = comp.url
-    
+
         command_result = CommandResult(
             hit=True,
             success=False,
@@ -108,11 +113,11 @@ keyword d hi
             command_result.success = True
             command_result.message_chain = [Plain("设置成功")]
             return command_result
-        
+
     def save_keyword(self):
-        json.dump(self.keywords, open("data/keyword.json", "w"), ensure_ascii=False)
-        
-        
+        json.dump(self.keywords, open(
+            "data/keyword.json", "w"), ensure_ascii=False)
+
     def check_keyword(self, message_str: str):
         for k in self.keywords:
             if message_str == k:
@@ -151,7 +156,8 @@ keyword d hi
         "repo": str, # 插件仓库地址 [ 可选 ]
         "homepage": str, # 插件主页  [ 可选 ]
     }
-    """        
+    """
+
     def info(self):
         return {
             "name": "helloworld",

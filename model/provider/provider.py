@@ -1,7 +1,7 @@
 class Provider:
-    async def text_chat(self, 
-                        prompt: str, 
-                        session_id: str, 
+    async def text_chat(self,
+                        prompt: str,
+                        session_id: str,
                         image_url: None,
                         function_call: None,
                         extra_conf: dict = None,
@@ -11,7 +11,7 @@ class Provider:
         [require]
         prompt: 提示词
         session_id: 会话id
-        
+
         [optional]
         image_url: 图片url（识图）
         function_call: 函数调用
@@ -19,7 +19,7 @@ class Provider:
         default_personality: 默认人格
         '''
         raise NotImplementedError
-    
+
     async def image_generate(self, prompt, session_id, **kwargs) -> str:
         '''
         [require]
@@ -28,7 +28,7 @@ class Provider:
         '''
         raise NotImplementedError
 
-    async def forget(self, session_id = None) -> bool:
+    async def forget(self, session_id=None) -> bool:
         '''
         重置会话
         '''

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Union, Optional
 
+
 @dataclass
 class MessageResult():
     result_message: Union[str, list]

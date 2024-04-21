@@ -63,10 +63,11 @@ level_colors = {
     "CRITICAL": "purple",
 }
 
+
 class Logger:
     def __init__(self) -> None:
         self.history = []
-    
+
     def log(
             self,
             msg: str,
@@ -85,7 +86,7 @@ class Logger:
 
         if level in level_codes and level_codes[level] < _set_level_code:
             return
-        
+
         if err is not None:
             msg += "\n异常原因: " + str(err)
             level = LEVEL_ERROR
@@ -93,7 +94,7 @@ class Logger:
         if len(msg) > max_len:
             msg = msg[:max_len] + "..."
         now = datetime.datetime.now().strftime("%H:%M:%S")
-        
+
         pres = []
         for line in msg.split("\n"):
             if line == "\n":
@@ -121,12 +122,13 @@ class Logger:
                 fg = FG_COLORS["purple"]
             if bg is None:
                 bg = BG_COLORS["default"]
-                
+
         ret = ""
         for line in pres:
             ret += f"\033[{fg};{bg}m{line}\033[0m\n"
         try:
-            requests.post("http://localhost:6185/api/log", data=ret[:-1].encode(), timeout=1)
+            requests.post("http://localhost:6185/api/log",
+                          data=ret[:-1].encode(), timeout=1)
         except BaseException as e:
             pass
         self.history.append(ret)
@@ -134,10 +136,12 @@ class Logger:
             self.history = self.history[-100:]
         print(ret[:-1])
 
+
 log = Logger().log
 
+
 def port_checker(port: int, host: str = "localhost"):
-    sk = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sk.settimeout(1)
     try:
         sk.connect((host, port))
@@ -146,7 +150,8 @@ def port_checker(port: int, host: str = "localhost"):
     except Exception:
         sk.close()
         return False
-    
+
+
 def get_font_path() -> str:
     if os.path.exists("resources/fonts/syst.otf"):
         font_path = "resources/fonts/syst.otf"
@@ -161,7 +166,8 @@ def get_font_path() -> str:
     else:
         raise Exception("找不到字体文件")
     return font_path
-    
+
+
 def word2img(title: str, text: str, max_width=30, font_size=20):
     font_path = get_font_path()
     width_factor = 1.0
@@ -189,11 +195,13 @@ def word2img(title: str, text: str, max_width=30, font_size=20):
     title_font = ImageFont.truetype(font_path, font_size + 5)
     # 标题居中
     title_width, title_height = title_font.getsize(title)
-    draw.text(((width - title_width) / 2, 10), title, fill=(0, 0, 0), font=title_font)
+    draw.text(((width - title_width) / 2, 10),
+              title, fill=(0, 0, 0), font=title_font)
     # 文本不居中
     draw.text((10, title_height+20), text, fill=(0, 0, 0), font=text_font)
 
     return image
+
 
 def render_markdown(markdown_text, image_width=800, image_height=600, font_size=26, font_color=(0, 0, 0), bg_color=(255, 255, 255)):
 
@@ -201,7 +209,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     HEADER_FONT_STANDARD_SIZE = 42
 
     QUOTE_LEFT_LINE_MARGIN = 10
-    QUOTE_FONT_LINE_MARGIN = 6 # 引用文字距离左边线的距离和上下的距离
+    QUOTE_FONT_LINE_MARGIN = 6  # 引用文字距离左边线的距离和上下的距离
     QUOTE_LEFT_LINE_HEIGHT = font_size + QUOTE_FONT_LINE_MARGIN * 2
     QUOTE_LEFT_LINE_WIDTH = 5
     QUOTE_LEFT_LINE_COLOR = (180, 180, 180)
@@ -213,9 +221,9 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     CODE_BLOCK_FONT_SIZE = font_size
     CODE_BLOCK_FONT_COLOR = (255, 255, 255)
     CODE_BLOCK_BG_COLOR = (240, 240, 240)
-    CODE_BLOCK_CODES_MARGIN_VERTICAL = 5 # 代码块和代码之间的距离
-    CODE_BLOCK_CODES_MARGIN_HORIZONTAL = 5 # 代码块和代码之间的距离
-    CODE_BLOCK_TEXT_MARGIN = 4 # 代码和代码之间的距离
+    CODE_BLOCK_CODES_MARGIN_VERTICAL = 5  # 代码块和代码之间的距离
+    CODE_BLOCK_CODES_MARGIN_HORIZONTAL = 5  # 代码块和代码之间的距离
+    CODE_BLOCK_TEXT_MARGIN = 4  # 代码和代码之间的距离
 
     INLINE_CODE_MARGIN = 8
     INLINE_CODE_FONT_SIZE = font_size
@@ -239,9 +247,9 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
 
     # 加载字体
     font = ImageFont.truetype(font_path, font_size)
-    
+
     images: Image = {}
-    
+
     # pre_process, get height of each line
     pre_lines = markdown_text.split('\n')
     height = 0
@@ -255,23 +263,25 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             try:
                 image_url = re.findall(IMAGE_REGEX, line)[0]
                 print(image_url)
-                image_res = Image.open(requests.get(image_url, stream=True, timeout=5).raw)
+                image_res = Image.open(requests.get(
+                    image_url, stream=True, timeout=5).raw)
                 images[i] = image_res
                 # 最大不得超过image_width的50%
                 img_height = image_res.size[1]
 
                 if image_res.size[0] > image_width*0.5:
-                    image_res = image_res.resize((int(image_width*0.5), int(image_res.size[1]*image_width*0.5/image_res.size[0])))
+                    image_res = image_res.resize(
+                        (int(image_width*0.5), int(image_res.size[1]*image_width*0.5/image_res.size[0])))
                     img_height = image_res.size[1]
 
                 height += img_height + IMAGE_MARGIN*2
-            
+
                 line = re.sub(IMAGE_REGEX, "", line)
             except Exception as e:
                 print(e)
                 line = re.sub(IMAGE_REGEX, "\n[加载失败的图片]\n", line)
                 continue
-            
+
         line.replace("\t", "    ")
         if font.getsize(line)[0] > image_width:
             cp = line
@@ -280,18 +290,18 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             for ii in range(len(line)):
                 # 检测是否是中文
                 _width += font.getsize(line[ii])[0]
-                _word_cnt+=1
+                _word_cnt += 1
                 if _width > image_width:
                     _pre_lines.append(cp[:_word_cnt])
                     cp = cp[_word_cnt:]
-                    _word_cnt=0
-                    _width=0
+                    _word_cnt = 0
+                    _width = 0
             _pre_lines.append(cp)
         else:
             _pre_lines.append(line)
     pre_lines = _pre_lines
 
-    i=-1
+    i = -1
     for line in pre_lines:
         if line == "":
             height += TEXT_LINE_MARGIN
@@ -327,7 +337,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     if image_height < 100:
         image_height = 100
     image_width += 20
-    
+
     # 创建空白图像
     image = Image.new('RGB', (image_width, image_height), bg_color)
     draw = ImageDraw.Draw(image)
@@ -358,27 +368,31 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             line = line.strip("#").strip()
             font_size_header = HEADER_FONT_STANDARD_SIZE - header_level * 4
             font = ImageFont.truetype(font_path, font_size_header)
-            y += HEADER_MARGIN # 上边距
+            y += HEADER_MARGIN  # 上边距
             # 字间距
             draw.text((x, y), line, font=font, fill=font_color)
-            draw.line((x, y + font_size_header + 8, image_width - 10, y + font_size_header + 8), fill=(230, 230, 230), width=3)
+            draw.line((x, y + font_size_header + 8, image_width - 10,
+                      y + font_size_header + 8), fill=(230, 230, 230), width=3)
             y += font_size_header + HEADER_MARGIN
 
         elif line.startswith(">"):
             # 处理引用
             quote_text = line.strip(">")
-            y+=QUOTE_LEFT_LINE_MARGIN
-            draw.line((x, y, x, y + QUOTE_LEFT_LINE_HEIGHT), fill=QUOTE_LEFT_LINE_COLOR, width=QUOTE_LEFT_LINE_WIDTH)
+            y += QUOTE_LEFT_LINE_MARGIN
+            draw.line((x, y, x, y + QUOTE_LEFT_LINE_HEIGHT),
+                      fill=QUOTE_LEFT_LINE_COLOR, width=QUOTE_LEFT_LINE_WIDTH)
             font = ImageFont.truetype(font_path, QUOTE_FONT_SIZE)
-            draw.text((x + QUOTE_FONT_LINE_MARGIN, y + QUOTE_FONT_LINE_MARGIN), quote_text, font=font, fill=QUOTE_FONT_COLOR)
+            draw.text((x + QUOTE_FONT_LINE_MARGIN, y + QUOTE_FONT_LINE_MARGIN),
+                      quote_text, font=font, fill=QUOTE_FONT_COLOR)
             y += font_size + QUOTE_LEFT_LINE_HEIGHT + QUOTE_LEFT_LINE_MARGIN
-        
+
         elif line.startswith("-"):
             # 处理列表
             list_text = line.strip("-").strip()
             font = ImageFont.truetype(font_path, LIST_FONT_SIZE)
             y += LIST_MARGIN
-            draw.text((x, y), "  ·  " + list_text, font=font, fill=LIST_FONT_COLOR)
+            draw.text((x, y), "  ·  " + list_text,
+                      font=font, fill=LIST_FONT_COLOR)
             y += font_size + LIST_MARGIN
 
         elif line.startswith("```"):
@@ -390,13 +404,15 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                 in_code_block = False
                 codes = "\n".join(code_block_codes)
                 code_block_codes = []
-                draw.rounded_rectangle((x, code_block_start_y, image_width - 10, y+CODE_BLOCK_CODES_MARGIN_VERTICAL + CODE_BLOCK_TEXT_MARGIN), radius=5, fill=CODE_BLOCK_BG_COLOR, width=2)
+                draw.rounded_rectangle((x, code_block_start_y, image_width - 10, y+CODE_BLOCK_CODES_MARGIN_VERTICAL +
+                                       CODE_BLOCK_TEXT_MARGIN), radius=5, fill=CODE_BLOCK_BG_COLOR, width=2)
                 font = ImageFont.truetype(font_path1, CODE_BLOCK_FONT_SIZE)
-                draw.text((x + CODE_BLOCK_CODES_MARGIN_HORIZONTAL, code_block_start_y + CODE_BLOCK_CODES_MARGIN_VERTICAL), codes, font=font, fill=font_color)
+                draw.text((x + CODE_BLOCK_CODES_MARGIN_HORIZONTAL, code_block_start_y +
+                          CODE_BLOCK_CODES_MARGIN_VERTICAL), codes, font=font, fill=font_color)
                 y += CODE_BLOCK_CODES_MARGIN_VERTICAL + CODE_BLOCK_MARGIN
         # y += font_size+10
         elif re.search(r"`(.*?)`", line):
-            y += INLINE_CODE_MARGIN # 上边距
+            y += INLINE_CODE_MARGIN  # 上边距
             # 处理行内代码
             code_regex = r"`(.*?)`"
             parts_inline = re.findall(code_regex, line)
@@ -409,11 +425,15 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                 if part in parts_inline:
                     font = ImageFont.truetype(font_path, INLINE_CODE_FONT_SIZE)
                     code_text = part.strip("`")
-                    code_width = font.getsize(code_text)[0] + INLINE_CODE_FONT_MARGIN*2
+                    code_width = font.getsize(
+                        code_text)[0] + INLINE_CODE_FONT_MARGIN*2
                     x += INLINE_CODE_MARGIN
-                    code_box = (x, y, x + code_width, y + INLINE_CODE_BG_HEIGHT)
-                    draw.rounded_rectangle(code_box, radius=5, fill=INLINE_CODE_BG_COLOR, width=2)  # 使用灰色填充矩形框作为引用背景
-                    draw.text((x+INLINE_CODE_FONT_MARGIN, y), code_text, font=font, fill=font_color)
+                    code_box = (x, y, x + code_width,
+                                y + INLINE_CODE_BG_HEIGHT)
+                    draw.rounded_rectangle(
+                        code_box, radius=5, fill=INLINE_CODE_BG_COLOR, width=2)  # 使用灰色填充矩形框作为引用背景
+                    draw.text((x+INLINE_CODE_FONT_MARGIN, y),
+                              code_text, font=font, fill=font_color)
                     x += code_width+INLINE_CODE_MARGIN-INLINE_CODE_FONT_MARGIN
                 else:
                     font = ImageFont.truetype(font_path, font_size)
@@ -428,7 +448,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                 y += TEXT_LINE_MARGIN
             else:
                 font = ImageFont.truetype(font_path, font_size)
-                
+
                 draw.text((x, y), line, font=font, fill=font_color)
                 y += font_size + TEXT_LINE_MARGIN*2
 
@@ -437,10 +457,12 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             image_res = images[index]
             # 最大不得超过image_width的50%
             if image_res.size[0] > image_width*0.5:
-                image_res = image_res.resize((int(image_width*0.5), int(image_res.size[1]*image_width*0.5/image_res.size[0])))
+                image_res = image_res.resize(
+                    (int(image_width*0.5), int(image_res.size[1]*image_width*0.5/image_res.size[0])))
             image.paste(image_res, (IMAGE_MARGIN, y))
             y += image_res.size[1] + IMAGE_MARGIN*2
     return image
+
 
 def save_temp_img(img: Image) -> str:
     if not os.path.exists("temp"):
@@ -463,6 +485,7 @@ def save_temp_img(img: Image) -> str:
     img.save(p)
     return p
 
+
 def create_text_image(title: str, text: str, max_width=30, font_size=20):
     '''
     文本转图片。
@@ -479,7 +502,8 @@ def create_text_image(title: str, text: str, max_width=30, font_size=20):
         return p
     except Exception as e:
         raise e
-    
+
+
 def create_markdown_image(text: str):
     '''
     markdown文本转图片。
@@ -492,6 +516,7 @@ def create_markdown_image(text: str):
     except Exception as e:
         raise e
 
+
 def try_migrate_config(old_config: dict):
     '''
     迁移配置文件到 cmd_config.json    
@@ -501,6 +526,7 @@ def try_migrate_config(old_config: dict):
         # 未迁移过
         for k in old_config:
             cc.put(k, old_config[k])
+
 
 def get_local_ip_addresses():
     ip = ''
@@ -513,6 +539,7 @@ def get_local_ip_addresses():
     finally:
         s.close()
     return ip
+
 
 def get_sys_info(global_object: GlobalObject):
     mem = None
@@ -527,19 +554,21 @@ def get_sys_info(global_object: GlobalObject):
         'os': os_name + '_' + os_version,
         'py': platform.python_version(),
     }
-    
+
+
 def upload(_global_object: GlobalObject):
     while True:
         addr_ip = ''
         try:
             res = {
-                "version": _global_object.version, 
+                "version": _global_object.version,
                 "count": _global_object.cnt_total,
                 "ip": addr_ip,
                 "sys": sys.platform,
                 "admin": "null",
             }
-            resp = requests.post('https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
+            resp = requests.post(
+                'https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
             if resp.status_code == 200:
                 ok = resp.json()
                 if ok['status'] == 'ok':
@@ -547,6 +576,7 @@ def upload(_global_object: GlobalObject):
         except BaseException as e:
             pass
         time.sleep(10*60)
+
 
 def run_monitor(global_object: GlobalObject):
     '''
@@ -558,7 +588,7 @@ def run_monitor(global_object: GlobalObject):
     while True:
         stat = global_object.dashboard_data.stats
         # 程序占用的内存大小
-        mem = psutil.Process().memory_info().rss / 1024 / 1024 # MB
+        mem = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         stat['sys_perf'] = {
             'memory': mem,
             'cpu': psutil.cpu_percent()

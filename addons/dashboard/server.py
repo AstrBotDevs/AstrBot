@@ -13,8 +13,10 @@ import websockets
 import json
 import threading
 import asyncio
-import os, sys
+import os
+import sys
 import time
+
 
 @dataclass
 class DashBoardData():
@@ -23,33 +25,36 @@ class DashBoardData():
     logs: dict
     plugins: List[RegisteredPlugin]
 
+
 @dataclass
 class Response():
     status: str
     message: str
     data: dict
-    
+
+
 class AstrBotDashBoard():
     def __init__(self, global_object: 'gu.GlobalObject'):
         self.global_object = global_object
         self.loop = asyncio.get_event_loop()
         asyncio.set_event_loop(self.loop)
         self.dashboard_data: DashBoardData = global_object.dashboard_data
-        self.dashboard_be = Flask(__name__, static_folder="dist", static_url_path="/")
+        self.dashboard_be = Flask(
+            __name__, static_folder="dist", static_url_path="/")
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
         self.funcs = {}
         self.cc = CmdConfig()
         self.logger = global_object.logger
-        self.ws_clients = {} # remote_ip: ws
+        self.ws_clients = {}  # remote_ip: ws
         # 启动 websocket 服务器
         self.ws_server = websockets.serve(self.__handle_msg, "0.0.0.0", 6186)
-        
+
         @self.dashboard_be.get("/")
         def index():
             # 返回页面
             return self.dashboard_be.send_static_file("index.html")
-        
+
         @self.dashboard_be.post("/api/authenticate")
         def authenticate():
             username = self.cc.get("dashboard_username", "")
@@ -71,7 +76,7 @@ class AstrBotDashBoard():
                     message="用户名或密码错误。",
                     data=None
                 ).__dict__
-                
+
         @self.dashboard_be.post("/api/change_password")
         def change_password():
             password = self.cc.get("dashboard_password", "")
@@ -99,9 +104,11 @@ class AstrBotDashBoard():
             # last_24_platform = db_inst.get_last_24h_stat_platform()
             platforms = db_inst.get_platform_cnt_total()
             self.dashboard_data.stats["session"] = []
-            self.dashboard_data.stats["session_total"] = db_inst.get_session_cnt_total()
+            self.dashboard_data.stats["session_total"] = db_inst.get_session_cnt_total(
+            )
             self.dashboard_data.stats["message"] = last_24_message
-            self.dashboard_data.stats["message_total"] = db_inst.get_message_cnt_total()
+            self.dashboard_data.stats["message_total"] = db_inst.get_message_cnt_total(
+            )
             self.dashboard_data.stats["platform"] = platforms
 
             return Response(
@@ -109,7 +116,7 @@ class AstrBotDashBoard():
                 message="",
                 data=self.dashboard_data.stats
             ).__dict__
-        
+
         @self.dashboard_be.get("/api/configs")
         def get_configs():
             # 如果params中有namespace，则返回该namespace下的配置
@@ -121,7 +128,7 @@ class AstrBotDashBoard():
                 message="",
                 data=conf
             ).__dict__
-            
+
         @self.dashboard_be.get("/api/config_outline")
         def get_config_outline():
             outline = self._generate_outline()
@@ -130,7 +137,7 @@ class AstrBotDashBoard():
                 message="",
                 data=outline
             ).__dict__
-            
+
         @self.dashboard_be.post("/api/configs")
         def post_configs():
             post_configs = request.json
@@ -147,7 +154,7 @@ class AstrBotDashBoard():
                     message=e.__str__(),
                     data=self.dashboard_data.configs
                 ).__dict__
-            
+
         @self.dashboard_be.get("/api/extensions")
         def get_plugins():
             _plugin_resp = []
@@ -166,7 +173,7 @@ class AstrBotDashBoard():
                 message="",
                 data=_plugin_resp
             ).__dict__
-            
+
         @self.dashboard_be.post("/api/extensions/install")
         def install_plugin():
             post_data = request.json
@@ -186,14 +193,15 @@ class AstrBotDashBoard():
                     message=e.__str__(),
                     data=None
                 ).__dict__
-        
+
         @self.dashboard_be.post("/api/extensions/uninstall")
         def uninstall_plugin():
             post_data = request.json
             plugin_name = post_data["name"]
             try:
                 self.logger.log(f"正在卸载插件 {plugin_name}", tag="可视化面板")
-                putil.uninstall_plugin(plugin_name, self.dashboard_data.plugins)
+                putil.uninstall_plugin(
+                    plugin_name, self.dashboard_data.plugins)
                 self.logger.log(f"卸载插件 {plugin_name} 成功", tag="可视化面板")
                 return Response(
                     status="success",
@@ -206,7 +214,7 @@ class AstrBotDashBoard():
                     message=e.__str__(),
                     data=None
                 ).__dict__
-                
+
         @self.dashboard_be.post("/api/extensions/update")
         def update_plugin():
             post_data = request.json
@@ -226,16 +234,17 @@ class AstrBotDashBoard():
                     message=e.__str__(),
                     data=None
                 ).__dict__
-                
+
         @self.dashboard_be.post("/api/log")
         def log():
             for item in self.ws_clients:
                 try:
-                    asyncio.run_coroutine_threadsafe(self.ws_clients[item].send(request.data.decode()), self.loop)
+                    asyncio.run_coroutine_threadsafe(
+                        self.ws_clients[item].send(request.data.decode()), self.loop)
                 except Exception as e:
                     pass
             return 'ok'
-        
+
         @self.dashboard_be.get("/api/check_update")
         def get_update_info():
             try:
@@ -244,7 +253,7 @@ class AstrBotDashBoard():
                     status="success",
                     message=ret,
                     data={
-                        "has_new_version": ret != "当前已经是最新版本。" # 先这样吧，累了=.=
+                        "has_new_version": ret != "当前已经是最新版本。"  # 先这样吧，累了=.=
                     }
                 ).__dict__
             except Exception as e:
@@ -253,7 +262,7 @@ class AstrBotDashBoard():
                     message=e.__str__(),
                     data=None
                 ).__dict__
-                
+
         @self.dashboard_be.post("/api/update_project")
         def update_project_api():
             version = request.json['version']
@@ -263,7 +272,8 @@ class AstrBotDashBoard():
             else:
                 latest = False
             try:
-                update_project(request_release_info(latest), latest=latest, version=version)
+                update_project(request_release_info(latest),
+                               latest=latest, version=version)
                 threading.Thread(target=self.shutdown_bot, args=(3,)).start()
                 return Response(
                     status="success",
@@ -276,7 +286,7 @@ class AstrBotDashBoard():
                     message=e.__str__(),
                     data=None
                 ).__dict__
-                
+
         @self.dashboard_be.get("/api/llm/list")
         def llm_list():
             ret = []
@@ -287,7 +297,7 @@ class AstrBotDashBoard():
                 message="",
                 data=ret
             ).__dict__
-        
+
         @self.dashboard_be.get("/api/llm")
         def llm():
             text = request.args["text"]
@@ -296,7 +306,8 @@ class AstrBotDashBoard():
                 if llm_.llm_name == llm:
                     try:
                         # ret = await llm_.llm_instance.text_chat(text)
-                        ret = asyncio.run_coroutine_threadsafe(llm_.llm_instance.text_chat(text), self.loop).result()
+                        ret = asyncio.run_coroutine_threadsafe(
+                            llm_.llm_instance.text_chat(text), self.loop).result()
                         return Response(
                             status="success",
                             message="",
@@ -314,21 +325,21 @@ class AstrBotDashBoard():
                 message="LLM not found.",
                 data=None
             ).__dict__
-            
+
     def shutdown_bot(self, delay_s: int):
         time.sleep(delay_s)
         py = sys.executable
         os.execl(py, py, *sys.argv)
-    
+
     def _get_configs(self, namespace: str):
         if namespace == "":
-            ret = [self.dashboard_data.configs['data'][4], 
-                    self.dashboard_data.configs['data'][5],]
+            ret = [self.dashboard_data.configs['data'][4],
+                   self.dashboard_data.configs['data'][5],]
         elif namespace == "internal_platform_qq_official":
             ret = [self.dashboard_data.configs['data'][0],]
         elif namespace == "internal_platform_qq_gocq":
             ret = [self.dashboard_data.configs['data'][1],]
-        elif namespace == "internal_platform_general": # 全局平台配置
+        elif namespace == "internal_platform_general":  # 全局平台配置
             ret = [self.dashboard_data.configs['data'][2],]
         elif namespace == "internal_llm_openai_official":
             ret = [self.dashboard_data.configs['data'][3],]
@@ -352,28 +363,28 @@ class AstrBotDashBoard():
         '''
         outline = [
             {
-            "type": "platform",
-            "name": "配置通用消息平台",
-            "body": [
-                {
-                "title": "通用",
-                "desc": "通用平台配置",
-                "namespace": "internal_platform_general",
-                "tag": ""
-                },
-                {
-                "title": "QQ_OFFICIAL",
-                "desc": "QQ官方API，仅支持频道",
-                "namespace": "internal_platform_qq_official",
-                "tag": ""
-                },
-                {
-                "title": "OneBot协议",
-                "desc": "支持cq-http、shamrock等（目前仅支持QQ平台）",
-                "namespace": "internal_platform_qq_gocq",
-                "tag": ""
-                }
-            ]
+                "type": "platform",
+                "name": "配置通用消息平台",
+                "body": [
+                    {
+                        "title": "通用",
+                        "desc": "通用平台配置",
+                        "namespace": "internal_platform_general",
+                        "tag": ""
+                    },
+                    {
+                        "title": "QQ_OFFICIAL",
+                        "desc": "QQ官方API，仅支持频道",
+                        "namespace": "internal_platform_qq_official",
+                        "tag": ""
+                    },
+                    {
+                        "title": "OneBot协议",
+                        "desc": "支持cq-http、shamrock等（目前仅支持QQ平台）",
+                        "namespace": "internal_platform_qq_gocq",
+                        "tag": ""
+                    }
+                ]
             },
             {
                 "type": "llm",
@@ -422,7 +433,7 @@ class AstrBotDashBoard():
                 # self.logger.log(f"和 {path} 的 websocket 连接发生了错误: {e.__str__()}", tag="可视化面板")
                 del self.ws_clients[address]
                 break
-        
+
     def run_ws_server(self, loop):
         asyncio.set_event_loop(loop)
         loop.run_until_complete(self.ws_server)
@@ -433,7 +444,8 @@ class AstrBotDashBoard():
         self.logger.log("已启动 websocket 服务器", tag="可视化面板")
         ip_address = gu.get_local_ip_addresses()
         ip_str = f"http://{ip_address}:6185\n\thttp://localhost:6185"
-        self.logger.log(f"\n==================\n您可访问:\n\n\t{ip_str}\n\n来登录可视化面板，默认账号密码为空。\n注意: 所有配置项现已全量迁移至 cmd_config.json 文件下，可登录可视化面板在线修改配置。\n==================\n", tag="可视化面板")
-        http_server = make_server('0.0.0.0', 6185, self.dashboard_be, threaded=True)
+        self.logger.log(
+            f"\n==================\n您可访问:\n\n\t{ip_str}\n\n来登录可视化面板，默认账号密码为空。\n注意: 所有配置项现已全量迁移至 cmd_config.json 文件下，可登录可视化面板在线修改配置。\n==================\n", tag="可视化面板")
+        http_server = make_server(
+            '0.0.0.0', 6185, self.dashboard_be, threaded=True)
         http_server.serve_forever()
-

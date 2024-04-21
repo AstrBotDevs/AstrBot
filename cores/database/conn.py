@@ -3,11 +3,12 @@ import yaml
 import time
 from typing import Tuple
 
+
 class dbConn():
     def __init__(self):
         # 读取参数,并支持中文
         conn = sqlite3.connect("data.db")
-        conn.text_factory=str
+        conn.text_factory = str
         self.conn = conn
         c = conn.cursor()
         c.execute(
@@ -44,7 +45,7 @@ class dbConn():
             );
             '''
         )
-        
+
         conn.commit()
 
     def insert_session(self, qq_id, history):
@@ -76,7 +77,7 @@ class dbConn():
             ''', (qq_id, )
         )
         return c.fetchone()
-    
+
     def get_all_session(self):
         conn = self.conn
         c = conn.cursor()
@@ -86,7 +87,7 @@ class dbConn():
             '''
         )
         return c.fetchall()
-    
+
     def check_session(self, qq_id):
         conn = self.conn
         c = conn.cursor()
@@ -106,7 +107,6 @@ class dbConn():
             ''', (qq_id, )
         )
         conn.commit()
-
 
     def increment_stat_session(self, platform, session_id, cnt):
         # if not exist, insert
@@ -137,7 +137,7 @@ class dbConn():
             ''', (platform, session_id)
         )
         return c.fetchone() is not None
-    
+
     def get_all_stat_session(self):
         conn = self.conn
         c = conn.cursor()
@@ -147,7 +147,7 @@ class dbConn():
             '''
         )
         return c.fetchall()
-    
+
     def get_session_cnt_total(self):
         conn = self.conn
         c = conn.cursor()
@@ -157,7 +157,7 @@ class dbConn():
             '''
         )
         return c.fetchone()[0]
-    
+
     def increment_stat_message(self, ts, cnt):
         # 以一个小时为单位。ts的单位是秒。
         # 找到最近的一个小时，如果没有，就插入
@@ -197,7 +197,7 @@ class dbConn():
             return True, ts
         else:
             return False, ts
-        
+
     def get_last_24h_stat_message(self):
         # 获取最近24小时的消息统计
         conn = self.conn
@@ -208,7 +208,7 @@ class dbConn():
             ''', (time.time() - 86400, )
         )
         return c.fetchall()
-    
+
     def get_message_cnt_total(self) -> int:
         conn = self.conn
         c = conn.cursor()
@@ -258,7 +258,7 @@ class dbConn():
             return True, ts
         else:
             return False, ts
-        
+
     def get_last_24h_stat_platform(self):
         # 获取最近24小时的消息统计
         conn = self.conn
@@ -269,7 +269,7 @@ class dbConn():
             ''', (time.time() - 86400, )
         )
         return c.fetchall()
-    
+
     def get_platform_cnt_total(self) -> int:
         conn = self.conn
         c = conn.cursor()
@@ -291,4 +291,3 @@ class dbConn():
 
     def close(self):
         self.conn.close()
-    

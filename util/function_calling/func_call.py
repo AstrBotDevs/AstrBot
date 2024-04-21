@@ -3,30 +3,35 @@ import json
 import util.general_utils as gu
 
 import time
+
+
 class FuncCallJsonFormatError(Exception):
     def __init__(self, msg):
         self.msg = msg
 
     def __str__(self):
         return self.msg
-    
+
+
 class FuncNotFoundError(Exception):
     def __init__(self, msg):
         self.msg = msg
 
     def __str__(self):
         return self.msg
-    
+
+
 class FuncCall():
     def __init__(self, provider) -> None:
         self.func_list = []
         self.provider = provider
 
-    def add_func(self, name: str = None, func_args: list = None, desc: str = None, func_obj = None) -> None:
+    def add_func(self, name: str = None, func_args: list = None, desc: str = None, func_obj=None) -> None:
         if name == None or func_args == None or desc == None or func_obj == None:
-            raise FuncCallJsonFormatError("name, func_args, desc must be provided.")
+            raise FuncCallJsonFormatError(
+                "name, func_args, desc must be provided.")
         params = {
-            "type": "object", # hardcore here
+            "type": "object",  # hardcore here
             "properties": {}
         }
         for param in func_args:
@@ -51,7 +56,7 @@ class FuncCall():
                 "description": f["description"],
             })
         return json.dumps(_l, indent=intent, ensur_ascii=False)
-    
+
     def get_func(self) -> list:
         _l = []
         for f in self.func_list:
@@ -64,8 +69,8 @@ class FuncCall():
                 }
             })
         return _l
-    
-    def func_call(self, question, func_definition, is_task = False, tasks = None, taskindex = -1, is_summary = True, session_id = None):
+
+    def func_call(self, question, func_definition, is_task=False, tasks=None, taskindex=-1, is_summary=True, session_id=None):
 
         funccall_prompt = """
 我正实现function call功能，该功能旨在让你变成给定的问题到给定的函数的解析器（意味着你不是创造函数）。
@@ -120,7 +125,8 @@ class FuncCall():
                 res = self.provider.text_chat(prompt, session_id)
                 if res.find('```') != -1:
                     res = res[res.find('```json') + 7: res.rfind('```')]
-                gu.log("REVGPT func_call json result", bg=gu.BG_COLORS["green"], fg=gu.FG_COLORS["white"])
+                gu.log("REVGPT func_call json result",
+                       bg=gu.BG_COLORS["green"], fg=gu.FG_COLORS["white"])
                 print(res)
                 res = json.loads(res)
                 break
@@ -151,11 +157,13 @@ class FuncCall():
                         func_target = func["func_obj"]
                         break
                 if func_target == None:
-                    raise FuncNotFoundError(f"Request function {func_name} not found.")
+                    raise FuncNotFoundError(
+                        f"Request function {func_name} not found.")
                 t_res = str(func_target(**args))
                 invoke_func_res += f"{func_name} 调用结果：\n```\n{t_res}\n```\n"
                 invoke_func_res_list.append(invoke_func_res)
-                gu.log(f"[FUNC| {func_name} invoked]", bg=gu.BG_COLORS["green"], fg=gu.FG_COLORS["white"])
+                gu.log(f"[FUNC| {func_name} invoked]",
+                       bg=gu.BG_COLORS["green"], fg=gu.FG_COLORS["white"])
                 # print(str(t_res))
 
             if is_summary:
@@ -181,12 +189,16 @@ class FuncCall():
                     try:
                         res = self.provider.text_chat(after_prompt, session_id)
                         # 截取```之间的内容
-                        gu.log("DEBUG BEGIN", bg=gu.BG_COLORS["yellow"], fg=gu.FG_COLORS["white"])
+                        gu.log(
+                            "DEBUG BEGIN", bg=gu.BG_COLORS["yellow"], fg=gu.FG_COLORS["white"])
                         print(res)
-                        gu.log("DEBUG END", bg=gu.BG_COLORS["yellow"], fg=gu.FG_COLORS["white"])
+                        gu.log(
+                            "DEBUG END", bg=gu.BG_COLORS["yellow"], fg=gu.FG_COLORS["white"])
                         if res.find('```') != -1:
-                            res = res[res.find('```json') + 7: res.rfind('```')]
-                        gu.log("REVGPT after_func_call json result", bg=gu.BG_COLORS["green"], fg=gu.FG_COLORS["white"])
+                            res = res[res.find('```json') +
+                                      7: res.rfind('```')]
+                        gu.log("REVGPT after_func_call json result",
+                               bg=gu.BG_COLORS["green"], fg=gu.FG_COLORS["white"])
                         after_prompt_res = res
                         after_prompt_res = json.loads(after_prompt_res)
                         break
@@ -197,7 +209,8 @@ class FuncCall():
                         if "The message you submitted was too long" in str(e):
                             # 如果返回的内容太长了，那么就截取一部分
                             time.sleep(3)
-                            invoke_func_res = invoke_func_res[:int(len(invoke_func_res) / 2)]
+                            invoke_func_res = invoke_func_res[:int(
+                                len(invoke_func_res) / 2)]
                             after_prompt = """
 函数返回以下内容："""+invoke_func_res+"""
 请以AI助手的身份结合返回的内容对用户提问做详细全面的回答。
@@ -218,11 +231,13 @@ class FuncCall():
                 if "func_call_again" in after_prompt_res and after_prompt_res["func_call_again"]:
                     # 如果需要重新调用函数
                     # 重新调用函数
-                    gu.log("REVGPT func_call_again", bg=gu.BG_COLORS["purple"], fg=gu.FG_COLORS["white"])
+                    gu.log("REVGPT func_call_again",
+                           bg=gu.BG_COLORS["purple"], fg=gu.FG_COLORS["white"])
                     res = self.func_call(question, func_definition)
                     return res, True
 
-                gu.log("REVGPT func callback:", bg=gu.BG_COLORS["green"], fg=gu.FG_COLORS["white"])
+                gu.log("REVGPT func callback:",
+                       bg=gu.BG_COLORS["green"], fg=gu.FG_COLORS["white"])
                 # print(after_prompt_res["res"])
                 return after_prompt_res["res"], True
             else:
@@ -230,8 +245,3 @@ class FuncCall():
         else:
             # print(res["res"])
             return res["res"], False
-
-
-
-
-

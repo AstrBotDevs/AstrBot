@@ -13,12 +13,6 @@ import util.function_calling.gplugin as gplugin
 import util.plugin_util as putil
 
 from PIL import Image as PILImage
-from typing import Union
-from nakuru import (
-    GroupMessage,
-    FriendMessage,
-    GuildMessage,
-)
 from nakuru.entities.components import Plain, At, Image
 
 from addons.baidu_aip_judge import BaiduJudge
@@ -67,22 +61,27 @@ _global_object: GlobalObject = None
 logger: Logger = Logger()
 
 # 语言模型选择
+
+
 def privider_chooser(cfg):
     l = []
     if 'openai' in cfg and len(cfg['openai']['key']) > 0 and cfg['openai']['key'][0] is not None:
         l.append('openai_official')
     return l
 
+
 '''
 初始化机器人
 '''
+
+
 def init(cfg):
     global llm_instance, llm_command_instance
     global baidu_judge, chosen_provider
     global frequency_count, frequency_time
     global _global_object
     global logger
-    
+
     # 迁移旧配置
     gu.try_migrate_config(cfg)
     # 使用新配置
@@ -115,25 +114,29 @@ def init(cfg):
         if cfg['openai']['key'] is not None and cfg['openai']['key'] != [None]:
             from model.provider.openai_official import ProviderOpenAIOfficial
             from model.command.openai_official import CommandOpenAIOfficial
-            llm_instance[OPENAI_OFFICIAL] = ProviderOpenAIOfficial(cfg['openai'])
-            llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(llm_instance[OPENAI_OFFICIAL], _global_object)
-            _global_object.llms.append(RegisteredLLM(llm_name=OPENAI_OFFICIAL, llm_instance=llm_instance[OPENAI_OFFICIAL], origin="internal"))
+            llm_instance[OPENAI_OFFICIAL] = ProviderOpenAIOfficial(
+                cfg['openai'])
+            llm_command_instance[OPENAI_OFFICIAL] = CommandOpenAIOfficial(
+                llm_instance[OPENAI_OFFICIAL], _global_object)
+            _global_object.llms.append(RegisteredLLM(
+                llm_name=OPENAI_OFFICIAL, llm_instance=llm_instance[OPENAI_OFFICIAL], origin="internal"))
             chosen_provider = OPENAI_OFFICIAL
 
     # 检查provider设置偏好
     p = cc.get("chosen_provider", None)
     if p is not None and p in llm_instance:
         chosen_provider = p
-    
+
     # 百度内容审核
     if 'baidu_aip' in cfg and 'enable' in cfg['baidu_aip'] and cfg['baidu_aip']['enable']:
-        try: 
+        try:
             baidu_judge = BaiduJudge(cfg['baidu_aip'])
             logger.log("百度内容审核初始化成功", gu.LEVEL_INFO)
         except BaseException as e:
             logger.log("百度内容审核初始化失败", gu.LEVEL_ERROR)
-        
-    threading.Thread(target=upload, args=(_global_object, ), daemon=True).start()
+
+    threading.Thread(target=upload, args=(
+        _global_object, ), daemon=True).start()
 
     # 得到发言频率配置
     if 'limit' in cfg:
@@ -141,7 +144,7 @@ def init(cfg):
             frequency_count = cfg['limit']['count']
         if 'time' in cfg['limit']:
             frequency_time = cfg['limit']['time']
-    
+
     try:
         if 'uniqueSessionMode' in cfg and cfg['uniqueSessionMode']:
             _global_object.unique_session = True
@@ -152,7 +155,7 @@ def init(cfg):
 
     nick_qq = cc.get("nick_qq", None)
     if nick_qq == None:
-        nick_qq = ("ai","!","！")
+        nick_qq = ("ai", "!", "！")
     if isinstance(nick_qq, str):
         nick_qq = (nick_qq,)
     if isinstance(nick_qq, list):
@@ -168,10 +171,11 @@ def init(cfg):
     _command = Command(None, _global_object)
     ok, err = putil.plugin_reload(_global_object.cached_plugins)
     if ok:
-        logger.log(f"成功载入 {len(_global_object.cached_plugins)} 个插件", gu.LEVEL_INFO)
+        logger.log(
+            f"成功载入 {len(_global_object.cached_plugins)} 个插件", gu.LEVEL_INFO)
     else:
         logger.log(err, gu.LEVEL_ERROR)
-    
+
     if chosen_provider is None:
         llm_command_instance[NONE_LLM] = _command
         chosen_provider = NONE_LLM
@@ -182,19 +186,21 @@ def init(cfg):
     # GOCQ
     if 'gocqbot' in cfg and cfg['gocqbot']['enable']:
         logger.log("启用 QQ_GOCQ 机器人消息平台", gu.LEVEL_INFO)
-        threading.Thread(target=run_gocq_bot, args=(cfg, _global_object), daemon=True).start()
+        threading.Thread(target=run_gocq_bot, args=(
+            cfg, _global_object), daemon=True).start()
         platform_str += "QQ_GOCQ,"
 
     # QQ频道
     if 'qqbot' in cfg and cfg['qqbot']['enable'] and cfg['qqbot']['appid'] != None:
         logger.log("启用 QQ_OFFICIAL 机器人消息平台", gu.LEVEL_INFO)
-        threading.Thread(target=run_qqchan_bot, args=(cfg, _global_object), daemon=True).start()
+        threading.Thread(target=run_qqchan_bot, args=(
+            cfg, _global_object), daemon=True).start()
         platform_str += "QQ_OFFICIAL,"
 
     default_personality_str = cc.get("default_personality_str", "")
     if default_personality_str == "":
         _global_object.default_personality = None
-    else: 
+    else:
         _global_object.default_personality = {
             "name": "default",
             "prompt": default_personality_str,
@@ -207,63 +213,83 @@ def init(cfg):
         plugins=_global_object.cached_plugins,
     )
     dashboard_helper = DashBoardHelper(_global_object, config=cc.get_all())
-    dashboard_thread = threading.Thread(target=dashboard_helper.run, daemon=True)
+    dashboard_thread = threading.Thread(
+        target=dashboard_helper.run, daemon=True)
     dashboard_thread.start()
 
     # 运行 monitor
-    threading.Thread(target=run_monitor, args=(_global_object,), daemon=True).start()
+    threading.Thread(target=run_monitor, args=(
+        _global_object,), daemon=True).start()
 
-    logger.log("如果有任何问题, 请在 https://github.com/Soulter/AstrBot 上提交 issue 或加群 322154837。", gu.LEVEL_INFO)
+    logger.log(
+        "如果有任何问题, 请在 https://github.com/Soulter/AstrBot 上提交 issue 或加群 322154837。", gu.LEVEL_INFO)
     logger.log("请给 https://github.com/Soulter/AstrBot 点个 star。", gu.LEVEL_INFO)
     if platform_str == '':
         platform_str = "(未启动任何平台，请前往面板添加)"
     logger.log(f"🎉 项目启动完成")
-    
+
     dashboard_thread.join()
+
 
 '''
 运行 QQ_OFFICIAL 机器人
 '''
+
+
 def run_qqchan_bot(cfg: dict, global_object: GlobalObject):
     try:
         from model.platform.qq_official import QQOfficial
-        qqchannel_bot = QQOfficial(cfg=cfg, message_handler=oper_msg, global_object=global_object)
-        global_object.platforms.append(RegisteredPlatform(platform_name="qqchan", platform_instance=qqchannel_bot, origin="internal"))
+        qqchannel_bot = QQOfficial(
+            cfg=cfg, message_handler=oper_msg, global_object=global_object)
+        global_object.platforms.append(RegisteredPlatform(
+            platform_name="qqchan", platform_instance=qqchannel_bot, origin="internal"))
         qqchannel_bot.run()
     except BaseException as e:
-        logger.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e), gu.LEVEL_CRITICAL, tag="QQ频道")
-        logger.log(r"如果您是初次启动，请前往可视化面板填写配置。详情请看：https://astrbot.soulter.top/center/。" + str(e), gu.LEVEL_CRITICAL)
+        logger.log("启动QQ频道机器人时出现错误, 原因如下: " + str(e),
+                   gu.LEVEL_CRITICAL, tag="QQ频道")
+        logger.log(r"如果您是初次启动，请前往可视化面板填写配置。详情请看：https://astrbot.soulter.top/center/。" +
+                   str(e), gu.LEVEL_CRITICAL)
+
 
 '''
 运行 QQ_GOCQ 机器人
 '''
+
+
 def run_gocq_bot(cfg: dict, _global_object: GlobalObject):
     from model.platform.qq_gocq import QQGOCQ
-    
+
     noticed = False
     host = cc.get("gocq_host", "127.0.0.1")
     port = cc.get("gocq_websocket_port", 6700)
     http_port = cc.get("gocq_http_port", 5700)
-    logger.log(f"正在检查连接...host: {host}, ws port: {port}, http port: {http_port}", tag="QQ")
+    logger.log(
+        f"正在检查连接...host: {host}, ws port: {port}, http port: {http_port}", tag="QQ")
     while True:
         if not gu.port_checker(port=port, host=host) or not gu.port_checker(port=http_port, host=host):
             if not noticed:
                 noticed = True
-                logger.log(f"连接到{host}:{port}（或{http_port}）失败。程序会每隔 5s 自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
+                logger.log(
+                    f"连接到{host}:{port}（或{http_port}）失败。程序会每隔 5s 自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
             time.sleep(5)
         else:
             logger.log("检查完毕，未发现问题。", tag="QQ")
             break
     try:
-        qq_gocq = QQGOCQ(cfg=cfg, message_handler=oper_msg, global_object=_global_object)
-        _global_object.platforms.append(RegisteredPlatform(platform_name="gocq", platform_instance=qq_gocq, origin="internal"))
+        qq_gocq = QQGOCQ(cfg=cfg, message_handler=oper_msg,
+                         global_object=_global_object)
+        _global_object.platforms.append(RegisteredPlatform(
+            platform_name="gocq", platform_instance=qq_gocq, origin="internal"))
         qq_gocq.run()
     except BaseException as e:
         input("启动QQ机器人出现错误"+str(e))
 
+
 '''
 检查发言频率
 '''
+
+
 def check_frequency(id) -> bool:
     ts = int(time.time())
     if id in user_frequency:
@@ -275,12 +301,13 @@ def check_frequency(id) -> bool:
             if user_frequency[id]['count'] >= frequency_count:
                 return False
             else:
-                user_frequency[id]['count']+=1
+                user_frequency[id]['count'] += 1
                 return True
     else:
-        t = {'time':ts,'count':1}
+        t = {'time': ts, 'count': 1}
         user_frequency[id] = t
         return True
+
 
 async def record_message(platform: str, session_id: str):
     # TODO: 这里会非常吃资源。然而 sqlite3 不支持多线程，所以暂时这样写。
@@ -291,11 +318,12 @@ async def record_message(platform: str, session_id: str):
     db_inst.increment_stat_platform(curr_ts, platform, 1)
     _global_object.cnt_total += 1
 
+
 async def oper_msg(message: AstrBotMessage,
-             session_id: str,
-             role: str = 'member',
-             platform: str = None,
-) -> MessageResult:
+                   session_id: str,
+                   role: str = 'member',
+                   platform: str = None,
+                   ) -> MessageResult:
     """
     处理消息。
     message: 消息对象
@@ -307,9 +335,9 @@ async def oper_msg(message: AstrBotMessage,
     message_str = ''
     session_id = session_id
     role = role
-    hit = False # 是否命中指令
-    command_result = () # 调用指令返回的结果
-    
+    hit = False  # 是否命中指令
+    command_result = ()  # 调用指令返回的结果
+
     # 获取平台实例
     reg_platform: RegisteredPlatform = None
     for p in _global_object.platforms:
@@ -319,7 +347,7 @@ async def oper_msg(message: AstrBotMessage,
     if not reg_platform:
         _global_object.logger.log(f"未找到平台 {platform} 的实例。", gu.LEVEL_ERROR)
         raise Exception(f"未找到平台 {platform} 的实例。")
-    
+
     # 统计数据，如频道消息量
     await record_message(platform, session_id)
 
@@ -328,11 +356,11 @@ async def oper_msg(message: AstrBotMessage,
             message_str += i.text.strip()
     if message_str == "":
         return MessageResult("Hi~")
-    
+
     # 检查发言频率
     if not check_frequency(message.sender.user_id):
         return MessageResult(f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置{frequency_time}秒内只能提问{frequency_count}次。')
-    
+
     # 检查是否是更换语言模型的请求
     temp_switch = ""
     if message_str.startswith('/gpt'):
@@ -400,7 +428,7 @@ async def oper_msg(message: AstrBotMessage,
                     official_fc = chosen_provider == OPENAI_OFFICIAL
                     llm_result_str = await gplugin.web_search(message_str, llm_instance[chosen_provider], session_id, official_fc)
                 else:
-                    llm_result_str = await llm_instance[chosen_provider].text_chat(message_str, session_id, image_url, default_personality = _global_object.default_personality)
+                    llm_result_str = await llm_instance[chosen_provider].text_chat(message_str, session_id, image_url, default_personality=_global_object.default_personality)
 
             llm_result_str = _global_object.reply_prefix + llm_result_str
         except BaseException as e:
@@ -410,7 +438,7 @@ async def oper_msg(message: AstrBotMessage,
     # 切换回原来的语言模型
     if temp_switch != "":
         chosen_provider = temp_switch
-        
+
     if hit:
         # 有指令或者插件触发
         # command_result 是一个元组：(指令调用是否成功, 指令返回的文本结果, 指令类型)
@@ -426,7 +454,7 @@ async def oper_msg(message: AstrBotMessage,
 
         if not command_result[0]:
             return MessageResult(f"指令调用错误: \n{str(command_result[1])}")
-        
+
         # 画图指令
         if isinstance(command_result[1], list) and len(command_result) == 3 and command == 'draw':
             for i in command_result[1]:
