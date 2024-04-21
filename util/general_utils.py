@@ -134,7 +134,7 @@ class Logger:
             self.history = self.history[-100:]
         print(ret[:-1])
 
-log = Logger()
+log = Logger().log
 
 def port_checker(port: int, host: str = "localhost"):
     sk = socket.socket(socket.AF_INET,socket.SOCK_STREAM)

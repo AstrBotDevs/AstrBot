@@ -12,7 +12,6 @@ def main():
     try:
         import cores.astrbot.core as qqBot
         import yaml
-        import util.general_utils as gu
         ymlfile =  open(abs_path+"configs/config.yaml", 'r', encoding='utf-8')
         cfg = yaml.safe_load(ymlfile)
     except ImportError as import_error:
@@ -91,6 +90,10 @@ if __name__ == "__main__":
     else:
         check_env()
     
-    t = threading.Thread(target=main, daemon=False)
+    t = threading.Thread(target=main, daemon=True)
     t.start()
-    t.join()
+    try:
+        t.join()
+    except KeyboardInterrupt as e:
+        print("退出 AstrBot。")
+        exit()

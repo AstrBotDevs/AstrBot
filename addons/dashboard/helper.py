@@ -12,15 +12,17 @@ import time
 import asyncio
 from util.plugin_dev.api.v1.config import update_config
 
+
 @dataclass
 class DashBoardConfig():
     config_type: str
     name: Optional[str] = None
     description: Optional[str] = None
-    path: Optional[str] = None # 仅 item 才需要
-    body: Optional[list['DashBoardConfig']] = None # 仅 group 才需要
-    value: Optional[Union[list, dict, str, int, bool]] = None # 仅 item 才需要
-    val_type: Optional[str] = None # 仅 item 才需要
+    path: Optional[str] = None  # 仅 item 才需要
+    body: Optional[list['DashBoardConfig']] = None  # 仅 group 才需要
+    value: Optional[Union[list, dict, str, int, bool]] = None  # 仅 item 才需要
+    val_type: Optional[str] = None  # 仅 item 才需要
+
 
 class DashBoardHelper():
     def __init__(self, global_object, config: dict):
@@ -34,26 +36,30 @@ class DashBoardHelper():
         self.parse_default_config(dashboard_data, config)
         self.dashboard_data: DashBoardData = dashboard_data
         self.dashboard = AstrBotDashBoard(global_object)
-        self.key_map = {} # key: uuid, value: config key name
+        self.key_map = {}  # key: uuid, value: config key name
         self.cc = CmdConfig()
-        
+
         @self.dashboard.register("post_configs")
         def on_post_configs(post_configs: dict):
             try:
                 # self.logger.log(f"收到配置更新请求", gu.LEVEL_INFO, tag="可视化面板")
                 if 'base_config' in post_configs:
-                    self.save_config(post_configs['base_config'], namespace='') # 基础配置
-                self.save_config(post_configs['config'], namespace=post_configs['namespace']) # 选定配置
-                self.parse_default_config(self.dashboard_data, self.cc.get_all())
+                    self.save_config(
+                        post_configs['base_config'], namespace='')  # 基础配置
+                self.save_config(
+                    post_configs['config'], namespace=post_configs['namespace'])  # 选定配置
+                self.parse_default_config(
+                    self.dashboard_data, self.cc.get_all())
                 # 重启
-                threading.Thread(target=self.dashboard.shutdown_bot, args=(2,), daemon=True).start()
+                threading.Thread(target=self.dashboard.shutdown_bot,
+                                 args=(2,), daemon=True).start()
             except Exception as e:
                 # self.logger.log(f"在保存配置时发生错误：{e}", gu.LEVEL_ERROR, tag="可视化面板")
                 raise e
-        
+
     # 将 config.yaml、 中的配置解析到 dashboard_data.configs 中
     def parse_default_config(self, dashboard_data: DashBoardData, config: dict):
-        
+
         try:
             qq_official_platform_group = DashBoardConfig(
                 config_type="group",
@@ -381,48 +387,7 @@ class DashBoardHelper():
                     ),
                 ]
             )
-            
-            rev_chatgpt_accounts = config['rev_ChatGPT']['account']
-            new_accs = []
-            for i in rev_chatgpt_accounts:
-                if isinstance(i, dict) and 'access_token' in i:
-                    new_accs.append(i['access_token'])
-                elif isinstance(i, str):
-                    new_accs.append(i)
-            config['rev_ChatGPT']['account'] = new_accs
-            
-            rev_chatgpt_llm_group = DashBoardConfig(
-                config_type="group",
-                name="逆向语言模型服务设置",
-                description="",
-                body=[
-                    DashBoardConfig(
-                        config_type="item",
-                        val_type="bool",
-                        name="启用逆向语言模型服务",
-                        description="",
-                        value=config['rev_ChatGPT']['enable'],
-                        path="rev_ChatGPT.enable",
-                    ), 
-                    DashBoardConfig(
-                        config_type="item",
-                        val_type="str",
-                        name="终结点（Endpoint）地址",
-                        description="逆向服务的终结点服务器的地址。",
-                        value=config['CHATGPT_BASE_URL'],
-                        path="CHATGPT_BASE_URL",
-                    ), 
-                    DashBoardConfig(
-                        config_type="item",
-                        val_type="list",
-                        name="assess_token",
-                        description="assess_token",
-                        value=config['rev_ChatGPT']['account'],
-                        path="rev_ChatGPT.account",
-                    ),
-                ]
-            )
-            
+
             baidu_aip_group = DashBoardConfig(
                 config_type="group",
                 name="百度内容审核",
@@ -436,9 +401,6 @@ class DashBoardHelper():
                         value=config['baidu_aip']['enable'],
                         path="baidu_aip.enable"
                     ),
-                    # "app_id": null,
-                    # "api_key": null,
-                    # "secret_key": null
                     DashBoardConfig(
                         config_type="item",
                         val_type="str",
@@ -497,13 +459,12 @@ class DashBoardHelper():
                     ),
                 ]
             )
-            
+
             dashboard_data.configs['data'] = [
                 qq_official_platform_group,
                 qq_gocq_platform_group,
                 general_platform_detail_group,
                 openai_official_llm_group,
-                rev_chatgpt_llm_group,
                 other_group,
                 baidu_aip_group
             ]
@@ -511,13 +472,12 @@ class DashBoardHelper():
         except Exception as e:
             self.logger.log(f"配置文件解析错误：{e}", gu.LEVEL_ERROR)
             raise e
-        
-    
+
     def save_config(self, post_config: list, namespace: str):
         '''
         根据 path 解析并保存配置
         '''
-        
+
         queue = post_config
         while len(queue) > 0:
             config = queue.pop(0)
@@ -527,23 +487,27 @@ class DashBoardHelper():
             elif config['config_type'] == "item":
                 if config['path'] is None or config['path'] == "":
                     continue
-                
+
                 path = config['path'].split('.')
                 if len(path) == 0:
                     continue
-                
+
                 if config['val_type'] == "bool":
-                    self._write_config(namespace, config['path'], config['value'])
+                    self._write_config(
+                        namespace, config['path'], config['value'])
                 elif config['val_type'] == "str":
-                    self._write_config(namespace, config['path'], config['value'])
+                    self._write_config(
+                        namespace, config['path'], config['value'])
                 elif config['val_type'] == "int":
                     try:
-                        self._write_config(namespace, config['path'], int(config['value']))
+                        self._write_config(
+                            namespace, config['path'], int(config['value']))
                     except:
                         raise ValueError(f"配置项 {config['name']} 的值必须是整数")
                 elif config['val_type'] == "float":
                     try:
-                        self._write_config(namespace, config['path'], float(config['value']))
+                        self._write_config(
+                            namespace, config['path'], float(config['value']))
                     except:
                         raise ValueError(f"配置项 {config['name']} 的值必须是浮点数")
                 elif config['val_type'] == "list":
@@ -551,16 +515,18 @@ class DashBoardHelper():
                         self._write_config(namespace, config['path'], [])
                     elif not isinstance(config['value'], list):
                         raise ValueError(f"配置项 {config['name']} 的值必须是列表")
-                    self._write_config(namespace, config['path'], config['value'])
+                    self._write_config(
+                        namespace, config['path'], config['value'])
                 else:
-                    raise NotImplementedError(f"未知或者未实现的配置项类型：{config['val_type']}")
-    
+                    raise NotImplementedError(
+                        f"未知或者未实现的配置项类型：{config['val_type']}")
+
     def _write_config(self, namespace: str, key: str, value):
         if namespace == "" or namespace.startswith("internal_"):
             # 机器人自带配置，存到 config.yaml
             self.cc.put_by_dot_str(key, value)
         else:
             update_config(namespace, key, value)
-        
+
     def run(self):
         self.dashboard.run()

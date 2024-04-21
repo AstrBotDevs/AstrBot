@@ -46,7 +46,6 @@ frequency_count = 10
 version = '3.1.11'
 
 # 语言模型
-REV_CHATGPT = 'rev_chatgpt'
 OPENAI_OFFICIAL = 'openai_official'
 NONE_LLM = 'none_llm'
 chosen_provider = None
@@ -70,8 +69,6 @@ logger: Logger = Logger()
 # 语言模型选择
 def privider_chooser(cfg):
     l = []
-    if 'rev_ChatGPT' in cfg and cfg['rev_ChatGPT']['enable']:
-        l.append('rev_chatgpt')
     if 'openai' in cfg and len(cfg['openai']['key']) > 0 and cfg['openai']['key'][0] is not None:
         l.append('openai_official')
     return l
@@ -113,18 +110,6 @@ def init(cfg):
     # 语言模型提供商
     logger.log("正在载入语言模型...", gu.LEVEL_INFO)
     prov = privider_chooser(cfg)
-    if REV_CHATGPT in prov:
-        logger.log("初始化：逆向 ChatGPT", gu.LEVEL_INFO)
-        if cfg['rev_ChatGPT']['enable']:
-            if 'account' in cfg['rev_ChatGPT']:
-                from model.provider.rev_chatgpt import ProviderRevChatGPT
-                from model.command.rev_chatgpt import CommandRevChatGPT
-                llm_instance[REV_CHATGPT] = ProviderRevChatGPT(cfg['rev_ChatGPT'], base_url=cc.get("CHATGPT_BASE_URL", None))
-                llm_command_instance[REV_CHATGPT] = CommandRevChatGPT(llm_instance[REV_CHATGPT], _global_object)
-                chosen_provider = REV_CHATGPT
-                _global_object.llms.append(RegisteredLLM(llm_name=REV_CHATGPT, llm_instance=llm_instance[REV_CHATGPT], origin="internal"))
-            else:
-                input("请退出本程序, 然后在配置文件中填写rev_ChatGPT相关配置")
     if OPENAI_OFFICIAL in prov:
         logger.log("初始化：OpenAI官方", gu.LEVEL_INFO)
         if cfg['openai']['key'] is not None and cfg['openai']['key'] != [None]:
@@ -226,7 +211,7 @@ def init(cfg):
     dashboard_thread.start()
 
     # 运行 monitor
-    threading.Thread(target=run_monitor, args=(_global_object,), daemon=False).start()
+    threading.Thread(target=run_monitor, args=(_global_object,), daemon=True).start()
 
     logger.log("如果有任何问题, 请在 https://github.com/Soulter/AstrBot 上提交 issue 或加群 322154837。", gu.LEVEL_INFO)
     logger.log("请给 https://github.com/Soulter/AstrBot 点个 star。", gu.LEVEL_INFO)
@@ -350,12 +335,10 @@ async def oper_msg(message: AstrBotMessage,
     
     # 检查是否是更换语言模型的请求
     temp_switch = ""
-    if message_str.startswith('/gpt') or message_str.startswith('/revgpt'):
+    if message_str.startswith('/gpt'):
         target = chosen_provider
         if message_str.startswith('/gpt'):
             target = OPENAI_OFFICIAL
-        elif message_str.startswith('/revgpt'):
-            target = REV_CHATGPT
         l = message_str.split(' ')
         if len(l) > 1 and l[1] != "":
             # 临时对话模式，先记录下之前的语言模型，回答完毕后再切回
@@ -412,7 +395,7 @@ async def oper_msg(message: AstrBotMessage,
                 web_sch_flag = True
             else:
                 message_str += " " + cc.get("llm_env_prompt", "")
-            if chosen_provider == REV_CHATGPT or chosen_provider == OPENAI_OFFICIAL:
+            if chosen_provider == OPENAI_OFFICIAL:
                 if _global_object.web_search or web_sch_flag:
                     official_fc = chosen_provider == OPENAI_OFFICIAL
                     llm_result_str = await gplugin.web_search(message_str, llm_instance[chosen_provider], session_id, official_fc)

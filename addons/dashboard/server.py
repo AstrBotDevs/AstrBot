@@ -276,6 +276,44 @@ class AstrBotDashBoard():
                     message=e.__str__(),
                     data=None
                 ).__dict__
+                
+        @self.dashboard_be.get("/api/llm/list")
+        def llm_list():
+            ret = []
+            for llm in self.global_object.llms:
+                ret.append(llm.llm_name)
+            return Response(
+                status="success",
+                message="",
+                data=ret
+            ).__dict__
+        
+        @self.dashboard_be.get("/api/llm")
+        def llm():
+            text = request.args["text"]
+            llm = request.args["llm"]
+            for llm_ in self.global_object.llms:
+                if llm_.llm_name == llm:
+                    try:
+                        # ret = await llm_.llm_instance.text_chat(text)
+                        ret = asyncio.run_coroutine_threadsafe(llm_.llm_instance.text_chat(text), self.loop).result()
+                        return Response(
+                            status="success",
+                            message="",
+                            data=ret
+                        ).__dict__
+                    except Exception as e:
+                        return Response(
+                            status="error",
+                            message=e.__str__(),
+                            data=None
+                        ).__dict__
+
+            return Response(
+                status="error",
+                message="LLM not found.",
+                data=None
+            ).__dict__
             
     def shutdown_bot(self, delay_s: int):
         time.sleep(delay_s)
@@ -347,12 +385,6 @@ class AstrBotDashBoard():
                         "title": "OpenAI Official",
                         "desc": "也支持使用官方接口的中转服务",
                         "namespace": "internal_llm_openai_official",
-                        "tag": ""
-                    },
-                    {
-                        "title": "Rev ChatGPT",
-                        "desc": "早期的逆向ChatGPT，不推荐",
-                        "namespace": "internal_llm_rev_chatgpt",
                         "tag": ""
                     }
                 ]

@@ -160,7 +160,6 @@
 - `/key` 动态添加key
 - `/set` 人格设置面板
 - `/keyword nihao 你好` 设置关键词回复。nihao->你好
-- `/revgpt` 切换为ChatGPT逆向库
 - `/画` 画画
 
 #### 逆向ChatGPT库语言模型
