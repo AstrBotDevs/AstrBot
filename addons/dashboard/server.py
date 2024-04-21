@@ -322,8 +322,8 @@ class AstrBotDashBoard():
     
     def _get_configs(self, namespace: str):
         if namespace == "":
-            ret = [self.dashboard_data.configs['data'][5], 
-                    self.dashboard_data.configs['data'][6],]
+            ret = [self.dashboard_data.configs['data'][4], 
+                    self.dashboard_data.configs['data'][5],]
         elif namespace == "internal_platform_qq_official":
             ret = [self.dashboard_data.configs['data'][0],]
         elif namespace == "internal_platform_qq_gocq":
@@ -332,8 +332,6 @@ class AstrBotDashBoard():
             ret = [self.dashboard_data.configs['data'][2],]
         elif namespace == "internal_llm_openai_official":
             ret = [self.dashboard_data.configs['data'][3],]
-        elif namespace == "internal_llm_rev_chatgpt":
-            ret = [self.dashboard_data.configs['data'][4],]
         else:
             path = f"data/config/{namespace}.json"
             if not os.path.exists(path):
