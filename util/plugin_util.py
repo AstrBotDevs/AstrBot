@@ -93,21 +93,13 @@ def plugin_reload(cached_plugins: RegisteredPlugins):
         return False, "未找到任何插件模块"
     fail_rec = ""
 
-    registered_map = {}
-    for p in cached_plugins:
-        registered_map[p.module_path] = None
-
     for plugin in plugins:
         try:
             p = plugin['module']
             module_path = plugin['module_path']
             root_dir_name = plugin['pname']
 
-            if module_path in registered_map:
-                # 之前注册过
-                module = importlib.reload(module)
-            else:
-                module = __import__("addons.plugins." +
+            module = __import__("addons.plugins." +
                                     root_dir_name + "." + p, fromlist=[p])
 
             cls = get_classes(p, module)
