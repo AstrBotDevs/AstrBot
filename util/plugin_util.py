@@ -93,6 +93,10 @@ def plugin_reload(cached_plugins: RegisteredPlugins):
         return False, "未找到任何插件模块"
     fail_rec = ""
 
+    registered_map = {}
+    for p in cached_plugins:
+        registered_map[p.module_path] = None
+
     for plugin in plugins:
         try:
             p = plugin['module']
@@ -130,13 +134,15 @@ def plugin_reload(cached_plugins: RegisteredPlugins):
             except BaseException as e:
                 fail_rec += f"注册插件 {module_path} 失败, 原因: {str(e)}\n"
                 continue
-            cached_plugins.append(RegisteredPlugin(
-                metadata=metadata,
-                plugin_instance=obj,
-                module=module,
-                module_path=module_path,
-                root_dir_name=root_dir_name
-            ))
+
+            if module_path not in registered_map:
+                cached_plugins.append(RegisteredPlugin(
+                    metadata=metadata,
+                    plugin_instance=obj,
+                    module=module,
+                    module_path=module_path,
+                    root_dir_name=root_dir_name
+                ))
         except BaseException as e:
             traceback.print_exc()
             fail_rec += f"加载{p}插件出现问题，原因 {str(e)}\n"
