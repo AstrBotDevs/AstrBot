@@ -4,14 +4,14 @@ requests
 openai~=1.2.3
 qq-botpy
 chardet~=5.1.0
-Pillow~=9.4.0
-GitPython~=3.1.31
+Pillow
+GitPython
 nakuru-project
 beautifulsoup4
 googlesearch-python
 tiktoken
 readability-lxml
-baidu-aip~=4.16.9
+baidu-aip
 websockets
 flask
 psutil
