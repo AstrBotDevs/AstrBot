@@ -8,6 +8,9 @@ import threading
 warnings.filterwarnings("ignore")
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
+def make_necessary_dirs():
+    os.makedirs("data/config", exist_ok=True)
+    os.makedirs("temp", exist_ok=True)
 
 def main():
     # config.yaml 配置文件加载和环境确认
@@ -34,14 +37,8 @@ def main():
 
     os.environ['NO_PROXY'] = 'https://api.sgroup.qq.com'
 
-    # 检查并创建 temp 文件夹
-    if not os.path.exists(abs_path + "temp"):
-        os.mkdir(abs_path+"temp")
-    if not os.path.exists(abs_path + "data"):
-        os.mkdir(abs_path+"data")
-    if not os.path.exists(abs_path + "data/config"):
-        os.mkdir(abs_path+"data/config")
-
+    make_necessary_dirs()
+    
     # 启动主程序（cores/qqbot/core.py）
     qqBot.init(cfg)
 
