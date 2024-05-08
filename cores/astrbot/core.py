@@ -40,7 +40,7 @@ frequency_time = 60
 frequency_count = 10
 
 # 版本
-version = '3.1.12'
+version = '3.1.13'
 
 # 语言模型
 OPENAI_OFFICIAL = 'openai_official'

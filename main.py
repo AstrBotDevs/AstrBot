@@ -46,7 +46,13 @@ def main():
         cfg = yaml.safe_load(ymlfile)
     except ImportError as import_error:
         logger.error(import_error)
-        input("检测到一些依赖库没有安装。请先安装，然后重试。")
+        logger.error("检测到一些依赖库没有安装。由于兼容性问题，AstrBot 此版本将不会自动为您安装依赖库。请您先自行安装，然后重试。")
+        logger.info("如何安装？如果：")
+        logger.info("- Windows 启动器部署且使用启动器下载了 Python的：在 launcher.exe 所在目录下的地址框输入 powershell，然后执行 .\python\python.exe -m pip install .\AstrBot\requirements.txt")
+        logger.info("- Windows 启动器部署且使用自己之前下载的 Python的：在 launcher.exe 所在目录下的地址框输入 powershell，然后执行 python -m pip install .\AstrBot\requirements.txt")
+        logger.info("- 自行 clone 源码部署的：python -m pip install -r requirements.txt")
+        logger.info("- 如果还不会，加群 322154837 ")
+        input("按任意键退出。")
         exit()
     except FileNotFoundError as file_not_found:
         logger.error(file_not_found)
