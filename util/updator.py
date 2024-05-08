@@ -111,7 +111,7 @@ def update_project(update_data: list,
         else:
             # 更新到最新版本对应的commit
             try:
-                repo.remotes.origin.fetch()
+                repo.git.fetch()
                 repo.git.checkout(update_data[0]['tag_name'])
                 if reboot: _reboot()
             except BaseException as e:
@@ -123,7 +123,7 @@ def update_project(update_data: list,
         for data in update_data:
             if data['tag_name'] == version:
                 try:
-                    repo.remotes.origin.fetch()
+                    repo.git.fetch()
                     repo.git.checkout(data['tag_name'])
                     flag = True
                     if reboot: _reboot()
@@ -135,8 +135,7 @@ def update_project(update_data: list,
 def checkout_branch(branch_name: str):
     repo = find_repo()
     try:
-        origin = repo.remotes.origin
-        origin.fetch()
+        repo.git.fetch()
         repo.git.checkout(branch_name)
         repo.git.pull("origin", branch_name, "-f")
         return True
