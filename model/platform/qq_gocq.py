@@ -16,6 +16,10 @@ import time
 from ._platfrom import Platform
 from ._message_parse import nakuru_message_parse_rev
 from cores.astrbot.types import MessageType, AstrBotMessage, MessageMember
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
 
 class FakeSource:
@@ -34,7 +38,6 @@ class QQGOCQ(Platform):
         self.waiting = {}
         self.cc = CmdConfig()
         self.cfg = cfg
-        self.logger: gu.Logger = global_object.logger
 
         try:
             self.nick_qq = cfg['nick_qq']
@@ -106,8 +109,8 @@ class QQGOCQ(Platform):
         self.client.run()
 
     async def handle_msg(self, message: AstrBotMessage):
-        self.logger.log(
-            f"{message.sender.nickname}/{message.sender.user_id} -> {self.parse_message_outline(message)}", tag="QQ_GOCQ")
+        logger.info(
+            f"{message.sender.nickname}/{message.sender.user_id} -> {self.parse_message_outline(message)}")
 
         assert isinstance(message.raw_message,
                           (GroupMessage, FriendMessage, GuildMessage))
@@ -188,8 +191,8 @@ class QQGOCQ(Platform):
 
         res = result_message
 
-        self.logger.log(
-            f"{source.user_id} <- {self.parse_message_outline(res)}", tag="QQ_GOCQ")
+        logger.info(
+            f"{source.user_id} <- {self.parse_message_outline(res)}")
 
         if isinstance(source, int):
             source = FakeSource("GroupMessage", source)

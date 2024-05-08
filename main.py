@@ -1,31 +1,57 @@
+
 import os
 import sys
-from pip._internal import main as pipmain
 import warnings
 import traceback
 import threading
+from SparkleLogging.utils.core import LogManager
+from logging import Formatter, Logger
 
 warnings.filterwarnings("ignore")
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
+
+logger: Logger = None
+
+logo_tmpl = """
+     ___           _______.___________..______      .______     ______   .___________.
+    /   \         /       |           ||   _  \     |   _  \   /  __  \  |           |
+   /  ^  \       |   (----`---|  |----`|  |_)  |    |  |_)  | |  |  |  | `---|  |----`
+  /  /_\  \       \   \       |  |     |      /     |   _  <  |  |  |  |     |  |     
+ /  _____  \  .----)   |      |  |     |  |\  \----.|  |_)  | |  `--'  |     |  |     
+/__/     \__\ |_______/       |__|     | _| `._____||______/   \______/      |__|     
+                                                                                    
+"""
 
 def make_necessary_dirs():
     os.makedirs("data/config", exist_ok=True)
     os.makedirs("temp", exist_ok=True)
 
 def main():
+    logger = LogManager.GetLogger(
+        log_name='astrbot-core',
+        out_to_console=True,
+        # HTTPpost_url='http://localhost:6185/api/log',
+        # http_mode = True,
+        custom_formatter=Formatter('[%(asctime)s| %(name)s - %(levelname)s|%(filename)s:%(lineno)d]: %(message)s', datefmt="%H:%M:%S")
+    )
+    logger.info(logo_tmpl)
     # config.yaml 配置文件加载和环境确认
     try:
+        import botpy, logging, yaml
         import cores.astrbot.core as qqBot
-        import yaml
+        # delete qqbotpy's logger
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
         ymlfile = open(abs_path+"configs/config.yaml", 'r', encoding='utf-8')
         cfg = yaml.safe_load(ymlfile)
     except ImportError as import_error:
-        traceback.print_exc()
-        print(import_error)
-        input("第三方库未完全安装完毕，请退出程序重试。")
+        logger.error(import_error)
+        input("检测到一些依赖库没有安装。请先安装，然后重试。")
+        exit()
     except FileNotFoundError as file_not_found:
-        print(file_not_found)
+        logger.error(file_not_found)
         input("配置文件不存在，请检查是否已经下载配置文件。")
+        exit()
     except BaseException as e:
         raise e
 
@@ -34,70 +60,26 @@ def main():
         os.environ['HTTP_PROXY'] = cfg['http_proxy']
     if 'https_proxy' in cfg and cfg['https_proxy'] != '':
         os.environ['HTTPS_PROXY'] = cfg['https_proxy']
-
     os.environ['NO_PROXY'] = 'https://api.sgroup.qq.com'
 
     make_necessary_dirs()
-    
+
     # 启动主程序（cores/qqbot/core.py）
     qqBot.init(cfg)
 
 
-def check_env(ch_mirror=False):
+def check_env():
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 9):
-        print("请使用Python3.9+运行本项目")
-        input("按任意键退出...")
+        logger.error("请使用 Python3.9+ 运行本项目。按任意键退出。")
+        input("")
         exit()
 
-    if os.path.exists('requirements.txt'):
-        pth = 'requirements.txt'
-    else:
-        pth = 'QQChannelChatGPT' + os.sep + 'requirements.txt'
-    print("正在检查或下载第三方库，请耐心等待...")
-    try:
-        if ch_mirror:
-            print("使用阿里云镜像")
-            pipmain(['install', '-r', pth, '-i',
-                    'https://mirrors.aliyun.com/pypi/simple/'])
-        else:
-            pipmain(['install', '-r', pth])
-    except BaseException as e:
-        print(e)
-        while True:
-            res = input(
-                "安装失败。\n如报错ValueError: check_hostname requires server_hostname，请尝试先关闭代理后重试。\n1.输入y回车重试\n2. 输入c回车使用国内镜像源下载\n3. 输入其他按键回车继续往下执行。")
-            if res == "y":
-                try:
-                    pipmain(['install', '-r', pth])
-                    break
-                except BaseException as e:
-                    print(e)
-                    continue
-            elif res == "c":
-                try:
-                    pipmain(['install', '-r', pth, '-i',
-                            'https://mirrors.aliyun.com/pypi/simple/'])
-                    break
-                except BaseException as e:
-                    print(e)
-                    continue
-            else:
-                break
-    print("第三方库检查完毕。")
-
-
 if __name__ == "__main__":
-    args = sys.argv
-
-    if '-cn' in args:
-        check_env(True)
-    else:
-        check_env()
-
+    check_env()
     t = threading.Thread(target=main, daemon=True)
     t.start()
     try:
         t.join()
     except KeyboardInterrupt as e:
-        print("退出 AstrBot。")
+        logger.info("退出 AstrBot。")
         exit()

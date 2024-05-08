@@ -123,7 +123,6 @@ class GlobalObject:
     cnt_total: int  # 总消息数
     default_personality: dict
     dashboard_data = None
-    logger: None
 
     def __init__(self):
         self.nick = None  # gocq 的昵称

@@ -206,7 +206,8 @@ def update_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
     repo.remotes.origin.pull()
     # 读取插件的requirements.txt
     if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-        if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), '--quiet']) != 0:
+        print("正在安装插件依赖...")
+        if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt")]) != 0:
             raise Exception("插件依赖安装失败, 需要您手动pip安装对应插件的依赖。")
     ok, err = plugin_reload(cached_plugins)
     if not ok:

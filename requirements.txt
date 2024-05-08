@@ -16,3 +16,4 @@ websockets
 flask
 psutil
 lxml_html_clean
+SparkleLogging

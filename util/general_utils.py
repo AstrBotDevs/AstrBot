@@ -14,132 +14,6 @@ import json
 import sys
 import psutil
 
-PLATFORM_GOCQ = 'gocq'
-PLATFORM_QQCHAN = 'qqchan'
-
-FG_COLORS = {
-    "black": "30",
-    "red": "31",
-    "green": "32",
-    "yellow": "33",
-    "blue": "34",
-    "purple": "35",
-    "cyan": "36",
-    "white": "37",
-    "default": "39",
-}
-
-BG_COLORS = {
-    "black": "40",
-    "red": "41",
-    "green": "42",
-    "yellow": "43",
-    "blue": "44",
-    "purple": "45",
-    "cyan": "46",
-    "white": "47",
-    "default": "49",
-}
-
-LEVEL_DEBUG = "DEBUG"
-LEVEL_INFO = "INFO"
-LEVEL_WARNING = "WARN"
-LEVEL_ERROR = "ERROR"
-LEVEL_CRITICAL = "CRITICAL"
-
-# 为了兼容旧版
-level_codes = {
-    LEVEL_DEBUG: logging.DEBUG,
-    LEVEL_INFO: logging.INFO,
-    LEVEL_WARNING: logging.WARNING,
-    LEVEL_ERROR: logging.ERROR,
-    LEVEL_CRITICAL: logging.CRITICAL,
-}
-
-level_colors = {
-    "INFO": "green",
-    "WARN": "yellow",
-    "ERROR": "red",
-    "CRITICAL": "purple",
-}
-
-
-class Logger:
-    def __init__(self) -> None:
-        self.history = []
-
-    def log(
-            self,
-            msg: str,
-            level: str = "INFO",
-            tag: str = "System",
-            fg: str = None,
-            bg: str = None,
-            max_len: int = 50000,
-            err: Exception = None,):
-        """
-        日志打印函数
-        """
-        _set_level_code = level_codes[LEVEL_INFO]
-        if 'LOG_LEVEL' in os.environ and os.environ['LOG_LEVEL'] in level_codes:
-            _set_level_code = level_codes[os.environ['LOG_LEVEL']]
-
-        if level in level_codes and level_codes[level] < _set_level_code:
-            return
-
-        if err is not None:
-            msg += "\n异常原因: " + str(err)
-            level = LEVEL_ERROR
-
-        if len(msg) > max_len:
-            msg = msg[:max_len] + "..."
-        now = datetime.datetime.now().strftime("%H:%M:%S")
-
-        pres = []
-        for line in msg.split("\n"):
-            if line == "\n":
-                pres.append("")
-            else:
-                pres.append(f"[{now}] [{tag}/{level}] {line}")
-
-        if level == "INFO":
-            if fg is None:
-                fg = FG_COLORS["green"]
-            if bg is None:
-                bg = BG_COLORS["default"]
-        elif level == "WARN":
-            if fg is None:
-                fg = FG_COLORS["yellow"]
-            if bg is None:
-                bg = BG_COLORS["default"]
-        elif level == "ERROR":
-            if fg is None:
-                fg = FG_COLORS["red"]
-            if bg is None:
-                bg = BG_COLORS["default"]
-        elif level == "CRITICAL":
-            if fg is None:
-                fg = FG_COLORS["purple"]
-            if bg is None:
-                bg = BG_COLORS["default"]
-
-        ret = ""
-        for line in pres:
-            ret += f"\033[{fg};{bg}m{line}\033[0m\n"
-        try:
-            requests.post("http://localhost:6185/api/log",
-                          data=ret[:-1].encode(), timeout=1)
-        except BaseException as e:
-            pass
-        self.history.append(ret)
-        if len(self.history) > 100:
-            self.history = self.history[-100:]
-        print(ret[:-1])
-
-
-log = Logger().log
-
-
 def port_checker(port: int, host: str = "localhost"):
     sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sk.settimeout(1)
@@ -477,7 +351,7 @@ def save_temp_img(img: Image) -> str:
                 if time.time() - ctime > 3600:
                     os.remove(path)
     except Exception as e:
-        print(f"清除临时文件失败: {e}", level=LEVEL_WARNING, tag="GeneralUtils")
+        print(f"清除临时文件失败: {e}")
 
     # 获得时间戳
     timestamp = int(time.time())

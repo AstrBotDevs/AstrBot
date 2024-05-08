@@ -11,6 +11,10 @@ import threading
 import time
 import asyncio
 from util.plugin_dev.api.v1.config import update_config
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
 
 @dataclass
@@ -28,7 +32,6 @@ class DashBoardHelper():
     def __init__(self, global_object, config: dict):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        self.logger = global_object.logger
         dashboard_data = global_object.dashboard_data
         dashboard_data.configs = {
             "data": []
@@ -42,7 +45,6 @@ class DashBoardHelper():
         @self.dashboard.register("post_configs")
         def on_post_configs(post_configs: dict):
             try:
-                # self.logger.log(f"收到配置更新请求", gu.LEVEL_INFO, tag="可视化面板")
                 if 'base_config' in post_configs:
                     self.save_config(
                         post_configs['base_config'], namespace='')  # 基础配置
@@ -54,7 +56,6 @@ class DashBoardHelper():
                 threading.Thread(target=self.dashboard.shutdown_bot,
                                  args=(2,), daemon=True).start()
             except Exception as e:
-                # self.logger.log(f"在保存配置时发生错误：{e}", gu.LEVEL_ERROR, tag="可视化面板")
                 raise e
 
     # 将 config.yaml、 中的配置解析到 dashboard_data.configs 中
@@ -470,7 +471,7 @@ class DashBoardHelper():
             ]
 
         except Exception as e:
-            self.logger.log(f"配置文件解析错误：{e}", gu.LEVEL_ERROR)
+            logger.error(f"配置文件解析错误：{e}")
             raise e
 
     def save_config(self, post_config: list, namespace: str):

@@ -14,7 +14,10 @@ from cores.database.conn import dbConn
 from model.provider.provider import Provider
 from util import general_utils as gu
 from util.cmd_config import CmdConfig
-from util.general_utils import Logger
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
 
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
@@ -23,7 +26,6 @@ abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 class ProviderOpenAIOfficial(Provider):
     def __init__(self, cfg):
         self.cc = CmdConfig()
-        self.logger = Logger()
 
         self.key_list = []
         # 如果 cfg['key'] 中有长度为 1 的字符串，那么是格式错误，直接报错
@@ -43,7 +45,7 @@ class ProviderOpenAIOfficial(Provider):
         self.api_base = None
         if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
             self.api_base = cfg['api_base']
-            self.logger.log(f"设置 api_base 为: {self.api_base}", tag="OpenAI")
+            logger.info(f"设置 api_base 为: {self.api_base}")
 
         # 创建 OpenAI Client
         self.client = AsyncOpenAI(
@@ -52,8 +54,6 @@ class ProviderOpenAIOfficial(Provider):
         )
 
         self.openai_model_configs: dict = cfg['chatGPTConfigs']
-        self.logger.log(
-            f'加载 OpenAI Chat Configs: {self.openai_model_configs}', tag="OpenAI")
         self.openai_configs = cfg
         # 会话缓存
         self.session_dict = {}
@@ -69,10 +69,9 @@ class ProviderOpenAIOfficial(Provider):
             db1 = dbConn()
             for session in db1.get_all_session():
                 self.session_dict[session[0]] = json.loads(session[1])['data']
-            self.logger.log("读取历史记录成功。", tag="OpenAI")
+            logger.info("读取历史记录成功。")
         except BaseException as e:
-            self.logger.log("读取历史记录失败，但不影响使用。",
-                            level=gu.LEVEL_ERROR, tag="OpenAI")
+            logger.info("读取历史记录失败，但不影响使用。")
 
         # 创建转储定时器线程
         threading.Thread(target=self.dump_history, daemon=True).start()
@@ -143,15 +142,12 @@ class ProviderOpenAIOfficial(Provider):
         if self.openai_model_configs['max_tokens'] < len(_encoded_prompt):
             prompt = self.enc.decode(_encoded_prompt[:int(
                 self.openai_model_configs['max_tokens']*0.80)])
-            self.logger.log(f"注意，有一部分 prompt 文本由于超出 token 限制而被截断。",
-                            level=gu.LEVEL_WARNING, tag="OpenAI")
+            logger.info(f"注意，有一部分 prompt 文本由于超出 token 限制而被截断。")
 
         cache_data_list, new_record, req = self.wrap(
             prompt, session_id, image_url)
-        self.logger.log(f"cache: {str(cache_data_list)}",
-                        level=gu.LEVEL_DEBUG, tag="OpenAI")
-        self.logger.log(f"request: {str(req)}",
-                        level=gu.LEVEL_DEBUG, tag="OpenAI")
+        logger.debug(f"cache: {str(cache_data_list)}")
+        logger.debug(f"request: {str(req)}")
         retry = 0
         response = None
         err = ''
@@ -194,15 +190,15 @@ class ProviderOpenAIOfficial(Provider):
                 if 'Invalid content type. image_url is only supported by certain models.' in str(e):
                     raise e
                 if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(e) or 'No API key provided' in str(e) or 'Incorrect API key provided' in str(e):
-                    self.logger.log("当前 Key 已超额或异常, 正在切换",
-                                    level=gu.LEVEL_WARNING, tag="OpenAI")
+                    logger.info("当前 Key 已超额或异常, 正在切换",
+                                    )
                     self.key_stat[self.client.api_key]['exceed'] = True
                     is_switched = self.handle_switch_key()
                     if not is_switched:
                         raise e
                     retry -= 1
                 elif 'maximum context length' in str(e):
-                    self.logger.log("token 超限, 清空对应缓存，并进行消息截断", tag="OpenAI")
+                    logger.info("token 超限, 清空对应缓存，并进行消息截断")
                     self.session_dict[session_id] = []
                     prompt = prompt[:int(len(prompt)*truncate_rate)]
                     truncate_rate -= 0.05
@@ -213,17 +209,17 @@ class ProviderOpenAIOfficial(Provider):
                     time.sleep(30)
                     continue
                 else:
-                    self.logger.log(str(e), level=gu.LEVEL_ERROR, tag="OpenAI")
+                    logger.error(str(e))
                 time.sleep(2)
                 err = str(e)
                 retry += 1
         if retry >= 10:
-            self.logger.log(
-                r"如果报错, 且您的机器在中国大陆内, 请确保您的电脑已经设置好代理软件(梯子), 并在配置文件设置了系统代理地址。详见 https://github.com/Soulter/QQChannelChatGPT/wiki", tag="OpenAI")
+            logger.warning(
+                r"如果报错, 且您的机器在中国大陆内, 请确保您的电脑已经设置好代理软件(梯子), 并在配置文件设置了系统代理地址。详见 https://github.com/Soulter/QQChannelChatGPT/wiki")
             raise BaseException("连接出错: "+str(err))
         assert isinstance(response, ChatCompletion)
-        self.logger.log(
-            f"OPENAI RESPONSE: {response.usage}", level=gu.LEVEL_DEBUG, tag="OpenAI")
+        logger.debug(
+            f"OPENAI RESPONSE: {response.usage}")
 
         # 结果分类
         choice = response.choices[0]
@@ -288,18 +284,16 @@ class ProviderOpenAIOfficial(Provider):
                     image_url.append(response.data[i].url)
                 break
             except Exception as e:
-                self.logger.log(str(e), level=gu.LEVEL_ERROR)
+                logger.warning(str(e))
                 if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(
                         e) or 'No API key provided' in str(e) or 'Incorrect API key provided' in str(e):
-                    self.logger.log("当前 Key 已超额或者不正常, 正在切换",
-                                    level=gu.LEVEL_WARNING, tag="OpenAI")
+                    logger.warning("当前 Key 已超额或者不正常, 正在切换")
                     self.key_stat[self.client.api_key]['exceed'] = True
                     is_switched = self.handle_switch_key()
                     if not is_switched:
                         raise e
                 elif 'Your request was rejected as a result of our safety system.' in str(e):
-                    self.logger.log("您的请求被 OpenAI 安全系统拒绝, 请稍后再试",
-                                    level=gu.LEVEL_WARNING, tag="OpenAI")
+                    logger.warning("您的请求被 OpenAI 安全系统拒绝, 请稍后再试")
                     raise e
                 else:
                     retry += 1
@@ -378,12 +372,12 @@ class ProviderOpenAIOfficial(Provider):
                 continue
             is_all_exceed = False
             self.client.api_key = key
-            self.logger.log(
-                f"切换到 Key: {key}(已使用 token: {self.key_stat[key]['used']})", level=gu.LEVEL_INFO, tag="OpenAI")
+            logger.warning(
+                f"切换到 Key: {key}(已使用 token: {self.key_stat[key]['used']})")
             break
         if is_all_exceed:
-            self.logger.log(
-                "所有 Key 已超额", level=gu.LEVEL_CRITICAL, tag="OpenAI")
+            logger.warning(
+                "所有 Key 已超额")
             return False
         return True
 

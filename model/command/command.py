@@ -13,7 +13,6 @@ from nakuru.entities.components import (
 from util import general_utils as gu
 from model.provider.provider import Provider
 from util.cmd_config import CmdConfig as cc
-from util.general_utils import Logger
 from cores.astrbot.types import (
     GlobalObject,
     AstrMessageEvent,
@@ -24,6 +23,10 @@ from cores.astrbot.types import (
 )
 
 from typing import List, Tuple
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -35,7 +38,6 @@ class Command:
     def __init__(self, provider: Provider, global_object: GlobalObject = None):
         self.provider = provider
         self.global_object = global_object
-        self.logger: Logger = global_object.logger
 
     async def check_command(self,
                             message,
@@ -85,11 +87,11 @@ class Command:
                     if hit:
                         return True, res
                 except BaseException as e:
-                    self.logger.log(
-                        f"{plugin.metadata.plugin_name} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                    logger.error(
+                        f"{plugin.metadata.plugin_name} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。")
             except BaseException as e:
-                self.logger.log(
-                    f"{plugin.metadata.plugin_name} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。", level=gu.LEVEL_WARNING)
+                logger.error(
+                    f"{plugin.metadata.plugin_name} 插件异常，原因: {str(e)}\n如果你没有相关装插件的想法, 请直接忽略此报错, 不影响其他功能的运行。")
 
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform, role)
@@ -248,7 +250,7 @@ class Command:
             p = gu.create_markdown_image(msg)
             return [Image.fromFileSystem(p),]
         except BaseException as e:
-            self.logger.log(str(e))
+            logger.error(str(e))
             return msg
 
     def command_start_with(self, message: str, *args):

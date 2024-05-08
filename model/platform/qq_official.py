@@ -18,10 +18,12 @@ from ._message_parse import (
 from cores.astrbot.types import MessageType, AstrBotMessage, MessageMember
 from typing import Union, List
 from nakuru.entities.components import BaseMessageComponent
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
 # QQ 机器人官方框架
-
-
 class botClient(Client):
     def set_platform(self, platform: 'QQOfficial'):
         self.platform = platform
@@ -59,7 +61,6 @@ class QQOfficial(Platform):
         self.token = cfg['qqbot']['token']
         self.secret = cfg['qqbot_secret']
         self.unique_session = cfg['uniqueSessionMode']
-        self.logger: gu.Logger = global_object.logger
         qq_group = cfg['qqofficial_enable_group_message']
 
         if qq_group:
@@ -104,8 +105,8 @@ class QQOfficial(Platform):
         is_group = message.type != MessageType.FRIEND_MESSAGE
 
         _t = "/私聊" if not is_group else ""
-        self.logger.log(
-            f"{message.sender.nickname}({message.sender.user_id}{_t}) -> {self.parse_message_outline(message)}", tag="QQ_OFFICIAL")
+        logger.info(
+            f"{message.sender.nickname}({message.sender.user_id}{_t}) -> {self.parse_message_outline(message)}")
 
         # 解析出 session_id
         if self.unique_session or not is_group:
@@ -157,8 +158,8 @@ class QQOfficial(Platform):
             source = message
         assert isinstance(source, (botpy.message.Message,
                           botpy.message.GroupMessage, botpy.message.DirectMessage))
-        self.logger.log(
-            f"{message.sender.nickname}({message.sender.user_id}) <- {self.parse_message_outline(res)}", tag="QQ_OFFICIAL")
+        logger.info(
+            f"{message.sender.nickname}({message.sender.user_id}) <- {self.parse_message_outline(res)}")
 
         plain_text = ''
         image_path = ''

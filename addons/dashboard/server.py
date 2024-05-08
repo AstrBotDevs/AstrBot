@@ -1,13 +1,3 @@
-from flask import Flask, request
-from flask.logging import default_handler
-from werkzeug.serving import make_server
-from util import general_utils as gu
-from dataclasses import dataclass
-import logging
-from cores.database.conn import dbConn
-from util.cmd_config import CmdConfig
-from util.updator import check_update, update_project, request_release_info
-from cores.astrbot.types import *
 import util.plugin_util as putil
 import websockets
 import json
@@ -17,6 +7,18 @@ import os
 import sys
 import time
 
+from flask import Flask, request
+from flask.logging import default_handler
+from werkzeug.serving import make_server
+from util import general_utils as gu
+from dataclasses import dataclass
+from cores.database.conn import dbConn
+from util.cmd_config import CmdConfig
+from util.updator import check_update, update_project, request_release_info
+from cores.astrbot.types import *
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
 @dataclass
 class DashBoardData():
@@ -41,11 +43,8 @@ class AstrBotDashBoard():
         self.dashboard_data: DashBoardData = global_object.dashboard_data
         self.dashboard_be = Flask(
             __name__, static_folder="dist", static_url_path="/")
-        log = logging.getLogger('werkzeug')
-        log.setLevel(logging.ERROR)
         self.funcs = {}
         self.cc = CmdConfig()
-        self.logger = global_object.logger
         self.ws_clients = {}  # remote_ip: ws
         # 启动 websocket 服务器
         self.ws_server = websockets.serve(self.__handle_msg, "0.0.0.0", 6186)
@@ -53,6 +52,22 @@ class AstrBotDashBoard():
         @self.dashboard_be.get("/")
         def index():
             # 返回页面
+            return self.dashboard_be.send_static_file("index.html")
+
+        @self.dashboard_be.get("/config")
+        def rt_config():
+            return self.dashboard_be.send_static_file("index.html")
+
+        @self.dashboard_be.get("/logs")
+        def rt_logs():
+            return self.dashboard_be.send_static_file("index.html")
+        
+        @self.dashboard_be.get("/extension")
+        def rt_extension():
+            return self.dashboard_be.send_static_file("index.html")
+
+        @self.dashboard_be.get("/dashboard/default")
+        def rt_dashboard():
             return self.dashboard_be.send_static_file("index.html")
 
         @self.dashboard_be.post("/api/authenticate")
@@ -179,9 +194,9 @@ class AstrBotDashBoard():
             post_data = request.json
             repo_url = post_data["url"]
             try:
-                self.logger.log(f"正在安装插件 {repo_url}", tag="可视化面板")
+                logger.info(f"正在安装插件 {repo_url}")
                 putil.install_plugin(repo_url, self.dashboard_data.plugins)
-                self.logger.log(f"安装插件 {repo_url} 成功", tag="可视化面板")
+                logger.info(f"安装插件 {repo_url} 成功")
                 return Response(
                     status="success",
                     message="安装成功~",
@@ -199,10 +214,10 @@ class AstrBotDashBoard():
             post_data = request.json
             plugin_name = post_data["name"]
             try:
-                self.logger.log(f"正在卸载插件 {plugin_name}", tag="可视化面板")
+                logger.info(f"正在卸载插件 {plugin_name}")
                 putil.uninstall_plugin(
                     plugin_name, self.dashboard_data.plugins)
-                self.logger.log(f"卸载插件 {plugin_name} 成功", tag="可视化面板")
+                logger.info(f"卸载插件 {plugin_name} 成功")
                 return Response(
                     status="success",
                     message="卸载成功~",
@@ -220,9 +235,9 @@ class AstrBotDashBoard():
             post_data = request.json
             plugin_name = post_data["name"]
             try:
-                self.logger.log(f"正在更新插件 {plugin_name}", tag="可视化面板")
+                logger.info(f"正在更新插件 {plugin_name}")
                 putil.update_plugin(plugin_name, self.dashboard_data.plugins)
-                self.logger.log(f"更新插件 {plugin_name} 成功", tag="可视化面板")
+                logger.info(f"更新插件 {plugin_name} 成功")
                 return Response(
                     status="success",
                     message="更新成功~",
@@ -416,21 +431,29 @@ class AstrBotDashBoard():
             return func
         return decorator
 
+    async def get_log_history(self):
+        try:
+            with open("logs/astrbot-core/astrbot-core.log", "r", encoding="utf-8") as f:
+                return f.readlines()[-100:]
+        except Exception as e:
+            logger.warning(f"读取日志历史失败: {e.__str__()}")
+            return []
+
     async def __handle_msg(self, websocket, path):
         address = websocket.remote_address
-        # self.logger.log(f"和 {address} 建立了 websocket 连接", tag="可视化面板")
         self.ws_clients[address] = websocket
-        data = ''.join(self.logger.history).replace('\n', '\r\n')
+        data = await self.get_log_history()
+        data = ''.join(data).replace('\n', '\r\n')
         await websocket.send(data)
         while True:
             try:
                 msg = await websocket.recv()
             except websockets.exceptions.ConnectionClosedError:
-                # self.logger.log(f"和 {address} 的 websocket 连接已断开", tag="可视化面板")
+                # logger.info(f"和 {address} 的 websocket 连接已断开")
                 del self.ws_clients[address]
                 break
             except Exception as e:
-                # self.logger.log(f"和 {path} 的 websocket 连接发生了错误: {e.__str__()}", tag="可视化面板")
+                # logger.info(f"和 {path} 的 websocket 连接发生了错误: {e.__str__()}")
                 del self.ws_clients[address]
                 break
 
@@ -441,11 +464,12 @@ class AstrBotDashBoard():
 
     def run(self):
         threading.Thread(target=self.run_ws_server, args=(self.loop,)).start()
-        self.logger.log("已启动 websocket 服务器", tag="可视化面板")
+        logger.info("已启动 websocket 服务器")
         ip_address = gu.get_local_ip_addresses()
         ip_str = f"http://{ip_address}:6185\n\thttp://localhost:6185"
-        self.logger.log(
-            f"\n==================\n您可访问:\n\n\t{ip_str}\n\n来登录可视化面板，默认账号密码为空。\n注意: 所有配置项现已全量迁移至 cmd_config.json 文件下，可登录可视化面板在线修改配置。\n==================\n", tag="可视化面板")
+        logger.info(
+            f"\n==================\n您可访问:\n\n\t{ip_str}\n\n来登录可视化面板，默认账号密码为空。\n注意: 所有配置项现已全量迁移至 cmd_config.json 文件下，可登录可视化面板在线修改配置。\n==================\n")
+        
         http_server = make_server(
             '0.0.0.0', 6185, self.dashboard_be, threaded=True)
         http_server.serve_forever()
