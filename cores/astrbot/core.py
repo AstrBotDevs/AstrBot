@@ -262,16 +262,16 @@ def run_gocq_bot(cfg: dict, _global_object: GlobalObject):
     port = cc.get("gocq_websocket_port", 6700)
     http_port = cc.get("gocq_http_port", 5700)
     logger.info(
-        f"正在检查连接...host: {host}, ws port: {port}, http port: {http_port}", tag="QQ")
+        f"正在检查连接...host: {host}, ws port: {port}, http port: {http_port}")
     while True:
         if not gu.port_checker(port=port, host=host) or not gu.port_checker(port=http_port, host=host):
             if not noticed:
                 noticed = True
-                logger.info(
-                    f"连接到{host}:{port}（或{http_port}）失败。程序会每隔 5s 自动重试。", gu.LEVEL_CRITICAL, tag="QQ")
+                logger.warning(
+                    f"连接到{host}:{port}（或{http_port}）失败。程序会每隔 5s 自动重试。")
             time.sleep(5)
         else:
-            logger.info("检查完毕，未发现问题。", tag="QQ")
+            logger.info("已连接到 gocq。")
             break
     try:
         qq_gocq = QQGOCQ(cfg=cfg, message_handler=oper_msg,
