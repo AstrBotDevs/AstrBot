@@ -155,19 +155,7 @@ class ProviderOpenAIOfficial(Provider):
         # 截断倍率
         truncate_rate = 0.75
 
-        use_gpt4v = False
-        for i in req:
-            if isinstance(i['content'], list):
-                use_gpt4v = True
-                break
-        if image_url is not None:
-            use_gpt4v = True
-        if use_gpt4v:
-            conf = self.openai_model_configs.copy()
-            conf['model'] = 'gpt-4-vision-preview'
-        else:
-            conf = self.openai_model_configs
-
+        conf = self.openai_model_configs
         if extra_conf is not None:
             conf.update(extra_conf)
 
