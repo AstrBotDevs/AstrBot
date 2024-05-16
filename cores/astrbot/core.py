@@ -378,8 +378,13 @@ async def oper_msg(message: AstrBotMessage,
     llm_result_str = ""
 
     # check commands and plugins
+    message_str_no_wake_prefix = message_str
+    for wake_prefix in _global_object.nick: # nick: tuple
+        if message_str.startswith(wake_prefix):
+            message_str_no_wake_prefix = message_str.removeprefix(wake_prefix)
+            break
     hit, command_result = await llm_command_instance[chosen_provider].check_command(
-        message_str,
+        message_str_no_wake_prefix,
         session_id,
         role,
         reg_platform,

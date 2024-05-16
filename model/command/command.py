@@ -76,6 +76,7 @@ class Command:
                 else:
                     raise TypeError("插件返回值格式错误。")
                 if hit:
+                    logger.debug("hit plugin: " + plugin.metadata.plugin_name)
                     return True, res
             except TypeError as e:
                 # 参数不匹配，尝试使用旧的参数方案
@@ -199,10 +200,10 @@ class Command:
     nick: 存储机器人的昵称
     '''
 
-    def set_nick(self, message: str, platform: str, role: str = "member"):
+    def set_nick(self, message: str, platform: RegisteredPlatform, role: str = "member"):
         if role != "admin":
             return True, "你无权使用该指令 :P", "nick"
-        if platform == PLATFORM_GOCQ:
+        if str(platform) == PLATFORM_GOCQ:
             l = message.split(" ")
             if len(l) == 1:
                 return True, "【设置机器人昵称】示例：\n支持多昵称\nnick 昵称1 昵称2 昵称3", "nick"
@@ -210,7 +211,7 @@ class Command:
             cc.put("nick_qq", nick)
             self.global_object.nick = tuple(nick)
             return True, f"设置成功！现在你可以叫我这些昵称来提问我啦~", "nick"
-        elif platform == PLATFORM_QQCHAN:
+        elif str(platform) == PLATFORM_QQCHAN:
             nick = message.split(" ")[2]
             return False, "QQ频道平台不支持为机器人设置昵称。", "nick"
 

@@ -95,6 +95,9 @@ class RegisteredPlatform:
     platform_instance: Platform
     origin: str = None  # 注册来源
 
+    def __str__(self) -> str:
+        return self.platform_name
+
 
 @dataclass
 class RegisteredLLM:
@@ -111,7 +114,7 @@ class GlobalObject:
     存放一些公用的数据，用于在不同模块(如core与command)之间传递
     '''
     version: str  # 机器人版本
-    nick: str  # 用户定义的机器人的别名
+    nick: tuple  # 用户定义的机器人的别名
     base_config: dict  # config.json 中导出的配置
     cached_plugins: List[RegisteredPlugin]  # 加载的插件
     platforms: List[RegisteredPlatform]

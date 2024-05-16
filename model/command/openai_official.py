@@ -2,7 +2,10 @@ from model.command.command import Command
 from model.provider.openai_official import ProviderOpenAIOfficial
 from util.personality import personalities
 from cores.astrbot.types import GlobalObject
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
 
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
 class CommandOpenAIOfficial(Command):
     def __init__(self, provider: ProviderOpenAIOfficial, global_object: GlobalObject):
@@ -27,6 +30,8 @@ class CommandOpenAIOfficial(Command):
             platform,
             message_obj
         )
+
+        logger.debug(f"基础指令hit: {hit}, res: {res}")
 
         # 这里是这个 LLM 的专属指令
         if hit:
