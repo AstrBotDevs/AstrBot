@@ -189,7 +189,7 @@ class Command:
                             break
                     if info:
                         p = gu.create_text_image(
-                            f"【插件信息】", f"名称: {info['name']}\n{info['desc']}\n版本: {info['version']}\n作者: {info['author']}\n\n帮助:\n{info['help']}")
+                            f"【插件信息】", f"名称: {info.plugin_name}\n类型: {info.plugin_type}\n{info.desc}\n版本: {info.version}\n作者: {info.author}")
                         return True, [Image.fromFileSystem(p)], "plugin"
                     else:
                         return False, "未找到该插件", "plugin"
