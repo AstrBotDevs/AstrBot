@@ -78,6 +78,12 @@ class ProviderOpenAIOfficial(Provider):
 
         # 人格
         self.curr_personality = {}
+        
+    def make_tmp_client(self, api_key: str, base_url: str):
+        return AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url
+        )
 
     # 转储历史记录
     def dump_history(self):
