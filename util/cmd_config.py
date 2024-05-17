@@ -2,8 +2,7 @@ import os
 import json
 from typing import Union
 
-cpath = "cmd_config.json"
-
+cpath = "data/cmd_config.json"
 
 def check_exist():
     if not os.path.exists(cpath):
@@ -89,8 +88,7 @@ def init_astrbot_config_items():
     # 加载默认配置
     cc = CmdConfig()
     cc.init_attributes("qq_forward_threshold", 200)
-    cc.init_attributes(
-        "qq_welcome", "欢迎加入本群！\n欢迎给https://github.com/Soulter/QQChannelChatGPT项目一个Star😊~\n输入help查看帮助~\n")
+    cc.init_attributes("qq_welcome", "")
     cc.init_attributes("qq_pic_mode", False)
     cc.init_attributes("gocq_host", "127.0.0.1")
     cc.init_attributes("gocq_http_port", 5700)

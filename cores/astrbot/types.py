@@ -6,7 +6,7 @@ from nakuru import (
     GuildMessage,
 )
 from nakuru.entities.components import BaseMessageComponent
-from typing import Union, List, ClassVar
+from typing import Union, List, ClassVar, Callable
 from types import ModuleType
 from enum import Enum
 from dataclasses import dataclass
@@ -167,6 +167,16 @@ class AstrMessageEvent():
         self.role = role
         self.session_id = session_id
 
+@dataclass
+class CommandItem():
+    '''
+    用来描述单个指令
+    '''
+
+    command_name: Union[str, tuple]  # 指令名
+    callback: Callable  # 回调函数
+    description: str  # 描述
+    origin: str  # 注册来源
 
 class CommandResult():
     '''

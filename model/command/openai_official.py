@@ -1,7 +1,7 @@
 from model.command.command import Command
 from model.provider.openai_official import ProviderOpenAIOfficial
 from util.personality import personalities
-from cores.astrbot.types import GlobalObject
+from cores.astrbot.types import GlobalObject, CommandItem
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from openai._exceptions import NotFoundError, RateLimitError, APIError
@@ -13,6 +13,12 @@ class CommandOpenAIOfficial(Command):
         self.provider = provider
         self.global_object = global_object
         self.personality_str = ""
+        self.commands = [
+            CommandItem("reset", self.reset, "重置 LLM 会话。", "内置"),
+            CommandItem("his", self.his, "查看与 LLM 的历史记录。", "内置"),
+            CommandItem("status", self.gpt, "查看 GPT 配置信息和用量状态。", "内置"),
+
+        ]
         super().__init__(provider, global_object)
 
     async def check_command(self,
@@ -41,10 +47,6 @@ class CommandOpenAIOfficial(Command):
             return True, await self.reset(session_id, message)
         elif self.command_start_with(message, "his", "历史"):
             return True, self.his(message, session_id)
-        elif self.command_start_with(message, "token"):
-            return True, self.token(session_id)
-        elif self.command_start_with(message, "gpt"):
-            return True, self.gpt()
         elif self.command_start_with(message, "status"):
             return True, self.status()
         elif self.command_start_with(message, "help", "帮助"):
@@ -125,16 +127,6 @@ class CommandOpenAIOfficial(Command):
         p = self.provider.get_prompts_by_cache_list(
             self.provider.session_dict[session_id], divide=True, paging=True, size=size_per_page, page=page)
         return True, f"历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页", "his"
-
-    def token(self, session_id: str):
-        if self.provider is None:
-            return False, "未启用 OpenAI 官方 API", "token"
-        return True, f"会话的token数: {self.provider.get_user_usage_tokens(self.provider.session_dict[session_id])}\n系统最大缓存token数: {self.provider.max_tokens}", "token"
-
-    def gpt(self):
-        if self.provider is None:
-            return False, "未启用 OpenAI 官方 API", "gpt"
-        return True, f"OpenAI GPT配置:\n {self.provider.chatGPT_configs}", "gpt"
 
     def status(self):
         if self.provider is None:

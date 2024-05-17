@@ -391,15 +391,19 @@ def create_markdown_image(text: str):
         raise e
 
 
-def try_migrate_config(old_config: dict):
+def try_migrate_config():
     '''
-    迁移配置文件到 cmd_config.json    
+    将 cmd_config.json 迁移至 data/cmd_config.json
     '''
-    cc = CmdConfig()
-    if cc.get("qqbot", None) is None:
-        # 未迁移过
-        for k in old_config:
-            cc.put(k, old_config[k])
+    if os.path.exists("cmd_config.json"):
+        with open("cmd_config.json", "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        with open("data/cmd_config.json", "w", encoding="utf-8-sig") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        try:
+            os.remove("cmd_config.json")
+        except Exception as e:
+            pass
 
 
 def get_local_ip_addresses():
