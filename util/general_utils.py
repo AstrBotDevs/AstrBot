@@ -1,18 +1,22 @@
-import datetime
 import time
 import socket
-from PIL import Image, ImageDraw, ImageFont
 import os
 import re
 import requests
-from util.cmd_config import CmdConfig
+import aiohttp
 import socket
-from cores.astrbot.types import GlobalObject
 import platform
-import logging
 import json
 import sys
 import psutil
+
+from PIL import Image, ImageDraw, ImageFont
+from cores.astrbot.types import GlobalObject
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
+
 
 def port_checker(port: int, host: str = "localhost"):
     sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -355,9 +359,22 @@ def save_temp_img(img: Image) -> str:
 
     # 获得时间戳
     timestamp = int(time.time())
-    p = f"temp/{timestamp}.png"
+    p = f"temp/{timestamp}.jpg"
     img.save(p)
     return p
+
+async def download_image_by_url(url: str) -> str:
+    '''
+    下载图片
+    '''
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                img = Image.open(await resp.read())
+                p = save_temp_img(img)
+                return p
+    except Exception as e:
+        raise e
 
 
 def create_text_image(title: str, text: str, max_width=30, font_size=20):
@@ -454,6 +471,21 @@ def upload(_global_object: GlobalObject):
         except BaseException as e:
             pass
         time.sleep(10*60)
+
+def retry(n: int = 3):
+    '''
+    重试装饰器
+    '''
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            for i in range(n):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if i == n-1: raise e
+                    logger.warning(f"函数 {func.__name__} 第 {i+1} 次重试... {e}")
+        return wrapper
+    return decorator
 
 
 def run_monitor(global_object: GlobalObject):

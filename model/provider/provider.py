@@ -3,7 +3,7 @@ class Provider:
                         prompt: str,
                         session_id: str,
                         image_url: None,
-                        function_call: None,
+                        tools: None,
                         extra_conf: dict = None,
                         default_personality: dict = None,
                         **kwargs) -> str:
@@ -14,7 +14,7 @@ class Provider:
 
         [optional]
         image_url: 图片url（识图）
-        function_call: 函数调用
+        tools: 函数调用工具
         extra_conf: 额外配置
         default_personality: 默认人格
         '''

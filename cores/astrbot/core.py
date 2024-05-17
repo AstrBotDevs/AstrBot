@@ -84,7 +84,7 @@ def init(cfg):
     global _global_object
 
     # 迁移旧配置
-    gu.try_migrate_config(cfg)
+    gu.try_migrate_config()
     # 使用新配置
     cfg = cc.get_all()
 
@@ -105,6 +105,15 @@ def init(cfg):
             cc.put("reply_prefix", "")
         else:
             _global_object.reply_prefix = cfg['reply_prefix']
+    
+    default_personality_str = cc.get("default_personality_str", "")
+    if default_personality_str == "":
+        _global_object.default_personality = None
+    else:
+        _global_object.default_personality = {
+            "name": "default",
+            "prompt": default_personality_str,
+        }
 
     # 语言模型提供商
     logger.info("正在载入语言模型...")
@@ -121,6 +130,10 @@ def init(cfg):
             _global_object.llms.append(RegisteredLLM(
                 llm_name=OPENAI_OFFICIAL, llm_instance=llm_instance[OPENAI_OFFICIAL], origin="internal"))
             chosen_provider = OPENAI_OFFICIAL
+
+            instance = llm_instance[OPENAI_OFFICIAL]
+            assert isinstance(instance, ProviderOpenAIOfficial)
+            instance.personality_set(_global_object.default_personality, session_id=None)
 
     # 检查provider设置偏好
     p = cc.get("chosen_provider", None)
@@ -197,14 +210,6 @@ def init(cfg):
             cfg, _global_object), daemon=True).start()
         platform_str += "QQ_OFFICIAL,"
 
-    default_personality_str = cc.get("default_personality_str", "")
-    if default_personality_str == "":
-        _global_object.default_personality = None
-    else:
-        _global_object.default_personality = {
-            "name": "default",
-            "prompt": default_personality_str,
-        }
     # 初始化dashboard
     _global_object.dashboard_data = DashBoardData(
         stats={},
@@ -430,12 +435,12 @@ async def oper_msg(message: AstrBotMessage,
                     official_fc = chosen_provider == OPENAI_OFFICIAL
                     llm_result_str = await gplugin.web_search(message_str, llm_instance[chosen_provider], session_id, official_fc)
                 else:
-                    llm_result_str = await llm_instance[chosen_provider].text_chat(message_str, session_id, image_url, default_personality=_global_object.default_personality)
+                    llm_result_str = await llm_instance[chosen_provider].text_chat(message_str, session_id, image_url)
 
             llm_result_str = _global_object.reply_prefix + llm_result_str
         except BaseException as e:
-            logger.info(f"调用异常：{traceback.format_exc()}")
-            return MessageResult(f"调用语言模型例程时出现异常。原因: {str(e)}")
+            logger.error(f"调用异常：{traceback.format_exc()}")
+            return MessageResult(f"调用异常。详细原因：{str(e)}")
 
     # 切换回原来的语言模型
     if temp_switch != "":
@@ -458,14 +463,10 @@ async def oper_msg(message: AstrBotMessage,
             return MessageResult(f"指令调用错误: \n{str(command_result[1])}")
 
         # 画图指令
-        if isinstance(command_result[1], list) and len(command_result) == 3 and command == 'draw':
-            for i in command_result[1]:
-                # 保存到本地
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(i) as resp:
-                        if resp.status == 200:
-                            image = PILImage.open(io.BytesIO(await resp.read()))
-                            return MessageResult([Image.fromFileSystem(gu.save_temp_img(image))])
+        if command == 'draw':
+            # 保存到本地
+            path = await gu.download_image_by_url(command_result[1])
+            return MessageResult([Image.fromFileSystem(path)])
         # 其他指令
         else:
             try:

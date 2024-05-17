@@ -16,8 +16,7 @@ class CommandOpenAIOfficial(Command):
         self.commands = [
             CommandItem("reset", self.reset, "重置 LLM 会话。", "内置"),
             CommandItem("his", self.his, "查看与 LLM 的历史记录。", "内置"),
-            CommandItem("status", self.gpt, "查看 GPT 配置信息和用量状态。", "内置"),
-
+            CommandItem("status", self.status, "查看 GPT 配置信息和用量状态。", "内置"),
         ]
         super().__init__(provider, global_object)
 
@@ -59,8 +58,6 @@ class CommandOpenAIOfficial(Command):
             return True, self.update(message, role)
         elif self.command_start_with(message, "画", "draw"):
             return True, await self.draw(message)
-        elif self.command_start_with(message, "key"):
-            return True, self.key(message)
         elif self.command_start_with(message, "switch"):
             return True, await self.switch(message)
         elif self.command_start_with(message, "models"):
@@ -87,12 +84,13 @@ class CommandOpenAIOfficial(Command):
 
     async def help(self):
         commands = super().general_commands()
-        commands['画'] = '画画'
-        commands['key'] = '添加OpenAI key'
+        commands['画'] = '调用 OpenAI DallE 模型生成图片'
         commands['set'] = '人格设置面板'
-        commands['gpt'] = '查看gpt配置信息'
-        commands['status'] = '查看key使用状态'
-        commands['token'] = '查看本轮会话token'
+        commands['status'] = '查看 Api Key 状态和配置信息'
+        commands['token'] = '查看本轮会话 token'
+        commands['reset'] = '重置当前与 LLM 的会话'
+        commands['reset p'] = '重置当前与 LLM 的会话，但保留人格（system prompt）'
+        
         return True, await super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"
 
     async def reset(self, session_id: str, message: str = "reset"):
@@ -103,66 +101,34 @@ class CommandOpenAIOfficial(Command):
             await self.provider.forget(session_id)
             return True, "重置成功", "reset"
         if len(l) == 2 and l[1] == "p":
-            self.provider.forget(session_id)
-            if self.personality_str != "":
-                self.set(self.personality_str, session_id)  # 重新设置人格
-            return True, "重置成功", "reset"
+            await self.provider.forget(session_id, keep_system_prompt=True)
 
     def his(self, message: str, session_id: str):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "his"
-        # 分页，每页5条
-        msg = ''
         size_per_page = 3
         page = 1
-        if message[4:]:
-            page = int(message[4:])
-        # 检查是否有过历史记录
-        if session_id not in self.provider.session_dict:
-            msg = f"历史记录为空"
-            return True, msg, "his"
-        l = self.provider.session_dict[session_id]
-        max_page = len(l)//size_per_page + \
-            1 if len(l) % size_per_page != 0 else len(l)//size_per_page
-        p = self.provider.get_prompts_by_cache_list(
-            self.provider.session_dict[session_id], divide=True, paging=True, size=size_per_page, page=page)
-        return True, f"历史记录如下：\n{p}\n第{page}页 | 共{max_page}页\n*输入/his 2跳转到第2页", "his"
+        l = message.split(" ")
+        if len(l) == 2:
+            try:
+                page = int(l[1])
+            except BaseException as e:
+                return True, "页码不合法", "his"
+        contexts, total_num = self.provider.dump_contexts_page(size_per_page, page=page)
+        t_pages = total_num // size_per_page + 1
+        return True, f"历史记录如下：\n{contexts}\n第 {page} 页 | 共 {t_pages} 页\n*输入 /his 2 跳转到第 2 页", "his"
 
     def status(self):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "status"
-        chatgpt_cfg_str = ""
-        key_stat = self.provider.get_key_stat()
-        index = 1
-        max = 9000000
-        gg_count = 0
-        total = 0
-        tag = ''
-        for key in key_stat.keys():
-            sponsor = ''
-            total += key_stat[key]['used']
-            if key_stat[key]['exceed']:
-                gg_count += 1
-                continue
-            if 'sponsor' in key_stat[key]:
-                sponsor = key_stat[key]['sponsor']
-            chatgpt_cfg_str += f"  |-{index}: {key[-8:]} {key_stat[key]['used']}/{max} {sponsor}{tag}\n"
-            index += 1
-        return True, f"⭐使用情况({str(gg_count)}个已用):\n{chatgpt_cfg_str}", "status"
+        keys_data = self.provider.get_keys_data()
+        ret = "OpenAI Key"
+        for k in keys_data:
+            status = "🟢" if keys_data[k]['status'] == 0 else "🔴"
+            ret += "\n|- " + k[:8] + " " + status
 
-    def key(self, message: str):
-        if self.provider is None:
-            return False, "未启用 OpenAI 官方 API", "reset"
-        l = message.split(" ")
-        if len(l) == 1:
-            msg = "感谢您赞助key，key为官方API使用，请以以下格式赞助:\n/key xxxxx"
-            return True, msg, "key"
-        key = l[1]
-        if self.provider.check_key(key):
-            self.provider.append_key(key)
-            return True, f"*★,°*:.☆(￣▽￣)/$:*.°★* 。\n该Key被验证为有效。感谢你的赞助~"
-        else:
-            return True, "该Key被验证为无效。也许是输入错误了，或者重试。", "key"
+        conf = self.provider.get_configs()
+        ret += "\n当前模型：" + conf['model']
 
     async def switch(self, message: str):
         '''
@@ -179,14 +145,13 @@ class CommandOpenAIOfficial(Command):
             return True, ret, "switch"
         elif len(l) == 2:
             try:
-                key_stat = self.provider.get_key_stat()
+                key_stat = self.provider.get_keys_data()
                 index = int(l[1])
                 if index > len(key_stat) or index < 1:
                     return True, "账号序号不合法。", "switch"
                 else:
                     try:
                         new_key = list(key_stat.keys())[index-1]
-                        ret = await self.provider.check_key(new_key)
                         self.provider.set_key(new_key)
                     except BaseException as e:
                         return True, "账号切换失败，原因: " + str(e), "switch"
@@ -235,58 +200,22 @@ class CommandOpenAIOfficial(Command):
                     'name': ps,
                     'prompt': personalities[ps]
                 }
-                self.provider.session_dict[session_id] = []
-                new_record = {
-                    "user": {
-                        "role": "user",
-                        "content": personalities[ps],
-                    },
-                    "AI": {
-                        "role": "assistant",
-                        "content": "好的，接下来我会扮演这个角色。"
-                    },
-                    'type': "personality",
-                    'usage_tokens': 0,
-                    'single-tokens': 0
-                }
-                self.provider.session_dict[session_id].append(new_record)
-                self.personality_str = message
+                self.provider.personality_set(ps, session_id)
                 return True, f"人格{ps}已设置。", "set"
             else:
                 self.provider.curr_personality = {
                     'name': '自定义人格',
                     'prompt': ps
                 }
-                new_record = {
-                    "user": {
-                        "role": "user",
-                        "content": ps,
-                    },
-                    "AI": {
-                        "role": "assistant",
-                        "content": "好的，接下来我会扮演这个角色。"
-                    },
-                    'type': "personality",
-                    'usage_tokens': 0,
-                    'single-tokens': 0
-                }
-                self.provider.session_dict[session_id] = []
-                self.provider.session_dict[session_id].append(new_record)
-                self.personality_str = message
+                self.provider.personality_set(ps, session_id)
                 return True, f"自定义人格已设置。 \n人格信息: {ps}", "set"
 
-    async def draw(self, message):
+    async def draw(self, message: str):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "draw"
         if message.startswith("/画"):
             message = message[2:]
         elif message.startswith("画"):
             message = message[1:]
-        try:
-            # 画图模式传回3个参数
-            img_url = await self.provider.image_chat(message)
-            return True, img_url, "draw"
-        except Exception as e:
-            if 'exceeded' in str(e):
-                return f"OpenAI API错误。原因：\n{str(e)} \n超额了。可自己搭建一个机器人(Github仓库：QQChannelChatGPT)"
-            return False, f"图片生成失败: {e}", "draw"
+        img_url = await self.provider.image_generate(message)
+        return True, img_url, "draw"

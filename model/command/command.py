@@ -223,8 +223,6 @@ class Command:
             "nick": "设置机器人昵称",
             "plugin": "插件安装、卸载和重载",
             "web on/off": "LLM 网页搜索能力",
-            "reset": "重置 LLM 对话",
-            "/gpt": "切换到 OpenAI 官方接口"
         }
 
     async def help_messager(self, commands: dict, platform: str, cached_plugins: List[RegisteredPlugin] = None):
