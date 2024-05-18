@@ -1,5 +1,5 @@
 from model.command.command import Command
-from model.provider.openai_official import ProviderOpenAIOfficial
+from model.provider.openai_official import ProviderOpenAIOfficial, MODELS
 from util.personality import personalities
 from cores.astrbot.types import GlobalObject, CommandItem
 from SparkleLogging.utils.core import LogManager
@@ -47,7 +47,7 @@ class CommandOpenAIOfficial(Command):
         elif self.command_start_with(message, "his", "历史"):
             return True, self.his(message, session_id)
         elif self.command_start_with(message, "status"):
-            return True, self.status()
+            return True, self.status(session_id)
         elif self.command_start_with(message, "help", "帮助"):
             return True, await self.help()
         elif self.command_start_with(message, "unset"):
@@ -61,11 +61,12 @@ class CommandOpenAIOfficial(Command):
         elif self.command_start_with(message, "switch"):
             return True, await self.switch(message)
         elif self.command_start_with(message, "models"):
-            return True, await self.get_models()
+            return True, await self.print_models()
+        elif self.command_start_with(message, "model"):
+            return True, await self.set_model(message)
         return False, None
     
     async def get_models(self):
-        ret = "OpenAI GPT 类可用模型"
         try:
             models = await self.provider.client.models.list()
         except NotFoundError as e:
@@ -73,23 +74,49 @@ class CommandOpenAIOfficial(Command):
             self.provider.client.base_url = bu + "/v1"
             models = await self.provider.client.models.list()
         finally:
-            print(models.data)
-            i = 1
-            for model in models.data:
-                if str(model.id).startswith("gpt"):
-                    ret += f"\n{i}. {model.id}"
-                    i += 1
-            logger.debug(ret)
+            return filter(lambda x: x.id.startswith("gpt"), models.data)
+
+    async def print_models(self):
+        models = await self.get_models()
+        i = 1
+        ret = "OpenAI GPT 类可用模型"
+        for model in models:
+            ret += f"\n{i}. {model.id}"
+            i += 1
+        logger.debug(ret)
         return True, ret, "models"
 
+    
+    async def set_model(self, message: str):
+        l = message.split(" ")
+        if len(l) == 1:
+            return True, "请输入 /model 模型名/编号", "model"
+        model = str(l[1])
+        models = await self.get_models()
+        models = list(models)
+        if model.isdigit() and int(model) <= len(models) and int(model) >= 1:
+            model = models[int(model)-1]
+        else:
+            f = False
+            for m in models:
+                if model == m.id:
+                    f = True
+                    break
+            if not f:
+                return True, "模型不存在或输入非法", "model"
+
+        self.provider.set_model(model.id)
+        return True, f"模型已设置为 {model.id}", "model"
+    
+        
     async def help(self):
         commands = super().general_commands()
         commands['画'] = '调用 OpenAI DallE 模型生成图片'
         commands['set'] = '人格设置面板'
         commands['status'] = '查看 Api Key 状态和配置信息'
         commands['token'] = '查看本轮会话 token'
-        commands['reset'] = '重置当前与 LLM 的会话'
-        commands['reset p'] = '重置当前与 LLM 的会话，但保留人格（system prompt）'
+        commands['reset'] = '重置当前与 LLM 的会话，但保留人格（system prompt）'
+        commands['reset p'] = '重置当前与 LLM 的会话，并清除人格。'
         
         return True, await super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"
 
@@ -98,10 +125,10 @@ class CommandOpenAIOfficial(Command):
             return False, "未启用 OpenAI 官方 API", "reset"
         l = message.split(" ")
         if len(l) == 1:
-            await self.provider.forget(session_id)
+            await self.provider.forget(session_id, keep_system_prompt=True)
             return True, "重置成功", "reset"
         if len(l) == 2 and l[1] == "p":
-            await self.provider.forget(session_id, keep_system_prompt=True)
+            await self.provider.forget(session_id)
 
     def his(self, message: str, session_id: str):
         if self.provider is None:
@@ -114,21 +141,28 @@ class CommandOpenAIOfficial(Command):
                 page = int(l[1])
             except BaseException as e:
                 return True, "页码不合法", "his"
-        contexts, total_num = self.provider.dump_contexts_page(size_per_page, page=page)
+        contexts, total_num = self.provider.dump_contexts_page(session_id, size_per_page, page=page)
         t_pages = total_num // size_per_page + 1
         return True, f"历史记录如下：\n{contexts}\n第 {page} 页 | 共 {t_pages} 页\n*输入 /his 2 跳转到第 2 页", "his"
 
-    def status(self):
+    def status(self, session_id: str):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "status"
         keys_data = self.provider.get_keys_data()
         ret = "OpenAI Key"
         for k in keys_data:
-            status = "🟢" if keys_data[k]['status'] == 0 else "🔴"
+            status = "🟢" if keys_data[k] else "🔴"
             ret += "\n|- " + k[:8] + " " + status
 
         conf = self.provider.get_configs()
         ret += "\n当前模型：" + conf['model']
+        if conf['model'] in MODELS:
+            ret += "\n最大上下文窗口：" + str(MODELS[conf['model']]) + " tokens"
+
+        if session_id in self.provider.session_memory and len(self.provider.session_memory[session_id]):
+            ret += "\n你的会话上下文：" + str(self.provider.session_memory[session_id][-1]['usage_tokens']) + " tokens"
+
+        return True, ret, "status"
 
     async def switch(self, message: str):
         '''

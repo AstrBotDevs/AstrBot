@@ -133,6 +133,7 @@ def init(cfg):
 
             instance = llm_instance[OPENAI_OFFICIAL]
             assert isinstance(instance, ProviderOpenAIOfficial)
+            instance.DEFAULT_PERSONALITY = _global_object.default_personality
             instance.personality_set(_global_object.default_personality, session_id=None)
 
     # 检查provider设置偏好

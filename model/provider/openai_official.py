@@ -78,11 +78,12 @@ class ProviderOpenAIOfficial(Provider):
         self.session_memory_lock = threading.Lock()
         self.max_tokens = self.model_configs['max_tokens'] # 上下文窗口大小
         self.tokenizer = tiktoken.get_encoding("cl100k_base") # todo: 根据 model 切换分词器
-        self.curr_personality = {
+        self.DEFAULT_PERSONALITY = {
             "name": "default",
             "prompt": "你是一个很有帮助的 AI 助手。"
         }
-
+        self.curr_personality = self.DEFAULT_PERSONALITY
+        self.session_personality = {} # 记录了某个session是否已设置人格。
         # 从 SQLite DB 读取历史记录
         try:
             db1 = dbConn()
@@ -121,13 +122,13 @@ class ProviderOpenAIOfficial(Provider):
     
     def personality_set(self, default_personality: dict, session_id: str):
         if not default_personality: return
-        if session_id not in self.session_memory: self.session_memory[session_id] = []
         self.curr_personality = default_personality
+        self.session_personality = {} # 重置
         encoded_prompt = self.tokenizer.encode(default_personality['prompt'])
         tokens_num = len(encoded_prompt)
         model = self.model_configs['model']
-        if model in MODELS and tokens_num > MODELS[model] - 800:
-            default_personality['prompt'] = self.tokenizer.decode(encoded_prompt[:MODELS[model] - 800])
+        if model in MODELS and tokens_num > MODELS[model] - 500:
+            default_personality['prompt'] = self.tokenizer.decode(encoded_prompt[:MODELS[model] - 500])
 
         new_record = {
             "user": {
@@ -160,13 +161,23 @@ class ProviderOpenAIOfficial(Provider):
         
         # 转换为 openai 要求的格式
         context = []
+        is_lvm = await self.is_lvm()
         for record in self.session_memory[session_id]:
             if "user" in record and record['user']:
+                if not is_lvm and "content" in record['user'] and isinstance(record['user']['content'], list):
+                    logger.warn(f"由于当前模型 {self.model_configs['model']}不支持视觉，将忽略上下文中的图片输入。如果一直弹出此警告，可以尝试 reset 指令。")
+                    continue
                 context.append(record['user'])
             if "AI" in record and record['AI']:
                 context.append(record['AI'])
 
         return context
+
+    async def is_lvm(self):
+        '''
+        是否是 LVM
+        '''
+        return self.model_configs['model'].startswith("gpt-4")
     
     async def get_models(self):
         '''
@@ -201,7 +212,9 @@ class ProviderOpenAIOfficial(Provider):
                     },
                     {
                         "type": "image_url",
-                        "url": await self.encode_image_bs64(image_url)
+                        "image_url": {
+                            "url": await self.encode_image_bs64(image_url)
+                        }
                     }
                 ]
             }
@@ -249,7 +262,14 @@ class ProviderOpenAIOfficial(Provider):
         for i in range(len(self.session_memory[session_id])):
             # 检查是否是 system prompt
             if not pop_system_prompt and self.session_memory[session_id][i]['user']['role'] == "system":
-                continue
+                # 如果只有一个 system prompt，才不删掉
+                f = False
+                for j in range(i+1, len(self.session_memory[session_id])):
+                    if self.session_memory[session_id][j]['user']['role'] == "system":
+                        f = True
+                        break
+                if not f:
+                    continue
             record = self.session_memory[session_id].pop(i)
             break
 
@@ -274,7 +294,10 @@ class ProviderOpenAIOfficial(Provider):
 
         if session_id not in self.session_memory:
             self.session_memory[session_id] = []
+
+        if session_id not in self.session_personality or not self.session_personality[session_id]:
             self.personality_set(self.curr_personality, session_id)
+            self.session_personality[session_id] = True
         
         # 如果 prompt 超过了最大窗口，截断。
         # 1. 可以保证之后 pop 的时候不会出现问题
@@ -321,9 +344,13 @@ class ProviderOpenAIOfficial(Provider):
                 ok = await self.switch_to_next_key()
                 if ok: continue
                 else: raise Exception("所有 OpenAI API Key 目前都不可用。")
-
+            except BadRequestError as e:
+                logger.warn(f"OpenAI 请求异常：{e}。")
+                if "image_url is only supported by certain models." in str(e):
+                    raise Exception(f"当前模型 { self.model_configs['model'] } 不支持图片输入，请更换模型。")
+                retry += 1
             except RateLimitError as e:
-                if "You exceeded your current quota" in e:
+                if "You exceeded your current quota" in str(e):
                     self.keys_data[self.chosen_api_key] = False
                     ok = await self.switch_to_next_key()
                     if ok: continue
@@ -417,25 +444,41 @@ class ProviderOpenAIOfficial(Provider):
         self.session_memory[session_id] = []
         if keep_system_prompt:
             self.personality_set(self.curr_personality, session_id)
+        else:
+            self.curr_personality = self.DEFAULT_PERSONALITY
         return True
     
-    def dump_contexts_page(self, size=5, page=1):
+    def dump_contexts_page(self, session_id: str, size=5, page=1,):
         '''
         获取缓存的会话
         '''
+        # contexts_str = ""
+        # for i, key in enumerate(self.session_memory):
+        #     if i < (page-1)*size or i >= page*size:
+        #         continue
+        #     contexts_str += f"Session ID: {key}\n"
+        #     for record in self.session_memory[key]:
+        #         if "user" in record:
+        #             contexts_str += f"User: {record['user']['content']}\n"
+        #         if "AI" in record:
+        #             contexts_str += f"AI: {record['AI']['content']}\n"
+        #     contexts_str += "---\n"
         contexts_str = ""
-        for i, key in enumerate(self.session_memory):
-            if i < (page-1)*size or i >= page*size:
-                continue
-            contexts_str += f"Session ID: {key}\n"
-            for record in self.session_memory[key]:
-                if "user" in record:
-                    contexts_str += f"User: {record['user']['content']}\n"
-                if "AI" in record:
-                    contexts_str += f"AI: {record['AI']['content']}\n"
-            contexts_str += "---\n"
+        if session_id in self.session_memory:
+            for record in self.session_memory[session_id]:
+                if "user" in record and record['user']:
+                    text = record['user']['content'][:100] + "..." if len(record['user']['content']) > 100 else record['user']['content']
+                    contexts_str += f"User: {text}\n"
+                if "AI" in record and record['AI']:
+                    text = record['AI']['content'][:100] + "..." if len(record['AI']['content']) > 100 else record['AI']['content']
+                    contexts_str += f"Assistant: {text}\n"
+        else:
+            contexts_str = "会话 ID 不存在。"
 
-        return contexts_str, len(self.session_memory)
+        return contexts_str, len(self.session_memory[session_id])
+
+    def set_model(self, model: str):
+        self.model_configs['model'] = model
     
     def get_configs(self):
         return self.model_configs

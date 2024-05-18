@@ -360,7 +360,13 @@ def save_temp_img(img: Image) -> str:
     # 获得时间戳
     timestamp = int(time.time())
     p = f"temp/{timestamp}.jpg"
-    img.save(p)
+
+    if isinstance(img, Image.Image):
+        img.save(p)
+    else:
+        with open(p, "wb") as f:
+            f.write(img)
+    logger.info(f"保存临时图片: {p}")
     return p
 
 async def download_image_by_url(url: str) -> str:
@@ -368,11 +374,10 @@ async def download_image_by_url(url: str) -> str:
     下载图片
     '''
     try:
+        logger.info(f"下载图片: {url}")
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
-                img = Image.open(await resp.read())
-                p = save_temp_img(img)
-                return p
+                return save_temp_img(await resp.read())
     except Exception as e:
         raise e
 

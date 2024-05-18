@@ -5,6 +5,8 @@ import botpy.message
 import re
 import asyncio
 import aiohttp
+import botpy.types
+import botpy.types.message
 from util import general_utils as gu
 
 from botpy.types.message import Reference
