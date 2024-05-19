@@ -112,7 +112,7 @@ def update_project(update_data: list,
             # 更新到最新版本对应的commit
             try:
                 repo.git.fetch()
-                repo.git.checkout(update_data[0]['tag_name'])
+                repo.git.checkout(update_data[0]['tag_name'], "-f")
                 if reboot: _reboot()
             except BaseException as e:
                 raise e
@@ -124,7 +124,7 @@ def update_project(update_data: list,
             if data['tag_name'] == version:
                 try:
                     repo.git.fetch()
-                    repo.git.checkout(data['tag_name'])
+                    repo.git.checkout(data['tag_name'], "-f")
                     flag = True
                     if reboot: _reboot()
                 except BaseException as e:
@@ -136,7 +136,7 @@ def checkout_branch(branch_name: str):
     repo = find_repo()
     try:
         repo.git.fetch()
-        repo.git.checkout(branch_name)
+        repo.git.checkout(branch_name, "-f")
         repo.git.pull("origin", branch_name, "-f")
         return True
     except BaseException as e:
