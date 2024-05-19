@@ -3,24 +3,18 @@
 '''
 import os
 import inspect
+import shutil
+import stat
+import traceback
+
 try:
-    import git.exc
     from git.repo import Repo
 except ImportError:
     pass
-import shutil
-import importlib
-import stat
-import traceback
 from types import ModuleType
-from typing import List
 from pip._internal import main as pipmain
-from cores.astrbot.types import (
-    PluginMetadata,
-    PluginType,
-    RegisteredPlugin,
-    RegisteredPlugins
-)
+from type.plugin import *
+from type.register import *
 
 
 # 找出模块里所有的类名

@@ -5,7 +5,7 @@ from nakuru import (
     FriendMessage
 )
 import botpy.message
-from cores.astrbot.types import MessageType, AstrBotMessage, MessageMember
+from type.message import *
 from typing import List, Union
 import time
 

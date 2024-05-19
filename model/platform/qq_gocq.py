@@ -15,7 +15,7 @@ import time
 
 from ._platfrom import Platform
 from ._message_parse import nakuru_message_parse_rev
-from cores.astrbot.types import MessageType, AstrBotMessage, MessageMember
+from type.message import *
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 

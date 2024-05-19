@@ -5,6 +5,8 @@ import botpy.message
 import re
 import asyncio
 import aiohttp
+import botpy.types
+import botpy.types.message
 from util import general_utils as gu
 
 from botpy.types.message import Reference
@@ -15,7 +17,7 @@ from ._message_parse import (
     qq_official_message_parse_rev,
     qq_official_message_parse
 )
-from cores.astrbot.types import MessageType, AstrBotMessage, MessageMember
+from type.message import *
 from typing import Union, List
 from nakuru.entities.components import BaseMessageComponent
 from SparkleLogging.utils.core import LogManager

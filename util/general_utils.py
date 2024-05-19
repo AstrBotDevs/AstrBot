@@ -1,18 +1,23 @@
-import datetime
 import time
 import socket
-from PIL import Image, ImageDraw, ImageFont
 import os
 import re
 import requests
-from util.cmd_config import CmdConfig
+import aiohttp
 import socket
-from cores.astrbot.types import GlobalObject
 import platform
-import logging
 import json
 import sys
 import psutil
+import ssl
+
+from PIL import Image, ImageDraw, ImageFont
+from type.types import GlobalObject
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
+
 
 def port_checker(port: int, host: str = "localhost"):
     sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -355,9 +360,35 @@ def save_temp_img(img: Image) -> str:
 
     # 获得时间戳
     timestamp = int(time.time())
-    p = f"temp/{timestamp}.png"
-    img.save(p)
+    p = f"temp/{timestamp}.jpg"
+
+    if isinstance(img, Image.Image):
+        img.save(p)
+    else:
+        with open(p, "wb") as f:
+            f.write(img)
+    logger.info(f"保存临时图片: {p}")
     return p
+
+async def download_image_by_url(url: str) -> str:
+    '''
+    下载图片
+    '''
+    try:
+        logger.info(f"下载图片: {url}")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                return save_temp_img(await resp.read())
+    except aiohttp.client_exceptions.ClientConnectorSSLError as e:
+        # 关闭SSL验证
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        async with aiohttp.ClientSession(trust_env=False) as session:
+            async with session.get(url, ssl=ssl_context) as resp:
+                return save_temp_img(await resp.read())
+    except Exception as e:
+        raise e
 
 
 def create_text_image(title: str, text: str, max_width=30, font_size=20):
@@ -391,15 +422,19 @@ def create_markdown_image(text: str):
         raise e
 
 
-def try_migrate_config(old_config: dict):
+def try_migrate_config():
     '''
-    迁移配置文件到 cmd_config.json    
+    将 cmd_config.json 迁移至 data/cmd_config.json
     '''
-    cc = CmdConfig()
-    if cc.get("qqbot", None) is None:
-        # 未迁移过
-        for k in old_config:
-            cc.put(k, old_config[k])
+    if os.path.exists("cmd_config.json"):
+        with open("cmd_config.json", "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        with open("data/cmd_config.json", "w", encoding="utf-8-sig") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        try:
+            os.remove("cmd_config.json")
+        except Exception as e:
+            pass
 
 
 def get_local_ip_addresses():
@@ -450,6 +485,21 @@ def upload(_global_object: GlobalObject):
         except BaseException as e:
             pass
         time.sleep(10*60)
+
+def retry(n: int = 3):
+    '''
+    重试装饰器
+    '''
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            for i in range(n):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if i == n-1: raise e
+                    logger.warning(f"函数 {func.__name__} 第 {i+1} 次重试... {e}")
+        return wrapper
+    return decorator
 
 
 def run_monitor(global_object: GlobalObject):

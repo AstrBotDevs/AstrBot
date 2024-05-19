@@ -1,5 +1,6 @@
-from cores.astrbot.core import oper_msg
-from cores.astrbot.types import AstrMessageEvent, CommandResult
+from astrbot.core import oper_msg
+from type.message import AstrMessageEvent, AstrBotMessage
+from type.command import CommandResult
 from model.platform._message_result import MessageResult
 
 '''

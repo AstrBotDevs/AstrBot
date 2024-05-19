@@ -13,16 +13,13 @@ from nakuru.entities.components import (
 from util import general_utils as gu
 from model.provider.provider import Provider
 from util.cmd_config import CmdConfig as cc
-from cores.astrbot.types import (
-    GlobalObject,
-    AstrMessageEvent,
-    PluginType,
-    CommandResult,
-    RegisteredPlugin,
-    RegisteredPlatform
-)
+from type.message import *
+from type.types import GlobalObject
+from type.command import *
+from type.plugin import *
+from type.register import *
 
-from typing import List, Tuple
+from typing import List
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 
@@ -223,8 +220,6 @@ class Command:
             "nick": "设置机器人昵称",
             "plugin": "插件安装、卸载和重载",
             "web on/off": "LLM 网页搜索能力",
-            "reset": "重置 LLM 对话",
-            "/gpt": "切换到 OpenAI 官方接口"
         }
 
     async def help_messager(self, commands: dict, platform: str, cached_plugins: List[RegisteredPlugin] = None):
