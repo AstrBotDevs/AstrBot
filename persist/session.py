@@ -1,13 +1,16 @@
 import sqlite3
-import yaml
+import os
+import shutil
 import time
 from typing import Tuple
 
 
 class dbConn():
     def __init__(self):
-        # 读取参数,并支持中文
-        conn = sqlite3.connect("data.db")
+        db_path = "data/data.db"
+        if os.path.exists("data.db"):
+            shutil.copy("data.db", db_path)
+        conn = sqlite3.connect(db_path)
         conn.text_factory = str
         self.conn = conn
         c = conn.cursor()
