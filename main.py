@@ -27,6 +27,7 @@ def make_necessary_dirs():
     os.makedirs("temp", exist_ok=True)
 
 def main():
+    
     logger = LogManager.GetLogger(
         log_name='astrbot-core',
         out_to_console=True,
@@ -35,15 +36,25 @@ def main():
         custom_formatter=Formatter('[%(asctime)s| %(name)s - %(levelname)s|%(filename)s:%(lineno)d]: %(message)s', datefmt="%H:%M:%S")
     )
     logger.info(logo_tmpl)
-    # config.yaml 配置文件加载和环境确认
+
+    # 设置代理
+    from util.cmd_config import CmdConfig
+    cc = CmdConfig()
+    http_proxy = cc.get("http_proxy")
+    https_proxy = cc.get("https_proxy")
+    logger.info(f"使用代理: {http_proxy}, {https_proxy}")
+    if http_proxy:
+        os.environ['HTTP_PROXY'] = http_proxy
+    if https_proxy:
+        os.environ['HTTPS_PROXY'] = https_proxy
+    os.environ['NO_PROXY'] = 'https://api.sgroup.qq.com'
+
     try:
-        import botpy, logging, yaml
+        import botpy, logging
         import astrbot.core as bot_core
         # delete qqbotpy's logger
         for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
-        ymlfile = open(abs_path+"configs/config.yaml", 'r', encoding='utf-8')
-        cfg = yaml.safe_load(ymlfile)
+            logging.root.removeHandler(handler)        
     except ImportError as import_error:
         logger.error(import_error)
         logger.error("检测到一些依赖库没有安装。由于兼容性问题，AstrBot 此版本将不会自动为您安装依赖库。请您先自行安装，然后重试。")
@@ -63,17 +74,10 @@ def main():
         input("未知错误。")
         exit()
 
-    # 设置代理
-    if 'http_proxy' in cfg and cfg['http_proxy'] != '':
-        os.environ['HTTP_PROXY'] = cfg['http_proxy']
-    if 'https_proxy' in cfg and cfg['https_proxy'] != '':
-        os.environ['HTTPS_PROXY'] = cfg['https_proxy']
-    os.environ['NO_PROXY'] = 'https://api.sgroup.qq.com'
-
     make_necessary_dirs()
 
     # 启动主程序（cores/qqbot/core.py）
-    bot_core.init(cfg)
+    bot_core.init()
 
 
 def check_env():

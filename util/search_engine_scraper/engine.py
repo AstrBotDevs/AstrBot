@@ -42,11 +42,11 @@ class SearchEngine():
         if data:
             async with ClientSession() as session:
                 async with session.post(url, headers=headers, data=data, timeout=self.TIMEOUT) as resp:
-                    return await resp.text()
+                    return await resp.text(encoding="utf-8")
         else:
             async with ClientSession() as session:
                 async with session.get(url, headers=headers, timeout=self.TIMEOUT) as resp:
-                    return await resp.text()
+                    return await resp.text(encoding="utf-8")
                 
     
     def tidy_text(self, text: str) -> str:

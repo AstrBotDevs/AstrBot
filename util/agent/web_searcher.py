@@ -51,13 +51,23 @@ async def search_from_bing(keyword: str) -> str:
     tools, 从 bing 搜索引擎搜索
     '''
     logger.info("web_searcher - search_from_bing: " + keyword)
-    results = await google.search(keyword, 5)
+    results = []
+    try:
+        results = await google.search(keyword, 5)
+    except BaseException as e:
+        logger.error(f"google search error: {e}, try the next one...")
     if len(results) == 0:
         logger.debug("search google failed")
-        results = await bing_search.search(keyword, 5)
+        try:
+            results = await bing_search.search(keyword, 5)
+        except BaseException as e:
+            logger.error(f"bing search error: {e}, try the next one...")
     if len(results) == 0:
         logger.debug("search bing failed")
-        results = await sogo_search.search(keyword, 5)
+        try:
+            results = await sogo_search.search(keyword, 5)
+        except BaseException as e:
+            logger.error(f"sogo search error: {e}")
     if len(results) == 0:
         logger.debug("search sogo failed")
         return "没有搜索到结果"
@@ -65,7 +75,10 @@ async def search_from_bing(keyword: str) -> str:
     idx = 1
     for i in results:
         logger.info(f"web_searcher - scraping web: {i.title} - {i.url}")
-        site_result = await fetch_website_content(i.url)
+        try:
+            site_result = await fetch_website_content(i.url)
+        except:
+            site_result = ""
         site_result = site_result[:600] + "..." if len(site_result) > 600 else site_result
         ret += f"{idx}. {i.title}\n{site_result}\n\n"
         idx += 1
@@ -76,8 +89,8 @@ async def fetch_website_content(url):
     header = HEADERS
     header.update({'User-Agent': random.choice(USER_AGENTS)})
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=HEADERS, timeout=3) as response:
-            html = await response.text()
+        async with session.get(url, headers=HEADERS, timeout=6) as response:
+            html = await response.text(encoding="utf-8")
             doc = Document(html)
             ret = doc.summary(html_partial=True)
             soup = BeautifulSoup(ret, 'html.parser')

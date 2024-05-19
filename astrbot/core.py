@@ -76,7 +76,7 @@ def privider_chooser(cfg):
 '''
 
 
-def init(cfg):
+def init():
     global llm_instance, llm_command_instance
     global baidu_judge, chosen_provider
     global frequency_count, frequency_time

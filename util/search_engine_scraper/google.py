@@ -18,9 +18,10 @@ class Google(SearchEngine):
     async def search(self, query: str, num_results: int) -> List[SearchResult]:
         results = []
         try:
+            print("use proxy:", self.proxy)
             ls = search(query, advanced=True, num_results=num_results, timeout=3, proxy=self.proxy)
             for i in ls:
                 results.append(SearchResult(title=i.title, url=i.url, snippet=i.description))
-        except:
-            pass
+        except Exception as e:
+            raise e
         return results
