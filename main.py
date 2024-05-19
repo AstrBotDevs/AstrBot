@@ -23,32 +23,23 @@ logo_tmpl = """
 """
 
 def make_necessary_dirs():
+    '''
+    创建必要的目录。
+    '''
     os.makedirs("data/config", exist_ok=True)
     os.makedirs("temp", exist_ok=True)
 
-def main():
+def update_dept():
+    '''
+    更新依赖库。
+    '''
+    # 获取 Python 可执行文件路径
+    py = sys.executable
+    # 更新依赖库
+    mirror = "https://mirrors.aliyun.com/pypi/simple/"
+    os.system(f"{py} -m pip install -r requirements.txt -i {mirror}")
     
-    logger = LogManager.GetLogger(
-        log_name='astrbot-core',
-        out_to_console=True,
-        # HTTPpost_url='http://localhost:6185/api/log',
-        # http_mode = True,
-        custom_formatter=Formatter('[%(asctime)s| %(name)s - %(levelname)s|%(filename)s:%(lineno)d]: %(message)s', datefmt="%H:%M:%S")
-    )
-    logger.info(logo_tmpl)
-
-    # 设置代理
-    from util.cmd_config import CmdConfig
-    cc = CmdConfig()
-    http_proxy = cc.get("http_proxy")
-    https_proxy = cc.get("https_proxy")
-    logger.info(f"使用代理: {http_proxy}, {https_proxy}")
-    if http_proxy:
-        os.environ['HTTP_PROXY'] = http_proxy
-    if https_proxy:
-        os.environ['HTTPS_PROXY'] = https_proxy
-    os.environ['NO_PROXY'] = 'https://api.sgroup.qq.com'
-
+def main():
     try:
         import botpy, logging
         import astrbot.core as bot_core
@@ -87,6 +78,26 @@ def check_env():
         exit()
 
 if __name__ == "__main__":
+    logger = LogManager.GetLogger(
+    log_name='astrbot-core',
+        out_to_console=True,
+        custom_formatter=Formatter('[%(asctime)s| %(name)s - %(levelname)s|%(filename)s:%(lineno)d]: %(message)s', datefmt="%H:%M:%S")
+    )
+    logger.info(logo_tmpl)
+    
+    # 设置代理
+    from util.cmd_config import CmdConfig
+    cc = CmdConfig()
+    http_proxy = cc.get("http_proxy")
+    https_proxy = cc.get("https_proxy")
+    logger.info(f"使用代理: {http_proxy}, {https_proxy}")
+    if http_proxy:
+        os.environ['HTTP_PROXY'] = http_proxy
+    if https_proxy:
+        os.environ['HTTPS_PROXY'] = https_proxy
+    os.environ['NO_PROXY'] = 'https://api.sgroup.qq.com'
+
+    update_dept()
     check_env()
     t = threading.Thread(target=main, daemon=True)
     t.start()

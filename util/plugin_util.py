@@ -1,7 +1,7 @@
 '''
 插件工具函数
 '''
-import os
+import os, sys
 import inspect
 import shutil
 import stat
@@ -12,9 +12,13 @@ try:
 except ImportError:
     pass
 from types import ModuleType
-from pip._internal import main as pipmain
 from type.plugin import *
 from type.register import *
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
+
 
 
 # 找出模块里所有的类名
@@ -56,29 +60,35 @@ def get_modules(path):
 
 
 def get_plugin_store_path():
-    if os.path.exists("addons/plugins"):
-        return "addons/plugins"
-    elif os.path.exists("QQChannelChatGPT/addons/plugins"):
-        return "QQChannelChatGPT/addons/plugins"
-    elif os.path.exists("AstrBot/addons/plugins"):
-        return "AstrBot/addons/plugins"
-    else:
-        raise FileNotFoundError("插件文件夹不存在。")
-
+    plugin_dir = os.path.abspath(os.path.join(os.path.abspath(__file__), "../../addons/plugins"))
+    return plugin_dir
 
 def get_plugin_modules():
     plugins = []
     try:
-        if os.path.exists("addons/plugins"):
-            plugins = get_modules("addons/plugins")
+        plugin_dir = get_plugin_store_path()
+        if os.path.exists(plugin_dir):
+            plugins = get_modules(plugin_dir)
             return plugins
-        elif os.path.exists("QQChannelChatGPT/addons/plugins"):
-            plugins = get_modules("QQChannelChatGPT/addons/plugins")
-            return plugins
-        else:
-            return None
     except BaseException as e:
         raise e
+    
+def check_plugin_dept_update(cached_plugins: RegisteredPlugins, target_plugin: str = None):
+    plugin_dir = get_plugin_store_path()
+    if not os.path.exists(plugin_dir):
+        return False
+    to_update = []
+    if target_plugin:
+        to_update.append(target_plugin)
+    else:
+        for p in cached_plugins:
+            to_update.append(p.root_dir_name)
+    for p in to_update:
+        plugin_path = os.path.join(plugin_dir, p)
+        if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
+            pth = os.path.join(plugin_path, "requirements.txt")
+            logger.info(f"正在检查更新插件 {p} 的依赖: {pth}")
+            update_plugin_dept(os.path.join(plugin_path, "requirements.txt"))
 
 
 def plugin_reload(cached_plugins: RegisteredPlugins):
@@ -96,6 +106,8 @@ def plugin_reload(cached_plugins: RegisteredPlugins):
             p = plugin['module']
             module_path = plugin['module_path']
             root_dir_name = plugin['pname']
+
+            check_plugin_dept_update(cached_plugins, root_dir_name)
 
             module = __import__("addons.plugins." +
                                     root_dir_name + "." + p, fromlist=[p])
@@ -144,6 +156,11 @@ def plugin_reload(cached_plugins: RegisteredPlugins):
         return True, None
     else:
         return False, fail_rec
+    
+def update_plugin_dept(path):
+    mirror = "https://mirrors.aliyun.com/pypi/simple/"
+    py = sys.executable
+    os.system(f"{py} -m pip install -r {path} -i {mirror} --quiet")
 
 
 def install_plugin(repo_url: str, cached_plugins: RegisteredPlugins):
@@ -155,15 +172,12 @@ def install_plugin(repo_url: str, cached_plugins: RegisteredPlugins):
     d = repo_url.split("/")[-1]
     # 转换非法字符：-
     d = d.replace("-", "_")
+    d = d.lower() # 转换为小写
     # 创建文件夹
     plugin_path = os.path.join(ppath, d)
     if os.path.exists(plugin_path):
         remove_dir(plugin_path)
     Repo.clone_from(repo_url, to_path=plugin_path, branch='master')
-    # 读取插件的requirements.txt
-    if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-        if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt"), '--quiet']) != 0:
-            raise Exception("插件的依赖安装失败, 需要您手动 pip 安装对应插件的依赖。")
     ok, err = plugin_reload(cached_plugins)
     if not ok:
         raise Exception(err)
@@ -198,11 +212,6 @@ def update_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
     plugin_path = os.path.join(ppath, root_dir_name)
     repo = Repo(path=plugin_path)
     repo.remotes.origin.pull()
-    # 读取插件的requirements.txt
-    if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-        print("正在安装插件依赖...")
-        if pipmain(['install', '-r', os.path.join(plugin_path, "requirements.txt")]) != 0:
-            raise Exception("插件依赖安装失败, 需要您手动pip安装对应插件的依赖。")
     ok, err = plugin_reload(cached_plugins)
     if not ok:
         raise Exception(err)
