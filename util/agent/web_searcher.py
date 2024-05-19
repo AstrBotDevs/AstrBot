@@ -3,6 +3,7 @@ import random
 import json
 import asyncio
 import aiohttp
+import os
 
 from readability import Document
 from bs4 import BeautifulSoup
@@ -22,6 +23,7 @@ logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 bing_search = Bing()
 sogo_search = Sogo()
 google = Google()
+proxy = os.environ.get("HTTPS_PROXY", None)
 
 def tidy_text(text: str) -> str:
     '''
@@ -80,7 +82,7 @@ async def search_from_bing(keyword: str) -> str:
         except:
             site_result = ""
         site_result = site_result[:600] + "..." if len(site_result) > 600 else site_result
-        ret += f"{idx}. {i.title}\n{site_result}\n\n"
+        ret += f"{idx}. {i.title} \n{i.snippet}\n{site_result}\n\n"
         idx += 1
     return ret
 
@@ -89,7 +91,7 @@ async def fetch_website_content(url):
     header = HEADERS
     header.update({'User-Agent': random.choice(USER_AGENTS)})
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=HEADERS, timeout=6) as response:
+        async with session.get(url, headers=HEADERS, timeout=6, proxy=proxy) as response:
             html = await response.text(encoding="utf-8")
             doc = Document(html)
             ret = doc.summary(html_partial=True)
