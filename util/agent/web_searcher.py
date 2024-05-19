@@ -53,10 +53,13 @@ async def search_from_bing(keyword: str) -> str:
     logger.info("web_searcher - search_from_bing: " + keyword)
     results = await google.search(keyword, 5)
     if len(results) == 0:
+        logger.debug("search google failed")
         results = await bing_search.search(keyword, 5)
     if len(results) == 0:
+        logger.debug("search bing failed")
         results = await sogo_search.search(keyword, 5)
     if len(results) == 0:
+        logger.debug("search sogo failed")
         return "没有搜索到结果"
     ret = ""
     idx = 1

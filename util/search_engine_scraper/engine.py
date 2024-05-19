@@ -39,7 +39,6 @@ class SearchEngine():
         headers = self.headers
         headers["Referer"] = url
         headers["User-Agent"] = random.choice(USER_AGENTS)
-        print(headers)
         if data:
             async with ClientSession() as session:
                 async with session.post(url, headers=headers, data=data, timeout=self.TIMEOUT) as resp:
