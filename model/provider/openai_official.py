@@ -12,7 +12,7 @@ from openai.types.images_response import ImagesResponse
 from openai.types.chat.chat_completion import ChatCompletion
 from openai._exceptions import *
 
-from cores.database.conn import dbConn
+from persist.session import dbConn
 from model.provider.provider import Provider
 from util import general_utils as gu
 from util.cmd_config import CmdConfig
@@ -122,6 +122,8 @@ class ProviderOpenAIOfficial(Provider):
     
     def personality_set(self, default_personality: dict, session_id: str):
         if not default_personality: return
+        if session_id not in self.session_memory:
+            self.session_memory[session_id] = []
         self.curr_personality = default_personality
         self.session_personality = {} # 重置
         encoded_prompt = self.tokenizer.encode(default_personality['prompt'])
@@ -282,7 +284,7 @@ class ProviderOpenAIOfficial(Provider):
     async def text_chat(self, 
                         prompt: str, 
                         session_id: str, 
-                        image_url: None, 
+                        image_url: None=None, 
                         tools: None=None, 
                         extra_conf: Dict = None,
                         **kwargs

@@ -1,10 +1,11 @@
 from model.command.command import Command
 from model.provider.openai_official import ProviderOpenAIOfficial, MODELS
 from util.personality import personalities
-from cores.astrbot.types import GlobalObject, CommandItem
+from type.types import GlobalObject
+from type.command import CommandItem
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
-from openai._exceptions import NotFoundError, RateLimitError, APIError
+from openai._exceptions import NotFoundError
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 

@@ -38,7 +38,7 @@ def main():
     # config.yaml 配置文件加载和环境确认
     try:
         import botpy, logging, yaml
-        import cores.astrbot.core as qqBot
+        import astrbot.core as bot_core
         # delete qqbotpy's logger
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
@@ -59,7 +59,9 @@ def main():
         input("配置文件不存在，请检查是否已经下载配置文件。")
         exit()
     except BaseException as e:
-        raise e
+        logger.error(traceback.format_exc())
+        input("未知错误。")
+        exit()
 
     # 设置代理
     if 'http_proxy' in cfg and cfg['http_proxy'] != '':
@@ -71,7 +73,7 @@ def main():
     make_necessary_dirs()
 
     # 启动主程序（cores/qqbot/core.py）
-    qqBot.init(cfg)
+    bot_core.init(cfg)
 
 
 def check_env():

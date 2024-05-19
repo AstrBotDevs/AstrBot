@@ -12,10 +12,11 @@ from flask.logging import default_handler
 from werkzeug.serving import make_server
 from util import general_utils as gu
 from dataclasses import dataclass
-from cores.database.conn import dbConn
+from persist.session import dbConn
+from type.register import RegisteredPlugin
+from typing import List
 from util.cmd_config import CmdConfig
 from util.updator import check_update, update_project, request_release_info
-from cores.astrbot.types import *
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 logger: Logger = LogManager.GetLogger(log_name='astrbot-core')

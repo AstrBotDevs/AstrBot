@@ -2,8 +2,8 @@ class Provider:
     async def text_chat(self,
                         prompt: str,
                         session_id: str,
-                        image_url: None,
-                        tools: None,
+                        image_url: None = None,
+                        tools: None = None,
                         extra_conf: dict = None,
                         default_personality: dict = None,
                         **kwargs) -> str:

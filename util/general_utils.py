@@ -9,9 +9,10 @@ import platform
 import json
 import sys
 import psutil
+import ssl
 
 from PIL import Image, ImageDraw, ImageFont
-from cores.astrbot.types import GlobalObject
+from type.types import GlobalObject
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 
@@ -377,6 +378,14 @@ async def download_image_by_url(url: str) -> str:
         logger.info(f"下载图片: {url}")
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
+                return save_temp_img(await resp.read())
+    except aiohttp.client_exceptions.ClientConnectorSSLError as e:
+        # 关闭SSL验证
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        async with aiohttp.ClientSession(trust_env=False) as session:
+            async with session.get(url, ssl=ssl_context) as resp:
                 return save_temp_img(await resp.read())
     except Exception as e:
         raise e

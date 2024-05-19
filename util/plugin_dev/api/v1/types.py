@@ -2,4 +2,4 @@
 插件类型
 '''
 
-from cores.astrbot.types import PluginType
+from type.plugin import PluginType

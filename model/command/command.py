@@ -13,16 +13,13 @@ from nakuru.entities.components import (
 from util import general_utils as gu
 from model.provider.provider import Provider
 from util.cmd_config import CmdConfig as cc
-from cores.astrbot.types import (
-    GlobalObject,
-    AstrMessageEvent,
-    PluginType,
-    CommandResult,
-    RegisteredPlugin,
-    RegisteredPlatform
-)
+from type.message import *
+from type.types import GlobalObject
+from type.command import *
+from type.plugin import *
+from type.register import *
 
-from typing import List, Tuple
+from typing import List
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 
