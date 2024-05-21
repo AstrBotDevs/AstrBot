@@ -390,13 +390,13 @@ class AstrBotDashBoard():
                     },
                     {
                         "title": "QQ_OFFICIAL",
-                        "desc": "QQ官方API，仅支持频道",
+                        "desc": "QQ官方API。支持频道、群（需获得群权限）",
                         "namespace": "internal_platform_qq_official",
                         "tag": ""
                     },
                     {
-                        "title": "OneBot协议",
-                        "desc": "支持cq-http、shamrock等（目前仅支持QQ平台）",
+                        "title": "go-cqhttp",
+                        "desc": "第三方 QQ 协议实现。支持频道、群",
                         "namespace": "internal_platform_qq_gocq",
                         "tag": ""
                     }

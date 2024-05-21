@@ -119,14 +119,14 @@ class DashBoardHelper():
             )
             qq_gocq_platform_group = DashBoardConfig(
                 config_type="group",
-                name="OneBot协议平台配置",
+                name="go-cqhttp",
                 description="",
                 body=[
                     DashBoardConfig(
                         config_type="item",
                         val_type="bool",
                         name="启用",
-                        description="支持cq-http、shamrock等（目前仅支持QQ平台）",
+                        description="",
                         value=config['gocqbot']['enable'],
                         path="gocqbot.enable",
                     ),
