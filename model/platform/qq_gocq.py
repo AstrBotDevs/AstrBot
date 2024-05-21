@@ -11,6 +11,7 @@ from nakuru import (
     Notify
 )
 from typing import Union
+from type.types import GlobalObject
 import time
 
 from ._platfrom import Platform
@@ -29,7 +30,7 @@ class FakeSource:
 
 
 class QQGOCQ(Platform):
-    def __init__(self, cfg: dict, message_handler: callable, global_object) -> None:
+    def __init__(self, cfg: dict, message_handler: callable, global_object: GlobalObject) -> None:
         super().__init__(message_handler)
 
         self.loop = asyncio.new_event_loop()
@@ -38,14 +39,8 @@ class QQGOCQ(Platform):
         self.waiting = {}
         self.cc = CmdConfig()
         self.cfg = cfg
-
-        try:
-            self.nick_qq = cfg['nick_qq']
-        except:
-            self.nick_qq = ["ai", "!", "！"]
-        nick_qq = self.nick_qq
-        if isinstance(nick_qq, str):
-            nick_qq = [nick_qq]
+        
+        self.context = global_object
 
         self.unique_session = cfg['uniqueSessionMode']
         self.pic_mode = cfg['qq_pic_mode']
@@ -132,8 +127,8 @@ class QQGOCQ(Platform):
                     if message.type.value == "GroupMessage":
                         if str(i.qq) == str(message.self_id):
                             resp = True
-                elif isinstance(i, Plain):
-                    for nick in self.nick_qq:
+                elif isinstance(i, Plain) and self.context.nick:
+                    for nick in self.context.nick:
                         if nick != '' and i.text.strip().startswith(nick):
                             resp = True
                             break

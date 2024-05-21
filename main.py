@@ -4,7 +4,6 @@ import sys
 import warnings
 import traceback
 import threading
-from SparkleLogging.utils.core import LogManager
 from logging import Formatter, Logger
 
 warnings.filterwarnings("ignore")
@@ -78,19 +77,12 @@ def check_env():
         exit()
 
 if __name__ == "__main__":
-    logger = LogManager.GetLogger(
-    log_name='astrbot-core',
-        out_to_console=True,
-        custom_formatter=Formatter('[%(asctime)s| %(name)s - %(levelname)s|%(filename)s:%(lineno)d]: %(message)s', datefmt="%H:%M:%S")
-    )
-    logger.info(logo_tmpl)
     
     # 设置代理
     from util.cmd_config import CmdConfig
     cc = CmdConfig()
     http_proxy = cc.get("http_proxy")
     https_proxy = cc.get("https_proxy")
-    logger.info(f"使用代理: {http_proxy}, {https_proxy}")
     if http_proxy:
         os.environ['HTTP_PROXY'] = http_proxy
     if https_proxy:
@@ -98,6 +90,16 @@ if __name__ == "__main__":
     os.environ['NO_PROXY'] = 'https://api.sgroup.qq.com'
 
     update_dept()
+    
+    from SparkleLogging.utils.core import LogManager
+    logger = LogManager.GetLogger(
+    log_name='astrbot-core',
+        out_to_console=True,
+        custom_formatter=Formatter('[%(asctime)s| %(name)s - %(levelname)s|%(filename)s:%(lineno)d]: %(message)s', datefmt="%H:%M:%S")
+    )
+    logger.info(logo_tmpl)
+    logger.info(f"使用代理: {http_proxy}, {https_proxy}")
+    
     check_env()
     t = threading.Thread(target=main, daemon=True)
     t.start()
