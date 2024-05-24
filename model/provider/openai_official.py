@@ -415,7 +415,7 @@ class ProviderOpenAIOfficial(Provider):
 
         return False
     
-    async def image_generate(self, prompt, session_id, **kwargs) -> str:
+    async def image_generate(self, prompt: str, session_id: str = None, **kwargs) -> str:
         '''
         生成图片
         '''

@@ -217,7 +217,7 @@ class Command:
             "help": "帮助",
             "keyword": "设置关键词/关键指令回复",
             "update": "更新项目",
-            "nick": "设置机器人昵称",
+            "nick": "设置机器人唤醒词",
             "plugin": "插件安装、卸载和重载",
             "web on/off": "LLM 网页搜索能力",
         }

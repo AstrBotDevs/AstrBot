@@ -248,9 +248,6 @@ class CommandOpenAIOfficial(Command):
     async def draw(self, message: str):
         if self.provider is None:
             return False, "未启用 OpenAI 官方 API", "draw"
-        if message.startswith("/画"):
-            message = message[2:]
-        elif message.startswith("画"):
-            message = message[1:]
+        message = message.removeprefix("/").removeprefix("画")
         img_url = await self.provider.image_generate(message)
         return True, img_url, "draw"
