@@ -18,7 +18,7 @@ class CommandResult():
     用于在Command中返回多个值
     '''
 
-    def __init__(self, hit: bool, success: bool, message_chain: list, command_name: str = "unknown_command") -> None:
+    def __init__(self, hit: bool, success: bool = False, message_chain: list = [], command_name: str = "unknown_command") -> None:
         self.hit = hit
         self.success = success
         self.message_chain = message_chain

@@ -64,6 +64,8 @@ class Command:
                     result = await plugin.plugin_instance.run(ame)
                 else:
                     result = await asyncio.to_thread(plugin.plugin_instance.run, ame)
+                if not result:
+                    continue
                 if isinstance(result, CommandResult):
                     hit = result.hit
                     res = result._result_tuple()
