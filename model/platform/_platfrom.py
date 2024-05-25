@@ -14,34 +14,40 @@ class Platform():
         初始化平台的各种接口
         '''
         self.message_handler = message_handler
+        self.cnt_receive = 0
+        self.cnt_reply = 0
         pass
 
     @abc.abstractmethod
-    async def handle_msg():
+    async def handle_msg(self):
         '''
         处理到来的消息
         '''
+        self.cnt_receive += 1
         pass
 
     @abc.abstractmethod
-    async def reply_msg():
+    async def reply_msg(self):
         '''
         回复消息（被动发送）
         '''
+        self.cnt_reply += 1
         pass
 
     @abc.abstractmethod
-    async def send_msg(target: Union[GuildMessage, GroupMessage, FriendMessage, str], message: Union[str, list]):
+    async def send_msg(self, target: Union[GuildMessage, GroupMessage, FriendMessage, str], message: Union[str, list]):
         '''
         发送消息（主动发送）
         '''
+        self.cnt_reply += 1
         pass
 
     @abc.abstractmethod
-    async def send(target: Union[GuildMessage, GroupMessage, FriendMessage, str], message: Union[str, list]):
+    async def send(self, target: Union[GuildMessage, GroupMessage, FriendMessage, str], message: Union[str, list]):
         '''
         发送消息（主动发送）同 send_msg()
         '''
+        self.cnt_reply += 1
         pass
 
     def parse_message_outline(self, message: Union[GuildMessage, GroupMessage, FriendMessage, str, list]) -> str:

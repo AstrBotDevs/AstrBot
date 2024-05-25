@@ -22,6 +22,7 @@ from util.cmd_config import init_astrbot_config_items
 from type.types import GlobalObject
 from type.register import *
 from type.message import AstrBotMessage
+from type.config import *
 from addons.dashboard.helper import DashBoardHelper
 from addons.dashboard.server import DashBoardData
 from persist.session import dbConn
@@ -37,9 +38,6 @@ user_frequency = {}
 frequency_time = 60
 # 计数默认值
 frequency_count = 10
-
-# 版本
-version = '3.1.13'
 
 # 语言模型
 OPENAI_OFFICIAL = 'openai_official'
@@ -61,8 +59,6 @@ init_astrbot_config_items()
 # 全局对象
 _global_object: GlobalObject = None
 
-# 语言模型选择
-
 
 def privider_chooser(cfg):
     l = []
@@ -70,13 +66,10 @@ def privider_chooser(cfg):
         l.append('openai_official')
     return l
 
-
-'''
-初始化机器人
-'''
-
-
 def init():
+    '''
+    初始化机器人
+    '''
     global llm_instance, llm_command_instance
     global baidu_judge, chosen_provider
     global frequency_count, frequency_time
@@ -92,9 +85,9 @@ def init():
 
     # 初始化 global_object
     _global_object = GlobalObject()
-    _global_object.version = version
+    _global_object.version = VERSION
     _global_object.base_config = cfg
-    logger.info("AstrBot v"+version)
+    logger.info("AstrBot v" + VERSION)
 
     if 'reply_prefix' in cfg:
         # 适配旧版配置
@@ -319,7 +312,6 @@ async def record_message(platform: str, session_id: str):
     db_inst.increment_stat_session(platform, session_id, 1)
     db_inst.increment_stat_message(curr_ts, 1)
     db_inst.increment_stat_platform(curr_ts, platform, 1)
-    _global_object.cnt_total += 1
 
 
 async def oper_msg(message: AstrBotMessage,

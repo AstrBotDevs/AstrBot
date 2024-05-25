@@ -73,6 +73,7 @@ class Command:
                 else:
                     raise TypeError("插件返回值格式错误。")
                 if hit:
+                    plugin.trig()
                     logger.debug("hit plugin: " + plugin.metadata.plugin_name)
                     return True, res
             except TypeError as e:

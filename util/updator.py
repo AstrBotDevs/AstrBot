@@ -6,6 +6,7 @@ except BaseException as e:
     has_git = False
 import sys, os
 import requests
+from type.config import VERSION
 
 def _reboot():
     py = sys.executable
@@ -78,11 +79,11 @@ def check_update() -> str:
     print(f"当前版本: {curr_commit}")
     print(f"最新版本: {new_commit}")
     if curr_commit.startswith(new_commit):
-        return "当前已经是最新版本。"
+        return f"当前已经是最新版本: v{VERSION}"
     else:
         update_info = f"""有新版本可用。
 === 当前版本 ===
-{curr_commit}
+v{VERSION}
 
 === 新版本 ===
 {update_data[0]['version']}
