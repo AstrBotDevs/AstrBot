@@ -106,11 +106,13 @@ class CommandOpenAIOfficial(Command):
     async def help(self):
         commands = super().general_commands()
         commands['画'] = '调用 OpenAI DallE 模型生成图片'
-        commands['set'] = '人格设置面板'
-        commands['status'] = '查看 Api Key 状态和配置信息'
-        commands['token'] = '查看本轮会话 token'
-        commands['reset'] = '重置当前与 LLM 的会话，但保留人格（system prompt）'
-        commands['reset p'] = '重置当前与 LLM 的会话，并清除人格。'
+        commands['/set'] = '人格设置面板'
+        commands['/status'] = '查看 Api Key 状态和配置信息'
+        commands['/token'] = '查看本轮会话 token'
+        commands['/reset'] = '重置当前与 LLM 的会话，但保留人格（system prompt）'
+        commands['/reset p'] = '重置当前与 LLM 的会话，并清除人格。'
+        commands['/models'] = '获取当前可用的模型'
+        commands['/model'] = '更换模型'
         
         return True, await super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"
 
