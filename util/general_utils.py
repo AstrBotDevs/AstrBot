@@ -470,6 +470,7 @@ def upload(_global_object: GlobalObject):
     '''
     上传相关非敏感统计数据
     '''
+    time.sleep(10)
     while True:
         platform_stats = {}
         llm_stats = {}
@@ -481,8 +482,9 @@ def upload(_global_object: GlobalObject):
             }
             
         for llm in _global_object.llms:
-            for k, v in llm.llm_instance.model_stat:
-                llm_stats[llm.llm_name + "_" + k] = v
+            stat = llm.llm_instance.model_stat
+            for k in stat:
+                llm_stats[llm.llm_name + "#" + k] = stat[k]
             llm.llm_instance.reset_model_stat()
             
         for plugin in _global_object.cached_plugins:

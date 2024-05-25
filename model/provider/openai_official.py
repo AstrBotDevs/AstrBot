@@ -73,6 +73,7 @@ class ProviderOpenAIOfficial(Provider):
             base_url=self.base_url
         )
         self.model_configs: Dict = cfg['chatGPTConfigs']
+        super().set_curr_model(self.model_configs['model'])
         self.image_generator_model_configs: Dict = self.cc.get('openai_image_generate', None)
         self.session_memory: Dict[str, List]  = {} # 会话记忆
         self.session_memory_lock = threading.Lock()
