@@ -484,6 +484,7 @@ class ProviderOpenAIOfficial(Provider):
 
     def set_model(self, model: str):
         self.model_configs['model'] = model
+        self.cc.put_by_dot_str("openai.chatGPTConfigs.model", model)
         super().set_curr_model(model)
     
     def get_configs(self):

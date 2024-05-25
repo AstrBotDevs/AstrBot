@@ -84,6 +84,7 @@ class CommandOpenAIOfficial(Command):
         for model in models:
             ret += f"\n{i}. {model.id}"
             i += 1
+        ret += "\nTips: 使用 /model 模型名/编号，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
         logger.debug(ret)
         return True, ret, "models"
 
@@ -97,14 +98,6 @@ class CommandOpenAIOfficial(Command):
         models = list(models)
         if model.isdigit() and int(model) <= len(models) and int(model) >= 1:
             model = models[int(model)-1]
-        else:
-            f = False
-            for m in models:
-                if model == m.id:
-                    f = True
-                    break
-            if not f:
-                return True, "模型不存在或输入非法", "model"
 
         self.provider.set_model(model.id)
         return True, f"模型已设置为 {model.id}", "model"
@@ -113,11 +106,13 @@ class CommandOpenAIOfficial(Command):
     async def help(self):
         commands = super().general_commands()
         commands['画'] = '调用 OpenAI DallE 模型生成图片'
-        commands['set'] = '人格设置面板'
-        commands['status'] = '查看 Api Key 状态和配置信息'
-        commands['token'] = '查看本轮会话 token'
-        commands['reset'] = '重置当前与 LLM 的会话，但保留人格（system prompt）'
-        commands['reset p'] = '重置当前与 LLM 的会话，并清除人格。'
+        commands['/set'] = '人格设置面板'
+        commands['/status'] = '查看 Api Key 状态和配置信息'
+        commands['/token'] = '查看本轮会话 token'
+        commands['/reset'] = '重置当前与 LLM 的会话，但保留人格（system prompt）'
+        commands['/reset p'] = '重置当前与 LLM 的会话，并清除人格。'
+        commands['/models'] = '获取当前可用的模型'
+        commands['/model'] = '更换模型'
         
         return True, await super().help_messager(commands, self.platform, self.global_object.cached_plugins), "help"
 
