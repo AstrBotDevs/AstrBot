@@ -84,6 +84,7 @@ class CommandOpenAIOfficial(Command):
         for model in models:
             ret += f"\n{i}. {model.id}"
             i += 1
+        ret += "\nTips: 使用 /model 模型名/编号，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
         logger.debug(ret)
         return True, ret, "models"
 
@@ -97,14 +98,6 @@ class CommandOpenAIOfficial(Command):
         models = list(models)
         if model.isdigit() and int(model) <= len(models) and int(model) >= 1:
             model = models[int(model)-1]
-        else:
-            f = False
-            for m in models:
-                if model == m.id:
-                    f = True
-                    break
-            if not f:
-                return True, "模型不存在或输入非法", "model"
 
         self.provider.set_model(model.id)
         return True, f"模型已设置为 {model.id}", "model"
