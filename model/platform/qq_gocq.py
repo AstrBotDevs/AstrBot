@@ -104,6 +104,7 @@ class QQGOCQ(Platform):
         self.client.run()
 
     async def handle_msg(self, message: AstrBotMessage):
+        await super().handle_msg()
         logger.info(
             f"{message.sender.nickname}/{message.sender.user_id} -> {self.parse_message_outline(message)}")
 
@@ -176,6 +177,7 @@ class QQGOCQ(Platform):
     async def reply_msg(self,
                         message: Union[AstrBotMessage, GuildMessage, GroupMessage, FriendMessage],
                         result_message: list):
+        await super().reply_msg()
         """
         插件开发者请使用send方法, 可以不用直接调用这个方法。
         """
@@ -254,6 +256,7 @@ class QQGOCQ(Platform):
         提供给插件的发送QQ消息接口。
         参数说明：第一个参数可以是消息对象，也可以是QQ群号。第二个参数是消息内容（消息内容可以是消息链列表，也可以是纯文字信息）。
         '''
+        await super().reply_msg()
         try:
             await self.reply_msg(message, result_message)
         except BaseException as e:
@@ -265,6 +268,7 @@ class QQGOCQ(Platform):
         '''
         同 send_msg()
         '''
+        await super().reply_msg()
         await self.reply_msg(to, res)
 
     def create_text_image(title: str, text: str, max_width=30, font_size=20):

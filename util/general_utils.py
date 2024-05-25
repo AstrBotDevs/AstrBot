@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from type.types import GlobalObject
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
+from collections import defaultdict
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
@@ -466,15 +467,39 @@ def get_sys_info(global_object: GlobalObject):
 
 
 def upload(_global_object: GlobalObject):
+    '''
+    上传相关非敏感统计数据
+    '''
     while True:
-        addr_ip = ''
+        platform_stats = {}
+        llm_stats = {}
+        plugin_stats = {}
+        for platform in _global_object.platforms:
+            platform_stats[platform.platform_name] = {
+                "cnt_receive": platform.platform_instance.cnt_receive,
+                "cnt_reply": platform.platform_instance.cnt_reply
+            }
+            
+        for llm in _global_object.llms:
+            for k, v in llm.llm_instance.model_stat:
+                llm_stats[llm.llm_name + "_" + k] = v
+            llm.llm_instance.reset_model_stat()
+            
+        for plugin in _global_object.cached_plugins:
+            plugin_stats[plugin.metadata.plugin_name] = {
+                "metadata": plugin.metadata,
+                "trig_cnt": plugin.trig_cnt
+            }
+            plugin.reset_trig_cnt()
+        
         try:
             res = {
-                "version": _global_object.version,
-                "count": _global_object.cnt_total,
-                "ip": addr_ip,
-                "sys": sys.platform,
-                "admin": "null",
+                "stat_version": "moon",
+                "version": _global_object.version, # 版本号
+                "platform_stats": platform_stats, # 过去 30 分钟各消息平台交互消息数
+                "llm_stats": llm_stats,
+                "plugin_stats": plugin_stats,
+                "sys": sys.platform, # 系统版本
             }
             resp = requests.post(
                 'https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
@@ -484,7 +509,7 @@ def upload(_global_object: GlobalObject):
                     _global_object.cnt_total = 0
         except BaseException as e:
             pass
-        time.sleep(10*60)
+        time.sleep(30*60)
 
 def retry(n: int = 3):
     '''

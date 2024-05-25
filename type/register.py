@@ -15,6 +15,13 @@ class RegisteredPlugin:
     module_path: str
     module: ModuleType
     root_dir_name: str
+    trig_cnt: int = 0
+    
+    def reset_trig_cnt(self):
+        self.trig_cnt = 0
+    
+    def trig(self):
+        self.trig_cnt += 1
 
     def __str__(self) -> str:
         return f"RegisteredPlugin({self.metadata}, {self.module_path}, {self.root_dir_name})"

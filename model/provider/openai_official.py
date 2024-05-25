@@ -289,6 +289,7 @@ class ProviderOpenAIOfficial(Provider):
                         extra_conf: Dict = None,
                         **kwargs
                     ) -> str:
+        super().accu_model_stat()
         if not session_id:
             session_id = "unknown"
             if "unknown" in self.session_memory:
@@ -421,6 +422,7 @@ class ProviderOpenAIOfficial(Provider):
         '''
         retry = 0
         conf = self.image_generator_model_configs
+        super().accu_model_stat(model=conf['model'])
         if not conf:
             logger.error("OpenAI 图片生成模型配置不存在。")
             raise Exception("OpenAI 图片生成模型配置不存在。")
@@ -481,6 +483,7 @@ class ProviderOpenAIOfficial(Provider):
 
     def set_model(self, model: str):
         self.model_configs['model'] = model
+        super().set_curr_model(model)
     
     def get_configs(self):
         return self.model_configs

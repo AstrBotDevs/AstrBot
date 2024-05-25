@@ -102,6 +102,7 @@ class QQOfficial(Platform):
             )
 
     async def handle_msg(self, message: AstrBotMessage):
+        await super().handle_msg()
         assert isinstance(message.raw_message, (botpy.message.Message,
                           botpy.message.GroupMessage, botpy.message.DirectMessage))
         is_group = message.type != MessageType.FRIEND_MESSAGE
@@ -154,6 +155,7 @@ class QQOfficial(Platform):
         '''
         回复频道消息
         '''
+        await super().reply_msg()
         if isinstance(message, AstrBotMessage):
             source = message.raw_message
         else:

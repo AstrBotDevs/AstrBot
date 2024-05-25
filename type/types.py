@@ -15,7 +15,6 @@ class GlobalObject:
     web_search: bool  # 是否开启了网页搜索
     reply_prefix: str  # 回复前缀
     unique_session: bool  # 是否开启了独立会话
-    cnt_total: int  # 总消息数
     default_personality: dict
     dashboard_data = None
 
@@ -26,7 +25,6 @@ class GlobalObject:
         self.web_search = False  # 是否开启了网页搜索
         self.reply_prefix = None
         self.unique_session = False
-        self.cnt_total = 0
         self.platforms = []
         self.llms = []
         self.default_personality = None
