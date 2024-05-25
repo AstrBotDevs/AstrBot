@@ -1,5 +1,6 @@
 import os
 import json
+import yaml
 from typing import Union
 
 cpath = "data/cmd_config.json"
@@ -117,3 +118,28 @@ def init_astrbot_config_items():
     cc.init_attributes("https_proxy", "")
     cc.init_attributes("dashboard_username", "")
     cc.init_attributes("dashboard_password", "")
+
+
+
+def try_migrate_config():
+    '''
+    将 cmd_config.json 迁移至 data/cmd_config.json
+    '''
+    print("try migrate configs")
+    if os.path.exists("cmd_config.json"):
+        with open("cmd_config.json", "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        with open("data/cmd_config.json", "w", encoding="utf-8-sig") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        try:
+            os.remove("cmd_config.json")
+        except Exception as e:
+            pass
+    if not os.path.exists("cmd_config.json") and not os.path.exists("data/cmd_config.json"):
+        # 从 configs/config.yaml 上拿数据
+        configs_pth = os.path.abspath(os.path.join(os.path.abspath(__file__), "../../configs/config.yaml"))
+        with open(configs_pth, encoding='utf-8') as f:
+            data = yaml.load(f, Loader=yaml.Loader)
+            print(data)
+            with open("data/cmd_config.json", "w", encoding="utf-8-sig") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)

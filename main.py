@@ -5,6 +5,7 @@ import warnings
 import traceback
 import threading
 from logging import Formatter, Logger
+from util.cmd_config import CmdConfig, try_migrate_config
 
 warnings.filterwarnings("ignore")
 abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
@@ -77,9 +78,9 @@ def check_env():
         exit()
 
 if __name__ == "__main__":
+    update_dept()
     
-    # 设置代理
-    from util.cmd_config import CmdConfig
+    try_migrate_config()
     cc = CmdConfig()
     http_proxy = cc.get("http_proxy")
     https_proxy = cc.get("https_proxy")
@@ -88,8 +89,6 @@ if __name__ == "__main__":
     if https_proxy:
         os.environ['HTTPS_PROXY'] = https_proxy
     os.environ['NO_PROXY'] = 'https://api.sgroup.qq.com'
-
-    update_dept()
     
     from SparkleLogging.utils.core import LogManager
     logger = LogManager.GetLogger(

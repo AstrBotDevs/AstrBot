@@ -54,8 +54,6 @@ baidu_judge = None
 # CLI
 PLATFORM_CLI = 'cli'
 
-init_astrbot_config_items()
-
 # 全局对象
 _global_object: GlobalObject = None
 
@@ -75,9 +73,7 @@ def init():
     global frequency_count, frequency_time
     global _global_object
 
-    # 迁移旧配置
-    gu.try_migrate_config()
-    # 使用新配置
+    init_astrbot_config_items()
     cfg = cc.get_all()
 
     _event_loop = asyncio.new_event_loop()
