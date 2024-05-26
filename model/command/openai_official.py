@@ -94,14 +94,17 @@ class CommandOpenAIOfficial(Command):
         if len(l) == 1:
             return True, "请输入 /model 模型名/编号", "model"
         model = str(l[1])
-        models = await self.get_models()
-        models = list(models)
-        if model.isdigit() and int(model) <= len(models) and int(model) >= 1:
-            model = models[int(model)-1]
+        if model.isdigit():
+            models = await self.get_models()
+            models = list(models)
+            if int(model) <= len(models) and int(model) >= 1:
+                model = models[int(model)-1]
+            self.provider.set_model(model.id)
+            return True, f"模型已设置为 {model.id}", "model"
+        else:
+            self.provider.set_model(model)
+            return True, f"模型已设置为 {model} (自定义)", "model"
 
-        self.provider.set_model(model.id)
-        return True, f"模型已设置为 {model.id}", "model"
-    
         
     async def help(self):
         commands = super().general_commands()
