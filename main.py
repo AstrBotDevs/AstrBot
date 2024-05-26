@@ -8,10 +8,8 @@ from logging import Formatter, Logger
 from util.cmd_config import CmdConfig, try_migrate_config
 
 warnings.filterwarnings("ignore")
-abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
 
 logger: Logger = None
-
 logo_tmpl = """
      ___           _______.___________..______      .______     ______   .___________.
     /   \         /       |           ||   _  \     |   _  \   /  __  \  |           |
@@ -35,9 +33,11 @@ def update_dept():
     '''
     # 获取 Python 可执行文件路径
     py = sys.executable
+    requirements_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "requirements.txt")
+    print(requirements_path)
     # 更新依赖库
     mirror = "https://mirrors.aliyun.com/pypi/simple/"
-    os.system(f"{py} -m pip install -r requirements.txt -i {mirror}")
+    os.system(f"{py} -m pip install -r {requirements_path} -i {mirror}")
     
 def main():
     try:
