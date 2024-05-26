@@ -133,13 +133,15 @@
 
 - `LLMS`: https://github.com/Soulter/llms | Claude, HuggingChat 大语言模型接入。
  
-- `GoodPlugins`: https://github.com/Soulter/goodplugins | 随机动漫图片、搜番、喜报生成器等等
+- `GoodPlugins`: https://github.com/Soulter/goodplugins | 随机动漫图片、搜番、喜报生成器等。
 
 - `sysstat`: https://github.com/Soulter/sysstatqcbot | 查看系统状态
 
 - `BiliMonitor`: https://github.com/Soulter/BiliMonitor | 订阅B站动态
   
 - `liferestart`: https://github.com/Soulter/liferestart | 人生重开模拟器
+
+- `astrbot_plugin_aiocqhttp`: https://github.com/Soulter/astrbot_plugin_aiocqhttp | aiocqhttp 适配器，支持接入支持反向 WS 的 OneBot 协议实现，如 Lagrange.OneBot，Shamrock 等。
 
 
 <img width="900" alt="image" src="https://github.com/Soulter/AstrBot/assets/37870767/824d1ff3-7b85-481c-b795-8e62dedb9fd7">
