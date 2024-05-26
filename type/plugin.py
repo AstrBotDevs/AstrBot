@@ -2,7 +2,7 @@ from enum import Enum
 from dataclasses import dataclass
 
 class PluginType(Enum):
-    PLATFORM = 'platfrom'  # 平台类插件。
+    PLATFORM = 'platform'  # 平台类插件。
     LLM = 'llm'  # 大语言模型类插件
     COMMON = 'common'  # 其他插件
 
