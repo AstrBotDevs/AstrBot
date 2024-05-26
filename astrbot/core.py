@@ -172,7 +172,7 @@ def init():
     logger.info("正在载入插件...")
     # 加载插件
     _command = Command(None, _global_object)
-    ok, err = putil.plugin_reload(_global_object.cached_plugins)
+    ok, err = putil.plugin_reload(_global_object)
     if ok:
         logger.info(
             f"成功载入 {len(_global_object.cached_plugins)} 个插件")

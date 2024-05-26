@@ -16,6 +16,7 @@ from type.plugin import *
 from type.register import *
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
+from type.types import GlobalObject
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
@@ -91,7 +92,19 @@ def check_plugin_dept_update(cached_plugins: RegisteredPlugins, target_plugin: s
             update_plugin_dept(os.path.join(plugin_path, "requirements.txt"))
 
 
-def plugin_reload(cached_plugins: RegisteredPlugins):
+def has_init_param(cls, param_name):
+    try:
+        # 获取 __init__ 方法的签名
+        init_signature = inspect.signature(cls.__init__)
+        
+        # 检查参数名是否在签名中
+        return param_name in init_signature.parameters
+    except (AttributeError, ValueError):
+        # 如果类没有 __init__ 方法或者无法获取签名
+        return False
+
+def plugin_reload(ctx: GlobalObject):
+    cached_plugins = ctx.cached_plugins
     plugins = get_plugin_modules()
     if plugins is None:
         return False, "未找到任何插件模块"
@@ -113,7 +126,12 @@ def plugin_reload(cached_plugins: RegisteredPlugins):
                                     root_dir_name + "." + p, fromlist=[p])
 
             cls = get_classes(p, module)
-            obj = getattr(module, cls[0])()
+            
+            try:
+                # 尝试传入 ctx
+                obj = getattr(module, cls[0])(ctx=ctx)
+            except:
+                obj = getattr(module, cls[0])()
 
             metadata = None
             try:
@@ -125,8 +143,7 @@ def plugin_reload(cached_plugins: RegisteredPlugins):
                     else:
                         metadata = PluginMetadata(
                             plugin_name=info['name'],
-                            plugin_type=PluginType.COMMON if 'plugin_type' not in info else PluginType(
-                                info['plugin_type']),
+                            plugin_type=PluginType.COMMON if 'plugin_type' not in info else PluginType(info['plugin_type']),
                             author=info['author'],
                             desc=info['desc'],
                             version=info['version'],
