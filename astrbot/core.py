@@ -83,6 +83,7 @@ def init():
     _global_object = GlobalObject()
     _global_object.version = VERSION
     _global_object.base_config = cfg
+    _global_object.logger = logger
     logger.info("AstrBot v" + VERSION)
 
     if 'reply_prefix' in cfg:
@@ -440,12 +441,6 @@ async def oper_msg(message: AstrBotMessage,
         if command_result == None:
             return
         command = command_result[2]
-
-        if command == "update latest r":
-            def update_restart():
-                py = sys.executable
-                os.execl(py, py, *sys.argv)
-            return MessageResult(command_result[1] + "\n\n即将自动重启。", callback=update_restart)
 
         if not command_result[0]:
             return MessageResult(f"指令调用错误: \n{str(command_result[1])}")

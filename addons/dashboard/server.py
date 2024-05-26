@@ -16,7 +16,7 @@ from persist.session import dbConn
 from type.register import RegisteredPlugin
 from typing import List
 from util.cmd_config import CmdConfig
-from util.updator import check_update, update_project, request_release_info
+from util.updator import check_update, update_project, request_release_info, _reboot
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
@@ -344,8 +344,7 @@ class AstrBotDashBoard():
 
     def shutdown_bot(self, delay_s: int):
         time.sleep(delay_s)
-        py = sys.executable
-        os.execl(py, py, *sys.argv)
+        _reboot()
 
     def _get_configs(self, namespace: str):
         if namespace == "":

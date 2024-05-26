@@ -6,10 +6,35 @@ except BaseException as e:
     has_git = False
 import sys, os
 import requests
+import psutil
 from type.config import VERSION
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
+
+
+def terminate_child_processes():
+    try:
+        parent = psutil.Process(os.getpid())
+        children = parent.children(recursive=True)
+        logger.info(f"正在终止 {len(children)} 个子进程。")
+        for child in children:
+            logger.info(f"正在终止子进程 {child.pid}")
+            child.terminate()
+            try:
+                child.wait(timeout=3)
+            except psutil.NoSuchProcess:
+                continue
+            except psutil.TimeoutExpired:
+                logger.info(f"子进程 {child.pid} 没有被正常终止, 正在强行杀死。")
+                child.kill()
+    except psutil.NoSuchProcess:
+        pass
 
 def _reboot():
     py = sys.executable
+    terminate_child_processes()
     os.execl(py, py, *sys.argv)
     
 def find_repo() -> Repo:

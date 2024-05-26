@@ -1,5 +1,7 @@
+
 from type.register import *
 from typing import List
+from logging import Logger
 
 class GlobalObject:
     '''
@@ -17,6 +19,8 @@ class GlobalObject:
     unique_session: bool  # 是否开启了独立会话
     default_personality: dict
     dashboard_data = None
+    
+    logger: Logger = None
 
     def __init__(self):
         self.nick = None  # gocq 的昵称
