@@ -16,15 +16,9 @@
 <img alt="Static Badge" src="https://img.shields.io/badge/频道-x42d56aki2-purple">
 
 <a href="https://astrbot.soulter.top/center">项目部署</a> ｜
-<a href="https://github.com/Soulter/QQChannelChatGPT/issues">问题提交</a> ｜
-<a href="https://astrbot.soulter.top/center/docs/%E5%BC%80%E5%8F%91/%E6%8F%92%E4%BB%B6%E5%BC%80%E5%8F%91">插件开发（最少只需 25 行）</a>
+<a href="https://github.com/Soulter/AstrBot/issues">问题提交</a> ｜
+<a href="https://astrbot.soulter.top/center/docs/%E5%BC%80%E5%8F%91/%E6%8F%92%E4%BB%B6%E5%BC%80%E5%8F%91">插件开发</a>
 </div>
-
-## 🤔您可能想了解的
-- **如何部署？** [帮助文档](https://astrbot.soulter.top/center/docs/%E9%83%A8%E7%BD%B2/%E9%80%9A%E8%BF%87Docker%E9%83%A8%E7%BD%B2) (部署不成功欢迎进群捞人解决<3)
-- **go-cqhttp启动不成功、报登录失败？** [在这里搜索解决方法](https://github.com/Mrs4s/go-cqhttp/issues)
-- **程序闪退/机器人启动不成功？** [提交issue或加群反馈](https://github.com/Soulter/QQChannelChatGPT/issues)
-- **如何开启 ChatGPT、Claude、HuggingChat 等语言模型？** [查看帮助](https://astrbot.soulter.top/center/docs/%E4%BD%BF%E7%94%A8/%E5%A4%A7%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%9E%8B)
 
 ## 🧩功能：
 
