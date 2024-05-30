@@ -7,13 +7,11 @@
 # AstrBot
 
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot)](https://github.com/Soulter/AstrBot/releases/latest)
-<img src="https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/34412545-2e37-400f-bedc-42348713ac1f.svg" alt="wakatime">
 <img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="python">
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg"/></a>
 <a href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft">
 <img alt="Static Badge" src="https://img.shields.io/badge/QQ群-322154837-purple">
 </a>
-<img alt="Static Badge" src="https://img.shields.io/badge/频道-x42d56aki2-purple">
 
 <a href="https://astrbot.soulter.top/center">项目部署</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a> ｜
@@ -22,41 +20,24 @@
 
 ## 🧩功能：
 
-✨ 最近功能：
-1. 可视化面板
-2. Docker 一键部署项目：[链接](https://astrbot.soulter.top/center/docs/%E9%83%A8%E7%BD%B2/%E9%80%9A%E8%BF%87Docker%E9%83%A8%E7%BD%B2)
-
-🌍支持的消息平台/接口
-- go-cqhttp（QQ、QQ频道）
-- QQ 官方机器人接口
+🌍支持的消息平台
+- QQ 群、QQ 频道（OneBot、QQ 官方接口）
 - Telegram（由 [astrbot_plugin_telegram](https://github.com/Soulter/astrbot_plugin_telegram) 插件支持）
 
-🌍支持的AI语言模型一览：
+🌍支持的大模型一览：
 
-**文字模型/图片理解**
-
-- OpenAI GPT-3（原生支持）
-- OpenAI GPT-3.5（原生支持）
-- OpenAI GPT-4（原生支持）
+- OpenAI GPT、DallE 系列
 - Claude（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 - HuggingChat（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 - Gemini（免费，由[LLMs插件](https://github.com/Soulter/llms)支持）
 
-**图片生成**
-- OpenAI Dalle 接口
-- NovelAI/Naifu (免费，由[AIDraw插件](https://github.com/Soulter/aidraw)支持)
-
 🌍机器人支持的能力一览：
-- 可视化面板（beta）
-- 同时部署机器人到 QQ 和 QQ 频道
-- 大模型对话
-- 大模型网页搜索能力 **(目前仅支持OpenAI系模型，最新版本下使用 web on 指令打开)**
-- 插件（在QQ或QQ频道聊天框内输入 `plugin` 了解详情）
-- 回复文字图片渲染（以图片markdown格式回复，**大幅度降低被风控概率**，需手动在`cmd_config.json`内开启qq_pic_mode）
-- 人格设置
-- 关键词回复
-- 热更新（更新本项目时**仅需**在QQ或QQ频道聊天框内输入`update latest r`）
-- Windows一键部署 https://github.com/Soulter/QQChatGPTLauncher/releases/latest
+- 大模型对话、人格、网页搜索
+- 可视化管理面板
+- 同时处理多平台消息
+- 精确到个人的会话隔离
+- 插件支持
+- 文本转图片回复
 
 <!-- 
 ### 基本功能
