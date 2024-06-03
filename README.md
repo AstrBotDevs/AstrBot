@@ -1,10 +1,9 @@
 <p align="center">
 
-<img src="https://github.com/Soulter/AstrBot/assets/37870767/b1686114-f3aa-4963-b07f-28bf83dc0a10" alt="QQChannelChatGPT" width="200" />
+<img width="806" alt="image" src="https://github.com/Soulter/AstrBot/assets/37870767/c6f057d9-46d7-4144-8116-00a962941746">
+
 </p>
 <div align="center">
-
-# AstrBot
 
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot)](https://github.com/Soulter/AstrBot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="python">
