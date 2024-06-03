@@ -105,6 +105,8 @@ class Command:
             return True, self.web_search(message)
         if self.command_start_with(message, "update"):
             return True, self.update(message, role)
+        if message == "t2i":
+            return True, "t2i", self.t2i_toggle(message, role)
         if not self.provider and message == "help":
             return True, await self.help()
 
@@ -120,17 +122,21 @@ class Command:
         elif l[1] == 'off':
             self.global_object.web_search = False
             return True, "已关闭网页搜索", "web"
+        
+    def t2i_toggle(self, message, role):
+        p = cc.get("qq_pic_mode", True)
+        if p:
+            cc.put("qq_pic_mode", False)
+            return True, "已关闭文本转图片模式。", "t2i"
+        cc.put("qq_pic_mode", True)
+        return True, "已开启文本转图片模式。", "t2i"
 
     def get_my_id(self, message_obj, platform):
         try:
-            user_id = str(message_obj.user_id)
+            user_id = str(message_obj.sender.user_id)
             return True, f"你在此平台上的ID：{user_id}", "plugin"
         except BaseException as e:
             return False, f"在{platform}上获取你的ID失败，原因: {str(e)}", "plugin"
-
-    '''
-    插件指令
-    '''
 
     async def plugin_oper(self, message: str, role: str, ctx: GlobalObject, platform: str):
         l = message.split(" ")
@@ -227,7 +233,6 @@ class Command:
         for key, value in commands.items():
             msg += f"- `{key}`: {value}\n"
         # plugins
-        print(cached_plugins)
         if cached_plugins:
             plugin_list_info = ""
             for plugin in cached_plugins:
@@ -261,7 +266,7 @@ class Command:
         if len(l) == 1:
             try:
                 update_info = util.updator.check_update()
-                update_info += "\nTips:\n输入「update latest」更新到最新版本\n输入「update <版本号如v3.1.3>」切换到指定版本\n输入「update r」重启机器人\n"
+                update_info += "\n> Tips: 输入「update latest」更新到最新版本，输入「update <版本号如v3.1.3>」切换到指定版本，输入「update r」重启机器人\n"
                 return True, update_info, "update"
             except BaseException as e:
                 return False, "检查更新失败: "+str(e), "update"

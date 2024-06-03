@@ -21,7 +21,7 @@ async def text_to_image_base(text: str, return_url: bool = False) -> str:
         "json": return_url,
         "tmpldata": {
             "text": text,
-            "version": f"v{VERSION}"
+            "version": f"v{VERSION}",
         },
         "options": {
             "full_page": True

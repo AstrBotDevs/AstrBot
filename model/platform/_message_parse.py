@@ -7,7 +7,8 @@ from nakuru import (
 import botpy.message
 from type.message import *
 from typing import List, Union
-import time
+from util.general_utils import save_temp_img
+import time, base64
 
 # QQ官方消息类型转换
 
@@ -18,11 +19,14 @@ def qq_official_message_parse(message: List[BaseMessageComponent]):
     for i in message:
         if isinstance(i, Plain):
             plain_text += i.text
-        elif isinstance(i, Image) and image_path == None:
-            if i.path is not None:
+        elif isinstance(i, Image) and not image_path:
+            if i.path:
                 image_path = i.path
+            elif i.file and i.file.startswith("base64://"):
+                img_data = base64.b64decode(i.file[9:])
+                image_path = save_temp_img(img_data)
             else:
-                image_path = i.file
+                image_path = save_temp_img(i.file)
     return plain_text, image_path
 
 # QQ官方消息类型 2 AstrBotMessage

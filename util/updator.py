@@ -106,18 +106,20 @@ def check_update() -> str:
     if curr_commit.startswith(new_commit):
         return f"当前已经是最新版本: v{VERSION}"
     else:
-        update_info = f"""有新版本可用。
-=== 当前版本 ===
+        update_info = f"""> 有新版本可用，请及时更新。
+# 当前版本
 v{VERSION}
 
-=== 新版本 ===
+# 最新版本
 {update_data[0]['version']}
 
-=== 发布时间 ===
+# 发布时间
 {update_data[0]['published_at']}
 
-=== 更新内容 ===
-{update_data[0]['body']}"""
+# 更新内容
+---
+{update_data[0]['body']}
+---"""
         return update_info
     
 def update_project(update_data: list,

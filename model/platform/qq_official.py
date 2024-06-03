@@ -19,7 +19,7 @@ from ._message_parse import (
 )
 from type.message import *
 from typing import Union, List
-from nakuru.entities.components import BaseMessageComponent
+from nakuru.entities.components import *
 from util.image_render.helper import text_to_image_base
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
@@ -65,6 +65,7 @@ class QQOfficial(Platform):
         self.secret = cfg['qqbot_secret']
         self.unique_session = cfg['uniqueSessionMode']
         qq_group = cfg['qqofficial_enable_group_message']
+        self.pic_mode = cfg['qq_pic_mode']
 
         if qq_group:
             self.intents = botpy.Intents(
@@ -170,33 +171,54 @@ class QQOfficial(Platform):
         image_path = ''
         msg_ref = None
 
+        # if isinstance(res, list):
+        #     plain_text, image_path = qq_official_message_parse(res)
+        # elif isinstance(res, str):
+        #     plain_text = res
+
+        # if self.cfg['qq_pic_mode']:
+        #     # 文本转图片，并且加上原来的图片
+        #     if plain_text != '' or image_path != '':
+        #         if image_path is not None and image_path != '':
+        #             if image_path.startswith("http"):
+        #                 plain_text += "\n\n" + "![](" + image_path + ")"
+        #             else:
+        #                 plain_text += "\n\n" + \
+        #                     "![](file:///" + image_path + ")"
+        #         # image_path = gu.create_markdown_image("".join(plain_text))
+        #         image_path = await text_to_image_base("".join(plain_text))
+        #         plain_text = ""
+
+        # else:
+        #     if image_path is not None and image_path != '':
+        #         msg_ref = None
+        #         if image_path.startswith("http"):
+        #             async with aiohttp.ClientSession() as session:
+        #                 async with session.get(image_path) as response:
+        #                     if response.status == 200:
+        #                         image = PILImage.open(io.BytesIO(await response.read()))
+        #                         image_path = gu.save_temp_img(image)
+        if self.pic_mode:
+            plains = []
+            news = []
+            if isinstance(res, str):
+                res = [Plain(text=res, convert=False),]
+            for i in res:
+                if isinstance(i, Plain):
+                    plains.append(i.text)
+                else:
+                    news.append(i)
+            plains_str = "".join(plains).strip()
+            if plains_str and len(plains_str) > 50:
+                p = await text_to_image_base(plains_str, return_url=False)
+                with open(p, "rb") as f:
+                    news.append(Image.fromBytes(f.read()))
+                res = news
+
         if isinstance(res, list):
             plain_text, image_path = qq_official_message_parse(res)
-        elif isinstance(res, str):
-            plain_text = res
-
-        if self.cfg['qq_pic_mode']:
-            # 文本转图片，并且加上原来的图片
-            if plain_text != '' or image_path != '':
-                if image_path is not None and image_path != '':
-                    if image_path.startswith("http"):
-                        plain_text += "\n\n" + "![](" + image_path + ")"
-                    else:
-                        plain_text += "\n\n" + \
-                            "![](file:///" + image_path + ")"
-                # image_path = gu.create_markdown_image("".join(plain_text))
-                image_path = await text_to_image_base("".join(plain_text))
-                plain_text = ""
-
         else:
-            if image_path is not None and image_path != '':
-                msg_ref = None
-                if image_path.startswith("http"):
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(image_path) as response:
-                            if response.status == 200:
-                                image = PILImage.open(io.BytesIO(await response.read()))
-                                image_path = gu.save_temp_img(image)
+            plain_text = res
 
         if source is not None and image_path == '':  # file_image与message_reference不能同时传入
             msg_ref = Reference(message_id=source.id,
@@ -217,7 +239,7 @@ class QQOfficial(Platform):
             data['guild_id'] = source.guild_id
         else:
             raise ValueError(f"未知的消息类型: {message.type}")
-        if image_path != '':
+        if image_path:
             data['file_image'] = image_path
 
         try:
