@@ -180,7 +180,7 @@ def update_plugin_dept(path):
     os.system(f"{py} -m pip install -r {path} -i {mirror} --quiet")
 
 
-def install_plugin(repo_url: str, cached_plugins: RegisteredPlugins):
+def install_plugin(repo_url: str, ctx: GlobalObject):
     ppath = get_plugin_store_path()
     # 删除末尾的 /
     if repo_url.endswith("/"):
@@ -195,7 +195,7 @@ def install_plugin(repo_url: str, cached_plugins: RegisteredPlugins):
     if os.path.exists(plugin_path):
         remove_dir(plugin_path)
     Repo.clone_from(repo_url, to_path=plugin_path, branch='master')
-    ok, err = plugin_reload(cached_plugins)
+    ok, err = plugin_reload(ctx)
     if not ok:
         raise Exception(err)
 
@@ -209,19 +209,19 @@ def get_registered_plugin(plugin_name: str, cached_plugins: RegisteredPlugins) -
     return ret
 
 
-def uninstall_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
-    plugin = get_registered_plugin(plugin_name, cached_plugins)
+def uninstall_plugin(plugin_name: str, ctx: GlobalObject):
+    plugin = get_registered_plugin(plugin_name, ctx.cached_plugins)
     if not plugin:
         raise Exception("插件不存在。")
     root_dir_name = plugin.root_dir_name
     ppath = get_plugin_store_path()
-    cached_plugins.remove(plugin)
+    ctx.cached_plugins.remove(plugin)
     if not remove_dir(os.path.join(ppath, root_dir_name)):
         raise Exception("移除插件成功，但是删除插件文件夹失败。您可以手动删除该文件夹，位于 addons/plugins/ 下。")
 
 
-def update_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
-    plugin = get_registered_plugin(plugin_name, cached_plugins)
+def update_plugin(plugin_name: str, ctx: GlobalObject):
+    plugin = get_registered_plugin(plugin_name, ctx.cached_plugins)
     if not plugin:
         raise Exception("插件不存在。")
     ppath = get_plugin_store_path()
@@ -229,7 +229,7 @@ def update_plugin(plugin_name: str, cached_plugins: RegisteredPlugins):
     plugin_path = os.path.join(ppath, root_dir_name)
     repo = Repo(path=plugin_path)
     repo.remotes.origin.pull()
-    ok, err = plugin_reload(cached_plugins)
+    ok, err = plugin_reload(ctx)
     if not ok:
         raise Exception(err)
 

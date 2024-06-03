@@ -196,7 +196,7 @@ class AstrBotDashBoard():
             repo_url = post_data["url"]
             try:
                 logger.info(f"正在安装插件 {repo_url}")
-                putil.install_plugin(repo_url, self.dashboard_data.plugins)
+                putil.install_plugin(repo_url, global_object)
                 logger.info(f"安装插件 {repo_url} 成功")
                 return Response(
                     status="success",
@@ -237,7 +237,7 @@ class AstrBotDashBoard():
             plugin_name = post_data["name"]
             try:
                 logger.info(f"正在更新插件 {plugin_name}")
-                putil.update_plugin(plugin_name, self.dashboard_data.plugins)
+                putil.update_plugin(plugin_name, global_object)
                 logger.info(f"更新插件 {plugin_name} 成功")
                 return Response(
                     status="success",

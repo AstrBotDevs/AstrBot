@@ -97,7 +97,7 @@ class Command:
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform, role)
         if self.command_start_with(message, "plugin"):
-            return True, self.plugin_oper(message, role, cached_plugins, platform)
+            return True, self.plugin_oper(message, role, self.global_object, platform)
         if self.command_start_with(message, "myid") or self.command_start_with(message, "!myid"):
             return True, self.get_my_id(message_obj, platform)
         if self.command_start_with(message, "web"):  # 网页搜索
@@ -141,7 +141,7 @@ class Command:
     插件指令
     '''
 
-    def plugin_oper(self, message: str, role: str, cached_plugins: List[RegisteredPlugin], platform: str):
+    def plugin_oper(self, message: str, role: str, ctx: GlobalObject, platform: str):
         l = message.split(" ")
         if len(l) < 2:
             p = gu.create_text_image(
@@ -152,7 +152,7 @@ class Command:
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限安装插件", "plugin"
                 try:
-                    putil.install_plugin(l[2], cached_plugins)
+                    putil.install_plugin(l[2], )
                     return True, "插件拉取并载入成功~", "plugin"
                 except BaseException as e:
                     return False, f"拉取插件失败，原因: {str(e)}", "plugin"
@@ -160,20 +160,20 @@ class Command:
                 if role != "admin":
                     return False, f"你的身份组{role}没有权限删除插件", "plugin"
                 try:
-                    putil.uninstall_plugin(l[2], cached_plugins)
+                    putil.uninstall_plugin(l[2], ctx)
                     return True, "插件卸载成功~", "plugin"
                 except BaseException as e:
                     return False, f"卸载插件失败，原因: {str(e)}", "plugin"
             elif l[1] == "u":
                 try:
-                    putil.update_plugin(l[2], cached_plugins)
+                    putil.update_plugin(l[2], ctx)
                     return True, "\n更新插件成功!!", "plugin"
                 except BaseException as e:
                     return False, f"更新插件失败，原因: {str(e)}。\n建议: 使用 plugin i 指令进行覆盖安装(插件数据可能会丢失)", "plugin"
             elif l[1] == "l":
                 try:
                     plugin_list_info = ""
-                    for plugin in cached_plugins:
+                    for plugin in ctx.cached_plugins:
                         plugin_list_info += f"{plugin.metadata.plugin_name}: \n名称: {plugin.metadata.plugin_name}\n简介: {plugin.metadata.plugin_desc}\n版本: {plugin.metadata.version}\n作者: {plugin.metadata.author}\n"
                     p = gu.create_text_image(
                         "【已激活插件列表】", plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n")
@@ -183,7 +183,7 @@ class Command:
             elif l[1] == "v":
                 try:
                     info = None
-                    for i in cached_plugins:
+                    for i in ctx.cached_plugins:
                         if i.metadata.plugin_name == l[2]:
                             info = i.metadata
                             break
