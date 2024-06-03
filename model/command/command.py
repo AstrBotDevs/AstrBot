@@ -128,16 +128,6 @@ class Command:
         except BaseException as e:
             return False, f"在{platform}上获取你的ID失败，原因: {str(e)}", "plugin"
 
-    def get_new_conf(self, message, role):
-        if role != "admin":
-            return False, f"你的身份组{role}没有权限使用此指令。", "newconf"
-        l = message.split(" ")
-        if len(l) <= 1:
-            obj = cc.get_all()
-            p = gu.create_text_image("【cmd_config.json】", json.dumps(
-                obj, indent=4, ensure_ascii=False))
-            return True, [Image.fromFileSystem(p)], "newconf"
-
     '''
     插件指令
     '''

@@ -47,42 +47,6 @@ def get_font_path() -> str:
         raise Exception("找不到字体文件")
     return font_path
 
-
-def word2img(title: str, text: str, max_width=30, font_size=20):
-    font_path = get_font_path()
-    width_factor = 1.0
-    height_factor = 1.5
-    # 格式化文本宽度最大为30
-    lines = text.split('\n')
-    i = 0
-    length = len(lines)
-    for l in lines:
-        if len(l) > max_width:
-            cp = l
-            for ii in range(len(l)):
-                if ii % max_width == 0:
-                    cp = cp[:ii] + '\n' + cp[ii:]
-                    length += 1
-            lines[i] = cp
-        i += 1
-    text = '\n'.join(lines)
-    width = int(max_width * font_size * width_factor)
-    height = int(length * font_size * height_factor)
-    image = Image.new('RGB', (width, height), (255, 255, 255))
-    draw = ImageDraw.Draw(image)
-
-    text_font = ImageFont.truetype(font_path, font_size)
-    title_font = ImageFont.truetype(font_path, font_size + 5)
-    # 标题居中
-    title_width, title_height = title_font.getsize(title)
-    draw.text(((width - title_width) / 2, 10),
-              title, fill=(0, 0, 0), font=title_font)
-    # 文本不居中
-    draw.text((10, title_height+20), text, fill=(0, 0, 0), font=text_font)
-
-    return image
-
-
 def render_markdown(markdown_text, image_width=800, image_height=600, font_size=26, font_color=(0, 0, 0), bg_color=(255, 255, 255)):
 
     HEADER_MARGIN = 20
@@ -396,24 +360,6 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
             else:
                 async with session.get(url, ssl=ssl_context) as resp:
                     return save_temp_img(await resp.read())
-    except Exception as e:
-        raise e
-
-
-def create_text_image(title: str, text: str, max_width=30, font_size=20):
-    '''
-    文本转图片。
-    title: 标题
-    text: 文本内容
-    max_width: 文本宽度最大值（默认30）
-    font_size: 字体大小（默认20）
-
-    返回：文件路径
-    '''
-    try:
-        img = word2img(title, text, max_width, font_size)
-        p = save_temp_img(img)
-        return p
     except Exception as e:
         raise e
 

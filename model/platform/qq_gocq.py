@@ -273,20 +273,14 @@ class QQGOCQ(Platform):
         await super().reply_msg()
         await self.reply_msg(to, res)
 
-    def create_text_image(title: str, text: str, max_width=30, font_size=20):
+    async def create_text_image(text: str):
         '''
         文本转图片。
-        title: 标题
         text: 文本内容
-        max_width: 文本宽度最大值（默认30）
-        font_size: 字体大小（默认20）
-
         返回：文件路径
         '''
         try:
-            img = gu.word2img(title, text, max_width, font_size)
-            p = gu.save_temp_img(img)
-            return p
+            return await text_to_image_base(text)
         except Exception as e:
             raise e
 
