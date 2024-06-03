@@ -65,8 +65,6 @@ def main():
         input("未知错误。")
         exit()
 
-    make_necessary_dirs()
-
     # 启动主程序（cores/qqbot/core.py）
     bot_core.init()
 
@@ -79,7 +77,7 @@ def check_env():
 
 if __name__ == "__main__":
     update_dept()
-    
+    make_necessary_dirs()
     try_migrate_config()
     cc = CmdConfig()
     http_proxy = cc.get("http_proxy")
