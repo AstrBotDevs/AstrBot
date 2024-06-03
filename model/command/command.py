@@ -11,6 +11,7 @@ from nakuru.entities.components import (
     Image
 )
 from util import general_utils as gu
+from util.image_render.helper import text_to_image_base
 from model.provider.provider import Provider
 from util.cmd_config import CmdConfig as cc
 from type.message import *
@@ -97,14 +98,14 @@ class Command:
         if self.command_start_with(message, "nick"):
             return True, self.set_nick(message, platform, role)
         if self.command_start_with(message, "plugin"):
-            return True, self.plugin_oper(message, role, self.global_object, platform)
+            return True, await self.plugin_oper(message, role, self.global_object, platform)
         if self.command_start_with(message, "myid") or self.command_start_with(message, "!myid"):
             return True, self.get_my_id(message_obj, platform)
         if self.command_start_with(message, "web"):  # 网页搜索
             return True, self.web_search(message)
         if self.command_start_with(message, "update"):
             return True, self.update(message, role)
-        if not self.provider and self.command_start_with(message, "help"):
+        if not self.provider and message == "help":
             return True, await self.help()
 
         return False, None
@@ -141,12 +142,12 @@ class Command:
     插件指令
     '''
 
-    def plugin_oper(self, message: str, role: str, ctx: GlobalObject, platform: str):
+    async def plugin_oper(self, message: str, role: str, ctx: GlobalObject, platform: str):
         l = message.split(" ")
         if len(l) < 2:
-            p = gu.create_text_image(
-                "【插件指令面板】", "安装插件: \nplugin i 插件Github地址\n卸载插件: \nplugin d 插件名 \n重载插件: \nplugin reload\n查看插件列表：\nplugin l\n更新插件: plugin u 插件名\n")
-            return True, [Image.fromFileSystem(p)], "plugin"
+            p = await text_to_image_base("# 插件指令面板 \n- 安装插件: `plugin i 插件Github地址`\n- 卸载插件: `plugin d 插件名`\n- 重载插件: `plugin reload`\n- 查看插件列表：`plugin l`\n - 更新插件: `plugin u 插件名`\n")
+            with open(p, 'rb') as f:
+                return True, [Image.fromBytes(f.read())], "plugin"
         else:
             if l[1] == "i":
                 if role != "admin":
@@ -174,10 +175,10 @@ class Command:
                 try:
                     plugin_list_info = ""
                     for plugin in ctx.cached_plugins:
-                        plugin_list_info += f"{plugin.metadata.plugin_name}: \n名称: {plugin.metadata.plugin_name}\n简介: {plugin.metadata.plugin_desc}\n版本: {plugin.metadata.version}\n作者: {plugin.metadata.author}\n"
-                    p = gu.create_text_image(
-                        "【已激活插件列表】", plugin_list_info + "\n使用plugin v 插件名 查看插件帮助\n")
-                    return True, [Image.fromFileSystem(p)], "plugin"
+                        plugin_list_info += f"### {plugin.metadata.plugin_name} \n- 名称: {plugin.metadata.plugin_name}\n- 简介: {plugin.metadata.desc}\n- 版本: {plugin.metadata.version}\n- 作者: {plugin.metadata.author}\n"
+                    p = await text_to_image_base(f"# 已激活的插件\n{plugin_list_info}\n> 使用plugin v 插件名 查看插件帮助\n")
+                    with open(p, 'rb') as f:
+                        return True, [Image.fromBytes(f.read())], "plugin"
                 except BaseException as e:
                     return False, f"获取插件列表失败，原因: {str(e)}", "plugin"
             elif l[1] == "v":
@@ -188,9 +189,9 @@ class Command:
                             info = i.metadata
                             break
                     if info:
-                        p = gu.create_text_image(
-                            f"【插件信息】", f"名称: {info.plugin_name}\n类型: {info.plugin_type}\n{info.desc}\n版本: {info.version}\n作者: {info.author}")
-                        return True, [Image.fromFileSystem(p)], "plugin"
+                        p = await text_to_image_base(f"# `{info.plugin_name}` 插件信息\n- 类型: {info.plugin_type}\n- 简介{info.desc}\n- 版本: {info.version}\n- 作者: {info.author}")
+                        with open(p, 'rb') as f:
+                            return True, [Image.fromBytes(f.read())], "plugin"
                     else:
                         return False, "未找到该插件", "plugin"
                 except BaseException as e:
@@ -232,22 +233,24 @@ class Command:
                     notice = (await resp.json())["notice"]
         except BaseException as e:
             notice = ""
-        msg = "# Help Center\n## 指令列表\n"
+        msg = "## 指令列表\n"
         for key, value in commands.items():
-            msg += f"`{key}` - {value}\n"
+            msg += f"- `{key}`: {value}\n"
         # plugins
-        if cached_plugins != None:
+        print(cached_plugins)
+        if cached_plugins:
             plugin_list_info = ""
             for plugin in cached_plugins:
-                plugin_list_info += f"`{plugin.metadata.plugin_name}` {plugin.metadata.desc}\n"
-            if plugin_list_info.strip() != "":
-                msg += "\n## 插件列表\n> 使用plugin v 插件名 查看插件帮助\n"
+                plugin_list_info += f"- `{plugin.metadata.plugin_name}`: {plugin.metadata.desc}\n"
+            if plugin_list_info.strip():
+                msg += "\n## 插件列表\n> 使用 plugin v 插件名 查看插件帮助\n"
                 msg += plugin_list_info
         msg += notice
 
         try:
-            p = gu.create_markdown_image(msg)
-            return [Image.fromFileSystem(p),]
+            p = await text_to_image_base(msg)
+            with open(p, 'rb') as f:
+                return [Image.fromBytes(f.read()),]
         except BaseException as e:
             logger.error(str(e))
             return msg

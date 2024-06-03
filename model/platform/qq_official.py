@@ -20,6 +20,7 @@ from ._message_parse import (
 from type.message import *
 from typing import Union, List
 from nakuru.entities.components import BaseMessageComponent
+from util.image_render.helper import text_to_image_base
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 
@@ -183,7 +184,8 @@ class QQOfficial(Platform):
                     else:
                         plain_text += "\n\n" + \
                             "![](file:///" + image_path + ")"
-                image_path = gu.create_markdown_image("".join(plain_text))
+                # image_path = gu.create_markdown_image("".join(plain_text))
+                image_path = await text_to_image_base("".join(plain_text))
                 plain_text = ""
 
         else:

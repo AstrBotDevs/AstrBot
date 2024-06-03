@@ -10,6 +10,7 @@ import json
 import sys
 import psutil
 import ssl
+import base64
 
 from PIL import Image, ImageDraw, ImageFont
 from type.types import GlobalObject
@@ -443,21 +444,6 @@ def get_local_ip_addresses():
     return ip
 
 
-def get_sys_info(global_object: GlobalObject):
-    mem = None
-    stats = global_object.dashboard_data.stats
-    os_name = platform.system()
-    os_version = platform.version()
-
-    if 'sys_perf' in stats and 'memory' in stats['sys_perf']:
-        mem = stats['sys_perf']['memory']
-    return {
-        'mem': mem,
-        'os': os_name + '_' + os_version,
-        'py': platform.python_version(),
-    }
-
-
 def upload(_global_object: GlobalObject):
     '''
     上传相关非敏感统计数据
@@ -519,7 +505,6 @@ def retry(n: int = 3):
                     logger.warning(f"函数 {func.__name__} 第 {i+1} 次重试... {e}")
         return wrapper
     return decorator
-
 
 def run_monitor(global_object: GlobalObject):
     '''

@@ -1,5 +1,6 @@
 from nakuru.entities.components import Plain, At, Image, Node
 from util import general_utils as gu
+from util.image_render.helper import text_to_image_base
 from util.cmd_config import CmdConfig
 import asyncio
 from nakuru import (
@@ -213,7 +214,8 @@ class QQGOCQ(Platform):
                     news.append(i)
             plains_str = "".join(plains).strip()
             if plains_str != "" and len(plains_str) > 50:
-                p = gu.create_markdown_image("".join(plains))
+                # p = gu.create_markdown_image("".join(plains))
+                p = await text_to_image_base(plains_str)
                 news.append(Image.fromFileSystem(p))
                 res = news
 
