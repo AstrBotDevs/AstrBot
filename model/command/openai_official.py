@@ -1,11 +1,13 @@
 from model.command.command import Command
 from model.provider.openai_official import ProviderOpenAIOfficial, MODELS
 from util.personality import personalities
+from util.general_utils import download_image_by_url
 from type.types import GlobalObject
 from type.command import CommandItem
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from openai._exceptions import NotFoundError
+from nakuru.entities.components import Image
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
@@ -248,4 +250,6 @@ class CommandOpenAIOfficial(Command):
             return False, "未启用 OpenAI 官方 API", "draw"
         message = message.removeprefix("/").removeprefix("画")
         img_url = await self.provider.image_generate(message)
-        return True, img_url, "draw"
+        p = await download_image_by_url(url=img_url)
+        with open(p, 'rb') as f:
+            return True, [Image.fromBytes(f.read())], "draw"
