@@ -106,7 +106,7 @@ class Command:
         if self.command_start_with(message, "update"):
             return True, self.update(message, role)
         if message == "t2i":
-            return True, "t2i", self.t2i_toggle(message, role)
+            return True, self.t2i_toggle(message, role)
         if not self.provider and message == "help":
             return True, await self.help()
 
@@ -220,6 +220,7 @@ class Command:
             "nick": "设置机器人唤醒词",
             "plugin": "插件安装、卸载和重载",
             "web on/off": "LLM 网页搜索能力",
+            "t2i": "启用/关闭文本转图片模式"
         }
 
     async def help_messager(self, commands: dict, platform: str, cached_plugins: List[RegisteredPlugin] = None):

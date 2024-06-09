@@ -44,7 +44,6 @@ class QQGOCQ(Platform):
         self.context = global_object
 
         self.unique_session = cfg['uniqueSessionMode']
-        self.pic_mode = cfg['qq_pic_mode']
 
         self.client = CQHTTP(
             host=self.cc.get("gocq_host", "127.0.0.1"),
@@ -204,7 +203,7 @@ class QQGOCQ(Platform):
             res.append(Plain(text=res_str))
 
         # if image mode, put all Plain texts into a new picture.
-        if self.pic_mode and isinstance(res, list):
+        if self.cc.get("qq_pic_mode", False) and isinstance(res, list):
             plains = []
             news = []
             for i in res:

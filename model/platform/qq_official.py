@@ -21,6 +21,7 @@ from type.message import *
 from typing import Union, List
 from nakuru.entities.components import *
 from util.image_render.helper import text_to_image_base
+from util.cmd_config import CmdConfig
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 
@@ -58,14 +59,14 @@ class QQOfficial(Platform):
         asyncio.set_event_loop(self.loop)
 
         self.waiting: dict = {}
-
+        
+        self.cc = CmdConfig()
         self.cfg = cfg
         self.appid = cfg['qqbot']['appid']
         self.token = cfg['qqbot']['token']
         self.secret = cfg['qqbot_secret']
         self.unique_session = cfg['uniqueSessionMode']
         qq_group = cfg['qqofficial_enable_group_message']
-        self.pic_mode = cfg['qq_pic_mode']
 
         if qq_group:
             self.intents = botpy.Intents(
@@ -198,7 +199,7 @@ class QQOfficial(Platform):
         #                     if response.status == 200:
         #                         image = PILImage.open(io.BytesIO(await response.read()))
         #                         image_path = gu.save_temp_img(image)
-        if self.pic_mode:
+        if self.cc.get("qq_pic_mode", False):
             plains = []
             news = []
             if isinstance(res, str):
@@ -220,7 +221,7 @@ class QQOfficial(Platform):
         else:
             plain_text = res
 
-        if source is not None and image_path == '':  # file_image与message_reference不能同时传入
+        if source and not image_path:  # file_image与message_reference不能同时传入
             msg_ref = Reference(message_id=source.id,
                                 ignore_get_message_error=False)
 
