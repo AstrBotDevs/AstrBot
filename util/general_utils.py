@@ -32,21 +32,17 @@ def port_checker(port: int, host: str = "localhost"):
         sk.close()
         return False
 
+def get_font(size: int) -> ImageFont.FreeTypeFont:
+    # get yahei first
+    # common and default fonts on Windows, macOS and Linux
+    fonts = ["msyh.ttc", "NotoSansCJK-Regular.ttc", "msyhbd.ttc", "PingFang.ttc", "Heiti.ttc"]
+    for font in fonts:
+        try:
+            font = ImageFont.truetype(font, size)
+            return font
+        except Exception as e:
+            pass
 
-def get_font_path() -> str:
-    if os.path.exists("resources/fonts/syst.otf"):
-        font_path = "resources/fonts/syst.otf"
-    elif os.path.exists("QQChannelChatGPT/resources/fonts/syst.otf"):
-        font_path = "QQChannelChatGPT/resources/fonts/syst.otf"
-    elif os.path.exists("AstrBot/resources/fonts/syst.otf"):
-        font_path = "AstrBot/resources/fonts/syst.otf"
-    elif os.path.exists("C:/Windows/Fonts/simhei.ttf"):
-        font_path = "C:/Windows/Fonts/simhei.ttf"
-    elif os.path.exists("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"):
-        font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-    else:
-        raise Exception("找不到字体文件")
-    return font_path
 
 def render_markdown(markdown_text, image_width=800, image_height=600, font_size=26, font_color=(0, 0, 0), bg_color=(255, 255, 255)):
 
@@ -87,11 +83,8 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
     # 用于匹配图片的正则表达式
     IMAGE_REGEX = r"!\s*\[.*?\]\s*\((.*?)\)"
 
-    font_path = get_font_path()
-    font_path1 = font_path
-
     # 加载字体
-    font = ImageFont.truetype(font_path, font_size)
+    font = get_font(font_size)
 
     images: Image = {}
 
@@ -212,7 +205,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             header_level = line.count("#")
             line = line.strip("#").strip()
             font_size_header = HEADER_FONT_STANDARD_SIZE - header_level * 4
-            font = ImageFont.truetype(font_path, font_size_header)
+            font = get_font(font_size_header)
             y += HEADER_MARGIN  # 上边距
             # 字间距
             draw.text((x, y), line, font=font, fill=font_color)
@@ -226,7 +219,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             y += QUOTE_LEFT_LINE_MARGIN
             draw.line((x, y, x, y + QUOTE_LEFT_LINE_HEIGHT),
                       fill=QUOTE_LEFT_LINE_COLOR, width=QUOTE_LEFT_LINE_WIDTH)
-            font = ImageFont.truetype(font_path, QUOTE_FONT_SIZE)
+            font = get_font(QUOTE_FONT_SIZE)
             draw.text((x + QUOTE_FONT_LINE_MARGIN, y + QUOTE_FONT_LINE_MARGIN),
                       quote_text, font=font, fill=QUOTE_FONT_COLOR)
             y += font_size + QUOTE_LEFT_LINE_HEIGHT + QUOTE_LEFT_LINE_MARGIN
@@ -234,7 +227,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
         elif line.startswith("-"):
             # 处理列表
             list_text = line.strip("-").strip()
-            font = ImageFont.truetype(font_path, LIST_FONT_SIZE)
+            font = get_font(LIST_FONT_SIZE)
             y += LIST_MARGIN
             draw.text((x, y), "  ·  " + list_text,
                       font=font, fill=LIST_FONT_COLOR)
@@ -251,7 +244,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                 code_block_codes = []
                 draw.rounded_rectangle((x, code_block_start_y, image_width - 10, y+CODE_BLOCK_CODES_MARGIN_VERTICAL +
                                        CODE_BLOCK_TEXT_MARGIN), radius=5, fill=CODE_BLOCK_BG_COLOR, width=2)
-                font = ImageFont.truetype(font_path1, CODE_BLOCK_FONT_SIZE)
+                font = get_font(CODE_BLOCK_FONT_SIZE)
                 draw.text((x + CODE_BLOCK_CODES_MARGIN_HORIZONTAL, code_block_start_y +
                           CODE_BLOCK_CODES_MARGIN_VERTICAL), codes, font=font, fill=font_color)
                 y += CODE_BLOCK_CODES_MARGIN_VERTICAL + CODE_BLOCK_MARGIN
@@ -268,7 +261,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                 # the judge has a tiny bug.
                 # when line is like "hi`hi`". all the parts will be in parts_inline.
                 if part in parts_inline:
-                    font = ImageFont.truetype(font_path, INLINE_CODE_FONT_SIZE)
+                    font = get_font(INLINE_CODE_FONT_SIZE)
                     code_text = part.strip("`")
                     code_width = font.getsize(
                         code_text)[0] + INLINE_CODE_FONT_MARGIN*2
@@ -281,7 +274,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
                               code_text, font=font, fill=font_color)
                     x += code_width+INLINE_CODE_MARGIN-INLINE_CODE_FONT_MARGIN
                 else:
-                    font = ImageFont.truetype(font_path, font_size)
+                    font = get_font(font_size)
                     draw.text((x, y), part, font=font, fill=font_color)
                     x += font.getsize(part)[0]
             y += font_size + INLINE_CODE_MARGIN
@@ -292,7 +285,7 @@ def render_markdown(markdown_text, image_width=800, image_height=600, font_size=
             if line == "":
                 y += TEXT_LINE_MARGIN
             else:
-                font = ImageFont.truetype(font_path, font_size)
+                font = get_font(font_size)
 
                 draw.text((x, y), line, font=font, fill=font_color)
                 y += font_size + TEXT_LINE_MARGIN*2
