@@ -7,7 +7,6 @@ configs/config.yaml
 **/.DS_Store
 temp
 cmd_config.json
-addons/plugins/
 data/*
 cookies.json
 logs/
