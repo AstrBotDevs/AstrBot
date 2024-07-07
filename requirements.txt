@@ -5,7 +5,6 @@ openai~=1.2.3
 qq-botpy
 chardet~=5.1.0
 Pillow
-GitPython
 nakuru-project
 beautifulsoup4
 googlesearch-python

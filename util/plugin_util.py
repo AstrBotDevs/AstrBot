@@ -1,22 +1,18 @@
 '''
 插件工具函数
 '''
-import os, sys
+import os, sys, zipfile, shutil
 import inspect
-import shutil
-import stat
 import traceback
 
-try:
-    from git.repo import Repo
-except ImportError:
-    pass
 from types import ModuleType
 from type.plugin import *
 from type.register import *
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from type.types import GlobalObject
+from util.general_utils import download_file, remove_dir
+from util.updator import request_release_info
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
@@ -61,7 +57,7 @@ def get_modules(path):
 
 
 def get_plugin_store_path():
-    plugin_dir = os.path.abspath(os.path.join(os.path.abspath(__file__), "../../addons/plugins"))
+    plugin_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../addons/plugins"))
     return plugin_dir
 
 def get_plugin_modules():
@@ -182,22 +178,44 @@ def update_plugin_dept(path):
 
 def install_plugin(repo_url: str, ctx: GlobalObject):
     ppath = get_plugin_store_path()
-    # 删除末尾的 /
     if repo_url.endswith("/"):
         repo_url = repo_url[:-1]
-    # 得到 url 的最后一段
-    d = repo_url.split("/")[-1]
-    # 转换非法字符：-
-    d = d.replace("-", "_")
-    d = d.lower() # 转换为小写
-    # 创建文件夹
-    plugin_path = os.path.join(ppath, d)
-    if os.path.exists(plugin_path):
-        remove_dir(plugin_path)
-    Repo.clone_from(repo_url, to_path=plugin_path, branch='master')
+
+    repo_namespace = repo_url.split("/")[-2:]
+    repo = repo_namespace[1]
+
+    plugin_path = os.path.join(ppath, repo.replace("-", "_").lower())
+    if os.path.exists(plugin_path): remove_dir(plugin_path)
+
+    # we no longer use Git anymore :)
+    # Repo.clone_from(repo_url, to_path=plugin_path, branch='master')
+
+    download_from_repo_url(plugin_path, repo_url)
+    unzip_file(plugin_path + ".zip", plugin_path)
+
+    with open(os.path.join(plugin_path, "REPO"), "w") as f:
+        f.write(repo_url)
+
     ok, err = plugin_reload(ctx)
     if not ok:
         raise Exception(err)
+    
+def download_from_repo_url(target_path: str, repo_url: str):
+    repo_namespace = repo_url.split("/")[-2:]
+    author = repo_namespace[0]
+    repo = repo_namespace[1]
+
+    logger.info(f"正在下载插件 {repo} ...")
+    release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
+    releases = request_release_info(latest=True, url=release_url, mirror_url=release_url)
+    if not releases:
+        # download from the default branch directly. 
+        logger.warn(f"未在插件 {author}/{repo} 中找到任何发布版本，将从默认分支下载。")
+        release_url = f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
+    else:
+        release_url = releases[0]['zipball_url']
+
+    download_file(release_url, target_path + ".zip")
 
 
 def get_registered_plugin(plugin_name: str, cached_plugins: RegisteredPlugins) -> RegisteredPlugin:
@@ -227,23 +245,63 @@ def update_plugin(plugin_name: str, ctx: GlobalObject):
     ppath = get_plugin_store_path()
     root_dir_name = plugin.root_dir_name
     plugin_path = os.path.join(ppath, root_dir_name)
-    repo = Repo(path=plugin_path)
-    repo.remotes.origin.pull()
+
+    if not os.path.exists(os.path.join(plugin_path, "REPO")):
+        raise Exception("插件更新信息文件 `REPO` 不存在，请手动升级，或者先卸载然后重新安装该插件。")
+    
+    repo_url = None
+    with open(os.path.join(plugin_path, "REPO"), "r") as f:
+        repo_url = f.read()
+
+    download_from_repo_url(plugin_path, repo_url)
+    try:
+        remove_dir(plugin_path)
+    except BaseException as e:
+        logger.error(f"删除旧版本插件 {plugin_name} 文件夹失败: {str(e)}，使用覆盖安装。")
+    unzip_file(plugin_path + ".zip", plugin_path)
+
     ok, err = plugin_reload(ctx)
     if not ok:
         raise Exception(err)
 
+def unzip_file(zip_path: str, target_dir: str):
+    '''
+    解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir
+    '''
+    os.makedirs(target_dir, exist_ok=True)
+    update_dir = ""
+    logger.info(f"解压文件: {zip_path}")
+    with zipfile.ZipFile(zip_path, 'r') as z:
+        update_dir = z.namelist()[0]
+        z.extractall(target_dir)
 
-def remove_dir(file_path) -> bool:
-    try_cnt = 50
-    while try_cnt > 0:
-        if not os.path.exists(file_path):
-            return False
-        try:
-            shutil.rmtree(file_path)
-            return True
-        except PermissionError as e:
-            err_file_path = str(e).split("\'", 2)[1]
-            if os.path.exists(err_file_path):
-                os.chmod(err_file_path, stat.S_IWUSR)
-            try_cnt -= 1
+    files = os.listdir(os.path.join(target_dir, update_dir))
+    for f in files:
+        logger.info(f"移动更新文件/目录: {f}")
+        if os.path.isdir(os.path.join(target_dir, update_dir, f)):
+            if os.path.exists(os.path.join(target_dir, f)):
+                shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
+        else:
+            if os.path.exists(os.path.join(target_dir, f)):
+                os.remove(os.path.join(target_dir, f))
+        shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
+    
+    try:
+        logger.info(f"删除临时更新文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}")
+        shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
+        os.remove(zip_path)
+    except:
+        logger.warn(f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}")
+
+
+def on_error(func, path, exc_info):
+    '''
+    a callback of the rmtree function.
+    '''
+    print(f"remove {path} failed.")
+    import stat
+    if not os.access(path, os.W_OK):
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        raise

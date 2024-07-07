@@ -1,18 +1,20 @@
-has_git = True
-try:
-    import git.exc
-    from git.repo import Repo
-except BaseException as e:
-    has_git = False
-import sys, os
+import sys, os, zipfile, shutil
 import requests
 import psutil
 from type.config import VERSION
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 
+from util.general_utils import download_file
+
 logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
 
+ASTRBOT_RELEASE_API = "https://api.github.com/repos/Soulter/AstrBot/releases"
+MIRROR_ASTRBOT_RELEASE_API = "https://api.soulter.top/releases" # 0-10 分钟的缓存时间
+
+def get_main_path():
+    ret = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    return ret
 
 def terminate_child_processes():
     try:
@@ -37,40 +39,23 @@ def _reboot():
     terminate_child_processes()
     os.execl(py, py, *sys.argv)
     
-def find_repo() -> Repo:
-    if not has_git:
-        raise Exception("未安装 GitPython 库，无法进行更新。")
-    repo = None
-    
-    # 由于项目更名过，因此这里需要多次尝试。
-    try:
-        repo = Repo()
-    except git.exc.InvalidGitRepositoryError:
-        try:
-            repo = Repo(path="QQChannelChatGPT")  
-        except git.exc.InvalidGitRepositoryError:
-            repo = Repo(path="AstrBot")
-    if not repo:
-        raise Exception("在已知的目录下未找到项目位置。请联系项目维护者。")
-    return repo
-    
-def request_release_info(latest: bool = True) -> list:
+def request_release_info(latest: bool = True, url: str = ASTRBOT_RELEASE_API, mirror_url: str = MIRROR_ASTRBOT_RELEASE_API) -> list:
     '''
     请求版本信息。
     返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
     '''
-    api_url1 = "https://api.github.com/repos/Soulter/AstrBot/releases"
-    api_url2 = "https://api.soulter.top/releases" # 0-10 分钟的缓存时间
     try:
-        result = requests.get(api_url2).json()
+        result = requests.get(mirror_url).json()
     except BaseException as e:
-        result = requests.get(api_url1).json()
+        result = requests.get(url).json()
     try:
+        if not result: return []
         if latest:
             ret = github_api_release_parser([result[0]])
         else:
             ret = github_api_release_parser(result)
     except BaseException as e:
+        logger.error(f"解析版本信息失败: {result}")
         raise Exception(f"解析版本信息失败: {result}")
     return ret
         
@@ -92,22 +77,38 @@ def github_api_release_parser(releases: list) -> list:
             "published_at": release['published_at'],
             "body": release['body'],
             "commit_hash": commit_hash,
-            "tag_name": release['tag_name']
+            "tag_name": release['tag_name'],
+            "zipball_url": release['zipball_url']
         })
     return ret
 
+def compare_version(v1: str, v2: str) -> int:
+    '''
+    比较两个版本号的大小。
+    返回 1 表示 v1 > v2，返回 -1 表示 v1 < v2，返回 0 表示 v1 = v2。
+    '''
+    v1 = v1.replace('v', '')
+    v2 = v2.replace('v', '')
+    v1 = v1.split('.')
+    v2 = v2.split('.')
+
+    for i in range(3):
+        if int(v1[i]) > int(v2[i]):
+            return 1
+        elif int(v1[i]) < int(v2[i]):
+            return -1
+    return 0
+
 def check_update() -> str:
-    repo = find_repo()
-    curr_commit = repo.commit().hexsha
     update_data = request_release_info()
-    new_commit = update_data[0]['commit_hash']
-    print(f"当前版本: {curr_commit}")
-    print(f"最新版本: {new_commit}")
-    if curr_commit.startswith(new_commit):
-        return f"当前已经是最新版本: v{VERSION}"
-    else:
-        update_info = f"""> 有新版本可用，请及时更新。
-# 当前版本
+    tag_name = update_data[0]['tag_name']
+    logger.debug(f"当前版本: v{VERSION}")
+    logger.debug(f"最新版本: {tag_name}")
+
+    if compare_version(VERSION, tag_name) >= 0:
+        return "当前已经是最新版本。"
+
+    update_info = f"""# 当前版本
 v{VERSION}
 
 # 最新版本
@@ -120,27 +121,20 @@ v{VERSION}
 ---
 {update_data[0]['body']}
 ---"""
-        return update_info
+    return update_info
     
-def update_project(update_data: list,
-                   reboot: bool = False, 
+def update_project(reboot: bool = False, 
                    latest: bool = True,
                    version: str = ''):
-    repo = find_repo()
-    # update_data = request_release_info(latest)
+    update_data = request_release_info(latest)
     if latest:
-        # 检查本地commit和最新commit是否一致
-        curr_commit = repo.head.commit.hexsha
-        new_commit = update_data[0]['commit_hash']
-        if curr_commit == '':
-            raise Exception("无法获取当前版本号对应的版本位置。请联系项目维护者。")
-        if curr_commit.startswith(new_commit):
+        latest_version = update_data[0]['tag_name']
+        if compare_version(VERSION, latest_version) >= 0:
             raise Exception("当前已经是最新版本。")
         else:
-            # 更新到最新版本对应的commit
             try:
-                repo.git.fetch()
-                repo.git.checkout(update_data[0]['tag_name'], "-f")
+                download_file(update_data[0]['zipball_url'], "temp.zip")
+                unzip_file("temp.zip", get_main_path())
                 if reboot: _reboot()
             except BaseException as e:
                 raise e
@@ -151,21 +145,66 @@ def update_project(update_data: list,
         for data in update_data:
             if data['tag_name'] == version:
                 try:
-                    repo.git.fetch()
-                    repo.git.checkout(data['tag_name'], "-f")
+                    download_file(data['zipball_url'], "temp.zip")
+                    unzip_file("temp.zip", get_main_path())
                     flag = True
                     if reboot: _reboot()
                 except BaseException as e:
                     raise e
         if not flag:
             raise Exception("未找到指定版本。")
+
+def unzip_file(zip_path: str, target_dir: str):
+    '''
+    解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir
+    '''
+    os.makedirs(target_dir, exist_ok=True)
+    update_dir = ""
+    logger.info(f"解压文件: {zip_path}")
+    with zipfile.ZipFile(zip_path, 'r') as z:
+        update_dir = z.namelist()[0]
+        z.extractall(target_dir)
+
+    avoid_dirs = ["logs", "data", "configs", "temp_plugins", update_dir]
+    # copy addons/plugins to the target_dir temporarily
+    if os.path.exists(os.path.join(target_dir, "addons/plugins")):
+        logger.info("备份插件目录：从 addons/plugins 到 temp_plugins")
+        shutil.copytree(os.path.join(target_dir, "addons/plugins"), "temp_plugins")
+
+    files = os.listdir(os.path.join(target_dir, update_dir))
+    for f in files:
+        logger.info(f"移动更新文件/目录: {f}")
+        if os.path.isdir(os.path.join(target_dir, update_dir, f)):
+            if f in avoid_dirs: continue
+            if os.path.exists(os.path.join(target_dir, f)):
+                shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
+        else:
+            if os.path.exists(os.path.join(target_dir, f)):
+                os.remove(os.path.join(target_dir, f))
+        shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
     
-def checkout_branch(branch_name: str):
-    repo = find_repo()
+    # move back
+    if os.path.exists("temp_plugins"):
+        logger.info("恢复插件目录：从 temp_plugins 到 addons/plugins")
+        shutil.rmtree(os.path.join(target_dir, "addons/plugins"), onerror=on_error)
+        shutil.move("temp_plugins", os.path.join(target_dir, "addons/plugins"))
+    
     try:
-        repo.git.fetch()
-        repo.git.checkout(branch_name, "-f")
-        repo.git.pull("origin", branch_name, "-f")
-        return True
-    except BaseException as e:
-        raise e
+        logger.info(f"删除临时更新文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}")
+        shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
+        os.remove(zip_path)
+    except:
+        logger.warn(f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}")
+
+
+def on_error(func, path, exc_info):
+    '''
+    a callback of the rmtree function.
+    '''
+    print(f"remove {path} failed.")
+    import stat
+    if not os.access(path, os.W_OK):
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        raise

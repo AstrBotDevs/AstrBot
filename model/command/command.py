@@ -274,8 +274,7 @@ class Command:
         else:
             if l[1] == "latest":
                 try:
-                    release_data = util.updator.request_release_info()
-                    util.updator.update_project(release_data)
+                    util.updator.update_project()
                     return True, "更新成功，重启生效。可输入「update r」重启", "update"
                 except BaseException as e:
                     return False, "更新失败: "+str(e), "update"
@@ -284,10 +283,7 @@ class Command:
             else:
                 if l[1].lower().startswith('v'):
                     try:
-                        release_data = util.updator.request_release_info(
-                            latest=False)
-                        util.updator.update_project(
-                            release_data, latest=False, version=l[1])
+                        util.updator.update_project(latest=False, version=l[1])
                         return True, "更新成功，重启生效。可输入「update r」重启", "update"
                     except BaseException as e:
                         return False, "更新失败: "+str(e), "update"

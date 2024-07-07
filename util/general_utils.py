@@ -5,12 +5,13 @@ import re
 import requests
 import aiohttp
 import socket
-import platform
 import json
 import sys
 import psutil
 import ssl
-import base64
+import zipfile
+import shutil
+import stat
 
 from PIL import Image, ImageDraw, ImageFont
 from type.types import GlobalObject
@@ -362,7 +363,20 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
                     return save_temp_img(await resp.read())
     except Exception as e:
         raise e
-
+    
+def download_file(url: str, path: str):
+    '''
+    从指定 url 下载文件到指定路径 path
+    '''
+    try:
+        logger.info(f"下载文件: {url}")
+        with requests.get(url, stream=True) as r:
+            with open(path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+    except Exception as e:
+        raise e
+    
 
 def create_markdown_image(text: str):
     '''
@@ -469,3 +483,24 @@ def run_monitor(global_object: GlobalObject):
         }
         stat['sys_start_time'] = start_time
         time.sleep(30)
+
+def remove_dir(file_path) -> bool:
+    if not os.path.exists(file_path): return True
+    try:
+        shutil.rmtree(file_path, onerror=on_error)
+        return True
+    except BaseException as e:
+        logger.error(f"删除文件/文件夹 {file_path} 失败: {str(e)}")
+        return False
+    
+def on_error(func, path, exc_info):
+    '''
+    a callback of the rmtree function.
+    '''
+    print(f"remove {path} failed.")
+    import stat
+    if not os.access(path, os.W_OK):
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        raise

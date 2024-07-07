@@ -288,8 +288,7 @@ class AstrBotDashBoard():
             else:
                 latest = False
             try:
-                update_project(request_release_info(latest),
-                               latest=latest, version=version)
+                update_project(latest=latest, version=version)
                 threading.Thread(target=self.shutdown_bot, args=(3,)).start()
                 return Response(
                     status="success",
