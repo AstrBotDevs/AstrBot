@@ -196,7 +196,6 @@ def unzip_file(zip_path: str, target_dir: str):
     except:
         logger.warn(f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}")
 
-
 def on_error(func, path, exc_info):
     '''
     a callback of the rmtree function.

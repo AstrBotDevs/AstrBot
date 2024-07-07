@@ -9,7 +9,7 @@ async def text_to_image_base(text: str, return_url: bool = False) -> str:
     '''
     返回图像的文件路径
     '''
-    with open(os.path.join(TEMPLATE_PATH, "base.html"), "r") as f:
+    with open(os.path.join(TEMPLATE_PATH, "base.html"), "r", encoding='utf-8') as f:
         tmpl_str = f.read()
 
     assert(tmpl_str)

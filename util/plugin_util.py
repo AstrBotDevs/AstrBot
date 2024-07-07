@@ -1,9 +1,10 @@
 '''
 插件工具函数
 '''
-import os, sys, zipfile, shutil
+import os, sys, zipfile, shutil, yaml
 import inspect
 import traceback
+import uuid
 
 from types import ModuleType
 from type.plugin import *
@@ -193,12 +194,65 @@ def install_plugin(repo_url: str, ctx: GlobalObject):
     download_from_repo_url(plugin_path, repo_url)
     unzip_file(plugin_path + ".zip", plugin_path)
 
-    with open(os.path.join(plugin_path, "REPO"), "w") as f:
+    with open(os.path.join(plugin_path, "REPO"), "w", encoding='utf-8') as f:
         f.write(repo_url)
 
     ok, err = plugin_reload(ctx)
     if not ok:
         raise Exception(err)
+    
+def install_plugin_from_file(zip_file_path: str, ctx: GlobalObject):
+    # try to unzip
+    temp_dir = os.path.join(os.path.dirname(zip_file_path), str(uuid.uuid4()))
+    unzip_file(zip_file_path, temp_dir)
+    # check if the plugin has metadata.yaml
+    if not os.path.exists(os.path.join(temp_dir, "metadata.yaml")):
+        remove_dir(temp_dir)
+        raise Exception("插件缺少 metadata.yaml 文件。")
+    
+    metadata = load_plugin_metadata(temp_dir)
+    plugin_name = metadata.plugin_name
+    if not plugin_name: 
+        remove_dir(temp_dir)
+        raise Exception("插件 metadata.yaml 文件中 name 字段为空。")
+    plugin_name = plugin_name.replace("-", "_").lower()
+
+    ppath = get_plugin_store_path()
+    plugin_path = os.path.join(ppath, plugin_name.replace("-", "_").lower())
+    if os.path.exists(plugin_path): remove_dir(plugin_path)
+
+    # move to the target path
+    shutil.move(temp_dir, plugin_path)
+
+    with open(os.path.join(plugin_path, "REPO"), "w", encoding='utf-8') as f:
+        if metadata.repo: f.write(metadata.repo)
+
+    # remove the temp dir
+    remove_dir(temp_dir)
+
+    ok, err = plugin_reload(ctx)
+    if not ok:
+        raise Exception(err)
+    
+def load_plugin_metadata(plugin_path: str) -> PluginMetadata:
+    if not os.path.exists(plugin_path):
+        raise Exception("插件不存在。")
+    if not os.path.exists(os.path.join(plugin_path, "metadata.yaml")):
+        raise Exception("插件缺少 metadata.yaml 文件。")
+    metadata = None
+    with open(os.path.join(plugin_path, "metadata.yaml"), "r", encoding='utf-8') as f:
+        metadata = yaml.safe_load(f)
+    if 'name' not in metadata or 'desc' not in metadata or 'version' not in metadata or 'author' not in metadata:
+        raise Exception("插件 metadata.yaml 信息不完整。")
+    return PluginMetadata(
+        plugin_name=metadata['name'],
+        plugin_type=PluginType.COMMON if 'plugin_type' not in metadata else PluginType(metadata['plugin_type']),
+        author=metadata['author'],
+        desc=metadata['desc'],
+        version=metadata['version'],
+        repo=metadata['repo'] if 'repo' in metadata else None
+    )
+    
     
 def download_from_repo_url(target_path: str, repo_url: str):
     repo_namespace = repo_url.split("/")[-2:]
@@ -250,7 +304,7 @@ def update_plugin(plugin_name: str, ctx: GlobalObject):
         raise Exception("插件更新信息文件 `REPO` 不存在，请手动升级，或者先卸载然后重新安装该插件。")
     
     repo_url = None
-    with open(os.path.join(plugin_path, "REPO"), "r") as f:
+    with open(os.path.join(plugin_path, "REPO"), "r", encoding='utf-8') as f:
         repo_url = f.read()
 
     download_from_repo_url(plugin_path, repo_url)

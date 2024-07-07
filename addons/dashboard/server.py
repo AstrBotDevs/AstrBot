@@ -4,8 +4,9 @@ import json
 import threading
 import asyncio
 import os
-import sys
+import uuid
 import time
+import traceback
 
 from flask import Flask, request
 from flask.logging import default_handler
@@ -204,6 +205,31 @@ class AstrBotDashBoard():
                     data=None
                 ).__dict__
             except Exception as e:
+                logger.error(f"/api/extensions/install: {traceback.format_exc()}")
+                return Response(
+                    status="error",
+                    message=e.__str__(),
+                    data=None
+                ).__dict__
+            
+        @self.dashboard_be.post("/api/extensions/upload-install")
+        def upload_install_plugin():
+            try:
+                file = request.files['file']
+                print(file.filename)
+                logger.info(f"正在安装用户上传的插件 {file.filename}")
+                # save file to temp/
+                file_path = f"temp/{uuid.uuid4()}.zip"
+                file.save(file_path)
+                putil.install_plugin_from_file(file_path, global_object)
+                logger.info(f"安装插件 {file.filename} 成功")
+                return Response(
+                    status="success",
+                    message="安装成功~",
+                    data=None
+                ).__dict__
+            except Exception as e:
+                logger.error(f"/api/extensions/upload-install: {traceback.format_exc()}")
                 return Response(
                     status="error",
                     message=e.__str__(),
@@ -217,7 +243,7 @@ class AstrBotDashBoard():
             try:
                 logger.info(f"正在卸载插件 {plugin_name}")
                 putil.uninstall_plugin(
-                    plugin_name, self.dashboard_data.plugins)
+                    plugin_name, global_object)
                 logger.info(f"卸载插件 {plugin_name} 成功")
                 return Response(
                     status="success",
@@ -225,6 +251,7 @@ class AstrBotDashBoard():
                     data=None
                 ).__dict__
             except Exception as e:
+                logger.error(f"/api/extensions/uninstall: {traceback.format_exc()}")
                 return Response(
                     status="error",
                     message=e.__str__(),
@@ -245,6 +272,7 @@ class AstrBotDashBoard():
                     data=None
                 ).__dict__
             except Exception as e:
+                logger.error(f"/api/extensions/update: {traceback.format_exc()}")
                 return Response(
                     status="error",
                     message=e.__str__(),
@@ -273,6 +301,7 @@ class AstrBotDashBoard():
                     }
                 ).__dict__
             except Exception as e:
+                logger.error(f"/api/check_update: {traceback.format_exc()}")
                 return Response(
                     status="error",
                     message=e.__str__(),
@@ -296,6 +325,7 @@ class AstrBotDashBoard():
                     data=None
                 ).__dict__
             except Exception as e:
+                logger.error(f"/api/update_project: {traceback.format_exc()}")
                 return Response(
                     status="error",
                     message=e.__str__(),
