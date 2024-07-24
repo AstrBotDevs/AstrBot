@@ -419,19 +419,19 @@ class AstrBotDashBoard():
                         "tag": ""
                     },
                     {
-                        "title": "QQ(官方机器人 API)",
+                        "title": "QQ(官方)",
                         "desc": "QQ官方API。支持频道、群、私聊（需获得群权限）",
                         "namespace": "internal_platform_qq_official",
                         "tag": ""
                     },
                     {
-                        "title": "QQ(nakuru 适配器)",
+                        "title": "QQ(nakuru)",
                         "desc": "适用于 go-cqhttp",
                         "namespace": "internal_platform_qq_gocq",
                         "tag": ""
                     },
                     {
-                        "title": "QQ(aiocqhttp 适配器)",
+                        "title": "QQ(aiocqhttp)",
                         "desc": "适用于 Lagrange, LLBot, Shamrock 等支持反向WS的协议实现。",
                         "namespace": "internal_platform_qq_aiocqhttp",
                         "tag": ""

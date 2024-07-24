@@ -23,7 +23,7 @@ class InternalCommandHandler:
         self.manager.register("update", "更新 AstrBot", 10, self.update)
         self.manager.register("plugin", "插件管理", 10, self.plugin)
         self.manager.register("reboot", "重启 AstrBot", 10, self.reboot)
-        self.manager.register("web_search", "网页搜索开关", 10, self.web_search)
+        self.manager.register("websearch", "网页搜索开关", 10, self.web_search)
         self.manager.register("t2i", "文本转图片开关", 10, self.t2i_toggle)
         self.manager.register("myid", "获取你在此平台上的ID", 10, self.myid)
     

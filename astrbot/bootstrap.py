@@ -1,5 +1,5 @@
 import asyncio
-import threading
+import traceback
 from astrbot.message.handler import MessageHandler
 from astrbot.persist.helper import dbConn
 from dashboard.server import AstrBotDashBoard
@@ -72,13 +72,21 @@ class AstrBotBootstrap():
         # load platforms
         platform_tasks = self.load_platform()
         # load metrics uploader
-        metrics_upload_task = upload_metrics(self.context)
+        metrics_upload_task = asyncio.create_task(upload_metrics(self.context))
         # load dashboard
         self.dashboard.run_http_server()
-        dashboard_task = self.dashboard.ws_server()
-        
-        await asyncio.gather(metrics_upload_task, dashboard_task, *platform_tasks)
-        
+        dashboard_task = asyncio.create_task(self.dashboard.ws_server())
+        tasks = [metrics_upload_task, dashboard_task, *platform_tasks]
+        tasks = [self.handle_task(task) for task in tasks]
+        await asyncio.gather(*tasks)
+
+    async def handle_task(self, task: Union[asyncio.Task, asyncio.Future]):
+        try:
+            result = await task
+            return result
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return None
     
     def load_llm(self):
         if 'openai' in self.configs and \
@@ -88,6 +96,7 @@ class AstrBotBootstrap():
             from model.command.openai_official_handler import OpenAIOfficialCommandHandler
             self.openai_command_handler = OpenAIOfficialCommandHandler(self.command_manager)
             self.llm_instance = ProviderOpenAIOfficial(self.context)
+            self.openai_command_handler.set_provider(self.llm_instance)
             logger.info("已启用 OpenAI API 支持。")
     
     def load_plugins(self):

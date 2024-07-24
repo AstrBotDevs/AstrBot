@@ -1,4 +1,4 @@
-import time, threading
+import asyncio
 
 from util.io import port_checker
 from type.register import RegisteredPlatform
@@ -21,20 +21,20 @@ class PlatformManager():
         
         if 'gocqbot' in self.config and self.config['gocqbot']['enable']:
             logger.info("启用 QQ(nakuru 适配器)")
-            tasks.append(self.gocq_bot())
+            tasks.append(asyncio.create_task(self.gocq_bot()))
         
         if 'aiocqhttp' in self.config and self.config['aiocqhttp']['enable']:
             logger.info("启用 QQ(aiocqhttp 适配器)")
-            tasks.append(self.aiocq_bot())
+            tasks.append(asyncio.create_task(self.aiocq_bot()))
 
         # QQ频道
         if 'qqbot' in self.config and self.config['qqbot']['enable'] and self.config['qqbot']['appid'] != None:
             logger.info("启用 QQ(官方 API) 机器人消息平台")
-            tasks.append(self.qqchan_bot())
+            tasks.append(asyncio.create_task(self.qqchan_bot()))
             
         return tasks
 
-    def gocq_bot(self):
+    async def gocq_bot(self):
         '''
         运行 QQ(nakuru 适配器) 
         '''
@@ -51,7 +51,7 @@ class PlatformManager():
                     noticed = True
                     logger.warning(
                         f"连接到{host}:{port}（或{http_port}）失败。程序会每隔 5s 自动重试。")
-                time.sleep(5)
+                await asyncio.sleep(5)
             else:
                 logger.info("nakuru 适配器已连接。")
                 break
@@ -59,7 +59,7 @@ class PlatformManager():
             qq_gocq = QQGOCQ(self.context, self.msg_handler)
             self.context.platforms.append(RegisteredPlatform(
                 platform_name="gocq", platform_instance=qq_gocq, origin="internal"))
-            return qq_gocq.run()
+            await qq_gocq.run()
         except BaseException as e:
             logger.error("启动 nakuru 适配器时出现错误: " + str(e))
 

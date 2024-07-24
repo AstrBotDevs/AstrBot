@@ -93,7 +93,11 @@ class CommandManager():
             return command_result
         except BaseException as e:
             logger.error(traceback.format_exc())
+            
             if not command_metadata.inner_command:
-                logger.error(f"当执行 {command}/({command_metadata.plugin_metadata.plugin_name} By {command_metadata.plugin_metadata.author}) 指令时，发生了异常。")
+                text = f"执行 {command}/({command_metadata.plugin_metadata.plugin_name} By {command_metadata.plugin_metadata.author}) 指令时发生了异常。{e}"
+                logger.error(text)
             else:
-                logger.error(f"当执行 {command} 指令时，发生了异常。")
+                text = f"执行 {command} 指令时发生了异常。{e}"
+                logger.error(text)
+            return CommandResult().message(text)

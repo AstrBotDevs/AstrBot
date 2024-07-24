@@ -7,5 +7,5 @@ class RenderContext:
     def set_strategy(self, strategy: RenderStrategy):
         self._strategy = strategy
 
-    async def render(self, text: str) -> str:
-        return await self._strategy.render(text)
+    async def render(self, text: str, return_url: bool = False):
+        return await self._strategy.render(text, return_url)

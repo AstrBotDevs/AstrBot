@@ -64,7 +64,10 @@ class Platform():
             if isinstance(i, Plain):
                 plain_str += i.text
         if plain_str and len(plain_str) > 50:
-            p = await self.context.image_renderer.render(plain_str)
-            rendered_images.append(Image.fromFileSystem(p))
+            p = await self.context.image_renderer.render(plain_str, return_url=True)
+            if p.startswith('http'):
+                rendered_images.append(Image.fromURL(p))
+            else:
+                rendered_images.append(Image.fromFileSystem(p))
             return rendered_images
         

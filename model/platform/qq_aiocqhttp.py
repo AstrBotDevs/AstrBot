@@ -22,11 +22,8 @@ class AIOCQHTTP(Platform):
         self.announcement = self.context.base_config.get("announcement", "欢迎新人！")
         self.host = self.context.base_config['aiocqhttp']['ws_reverse_host']
         self.port = self.context.base_config['aiocqhttp']['ws_reverse_port']
-
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)   
         
-    def compat_onebot2astrbotmsg(self, event: Event) -> AstrBotMessage:
+    def convert_message(self, event: Event) -> AstrBotMessage:
         
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
@@ -69,27 +66,47 @@ class AIOCQHTTP(Platform):
     def run_aiocqhttp(self):
         if not self.host or not self.port:
             return
-        self.bot = CQHttp(use_ws_reverse=True)
-        
+        self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp')
         @self.bot.on_message('group')
         async def group(event: Event):
-            abm = self.compat_onebot2astrbotmsg(event)
+            abm = self.convert_message(event)
             if abm:
-                await self.handle_msg(event, abm)
-            return {'reply': event.message}
+                await self.handle_msg(abm)
+            # return {'reply': event.message}
         
         @self.bot.on_message('private')
         async def private(event: Event):
-            abm = self.compat_onebot2astrbotmsg(event)
+            abm = self.convert_message(event)
             if abm:
-                await self.handle_msg(event, abm)
-            return {'reply': event.message}
+                await self.handle_msg(abm)
+            # return {'reply': event.message}
         
-        return self.bot.run_task(host=self.host, port=int(self.port))
+        bot = self.bot.run_task(host=self.host, port=int(self.port))
+        
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
+        logging.getLogger('aiocqhttp').setLevel(logging.ERROR)
+        
+        return bot
+    
+    def pre_check(self, message: AstrBotMessage) -> bool:
+        # if message chain contains Plain components or At components which points to self_id, return True
+        if message.type == MessageType.FRIEND_MESSAGE:
+            return True
+        for comp in message.message:
+            if isinstance(comp, At) and str(comp.qq) == message.self_id:
+                return True
+        # check nicks
+        if self.check_nick(message.message_str):
+            return True
+        return False
         
     async def handle_msg(self, message: AstrBotMessage):
         logger.info(
             f"{message.sender.nickname}/{message.sender.user_id} -> {self.parse_message_outline(message)}")
+        
+        if not self.pre_check(message):
+            return
         
         # 解析 role
         sender_id = str(message.sender.user_id)
@@ -100,7 +117,7 @@ class AIOCQHTTP(Platform):
             role = 'member'
             
         # construct astrbot message event
-        ame = AstrMessageEvent().from_astrbot_message(message, self.context, "gocq", message.session_id, role)
+        ame = AstrMessageEvent.from_astrbot_message(message, self.context, "aiocqhttp", message.session_id, role)
         
         # transfer control to message handler
         message_result = await self.message_handler.handle(ame)
@@ -118,12 +135,13 @@ class AIOCQHTTP(Platform):
     async def reply_msg(self,
                         message: AstrBotMessage,
                         result_message: list):
-        await super().reply_msg()
         """
         回复用户唤醒机器人的消息。（被动回复）
         """
         logger.info(
             f"{message.sender.user_id} <- {self.parse_message_outline(message)}")
+        
+        res = result_message
         
         if isinstance(res, str):
             res = [Plain(text=res), ]
@@ -138,9 +156,21 @@ class AIOCQHTTP(Platform):
                 except BaseException as e:
                     logger.warn(traceback.format_exc())
                     logger.warn(f"以文本转图片的形式回复消息时发生错误: {e}，将尝试默认方式。")
+        
+        await self._reply(message, res)
             
     async def _reply(self, message: AstrBotMessage, message_chain: List[BaseMessageComponent]):
         if isinstance(message_chain, str): 
             message_chain = [Plain(text=message_chain), ]
-        
-        await self.bot.send(message.raw_message, message_chain)
+            
+        ret = []
+        for segment in message_chain:
+            d = segment.toDict()
+            if isinstance(segment, Plain):
+                d['type'] = 'text'
+            if isinstance(segment, Image):
+                # d['data']['file'] = 
+                pass
+            ret.append(d)
+
+        await self.bot.send(message.raw_message, ret)

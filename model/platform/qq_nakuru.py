@@ -75,8 +75,6 @@ class QQGOCQ(Platform):
         if message.type == MessageType.FRIEND_MESSAGE:
             return True
         for comp in message.message:
-            if isinstance(comp, Plain):
-                return True
             if isinstance(comp, At) and str(comp.qq) == message.self_id:
                 return True
         # check nicks
@@ -85,7 +83,8 @@ class QQGOCQ(Platform):
         return False
 
     def run(self):
-        return self.client._run()
+        coro = self.client._run()
+        return coro
 
     async def handle_msg(self, message: AstrBotMessage):
         logger.info(
@@ -119,7 +118,7 @@ class QQGOCQ(Platform):
             role = 'member'
             
         # construct astrbot message event
-        ame = AstrMessageEvent().from_astrbot_message(message, self.context, "gocq", session_id, role)
+        ame = AstrMessageEvent.from_astrbot_message(message, self.context, "gocq", session_id, role)
         
         # transfer control to message handler
         message_result = await self.message_handler.handle(ame)

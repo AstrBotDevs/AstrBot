@@ -145,8 +145,6 @@ class OpenAIOfficialCommandHandler():
     async def draw(self, message: AstrMessageEvent, context: Context):
         message = message.message_str.removeprefix("画")
         img_url = await self.provider.image_generate(message)
-        p = await download_image_by_url(url=img_url)
-        with open(p, 'rb') as f:
-            return CommandResult(
-                message_chain=[Image.fromBytes(f.read())],
-            )
+        return CommandResult(
+            message_chain=[Image.fromURL(img_url)],
+        )

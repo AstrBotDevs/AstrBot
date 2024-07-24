@@ -309,9 +309,13 @@ class QQOfficial(Platform):
             if 'file_image' in kwargs:
                 file_image_path = kwargs['file_image'].replace("file:///", "")
                 if file_image_path:
-                    logger.debug(f"上传图片: {file_image_path}")
-                    image_url = await self.context.image_uploader.upload_image(file_image_path)
-                    logger.debug(f"上传成功: {image_url}")
+                    
+                    if file_image_path.startswith("http"):
+                        image_url = file_image_path
+                    else:
+                        logger.debug(f"上传图片: {file_image_path}")
+                        image_url = await self.context.image_uploader.upload_image(file_image_path)
+                        logger.debug(f"上传成功: {image_url}")
                     media = await self.client.api.post_group_file(kwargs['group_openid'], 1, image_url)
                     del kwargs['file_image']
                     kwargs['media'] = media
