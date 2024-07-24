@@ -13,7 +13,7 @@ from type.types import Context
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from util.cmd_config import CmdConfig
-from util.general_utils import upload_metrics
+from util.metrics import MetricUploader
 from util.config_utils import *
 from util.updator.astrbot_updator import AstrBotUpdator
 
@@ -47,7 +47,6 @@ class AstrBotBootstrap():
             logger.info("未使用代理。")
     
     async def run(self):
-        
         self.command_manager = CommandManager()
         self.plugin_manager = PluginManager(self.context)
         self.updator = AstrBotUpdator()
@@ -61,7 +60,9 @@ class AstrBotBootstrap():
         self.message_handler = MessageHandler(self.context, self.command_manager, self.db_conn_helper, self.llm_instance)
         self.platfrom_manager = PlatformManager(self.context, self.message_handler)
         self.dashboard = AstrBotDashBoard(self.context, plugin_manager=self.plugin_manager, astrbot_updator=self.updator)
+        self.metrics_uploader = MetricUploader(self.context)
         
+        self.context.metrics_uploader = self.metrics_uploader
         self.context.updator = self.updator
         self.context.plugin_updator = self.plugin_manager.updator
         
@@ -72,7 +73,7 @@ class AstrBotBootstrap():
         # load platforms
         platform_tasks = self.load_platform()
         # load metrics uploader
-        metrics_upload_task = asyncio.create_task(upload_metrics(self.context))
+        metrics_upload_task = asyncio.create_task(self.metrics_uploader.upload_metrics())
         # load dashboard
         self.dashboard.run_http_server()
         dashboard_task = asyncio.create_task(self.dashboard.ws_server())

@@ -32,6 +32,7 @@ class Context:
         self.reply_prefix = ""
         self.updator: AstrBotUpdator = None
         self.plugin_updator: PluginUpdator = None
+        self.metrics_uploader = None
         
         self.plugin_command_bridge = PluginCommandBridge(self.cached_plugins)
         self.image_renderer = TextToImageRenderer()

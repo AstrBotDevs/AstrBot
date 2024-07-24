@@ -90,6 +90,9 @@ class CommandManager():
             
             if not isinstance(command_result, CommandResult):
                 raise ValueError(f"Command {command} handler should return CommandResult.")
+            
+            context.metrics_uploader.command_stats[command] += 1
+            
             return command_result
         except BaseException as e:
             logger.error(traceback.format_exc())
