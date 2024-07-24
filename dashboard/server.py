@@ -1,55 +1,45 @@
-import util.plugin_util as putil
 import websockets
 import json
 import threading
 import asyncio
 import os
 import uuid
-import time
+import logging
 import traceback
 
+from . import DashBoardData, Response
 from flask import Flask, request
-from flask.logging import default_handler
 from werkzeug.serving import make_server
-from util import general_utils as gu
-from dataclasses import dataclass
-from persist.session import dbConn
-from type.register import RegisteredPlugin
+from astrbot.persist.helper import dbConn
+from type.types import Context
 from typing import List
-from util.cmd_config import CmdConfig
-from util.updator import check_update, update_project, request_release_info, _reboot
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
-logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
-
-@dataclass
-class DashBoardData():
-    stats: dict
-    configs: dict
-    logs: dict
-    plugins: List[RegisteredPlugin]
+from dashboard.helper import DashBoardHelper
+from util.io import get_local_ip_addresses
+from model.plugin.manager import PluginManager
+from util.updator.astrbot_updator import AstrBotUpdator
 
 
-@dataclass
-class Response():
-    status: str
-    message: str
-    data: dict
+logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 
 class AstrBotDashBoard():
-    def __init__(self, global_object: 'gu.GlobalObject'):
-        self.global_object = global_object
-        self.loop = asyncio.get_event_loop()
-        asyncio.set_event_loop(self.loop)
-        self.dashboard_data: DashBoardData = global_object.dashboard_data
-        self.dashboard_be = Flask(
-            __name__, static_folder="dist", static_url_path="/")
-        self.funcs = {}
-        self.cc = CmdConfig()
+    def __init__(self, context: Context, plugin_manager: PluginManager, astrbot_updator: AstrBotUpdator):
+        self.context = context
+        self.plugin_manager = plugin_manager
+        self.astrbot_updator = astrbot_updator
+        self.dashboard_data = DashBoardData()
+        self.dashboard_helper = DashBoardHelper(self.context, self.dashboard_data)
+        
+        self.dashboard_be = Flask(__name__, static_folder="dist", static_url_path="/")
+        logging.getLogger('werkzeug').setLevel(logging.ERROR)
+        self.dashboard_be.logger.setLevel(logging.ERROR)
+        
         self.ws_clients = {}  # remote_ip: ws
-        # 启动 websocket 服务器
-        self.ws_server = websockets.serve(self.__handle_msg, "0.0.0.0", 6186)
+        self.loop = asyncio.get_event_loop()
+        
+        self.http_server_thread: threading.Thread = None 
 
         @self.dashboard_be.get("/")
         def index():
@@ -74,8 +64,8 @@ class AstrBotDashBoard():
 
         @self.dashboard_be.post("/api/authenticate")
         def authenticate():
-            username = self.cc.get("dashboard_username", "")
-            password = self.cc.get("dashboard_password", "")
+            username = self.context.base_config.get("dashboard_username", "")
+            password = self.context.base_config.get("dashboard_password", "")
             # 获得请求体
             post_data = request.json
             if post_data["username"] == username and post_data["password"] == password:
@@ -96,11 +86,12 @@ class AstrBotDashBoard():
 
         @self.dashboard_be.post("/api/change_password")
         def change_password():
-            password = self.cc.get("dashboard_password", "")
+            password = self.context.base_config("dashboard_password", "")
             # 获得请求体
             post_data = request.json
             if post_data["password"] == password:
-                self.cc.put("dashboard_password", post_data["new_password"])
+                self.context.config_helper.put("dashboard_password", post_data["new_password"])
+                self.context.base_config['dashboard_password'] = post_data["new_password"]
                 return Response(
                     status="success",
                     message="修改成功。",
@@ -159,7 +150,7 @@ class AstrBotDashBoard():
         def post_configs():
             post_configs = request.json
             try:
-                self.funcs["post_configs"](post_configs)
+                self.on_post_configs(post_configs)
                 return Response(
                     status="success",
                     message="保存成功~ 机器人将在 2 秒内重启以应用新的配置。",
@@ -175,7 +166,7 @@ class AstrBotDashBoard():
         @self.dashboard_be.get("/api/extensions")
         def get_plugins():
             _plugin_resp = []
-            for plugin in self.dashboard_data.plugins:
+            for plugin in self.context.cached_plugins:
                 _p = plugin.metadata
                 _t = {
                     "name": _p.plugin_name,
@@ -197,7 +188,7 @@ class AstrBotDashBoard():
             repo_url = post_data["url"]
             try:
                 logger.info(f"正在安装插件 {repo_url}")
-                putil.install_plugin(repo_url, global_object)
+                self.plugin_manager.install_plugin(repo_url)
                 logger.info(f"安装插件 {repo_url} 成功")
                 return Response(
                     status="success",
@@ -221,7 +212,7 @@ class AstrBotDashBoard():
                 # save file to temp/
                 file_path = f"temp/{uuid.uuid4()}.zip"
                 file.save(file_path)
-                putil.install_plugin_from_file(file_path, global_object)
+                self.plugin_manager.install_plugin_from_file(file_path)
                 logger.info(f"安装插件 {file.filename} 成功")
                 return Response(
                     status="success",
@@ -242,8 +233,7 @@ class AstrBotDashBoard():
             plugin_name = post_data["name"]
             try:
                 logger.info(f"正在卸载插件 {plugin_name}")
-                putil.uninstall_plugin(
-                    plugin_name, global_object)
+                self.plugin_manager.uninstall_plugin(plugin_name)
                 logger.info(f"卸载插件 {plugin_name} 成功")
                 return Response(
                     status="success",
@@ -264,7 +254,7 @@ class AstrBotDashBoard():
             plugin_name = post_data["name"]
             try:
                 logger.info(f"正在更新插件 {plugin_name}")
-                putil.update_plugin(plugin_name, global_object)
+                self.plugin_manager.update_plugin(plugin_name)
                 logger.info(f"更新插件 {plugin_name} 成功")
                 return Response(
                     status="success",
@@ -284,7 +274,7 @@ class AstrBotDashBoard():
             for item in self.ws_clients:
                 try:
                     asyncio.run_coroutine_threadsafe(
-                        self.ws_clients[item].send(request.data.decode()), self.loop)
+                        self.ws_clients[item].send(request.data.decode()), self.loop).result()
                 except Exception as e:
                     pass
             return 'ok'
@@ -292,12 +282,12 @@ class AstrBotDashBoard():
         @self.dashboard_be.get("/api/check_update")
         def get_update_info():
             try:
-                ret = check_update()
+                ret = self.astrbot_updator.check_update(None, None)
                 return Response(
                     status="success",
-                    message=ret,
+                    message=str(ret),
                     data={
-                        "has_new_version": ret != "当前已经是最新版本。"  # 先这样吧，累了=.=
+                        "has_new_version": ret is not None
                     }
                 ).__dict__
             except Exception as e:
@@ -317,8 +307,8 @@ class AstrBotDashBoard():
             else:
                 latest = False
             try:
-                update_project(latest=latest, version=version)
-                threading.Thread(target=self.shutdown_bot, args=(3,)).start()
+                self.astrbot_updator.update(latest=latest, version=version)
+                threading.Thread(target=self.astrbot_updator._reboot, args=(3, )).start()
                 return Response(
                     status="success",
                     message="更新成功，机器人将在 3 秒内重启。",
@@ -335,7 +325,7 @@ class AstrBotDashBoard():
         @self.dashboard_be.get("/api/llm/list")
         def llm_list():
             ret = []
-            for llm in self.global_object.llms:
+            for llm in self.context.llms:
                 ret.append(llm.llm_name)
             return Response(
                 status="success",
@@ -347,10 +337,9 @@ class AstrBotDashBoard():
         def llm():
             text = request.args["text"]
             llm = request.args["llm"]
-            for llm_ in self.global_object.llms:
+            for llm_ in self.context.llms:
                 if llm_.llm_name == llm:
                     try:
-                        # ret = await llm_.llm_instance.text_chat(text)
                         ret = asyncio.run_coroutine_threadsafe(
                             llm_.llm_instance.text_chat(text), self.loop).result()
                         return Response(
@@ -370,10 +359,21 @@ class AstrBotDashBoard():
                 message="LLM not found.",
                 data=None
             ).__dict__
-
-    def shutdown_bot(self, delay_s: int):
-        time.sleep(delay_s)
-        _reboot()
+        
+    def on_post_configs(self, post_configs: dict):
+        try:
+            if 'base_config' in post_configs:
+                self.dashboard_helper.save_config(
+                    post_configs['base_config'], namespace='')  # 基础配置
+            self.dashboard_helper.save_config(
+                post_configs['config'], namespace=post_configs['namespace'])  # 选定配置
+            self.dashboard_helper.parse_default_config(
+                self.dashboard_data, self.context.config_helper.get_all())
+            # 重启
+            threading.Thread(target=self.astrbot_updator._reboot,
+                                args=(2, ), daemon=True).start()
+        except Exception as e:
+            raise e
 
     def _get_configs(self, namespace: str):
         if namespace == "":
@@ -387,6 +387,8 @@ class AstrBotDashBoard():
             ret = [self.dashboard_data.configs['data'][2],]
         elif namespace == "internal_llm_openai_official":
             ret = [self.dashboard_data.configs['data'][3],]
+        elif namespace == "internal_platform_qq_aiocqhttp":
+            ret = [self.dashboard_data.configs['data'][6],]
         else:
             path = f"data/config/{namespace}.json"
             if not os.path.exists(path):
@@ -417,15 +419,21 @@ class AstrBotDashBoard():
                         "tag": ""
                     },
                     {
-                        "title": "QQ_OFFICIAL",
-                        "desc": "QQ官方API。支持频道、群（需获得群权限）",
+                        "title": "QQ(官方机器人 API)",
+                        "desc": "QQ官方API。支持频道、群、私聊（需获得群权限）",
                         "namespace": "internal_platform_qq_official",
                         "tag": ""
                     },
                     {
-                        "title": "go-cqhttp",
-                        "desc": "第三方 QQ 协议实现。支持频道、群",
+                        "title": "QQ(nakuru 适配器)",
+                        "desc": "适用于 go-cqhttp",
                         "namespace": "internal_platform_qq_gocq",
+                        "tag": ""
+                    },
+                    {
+                        "title": "QQ(aiocqhttp 适配器)",
+                        "desc": "适用于 Lagrange, LLBot, Shamrock 等支持反向WS的协议实现。",
+                        "namespace": "internal_platform_qq_aiocqhttp",
                         "tag": ""
                     }
                 ]
@@ -443,7 +451,7 @@ class AstrBotDashBoard():
                 ]
             }
         ]
-        for plugin in self.global_object.cached_plugins:
+        for plugin in self.context.cached_plugins:
             for item in outline:
                 if item['type'] == plugin.metadata.plugin_type:
                     item['body'].append({
@@ -454,15 +462,9 @@ class AstrBotDashBoard():
                     })
         return outline
 
-    def register(self, name: str):
-        def decorator(func):
-            self.funcs[name] = func
-            return func
-        return decorator
-
     async def get_log_history(self):
         try:
-            with open("logs/astrbot-core/astrbot-core.log", "r", encoding="utf-8") as f:
+            with open("logs/astrbot/astrbot.log", "r", encoding="utf-8") as f:
                 return f.readlines()[-100:]
         except Exception as e:
             logger.warning(f"读取日志历史失败: {e.__str__()}")
@@ -486,19 +488,18 @@ class AstrBotDashBoard():
                 del self.ws_clients[address]
                 break
 
-    def run_ws_server(self, loop):
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(self.ws_server)
-        loop.run_forever()
-
-    def run(self):
-        threading.Thread(target=self.run_ws_server, args=(self.loop,)).start()
-        logger.info("已启动 websocket 服务器")
-        ip_address = gu.get_local_ip_addresses()
-        ip_str = f"http://{ip_address}:6185\n\thttp://localhost:6185"
-        logger.info(
-            f"\n==================\n您可访问:\n\n\t{ip_str}\n\n来登录可视化面板，默认账号密码为空。\n注意: 所有配置项现已全量迁移至 cmd_config.json 文件下，可登录可视化面板在线修改配置。\n==================\n")
+    async def ws_server(self):
+        ws_server = websockets.serve(self.__handle_msg, "0.0.0.0", 6186)
+        logger.info("WebSocket 服务器已启动。")
+        await ws_server
         
+    def http_server(self):
         http_server = make_server(
             '0.0.0.0', 6185, self.dashboard_be, threaded=True)
         http_server.serve_forever()
+
+    def run_http_server(self):
+        self.http_server_thread = threading.Thread(target=self.http_server, daemon=True).start()
+        ip_address = get_local_ip_addresses()
+        ip_str = f"http://{ip_address}:6185"
+        logger.info(f"HTTP 服务器已启动，可访问: {ip_str} 等来登录可视化面板。")

@@ -1,34 +1,8 @@
 from model.provider.provider import Provider as LLMProvider
-from model.platform._platfrom import Platform
+from model.platform import Platform
 from type.plugin import *
 from typing import List
-from types import ModuleType
 from dataclasses import dataclass
-
-@dataclass
-class RegisteredPlugin:
-    '''
-    注册在 AstrBot 中的插件。
-    '''
-    metadata: PluginMetadata
-    plugin_instance: object
-    module_path: str
-    module: ModuleType
-    root_dir_name: str
-    trig_cnt: int = 0
-    
-    def reset_trig_cnt(self):
-        self.trig_cnt = 0
-    
-    def trig(self):
-        self.trig_cnt += 1
-
-    def __str__(self) -> str:
-        return f"RegisteredPlugin({self.metadata}, {self.module_path}, {self.root_dir_name})"
-
-
-RegisteredPlugins = List[RegisteredPlugin]
-
 
 @dataclass
 class RegisteredPlatform:

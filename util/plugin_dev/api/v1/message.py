@@ -1,10 +1,3 @@
-from astrbot.core import oper_msg
-from type.message import *
+from type.message_event import *
+from type.astrbot_message import *
 from type.command import CommandResult
-from model.platform._message_result import MessageResult
-
-'''
-消息处理。在消息平台接收到消息后，调用此函数进行处理。
-集成了指令检测、指令处理、LLM 调用等功能。
-'''
-message_handler = oper_msg 

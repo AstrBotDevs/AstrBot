@@ -4,18 +4,16 @@ import aiohttp
 import asyncio
 import json
 
-import util.plugin_util as putil
 import util.updator
 
 from nakuru.entities.components import (
     Image
 )
 from util import general_utils as gu
-from util.image_render.helper import text_to_image_base
 from model.provider.provider import Provider
 from util.cmd_config import CmdConfig as cc
 from type.message import *
-from type.types import GlobalObject
+from type.types import Context
 from type.command import *
 from type.plugin import *
 from type.register import *
@@ -24,7 +22,7 @@ from typing import List
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 
-logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
+logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 PLATFORM_QQCHAN = 'qqchan'
 PLATFORM_GOCQ = 'gocq'
@@ -33,7 +31,7 @@ PLATFORM_GOCQ = 'gocq'
 
 
 class Command:
-    def __init__(self, provider: Provider, global_object: GlobalObject = None):
+    def __init__(self, provider: Provider, global_object: Context = None):
         self.provider = provider
         self.global_object = global_object
 
@@ -138,7 +136,7 @@ class Command:
         except BaseException as e:
             return False, f"在{platform}上获取你的ID失败，原因: {str(e)}", "plugin"
 
-    async def plugin_oper(self, message: str, role: str, ctx: GlobalObject, platform: str):
+    async def plugin_oper(self, message: str, role: str, ctx: Context, platform: str):
         l = message.split(" ")
         if len(l) < 2:
             p = await text_to_image_base("# 插件指令面板 \n- 安装插件: `plugin i 插件Github地址`\n- 卸载插件: `plugin d 插件名`\n- 重载插件: `plugin reload`\n- 查看插件列表：`plugin l`\n - 更新插件: `plugin u 插件名`\n")

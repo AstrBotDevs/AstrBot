@@ -4,11 +4,11 @@
 必须分别实现 Platform 和 LLMProvider 中涉及的接口
 '''
 from model.provider.provider import Provider as LLMProvider
-from model.platform._platfrom import Platform
-from type.types import GlobalObject
+from model.platform import Platform
+from type.types import Context
 from type.register import RegisteredPlatform, RegisteredLLM
 
-def register_platform(platform_name: str, platform_instance: Platform, context: GlobalObject) -> None:
+def register_platform(platform_name: str, platform_instance: Platform, context: Context) -> None:
     '''
     注册一个消息平台。
 
@@ -24,7 +24,7 @@ def register_platform(platform_name: str, platform_instance: Platform, context: 
     
     context.platforms.append(RegisteredPlatform(platform_name, platform_instance))
     
-def register_llm(llm_name: str, llm_instance: LLMProvider, context: GlobalObject) -> None:
+def register_llm(llm_name: str, llm_instance: LLMProvider, context: Context) -> None:
     '''
     注册一个大语言模型。
 
@@ -39,7 +39,7 @@ def register_llm(llm_name: str, llm_instance: LLMProvider, context: GlobalObject
     
     context.llms.append(RegisteredLLM(llm_name, llm_instance))
 
-def unregister_platform(platform_name: str, context: GlobalObject) -> None:
+def unregister_platform(platform_name: str, context: Context) -> None:
     '''
     注销一个消息平台。
 
@@ -51,7 +51,7 @@ def unregister_platform(platform_name: str, context: GlobalObject) -> None:
             context.platforms.pop(i)
             return
         
-def unregister_llm(llm_name: str, context: GlobalObject) -> None:
+def unregister_llm(llm_name: str, context: Context) -> None:
     '''
     注销一个大语言模型。
 

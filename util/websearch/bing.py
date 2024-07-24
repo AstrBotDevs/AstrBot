@@ -1,8 +1,8 @@
 from typing import List
 
 try:
-    from util.search_engine_scraper.engine import SearchEngine, SearchResult
-    from util.search_engine_scraper.config import HEADERS, USER_AGENT_BING
+    from util.websearch.engine import SearchEngine, SearchResult
+    from util.websearch.config import HEADERS, USER_AGENT_BING
 except ImportError:
     from engine import SearchEngine, SearchResult
     from config import HEADERS, USER_AGENT_BING

@@ -4,52 +4,25 @@ import shutil
 import time
 from typing import Tuple
 
-
 class dbConn():
     def __init__(self):
         db_path = "data/data.db"
         if os.path.exists("data.db"):
             shutil.copy("data.db", db_path)
-        conn = sqlite3.connect(db_path)
-        conn.text_factory = str
-        self.conn = conn
-        c = conn.cursor()
-        c.execute(
-            '''
-            CREATE TABLE IF NOT EXISTS tb_session(
-                qq_id   VARCHAR(32) PRIMARY KEY,
-                history TEXT
-            );
-            '''
-        )
-        c.execute(
-            '''
-            CREATE TABLE IF NOT EXISTS tb_stat_session(
-                platform VARCHAR(32),
-                session_id VARCHAR(32),
-                cnt INTEGER
-            );
-            '''
-        )
-        c.execute(
-            '''
-            CREATE TABLE IF NOT EXISTS tb_stat_message(
-                ts INTEGER,
-                cnt INTEGER
-            );
-            '''
-        )
-        c.execute(
-            '''
-            CREATE TABLE IF NOT EXISTS tb_stat_platform(
-                ts INTEGER,
-                platform VARCHAR(32),
-                cnt INTEGER
-            );
-            '''
-        )
+        with open(os.path.dirname(__file__) + "/initialization.sql", "r") as f:
+            sql = f.read()
 
-        conn.commit()
+        self.conn = sqlite3.connect(db_path)
+        self.conn.text_factory = str        
+        c = self.conn.cursor()
+        c.executescript(sql)
+        self.conn.commit()
+        
+    def record_message(self, platform, session_id):
+        curr_ts = int(time.time())
+        self.increment_stat_session(platform, session_id, 1)
+        self.increment_stat_message(curr_ts, 1)
+        self.increment_stat_platform(curr_ts, platform, 1)
 
     def insert_session(self, qq_id, history):
         conn = self.conn

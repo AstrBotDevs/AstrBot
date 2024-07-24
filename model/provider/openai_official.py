@@ -12,7 +12,7 @@ from openai.types.images_response import ImagesResponse
 from openai.types.chat.chat_completion import ChatCompletion
 from openai._exceptions import *
 
-from persist.session import dbConn
+from astrbot.persist.helper import dbConn
 from model.provider.provider import Provider
 from util import general_utils as gu
 from util.cmd_config import CmdConfig
@@ -20,7 +20,9 @@ from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from typing import List, Dict
 
-logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
+from type.types import Context
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 MODELS = {
     "gpt-4o": 128000,
@@ -46,7 +48,7 @@ MODELS = {
 }
 
 class ProviderOpenAIOfficial(Provider):
-    def __init__(self, cfg) -> None:
+    def __init__(self, context: Context) -> None:
         super().__init__()
 
         os.makedirs("data/openai", exist_ok=True)
@@ -57,6 +59,8 @@ class ProviderOpenAIOfficial(Provider):
         self.chosen_api_key = None
         self.base_url = None
         self.keys_data = {} # 记录超额
+        
+        cfg = context.base_config['openai']
 
         if cfg['key']: self.api_keys = cfg['key']
         if cfg['api_base']: self.base_url = cfg['api_base']
@@ -78,11 +82,12 @@ class ProviderOpenAIOfficial(Provider):
         self.session_memory: Dict[str, List]  = {} # 会话记忆
         self.session_memory_lock = threading.Lock()
         self.max_tokens = self.model_configs['max_tokens'] # 上下文窗口大小
+        
+        logger.info("正在载入分词器 cl100k_base...")
         self.tokenizer = tiktoken.get_encoding("cl100k_base") # todo: 根据 model 切换分词器
-        self.DEFAULT_PERSONALITY = {
-            "name": "default",
-            "prompt": "你是一个很有帮助的 AI 助手。"
-        }
+        logger.info("分词器载入完成。")
+        
+        self.DEFAULT_PERSONALITY = context.default_personality
         self.curr_personality = self.DEFAULT_PERSONALITY
         self.session_personality = {} # 记录了某个session是否已设置人格。
         # 从 SQLite DB 读取历史记录

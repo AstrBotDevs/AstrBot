@@ -1,6 +1,6 @@
 import random
 try:
-    from util.search_engine_scraper.config import HEADERS, USER_AGENTS
+    from util.websearch.config import HEADERS, USER_AGENTS
 except ImportError:
     from config import HEADERS, USER_AGENTS
 

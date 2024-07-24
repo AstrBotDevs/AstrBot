@@ -2,8 +2,8 @@ import random, re
 from bs4 import BeautifulSoup
 
 try:
-    from util.search_engine_scraper.engine import SearchEngine, SearchResult
-    from util.search_engine_scraper.config import HEADERS, USER_AGENTS
+    from util.websearch.engine import SearchEngine, SearchResult
+    from util.websearch.config import HEADERS, USER_AGENTS
 except ImportError:
     from engine import SearchEngine, SearchResult
     from config import HEADERS, USER_AGENTS

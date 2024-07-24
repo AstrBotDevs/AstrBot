@@ -1,20 +1,16 @@
-from addons.dashboard.server import AstrBotDashBoard, DashBoardData
-from pydantic import BaseModel
+import threading
+import asyncio
+
+from . import DashBoardData
 from typing import Union, Optional
-import uuid
-from util import general_utils as gu
 from util.cmd_config import CmdConfig
 from dataclasses import dataclass
-import sys
-import os
-import threading
-import time
-import asyncio
 from util.plugin_dev.api.v1.config import update_config
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
+from type.types import Context
 
-logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
+logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 
 @dataclass
@@ -29,34 +25,12 @@ class DashBoardConfig():
 
 
 class DashBoardHelper():
-    def __init__(self, global_object, config: dict):
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-        dashboard_data = global_object.dashboard_data
+    def __init__(self, context: Context, dashboard_data: DashBoardData):
         dashboard_data.configs = {
             "data": []
         }
-        self.parse_default_config(dashboard_data, config)
-        self.dashboard_data: DashBoardData = dashboard_data
-        self.dashboard = AstrBotDashBoard(global_object)
-        self.key_map = {}  # key: uuid, value: config key name
-        self.cc = CmdConfig()
-
-        @self.dashboard.register("post_configs")
-        def on_post_configs(post_configs: dict):
-            try:
-                if 'base_config' in post_configs:
-                    self.save_config(
-                        post_configs['base_config'], namespace='')  # 基础配置
-                self.save_config(
-                    post_configs['config'], namespace=post_configs['namespace'])  # 选定配置
-                self.parse_default_config(
-                    self.dashboard_data, self.cc.get_all())
-                # 重启
-                threading.Thread(target=self.dashboard.shutdown_bot,
-                                 args=(2,), daemon=True).start()
-            except Exception as e:
-                raise e
+        self.context = context
+        self.parse_default_config(dashboard_data, context.base_config)
 
     # 将 config.yaml、 中的配置解析到 dashboard_data.configs 中
     def parse_default_config(self, dashboard_data: DashBoardData, config: dict):
@@ -64,7 +38,7 @@ class DashBoardHelper():
         try:
             qq_official_platform_group = DashBoardConfig(
                 config_type="group",
-                name="QQ_OFFICIAL 平台配置",
+                name="QQ(官方)",
                 description="",
                 body=[
                     DashBoardConfig(
@@ -119,7 +93,7 @@ class DashBoardHelper():
             )
             qq_gocq_platform_group = DashBoardConfig(
                 config_type="group",
-                name="go-cqhttp",
+                name="QQ(nakuru)",
                 description="",
                 body=[
                     DashBoardConfig(
@@ -197,6 +171,38 @@ class DashBoardHelper():
                 ]
             )
 
+            qq_aiocqhttp_platform_group = DashBoardConfig(
+                config_type="group",
+                name="QQ(aiocqhttp)",
+                description="",
+                body=[
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="bool",
+                        name="启用",
+                        description="",
+                        value=config['aiocqhttp']['enable'],
+                        path="aiocqhttp.enable",
+                    ),
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="str",
+                        name="WebSocket 反向连接 host",
+                        description="",
+                        value=config['aiocqhttp']['ws_reverse_host'],
+                        path="aiocqhttp.ws_reverse_host",
+                    ),
+                    DashBoardConfig(
+                        config_type="item",
+                        val_type="int",
+                        name="WebSocket 反向连接 port",
+                        description="",
+                        value=config['aiocqhttp']['ws_reverse_port'],
+                        path="aiocqhttp.ws_reverse_port",
+                    ),
+                ]
+            )
+            
             general_platform_detail_group = DashBoardConfig(
                 config_type="group",
                 name="通用平台配置",
@@ -467,7 +473,8 @@ class DashBoardHelper():
                 general_platform_detail_group,
                 openai_official_llm_group,
                 other_group,
-                baidu_aip_group
+                baidu_aip_group,
+                qq_aiocqhttp_platform_group
             ]
 
         except Exception as e:
@@ -525,9 +532,6 @@ class DashBoardHelper():
     def _write_config(self, namespace: str, key: str, value):
         if namespace == "" or namespace.startswith("internal_"):
             # 机器人自带配置，存到 config.yaml
-            self.cc.put_by_dot_str(key, value)
+            self.context.config_helper.put_by_dot_str(key, value)
         else:
             update_config(namespace, key, value)
-
-    def run(self):
-        self.dashboard.run()

@@ -1,5 +1,6 @@
 from typing import Union, List, Callable
 from dataclasses import dataclass
+from nakuru.entities.components import Plain
 
 
 @dataclass
@@ -18,11 +19,15 @@ class CommandResult():
     用于在Command中返回多个值
     '''
 
-    def __init__(self, hit: bool, success: bool = False, message_chain: list = [], command_name: str = "unknown_command") -> None:
+    def __init__(self, hit: bool = True, success: bool = True, message_chain: list = [], command_name: str = "unknown_command") -> None:
         self.hit = hit
         self.success = success
         self.message_chain = message_chain
         self.command_name = command_name
+        
+    def message(self, message: str):
+        self.message_chain = [Plain(message), ]
+        return self
 
     def _result_tuple(self):
         return (self.success, self.message_chain, self.command_name)

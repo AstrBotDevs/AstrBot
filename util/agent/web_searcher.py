@@ -9,15 +9,15 @@ from readability import Document
 from bs4 import BeautifulSoup
 from openai.types.chat.chat_completion_message_tool_call import Function
 from util.agent.func_call import FuncCall
-from util.search_engine_scraper.config import HEADERS, USER_AGENTS
-from util.search_engine_scraper.bing import Bing
-from util.search_engine_scraper.sogo import Sogo
-from util.search_engine_scraper.google import Google
+from util.websearch.config import HEADERS, USER_AGENTS
+from util.websearch.bing import Bing
+from util.websearch.sogo import Sogo
+from util.websearch.google import Google
 from model.provider.provider import Provider
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 
-logger: Logger = LogManager.GetLogger(log_name='astrbot-core')
+logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 
 bing_search = Bing()

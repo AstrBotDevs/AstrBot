@@ -1,5 +1,3 @@
-import os
-import shutil
 from nakuru.entities.components import *
 flag_not_support = False
 try:
