@@ -37,6 +37,7 @@ class Context:
         self.plugin_command_bridge = PluginCommandBridge(self.cached_plugins)
         self.image_renderer = TextToImageRenderer()
         self.image_uploader = ImageUploader()
+        self.message_handler = None # see astrbot/message/handler.py
 
     def register_commands(self, 
                           plugin_name: str, 

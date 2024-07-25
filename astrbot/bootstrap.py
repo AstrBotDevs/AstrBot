@@ -65,6 +65,7 @@ class AstrBotBootstrap():
         self.context.metrics_uploader = self.metrics_uploader
         self.context.updator = self.updator
         self.context.plugin_updator = self.plugin_manager.updator
+        self.context.message_handler = self.message_handler
         
         # load plugins, plugins' commands.
         self.load_plugins()
