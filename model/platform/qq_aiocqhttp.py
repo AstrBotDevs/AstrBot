@@ -2,6 +2,7 @@ import time
 import traceback
 import logging
 from aiocqhttp import CQHttp, Event
+from aiocqhttp.exceptions import ActionFailed
 from . import Platform
 from type.astrbot_message import *
 from type.message_event import *
@@ -164,13 +165,29 @@ class AIOCQHTTP(Platform):
             message_chain = [Plain(text=message_chain), ]
             
         ret = []
-        for segment in message_chain:
+        image_idx = []
+        for idx, segment in enumerate(message_chain):
             d = segment.toDict()
             if isinstance(segment, Plain):
                 d['type'] = 'text'
             if isinstance(segment, Image):
-                # d['data']['file'] = 
-                pass
+                image_idx.append(idx)
             ret.append(d)
-
-        await self.bot.send(message.raw_message, ret)
+        try:
+            await self.bot.send(message.raw_message, ret)
+        except ActionFailed as e:
+            logger.error(traceback.format_exc())
+            logger.error(f"回复消息失败: {e}")
+            if e.retcode == 1200:
+                # ENOENT
+                if not image_idx:
+                    raise e
+                logger.info("检测到失败原因为文件未找到，猜测用户的协议端与 AstrBot 位于不同的文件系统上。尝试采用上传图片的方式发图。")
+                for idx in image_idx:
+                    if ret[idx]['data']['file'].startswith('file://'):
+                        logger.info(f"正在上传图片: {ret[idx]['data']['path']}")
+                        image_url = await self.context.image_uploader.upload_image(ret[idx]['data']['path'])
+                        logger.info(f"上传成功。")
+                        ret[idx]['data']['file'] = image_url
+                        ret[idx]['data']['path'] = image_url
+                await self.bot.send(message.raw_message, ret)

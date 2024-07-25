@@ -51,7 +51,7 @@ class Context:
         `command_name`: 指令名，如 "help"。不需要带前缀。
         `description`: 指令描述。
         `priority`: 优先级越高，越先被处理。合理的优先级应该在 1-10 之间。
-        `handler`: 指令处理函数。
+        `handler`: 指令处理函数。函数参数：message: AstrMessageEvent, context: Context
         '''
         self.plugin_command_bridge.register_command(plugin_name, command_name, description, priority, handler)
         

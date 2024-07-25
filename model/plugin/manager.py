@@ -165,7 +165,7 @@ class PluginManager():
                 
                 try:
                     # 尝试传入 ctx
-                    obj = getattr(module, cls[0])(ctx=self.context)
+                    obj = getattr(module, cls[0])(context=self.context)
                 except:
                     obj = getattr(module, cls[0])()
 
