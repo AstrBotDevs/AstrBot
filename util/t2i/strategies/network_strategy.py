@@ -30,7 +30,9 @@ class NetworkRenderStrategy(RenderStrategy):
                 "version": f"v{VERSION}",
             },
             "options": {
-                "full_page": True
+                "full_page": True,
+                "type": "jpeg",
+                "quality": 25,
             }
         }
         

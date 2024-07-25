@@ -25,6 +25,7 @@ class OpenAIOfficialCommandHandler():
         self.manager.register("unset", "清除个性化人格设置", 10, self.unset)
         self.manager.register("set", "设置个性化人格", 10, self.set)
         self.manager.register("draw", "调用 DallE 模型画图", 10, self.draw)
+        self.manager.register("model", "切换模型", 10, self.model)
         self.manager.register("画", "调用 DallE 模型画图", 10, self.draw)
         
     def set_provider(self, provider):
@@ -37,6 +38,41 @@ class OpenAIOfficialCommandHandler():
             return CommandResult().message("重置成功")
         elif tokens.get(1) == 'p':
             await self.provider.forget(message.session_id)
+    
+    async def model(self, message: AstrMessageEvent, context: Context):
+        tokens = self.manager.command_parser.parse(message.message_str)
+        if tokens.len == 1:
+            ret = await self._print_models()
+            return CommandResult().message(ret)
+        model = tokens.get(1)
+        if model.isdigit():
+            try:
+                models = await self.provider.get_models()
+            except BaseException as e:
+                logger.error(f"获取模型列表失败: {str(e)}")
+                return CommandResult().message("获取模型列表失败，无法使用编号切换模型。可以尝试直接输入模型名来切换，如 gpt-4o。")
+            models = list(models)
+            if int(model) <= len(models) and int(model) >= 1:
+                model = models[int(model)-1]
+            self.provider.set_model(model.id)
+            return CommandResult().message(f"模型已设置为 {model.id}")
+        else:
+            self.provider.set_model(model)
+            return CommandResult().message(f"模型已设置为 {model} (自定义)")
+
+    async def _print_models(self):
+        try:
+            models = await self.provider.get_models()
+        except BaseException as e:
+            return "获取模型列表失败: " + str(e)
+        i = 1
+        ret = "OpenAI GPT 类可用模型"
+        for model in models:
+            ret += f"\n{i}. {model.id}"
+            i += 1
+        ret += "\nTips: 使用 /model 模型名/编号，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
+        logger.debug(ret)
+        return ret
         
     def his(self, message: AstrMessageEvent, context: Context):
         tokens = self.manager.command_parser.parse(message.message_str)
@@ -108,12 +144,12 @@ class OpenAIOfficialCommandHandler():
     def set(self, message: AstrMessageEvent, context: Context):
         l = message.message_str.split(" ")
         if len(l) == 1:
-            return CommandResult().message("【人格文本由PlexPt开源项目awesome-chatgpt-prompts-zh提供】\n设置人格: \n/set 人格名。例如/set 编剧\n人格列表: /set list\n人格详细信息: /set view 人格名\n自定义人格: /set 人格文本\n重置会话(清除人格): /reset\n重置会话(保留人格): /reset p\n【当前人格】: " + str(self.provider.curr_personality))
+            return CommandResult().message("- 设置人格: \nset 人格名。例如 set 编剧\n- 人格列表: set list\n- 人格详细信息: set view 人格名\n- 自定义人格: set 人格文本\n- 重置会话(清除人格): reset\n- 重置会话(保留人格): reset p\n\n【当前人格】: " + str(self.provider.curr_personality['prompt']))
         elif l[1] == "list":
             msg = "人格列表：\n"
             for key in personalities.keys():
-                msg += f"  |-{key}\n"
-            msg += '\n\n*输入/set view 人格名查看人格详细信息'
+                msg += f"- {key}\n"
+            msg += '\n\n*输入 set view 人格名 查看人格详细信息'
             return CommandResult().message(msg)
         elif l[1] == "view":
             if len(l) == 2:
@@ -126,20 +162,20 @@ class OpenAIOfficialCommandHandler():
                 msg = f"人格{ps}不存在"
             return CommandResult().message(msg)
         else:
-            ps = l[1].strip()
+            ps = "".join(l[1:]).strip()
             if ps in personalities:
                 self.provider.curr_personality = {
                     'name': ps,
                     'prompt': personalities[ps]
                 }
-                self.provider.personality_set(ps, message.session_id)
+                self.provider.personality_set(self.provider.curr_personality, message.session_id)
                 return CommandResult().message(f"人格已设置。 \n人格信息: {ps}")
             else:
                 self.provider.curr_personality = {
                     'name': '自定义人格',
                     'prompt': ps
                 }
-                self.provider.personality_set(ps, message.session_id)
+                self.provider.personality_set(self.provider.curr_personality, message.session_id)
                 return CommandResult().message(f"人格已设置。 \n人格信息: {ps}")
 
     async def draw(self, message: AstrMessageEvent, context: Context):

@@ -10,6 +10,11 @@ class ReleaseInfo():
     published_at: str
     body: str
     
+    def __init__(self, version: str = '', published_at: str = '', body: str = '') -> None:
+        self.version = version
+        self.published_at = published_at
+        self.body = body
+    
     def __str__(self) -> str:
         return f"新版本: {self.version}, 发布于: {self.published_at}, 详细内容: {self.body}"
 

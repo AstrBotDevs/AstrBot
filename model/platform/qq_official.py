@@ -9,7 +9,7 @@ import botpy.types.message
 
 from botpy.types.message import Reference, Media
 from botpy import Client
-from util.io import save_temp_img
+from util.io import save_temp_img, download_image_by_url
 from . import Platform
 from type.astrbot_message import *
 from type.message_event import *
@@ -80,7 +80,7 @@ class QQOfficial(Platform):
 
         self.client.set_platform(self)
         
-    def _parse_to_qqofficial(self, message: List[BaseMessageComponent]):
+    async def _parse_to_qqofficial(self, message: List[BaseMessageComponent], is_group: bool = False):
         plain_text = ""
         image_path = None  # only one img supported
         for i in message:
@@ -92,8 +92,9 @@ class QQOfficial(Platform):
                 elif i.file and i.file.startswith("base64://"):
                     img_data = base64.b64decode(i.file[9:])
                     image_path = save_temp_img(img_data)
-                else:
-                    image_path = save_temp_img(i.file)
+                elif i.file and i.file.startswith("http"):
+                    # 如果是群消息，不需要下载
+                    image_path = await download_image_by_url(i.file) if not is_group else i.file
         return plain_text, image_path
 
     def _parse_from_qqofficial(self, message: Union[botpy.message.Message, botpy.message.GroupMessage],
@@ -237,7 +238,7 @@ class QQOfficial(Platform):
             rendered_images = await self.convert_to_t2i_chain(result_message)
         
         if isinstance(result_message, list):
-            plain_text, image_path = self._parse_to_qqofficial(result_message)
+            plain_text, image_path = await self._parse_to_qqofficial(result_message, message.type == MessageType.GROUP_MESSAGE)
         else:
             plain_text = result_message
 
@@ -319,17 +320,23 @@ class QQOfficial(Platform):
                     media = await self.client.api.post_group_file(kwargs['group_openid'], 1, image_url)
                     del kwargs['file_image']
                     kwargs['media'] = media
+                    logger.debug(f"发送群图片: {media}")
                     kwargs['msg_type'] = 7 # 富媒体
             await self.client.api.post_group_message(**kwargs)
         elif 'channel_id' in kwargs:
             # 频道消息
             if 'file_image' in kwargs:
                 kwargs['file_image'] = kwargs['file_image'].replace("file:///", "")
+                # 频道消息发图只支持本地
+                if kwargs['file_image'].startswith("http"):
+                    kwargs['file_image'] = await download_image_by_url(kwargs['file_image'])
             await self.client.api.post_message(**kwargs)
         else:
             # 频道私聊消息
             if 'file_image' in kwargs:
                 kwargs['file_image'] = kwargs['file_image'].replace("file:///", "")
+                if kwargs['file_image'].startswith("http"):
+                    kwargs['file_image'] = await download_image_by_url(kwargs['file_image'])
             await self.client.api.post_dms(**kwargs)
 
     async def send_msg(self, target: Dict[str, str], result_message: Union[List[BaseMessageComponent], str]):
@@ -343,7 +350,7 @@ class QQOfficial(Platform):
         - 如果目标是 频道私聊，请添加 key `guild_id`。
         '''
         if isinstance(result_message, list):
-            plain_text, image_path = self._parse_to_qqofficial(result_message)
+            plain_text, image_path = await self._parse_to_qqofficial(result_message)
         else:
             plain_text = result_message
 

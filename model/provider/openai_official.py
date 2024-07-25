@@ -188,12 +188,14 @@ class ProviderOpenAIOfficial(Provider):
         return self.model_configs['model'].startswith("gpt-4")
     
     async def get_models(self):
-        '''
-        获取所有模型
-        '''
-        models = await self.client.models.list()
-        logger.info(f"OpenAI 模型列表：{models}")
-        return models
+        try:
+            models = await self.client.models.list()
+        except NotFoundError as e:
+            bu = str(self.client.base_url)
+            self.client.base_url = bu + "/v1"
+            models = await self.client.models.list()
+        finally:
+            return filter(lambda x: x.id.startswith("gpt"), models.data)
     
     async def assemble_context(self, session_id: str, prompt: str, image_url: str = None):
         '''
@@ -376,7 +378,8 @@ class ProviderOpenAIOfficial(Provider):
                 if "maximum context length" in str(e):
                     logger.warn(f"OpenAI 请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。")
                     self.pop_record(session_id)
-
+                
+                logger.warning(traceback.format_exc())
                 logger.warning(f"OpenAI 请求失败：{e}。重试第 {retry} 次。")
                 time.sleep(1)
 

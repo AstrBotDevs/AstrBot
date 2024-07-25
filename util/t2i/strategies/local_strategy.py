@@ -17,7 +17,7 @@ class LocalRenderStrategy(RenderStrategy):
             except Exception as e:
                 pass
 
-    async def render(self, text: str, **kwargs):
+    async def render(self, text: str, return_url: bool=False) -> str:
         font_size = 26
         image_width = 800
         image_height = 600

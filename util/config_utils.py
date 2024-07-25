@@ -11,7 +11,7 @@ def init_configs():
     
     cc.init_attributes("qq_forward_threshold", 200)
     cc.init_attributes("qq_welcome", "")
-    cc.init_attributes("qq_pic_mode", False)
+    cc.init_attributes("qq_pic_mode", True)
     cc.init_attributes("gocq_host", "127.0.0.1")
     cc.init_attributes("gocq_http_port", 5700)
     cc.init_attributes("gocq_websocket_port", 6700)
@@ -104,6 +104,6 @@ def inject_to_context(context: Context):
     if isinstance(nick_qq, list):
         nick_qq = tuple(nick_qq)
     context.nick = nick_qq
-    context.t2i_mode = cc.get("qq_pic_mode", False)
+    context.t2i_mode = cc.get("qq_pic_mode", True)
     
     return cfg

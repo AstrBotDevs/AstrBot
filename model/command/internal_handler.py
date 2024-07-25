@@ -19,7 +19,7 @@ class InternalCommandHandler:
         self.plugin_manager = plugin_manager
         
         self.manager.register("help", "查看帮助", 10, self.help)
-        self.manager.register("nick", "设置机器人昵称", 10, self.set_nick)
+        self.manager.register("wake", "设置机器人唤醒词", 10, self.set_nick)
         self.manager.register("update", "更新 AstrBot", 10, self.update)
         self.manager.register("plugin", "插件管理", 10, self.plugin)
         self.manager.register("reboot", "重启 AstrBot", 10, self.reboot)
@@ -33,14 +33,14 @@ class InternalCommandHandler:
             return CommandResult().message("你没有权限使用该指令。")
         l = message_str.split(" ")
         if len(l) == 1:
-            return CommandResult().message("【设置机器人昵称】示例：\n支持多昵称\nnick 昵称1 昵称2 昵称3")
+            return CommandResult().message("设置机器人唤醒词，支持多唤醒词。以唤醒词开头的消息会唤醒机器人处理，起到 @ 的效果。\n示例：wake 昵称1 昵称2 昵称3")
         nick = l[1:]
         context.config_helper.put("nick_qq", nick)
         context.nick = tuple(nick)
         return CommandResult(
             hit=True,
             success=True,
-            message_chain=f"已经成功将昵称设定为 {nick}",
+            message_chain=f"已经成功将唤醒词设定为 {nick}",
         )
         
     def update(self, message: AstrMessageEvent, context: Context):
@@ -51,13 +51,13 @@ class InternalCommandHandler:
                 success=False,
                 message_chain="你没有权限使用该指令",
             )
+        update_info = context.updator.check_update(None, None)
         if tokens.len == 1:
-            update_info = context.updator.check_update(None, None)
             ret = ""
             if not update_info:
                 ret = f"当前已经是最新版本 v{VERSION}。"
             else:
-                ret = f"发现新版本 v{update_info['version']}。\n- 使用 /update latest 更新到最新版本。\n- 使用 /update vX.X.X 更新到指定版本。"
+                ret = f"发现新版本 {update_info.version}，更新内容如下:\n---\n{update_info.body}\n---\n- 使用 /update latest 更新到最新版本。\n- 使用 /update vX.X.X 更新到指定版本。"
             return CommandResult(
                 hit=True,
                 success=False,
@@ -67,7 +67,7 @@ class InternalCommandHandler:
             if tokens.get(1) == "latest":
                 try:
                     context.updator.update()
-                    return CommandResult().message(f"已经成功更新到最新版本 v{update_info['version']}。要应用更新，请重启 AstrBot。输入 /reboot 即可重启")
+                    return CommandResult().message(f"已经成功更新到最新版本 v{update_info.version}。要应用更新，请重启 AstrBot。输入 /reboot 即可重启")
                 except BaseException as e:
                     return CommandResult().message(f"更新失败。原因：{str(e)}")
             elif tokens.get(1).startswith("v"):
@@ -157,13 +157,13 @@ class InternalCommandHandler:
         msg = "# Help Center\n## 指令列表\n"
         for key, value in self.manager.commands_handler.items():
             if value.plugin_metadata:
-                msg += f"`{key}` ({value.plugin_metadata.plugin_name}) - {value.description}\n"
-            else: msg += f"`{key}` - {value.description}\n"
+                msg += f"- `{key}` ({value.plugin_metadata.plugin_name}): {value.description}\n"
+            else: msg += f"- `{key}`: {value.description}\n"
         # plugins
         if context.cached_plugins != None:
             plugin_list_info = ""
             for plugin in context.cached_plugins:
-                plugin_list_info += f"`{plugin.metadata.plugin_name}` {plugin.metadata.desc}\n"
+                plugin_list_info += f"- `{plugin.metadata.plugin_name}` {plugin.metadata.desc}\n"
             if plugin_list_info.strip() != "":
                 msg += "\n## 插件列表\n> 使用plugin v 插件名 查看插件帮助\n"
                 msg += plugin_list_info
