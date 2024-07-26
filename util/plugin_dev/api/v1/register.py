@@ -8,13 +8,17 @@ from model.platform import Platform
 from type.types import Context
 from type.register import RegisteredPlatform, RegisteredLLM
 
-def register_platform(platform_name: str, platform_instance: Platform, context: Context) -> None:
+def register_platform(platform_name: str, context: Context, platform_instance: Platform = None) -> None:
     '''
     注册一个消息平台。
 
     Args:
         platform_name: 平台名称。
-        platform_instance: 平台实例。
+        platform_instance: 平台实例，可为空。
+        context: 上下文对象。
+        
+    Note:
+        当插件类被加载时，AstrBot 会传给插件 context 对象。插件可以通过 context 对象注册指令、长任务等。
     '''
     
     # check 是否已经注册

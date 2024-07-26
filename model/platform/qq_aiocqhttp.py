@@ -1,4 +1,5 @@
 import time
+import asyncio
 import traceback
 import logging
 from aiocqhttp import CQHttp, Event
@@ -82,13 +83,17 @@ class AIOCQHTTP(Platform):
                 await self.handle_msg(abm)
             # return {'reply': event.message}
         
-        bot = self.bot.run_task(host=self.host, port=int(self.port))
+        bot = self.bot.run_task(host=self.host, port=int(self.port), shutdown_trigger=self.shutdown_trigger_placeholder)
         
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
         logging.getLogger('aiocqhttp').setLevel(logging.ERROR)
         
         return bot
+    
+    async def shutdown_trigger_placeholder(self):
+        while True:
+            await asyncio.sleep(1)
     
     def pre_check(self, message: AstrBotMessage) -> bool:
         # if message chain contains Plain components or At components which points to self_id, return True

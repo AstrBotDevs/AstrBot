@@ -1,5 +1,7 @@
+import asyncio
+from asyncio import Task
 from type.register import *
-from typing import List
+from typing import List, Awaitable
 from logging import Logger
 from util.cmd_config import CmdConfig
 from util.t2i.renderer import TextToImageRenderer
@@ -38,6 +40,7 @@ class Context:
         self.image_renderer = TextToImageRenderer()
         self.image_uploader = ImageUploader()
         self.message_handler = None # see astrbot/message/handler.py
+        self.ext_tasks: List[Task] = []
 
     def register_commands(self, 
                           plugin_name: str, 
@@ -56,6 +59,15 @@ class Context:
         '''
         self.plugin_command_bridge.register_command(plugin_name, command_name, description, priority, handler)
         
+    def register_task(self, coro: Awaitable, task_name: str):
+        '''
+        注册任务。适用于需要长时间运行的插件。
+        
+        `coro`: 协程对象
+        `task_name`: 任务名，用于标识任务。自定义即可。
+        '''
+        task = asyncio.create_task(coro, name=task_name)
+        self.ext_tasks.append(task)
     
     def find_platform(self, platform_name: str) -> RegisteredPlatform:
         for platform in self.platforms:

@@ -21,16 +21,16 @@ class PlatformManager():
         
         if 'gocqbot' in self.config and self.config['gocqbot']['enable']:
             logger.info("启用 QQ(nakuru 适配器)")
-            tasks.append(asyncio.create_task(self.gocq_bot()))
+            tasks.append(asyncio.create_task(self.gocq_bot(), name="nakuru-adapter"))
         
         if 'aiocqhttp' in self.config and self.config['aiocqhttp']['enable']:
             logger.info("启用 QQ(aiocqhttp 适配器)")
-            tasks.append(asyncio.create_task(self.aiocq_bot()))
+            tasks.append(asyncio.create_task(self.aiocq_bot(), name="aiocqhttp-adapter"))
 
         # QQ频道
         if 'qqbot' in self.config and self.config['qqbot']['enable'] and self.config['qqbot']['appid'] != None:
             logger.info("启用 QQ(官方 API) 机器人消息平台")
-            tasks.append(asyncio.create_task(self.qqchan_bot()))
+            tasks.append(asyncio.create_task(self.qqchan_bot(), name="qqofficial-adapter"))
             
         return tasks
 

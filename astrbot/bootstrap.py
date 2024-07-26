@@ -74,21 +74,23 @@ class AstrBotBootstrap():
         # load platforms
         platform_tasks = self.load_platform()
         # load metrics uploader
-        metrics_upload_task = asyncio.create_task(self.metrics_uploader.upload_metrics())
+        metrics_upload_task = asyncio.create_task(self.metrics_uploader.upload_metrics(), name="metrics-uploader")
         # load dashboard
         self.dashboard.run_http_server()
-        dashboard_task = asyncio.create_task(self.dashboard.ws_server())
-        tasks = [metrics_upload_task, dashboard_task, *platform_tasks]
+        dashboard_task = asyncio.create_task(self.dashboard.ws_server(), name="dashboard")
+        tasks = [metrics_upload_task, dashboard_task, *platform_tasks, *self.context.ext_tasks]
         tasks = [self.handle_task(task) for task in tasks]
         await asyncio.gather(*tasks)
 
     async def handle_task(self, task: Union[asyncio.Task, asyncio.Future]):
-        try:
-            result = await task
-            return result
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return None
+        while True:
+            try:
+                result = await task
+                return result
+            except Exception as e:
+                logger.error(traceback.format_exc())
+                logger.error(f"{task.get_name()} 任务发生错误，将在 5 秒后重试。")
+                await asyncio.sleep(5)
     
     def load_llm(self):
         if 'openai' in self.configs and \
