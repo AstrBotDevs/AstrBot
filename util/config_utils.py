@@ -9,6 +9,44 @@ def init_configs():
     '''
     cc = CmdConfig()
     
+    cc.init_attributes("qqbot", {
+        "enable": False,
+        "appid": "",
+        "token": "",
+    })
+    cc.init_attributes("gocqbot", {
+        "enable": False,
+    })
+    cc.init_attributes("uniqueSessionMode", False)
+    cc.init_attributes("dump_history_interval", 10)
+    cc.init_attributes("limit", {
+        "time": 60,
+        "count": 30,
+    })
+    cc.init_attributes("notice", "")
+    cc.init_attributes("direct_message_mode", True)
+    cc.init_attributes("reply_prefix", "")
+    cc.init_attributes("baidu_aip", {
+        "enable": False,
+        "app_id": "",
+        "api_key": "",
+        "secret_key": ""
+    })
+    cc.init_attributes("openai", {
+        "key": [],
+        "api_base": "",
+        "chatGPTConfigs": {
+            "model": "gpt-4o",
+            "max_tokens": 6000,
+            "temperature": 0.9,
+            "top_p": 1,
+            "frequency_penalty": 0,
+            "presence_penalty": 0,
+        },
+        "total_tokens_limit": 10000,
+    })
+    
+    
     cc.init_attributes("qq_forward_threshold", 200)
     cc.init_attributes("qq_welcome", "")
     cc.init_attributes("qq_pic_mode", True)

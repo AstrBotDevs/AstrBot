@@ -107,4 +107,7 @@ class AstrBotBootstrap():
         self.plugin_manager.plugin_reload()
     
     def load_platform(self):
-        return self.platfrom_manager.load_platforms()
+        platforms = self.platfrom_manager.load_platforms()
+        if not platforms:
+            logger.warn("未启用任何消息平台。")
+        return platforms
