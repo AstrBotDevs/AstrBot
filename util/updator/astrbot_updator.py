@@ -58,7 +58,7 @@ class AstrBotUpdator(RepoZipUpdator):
                 raise Exception(f"未找到版本号为 {version} 的更新文件。")
             
         try:
-            self.download_from_repo_url("temp", data['zipball_url'])
+            self.download_from_repo_url("temp", file_url)
             self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:
             raise e
