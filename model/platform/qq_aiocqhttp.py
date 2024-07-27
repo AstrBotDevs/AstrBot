@@ -165,7 +165,7 @@ class AIOCQHTTP(Platform):
         
         await self._reply(message, res)
             
-    async def _reply(self, message: AstrBotMessage, message_chain: List[BaseMessageComponent]):
+    async def _reply(self, message: Union[AstrBotMessage, Dict], message_chain: List[BaseMessageComponent]):
         if isinstance(message_chain, str): 
             message_chain = [Plain(text=message_chain), ]
             
@@ -179,7 +179,15 @@ class AIOCQHTTP(Platform):
                 image_idx.append(idx)
             ret.append(d)
         try:
-            await self.bot.send(message.raw_message, ret)
+            if isinstance(message, AstrBotMessage):
+                await self.bot.send(message.raw_message, ret)
+            if isinstance(message, dict):
+                if 'group_id' in message:
+                    await self.bot.send_group_msg(group_id=message['group_id'], message=ret)
+                elif 'user_id' in message:
+                    await self.bot.send_private_msg(user_id=message['user_id'], message=ret)
+                else:
+                    raise Exception("aiocqhttp: 无法识别的消息来源。仅支持 group_id 和 user_id。")
         except ActionFailed as e:
             logger.error(traceback.format_exc())
             logger.error(f"回复消息失败: {e}")
@@ -196,3 +204,18 @@ class AIOCQHTTP(Platform):
                         ret[idx]['data']['file'] = image_url
                         ret[idx]['data']['path'] = image_url
                 await self.bot.send(message.raw_message, ret)
+                
+    async def send_msg(self, target: Dict[str, int], result_message: Union[List[BaseMessageComponent], str]):
+        '''
+        以主动的方式给QQ用户、QQ群发送一条消息。
+        
+        `target` 接收一个 dict 类型的值引用。
+        
+        - 要发给 QQ 下的某个用户，请添加 key `user_id`，值为 int 类型的 qq 号；
+        - 要发给某个群聊，请添加 key `group_id`，值为 int 类型的 qq 群号；
+        
+        '''
+        if isinstance(result_message, str):
+            result_message = [Plain(text=result_message), ]
+        
+        await self._reply(target, result_message)

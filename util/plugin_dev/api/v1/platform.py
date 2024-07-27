@@ -9,3 +9,4 @@ from model.platform import Platform
 
 from model.platform.qq_nakuru import QQGOCQ
 from model.platform.qq_official import QQOfficial
+from model.platform.qq_aiocqhttp import AIOCQHTTP

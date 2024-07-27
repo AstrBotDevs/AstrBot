@@ -306,8 +306,7 @@ class QQOfficial(Platform):
     async def _reply(self, **kwargs):
         if 'group_openid' in kwargs:
             # QQ群组消息
-            # qq群组消息需要自行上传，暂时不处理
-            if 'file_image' in kwargs:
+            if 'file_image' in kwargs and kwargs['file_image']:
                 file_image_path = kwargs['file_image'].replace("file:///", "")
                 if file_image_path:
                     
@@ -325,7 +324,7 @@ class QQOfficial(Platform):
             await self.client.api.post_group_message(**kwargs)
         elif 'channel_id' in kwargs:
             # 频道消息
-            if 'file_image' in kwargs:
+            if 'file_image' in kwargs and kwargs['file_image']:
                 kwargs['file_image'] = kwargs['file_image'].replace("file:///", "")
                 # 频道消息发图只支持本地
                 if kwargs['file_image'].startswith("http"):
@@ -333,7 +332,7 @@ class QQOfficial(Platform):
             await self.client.api.post_message(**kwargs)
         else:
             # 频道私聊消息
-            if 'file_image' in kwargs:
+            if 'file_image' in kwargs and kwargs['file_image']:
                 kwargs['file_image'] = kwargs['file_image'].replace("file:///", "")
                 if kwargs['file_image'].startswith("http"):
                     kwargs['file_image'] = await download_image_by_url(kwargs['file_image'])
@@ -349,6 +348,7 @@ class QQOfficial(Platform):
         - 如果目标是 频道消息，请添加 key `channel_id`。
         - 如果目标是 频道私聊，请添加 key `guild_id`。
         '''
+        image_path = None
         if isinstance(result_message, list):
             plain_text, image_path = await self._parse_to_qqofficial(result_message)
         else:
@@ -356,9 +356,10 @@ class QQOfficial(Platform):
 
         payload = {
             'content': plain_text,
-            'file_image': image_path,
             **target
         }
+        if image_path:
+            payload['file_image'] = image_path
         await self._reply(**payload)
 
     def wait_for_message(self, channel_id: int) -> AstrBotMessage:
