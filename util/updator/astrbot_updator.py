@@ -3,7 +3,7 @@ from util.updator.zip_updator import ReleaseInfo, RepoZipUpdator
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from type.config import VERSION
-from util.io import on_error
+from util.io import on_error, download_file
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
@@ -58,7 +58,8 @@ class AstrBotUpdator(RepoZipUpdator):
                 raise Exception(f"未找到版本号为 {version} 的更新文件。")
             
         try:
-            self.download_from_repo_url("temp", file_url)
+            # self.download_from_repo_url("temp", file_url)
+            download_file(file_url, "temp.zip")
             self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:
             raise e

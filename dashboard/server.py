@@ -285,7 +285,7 @@ class AstrBotDashBoard():
                 ret = self.astrbot_updator.check_update(None, None)
                 return Response(
                     status="success",
-                    message=str(ret),
+                    message=str(ret) if ret is not None else "已经是最新版本了。",
                     data={
                         "has_new_version": ret is not None
                     }

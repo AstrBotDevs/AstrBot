@@ -10,3 +10,4 @@ cmd_config.json
 data/*
 cookies.json
 logs/
+addons/plugins
