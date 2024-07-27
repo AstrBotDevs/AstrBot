@@ -101,6 +101,7 @@ class AstrBotBootstrap():
             self.openai_command_handler = OpenAIOfficialCommandHandler(self.command_manager)
             self.llm_instance = ProviderOpenAIOfficial(self.context)
             self.openai_command_handler.set_provider(self.llm_instance)
+            self.context.register_provider("internal_openai", self.llm_instance)
             logger.info("已启用 OpenAI API 支持。")
     
     def load_plugins(self):

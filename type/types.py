@@ -9,6 +9,7 @@ from util.updator.astrbot_updator import AstrBotUpdator
 from util.image_uploader import ImageUploader
 from util.updator.plugin_updator import PluginUpdator
 from model.plugin.command import PluginCommandBridge
+from model.provider.provider import Provider
 
 
 class Context:
@@ -68,6 +69,14 @@ class Context:
         '''
         task = asyncio.create_task(coro, name=task_name)
         self.ext_tasks.append(task)
+        
+    def register_provider(self, llm_name: str, provider: Provider, origin: str = ''):
+        '''
+        注册一个提供 LLM 资源的 Provider。
+        
+        `provider`: Provider 对象。即你的实现需要继承 Provider 类。至少应该实现 text_chat() 方法。
+        '''
+        self.llms.append(RegisteredLLM(llm_name, provider, origin))
     
     def find_platform(self, platform_name: str) -> RegisteredPlatform:
         for platform in self.platforms:

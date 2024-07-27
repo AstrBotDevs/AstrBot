@@ -127,7 +127,7 @@ async def web_search(prompt, provider: Provider, session_id, official_fc=False):
     function_invoked_ret = ""
     if official_fc:
         # we use official function-calling
-        result = await provider.text_chat(prompt, session_id, tools=new_func_call.get_func())
+        result = await provider.text_chat(prompt=prompt, session_id=session_id, tools=new_func_call.get_func())
         if isinstance(result, Function):
             logger.debug(f"web_searcher - function-calling: {result}")
             func_obj = None
@@ -136,14 +136,14 @@ async def web_search(prompt, provider: Provider, session_id, official_fc=False):
                     func_obj = i["func_obj"]
                     break
             if not func_obj:
-                return await provider.text_chat(prompt, session_id) + "\n(网页搜索失败, 此为默认回复)"
+                return await provider.text_chat(prompt=prompt, session_id=session_id, ) + "\n(网页搜索失败, 此为默认回复)"
             try:
                 args = json.loads(result.arguments)
                 function_invoked_ret = await func_obj(**args)
                 has_func = True
             except BaseException as e:
                 traceback.print_exc()
-                return await provider.text_chat(prompt, session_id) + "\n(网页搜索失败, 此为默认回复)"
+                return await provider.text_chat(prompt=prompt, session_id=session_id, ) + "\n(网页搜索失败, 此为默认回复)"
         else:
             return result
     else:
@@ -162,7 +162,7 @@ async def web_search(prompt, provider: Provider, session_id, official_fc=False):
         has_func = True
 
     if has_func:
-        await provider.forget(session_id)
+        await provider.forget(session_id=session_id, )
         summary_prompt = f"""
 你是一个专业且高效的助手，你的任务是
 1. 根据下面的相关材料对用户的问题 `{prompt}` 进行总结;
@@ -178,6 +178,6 @@ async def web_search(prompt, provider: Provider, session_id, official_fc=False):
         
 # 相关材料
 {function_invoked_ret}"""
-        ret = await provider.text_chat(summary_prompt, session_id)
+        ret = await provider.text_chat(prompt=summary_prompt, session_id=session_id)
         return ret
     return function_invoked_ret

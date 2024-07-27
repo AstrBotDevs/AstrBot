@@ -26,7 +26,36 @@ class InternalCommandHandler:
         self.manager.register("websearch", "网页搜索开关", 10, self.web_search)
         self.manager.register("t2i", "文本转图片开关", 10, self.t2i_toggle)
         self.manager.register("myid", "获取你在此平台上的ID", 10, self.myid)
-    
+        self.manager.register("provider", "查看和切换当前使用的 LLM 资源来源", 10, self.provider)
+        
+    def provider(self, message: AstrMessageEvent, context: Context):
+        if len(context.llms) == 0:
+            return CommandResult().message("当前没有加载任何 LLM 资源。")
+
+        tokens = self.manager.command_parser.parse(message.message_str)
+        
+        if tokens.len == 1:
+            ret = "## 当前载入的 LLM 资源\n"
+            for idx, llm in enumerate(context.llms):
+                ret += f"{idx}. {llm.llm_name}"
+                if llm.origin:
+                    ret += f" (来源: {llm.origin})"
+                if context.message_handler.provider == llm.llm_instance:
+                    ret += " (当前使用)"
+                ret += "\n"
+            
+            ret += "\n使用 provider <序号> 切换 LLM 资源。" 
+            return CommandResult().message(ret)
+        else:
+            try:
+                idx = int(tokens.get(1))
+                if idx >= len(context.llms):
+                    return CommandResult().message("provider: 无效的序号。")
+                context.message_handler.set_provider(context.llms[idx].llm_instance)
+                return CommandResult().message(f"已经成功切换到 LLM 资源 {context.llms[idx].llm_name}。")
+            except BaseException as e:
+                return CommandResult().message("provider: 参数错误。")
+
     def set_nick(self, message: AstrMessageEvent, context: Context):
         message_str = message.message_str
         if message.role != "admin":

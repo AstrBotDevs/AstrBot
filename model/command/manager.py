@@ -73,7 +73,8 @@ class CommandManager():
             if message_str.startswith(command):
                 logger.info(f"触发 {command} 指令。")
                 command_result = await self.execute_handler(command, message_event, context)
-                return command_result
+                if command_result.hit:
+                    return command_result
 
     async def execute_handler(self,
                         command: str,
