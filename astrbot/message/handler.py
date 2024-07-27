@@ -115,6 +115,9 @@ class MessageHandler():
         self.nicks = self.context.nick
         self.provider = provider
         self.reply_prefix = self.context.reply_prefix
+    
+    def set_provider(self, provider: Provider):
+        self.provider = provider
 
     async def handle(self, message: AstrMessageEvent, llm_provider: Provider = None) -> MessageResult:
         '''
@@ -148,7 +151,8 @@ class MessageHandler():
             assert(isinstance(cmd_res, CommandResult))
             return MessageResult(
                 cmd_res.message_chain,
-                is_command_call=True
+                is_command_call=True,
+                use_t2i=cmd_res.is_use_t2i
             )
         
         # check if the message is a llm-wake-up command
@@ -178,7 +182,9 @@ class MessageHandler():
                 llm_result = await web_searcher.web_search(msg_plain, provider, message.session_id, inner_provider)
             else:
                 llm_result = await provider.text_chat(
-                    msg_plain, message.session_id, image_url
+                    prompt=msg_plain, 
+                    session_id=message.session_id, 
+                    image_url=image_url
                 )
         except BaseException as e:
             logger.error(traceback.format_exc())

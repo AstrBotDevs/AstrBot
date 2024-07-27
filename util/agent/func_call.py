@@ -122,7 +122,7 @@ class FuncCall():
         _c = 0
         while _c < 3:
             try:
-                res = self.provider.text_chat(prompt, session_id)
+                res = self.provider.text_chat(prompt=prompt, session_id=session_id)
                 if res.find('```') != -1:
                     res = res[res.find('```json') + 7: res.rfind('```')]
                 gu.log("REVGPT func_call json result",
@@ -187,7 +187,7 @@ class FuncCall():
                 _c = 0
                 while _c < 5:
                     try:
-                        res = self.provider.text_chat(after_prompt, session_id)
+                        res = self.provider.text_chat(prompt=after_prompt, session_id=session_id)
                         # 截取```之间的内容
                         gu.log(
                             "DEBUG BEGIN", bg=gu.BG_COLORS["yellow"], fg=gu.FG_COLORS["white"])

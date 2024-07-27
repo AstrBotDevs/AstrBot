@@ -43,13 +43,10 @@ class AstrMessageEvent():
                                context, 
                                session_id)
         return ame
-        
-        
-        
-        
-        
+
 @dataclass
 class MessageResult():
     result_message: Union[str, list]
     is_command_call: Optional[bool] = False
+    use_t2i: Optional[bool] = None # None 为跟随用户设置
     callback: Optional[callable] = None

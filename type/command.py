@@ -24,6 +24,7 @@ class CommandResult():
         self.success = success
         self.message_chain = message_chain
         self.command_name = command_name
+        self.is_use_t2i = None # default
         
     def message(self, message: str):
         '''
@@ -61,6 +62,15 @@ class CommandResult():
         '''
         self.message_chain = [Image.fromFileSystem(path), ]
         return self
+    
+    # def use_t2i(self, use_t2i: bool):
+    #     '''
+    #     设置是否使用文本转图片服务。如果不设置，则跟随用户的设置。
+        
+    #     CommandResult().use_t2i(False)
+    #     '''
+    #     self.is_use_t2i = use_t2i
+    #     return self
 
     def _result_tuple(self):
         return (self.success, self.message_chain, self.command_name)

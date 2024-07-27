@@ -32,7 +32,7 @@ class NetworkRenderStrategy(RenderStrategy):
             "options": {
                 "full_page": True,
                 "type": "jpeg",
-                "quality": 25,
+                "quality": 40,
             }
         }
         
