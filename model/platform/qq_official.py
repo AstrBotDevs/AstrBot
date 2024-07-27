@@ -43,6 +43,11 @@ class botClient(Client):
         # 转换层
         abm = self.platform._parse_from_qqofficial(message, MessageType.FRIEND_MESSAGE)
         await self.platform.handle_msg(abm)
+        
+    # 收到 C2C 消息
+    async def on_c2c_message_create(self, message: botpy.message.C2CMessage):
+        abm = self.platform._parse_from_qqofficial(message, MessageType.FRIEND_MESSAGE)
+        await self.platform.handle_msg(abm)
 
 
 class QQOfficial(Platform):
@@ -110,11 +115,17 @@ class QQOfficial(Platform):
         abm.tag = "qqchan"
         msg: List[BaseMessageComponent] = []
 
-        if message_type == MessageType.GROUP_MESSAGE:
-            abm.sender = MessageMember(
-                message.author.member_openid,
-                ""
-            )
+        if isinstance(message, botpy.message.GroupMessage) or isinstance(message, botpy.message.C2CMessage):
+            if isinstance(message, botpy.message.GroupMessage):
+                abm.sender = MessageMember(
+                    message.author.member_openid,
+                    ""
+                )
+            else:
+                abm.sender = MessageMember(
+                    message.author.user_openid,
+                    ""
+                )
             abm.message_str = message.content.strip()
             abm.self_id = "unknown_selfid"
 
@@ -129,8 +140,7 @@ class QQOfficial(Platform):
                         msg.append(img)
             abm.message = msg
 
-        elif message_type == MessageType.GUILD_MESSAGE or message_type == MessageType.FRIEND_MESSAGE:
-            # 目前对于 FRIEND_MESSAGE 只处理频道私聊
+        elif isinstance(message, botpy.message.Message) or isinstance(message, botpy.message.DirectMessage):
             try:
                 abm.self_id = str(message.mentions[0].id)
             except:
@@ -178,7 +188,7 @@ class QQOfficial(Platform):
 
     async def handle_msg(self, message: AstrBotMessage):
         assert isinstance(message.raw_message, (botpy.message.Message,
-                          botpy.message.GroupMessage, botpy.message.DirectMessage))
+                          botpy.message.GroupMessage, botpy.message.DirectMessage, botpy.message.C2CMessage))
         is_group = message.type != MessageType.FRIEND_MESSAGE
 
         _t = "/私聊" if not is_group else ""
@@ -230,7 +240,7 @@ class QQOfficial(Platform):
         '''
         source = message.raw_message
         assert isinstance(source, (botpy.message.Message,
-                          botpy.message.GroupMessage, botpy.message.DirectMessage))
+                          botpy.message.GroupMessage, botpy.message.DirectMessage, botpy.message.C2CMessage))
         logger.info(
             f"{message.sender.nickname}({message.sender.user_id}) <- {self.parse_message_outline(result_message)}")
 
@@ -258,12 +268,14 @@ class QQOfficial(Platform):
             'message_reference': msg_ref
         }
         
-        if message.type == MessageType.GROUP_MESSAGE:
+        if isinstance(message.raw_message, botpy.message.GroupMessage):
             data['group_openid'] = str(source.group_openid)
-        elif message.type == MessageType.GUILD_MESSAGE:
+        elif isinstance(message.raw_message, botpy.message.Message):
             data['channel_id'] = source.channel_id
-        elif message.type == MessageType.FRIEND_MESSAGE:
+        elif isinstance(message.raw_message, botpy.message.DirectMessage):
             data['guild_id'] = source.guild_id
+        elif isinstance(message.raw_message, botpy.message.C2CMessage):
+            data['openid'] = source.author.user_openid
         if image_path:
             data['file_image'] = image_path
         if rendered_images:
@@ -308,7 +320,7 @@ class QQOfficial(Platform):
                         return await self._reply(**data)
 
     async def _reply(self, **kwargs):
-        if 'group_openid' in kwargs:
+        if 'group_openid' in kwargs or 'openid' in kwargs:
             # QQ群组消息
             if 'file_image' in kwargs and kwargs['file_image']:
                 file_image_path = kwargs['file_image'].replace("file:///", "")
@@ -320,14 +332,20 @@ class QQOfficial(Platform):
                         logger.debug(f"上传图片: {file_image_path}")
                         image_url = await self.context.image_uploader.upload_image(file_image_path)
                         logger.debug(f"上传成功: {image_url}")
-                    media = await self.client.api.post_group_file(kwargs['group_openid'], 1, image_url)
+                    if 'group_openid' in kwargs:
+                        media = await self.client.api.post_group_file(kwargs['group_openid'], 1, image_url)
+                    elif 'openid' in kwargs:
+                        media = await self.client.api.post_c2c_file(kwargs['openid'], 1, image_url)
                     del kwargs['file_image']
                     kwargs['media'] = media
                     logger.debug(f"发送群图片: {media}")
                     kwargs['msg_type'] = 7 # 富媒体
             if self.test_mode: 
                 return kwargs
-            await self.client.api.post_group_message(**kwargs)
+            if 'group_openid' in kwargs:
+                await self.client.api.post_group_message(**kwargs)
+            elif 'openid' in kwargs:
+                await self.client.api.post_c2c_message(**kwargs)
         elif 'channel_id' in kwargs:
             # 频道消息
             if 'file_image' in kwargs and kwargs['file_image']:
@@ -338,7 +356,7 @@ class QQOfficial(Platform):
             if self.test_mode:
                 return kwargs
             await self.client.api.post_message(**kwargs)
-        else:
+        elif 'guild_id' in kwargs:
             # 频道私聊消息
             if 'file_image' in kwargs and kwargs['file_image']:
                 kwargs['file_image'] = kwargs['file_image'].replace("file:///", "")
@@ -347,16 +365,19 @@ class QQOfficial(Platform):
             if self.test_mode:
                 return kwargs
             await self.client.api.post_dms(**kwargs)
+        else:
+            raise ValueError("Unknown target type.")
 
     async def send_msg(self, target: Dict[str, str], result_message: CommandResult):
         '''
-        以主动的方式给用户、群或者频道发送一条消息。
+        以主动的方式给频道用户、群、频道或者消息列表用户（QQ用户）发送一条消息。
         
         `target` 接收一个 dict 类型的值引用。
         
         - 如果目标是 QQ 群，请添加 key `group_openid`。
         - 如果目标是 频道消息，请添加 key `channel_id`。
         - 如果目标是 频道私聊，请添加 key `guild_id`。
+        - 如果目标是 QQ 用户，请添加 key `openid`。
         '''
         plain_text, image_path = await self._parse_to_qqofficial(result_message.message_chain)
 
