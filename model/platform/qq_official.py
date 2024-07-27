@@ -13,6 +13,7 @@ from util.io import save_temp_img, download_image_by_url
 from . import Platform
 from type.astrbot_message import *
 from type.message_event import *
+from type.command import *
 from typing import Union, List, Dict
 from nakuru.entities.components import *
 from SparkleLogging.utils.core import LogManager
@@ -46,7 +47,7 @@ class botClient(Client):
 
 class QQOfficial(Platform):
 
-    def __init__(self, context: Context, message_handler: MessageHandler) -> None:
+    def __init__(self, context: Context, message_handler: MessageHandler, test_mode = False) -> None:
         super().__init__()
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
@@ -80,6 +81,8 @@ class QQOfficial(Platform):
 
         self.client.set_platform(self)
         
+        self.test_mode = test_mode
+
     async def _parse_to_qqofficial(self, message: List[BaseMessageComponent], is_group: bool = False):
         plain_text = ""
         image_path = None  # only one img supported
@@ -209,13 +212,15 @@ class QQOfficial(Platform):
         if not message_result:
             return
 
-        await self.reply_msg(message, message_result.result_message)
+        ret = await self.reply_msg(message, message_result.result_message)
         if message_result.callback:
             message_result.callback()
 
         # 如果是等待回复的消息
         if session_id in self.waiting and self.waiting[session_id] == '':
             self.waiting[session_id] = message
+            
+        return ret
 
     async def reply_msg(self,
                         message: AstrBotMessage,
@@ -269,14 +274,13 @@ class QQOfficial(Platform):
             _data['message_reference'] = None
             
             try:
-                await self._reply(**_data)
-                return
+                return await self._reply(**_data)
             except BaseException as e:
                 logger.warn(traceback.format_exc())
                 logger.warn(f"以文本转图片的形式回复消息时发生错误: {e}，将尝试默认方式。")
 
         try:
-            await self._reply(**data)
+            return await self._reply(**data)
         except BaseException as e:
             logger.error(traceback.format_exc())
             # 分割过长的消息
@@ -286,22 +290,22 @@ class QQOfficial(Platform):
                 split_res.append(plain_text[len(plain_text)//2:])
                 for i in split_res:
                     data['content'] = i
-                    await self._reply(**data)
+                    return await self._reply(**data)
             else:
                 try:
                     # 防止被qq频道过滤消息
                     plain_text = plain_text.replace(".", " . ")
-                    await self._reply(**data)
+                    return await self._reply(**data)
                 except BaseException as e:
                     try:
                         data['content'] = str.join(" ", plain_text)
-                        await self._reply(**data)
+                        return await self._reply(**data)
                     except BaseException as e:
                         plain_text = re.sub(
                             r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '[被隐藏的链接]', str(e), flags=re.MULTILINE)
                         plain_text = plain_text.replace(".", "·")
                         data['content'] = plain_text
-                        await self._reply(**data)
+                        return await self._reply(**data)
 
     async def _reply(self, **kwargs):
         if 'group_openid' in kwargs:
@@ -321,6 +325,8 @@ class QQOfficial(Platform):
                     kwargs['media'] = media
                     logger.debug(f"发送群图片: {media}")
                     kwargs['msg_type'] = 7 # 富媒体
+            if self.test_mode: 
+                return kwargs
             await self.client.api.post_group_message(**kwargs)
         elif 'channel_id' in kwargs:
             # 频道消息
@@ -329,6 +335,8 @@ class QQOfficial(Platform):
                 # 频道消息发图只支持本地
                 if kwargs['file_image'].startswith("http"):
                     kwargs['file_image'] = await download_image_by_url(kwargs['file_image'])
+            if self.test_mode:
+                return kwargs
             await self.client.api.post_message(**kwargs)
         else:
             # 频道私聊消息
@@ -336,9 +344,11 @@ class QQOfficial(Platform):
                 kwargs['file_image'] = kwargs['file_image'].replace("file:///", "")
                 if kwargs['file_image'].startswith("http"):
                     kwargs['file_image'] = await download_image_by_url(kwargs['file_image'])
+            if self.test_mode:
+                return kwargs
             await self.client.api.post_dms(**kwargs)
 
-    async def send_msg(self, target: Dict[str, str], result_message: Union[List[BaseMessageComponent], str]):
+    async def send_msg(self, target: Dict[str, str], result_message: CommandResult):
         '''
         以主动的方式给用户、群或者频道发送一条消息。
         
@@ -348,11 +358,7 @@ class QQOfficial(Platform):
         - 如果目标是 频道消息，请添加 key `channel_id`。
         - 如果目标是 频道私聊，请添加 key `guild_id`。
         '''
-        image_path = None
-        if isinstance(result_message, list):
-            plain_text, image_path = await self._parse_to_qqofficial(result_message)
-        else:
-            plain_text = result_message
+        plain_text, image_path = await self._parse_to_qqofficial(result_message.message_chain)
 
         payload = {
             'content': plain_text,

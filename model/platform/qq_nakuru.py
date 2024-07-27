@@ -14,6 +14,7 @@ from type.types import Context
 from . import Platform
 from type.astrbot_message import *
 from type.message_event import *
+from type.command import *
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from astrbot.message.handler import MessageHandler
@@ -199,7 +200,7 @@ class QQGOCQ(Platform):
                 return
             await self.client.sendGroupMessage(group_id, message_chain)
         
-    async def send_msg(self, target: Dict[str, int], result_message: Union[List[BaseMessageComponent], str]):
+    async def send_msg(self, target: Dict[str, int], result_message: CommandResult):
         '''
         以主动的方式给用户、群或者频道发送一条消息。
         
@@ -211,7 +212,7 @@ class QQGOCQ(Platform):
         
         guild_id 不是频道号。
         '''
-        await self._reply(target, result_message)
+        await self._reply(target, result_message.message_chain)
 
     def convert_message(self, message: Union[GroupMessage, FriendMessage, GuildMessage]) -> AstrBotMessage:
         abm = AstrBotMessage()

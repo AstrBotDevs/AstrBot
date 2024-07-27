@@ -7,6 +7,7 @@ from aiocqhttp.exceptions import ActionFailed
 from . import Platform
 from type.astrbot_message import *
 from type.message_event import *
+from type.command import *
 from typing import Union, List, Dict
 from nakuru.entities.components import *
 from SparkleLogging.utils.core import LogManager
@@ -205,7 +206,7 @@ class AIOCQHTTP(Platform):
                         ret[idx]['data']['path'] = image_url
                 await self.bot.send(message.raw_message, ret)
                 
-    async def send_msg(self, target: Dict[str, int], result_message: Union[List[BaseMessageComponent], str]):
+    async def send_msg(self, target: Dict[str, int], result_message: CommandResult):
         '''
         以主动的方式给QQ用户、QQ群发送一条消息。
         
@@ -215,7 +216,5 @@ class AIOCQHTTP(Platform):
         - 要发给某个群聊，请添加 key `group_id`，值为 int 类型的 qq 群号；
         
         '''
-        if isinstance(result_message, str):
-            result_message = [Plain(text=result_message), ]
         
-        await self._reply(target, result_message)
+        await self._reply(target, result_message.message_chain)
