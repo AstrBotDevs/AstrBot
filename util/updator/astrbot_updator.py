@@ -34,6 +34,7 @@ class AstrBotUpdator(RepoZipUpdator):
         if delay: time.sleep(delay)
         py = sys.executable
         self.terminate_child_processes()
+        py = py.replace(" ", "\\ ")
         os.execl(py, py, *sys.argv)
         
     def check_update(self, url: str, current_version: str) -> ReleaseInfo:
