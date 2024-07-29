@@ -36,7 +36,14 @@ class MetricUploader():
                 
             for plugin in context.cached_plugins:
                 self.plugin_stats[plugin.metadata.plugin_name] = {
-                    "metadata": plugin.metadata
+                    "metadata": {
+                        "plugin_name": plugin.metadata.plugin_name,
+                        "plugin_type": plugin.metadata.plugin_type.value,
+                        "author": plugin.metadata.author,
+                        "desc": plugin.metadata.desc,
+                        "version": plugin.metadata.version,
+                        "repo": plugin.metadata.repo,
+                    }
                 }
             
             try:
