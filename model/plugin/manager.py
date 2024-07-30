@@ -123,7 +123,7 @@ class PluginManager():
                 return p
     
     def uninstall_plugin(self, plugin_name: str):
-        plugin = self.get_registered_plugin(plugin_name, self.context.cached_plugins)
+        plugin = self.get_registered_plugin(plugin_name)
         if not plugin:
             raise Exception("插件不存在。")
         root_dir_name = plugin.root_dir_name
@@ -133,7 +133,7 @@ class PluginManager():
             raise Exception("移除插件成功，但是删除插件文件夹失败。您可以手动删除该文件夹，位于 addons/plugins/ 下。")
 
     def update_plugin(self, plugin_name: str):
-        plugin = self.get_registered_plugin(plugin_name, self.context.cached_plugins)
+        plugin = self.get_registered_plugin(plugin_name)
         if not plugin:
             raise Exception("插件不存在。")
         
