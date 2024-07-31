@@ -117,8 +117,8 @@ class AIOCQHTTP(Platform):
         
         # 解析 role
         sender_id = str(message.sender.user_id)
-        if sender_id == self.context.config_helper.get('admin_qq', '') or \
-                sender_id in self.context.config_helper.get('other_admins', []):
+        if sender_id == self.context.base_config.get('admin_qq', '') or \
+                sender_id in self.context.base_config.get('other_admins', []):
             role = 'admin'
         else:
             role = 'member'
@@ -154,7 +154,7 @@ class AIOCQHTTP(Platform):
             res = [Plain(text=res), ]
             
         # if image mode, put all Plain texts into a new picture.
-        if self.context.config_helper.get("qq_pic_mode", False) and isinstance(res, list):
+        if self.context.base_config.get("qq_pic_mode", False) and isinstance(res, list):
             rendered_images = await self.convert_to_t2i_chain(res)
             if rendered_images:
                 try:

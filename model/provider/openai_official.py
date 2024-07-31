@@ -53,7 +53,7 @@ class ProviderOpenAIOfficial(Provider):
 
         os.makedirs("data/openai", exist_ok=True)
 
-        self.cc = CmdConfig
+        self.context = context
         self.key_data_path = "data/openai/keys.json"
         self.api_keys = []
         self.chosen_api_key = None
@@ -78,7 +78,7 @@ class ProviderOpenAIOfficial(Provider):
         )
         self.model_configs: Dict = cfg['chatGPTConfigs']
         super().set_curr_model(self.model_configs['model'])
-        self.image_generator_model_configs: Dict = self.cc.get('openai_image_generate', None)
+        self.image_generator_model_configs: Dict = context.base_config.get('openai_image_generate', None)
         self.session_memory: Dict[str, List]  = {} # 会话记忆
         self.session_memory_lock = threading.Lock()
         self.max_tokens = self.model_configs['max_tokens'] # 上下文窗口大小
@@ -492,7 +492,7 @@ class ProviderOpenAIOfficial(Provider):
 
     def set_model(self, model: str):
         self.model_configs['model'] = model
-        self.cc.put_by_dot_str("openai.chatGPTConfigs.model", model)
+        self.context.config_helper.put_by_dot_str("openai.chatGPTConfigs.model", model)
         super().set_curr_model(model)
     
     def get_configs(self):

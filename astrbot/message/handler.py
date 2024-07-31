@@ -114,7 +114,7 @@ class MessageHandler():
         self.llm_wake_prefix = self.context.base_config['llm_wake_prefix']
         self.nicks = self.context.nick
         self.provider = provider
-        self.reply_prefix = self.context.reply_prefix
+        self.reply_prefix = str(self.context.reply_prefix)
     
     def set_provider(self, provider: Provider):
         self.provider = provider

@@ -28,20 +28,21 @@ class Context:
         
         self.unique_session = False # 独立会话
         self.version: str = None  # 机器人版本
-        self.nick = None  # gocq 的唤醒词
-        self.stat = {}
+        self.nick: tuple = None  # gocq 的唤醒词
         self.t2i_mode = False
         self.web_search = False  # 是否开启了网页搜索
-        self.reply_prefix = ""
+        
+        self.metrics_uploader = None
         self.updator: AstrBotUpdator = None
         self.plugin_updator: PluginUpdator = None
-        self.metrics_uploader = None
-        
         self.plugin_command_bridge = PluginCommandBridge(self.cached_plugins)
         self.image_renderer = TextToImageRenderer()
         self.image_uploader = ImageUploader()
         self.message_handler = None # see astrbot/message/handler.py
         self.ext_tasks: List[Task] = []
+
+        # useless
+        self.reply_prefix = ""
 
     def register_commands(self, 
                           plugin_name: str, 

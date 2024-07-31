@@ -230,15 +230,17 @@ class InternalCommandHandler:
             )
     
     def t2i_toggle(self, message: AstrMessageEvent, context: Context):
-        p = context.config_helper.get("qq_pic_mode", True)
+        p = context.t2i_mode
         if p:
             context.config_helper.put("qq_pic_mode", False)
+            context.t2i_mode = False
             return CommandResult(
                 hit=True,
                 success=True,
                 message_chain="已关闭文本转图片模式。",
             )
         context.config_helper.put("qq_pic_mode", True)
+        context.t2i_mode = True
         
         return CommandResult(
             hit=True,

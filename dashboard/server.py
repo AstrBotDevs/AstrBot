@@ -86,12 +86,11 @@ class AstrBotDashBoard():
 
         @self.dashboard_be.post("/api/change_password")
         def change_password():
-            password = self.context.base_config("dashboard_password", "")
+            password = self.context.base_config.get("dashboard_password", "")
             # 获得请求体
             post_data = request.json
             if post_data["password"] == password:
                 self.context.config_helper.put("dashboard_password", post_data["new_password"])
-                self.context.base_config['dashboard_password'] = post_data["new_password"]
                 return Response(
                     status="success",
                     message="修改成功。",

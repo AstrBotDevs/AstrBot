@@ -10,6 +10,7 @@ from model.plugin.manager import PluginManager
 from model.platform.manager import PlatformManager
 from typing import Dict, List, Union
 from type.types import Context
+from type.config import VERSION
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from util.cmd_config import CmdConfig
@@ -23,15 +24,26 @@ logger: Logger = LogManager.GetLogger(log_name='astrbot')
 class AstrBotBootstrap():
     def __init__(self) -> None:        
         self.context = Context()
-        self.config_helper: CmdConfig = CmdConfig()
+        self.config_helper = CmdConfig()
         
         # load configs and ensure the backward compatibility
-        init_configs()
         try_migrate_config()
-        self.configs = inject_to_context(self.context)
-        logger.info("AstrBot v" + self.context.version)
         self.context.config_helper = self.config_helper
+        self.context.base_config = self.config_helper.cached_config
         
+        self.context.default_personality = {
+            "name": "default",
+            "prompt": self.context.base_config.get("default_personality_str", ""),
+        }
+        self.context.unique_session = self.context.base_config.get("uniqueSessionMode", False)
+        nick_qq = self.context.base_config.get("nick_qq", ('/', '!'))
+        if isinstance(nick_qq, str): nick_qq = (nick_qq, )
+        self.context.nick = nick_qq
+        self.context.t2i_mode = self.context.base_config.get("qq_pic_mode", True)
+        self.context.version = VERSION
+
+        logger.info("AstrBot v" + self.context.version)
+
         # apply proxy settings
         http_proxy = self.context.base_config.get("http_proxy")
         https_proxy = self.context.base_config.get("https_proxy")
@@ -93,9 +105,9 @@ class AstrBotBootstrap():
                 await asyncio.sleep(5)
     
     def load_llm(self):
-        if 'openai' in self.configs and \
-            len(self.configs['openai']['key']) and \
-            self.configs['openai']['key'][0] is not None:
+        if 'openai' in self.config_helper.cached_config and \
+            len(self.config_helper.cached_config['openai']['key']) and \
+            self.config_helper.cached_config['openai']['key'][0] is not None:
             from model.provider.openai_official import ProviderOpenAIOfficial
             from model.command.openai_official_handler import OpenAIOfficialCommandHandler
             self.openai_command_handler = OpenAIOfficialCommandHandler(self.command_manager)

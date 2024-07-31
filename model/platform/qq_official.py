@@ -209,8 +209,8 @@ class QQOfficial(Platform):
 
         # 解析出 role
         sender_id = message.sender.user_id
-        if sender_id == self.context.config_helper.get('admin_qqchan', None) or \
-                sender_id in self.context.config_helper.get('other_admins', None):
+        if sender_id == self.context.base_config.get('admin_qqchan', None) or \
+                sender_id in self.context.base_config.get('other_admins', None):
             role = 'admin'
         else:
             role = 'member'
@@ -249,7 +249,7 @@ class QQOfficial(Platform):
         msg_ref = None
         rendered_images = []
         
-        if self.context.config_helper.get("qq_pic_mode", False) and isinstance(result_message, list):
+        if self.context.base_config.get("qq_pic_mode", False) and isinstance(result_message, list):
             rendered_images = await self.convert_to_t2i_chain(result_message)
         
         if isinstance(result_message, list):
