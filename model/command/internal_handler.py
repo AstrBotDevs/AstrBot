@@ -62,14 +62,18 @@ class InternalCommandHandler:
             return CommandResult().message("你没有权限使用该指令。")
         l = message_str.split(" ")
         if len(l) == 1:
-            return CommandResult().message("设置机器人唤醒词，支持多唤醒词。以唤醒词开头的消息会唤醒机器人处理，起到 @ 的效果。\n示例：wake 昵称1 昵称2 昵称3")
-        nick = l[1:]
+            return CommandResult().message(f"设置机器人唤醒词。以唤醒词开头的消息 \
+                                           会唤醒机器人处理，起到 @ 的效果。\n示例：wake 昵称。\
+                                           当前唤醒词有：{",".join(context.nick)}")
+        nick = l[1].strip()
+        if not nick:
+            return CommandResult().message("wake: 请指定唤醒词。")
         context.config_helper.put("nick_qq", nick)
         context.nick = tuple(nick)
         return CommandResult(
             hit=True,
             success=True,
-            message_chain=f"已经成功将唤醒词设定为 {nick}",
+            message_chain=f"已经成功将唤醒词设定为 {nick}。",
         )
         
     def update(self, message: AstrMessageEvent, context: Context):

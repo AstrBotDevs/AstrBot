@@ -112,6 +112,8 @@ class MessageHandler():
         self.rate_limit_helper = RateLimitHelper(context)
         self.content_safety_helper = ContentSafetyHelper(context)
         self.llm_wake_prefix = self.context.base_config['llm_wake_prefix']
+        if self.llm_wake_prefix:
+            self.llm_wake_prefix = self.llm_wake_prefix.strip()
         self.nicks = self.context.nick
         self.provider = provider
         self.reply_prefix = str(self.context.reply_prefix)
@@ -156,10 +158,12 @@ class MessageHandler():
             )
         
         # check if the message is a llm-wake-up command
-        if not msg_plain.startswith(self.llm_wake_prefix):
+        if self.llm_wake_prefix and not msg_plain.startswith(self.llm_wake_prefix):
+            logger.debug(f"消息 `{msg_plain}` 没有以 LLM 唤醒前缀 `{self.llm_wake_prefix}` 开头，忽略。")
             return
         
         if not provider:
+            logger.debug("没有任何 LLM 可用，忽略。")
             return
         
         # check the content safety
