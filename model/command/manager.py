@@ -64,7 +64,8 @@ class CommandManager():
                     break
             if not plugin:
                 logger.warning(f"插件 {request.plugin_name} 未找到，无法注册指令 {request.command_name}。")
-            self.register(request.command_name, request.description, request.priority, request.handler, plugin.metadata)
+            else:
+                self.register(request.command_name, request.description, request.priority, request.handler, plugin.metadata)
         self.plugin_commands_waitlist = []
 
     async def scan_command(self, message_event: AstrMessageEvent, context: Context) -> CommandResult:

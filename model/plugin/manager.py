@@ -166,8 +166,10 @@ class PluginManager():
                 try:
                     # 尝试传入 ctx
                     obj = getattr(module, cls[0])(context=self.context)
-                except:
+                except TypeError:
                     obj = getattr(module, cls[0])()
+                except BaseException as e:
+                    raise e
 
                 metadata = None
 

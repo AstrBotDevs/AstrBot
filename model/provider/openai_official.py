@@ -385,7 +385,9 @@ class ProviderOpenAIOfficial(Provider):
 
         assert isinstance(completion, ChatCompletion)
         logger.debug(f"openai completion: {completion.usage}")
-
+        
+        if len(completion.choices) == 0:
+            raise Exception("OpenAI API 返回的 completion 为空。")
         choice = completion.choices[0]
 
         usage_tokens = completion.usage.total_tokens

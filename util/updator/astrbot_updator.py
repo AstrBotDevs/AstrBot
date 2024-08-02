@@ -35,7 +35,11 @@ class AstrBotUpdator(RepoZipUpdator):
         py = sys.executable
         self.terminate_child_processes()
         py = py.replace(" ", "\\ ")
-        os.execl(py, py, *sys.argv)
+        try:
+            os.execl(py, py, *sys.argv)
+        except Exception as e:
+            logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
+            raise e
         
     def check_update(self, url: str, current_version: str) -> ReleaseInfo:
         return super().check_update(self.ASTRBOT_RELEASE_API, VERSION)
