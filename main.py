@@ -4,6 +4,7 @@ import asyncio
 import sys
 import warnings
 import traceback
+import mimetypes
 from astrbot.bootstrap import AstrBotBootstrap
 from SparkleLogging.utils.core import LogManager
 from logging import Formatter
@@ -42,6 +43,11 @@ def check_env():
         
     os.makedirs("data/config", exist_ok=True)
     os.makedirs("temp", exist_ok=True)
+
+    # workaround for issue #188
+    mimetypes.add_type("text/javascript", ".js") 
+    mimetypes.add_type("text/javascript", ".mjs")
+    mimetypes.add_type("application/json", ".json")
     
 if __name__ == "__main__":
     check_env()
