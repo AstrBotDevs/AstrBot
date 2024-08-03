@@ -12,9 +12,9 @@
 <img alt="Static Badge" src="https://img.shields.io/badge/QQ群-322154837-purple">
 </a>
 
-<a href="https://astrbot.soulter.top/center">项目部署</a> ｜
+<a href="https://astrbot.soulter.top/docs/main">快速开始</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a> ｜
-<a href="https://astrbot.soulter.top/center/docs/%E5%BC%80%E5%8F%91/%E6%8F%92%E4%BB%B6%E5%BC%80%E5%8F%91">插件开发</a>
+<a href="https://astrbot.soulter.top/docs/develop/plugin4p">插件开发</a>
 </div>
 
 ## 🛠️ 功能
