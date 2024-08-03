@@ -44,7 +44,7 @@ def check_env():
     os.makedirs("data/config", exist_ok=True)
     os.makedirs("temp", exist_ok=True)
 
-    # workaround for issue #188
+    # workaround for issue #181
     mimetypes.add_type("text/javascript", ".js") 
     mimetypes.add_type("text/javascript", ".mjs")
     mimetypes.add_type("application/json", ".json")
