@@ -45,6 +45,10 @@ class AstrBotDashBoard():
         def index():
             # 返回页面
             return self.dashboard_be.send_static_file("index.html")
+        
+        @self.dashboard_be.get("/auth/login")
+        def _():
+            return self.dashboard_be.send_static_file("index.html")
 
         @self.dashboard_be.get("/config")
         def rt_config():
