@@ -146,7 +146,8 @@ class MessageHandler():
             if msg_plain.startswith(nick):
                 msg_plain = msg_plain.removeprefix(nick)
                 break
-            
+        message.message_str = msg_plain
+
         # scan candidate commands
         cmd_res = await self.command_manager.scan_command(message, self.context)
         if cmd_res:
