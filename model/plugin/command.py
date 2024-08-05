@@ -13,6 +13,7 @@ class CommandRegisterRequest():
     description: str
     priority: int
     handler: Callable
+    use_regex: bool = False
     plugin_name: str = None
 
 class PluginCommandBridge():
@@ -20,6 +21,6 @@ class PluginCommandBridge():
         self.plugin_commands_waitlist: List[CommandRegisterRequest] = []
         self.cached_plugins = cached_plugins
         
-    def register_command(self, plugin_name, command_name, description, priority, handler):
-        self.plugin_commands_waitlist.append(CommandRegisterRequest(command_name, description, priority, handler, plugin_name))
+    def register_command(self, plugin_name, command_name, description, priority, handler, use_regex=False):
+        self.plugin_commands_waitlist.append(CommandRegisterRequest(command_name, description, priority, handler, use_regex, plugin_name))
         

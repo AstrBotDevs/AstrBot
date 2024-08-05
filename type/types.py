@@ -49,17 +49,19 @@ class Context:
                           command_name: str, 
                           description: str, 
                           priority: int, 
-                          handler: callable):
+                          handler: callable,
+                          use_regex: bool = False):
         '''
         注册插件指令。
         
-        `plugin_name`: 插件名，注意需要和你的 metadata 中的一致。
-        `command_name`: 指令名，如 "help"。不需要带前缀。
-        `description`: 指令描述。
-        `priority`: 优先级越高，越先被处理。合理的优先级应该在 1-10 之间。
-        `handler`: 指令处理函数。函数参数：message: AstrMessageEvent, context: Context
+        @param plugin_name: 插件名，注意需要和你的 metadata 中的一致。
+        @param command_name: 指令名，如 "help"。不需要带前缀。
+        @param description: 指令描述。
+        @param priority: 优先级越高，越先被处理。合理的优先级应该在 1-10 之间。
+        @param handler: 指令处理函数。函数参数：message: AstrMessageEvent, context: Context
+        @param use_regex: 是否使用正则表达式匹配指令名。
         '''
-        self.plugin_command_bridge.register_command(plugin_name, command_name, description, priority, handler)
+        self.plugin_command_bridge.register_command(plugin_name, command_name, description, priority, handler, use_regex)
         
     def register_task(self, coro: Awaitable, task_name: str):
         '''

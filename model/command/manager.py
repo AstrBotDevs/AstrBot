@@ -20,7 +20,8 @@ class CommandMetadata():
     inner_command: bool
     plugin_metadata: PluginMetadata
     handler: callable
-    description: str
+    use_regex: bool = False
+    description: str = ""
 
 class CommandManager():
     def __init__(self):
@@ -33,10 +34,13 @@ class CommandManager():
                  description: str, 
                  priority: int,
                  handler: callable,
+                 use_regex: bool = False,
                  plugin_metadata: PluginMetadata = None,
                 ):
         '''
         优先级越高，越先被处理。
+        
+        use_regex: 是否使用正则表达式匹配指令。
         '''
         if command in self.commands_handler:
             raise ValueError(f"Command {command} already exists.")
@@ -48,6 +52,7 @@ class CommandManager():
             inner_command=plugin_metadata == None,
             plugin_metadata=plugin_metadata,
             handler=handler,
+            use_regex=use_regex,
             description=description
         )
         if plugin_metadata:
@@ -65,13 +70,23 @@ class CommandManager():
             if not plugin:
                 logger.warning(f"插件 {request.plugin_name} 未找到，无法注册指令 {request.command_name}。")
             else:
-                self.register(request.command_name, request.description, request.priority, request.handler, plugin.metadata)
+                self.register(command=request.command_name, 
+                              description=request.description, 
+                              priority=request.priority, 
+                              handler=request.handler, 
+                              use_regex=request.use_regex,
+                              plugin_metadata=plugin.metadata)
         self.plugin_commands_waitlist = []
 
     async def scan_command(self, message_event: AstrMessageEvent, context: Context) -> CommandResult:
         message_str = message_event.message_str
         for _, command in self.commands:
-            if message_str.startswith(command):
+            trig = False
+            if self.commands_handler[command].use_regex:
+                trig = self.command_parser.regex_match(message_str, command)
+            else:
+                trig = message_str.startswith(command)
+            if trig:
                 logger.info(f"触发 {command} 指令。")
                 command_result = await self.execute_handler(command, message_event, context)
                 if command_result.hit:

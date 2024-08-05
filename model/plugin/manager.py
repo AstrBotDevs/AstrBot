@@ -155,6 +155,8 @@ class PluginManager():
                 p = plugin['module']
                 module_path = plugin['module_path']
                 root_dir_name = plugin['pname']
+                
+                logger.info(f"正在加载插件 {root_dir_name} ...")
 
                 # self.check_plugin_dept_update(cached_plugins, root_dir_name)
 
