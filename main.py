@@ -10,7 +10,7 @@ from SparkleLogging.utils.core import LogManager
 from logging import Formatter
 
 warnings.filterwarnings("ignore")
-logo_tmpl = """
+logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
     /   \         /       |           ||   _  \     |   _  \   /  __  \  |           |
    /  ^  \       |   (----`---|  |----`|  |_)  |    |  |_)  | |  |  |  | `---|  |----`
