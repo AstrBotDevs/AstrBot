@@ -48,6 +48,14 @@ class AIOCQHTTP(Platform):
         abm.message = []
         
         message_str = ""
+        if not isinstance(event.message, list):
+            err = f"aiocqhttp: 无法识别的消息类型: {str(event.message)}，此条消息将被忽略。如果您在使用 go-cqhttp，请将其配置文件中的 message.post-format 更改为 array。"
+            logger.critical(err)
+            try:
+                self.bot.send(event, err)
+            except BaseException as e:
+                logger.error(f"回复消息失败: {e}")
+            return
         for m in event.message:
             t = m['type']
             a = None
@@ -75,14 +83,12 @@ class AIOCQHTTP(Platform):
             abm = self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
-            # return {'reply': event.message}
         
         @self.bot.on_message('private')
         async def private(event: Event):
             abm = self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
-            # return {'reply': event.message}
         
         bot = self.bot.run_task(host=self.host, port=int(self.port), shutdown_trigger=self.shutdown_trigger_placeholder)
         
