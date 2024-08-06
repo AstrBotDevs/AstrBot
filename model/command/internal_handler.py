@@ -62,12 +62,11 @@ class InternalCommandHandler:
             return CommandResult().message("你没有权限使用该指令。")
         l = message_str.split(" ")
         if len(l) == 1:
-            return CommandResult().message(f"设置机器人唤醒词。以唤醒词开头的消息会唤醒机器人处理，起到 @ 的效果。\n示例：wake 昵称。当前唤醒词有：{context.nick}")
+            return CommandResult().message(f"设置机器人唤醒词。以唤醒词开头的消息会唤醒机器人处理，起到 @ 的效果。\n示例：wake 昵称。当前唤醒词有：{context.config_helper.wake_prefix}")
         nick = l[1].strip()
         if not nick:
             return CommandResult().message("wake: 请指定唤醒词。")
-        context.config_helper.put("nick_qq", nick)
-        context.nick = tuple(nick)
+        context.config_helper.wake_prefix = [nick]
         return CommandResult(
             hit=True,
             success=True,
@@ -232,17 +231,17 @@ class InternalCommandHandler:
             )
     
     def t2i_toggle(self, message: AstrMessageEvent, context: Context):
-        p = context.t2i_mode
+        p = context.config_helper.t2i
         if p:
             context.config_helper.put("qq_pic_mode", False)
-            context.t2i_mode = False
+            context.config_helper.t2i = False
             return CommandResult(
                 hit=True,
                 success=True,
                 message_chain="已关闭文本转图片模式。",
             )
         context.config_helper.put("qq_pic_mode", True)
-        context.t2i_mode = True
+        context.config_helper.t2i = True
         
         return CommandResult(
             hit=True,

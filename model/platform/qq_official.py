@@ -19,6 +19,7 @@ from nakuru.entities.components import *
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from astrbot.message.handler import MessageHandler
+from util.cmd_config import PlatformConfig, QQOfficialPlatformConfig
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
@@ -52,32 +53,36 @@ class botClient(Client):
 
 class QQOfficial(Platform):
 
-    def __init__(self, context: Context, message_handler: MessageHandler, test_mode = False) -> None:
-        super().__init__()
+    def __init__(self, context: Context, 
+                 message_handler: MessageHandler, 
+                 platform_config: PlatformConfig,
+                 test_mode = False) -> None:
+        assert isinstance(platform_config, QQOfficialPlatformConfig), "qq_official: 无法识别的配置类型。"
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         
         self.message_handler = message_handler
         self.waiting: dict = {}
         self.context = context
+        self.config = platform_config
+        self.admins = context.config_helper.admins_id
         
-        self.appid = context.base_config['qqbot']['appid']
-        self.token = context.base_config['qqbot']['token']
-        self.secret = context.base_config['qqbot_secret']
-        self.unique_session = context.unique_session
-        qq_group = context.base_config['qqofficial_enable_group_message']
-        
+        self.appid = platform_config.appid
+        self.secret = platform_config.secret
+        self.unique_session = context.config_helper.platform_settings.unique_session
+        qq_group = platform_config.enable_group_c2c
+        guild_dm = platform_config.enable_guild_direct_message
 
         if qq_group:
             self.intents = botpy.Intents(
                 public_messages=True,
                 public_guild_messages=True,
-                direct_message=context.base_config['direct_message_mode']
+                direct_message=guild_dm
             )
         else:
             self.intents = botpy.Intents(
                 public_guild_messages=True,
-                direct_message=context.base_config['direct_message_mode']
+                direct_message=guild_dm
             )
         self.client = botClient(
             intents=self.intents,
@@ -168,24 +173,11 @@ class QQOfficial(Platform):
         return abm
 
     def run(self):
-        try:
-            return self.client.start(
-                appid=self.appid,
-                secret=self.secret
-            )
-        except BaseException as e:
-            # 早期的 qq-botpy 版本使用 token 登录。
-            logger.error(traceback.format_exc())
-            self.client = botClient(
-                intents=self.intents,
-                bot_log=False
-            )
-            self.client.set_platform(self)
-            return self.client.start(
-                appid=self.appid,
-                token=self.token
-            )
-
+        return self.client.start(
+            appid=self.appid,
+            secret=self.secret
+        )
+            
     async def handle_msg(self, message: AstrBotMessage):
         assert isinstance(message.raw_message, (botpy.message.Message,
                           botpy.message.GroupMessage, botpy.message.DirectMessage, botpy.message.C2CMessage))
@@ -209,8 +201,7 @@ class QQOfficial(Platform):
 
         # 解析出 role
         sender_id = message.sender.user_id
-        if sender_id == self.context.base_config.get('admin_qqchan', None) or \
-                sender_id in self.context.base_config.get('other_admins', None):
+        if sender_id in self.admins:
             role = 'admin'
         else:
             role = 'member'
@@ -249,7 +240,7 @@ class QQOfficial(Platform):
         msg_ref = None
         rendered_images = []
         
-        if self.context.base_config.get("qq_pic_mode", False) and isinstance(result_message, list):
+        if self.context.config_helper.t2i and isinstance(result_message, list):
             rendered_images = await self.convert_to_t2i_chain(result_message)
         
         if isinstance(result_message, list):

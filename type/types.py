@@ -3,7 +3,7 @@ from asyncio import Task
 from type.register import *
 from typing import List, Awaitable
 from logging import Logger
-from util.cmd_config import CmdConfig
+from util.cmd_config import AstrBotConfig
 from util.t2i.renderer import TextToImageRenderer
 from util.updator.astrbot_updator import AstrBotUpdator
 from util.image_uploader import ImageUploader
@@ -20,17 +20,17 @@ class Context:
     def __init__(self):
         self.logger: Logger = None
         self.base_config: dict = None  # 配置（期望启动机器人后是不变的）
-        self.config_helper: CmdConfig = None
+        self.config_helper: AstrBotConfig = None
         self.cached_plugins: List[RegisteredPlugin] = []  # 缓存的插件
         self.platforms: List[RegisteredPlatform] = []
         self.llms: List[RegisteredLLM] = []
         self.default_personality: dict = None
         
-        self.unique_session = False # 独立会话
-        self.version: str = None  # 机器人版本
-        self.nick: tuple = None  # gocq 的唤醒词
-        self.t2i_mode = False
-        self.web_search = False  # 是否开启了网页搜索
+        # self.unique_session = False # 独立会话
+        # self.version: str = None  # 机器人版本
+        # self.nick: tuple = None  # gocq 的唤醒词
+        # self.t2i_mode = False
+        # self.web_search = False  # 是否开启了网页搜索
         
         self.metrics_uploader = None
         self.updator: AstrBotUpdator = None
@@ -42,7 +42,7 @@ class Context:
         self.ext_tasks: List[Task] = []
 
         # useless
-        self.reply_prefix = ""
+        # self.reply_prefix = ""
 
     def register_commands(self, 
                           plugin_name: str, 

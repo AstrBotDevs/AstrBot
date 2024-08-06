@@ -13,18 +13,25 @@ from nakuru.entities.components import *
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from astrbot.message.handler import MessageHandler
+from util.cmd_config import PlatformConfig, AiocqhttpPlatformConfig
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 class AIOCQHTTP(Platform):
-    def __init__(self, context: Context, message_handler: MessageHandler) -> None:
+    def __init__(self, context: Context, 
+                 message_handler: MessageHandler, 
+                 platform_config: PlatformConfig) -> None:
+        assert isinstance(platform_config, AiocqhttpPlatformConfig), "aiocqhttp: 无法识别的配置类型。"
+        
         self.message_handler = message_handler
         self.waiting = {}
         self.context = context
-        self.unique_session = self.context.unique_session
-        self.announcement = self.context.base_config.get("announcement", "欢迎新人！")
-        self.host = self.context.base_config['aiocqhttp']['ws_reverse_host']
-        self.port = self.context.base_config['aiocqhttp']['ws_reverse_port']
+        self.config = platform_config
+        self.unique_session = context.config_helper.platform_settings.unique_session
+        self.announcement = context.config_helper.platform_settings.welcome_message_when_join
+        self.host = platform_config.ws_reverse_host
+        self.port = platform_config.ws_reverse_port
+        self.admins = context.config_helper.admins_id
         
     def convert_message(self, event: Event) -> AstrBotMessage:
         
@@ -123,12 +130,11 @@ class AIOCQHTTP(Platform):
         
         # 解析 role
         sender_id = str(message.sender.user_id)
-        if sender_id == self.context.base_config.get('admin_qq', '') or \
-                sender_id in self.context.base_config.get('other_admins', []):
+        if sender_id in self.admins:
             role = 'admin'
         else:
             role = 'member'
-            
+
         # construct astrbot message event
         ame = AstrMessageEvent.from_astrbot_message(message, self.context, "aiocqhttp", message.session_id, role)
         
@@ -160,7 +166,7 @@ class AIOCQHTTP(Platform):
             res = [Plain(text=res), ]
             
         # if image mode, put all Plain texts into a new picture.
-        if self.context.base_config.get("qq_pic_mode", False) and isinstance(res, list):
+        if self.context.config_helper.t2i and isinstance(res, list):
             rendered_images = await self.convert_to_t2i_chain(res)
             if rendered_images:
                 try:

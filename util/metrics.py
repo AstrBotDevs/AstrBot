@@ -5,6 +5,7 @@ import sys
 
 from type.types import Context
 from collections import defaultdict
+from type.config import VERSION
 
 class MetricUploader():
     def __init__(self, context: Context) -> None:
@@ -49,7 +50,7 @@ class MetricUploader():
             try:
                 res = {
                     "stat_version": "moon",
-                    "version": context.version, # 版本号
+                    "version": VERSION, # 版本号
                     "platform_stats": self.platform_stats, # 过去 30 分钟各消息平台交互消息数
                     "llm_stats": self.llm_stats,
                     "plugin_stats": self.plugin_stats,
