@@ -1,6 +1,6 @@
 <p align="center">
 
-<img width="806" alt="image" src="https://github.com/Soulter/AstrBot/assets/37870767/c6f057d9-46d7-4144-8116-00a962941746">
+<img width="750" alt="image" src="https://github.com/Soulter/AstrBot/assets/37870767/c6f057d9-46d7-4144-8116-00a962941746">
 
 </p>
 <div align="center">
@@ -21,27 +21,39 @@
 
 🌍 支持的消息平台
 - QQ 群、QQ 频道（OneBot、QQ 官方接口）
-- Telegram（由 [astrbot_plugin_telegram](https://github.com/Soulter/astrbot_plugin_telegram) 插件支持）
-- WeChat(微信) (由 [astrbot_plugin_vchat](https://github.com/z2z63/astrbot_plugin_vchat) 插件支持)
+- Telegram（[astrbot_plugin_telegram](https://github.com/Soulter/astrbot_plugin_telegram) 插件）
+- WeChat(微信) ([astrbot_plugin_vchat](https://github.com/z2z63/astrbot_plugin_vchat) 插件)
 
-🌍 支持的大模型一览：
+🌍 支持的大模型/底座：
 
 - OpenAI GPT、DallE 系列
 - Claude（由[LLMs插件](https://github.com/Soulter/llms)支持）
 - HuggingChat（由[LLMs插件](https://github.com/Soulter/llms)支持）
 - Gemini（由[LLMs插件](https://github.com/Soulter/llms)支持）
+- Ollama 
+- 几乎所有已知模型（可接入 [OneAPI](https://astrbot.soulter.top/docs/docs/adavanced/one-api)）
 
 🌍 机器人支持的能力一览：
 - 大模型对话、人格、网页搜索
-- 可视化管理面板
+- 可视化仪表盘
 - 同时处理多平台消息
 - 精确到个人的会话隔离
 - 插件支持
 - 文本转图片回复（Markdown）
 
-## 🧩 插件支持
+## 🧩 插件
 
 有关插件的使用和列表请移步：[AstrBot 文档 - 插件](https://astrbot.soulter.top/center/docs/%E4%BD%BF%E7%94%A8/%E6%8F%92%E4%BB%B6)
+
+## ❤️ 贡献
+
+欢迎任何 Issues/Pull Requests！只需要将你的更改提交到此项目 ：)
+
+对于新功能的添加，请先通过 Issue 进行讨论。
+
+## 🔭 展望
+
+- [ ] 更多、更开放的 LLM Agent 能力
 
 ## ✨ Demo
 
