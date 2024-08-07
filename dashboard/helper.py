@@ -54,6 +54,20 @@ class DashBoardHelper():
             raise ValueError(f"格式校验未通过: {errors}")
         self.context.config_helper.flush_config(post_config)
         
-    def save_extension_config(self, post_config: list, namespace: str):
-        pass
-        # update_config(namespace, key, value)
+    def save_extension_config(self, post_config: dict):
+        if 'namespace' not in post_config:
+            raise ValueError("Missing key: namespace")
+        if 'config' not in post_config:
+            raise ValueError("Missing key: config")
+
+        namespace = post_config['namespace']
+        config: list = post_config['config'][0]['body']
+        for item in config:
+            key = item['path']
+            value = item['value']
+            typ = item['val_type']
+            if typ == 'int':
+                if not value.isdigit():
+                    raise ValueError(f"Invalid type for {namespace}.{key}: expected int, got {type(value).__name__}")
+                value = int(value)
+            update_config(namespace, key, value)

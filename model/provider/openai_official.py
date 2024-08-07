@@ -69,7 +69,8 @@ class ProviderOpenAIOfficial(Provider):
             base_url=self.base_url
         )
         super().set_curr_model(llm_config.model_config.model)
-        self.image_generator_model_configs: Dict = asdict(llm_config.image_generation_model_config)
+        if llm_config.image_generation_model_config:
+            self.image_generator_model_configs: Dict = asdict(llm_config.image_generation_model_config)
         self.session_memory: Dict[str, List]  = {} # 会话记忆
         self.session_memory_lock = threading.Lock()
         self.max_tokens = self.llm_config.model_config.max_tokens # 上下文窗口大小
@@ -427,11 +428,10 @@ class ProviderOpenAIOfficial(Provider):
         '''
         retry = 0
         conf = self.image_generator_model_configs
-        super().accu_model_stat(model=conf['model'])
         if not conf:
             logger.error("OpenAI 图片生成模型配置不存在。")
             raise Exception("OpenAI 图片生成模型配置不存在。")
-        
+        super().accu_model_stat(model=conf['model'])
         while retry < 3:
             try:
                 images_response = await self.client.images.generate(

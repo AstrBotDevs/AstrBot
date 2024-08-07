@@ -34,6 +34,7 @@ class AstrBotDashBoard():
         self.dashboard_helper = DashBoardHelper(self.context)
         
         self.dashboard_be = Flask(__name__, static_folder="dist", static_url_path="/")
+        self.dashboard_be.json.sort_keys=False # 不按照字典排序
         logging.getLogger('werkzeug').setLevel(logging.ERROR)
         self.dashboard_be.logger.setLevel(logging.ERROR)
         
@@ -412,66 +413,6 @@ class AstrBotDashBoard():
                 "description": "",
                 "body": list(json.load(f).values())
             },]
-
-    def _generate_outline(self):
-        '''
-        生成配置大纲。目前分为 platform(消息平台配置) 和 llm(语言模型配置) 两大类。
-        插件的info函数中如果带了plugin_type字段，则会被归类到对应的大纲中。目前仅支持 platform 和 llm 两种类型。
-        '''
-        outline = [
-            {
-                "type": "platform",
-                "name": "配置通用消息平台",
-                "body": [
-                    {
-                        "title": "通用",
-                        "desc": "通用平台配置",
-                        "namespace": "internal_platform_general",
-                        "tag": ""
-                    },
-                    {
-                        "title": "QQ(官方)",
-                        "desc": "QQ官方API。支持频道、群、私聊（需获得群权限）",
-                        "namespace": "internal_platform_qq_official",
-                        "tag": ""
-                    },
-                    {
-                        "title": "QQ(nakuru)",
-                        "desc": "适用于 go-cqhttp",
-                        "namespace": "internal_platform_qq_gocq",
-                        "tag": ""
-                    },
-                    {
-                        "title": "QQ(aiocqhttp)",
-                        "desc": "适用于 Lagrange, LLBot, Shamrock 等支持反向WS的协议实现。",
-                        "namespace": "internal_platform_qq_aiocqhttp",
-                        "tag": ""
-                    }
-                ]
-            },
-            {
-                "type": "llm",
-                "name": "配置 LLM",
-                "body": [
-                    {
-                        "title": "OpenAI Official",
-                        "desc": "也支持使用官方接口的中转服务",
-                        "namespace": "internal_llm_openai_official",
-                        "tag": ""
-                    }
-                ]
-            }
-        ]
-        for plugin in self.context.cached_plugins:
-            for item in outline:
-                if item['type'] == plugin.metadata.plugin_type:
-                    item['body'].append({
-                        "title": plugin.metadata.plugin_name,
-                        "desc": plugin.metadata.desc,
-                        "namespace": plugin.metadata.plugin_name,
-                        "tag": plugin.metadata.plugin_name
-                    })
-        return outline
 
     async def get_log_history(self):
         try:

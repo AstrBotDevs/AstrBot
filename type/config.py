@@ -79,6 +79,7 @@ DEFAULT_CONFIG_VERSION_2 = {
     "config_version": 2,
     "platform": [
         {
+            "id": "default",
             "name": "qq_official",
             "enable": False,
             "appid": "",
@@ -87,6 +88,7 @@ DEFAULT_CONFIG_VERSION_2 = {
             "enable_guild_direct_message": True,
         },
         {
+            "id": "default",
             "name": "nakuru",
             "enable": False,
             "host": "172.0.0.1",
@@ -98,6 +100,7 @@ DEFAULT_CONFIG_VERSION_2 = {
             "enable_group_increase": True,
         },
         {
+            "id": "default",
             "name": "aiocqhttp",
             "enable": False,
             "ws_reverse_host": "",
@@ -116,6 +119,7 @@ DEFAULT_CONFIG_VERSION_2 = {
     },
     "llm": [
         {
+            "id": "default",
             "name": "openai",
             "enable": True,
             "key": [],

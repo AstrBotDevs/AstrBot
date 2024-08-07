@@ -26,6 +26,7 @@ class PlatformSettings:
     
 @dataclass
 class PlatformConfig():
+    id: str = ""
     name: str = ""
     enable: bool = False
 
@@ -70,6 +71,7 @@ class ImageGenerationModelConfig:
     
 @dataclass
 class LLMConfig:
+    id: str = ""
     name: str = "openai"
     enable: bool = True
     key: List[str] = field(default_factory=list)
@@ -77,12 +79,12 @@ class LLMConfig:
     prompt_prefix: str = ""
     default_personality: str = ""
     model_config: ModelConfig = field(default_factory=ModelConfig)
-    image_generation_model_config: ImageGenerationModelConfig = field(default_factory=ImageGenerationModelConfig)
+    image_generation_model_config: Optional[ImageGenerationModelConfig] = None
 
     def __post_init__(self):
         self.model_config = ModelConfig(**self.model_config)
-        self.image_generation_model_config = ImageGenerationModelConfig(**self.image_generation_model_config)
-        
+        if self.image_generation_model_config:
+            self.image_generation_model_config = ImageGenerationModelConfig(**self.image_generation_model_config)
 @dataclass
 class LLMSettings:
     wake_prefix: str = ""
@@ -245,6 +247,8 @@ class AstrBotConfig():
             conf_str = f.read() 
         if conf_str.startswith(u'/ufeff'): # remove BOM
             conf_str = conf_str.encode('utf8')[3:].decode('utf8')
+        if not conf_str:
+            return {}
         conf = json.loads(conf_str)
         return conf
 
