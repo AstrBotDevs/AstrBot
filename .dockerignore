@@ -3,6 +3,7 @@
 # github acions
 .github/
 .*ignore
+.git/
 # User-specific stuff
 .idea/
 # Byte-compiled / optimized / DLL files
