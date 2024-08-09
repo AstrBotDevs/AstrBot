@@ -43,7 +43,7 @@
 
 ## 🧩 插件
 
-有关插件的使用和列表请移步：[AstrBot 文档 - 插件](https://astrbot.soulter.top/center/docs/%E4%BD%BF%E7%94%A8/%E6%8F%92%E4%BB%B6)
+有关插件的使用和列表请移步：[AstrBot 文档 - 插件](https://astrbot.soulter.top/docs/get-started/plugin)
 
 ## ❤️ 贡献
 
