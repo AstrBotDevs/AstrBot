@@ -222,7 +222,7 @@ class QQOfficial(Platform):
         if not message_result:
             return
 
-        ret = await self.reply_msg(message, message_result.result_message)
+        ret = await self.reply_msg(message, message_result.result_message, message_result.use_t2i)
         if message_result.callback:
             message_result.callback()
 
@@ -234,7 +234,8 @@ class QQOfficial(Platform):
 
     async def reply_msg(self,
                         message: AstrBotMessage,
-                        result_message: List[BaseMessageComponent]):
+                        result_message: List[BaseMessageComponent],
+                        use_t2i: bool = None):
         '''
         回复频道消息
         '''
@@ -249,7 +250,7 @@ class QQOfficial(Platform):
         msg_ref = None
         rendered_images = []
         
-        if self.context.base_config.get("qq_pic_mode", False) and isinstance(result_message, list):
+        if use_t2i or (use_t2i == None and self.context.base_config.get("qq_pic_mode", False)) and isinstance(res, list):
             rendered_images = await self.convert_to_t2i_chain(result_message)
         
         if isinstance(result_message, list):
@@ -388,6 +389,9 @@ class QQOfficial(Platform):
         if image_path:
             payload['file_image'] = image_path
         await self._reply(**payload)
+        
+    async def send_msg_new(self, message_type: MessageType, target: str, result_message: CommandResult):
+        raise NotImplementedError("qqofficial 不支持此方法。")
 
     def wait_for_message(self, channel_id: int) -> AstrBotMessage:
         '''

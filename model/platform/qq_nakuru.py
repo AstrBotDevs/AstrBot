@@ -78,6 +78,9 @@ class QQGOCQ(Platform):
         for comp in message.message:
             if isinstance(comp, At) and str(comp.qq) == message.self_id:
                 return True
+        # check commands which ignore prefix
+        if self.context.command_manager.check_command_ignore_prefix(message.message_str):
+            return True
         # check nicks
         if self.check_nick(message.message_str):
             return True
@@ -118,14 +121,34 @@ class QQGOCQ(Platform):
         else:
             role = 'member'
             
+        # parse unified message origin
+        unified_msg_origin = None
+        if message.type == MessageType.GROUP_MESSAGE:
+            assert isinstance(message.raw_message, GroupMessage)
+            unified_msg_origin = f"nakuru:{message.type.value}:{message.raw_message.group_id}"
+        elif message.type == MessageType.FRIEND_MESSAGE:
+            assert isinstance(message.raw_message, FriendMessage)
+            unified_msg_origin = f"nakuru:{message.type.value}:{message.sender.user_id}"
+        elif message.type == MessageType.GUILD_MESSAGE:
+            assert isinstance(message.raw_message, GuildMessage)
+            unified_msg_origin = f"nakuru:{message.type.value}:{message.raw_message.channel_id}"
+        
+        logger.debug(f"unified_msg_origin: {unified_msg_origin}")
+
+            
         # construct astrbot message event
-        ame = AstrMessageEvent.from_astrbot_message(message, self.context, "gocq", session_id, role)
+        ame = AstrMessageEvent.from_astrbot_message(message, 
+                                                    self.context, 
+                                                    "nakuru", 
+                                                    session_id, 
+                                                    role,
+                                                    unified_msg_origin)
         
         # transfer control to message handler
         message_result = await self.message_handler.handle(ame)
         if not message_result: return
         
-        await self.reply_msg(message, message_result.result_message)
+        await self.reply_msg(message, message_result.result_message, message_result.use_t2i)
         if message_result.callback:
             message_result.callback()
 
@@ -135,7 +158,8 @@ class QQGOCQ(Platform):
 
     async def reply_msg(self,
                         message: AstrBotMessage,
-                        result_message: List[BaseMessageComponent]):
+                        result_message: List[BaseMessageComponent],
+                        use_t2i: bool = None):
         """
         回复用户唤醒机器人的消息。（被动回复）
         """
@@ -152,7 +176,7 @@ class QQGOCQ(Platform):
             res = [Plain(text=res), ]
 
         # if image mode, put all Plain texts into a new picture.
-        if self.context.base_config.get("qq_pic_mode", False) and isinstance(res, list):
+        if use_t2i or (use_t2i == None and self.context.base_config.get("qq_pic_mode", False)) and isinstance(res, list):
             rendered_images = await self.convert_to_t2i_chain(res)
             if rendered_images:
                 try:
@@ -213,6 +237,23 @@ class QQGOCQ(Platform):
         guild_id 不是频道号。
         '''
         await self._reply(target, result_message.message_chain)
+        
+    async def send_msg_new(self, message_type: MessageType, target: str, result_message: CommandResult):
+        '''
+        以主动的方式给用户、群或者频道发送一条消息。
+        
+        `message_type` 为 MessageType 枚举类型。
+        
+        - 要发给 QQ 下的某个用户，请使用 MessageType.FRIEND_MESSAGE；
+        - 要发给某个群聊，请使用 MessageType.GROUP_MESSAGE；
+        - 要发给某个频道，请使用 MessageType.GUILD_MESSAGE。
+        '''
+        if message_type == MessageType.FRIEND_MESSAGE:
+            await self.send_msg({"user_id": int(target)}, result_message)
+        elif message_type == MessageType.GROUP_MESSAGE:
+            await self.send_msg({"group_id": int(target)}, result_message)
+        elif message_type == MessageType.GUILD_MESSAGE:
+            await self.send_msg({"channel_id": int(target)}, result_message)
 
     def convert_message(self, message: Union[GroupMessage, FriendMessage, GuildMessage]) -> AstrBotMessage:
         abm = AstrBotMessage()
@@ -233,7 +274,7 @@ class QQGOCQ(Platform):
             str(message.sender.user_id),
             str(message.sender.nickname)
         )
-        abm.tag = "gocq"
+        abm.tag = "nakuru"
         abm.message = message.message
         return abm
     

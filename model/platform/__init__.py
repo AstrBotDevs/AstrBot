@@ -3,6 +3,7 @@ from typing import Union, Any, List
 from nakuru.entities.components import Plain, At, Image, BaseMessageComponent
 from type.astrbot_message import AstrBotMessage
 from type.command import CommandResult
+from type.astrbot_message import MessageType
 
 
 class Platform():
@@ -26,6 +27,13 @@ class Platform():
 
     @abc.abstractmethod
     async def send_msg(self, target: Any, result_message: CommandResult):
+        '''
+        发送消息（主动）
+        '''
+        pass
+    
+    @abc.abstractmethod
+    async def send_msg_new(self, message_type: MessageType, target: str, result_message: CommandResult):
         '''
         发送消息（主动）
         '''

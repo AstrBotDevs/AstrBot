@@ -103,12 +103,16 @@ class AIOCQHTTP(Platform):
             await asyncio.sleep(1)
     
     def pre_check(self, message: AstrBotMessage) -> bool:
-        # if message chain contains Plain components or At components which points to self_id, return True
+        # if message chain contains Plain components or 
+        # At components which points to self_id, return True
         if message.type == MessageType.FRIEND_MESSAGE:
             return True
         for comp in message.message:
             if isinstance(comp, At) and str(comp.qq) == message.self_id:
                 return True
+        # check commands which ignore prefix
+        if self.context.command_manager.check_command_ignore_prefix(message.message_str):
+            return True
         # check nicks
         if self.check_nick(message.message_str):
             return True
@@ -129,14 +133,28 @@ class AIOCQHTTP(Platform):
         else:
             role = 'member'
             
+        # parse unified message origin
+        unified_msg_origin = None
+        assert isinstance(message.raw_message, Event)
+        if message.type == MessageType.GROUP_MESSAGE:
+            unified_msg_origin = f"aiocqhttp:{message.type.value}:{message.raw_message.group_id}"
+        elif message.type == MessageType.FRIEND_MESSAGE:
+            unified_msg_origin = f"aiocqhttp:{message.type.value}:{message.sender.user_id}"
+        
+        logger.debug(f"unified_msg_origin: {unified_msg_origin}")
+
         # construct astrbot message event
-        ame = AstrMessageEvent.from_astrbot_message(message, self.context, "aiocqhttp", message.session_id, role)
+        ame = AstrMessageEvent.from_astrbot_message(message, 
+                                                    self.context, 
+                                                    "aiocqhttp", 
+                                                    message.session_id, 
+                                                    role, unified_msg_origin)
         
         # transfer control to message handler
         message_result = await self.message_handler.handle(ame)
         if not message_result: return
         
-        await self.reply_msg(message, message_result.result_message)
+        await self.reply_msg(message, message_result.result_message, message_result.use_t2i)
         if message_result.callback:
             message_result.callback()
 
@@ -147,7 +165,8 @@ class AIOCQHTTP(Platform):
     
     async def reply_msg(self,
                         message: AstrBotMessage,
-                        result_message: list):
+                        result_message: list,
+                        use_t2i: bool = None):
         """
         回复用户唤醒机器人的消息。（被动回复）
         """
@@ -160,7 +179,7 @@ class AIOCQHTTP(Platform):
             res = [Plain(text=res), ]
             
         # if image mode, put all Plain texts into a new picture.
-        if self.context.base_config.get("qq_pic_mode", False) and isinstance(res, list):
+        if use_t2i or (use_t2i == None and self.context.base_config.get("qq_pic_mode", False)) and isinstance(res, list):
             rendered_images = await self.convert_to_t2i_chain(res)
             if rendered_images:
                 try:
@@ -224,3 +243,11 @@ class AIOCQHTTP(Platform):
         '''
         
         await self._reply(target, result_message.message_chain)
+        
+    async def send_msg_new(self, message_type: MessageType, target: str, result_message: CommandResult):
+        if message_type == MessageType.GROUP_MESSAGE:
+            await self.send_msg({'group_id': int(target)}, result_message)
+        elif message_type == MessageType.FRIEND_MESSAGE:
+            await self.send_msg({'user_id': int(target)}, result_message)
+        else:
+            raise Exception("aiocqhttp: 无法识别的消息类型。")
