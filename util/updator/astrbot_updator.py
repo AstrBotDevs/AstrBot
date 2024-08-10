@@ -9,7 +9,7 @@ logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 class AstrBotUpdator(RepoZipUpdator):
     def __init__(self):
-        self.MAIN_PATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        self.MAIN_PATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../"))
         self.ASTRBOT_RELEASE_API = "https://api.github.com/repos/Soulter/AstrBot/releases"
 
     def terminate_child_processes(self):
