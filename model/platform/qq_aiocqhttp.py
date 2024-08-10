@@ -106,23 +106,24 @@ class AIOCQHTTP(Platform):
         # if message chain contains Plain components or 
         # At components which points to self_id, return True
         if message.type == MessageType.FRIEND_MESSAGE:
-            return True
+            return True, "friend"
         for comp in message.message:
             if isinstance(comp, At) and str(comp.qq) == message.self_id:
-                return True
+                return True, "at"
         # check commands which ignore prefix
         if self.context.command_manager.check_command_ignore_prefix(message.message_str):
-            return True
+            return True, "command"
         # check nicks
         if self.check_nick(message.message_str):
-            return True
-        return False
+            return True, "nick"
+        return False, "none"
         
     async def handle_msg(self, message: AstrBotMessage):
         logger.info(
             f"{message.sender.nickname}/{message.sender.user_id} -> {self.parse_message_outline(message)}")
         
-        if not self.pre_check(message):
+        ok, reason = self.pre_check(message)
+        if not ok:
             return
         
         # 解析 role
@@ -148,7 +149,9 @@ class AIOCQHTTP(Platform):
                                                     self.context, 
                                                     "aiocqhttp", 
                                                     message.session_id, 
-                                                    role, unified_msg_origin)
+                                                    role, 
+                                                    unified_msg_origin,
+                                                    reason == "command") # only_command
         
         # transfer control to message handler
         message_result = await self.message_handler.handle(ame)

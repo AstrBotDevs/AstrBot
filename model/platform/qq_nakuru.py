@@ -74,17 +74,17 @@ class QQGOCQ(Platform):
     def pre_check(self, message: AstrBotMessage) -> bool:
         # if message chain contains Plain components or At components which points to self_id, return True
         if message.type == MessageType.FRIEND_MESSAGE:
-            return True
+            return True, "friend"
         for comp in message.message:
             if isinstance(comp, At) and str(comp.qq) == message.self_id:
-                return True
+                return True, "at"
         # check commands which ignore prefix
         if self.context.command_manager.check_command_ignore_prefix(message.message_str):
-            return True
+            return True, "command"
         # check nicks
         if self.check_nick(message.message_str):
-            return True
-        return False
+            return True, "nick"
+        return False, "none"
 
     def run(self):
         coro = self.client._run()
@@ -98,7 +98,8 @@ class QQGOCQ(Platform):
                           (GroupMessage, FriendMessage, GuildMessage))
 
         # 判断是否响应消息
-        if not self.pre_check(message):
+        ok, reason = self.pre_check(message)
+        if not ok:
             return
 
         # 解析 session_id
@@ -142,7 +143,8 @@ class QQGOCQ(Platform):
                                                     "nakuru", 
                                                     session_id, 
                                                     role,
-                                                    unified_msg_origin)
+                                                    unified_msg_origin,
+                                                    reason == 'command') # only_command
         
         # transfer control to message handler
         message_result = await self.message_handler.handle(ame)

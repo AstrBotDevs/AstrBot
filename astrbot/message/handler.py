@@ -134,8 +134,8 @@ class MessageHandler():
         self.persist_manager.record_message(message.platform.platform_name, message.session_id)
         
         # TODO: this should be configurable
-        if not message.message_str:
-            return MessageResult("Hi~")
+        # if not message.message_str:
+        #     return MessageResult("Hi~")
         
         # check the rate limit
         if not self.rate_limit_helper.check_frequency(message.message_obj.sender.user_id):
@@ -157,6 +157,11 @@ class MessageHandler():
                 is_command_call=True,
                 use_t2i=cmd_res.is_use_t2i
             )
+        
+        # next is the LLM part
+        
+        if message.only_command:
+            return
         
         # check if the message is a llm-wake-up command
         if self.llm_wake_prefix and not msg_plain.startswith(self.llm_wake_prefix):
