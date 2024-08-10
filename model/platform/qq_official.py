@@ -112,7 +112,7 @@ class QQOfficial(Platform):
         abm.timestamp = int(time.time())
         abm.raw_message = message
         abm.message_id = message.id
-        abm.tag = "qqchan"
+        abm.tag = "qqofficial"
         msg: List[BaseMessageComponent] = []
 
         if isinstance(message, botpy.message.GroupMessage) or isinstance(message, botpy.message.C2CMessage):

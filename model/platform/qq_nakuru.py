@@ -195,14 +195,26 @@ class QQGOCQ(Platform):
             message_chain = [Plain(text=message_chain), ]
         
         is_dict = isinstance(source, dict)
-        if source.type == "GuildMessage":
+        
+        typ = None
+        if is_dict:
+            if "group_id" in source:
+                typ = "GroupMessage"
+            elif "user_id" in source:
+                typ = "FriendMessage"
+            elif "guild_id" in source:
+                typ = "GuildMessage"
+        else:
+            typ = source.type
+        
+        if typ == "GuildMessage":
             guild_id = source['guild_id'] if is_dict else source.guild_id
             chan_id = source['channel_id'] if is_dict else source.channel_id
             await self.client.sendGuildChannelMessage(guild_id, chan_id, message_chain)
-        elif source.type == "FriendMessage":
+        elif typ == "FriendMessage":
             user_id = source['user_id'] if is_dict else source.user_id
             await self.client.sendFriendMessage(user_id, message_chain)
-        elif source.type == "GroupMessage":
+        elif typ == "GroupMessage":
             group_id = source['group_id'] if is_dict else source.group_id
             # 过长时forward发送
             plain_text_len = 0

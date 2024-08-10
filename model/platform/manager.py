@@ -58,7 +58,7 @@ class PlatformManager():
         try:
             qq_gocq = QQGOCQ(self.context, self.msg_handler)
             self.context.platforms.append(RegisteredPlatform(
-                platform_name="gocq", platform_instance=qq_gocq, origin="internal"))
+                platform_name="nakuru", platform_instance=qq_gocq, origin="internal"))
             await qq_gocq.run()
         except BaseException as e:
             logger.error("启动 nakuru 适配器时出现错误: " + str(e))
@@ -81,7 +81,7 @@ class PlatformManager():
             from model.platform.qq_official import QQOfficial
             qqchannel_bot = QQOfficial(self.context, self.msg_handler)
             self.context.platforms.append(RegisteredPlatform(
-                platform_name="qqchan", platform_instance=qqchannel_bot, origin="internal"))
+                platform_name="qqofficial", platform_instance=qqchannel_bot, origin="internal"))
             return qqchannel_bot.run()
         except BaseException as e:
             logger.error("启动 QQ官方机器人适配器时出现错误: " + str(e))
