@@ -359,7 +359,7 @@ class ProviderOpenAIOfficial(Provider):
                 logger.warn(f"OpenAI 请求异常：{e}。")
                 if "image_url is only supported by certain models." in str(e):
                     raise Exception(f"当前模型 { self.model_configs['model'] } 不支持图片输入，请更换模型。")
-                retry += 1
+                raise e
             except RateLimitError as e:
                 if "You exceeded your current quota" in str(e):
                     self.keys_data[self.chosen_api_key] = False
