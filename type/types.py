@@ -44,6 +44,7 @@ class Context:
         self.ext_tasks: List[Task] = []
         
         self.command_manager = None
+        self.running = True
 
         # useless
         self.reply_prefix = ""

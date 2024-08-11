@@ -100,6 +100,9 @@ class AstrBotBootstrap():
             try:
                 result = await task
                 return result
+            except asyncio.CancelledError:
+                logger.info(f"{task.get_name()} 任务已取消。")
+                return
             except Exception as e:
                 logger.error(traceback.format_exc())
                 logger.error(f"{task.get_name()} 任务发生错误，将在 5 秒后重试。")

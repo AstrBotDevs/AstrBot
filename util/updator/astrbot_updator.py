@@ -30,9 +30,11 @@ class AstrBotUpdator(RepoZipUpdator):
         except psutil.NoSuchProcess:
             pass
     
-    def _reboot(self, delay: int = None):
-        if delay: time.sleep(delay)
+    def _reboot(self, delay: int = None, context = None):
+        # if delay: time.sleep(delay)
         py = sys.executable
+        context.running = False
+        time.sleep(3)
         self.terminate_child_processes()
         py = py.replace(" ", "\\ ")
         try:

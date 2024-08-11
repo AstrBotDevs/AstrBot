@@ -117,11 +117,11 @@ class InternalCommandHandler:
                 success=False,
                 message_chain="你没有权限使用该指令",
             )
-        context.updator._reboot(5)
+        context.updator._reboot(3, context)
         return CommandResult(
             hit=True,
             success=True,
-            message_chain="AstrBot 将在 5s 后重启。",
+            message_chain="AstrBot 将在 3s 后重启。",
         )
     
     def plugin(self, message: AstrMessageEvent, context: Context):

@@ -311,7 +311,7 @@ class AstrBotDashBoard():
                 latest = False
             try:
                 self.astrbot_updator.update(latest=latest, version=version)
-                threading.Thread(target=self.astrbot_updator._reboot, args=(3, )).start()
+                threading.Thread(target=self.astrbot_updator._reboot, args=(2, self.context)).start()
                 return Response(
                     status="success",
                     message="更新成功，机器人将在 3 秒内重启。",
@@ -374,7 +374,7 @@ class AstrBotDashBoard():
                 self.dashboard_data, self.context.config_helper.get_all())
             # 重启
             threading.Thread(target=self.astrbot_updator._reboot,
-                                args=(2, ), daemon=True).start()
+                                args=(2, self.context), daemon=True).start()
         except Exception as e:
             raise e
 

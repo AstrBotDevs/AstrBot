@@ -99,7 +99,7 @@ class AIOCQHTTP(Platform):
         return bot
     
     async def shutdown_trigger_placeholder(self):
-        while True:
+        while self.context.running:
             await asyncio.sleep(1)
     
     def pre_check(self, message: AstrBotMessage) -> bool:
