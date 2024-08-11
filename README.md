@@ -45,6 +45,10 @@
 
 有关插件的使用和列表请移步：[AstrBot 文档 - 插件](https://astrbot.soulter.top/docs/get-started/plugin)
 
+## 云部署
+
+[![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
+
 ## ❤️ 贡献
 
 欢迎任何 Issues/Pull Requests！只需要将你的更改提交到此项目 ：)
