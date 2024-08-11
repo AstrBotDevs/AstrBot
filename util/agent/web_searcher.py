@@ -1,13 +1,13 @@
 import traceback
 import random
 import json
-import asyncio
 import aiohttp
 import os
 
 from readability import Document
 from bs4 import BeautifulSoup
 from openai.types.chat.chat_completion_message_tool_call import Function
+from openai._exceptions import *
 from util.agent.func_call import FuncCall
 from util.websearch.config import HEADERS, USER_AGENTS
 from util.websearch.bing import Bing
@@ -100,9 +100,9 @@ async def fetch_website_content(url):
             return ret
 
 
-async def web_search(prompt, provider: Provider, session_id, official_fc=False):
+async def web_search(prompt: str, provider: Provider, session_id: str, official_fc: bool=False):
     '''
-    official_fc: 使用官方 function-calling
+    @param official_fc: 使用官方 function-calling
     '''
     new_func_call = FuncCall(provider)
 
@@ -127,9 +127,14 @@ async def web_search(prompt, provider: Provider, session_id, official_fc=False):
     function_invoked_ret = ""
     if official_fc:
         # we use official function-calling
-        result = await provider.text_chat(prompt=prompt, session_id=session_id, tools=new_func_call.get_func())
+        try:
+            result = await provider.text_chat(prompt=prompt, session_id=session_id, tools=new_func_call.get_func())
+        except BadRequestError as e:
+            # seems dont support function-calling
+            logger.error(f"error: {e}. Try to use local function-calling implementation")
+            return await web_search(prompt, provider, session_id, official_fc=False)
         if isinstance(result, Function):
-            logger.debug(f"web_searcher - function-calling: {result}")
+            logger.debug(f"function-calling: {result}")
             func_obj = None
             for i in new_func_call.func_list:
                 if i["name"] == result.name:
@@ -152,30 +157,31 @@ async def web_search(prompt, provider: Provider, session_id, official_fc=False):
             args = {
                 'question': prompt,
                 'func_definition': new_func_call.func_dump(),
-                'is_task': False,
-                'is_summary': False,
             }
-            function_invoked_ret, has_func = await asyncio.to_thread(new_func_call.func_call, **args)
+            function_invoked_ret, has_func = await new_func_call.func_call(**args)
+            
+            if not has_func:
+                return await provider.text_chat(prompt, session_id)
+            
         except BaseException as e:
-            res = await provider.text_chat(prompt) + "\n(网页搜索失败, 此为默认回复)"
-            return res
-        has_func = True
+            logger.error(traceback.format_exc())
+            return await provider.text_chat(prompt, session_id) + "(网页搜索失败, 此为默认回复)"
 
     if has_func:
-        await provider.forget(session_id=session_id, )
+        await provider.forget(session_id=session_id)
         summary_prompt = f"""
 你是一个专业且高效的助手，你的任务是
 1. 根据下面的相关材料对用户的问题 `{prompt}` 进行总结;
-2. 简单地发表你对这个问题的简略看法。
+2. 简单地发表你对这个问题的看法。
 
 # 例子
 1. 从网上的信息来看，可以知道...我个人认为...你觉得呢？
 2. 根据网上的最新信息，可以得知...我觉得...你怎么看？
 
 # 限制
-1. 限制在 200 字以内；
+1. 限制在 200-300 字；
 2. 请**直接输出总结**，不要输出多余的内容和提示语。
-        
+
 # 相关材料
 {function_invoked_ret}"""
         ret = await provider.text_chat(prompt=summary_prompt, session_id=session_id)

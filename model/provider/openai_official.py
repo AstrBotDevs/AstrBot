@@ -370,6 +370,8 @@ class ProviderOpenAIOfficial(Provider):
                 await self.switch_to_next_key()
                 rate_limit_retry += 1
                 time.sleep(1)
+            except NotFoundError as e:
+                raise e
             except Exception as e:
                 retry += 1
                 if retry >= 3:

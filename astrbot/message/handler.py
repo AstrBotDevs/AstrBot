@@ -189,7 +189,7 @@ class MessageHandler():
         
         try:
             if web_search:
-                llm_result = await web_searcher.web_search(msg_plain, provider, message.session_id, inner_provider)
+                llm_result = await web_searcher.web_search(msg_plain, provider, message.session_id, official_fc=True)
             else:
                 llm_result = await provider.text_chat(
                     prompt=msg_plain, 
