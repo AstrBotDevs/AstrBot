@@ -1,5 +1,5 @@
 import os
-import sys
+import asyncio
 import json
 import time
 import tiktoken
@@ -14,8 +14,6 @@ from openai._exceptions import *
 
 from astrbot.persist.helper import dbConn
 from model.provider.provider import Provider
-from util import general_utils as gu
-from util.cmd_config import CmdConfig
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from typing import List, Dict
@@ -369,7 +367,7 @@ class ProviderOpenAIOfficial(Provider):
                 logger.error(f"OpenAI API Key {self.chosen_api_key} 达到请求速率限制或者官方服务器当前超载。详细原因：{e}")
                 await self.switch_to_next_key()
                 rate_limit_retry += 1
-                time.sleep(1)
+                await asyncio.sleep(1)
             except NotFoundError as e:
                 raise e
             except Exception as e:
@@ -383,7 +381,7 @@ class ProviderOpenAIOfficial(Provider):
                 
                 logger.warning(traceback.format_exc())
                 logger.warning(f"OpenAI 请求失败：{e}。重试第 {retry} 次。")
-                time.sleep(1)
+                await asyncio.sleep(1)
 
         assert isinstance(completion, ChatCompletion)
         logger.debug(f"openai completion: {completion.usage}")
@@ -454,7 +452,7 @@ class ProviderOpenAIOfficial(Provider):
                     logger.error(traceback.format_exc())
                     raise Exception(f"OpenAI 图片生成请求失败：{e}。重试次数已达到上限。")
                 logger.warning(f"OpenAI 图片生成请求失败：{e}。重试第 {retry} 次。")
-                time.sleep(1)
+                await asyncio.sleep(1)
 
     async def forget(self, session_id=None, keep_system_prompt: bool=False) -> bool:
         if session_id is None: return False

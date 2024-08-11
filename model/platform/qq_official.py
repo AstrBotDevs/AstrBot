@@ -408,4 +408,4 @@ class QQOfficial(Platform):
             cnt += 1
             if cnt > 300:
                 raise Exception("等待消息超时。")
-            time.sleep(1)()
+            time.sleep(1)
