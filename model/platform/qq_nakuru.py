@@ -30,6 +30,7 @@ class FakeSource:
 
 class QQGOCQ(Platform):
     def __init__(self, context: Context, message_handler: MessageHandler) -> None:
+        super().__init__("nakuru", context)
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         

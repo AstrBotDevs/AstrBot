@@ -53,7 +53,7 @@ class botClient(Client):
 class QQOfficial(Platform):
 
     def __init__(self, context: Context, message_handler: MessageHandler, test_mode = False) -> None:
-        super().__init__()
+        super().__init__("qqofficial", context)
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         

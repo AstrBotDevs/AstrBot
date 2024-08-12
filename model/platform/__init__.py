@@ -7,8 +7,9 @@ from type.astrbot_message import MessageType
 
 
 class Platform():
-    def __init__(self) -> None:
-        pass
+    def __init__(self, platform_name: str, context) -> None:
+        self.PLATFORM_NAME = platform_name
+        self.context = context
 
     @abc.abstractmethod
     async def handle_msg(self, message: AstrBotMessage):
@@ -80,3 +81,5 @@ class Platform():
                 rendered_images.append(Image.fromFileSystem(p))
             return rendered_images
         
+    async def record_metrics(self):
+        self.context.metrics_uploader.increment_platform_stat(self.PLATFORM_NAME)

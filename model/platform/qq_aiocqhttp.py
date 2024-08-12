@@ -18,6 +18,7 @@ logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 class AIOCQHTTP(Platform):
     def __init__(self, context: Context, message_handler: MessageHandler) -> None:
+        super().__init__("aiocqhttp", context)
         self.message_handler = message_handler
         self.waiting = {}
         self.context = context
@@ -67,7 +68,9 @@ class AIOCQHTTP(Platform):
                 message_str += m['data']['text'].strip()
                 abm.message.append(a)
             if t == 'image':
-                a = Image(file=m['data']['file'])
+                file = m['data']['file'] if 'file' in m['data'] else None
+                url = m['data']['url'] if 'url' in m['data'] else None
+                a = Image(file=file, url=url)
                 abm.message.append(a)
         abm.timestamp = int(time.time())
         abm.message_str = message_str
@@ -195,9 +198,9 @@ class AIOCQHTTP(Platform):
         await self._reply(message, res)
             
     async def _reply(self, message: Union[AstrBotMessage, Dict], message_chain: List[BaseMessageComponent]):
+        await self.record_metrics()
         if isinstance(message_chain, str): 
             message_chain = [Plain(text=message_chain), ]
-            
         ret = []
         image_idx = []
         for idx, segment in enumerate(message_chain):
