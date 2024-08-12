@@ -53,7 +53,7 @@ if __name__ == "__main__":
     check_env()
     
     logger = LogManager.GetLogger(
-    log_name='astrbot',
+        log_name='astrbot',
         out_to_console=True,
         custom_formatter=Formatter('[%(asctime)s| %(name)s - %(levelname)s|%(filename)s:%(lineno)d]: %(message)s', datefmt="%H:%M:%S")
     )

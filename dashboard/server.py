@@ -192,10 +192,11 @@ class AstrBotDashBoard():
             try:
                 logger.info(f"正在安装插件 {repo_url}")
                 self.plugin_manager.install_plugin(repo_url)
-                logger.info(f"安装插件 {repo_url} 成功")
+                threading.Thread(target=self.astrbot_updator._reboot, args=(2, self.context)).start()
+                logger.info(f"安装插件 {repo_url} 成功，2秒后重启")
                 return Response(
                     status="success",
-                    message="安装成功~",
+                    message="安装成功，机器人将在 2 秒内重启。",
                     data=None
                 ).__dict__
             except Exception as e:
@@ -258,10 +259,11 @@ class AstrBotDashBoard():
             try:
                 logger.info(f"正在更新插件 {plugin_name}")
                 self.plugin_manager.update_plugin(plugin_name)
-                logger.info(f"更新插件 {plugin_name} 成功")
+                threading.Thread(target=self.astrbot_updator._reboot, args=(2, self.context)).start()
+                logger.info(f"更新插件 {plugin_name} 成功，2秒后重启")
                 return Response(
                     status="success",
-                    message="更新成功~",
+                    message="更新成功，机器人将在 2 秒内重启。",
                     data=None
                 ).__dict__
             except Exception as e:
