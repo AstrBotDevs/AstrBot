@@ -14,9 +14,12 @@ jobs:
           fetch-depth: 0
 
       - name: Write secret to file
-        run: mkdir data && echo "$CMD_CONFIG" > data/cmd_config.json
         env:
-          MY_SECRET: ${{ secrets.CMD_CONFIG }}
+            MY_SECRET: ${{ secrets.CMD_CONFIG }}
+        run: |
+            mkdir data
+            touch data/cmd_config.json
+            echo "$CMD_CONFIG" > data/cmd_config.json
 
       - name: Set up Python
         uses: actions/setup-python@v4
