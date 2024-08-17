@@ -105,8 +105,8 @@ class AstrBotBootstrap():
                 return
             except Exception as e:
                 logger.error(traceback.format_exc())
-                logger.error(f"{task.get_name()} 任务发生错误，将在 5 秒后重试。")
-                await asyncio.sleep(5)
+                logger.error(f"{task.get_name()} 任务发生错误。")
+                return
     
     def load_llm(self):
         if 'openai' in self.config_helper.cached_config and \
