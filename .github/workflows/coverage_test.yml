@@ -21,6 +21,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov pytest-asyncio
+          mkdir data
+          mkdir data/config
+          mkdir temp
 
       - name: Run tests
         run: PYTHONPATH=./ pytest --cov=. tests/ -v
