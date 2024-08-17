@@ -1,4 +1,4 @@
-import asyncio
+import asyncio, os
 from asyncio import Task
 from type.register import *
 from typing import List, Awaitable
@@ -12,6 +12,7 @@ from type.command import CommandResult
 from type.astrbot_message import MessageType
 from model.plugin.command import PluginCommandBridge
 from model.provider.provider import Provider
+from util.agent.func_call import FuncCall
 
 
 class Context:
@@ -97,13 +98,25 @@ class Context:
         `provider`: Provider 对象。即你的实现需要继承 Provider 类。至少应该实现 text_chat() 方法。
         '''
         self.llms.append(RegisteredLLM(llm_name, provider, origin))
+        
+    def register_llm_tool(self, tool_name: str, params: list, desc: str, func: callable):
+        '''
+        为函数调用（function-calling / tools-use）添加工具。
+        
+        @param name: 函数名
+        @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
+        @param desc: 函数描述
+        @param func_obj: 处理函数
+        '''
+        self.message_handler.llm_tools.add_func(tool_name, params, desc, func)
     
     def find_platform(self, platform_name: str) -> RegisteredPlatform:
         for platform in self.platforms:
             if platform_name == platform.platform_name:
                 return platform
-            
-        raise ValueError("couldn't find the platform you specified")
+        
+        if not os.environ.get('TEST_MODE', 'off') == 'on': # 测试模式下不报错
+            raise ValueError("couldn't find the platform you specified")
 
     async def send_message(self, unified_msg_origin: str, message: CommandResult):
         '''

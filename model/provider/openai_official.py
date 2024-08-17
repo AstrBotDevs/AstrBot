@@ -296,6 +296,9 @@ class ProviderOpenAIOfficial(Provider):
                         extra_conf: Dict = None,
                         **kwargs
                     ) -> str:
+        if os.environ.get("TEST_LLM", "off") != "on":
+            return "这是一个测试消息。"
+        
         super().accu_model_stat()
         if not session_id:
             session_id = "unknown"

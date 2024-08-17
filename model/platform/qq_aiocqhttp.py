@@ -210,6 +210,9 @@ class AIOCQHTTP(Platform):
             if isinstance(segment, Image):
                 image_idx.append(idx)
             ret.append(d)
+        if os.environ.get('TEST_MODE', 'off') == 'on':
+            logger.info(f"回复消息: {ret}")
+            return
         try:
             if isinstance(message, AstrBotMessage):
                 await self.bot.send(message.raw_message, ret)

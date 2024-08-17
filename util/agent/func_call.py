@@ -25,6 +25,14 @@ class FuncCall():
         self.provider = provider
 
     def add_func(self, name: str, func_args: list, desc: str, func_obj: callable) -> None:
+        '''
+        为函数调用（function-calling / tools-use）添加工具。
+        
+        @param name: 函数名
+        @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
+        @param desc: 函数描述
+        @param func_obj: 处理函数
+        '''
         params = {
             "type": "object",  # hardcore here
             "properties": {}
@@ -65,7 +73,10 @@ class FuncCall():
             })
         return _l
 
-    async def func_call(self, question: str, func_definition: str, session_id: str=None):
+    async def func_call(self, question: str, func_definition: str, session_id: str, provider: Provider = None) -> tuple:
+        
+        if not provider:
+            provider = self.provider
 
         prompt = textwrap.dedent(f"""
             ROLE:
@@ -91,7 +102,7 @@ class FuncCall():
         _c = 0
         while _c < 3:
             try:
-                res = await self.provider.text_chat(prompt, session_id)
+                res = await provider.text_chat(prompt, session_id)
                 print(res)
                 if res.find('```') != -1:
                     res = res[res.find('```json') + 7: res.rfind('```')]
