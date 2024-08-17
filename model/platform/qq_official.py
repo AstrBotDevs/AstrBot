@@ -52,7 +52,7 @@ class botClient(Client):
 
 class QQOfficial(Platform):
 
-    def __init__(self, context: Context, message_handler: MessageHandler, test_mode = False) -> None:
+    def __init__(self, context: Context, message_handler: MessageHandler) -> None:
         super().__init__("qqofficial", context)
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
@@ -87,7 +87,7 @@ class QQOfficial(Platform):
 
         self.client.set_platform(self)
         
-        self.test_mode = test_mode
+        self.test_mode = os.environ.get('TEST_MODE', 'off') == 'on'
 
     async def _parse_to_qqofficial(self, message: List[BaseMessageComponent], is_group: bool = False):
         plain_text = ""

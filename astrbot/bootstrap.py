@@ -22,7 +22,7 @@ logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 
 class AstrBotBootstrap():
-    def __init__(self) -> None:        
+    def __init__(self) -> None:
         self.context = Context()
         self.config_helper = CmdConfig()
         
@@ -57,6 +57,8 @@ class AstrBotBootstrap():
             logger.info(f"使用代理: {http_proxy}, {https_proxy}")
         else:
             logger.info("未使用代理。")
+            
+        self.test_mode = os.environ.get('TEST_MODE', 'off') == 'on'
     
     async def run(self):
         self.command_manager = CommandManager()
@@ -79,6 +81,9 @@ class AstrBotBootstrap():
         self.context.plugin_updator = self.plugin_manager.updator
         self.context.message_handler = self.message_handler
         self.context.command_manager = self.command_manager
+        
+        if self.test_mode:
+            return
         
         # load plugins, plugins' commands.
         self.load_plugins()

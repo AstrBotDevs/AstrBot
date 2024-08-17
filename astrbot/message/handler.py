@@ -1,5 +1,5 @@
 import time
-import re
+import re, os
 import asyncio
 import traceback
 import astrbot.message.unfit_words as uw
@@ -14,6 +14,7 @@ from type.command import CommandResult
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from nakuru.entities.components import Image
+from util.agent.func_call import FuncCall
 import util.agent.web_searcher as web_searcher
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
@@ -117,6 +118,8 @@ class MessageHandler():
         self.nicks = self.context.nick
         self.provider = provider
         self.reply_prefix = str(self.context.reply_prefix)
+        
+        self.llm_tools = FuncCall(self.provider)
     
     def set_provider(self, provider: Provider):
         self.provider = provider
@@ -128,21 +131,20 @@ class MessageHandler():
         `llm_provider`: the provider to use for LLM. If None, use the default provider
         '''
         msg_plain = message.message_str.strip()
-        provider = llm_provider if llm_provider else self.provider
-        inner_provider = False if llm_provider else True
+        provider = llm_provider if llm_provider else self.provider        
         
-        self.persist_manager.record_message(message.platform.platform_name, message.session_id)
+        if os.environ.get('TEST_MODE', 'off') != 'on':
+            self.persist_manager.record_message(message.platform.platform_name, message.session_id)
         
         # TODO: this should be configurable
         # if not message.message_str:
         #     return MessageResult("Hi~")
         
         # check the rate limit
-        if not message.only_command and not self.rate_limit_helper.check_frequency(message.message_obj.sender.user_id):
-            # return MessageResult(f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置 {self.rate_limit_helper.rate_limit_time} 秒内只能提问{self.rate_limit_helper.rate_limit_count} 次。')
-            logger.warning(f"用户 {message.message_obj.sender.user_id} 的发言频率超过限制, 跳过。")
+        if not self.rate_limit_helper.check_frequency(message.message_obj.sender.user_id):
+            logger.warning(f"用户 {message.message_obj.sender.user_id} 的发言频率超过限制，已忽略。")
             return
-        
+
         # remove the nick prefix
         for nick in self.nicks:
             if msg_plain.startswith(nick):
@@ -183,6 +185,7 @@ class MessageHandler():
             if isinstance(comp, Image):
                 image_url = comp.url if comp.url else comp.file
                 break
+        
         web_search = self.context.web_search
         if not web_search and msg_plain.startswith("ws"):
             # leverage web search feature

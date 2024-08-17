@@ -1,0 +1,5 @@
+[run]
+omit =
+    */site-packages/*
+    */dist-packages/*
+    your_package_name/tests/*
