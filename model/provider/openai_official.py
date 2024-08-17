@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 from openai.types.images_response import ImagesResponse
 from openai.types.chat.chat_completion import ChatCompletion
 from openai._exceptions import *
+from util.io import download_image_by_url
 
 from astrbot.persist.helper import dbConn
 from model.provider.provider import Provider
@@ -152,7 +153,7 @@ class ProviderOpenAIOfficial(Provider):
         将图片转换为 base64
         '''
         if image_url.startswith("http"):
-            image_url = await gu.download_image_by_url(image_url)
+            image_url = await download_image_by_url(image_url)
         
         with open(image_url, "rb") as f:
             image_bs64 = base64.b64encode(f.read()).decode()
