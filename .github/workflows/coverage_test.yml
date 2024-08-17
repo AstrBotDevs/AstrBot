@@ -14,7 +14,7 @@ jobs:
           fetch-depth: 0
 
       - name: Write secret to file
-        run: mkdir data & echo "$CMD_CONFIG" > data/cmd_config.json
+        run: mkdir data && echo "$CMD_CONFIG" > data/cmd_config.json
         env:
           MY_SECRET: ${{ secrets.CMD_CONFIG }}
 
