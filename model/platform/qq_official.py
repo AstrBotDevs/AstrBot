@@ -81,7 +81,8 @@ class QQOfficial(Platform):
             )
         self.client = botClient(
             intents=self.intents,
-            bot_log=False
+            bot_log=False,
+            timeout=20,
         )
 
         self.client.set_platform(self)
@@ -178,7 +179,8 @@ class QQOfficial(Platform):
             logger.error(traceback.format_exc())
             self.client = botClient(
                 intents=self.intents,
-                bot_log=False
+                bot_log=False,
+                timeout=20,
             )
             self.client.set_platform(self)
             return self.client.start(
