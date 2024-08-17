@@ -321,6 +321,7 @@ class QQOfficial(Platform):
                         return await self._reply(**data)
 
     async def _reply(self, **kwargs):
+        await self.record_metrics()
         if 'group_openid' in kwargs or 'openid' in kwargs:
             # QQ群组消息
             if 'file_image' in kwargs and kwargs['file_image']:

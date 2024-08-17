@@ -192,6 +192,7 @@ class QQGOCQ(Platform):
         await self._reply(source, res)
         
     async def _reply(self, source, message_chain: List[BaseMessageComponent]):
+        await self.record_metrics()
         if isinstance(message_chain, str): 
             message_chain = [Plain(text=message_chain), ]
         
