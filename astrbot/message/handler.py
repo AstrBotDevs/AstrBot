@@ -138,9 +138,11 @@ class MessageHandler():
         #     return MessageResult("Hi~")
         
         # check the rate limit
-        if not self.rate_limit_helper.check_frequency(message.message_obj.sender.user_id):
-            return MessageResult(f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置 {self.rate_limit_helper.rate_limit_time} 秒内只能提问{self.rate_limit_helper.rate_limit_count} 次。')
-
+        if not message.only_command and not self.rate_limit_helper.check_frequency(message.message_obj.sender.user_id):
+            # return MessageResult(f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置 {self.rate_limit_helper.rate_limit_time} 秒内只能提问{self.rate_limit_helper.rate_limit_count} 次。')
+            logger.warning(f"用户 {message.message_obj.sender.user_id} 的发言频率超过限制, 跳过。")
+            return
+        
         # remove the nick prefix
         for nick in self.nicks:
             if msg_plain.startswith(nick):
