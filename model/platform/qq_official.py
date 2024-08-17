@@ -216,7 +216,7 @@ class QQOfficial(Platform):
             role = 'member'
             
         # construct astrbot message event
-        ame = AstrMessageEvent.from_astrbot_message(message, self.context, "qqchan", session_id, role)
+        ame = AstrMessageEvent.from_astrbot_message(message, self.context, "qqofficial", session_id, role)
         
         message_result = await self.message_handler.handle(ame)
         if not message_result:
