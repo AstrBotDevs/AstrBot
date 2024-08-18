@@ -80,7 +80,7 @@ class AIOCQHTTP(Platform):
     def run_aiocqhttp(self):
         if not self.host or not self.port:
             return
-        self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp', api_timeout_sec=20)
+        self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp', api_timeout_sec=180)
         @self.bot.on_message('group')
         async def group(event: Event):
             abm = self.convert_message(event)
