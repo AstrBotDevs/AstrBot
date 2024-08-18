@@ -80,7 +80,7 @@ class AIOCQHTTP(Platform):
     def run_aiocqhttp(self):
         if not self.host or not self.port:
             return
-        self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp')
+        self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp', api_timeout_sec=20)
         @self.bot.on_message('group')
         async def group(event: Event):
             abm = self.convert_message(event)
@@ -176,9 +176,6 @@ class AIOCQHTTP(Platform):
         """
         回复用户唤醒机器人的消息。（被动回复）
         """
-        logger.info(
-            f"{message.sender.user_id} <- {self.parse_message_outline(message)}")
-        
         res = result_message
         
         if isinstance(res, str):
@@ -201,6 +198,13 @@ class AIOCQHTTP(Platform):
         await self.record_metrics()
         if isinstance(message_chain, str): 
             message_chain = [Plain(text=message_chain), ]
+        
+        if isinstance(message, AstrBotMessage):
+            logger.info(
+                f"{message.sender.user_id} <- {self.parse_message_outline(message)}")
+        else:
+            logger.info(f"回复消息: {message_chain}")
+
         ret = []
         image_idx = []
         for idx, segment in enumerate(message_chain):
@@ -214,23 +218,13 @@ class AIOCQHTTP(Platform):
             logger.info(f"回复消息: {ret}")
             return
         try:
-            if isinstance(message, AstrBotMessage):
-                await self.bot.send(message.raw_message, ret)
-            if isinstance(message, dict):
-                if 'group_id' in message:
-                    await self.bot.send_group_msg(group_id=message['group_id'], message=ret)
-                elif 'user_id' in message:
-                    await self.bot.send_private_msg(user_id=message['user_id'], message=ret)
-                else:
-                    raise Exception("aiocqhttp: 无法识别的消息来源。仅支持 group_id 和 user_id。")
+            await self._reply_wrapper(message, ret)
         except ActionFailed as e:
-            logger.error(traceback.format_exc())
-            logger.error(f"回复消息失败: {e}")
             if e.retcode == 1200:
                 # ENOENT
                 if not image_idx:
                     raise e
-                logger.info("检测到失败原因为文件未找到，猜测用户的协议端与 AstrBot 位于不同的文件系统上。尝试采用上传图片的方式发图。")
+                logger.warn("回复失败。检测到失败原因为文件未找到，猜测用户的协议端与 AstrBot 位于不同的文件系统上。尝试采用上传图片的方式发图。")
                 for idx in image_idx:
                     if ret[idx]['data']['file'].startswith('file://'):
                         logger.info(f"正在上传图片: {ret[idx]['data']['path']}")
@@ -238,8 +232,23 @@ class AIOCQHTTP(Platform):
                         logger.info(f"上传成功。")
                         ret[idx]['data']['file'] = image_url
                         ret[idx]['data']['path'] = image_url
-                await self.bot.send(message.raw_message, ret)
-                
+                await self._reply_wrapper(message, ret)
+            else:
+                logger.error(traceback.format_exc())
+                logger.error(f"回复消息失败: {e}")
+                raise e
+                    
+    async def _reply_wrapper(self, message: Union[AstrBotMessage, Dict], ret: List):
+        if isinstance(message, AstrBotMessage):
+            await self.bot.send(message.raw_message, ret)
+        if isinstance(message, dict):
+            if 'group_id' in message:
+                await self.bot.send_group_msg(group_id=message['group_id'], message=ret)
+            elif 'user_id' in message:
+                await self.bot.send_private_msg(user_id=message['user_id'], message=ret)
+            else:
+                raise Exception("aiocqhttp: 无法识别的消息来源。仅支持 group_id 和 user_id。")
+
     async def send_msg(self, target: Dict[str, int], result_message: CommandResult):
         '''
         以主动的方式给QQ用户、QQ群发送一条消息。
