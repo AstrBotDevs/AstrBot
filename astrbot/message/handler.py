@@ -216,8 +216,24 @@ class MessageHandler():
                         args = json.loads(llm_result.arguments)
                         args['ame'] = message
                         args['context'] = self.context
-                        llm_result = await func_obj(**args)
-                        has_func = True
+                        try:
+                            cmd_res = await func_obj(**args)
+                        except TypeError as e:
+                            args.pop('ame')
+                            args.pop('context')
+                            cmd_res = await func_obj(**args)
+                        if isinstance(cmd_res, CommandResult):
+                            return MessageResult(
+                                cmd_res.message_chain,
+                                is_command_call=True,
+                                use_t2i=cmd_res.is_use_t2i
+                            )
+                        elif isinstance(cmd_res, str):
+                            return MessageResult(cmd_res)
+                        elif not cmd_res:
+                            return
+                        else:
+                            return MessageResult(f"AstrBot Function-calling 异常：调用：{llm_result} 时，返回了未知的返回值类型。")
                     except BaseException as e:
                         traceback.print_exc()
                         return MessageResult("AstrBot Function-calling 异常：" + str(e))
