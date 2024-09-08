@@ -1,101 +1,117 @@
-from openai import OpenAI
-from openai.types.chat.chat_completion import ChatCompletion
+import os
+import asyncio
 import json
 import time
-import os
-import sys
-from cores.database.conn import dbConn
-from model.provider.provider import Provider
-import threading
-from util import general_utils as gu
-import traceback
 import tiktoken
+import threading
+import traceback
+import base64
 
-abs_path = os.path.dirname(os.path.realpath(sys.argv[0])) + '/'
+from openai import AsyncOpenAI
+from openai.types.images_response import ImagesResponse
+from openai.types.chat.chat_completion import ChatCompletion
+from openai._exceptions import *
+from util.io import download_image_by_url
+
+from astrbot.persist.helper import dbConn
+from model.provider.provider import Provider
+from SparkleLogging.utils.core import LogManager
+from logging import Logger
+from typing import List, Dict
+
+from type.types import Context
+
+logger: Logger = LogManager.GetLogger(log_name='astrbot')
+
+MODELS = {
+    "gpt-4o": 128000,
+    "gpt-4o-2024-05-13": 128000,
+    "gpt-4-turbo": 128000,
+    "gpt-4-turbo-2024-04-09": 128000,
+    "gpt-4-turbo-preview": 128000,
+    "gpt-4-0125-preview": 128000,
+    "gpt-4-1106-preview": 128000,
+    "gpt-4-vision-preview": 128000,
+    "gpt-4-1106-vision-preview": 128000,
+    "gpt-4": 8192,
+    "gpt-4-0613": 8192,
+    "gpt-4-32k": 32768,
+    "gpt-4-32k-0613": 32768,
+    "gpt-3.5-turbo-0125": 16385,
+    "gpt-3.5-turbo": 16385,
+    "gpt-3.5-turbo-1106": 16385,
+    "gpt-3.5-turbo-instruct": 4096,
+    "gpt-3.5-turbo-16k": 16385,
+    "gpt-3.5-turbo-0613": 16385,
+    "gpt-3.5-turbo-16k-0613": 16385, 
+}
 
 class ProviderOpenAIOfficial(Provider):
-    def __init__(self, cfg):
-        self.key_list = []
-        # 如果 cfg['key']中有长度为1的字符串，那么是格式错误，直接报错
-        for key in cfg['key']:
-            if len(key) == 1:
-                input("检查到了长度为 1 的Key。配置文件中的 openai.key 处的格式错误 (符号 - 的后面要加空格)，请退出程序并检查配置文件，按回车跳过。")
-                raise BaseException("配置文件格式错误")
-        if cfg['key'] != '' and cfg['key'] != None:
-            self.key_list = cfg['key']
-        else:
-            input("[System] 请先去完善ChatGPT的Key。详情请前往https://beta.openai.com/account/api-keys")
-        if len(self.key_list) == 0:
-            raise Exception("您打开了 OpenAI 模型服务，但是未填写 key。请前往填写。")
+    def __init__(self, context: Context) -> None:
+        super().__init__()
+
+        os.makedirs("data/openai", exist_ok=True)
+
+        self.context = context
+        self.key_data_path = "data/openai/keys.json"
+        self.api_keys = []
+        self.chosen_api_key = None
+        self.base_url = None
+        self.keys_data = {} # 记录超额
         
-        self.key_stat = {}
-        for k in self.key_list:
-            self.key_stat[k] = {'exceed': False, 'used': 0}
+        cfg = context.base_config['openai']
 
-        self.api_base = None
-        if 'api_base' in cfg and cfg['api_base'] != 'none' and cfg['api_base'] != '':
-            self.api_base = cfg['api_base']
-            gu.log(f"设置 api_base 为: {self.api_base}")
-        # openai client
-        self.client = OpenAI(
-            api_key=self.key_list[0],
-            base_url=self.api_base
+        if cfg['key']: self.api_keys = cfg['key']
+        if cfg['api_base']: self.base_url = cfg['api_base']
+        if not self.api_keys:
+            logger.warn("看起来你没有添加 OpenAI 的 API 密钥，OpenAI LLM 能力将不会启用。")
+        else:
+            self.chosen_api_key = self.api_keys[0]
+
+        for key in self.api_keys:
+            self.keys_data[key] = True
+
+        self.client = AsyncOpenAI(
+            api_key=self.chosen_api_key,
+            base_url=self.base_url
         )
-
-        self.openai_model_configs: dict = cfg['chatGPTConfigs']
-        gu.log(f'加载 OpenAI Chat Configs: {self.openai_model_configs}')
-        self.openai_configs = cfg
-        # 会话缓存
-        self.session_dict = {}
-        # 最大缓存token
-        self.max_tokens = cfg['total_tokens_limit']
-        # 历史记录持久化间隔时间
-        self.history_dump_interval = 20
-
-        self.enc = tiktoken.get_encoding("cl100k_base")
-
-        # 读取历史记录
+        self.model_configs: Dict = cfg['chatGPTConfigs']
+        super().set_curr_model(self.model_configs['model'])
+        self.image_generator_model_configs: Dict = context.base_config.get('openai_image_generate', None)
+        self.session_memory: Dict[str, List]  = {} # 会话记忆
+        self.session_memory_lock = threading.Lock()
+        self.max_tokens = self.model_configs['max_tokens'] # 上下文窗口大小
+        
+        logger.info("正在载入分词器 cl100k_base...")
+        self.tokenizer = tiktoken.get_encoding("cl100k_base") # todo: 根据 model 切换分词器
+        logger.info("分词器载入完成。")
+        
+        self.DEFAULT_PERSONALITY = context.default_personality
+        self.curr_personality = self.DEFAULT_PERSONALITY
+        self.session_personality = {} # 记录了某个session是否已设置人格。
+        # 从 SQLite DB 读取历史记录
         try:
             db1 = dbConn()
             for session in db1.get_all_session():
-                self.session_dict[session[0]] = json.loads(session[1])['data']
-            gu.log("读取历史记录成功。")
+                self.session_memory_lock.acquire()
+                self.session_memory[session[0]] = json.loads(session[1])['data']
+                self.session_memory_lock.release()
         except BaseException as e:
-            gu.log("读取历史记录失败，但不影响使用。", level=gu.LEVEL_ERROR)
-
-
-        # 读取统计信息
-        if not os.path.exists(abs_path+"configs/stat"):
-            with open(abs_path+"configs/stat", 'w', encoding='utf-8') as f:
-                    json.dump({}, f)
-        self.stat_file = open(abs_path+"configs/stat", 'r', encoding='utf-8')
-        global count
-        res = self.stat_file.read()
-        if res == '':
-            count = {}
-        else:
-            try: 
-                count = json.loads(res)
-            except BaseException:
-                pass
-
-        # 创建转储定时器线程
+            logger.warn(f"读取 OpenAI LLM 对话历史记录 失败：{e}。仍可正常使用。")
+        
+        # 定时保存历史记录
         threading.Thread(target=self.dump_history, daemon=True).start()
 
-        # 人格
-        self.curr_personality = {}
-
-
-    # 转储历史记录
     def dump_history(self):
+        '''
+        转储历史记录
+        '''
         time.sleep(10)
         db = dbConn()
         while True:
             try:
-                # print("转储历史记录...")
-                for key in self.session_dict:
-                    # print("TEST: "+str(db.get_session(key)))
-                    data = self.session_dict[key]
+                for key in self.session_memory:
+                    data = self.session_memory[key]
                     data_json = {
                         'data': data
                     }
@@ -103,361 +119,396 @@ class ProviderOpenAIOfficial(Provider):
                         db.update_session(key, json.dumps(data_json))
                     else:
                         db.insert_session(key, json.dumps(data_json))
-                # print("转储历史记录完毕")
+                logger.debug("已保存 OpenAI 会话历史记录")
             except BaseException as e:
                 print(e)
-            # 每隔10分钟转储一次
-            time.sleep(10*self.history_dump_interval)
-
+            finally:
+                time.sleep(10*60)
+    
     def personality_set(self, default_personality: dict, session_id: str):
+        if not default_personality: return
+        if session_id not in self.session_memory:
+            self.session_memory[session_id] = []
         self.curr_personality = default_personality
+        self.session_personality = {} # 重置
+        encoded_prompt = self.tokenizer.encode(default_personality['prompt'])
+        tokens_num = len(encoded_prompt)
+        model = self.model_configs['model']
+        if model in MODELS and tokens_num > MODELS[model] - 500:
+            default_personality['prompt'] = self.tokenizer.decode(encoded_prompt[:MODELS[model] - 500])
+
         new_record = {
             "user": {
-                "role": "user",
+                "role": "system",
                 "content": default_personality['prompt'],
             },
-            "AI": {
-                "role": "assistant",
-                "content": "好的，接下来我会扮演这个角色。"
-            },
-            'type': "personality",
-            'usage_tokens': 0,
-            'single-tokens': 0
+            'usage_tokens': 0, # 到该条目的总 token 数
+            'single-tokens': 0 # 该条目的 token 数
         }
-        self.session_dict[session_id].append(new_record)
 
+        self.session_memory[session_id].append(new_record)
 
-    def text_chat(self, prompt, 
-                  session_id = None, 
-                  image_url = None, 
-                  function_call=None,
-                  extra_conf: dict = None,
-                  default_personality: dict = None):
-        if session_id is None:
-            session_id = "unknown"
-            if "unknown" in self.session_dict:
-                del self.session_dict["unknown"] 
-        # 会话机制
-        if session_id not in self.session_dict:
-            self.session_dict[session_id] = []
-
-            fjson = {}
-            try:
-                f = open(abs_path+"configs/session", "r", encoding="utf-8")
-                fjson = json.loads(f.read())
-                f.close()
-            except:
-                pass
-            finally:
-                fjson[session_id] = 'true'
-                f = open(abs_path+"configs/session", "w", encoding="utf-8")
-                f.write(json.dumps(fjson))
-                f.flush()
-                f.close()
+    async def encode_image_bs64(self, image_url: str) -> str:
+        '''
+        将图片转换为 base64
+        '''
+        if image_url.startswith("http"):
+            image_url = await download_image_by_url(image_url)
         
-        if len(self.session_dict[session_id]) == 0:
-            # 设置默认人格
-            if default_personality is not None:
-                self.personality_set(default_personality, session_id)
+        with open(image_url, "rb") as f:
+            image_bs64 = base64.b64encode(f.read()).decode()
+            return "data:image/jpeg;base64," + image_bs64
 
-
-        # 使用 tictoken 截断消息
-        _encoded_prompt = self.enc.encode(prompt)
-        if self.openai_model_configs['max_tokens'] < len(_encoded_prompt):
-            prompt = self.enc.decode(_encoded_prompt[:int(self.openai_model_configs['max_tokens']*0.80)])
-            gu.log(f"注意，有一部分 prompt 文本由于超出 token 限制而被截断。", level=gu.LEVEL_WARNING, max_len=300)
-
-        cache_data_list, new_record, req = self.wrap(prompt, session_id, image_url)
-        gu.log(f"CACHE_DATA_: {str(cache_data_list)}", level=gu.LEVEL_DEBUG, max_len=99999)
-        gu.log(f"OPENAI REQUEST: {str(req)}", level=gu.LEVEL_DEBUG, max_len=9999)
-        retry = 0
-        response = None
-        err = ''
-
-        # 截断倍率
-        truncate_rate = 0.75
-
-        use_gpt4v = False
-        for i in req:
-            if isinstance(i['content'], list):
-                use_gpt4v = True
-                break
-        if image_url is not None:
-            use_gpt4v = True
-        if use_gpt4v:
-            conf = self.openai_model_configs.copy()
-            conf['model'] = 'gpt-4-vision-preview'
-        else:
-            conf = self.openai_model_configs
-
-        if extra_conf is not None:
-            conf.update(extra_conf)
-
-        while retry < 10:
-            try:
-                if function_call is None:
-                    response = self.client.chat.completions.create(
-                        messages=req,
-                        **conf
-                    )
-                else:
-                    response = self.client.chat.completions.create(
-                        messages=req,
-                        tools = function_call,
-                        **conf
-                    )
-                break
-            except Exception as e:
-                print(traceback.format_exc())
-                if 'Invalid content type. image_url is only supported by certain models.' in str(e):
-                    raise e
-                if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(e) or 'No API key provided' in str(e) or 'Incorrect API key provided' in str(e):
-                    gu.log("当前Key已超额或异常, 正在切换", level=gu.LEVEL_WARNING)
-                    self.key_stat[self.client.api_key]['exceed'] = True
-                    is_switched = self.handle_switch_key()
-                    if not is_switched:
-                        # 所有Key都超额或不正常
-                        raise e
-                    retry -= 1
-                elif 'maximum context length' in str(e):
-                    gu.log("token超限, 清空对应缓存，并进行消息截断")
-                    self.session_dict[session_id] = []
-                    prompt = prompt[:int(len(prompt)*truncate_rate)]
-                    truncate_rate -= 0.05
-                    cache_data_list, new_record, req = self.wrap(prompt, session_id)
-
-                elif 'Limit: 3 / min. Please try again in 20s.' in str(e) or "OpenAI response error" in str(e):
-                    time.sleep(30)
+    async def retrieve_context(self, session_id: str):
+        '''
+        根据 session_id 获取保存的 OpenAI 格式的上下文
+        '''
+        if session_id not in self.session_memory:
+            raise Exception("会话 ID 不存在")
+        
+        # 转换为 openai 要求的格式
+        context = []
+        is_lvm = await self.is_lvm()
+        for record in self.session_memory[session_id]:
+            if "user" in record and record['user']:
+                if not is_lvm and "content" in record['user'] and isinstance(record['user']['content'], list):
+                    logger.warn(f"由于当前模型 {self.model_configs['model']}不支持视觉，将忽略上下文中的图片输入。如果一直弹出此警告，可以尝试 reset 指令。")
                     continue
-                else:
-                    gu.log(str(e), level=gu.LEVEL_ERROR)
-                time.sleep(2)
-                err = str(e)
-                retry += 1
-        if retry >= 10:
-            gu.log(r"如果报错, 且您的机器在中国大陆内, 请确保您的电脑已经设置好代理软件(梯子), 并在配置文件设置了系统代理地址。详见https://github.com/Soulter/QQChannelChatGPT/wiki/%E4%BA%8C%E3%80%81%E9%A1%B9%E7%9B%AE%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E9%85%8D%E7%BD%AE", max_len=999)
-            raise BaseException("连接出错: "+str(err))
-        assert isinstance(response, ChatCompletion)
-        gu.log(f"OPENAI RESPONSE: {response.usage}", level=gu.LEVEL_DEBUG, max_len=9999)
+                context.append(record['user'])
+            if "AI" in record and record['AI']:
+                context.append(record['AI'])
 
-        # 结果分类
-        choice = response.choices[0]
-        if choice.message.content != None:
-            # 文本形式
-            chatgpt_res = str(choice.message.content).strip()
-        elif choice.message.tool_calls != None and len(choice.message.tool_calls) > 0:
+        return context
+
+    async def is_lvm(self):
+        '''
+        是否是 LVM
+        '''
+        return self.model_configs['model'].startswith("gpt-4")
+    
+    async def get_models(self):
+        try:
+            models = await self.client.models.list()
+        except NotFoundError as e:
+            bu = str(self.client.base_url)
+            self.client.base_url = bu + "/v1"
+            models = await self.client.models.list()
+        finally:
+            return filter(lambda x: x.id.startswith("gpt"), models.data)
+    
+    async def assemble_context(self, session_id: str, prompt: str, image_url: str = None):
+        '''
+        组装上下文，并且根据当前上下文窗口大小截断
+        '''
+        if session_id not in self.session_memory:
+            raise Exception("会话 ID 不存在")
+        
+        tokens_num = len(self.tokenizer.encode(prompt))
+        previous_total_tokens_num = 0 if not self.session_memory[session_id] else self.session_memory[session_id][-1]['usage_tokens']
+
+        message = {
+            "usage_tokens": previous_total_tokens_num + tokens_num,
+            "single_tokens": tokens_num,
+            "AI": None
+        }
+        if image_url:
+            user_content = {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": await self.encode_image_bs64(image_url)
+                        }
+                    }
+                ]
+            }
+        else:
+            user_content = {
+                "role": "user",
+                "content": prompt
+            }
+
+        message["user"] = user_content
+        self.session_memory[session_id].append(message)
+
+        # 根据 模型的上下文窗口 淘汰掉多余的记录
+        curr_model = self.model_configs['model']
+        if curr_model in MODELS:
+            maxium_tokens_num = MODELS[curr_model] - 300 # 至少预留 300 给 completion
+            # if message['usage_tokens'] > maxium_tokens_num:
+                # 淘汰多余的记录，使得最终的 usage_tokens 不超过 maxium_tokens_num - 300
+                # contexts = self.session_memory[session_id]
+                # need_to_remove_idx = 0
+                # freed_tokens_num = contexts[0]['single-tokens']
+                # while freed_tokens_num < message['usage_tokens'] - maxium_tokens_num:
+                #     need_to_remove_idx += 1
+                #     freed_tokens_num += contexts[need_to_remove_idx]['single-tokens']
+                # # 更新之后的所有记录的 usage_tokens
+                # for i in range(len(contexts)):
+                #     if i > need_to_remove_idx:
+                #         contexts[i]['usage_tokens'] -= freed_tokens_num
+                # logger.debug(f"淘汰上下文记录 {need_to_remove_idx+1} 条，释放 {freed_tokens_num} 个 token。当前上下文总 token 为 {contexts[-1]['usage_tokens']}。")
+                # self.session_memory[session_id] = contexts[need_to_remove_idx+1:]
+            while len(self.session_memory[session_id]) and self.session_memory[session_id][-1]['usage_tokens'] > maxium_tokens_num:
+                self.pop_record(session_id)
+
+
+    async def pop_record(self, session_id: str, pop_system_prompt: bool = False):
+        '''
+        弹出第一条记录
+        '''
+        if session_id not in self.session_memory:
+            raise Exception("会话 ID 不存在")
+        
+        if len(self.session_memory[session_id]) == 0:
+            return None
+        
+        for i in range(len(self.session_memory[session_id])):
+            # 检查是否是 system prompt
+            if not pop_system_prompt and self.session_memory[session_id][i]['user']['role'] == "system":
+                # 如果只有一个 system prompt，才不删掉
+                f = False
+                for j in range(i+1, len(self.session_memory[session_id])):
+                    if self.session_memory[session_id][j]['user']['role'] == "system":
+                        f = True
+                        break
+                if not f:
+                    continue
+            record = self.session_memory[session_id].pop(i)
+            break
+
+        # 更新之后所有记录的 usage_tokens
+        for i in range(len(self.session_memory[session_id])):
+            self.session_memory[session_id][i]['usage_tokens'] -= record['single-tokens']
+        logger.debug(f"淘汰上下文记录 1 条，释放 {record['single-tokens']} 个 token。当前上下文总 token 为 {self.session_memory[session_id][-1]['usage_tokens']}。")
+        return record
+
+    async def text_chat(self, 
+                        prompt: str, 
+                        session_id: str, 
+                        image_url: None=None, 
+                        tools: None=None, 
+                        extra_conf: Dict = None,
+                        **kwargs
+                    ) -> str:
+        if os.environ.get("TEST_LLM", "off") != "on" and os.environ.get("TEST_MODE", "off") == "on":
+            return "这是一个测试消息。"
+        
+        super().accu_model_stat()
+        if not session_id:
+            session_id = "unknown"
+            if "unknown" in self.session_memory:
+                del self.session_memory["unknown"]
+
+        if session_id not in self.session_memory:
+            self.session_memory[session_id] = []
+
+        if session_id not in self.session_personality or not self.session_personality[session_id]:
+            self.personality_set(self.curr_personality, session_id)
+            self.session_personality[session_id] = True
+        
+        # 如果 prompt 超过了最大窗口，截断。
+        # 1. 可以保证之后 pop 的时候不会出现问题
+        # 2. 可以保证不会超过最大 token 数
+        _encoded_prompt = self.tokenizer.encode(prompt)
+        curr_model = self.model_configs['model']
+        if curr_model in MODELS and len(_encoded_prompt) > MODELS[curr_model] - 300:
+            _encoded_prompt = _encoded_prompt[:MODELS[curr_model] - 300]
+            prompt = self.tokenizer.decode(_encoded_prompt)
+        
+        # 组装上下文，并且根据当前上下文窗口大小截断
+        await self.assemble_context(session_id, prompt, image_url)
+
+        # 获取上下文，openai 格式
+        contexts = await self.retrieve_context(session_id)
+
+        conf = self.model_configs
+        if extra_conf: conf.update(extra_conf)
+
+        # start request
+        retry = 0
+        rate_limit_retry = 0
+        while retry < 3 or rate_limit_retry < 5:
+            logger.debug(conf)
+            logger.debug(contexts)
+            if tools:
+                completion_coro = self.client.chat.completions.create(
+                    messages=contexts,
+                    tools=tools,
+                    **conf
+                )
+            else:
+                completion_coro = self.client.chat.completions.create(
+                    messages=contexts,
+                    **conf
+                )
+            try:
+                completion = await completion_coro
+                break
+            except AuthenticationError as e:
+                api_key = self.chosen_api_key[10:] + "..."
+                logger.error(f"OpenAI API Key {api_key} 验证错误。详细原因：{e}。正在切换到下一个可用的 Key（如果有的话）")
+                self.keys_data[self.chosen_api_key] = False
+                ok = await self.switch_to_next_key()
+                if ok: continue
+                else: raise Exception("所有 OpenAI API Key 目前都不可用。")
+            except BadRequestError as e:
+                logger.warn(f"OpenAI 请求异常：{e}。")
+                if "image_url is only supported by certain models." in str(e):
+                    raise Exception(f"当前模型 { self.model_configs['model'] } 不支持图片输入，请更换模型。")
+                raise e
+            except RateLimitError as e:
+                if "You exceeded your current quota" in str(e):
+                    self.keys_data[self.chosen_api_key] = False
+                    ok = await self.switch_to_next_key()
+                    if ok: continue
+                    else: raise Exception("所有 OpenAI API Key 目前都不可用。")
+                logger.error(f"OpenAI API Key {self.chosen_api_key} 达到请求速率限制或者官方服务器当前超载。详细原因：{e}")
+                await self.switch_to_next_key()
+                rate_limit_retry += 1
+                await asyncio.sleep(1)
+            except NotFoundError as e:
+                raise e
+            except Exception as e:
+                retry += 1
+                if retry >= 3:
+                    logger.error(traceback.format_exc())
+                    raise Exception(f"OpenAI 请求失败：{e}。重试次数已达到上限。")
+                if "maximum context length" in str(e):
+                    logger.warn(f"OpenAI 请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。")
+                    self.pop_record(session_id)
+                
+                logger.warning(traceback.format_exc())
+                logger.warning(f"OpenAI 请求失败：{e}。重试第 {retry} 次。")
+                await asyncio.sleep(1)
+
+        assert isinstance(completion, ChatCompletion)
+        logger.debug(f"openai completion: {completion.usage}")
+        
+        if len(completion.choices) == 0:
+            raise Exception("OpenAI API 返回的 completion 为空。")
+        choice = completion.choices[0]
+
+        usage_tokens = completion.usage.total_tokens
+        completion_tokens = completion.usage.completion_tokens
+        self.session_memory[session_id][-1]['usage_tokens'] = usage_tokens
+        self.session_memory[session_id][-1]['single_tokens'] += completion_tokens
+
+        if choice.message.content:
+            # 返回文本
+            completion_text = str(choice.message.content).strip()
+        elif choice.message.tool_calls and choice.message.tool_calls:
             # tools call (function calling)
             return choice.message.tool_calls[0].function
-
-        self.key_stat[self.client.api_key]['used'] += response.usage.total_tokens
-        current_usage_tokens = response.usage.total_tokens
-
-        # 超过指定tokens， 尽可能的保留最多的条目，直到小于max_tokens
-        if current_usage_tokens > self.max_tokens:
-            t = current_usage_tokens
-            index = 0
-            while t > self.max_tokens:
-                if index >= len(cache_data_list):
-                    break
-                # 保留人格信息
-                if cache_data_list[index]['type'] != 'personality':
-                    t -= int(cache_data_list[index]['single_tokens'])
-                    del cache_data_list[index]
-                else:
-                    index += 1
-            # 删除完后更新相关字段
-            self.session_dict[session_id] = cache_data_list
-            # cache_prompt = get_prompts_by_cache_list(cache_data_list)
-
-        # 添加新条目进入缓存的prompt
-        new_record['AI'] = {
-            'role': 'assistant',
-            'content': chatgpt_res,
-        }
-        new_record['usage_tokens'] = current_usage_tokens
-        if len(cache_data_list) > 0:
-            new_record['single_tokens'] = current_usage_tokens - int(cache_data_list[-1]['usage_tokens'])
-        else:
-            new_record['single_tokens'] = current_usage_tokens
-
-        cache_data_list.append(new_record)
-
-        self.session_dict[session_id] = cache_data_list
-
-        return chatgpt_res
         
-    def image_chat(self, prompt, img_num = 1, img_size = "1024x1024"):
+        self.session_memory[session_id][-1]['AI'] = {
+            "role": "assistant",
+            "content": completion_text
+        }
+
+        return completion_text
+    
+    async def switch_to_next_key(self):
+        '''
+        切换到下一个 API Key
+        '''
+        if not self.api_keys:
+            logger.error("OpenAI API Key 不存在。")
+            return False
+
+        for key in self.keys_data:
+            if self.keys_data[key]:
+                # 没超额
+                self.chosen_api_key = key
+                self.client.api_key = key
+                logger.info(f"OpenAI 切换到 API Key {key[:10]}... 成功。")
+                return True
+
+        return False
+    
+    async def image_generate(self, prompt: str, session_id: str = None, **kwargs) -> str:
+        '''
+        生成图片
+        '''
         retry = 0
-        image_url = ''
-        while retry < 5:
+        conf = self.image_generator_model_configs
+        super().accu_model_stat(model=conf['model'])
+        if not conf:
+            logger.error("OpenAI 图片生成模型配置不存在。")
+            raise Exception("OpenAI 图片生成模型配置不存在。")
+        
+        while retry < 3:
             try:
-                response = self.client.images.generate(
+                images_response = await self.client.images.generate(
                     prompt=prompt,
-                    n=img_num,
-                    size=img_size
+                    **conf
                 )
-                image_url = []
-                for i in range(img_num):
-                    image_url.append(response['data'][i]['url'])
-                break
+                image_url = images_response.data[0].url
+                return image_url
             except Exception as e:
-                gu.log(str(e), level=gu.LEVEL_ERROR)
-                if 'You exceeded' in str(e) or 'Billing hard limit has been reached' in str(
-                        e) or 'No API key provided' in str(e) or 'Incorrect API key provided' in str(e):
-                    gu.log("当前 Key 已超额或者不正常, 正在切换", level=gu.LEVEL_WARNING)
-                    self.key_stat[self.client.api_key]['exceed'] = True
-                    is_switched = self.handle_switch_key()
-                    if not is_switched:
-                        # 所有Key都超额或不正常
-                        raise e
-                else:
-                    retry += 1
-        if retry >= 5:
-            raise BaseException("连接超时")
-                
-        return image_url
+                retry += 1
+                if retry >= 3:
+                    logger.error(traceback.format_exc())
+                    raise Exception(f"OpenAI 图片生成请求失败：{e}。重试次数已达到上限。")
+                logger.warning(f"OpenAI 图片生成请求失败：{e}。重试第 {retry} 次。")
+                await asyncio.sleep(1)
 
-    def forget(self, session_id = None) -> bool:
-        if session_id is None:
-            return False
-        self.session_dict[session_id] = []
+    async def forget(self, session_id=None, keep_system_prompt: bool=False) -> bool:
+        if session_id is None: return False
+        self.session_memory[session_id] = []
+        if keep_system_prompt:
+            self.personality_set(self.curr_personality, session_id)
+        else:
+            self.curr_personality = self.DEFAULT_PERSONALITY
         return True
     
-    '''
-    获取缓存的会话
-    '''
-    def get_prompts_by_cache_list(self, cache_data_list, divide=False, paging=False, size=5, page=1):
-        prompts = ""
-        if paging:
-            page_begin = (page-1)*size
-            page_end = page*size
-            if page_begin < 0:
-                page_begin = 0
-            if page_end > len(cache_data_list):
-                page_end = len(cache_data_list)
-            cache_data_list = cache_data_list[page_begin:page_end]
-        for item in cache_data_list:
-            prompts += str(item['user']['role']) + ":\n" + str(item['user']['content']) + "\n"
-            prompts += str(item['AI']['role']) + ":\n" + str(item['AI']['content']) + "\n"
+    def dump_contexts_page(self, session_id: str, size=5, page=1,):
+        '''
+        获取缓存的会话
+        '''
+        # contexts_str = ""
+        # for i, key in enumerate(self.session_memory):
+        #     if i < (page-1)*size or i >= page*size:
+        #         continue
+        #     contexts_str += f"Session ID: {key}\n"
+        #     for record in self.session_memory[key]:
+        #         if "user" in record:
+        #             contexts_str += f"User: {record['user']['content']}\n"
+        #         if "AI" in record:
+        #             contexts_str += f"AI: {record['AI']['content']}\n"
+        #     contexts_str += "---\n"
+        contexts_str = ""
+        if session_id in self.session_memory:
+            for record in self.session_memory[session_id]:
+                if "user" in record and record['user']:
+                    text = record['user']['content'][:100] + "..." if len(record['user']['content']) > 100 else record['user']['content']
+                    contexts_str += f"User: {text}\n"
+                if "AI" in record and record['AI']:
+                    text = record['AI']['content'][:100] + "..." if len(record['AI']['content']) > 100 else record['AI']['content']
+                    contexts_str += f"Assistant: {text}\n"
+        else:
+            contexts_str = "会话 ID 不存在。"
 
-            if divide:
-                prompts += "----------\n"
-        return prompts
+        return contexts_str, len(self.session_memory[session_id])
+
+    def set_model(self, model: str):
+        self.model_configs['model'] = model
+        self.context.config_helper.put_by_dot_str("openai.chatGPTConfigs.model", model)
+        super().set_curr_model(model)
     
-        
-    def get_user_usage_tokens(self,cache_list):
-        usage_tokens = 0
-        for item in cache_list:
-            usage_tokens += int(item['single_tokens'])
-        return usage_tokens
-        
-    '''
-    获取统计信息
-    '''
-    def get_stat(self):
-        try:
-            f = open(abs_path+"configs/stat", "r", encoding="utf-8")
-            fjson = json.loads(f.read())
-            f.close()
-            guild_count = 0
-            guild_msg_count = 0
-            guild_direct_msg_count = 0
-
-            for k,v in fjson.items():
-                guild_count += 1
-                guild_msg_count += v['count']
-                guild_direct_msg_count += v['direct_count']
-            
-            session_count = 0
-
-            f = open(abs_path+"configs/session", "r", encoding="utf-8")
-            fjson = json.loads(f.read())
-            f.close()
-            for k,v in fjson.items():
-                session_count += 1
-            return guild_count, guild_msg_count, guild_direct_msg_count, session_count
-        except:
-            return -1, -1, -1, -1
-
-    # 包装信息
-    def wrap(self, prompt, session_id, image_url = None):
-        if image_url is not None:
-            prompt = [
-                {
-                    "type": "text",
-                    "text": prompt
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_url
-                    }
-                }
-            ]
-        # 获得缓存信息
-        context = self.session_dict[session_id]
-        new_record = {
-            "user": {
-                "role": "user",
-                "content": prompt,
-            },
-            "AI": {},
-            'type': "common",
-            'usage_tokens': 0,
-        }
-        req_list = []
-        for i in context:
-            if 'user' in i:
-                req_list.append(i['user'])
-            if 'AI' in i:
-                req_list.append(i['AI'])
-        req_list.append(new_record['user'])
-        return context, new_record, req_list
-    
-    def handle_switch_key(self):
-        # messages = [{"role": "user", "content": prompt}]
-        is_all_exceed = True
-        for key in self.key_stat:
-            if key == None or self.key_stat[key]['exceed']:
-                continue
-            is_all_exceed = False
-            self.client.api_key = key
-            gu.log(f"切换到Key: {key}, 已使用token: {self.key_stat[key]['used']}", level=gu.LEVEL_INFO)
-            break
-        if is_all_exceed:
-            gu.log("所有Key已超额", level=gu.LEVEL_CRITICAL)
-            return False
-        return True
-        
     def get_configs(self):
-        return self.openai_configs
-    
-    def get_key_stat(self):
-        return self.key_stat
-    
-    def get_key_list(self):
-        return self.key_list
-    
+        return self.model_configs
+
+    def get_keys_data(self):
+        return self.keys_data
+
     def get_curr_key(self):
-        return self.client.api_key
-    
+        return self.chosen_api_key
+
     def set_key(self, key):
         self.client.api_key = key
-    
-    # 添加key
-    def append_key(self, key, sponsor):
-        self.key_list.append(key)
-        self.key_stat[key] = {'exceed': False, 'used': 0, 'sponsor': sponsor}
-
-    # 检查key是否可用
-    def check_key(self, key):
-        client_ = OpenAI(
-            api_key=key,
-            base_url=self.api_base
-        )
-        messages = [{"role": "user", "content": "please just echo `test`"}]
-        client_.chat.completions.create(
-            messages=messages,
-            **self.openai_model_configs
-        )
-        return True

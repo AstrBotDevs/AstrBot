@@ -1,3 +1,13 @@
 __pycache__
 botpy.log
 .vscode
+data.db
+configs/session
+configs/config.yaml
+**/.DS_Store
+temp
+cmd_config.json
+data/*
+cookies.json
+logs/
+addons/plugins
