@@ -214,7 +214,9 @@ class MessageHandler():
                         return MessageResult("AstrBot Function-calling 异常：未找到请求的函数调用。")
                     try:
                         args = json.loads(llm_result.arguments)
-                        function_invoked_ret = await func_obj(**args)
+                        args['ame'] = message
+                        args['context'] = self.context
+                        llm_result = await func_obj(**args)
                         has_func = True
                     except BaseException as e:
                         traceback.print_exc()

@@ -1,6 +1,5 @@
 from model.provider.provider import Provider
 import json
-import time
 import textwrap
 
 class FuncCallJsonFormatError(Exception):
