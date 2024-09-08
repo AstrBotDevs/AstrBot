@@ -1,2 +1,0 @@
-class MessageEvent:
-    pass
