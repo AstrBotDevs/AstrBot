@@ -9,6 +9,7 @@ from type.config import VERSION
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from nakuru.entities.components import Image
+from util.agent.web_searcher import search_from_bing, fetch_website_content
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
@@ -212,6 +213,23 @@ class InternalCommandHandler:
             )
         elif l[1] == 'on':
             context.web_search = True
+            context.register_llm_tool("web_search", [{
+                "type": "string",
+                "name": "keyword",
+                "description": "搜索关键词"
+            }],
+                "通过搜索引擎搜索。如果问题需要获取近期、实时的消息，在网页上搜索(如天气、新闻或任何需要通过网页获取信息的问题)，则调用此函数；如果没有，不要调用此函数。",
+                search_from_bing
+            )
+            context.register_llm_tool("fetch_website_content", [{
+                "type": "string",
+                "name": "url",
+                "description": "要获取内容的网页链接"
+            }],
+                "获取网页的内容。如果问题带有合法的网页链接并且用户有需求了解网页内容(例如: `帮我总结一下 https://github.com 的内容`), 就调用此函数。如果没有，不要调用此函数。",
+                fetch_website_content
+            )
+            
             return CommandResult(
                 hit=True,
                 success=True,
@@ -219,6 +237,9 @@ class InternalCommandHandler:
             )
         elif l[1] == 'off':
             context.web_search = False
+            context.unregister_llm_tool("web_search")
+            context.unregister_llm_tool("fetch_website_content")
+            
             return CommandResult(
                 hit=True,
                 success=True,
