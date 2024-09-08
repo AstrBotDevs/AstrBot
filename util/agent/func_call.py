@@ -1,6 +1,5 @@
 from model.provider.provider import Provider
 import json
-import time
 import textwrap
 
 class FuncCallJsonFormatError(Exception):
@@ -23,6 +22,9 @@ class FuncCall():
     def __init__(self, provider: Provider) -> None:
         self.func_list = []
         self.provider = provider
+        
+    def empty(self) -> bool:
+        return len(self.func_list) == 0
 
     def add_func(self, name: str, func_args: list, desc: str, func_obj: callable) -> None:
         '''
@@ -34,7 +36,7 @@ class FuncCall():
         @param func_obj: 处理函数
         '''
         params = {
-            "type": "object",  # hardcore here
+            "type": "object",  # hard-coded here
             "properties": {}
         }
         for param in func_args:
@@ -42,14 +44,23 @@ class FuncCall():
                 "type": param['type'],
                 "description": param['description']
             }
-        self._func = {
+        _func = {
             "name": name,
             "parameters": params,
             "description": desc,
             "func_obj": func_obj,
         }
-        self.func_list.append(self._func)
-
+        self.func_list.append(_func)
+        
+    def remove_func(self, name: str) -> None:
+        '''
+        删除一个函数调用工具。
+        '''
+        for i, f in enumerate(self.func_list):
+            if f["name"] == name:
+                self.func_list.pop(i)
+                break
+    
     def func_dump(self) -> str:
         _l = []
         for f in self.func_list:

@@ -1,4 +1,4 @@
-import time
+import time, json
 import re, os
 import asyncio
 import traceback
@@ -16,6 +16,8 @@ from logging import Logger
 from nakuru.entities.components import Image
 from util.agent.func_call import FuncCall
 import util.agent.web_searcher as web_searcher
+from openai._exceptions import *
+from openai.types.chat.chat_completion_message_tool_call import Function
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
@@ -186,31 +188,84 @@ class MessageHandler():
                 image_url = comp.url if comp.url else comp.file
                 break
         
-        web_search = self.context.web_search
-        if not web_search and msg_plain.startswith("ws"):
-            # leverage web search feature
-            web_search = True
-            msg_plain = msg_plain.removeprefix("ws").strip()
-        
+        # web_search = self.context.web_search
+        # if not web_search and msg_plain.startswith("ws"):
+        #     # leverage web search feature
+        #     web_search = True
+        #     msg_plain = msg_plain.removeprefix("ws").strip()
         try:
-            if web_search:
-                llm_result = await web_searcher.web_search(msg_plain, provider, message.session_id, official_fc=True)
+            if not self.llm_tools.empty():
+                # tools-use
+                tool_use_flag = True
+                llm_result = await provider.text_chat(
+                    prompt=msg_plain, 
+                    session_id=message.session_id, 
+                    tools=self.llm_tools.get_func()
+                )
+                
+                if isinstance(llm_result, Function):
+                    logger.debug(f"function-calling: {llm_result}")
+                    func_obj = None
+                    for i in self.llm_tools.func_list:
+                        if i["name"] == llm_result.name:
+                            func_obj = i["func_obj"]
+                            break
+                    if not func_obj:
+                        return MessageResult("AstrBot Function-calling 异常：未找到请求的函数调用。")
+                    try:
+                        args = json.loads(llm_result.arguments)
+                        args['ame'] = message
+                        args['context'] = self.context
+                        llm_result = await func_obj(**args)
+                        has_func = True
+                    except BaseException as e:
+                        traceback.print_exc()
+                        return MessageResult("AstrBot Function-calling 异常：" + str(e))
+                else:
+                    return MessageResult(llm_result)
+        
             else:
+                # normal chat
+                tool_use_flag = False
                 llm_result = await provider.text_chat(
                     prompt=msg_plain, 
                     session_id=message.session_id, 
                     image_url=image_url
                 )
+        except BadRequestError as e:
+            if tool_use_flag:
+                # seems like the model don't support function-calling
+                logger.error(f"error: {e}. Using local function-calling implementation")
+                
+                try:
+                    # use local function-calling implementation
+                    args = {
+                        'question': llm_result,
+                        'func_definition': self.llm_tools.func_dump(),
+                    }
+                    _, has_func = await self.llm_tools.func_call(**args)
+                    
+                    if not has_func:
+                        # normal chat
+                        llm_result = await provider.text_chat(
+                            prompt=msg_plain, 
+                            session_id=message.session_id, 
+                            image_url=image_url
+                        )
+                except BaseException as e:
+                    logger.error(traceback.format_exc())
+                    return CommandResult("AstrBot Function-calling 异常：" + str(e))
+
         except BaseException as e:
             logger.error(traceback.format_exc())
             logger.error(f"LLM 调用失败。")
             return MessageResult("AstrBot 请求 LLM 资源失败：" + str(e))
-        
-        # concatenate the reply prefix
+
+        # concatenate reply prefix
         if self.reply_prefix:
             llm_result = self.reply_prefix + llm_result
         
-        # mask the unsafe content
+        # mask unsafe content
         llm_result = self.content_safety_helper.filter_content(llm_result)
         check = self.content_safety_helper.baidu_check(llm_result)
         if not check:

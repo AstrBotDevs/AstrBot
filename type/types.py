@@ -110,6 +110,12 @@ class Context:
         '''
         self.message_handler.llm_tools.add_func(tool_name, params, desc, func)
     
+    def unregister_llm_tool(self, tool_name: str):
+        '''
+        删除一个函数调用工具。
+        '''
+        self.message_handler.llm_tools.remove_func(tool_name)
+     
     def find_platform(self, platform_name: str) -> RegisteredPlatform:
         for platform in self.platforms:
             if platform_name == platform.platform_name:
@@ -131,4 +137,9 @@ class Context:
         platform_name, message_type, id = l
         platform = self.find_platform(platform_name)
         await platform.platform_instance.send_msg_new(MessageType(message_type), id, message)
-        
+    
+    def get_current_llm_provider(self) -> Provider:
+        '''
+        获取当前的 LLM Provider。
+        '''
+        return self.message_handler.provider
