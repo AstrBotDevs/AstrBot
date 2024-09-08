@@ -23,7 +23,6 @@
 🌍 支持的消息平台
 - QQ 群、QQ 频道（OneBot、QQ 官方接口）
 - Telegram（[astrbot_plugin_telegram](https://github.com/Soulter/astrbot_plugin_telegram) 插件）
-- WeChat(微信) ([astrbot_plugin_vchat](https://github.com/z2z63/astrbot_plugin_vchat) 插件)
 
 🌍 支持的大模型/底座：
 
