@@ -185,7 +185,7 @@ class QQNakuru(Platform):
             res = [Plain(text=res), ]
 
         # if image mode, put all Plain texts into a new picture.
-        if use_t2i or (use_t2i == None and self.context.base_config.get("qq_pic_mode", False)) and isinstance(res, list):
+        if use_t2i or (use_t2i == None and self.context.config_helper.t2i) and isinstance(result_message, list):
             rendered_images = await self.convert_to_t2i_chain(res)
             if rendered_images:
                 try:

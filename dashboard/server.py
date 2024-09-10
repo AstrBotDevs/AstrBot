@@ -383,14 +383,14 @@ class AstrBotDashBoard():
     def save_astrbot_configs(self, post_configs: dict):
         try:
             self.dashboard_helper.save_astrbot_config(post_configs)
-            threading.Thread(target=self.astrbot_updator._reboot, args=(3, ), daemon=True).start()
+            threading.Thread(target=self.astrbot_updator._reboot, args=(3, self.context), daemon=True).start()
         except Exception as e:
             raise e
     
     def save_extension_configs(self, post_configs: dict):
         try:
             self.dashboard_helper.save_extension_config(post_configs)
-            threading.Thread(target=self.astrbot_updator._reboot, args=(3, ), daemon=True).start()
+            threading.Thread(target=self.astrbot_updator._reboot, args=(3, self.context), daemon=True).start()
         except Exception as e:
             raise e
         

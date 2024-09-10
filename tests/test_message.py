@@ -13,6 +13,8 @@ from type.message_event import *
 from SparkleLogging.utils.core import LogManager
 from logging import Formatter
 
+from util.cmd_config import QQOfficialPlatformConfig, AiocqhttpPlatformConfig
+
 logger = LogManager.GetLogger(
 log_name='astrbot',
     out_to_console=True,
@@ -24,8 +26,11 @@ os.environ['TEST_MODE'] = 'on'
 bootstrap = AstrBotBootstrap()
 asyncio.run(bootstrap.run())
 
-qq_official = QQOfficial(bootstrap.context, bootstrap.message_handler)
-aiocqhttp = AIOCQHTTP(bootstrap.context, bootstrap.message_handler)
+for p_config in bootstrap.context.config_helper.platform:
+    if isinstance(p_config, QQOfficialPlatformConfig):
+        qq_official = QQOfficial(bootstrap.context, bootstrap.message_handler, p_config)
+    elif isinstance(p_config, AiocqhttpPlatformConfig):
+        aiocqhttp = AIOCQHTTP(bootstrap.context, bootstrap.message_handler, p_config)
 
 class TestBasicMessageHandle():
     @pytest.mark.asyncio

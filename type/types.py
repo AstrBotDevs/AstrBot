@@ -21,8 +21,8 @@ class Context:
     '''
 
     def __init__(self):
+        self.running = True
         self.logger: Logger = None
-        self.base_config: dict = None  # 配置（期望启动机器人后是不变的）
         self.config_helper: AstrBotConfig = None
         self.cached_plugins: List[RegisteredPlugin] = []  # 缓存的插件
         self.platforms: List[RegisteredPlatform] = []

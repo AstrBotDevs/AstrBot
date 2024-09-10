@@ -243,7 +243,7 @@ class QQOfficial(Platform):
         msg_ref = None
         rendered_images = []
         
-        if use_t2i or (use_t2i == None and self.context.base_config.get("qq_pic_mode", False)) and isinstance(res, list):
+        if use_t2i or (use_t2i == None and self.context.config_helper.t2i) and isinstance(result_message, list):
             rendered_images = await self.convert_to_t2i_chain(result_message)
         
         if isinstance(result_message, list):

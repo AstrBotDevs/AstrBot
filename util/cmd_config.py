@@ -202,6 +202,10 @@ class AstrBotConfig():
             json.dump(config if config else DEFAULT_CONFIG_VERSION_2, f, indent=2, ensure_ascii=False)
             f.flush()
     
+    def save_config(self):
+        '''将现存配置写入文件'''
+        self.flush_config(self.to_dict())
+    
     def init_configs(self):
         '''初始化必需的配置项'''
         config = None
@@ -228,7 +232,7 @@ class AstrBotConfig():
 
         self.load_from_dict(config)
 
-    def get(self, key, default=None):
+    def get(self, key: str, default=None):
         '''
         从文件系统中直接获取配置
         '''
@@ -287,7 +291,6 @@ class AstrBotConfig():
         for key in path:
             if key not in self:
                 raise KeyError(f"Key {key} not found in config.")
-
 
     def check_exist(self) -> bool:
         return os.path.exists(ASTRBOT_CONFIG_PATH)

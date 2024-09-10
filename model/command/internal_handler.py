@@ -8,7 +8,6 @@ from type.types import Context
 from type.config import VERSION
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
-from nakuru.entities.components import Image
 from util.agent.web_searcher import search_from_bing, fetch_website_content
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
@@ -208,10 +207,11 @@ class InternalCommandHandler:
             return CommandResult(
                 hit=True,
                 success=True,
-                message_chain=f"网页搜索功能当前状态: {context.web_search}",
+                message_chain=f"网页搜索功能当前状态: {context.config_helper.llm_settings.web_search}",
             )
         elif l[1] == 'on':
-            context.web_search = True
+            context.config_helper.llm_settings.web_search = True
+            context.config_helper.save_config()
             context.register_llm_tool("web_search", [{
                 "type": "string",
                 "name": "keyword",
@@ -235,7 +235,8 @@ class InternalCommandHandler:
                 message_chain="已开启网页搜索",
             )
         elif l[1] == 'off':
-            context.web_search = False
+            context.config_helper.llm_settings.web_search = False
+            context.config_helper.save_config()
             context.unregister_llm_tool("web_search")
             context.unregister_llm_tool("fetch_website_content")
             
@@ -254,15 +255,15 @@ class InternalCommandHandler:
     def t2i_toggle(self, message: AstrMessageEvent, context: Context):
         p = context.config_helper.t2i
         if p:
-            context.config_helper.put("qq_pic_mode", False)
             context.config_helper.t2i = False
+            context.config_helper.save_config()
             return CommandResult(
                 hit=True,
                 success=True,
                 message_chain="已关闭文本转图片模式。",
             )
-        context.config_helper.put("qq_pic_mode", True)
         context.config_helper.t2i = True
+        context.config_helper.save_config()
         
         return CommandResult(
             hit=True,
