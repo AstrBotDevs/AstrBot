@@ -13,7 +13,7 @@ from type.types import Context
 from type.config import VERSION
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
-from util.cmd_config import CmdConfig
+from util.cmd_config import AstrBotConfig
 from util.metrics import MetricUploader
 from util.config_utils import *
 from util.updator.astrbot_updator import AstrBotUpdator
@@ -24,29 +24,15 @@ logger: Logger = LogManager.GetLogger(log_name='astrbot')
 class AstrBotBootstrap():
     def __init__(self) -> None:
         self.context = Context()
-        self.config_helper = CmdConfig()
         
         # load configs and ensure the backward compatibility
         try_migrate_config()
+        self.config_helper = AstrBotConfig()
         self.context.config_helper = self.config_helper
-        self.context.base_config = self.config_helper.cached_config
-        
-        self.context.default_personality = {
-            "name": "default",
-            "prompt": self.context.base_config.get("default_personality_str", ""),
-        }
-        self.context.unique_session = self.context.base_config.get("uniqueSessionMode", False)
-        nick_qq = self.context.base_config.get("nick_qq", ('/', '!'))
-        if isinstance(nick_qq, str): nick_qq = (nick_qq, )
-        self.context.nick = nick_qq
-        self.context.t2i_mode = self.context.base_config.get("qq_pic_mode", True)
-        self.context.version = VERSION
-
-        logger.info("AstrBot v" + self.context.version)
-
+        logger.info("AstrBot v" + VERSION)
         # apply proxy settings
-        http_proxy = self.context.base_config.get("http_proxy")
-        https_proxy = self.context.base_config.get("https_proxy")
+        http_proxy = self.context.config_helper.http_proxy
+        https_proxy = self.context.config_helper.https_proxy
         if http_proxy:
             os.environ['HTTP_PROXY'] = http_proxy
         if https_proxy:
@@ -68,10 +54,9 @@ class AstrBotBootstrap():
         self.db_conn_helper = dbConn()
         
         # load llm provider
-        self.llm_instance: Provider = None
         self.load_llm()
         
-        self.message_handler = MessageHandler(self.context, self.command_manager, self.db_conn_helper, self.llm_instance)
+        self.message_handler = MessageHandler(self.context, self.command_manager, self.db_conn_helper)
         self.platfrom_manager = PlatformManager(self.context, self.message_handler)
         self.dashboard = AstrBotDashBoard(self.context, plugin_manager=self.plugin_manager, astrbot_updator=self.updator)
         self.metrics_uploader = MetricUploader(self.context)
@@ -114,16 +99,26 @@ class AstrBotBootstrap():
                 return
     
     def load_llm(self):
-        if 'openai' in self.config_helper.cached_config and \
-            len(self.config_helper.cached_config['openai']['key']) and \
-            self.config_helper.cached_config['openai']['key'][0] is not None:
-            from model.provider.openai_official import ProviderOpenAIOfficial
+        f = False
+        llms = self.context.config_helper.llm
+        logger.info(f"加载 {len(llms)} 个 LLM Provider...")
+        for llm in llms:
+            if llm.enable:
+                if llm.name == "openai" and llm.key and llm.enable:
+                    self.load_openai(llm)
+                    f = True
+                    logger.info(f"已启用 OpenAI API 支持。")
+                else:
+                    logger.warn(f"未知的 LLM Provider: {llm.name}")
+        if f:
             from model.command.openai_official_handler import OpenAIOfficialCommandHandler
             self.openai_command_handler = OpenAIOfficialCommandHandler(self.command_manager)
-            self.llm_instance = ProviderOpenAIOfficial(self.context)
-            self.openai_command_handler.set_provider(self.llm_instance)
-            self.context.register_provider("internal_openai", self.llm_instance)
-            logger.info("已启用 OpenAI API 支持。")
+            self.openai_command_handler.set_provider(self.context.llms[0].llm_instance)
+
+    def load_openai(self, llm_config):
+        from model.provider.openai_official import ProviderOpenAIOfficial
+        inst = ProviderOpenAIOfficial(llm_config)
+        self.context.register_provider("internal_openai", inst)
     
     def load_plugins(self):
         self.plugin_manager.plugin_reload()

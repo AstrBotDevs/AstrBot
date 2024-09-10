@@ -8,18 +8,18 @@ import traceback
 import base64
 
 from openai import AsyncOpenAI
-from openai.types.images_response import ImagesResponse
 from openai.types.chat.chat_completion import ChatCompletion
 from openai._exceptions import *
 from util.io import download_image_by_url
 
 from astrbot.persist.helper import dbConn
 from model.provider.provider import Provider
+from util.cmd_config import LLMConfig
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from typing import List, Dict
 
-from type.types import Context
+from dataclasses import asdict
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
@@ -47,22 +47,16 @@ MODELS = {
 }
 
 class ProviderOpenAIOfficial(Provider):
-    def __init__(self, context: Context) -> None:
+    def __init__(self, llm_config: LLMConfig) -> None:
         super().__init__()
 
-        os.makedirs("data/openai", exist_ok=True)
-
-        self.context = context
-        self.key_data_path = "data/openai/keys.json"
         self.api_keys = []
         self.chosen_api_key = None
         self.base_url = None
+        self.llm_config = llm_config
         self.keys_data = {} # 记录超额
-        
-        cfg = context.base_config['openai']
-
-        if cfg['key']: self.api_keys = cfg['key']
-        if cfg['api_base']: self.base_url = cfg['api_base']
+        if llm_config.key: self.api_keys = llm_config.key
+        if llm_config.api_base: self.base_url = llm_config.api_base
         if not self.api_keys:
             logger.warn("看起来你没有添加 OpenAI 的 API 密钥，OpenAI LLM 能力将不会启用。")
         else:
@@ -75,18 +69,21 @@ class ProviderOpenAIOfficial(Provider):
             api_key=self.chosen_api_key,
             base_url=self.base_url
         )
-        self.model_configs: Dict = cfg['chatGPTConfigs']
-        super().set_curr_model(self.model_configs['model'])
-        self.image_generator_model_configs: Dict = context.base_config.get('openai_image_generate', None)
+        super().set_curr_model(llm_config.model_config.model)
+        if llm_config.image_generation_model_config:
+            self.image_generator_model_configs: Dict = asdict(llm_config.image_generation_model_config)
         self.session_memory: Dict[str, List]  = {} # 会话记忆
         self.session_memory_lock = threading.Lock()
-        self.max_tokens = self.model_configs['max_tokens'] # 上下文窗口大小
+        self.max_tokens = self.llm_config.model_config.max_tokens # 上下文窗口大小
         
         logger.info("正在载入分词器 cl100k_base...")
         self.tokenizer = tiktoken.get_encoding("cl100k_base") # todo: 根据 model 切换分词器
         logger.info("分词器载入完成。")
         
-        self.DEFAULT_PERSONALITY = context.default_personality
+        self.DEFAULT_PERSONALITY = {
+            "prompt": self.llm_config.default_personality,
+            "name": "default"
+        }
         self.curr_personality = self.DEFAULT_PERSONALITY
         self.session_personality = {} # 记录了某个session是否已设置人格。
         # 从 SQLite DB 读取历史记录
@@ -133,7 +130,7 @@ class ProviderOpenAIOfficial(Provider):
         self.session_personality = {} # 重置
         encoded_prompt = self.tokenizer.encode(default_personality['prompt'])
         tokens_num = len(encoded_prompt)
-        model = self.model_configs['model']
+        model = self.get_curr_model()
         if model in MODELS and tokens_num > MODELS[model] - 500:
             default_personality['prompt'] = self.tokenizer.decode(encoded_prompt[:MODELS[model] - 500])
 
@@ -172,7 +169,7 @@ class ProviderOpenAIOfficial(Provider):
         for record in self.session_memory[session_id]:
             if "user" in record and record['user']:
                 if not is_lvm and "content" in record['user'] and isinstance(record['user']['content'], list):
-                    logger.warn(f"由于当前模型 {self.model_configs['model']}不支持视觉，将忽略上下文中的图片输入。如果一直弹出此警告，可以尝试 reset 指令。")
+                    logger.warn(f"由于当前模型 {self.get_curr_model()} 不支持视觉，将忽略上下文中的图片输入。如果一直弹出此警告，可以尝试 reset 指令。")
                     continue
                 context.append(record['user'])
             if "AI" in record and record['AI']:
@@ -184,7 +181,7 @@ class ProviderOpenAIOfficial(Provider):
         '''
         是否是 LVM
         '''
-        return self.model_configs['model'].startswith("gpt-4")
+        return self.get_curr_model().startswith("gpt-4")
     
     async def get_models(self):
         try:
@@ -237,7 +234,7 @@ class ProviderOpenAIOfficial(Provider):
         self.session_memory[session_id].append(message)
 
         # 根据 模型的上下文窗口 淘汰掉多余的记录
-        curr_model = self.model_configs['model']
+        curr_model = self.get_curr_model()
         if curr_model in MODELS:
             maxium_tokens_num = MODELS[curr_model] - 300 # 至少预留 300 给 completion
             # if message['usage_tokens'] > maxium_tokens_num:
@@ -316,7 +313,7 @@ class ProviderOpenAIOfficial(Provider):
         # 1. 可以保证之后 pop 的时候不会出现问题
         # 2. 可以保证不会超过最大 token 数
         _encoded_prompt = self.tokenizer.encode(prompt)
-        curr_model = self.model_configs['model']
+        curr_model = self.get_curr_model()
         if curr_model in MODELS and len(_encoded_prompt) > MODELS[curr_model] - 300:
             _encoded_prompt = _encoded_prompt[:MODELS[curr_model] - 300]
             prompt = self.tokenizer.decode(_encoded_prompt)
@@ -327,7 +324,7 @@ class ProviderOpenAIOfficial(Provider):
         # 获取上下文，openai 格式
         contexts = await self.retrieve_context(session_id)
 
-        conf = self.model_configs
+        conf = asdict(self.llm_config.model_config)
         if extra_conf: conf.update(extra_conf)
 
         # start request
@@ -358,10 +355,10 @@ class ProviderOpenAIOfficial(Provider):
                 if ok: continue
                 else: raise Exception("所有 OpenAI API Key 目前都不可用。")
             except BadRequestError as e:
+                retry += 1
                 logger.warn(f"OpenAI 请求异常：{e}。")
                 if "image_url is only supported by certain models." in str(e):
-                    raise Exception(f"当前模型 { self.model_configs['model'] } 不支持图片输入，请更换模型。")
-                raise e
+                    raise Exception(f"当前模型 { self.get_curr_model() } 不支持图片输入，请更换模型。")
             except RateLimitError as e:
                 if "You exceeded your current quota" in str(e):
                     self.keys_data[self.chosen_api_key] = False
@@ -437,11 +434,10 @@ class ProviderOpenAIOfficial(Provider):
         '''
         retry = 0
         conf = self.image_generator_model_configs
-        super().accu_model_stat(model=conf['model'])
         if not conf:
             logger.error("OpenAI 图片生成模型配置不存在。")
             raise Exception("OpenAI 图片生成模型配置不存在。")
-        
+        super().accu_model_stat(model=conf['model'])
         while retry < 3:
             try:
                 images_response = await self.client.images.generate(
@@ -497,12 +493,11 @@ class ProviderOpenAIOfficial(Provider):
         return contexts_str, len(self.session_memory[session_id])
 
     def set_model(self, model: str):
-        self.model_configs['model'] = model
-        self.context.config_helper.put_by_dot_str("openai.chatGPTConfigs.model", model)
+        # TODO: 更新配置文件
         super().set_curr_model(model)
     
     def get_configs(self):
-        return self.model_configs
+        return asdict(self.llm_config)
 
     def get_keys_data(self):
         return self.keys_data

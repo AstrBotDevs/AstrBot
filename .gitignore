@@ -11,3 +11,4 @@ data/*
 cookies.json
 logs/
 addons/plugins
+.coverage

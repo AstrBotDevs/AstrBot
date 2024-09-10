@@ -61,10 +61,11 @@ class Platform():
         return ret[:100] if len(ret) > 100 else ret
     
     def check_nick(self, message_str: str) -> bool:
-        if self.context.nick:
-            for nick in self.context.nick:
-                if nick and message_str.strip().startswith(nick):
-                    return True
+        w = self.context.config_helper.wake_prefix
+        if not w: return False
+        for nick in w:
+            if nick and message_str.strip().startswith(nick):
+                return True
         return False
 
     async def convert_to_t2i_chain(self, message_result: list) -> list:

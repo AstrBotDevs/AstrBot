@@ -25,16 +25,11 @@ logger: Logger = LogManager.GetLogger(log_name='astrbot')
 class RateLimitHelper():
     def __init__(self, context: Context) -> None:
         self.user_rate_limit: Dict[int, int] = {}
-        self.rate_limit_time: int = 60
-        self.rate_limit_count: int = 10
+        rl = context.config_helper.platform_settings.rate_limit
+        self.rate_limit_time: int = rl.time
+        self.rate_limit_count: int = rl.count
         self.user_frequency = {}
-        
-        if 'limit' in context.base_config:
-            if 'count' in context.base_config['limit']:
-                self.rate_limit_count = context.base_config['limit']['count']
-            if 'time' in context.base_config['limit']:
-                self.rate_limit_time = context.base_config['limit']['time']
-    
+
     def check_frequency(self, session_id: str) -> bool:
         '''
         检查发言频率
@@ -59,12 +54,11 @@ class RateLimitHelper():
 class ContentSafetyHelper():
     def __init__(self, context: Context) -> None:
         self.baidu_judge = None
-        if 'baidu_api' in context.base_config and \
-            'enable' in context.base_config['baidu_aip'] and \
-            context.base_config['baidu_aip']['enable']:
+        aip = context.config_helper.content_safety.baidu_aip
+        if aip.enable:
             try:
                 from astrbot.message.baidu_aip_judge import BaiduJudge
-                self.baidu_judge = BaiduJudge(context.base_config['baidu_aip'])
+                self.baidu_judge = BaiduJudge(aip)
                 logger.info("已启用百度 AI 内容审核。")
             except BaseException as e:
                 logger.error("百度 AI 内容审核初始化失败。")
@@ -107,22 +101,19 @@ class ContentSafetyHelper():
 class MessageHandler():
     def __init__(self, context: Context,
                  command_manager: CommandManager,
-                 persist_manager: dbConn,
-                 provider: Provider) -> None:
+                 persist_manager: dbConn) -> None:
         self.context = context
         self.command_manager = command_manager
         self.persist_manager = persist_manager
         self.rate_limit_helper = RateLimitHelper(context)
         self.content_safety_helper = ContentSafetyHelper(context)
-        self.llm_wake_prefix = self.context.base_config['llm_wake_prefix']
+        self.llm_wake_prefix = self.context.config_helper.llm_settings.wake_prefix
         if self.llm_wake_prefix:
             self.llm_wake_prefix = self.llm_wake_prefix.strip()
-        self.nicks = self.context.nick
-        self.provider = provider
-        self.reply_prefix = str(self.context.reply_prefix)
-        
+        self.provider = self.context.llms[0].llm_instance if len(self.context.llms) > 0 else None
+        self.reply_prefix = str(self.context.config_helper.platform_settings.reply_prefix)        
         self.llm_tools = FuncCall(self.provider)
-    
+
     def set_provider(self, provider: Provider):
         self.provider = provider
 
@@ -148,7 +139,7 @@ class MessageHandler():
             return
 
         # remove the nick prefix
-        for nick in self.nicks:
+        for nick in self.context.config_helper.wake_prefix:
             if msg_plain.startswith(nick):
                 msg_plain = msg_plain.removeprefix(nick)
                 break
@@ -187,12 +178,6 @@ class MessageHandler():
             if isinstance(comp, Image):
                 image_url = comp.url if comp.url else comp.file
                 break
-        
-        # web_search = self.context.web_search
-        # if not web_search and msg_plain.startswith("ws"):
-        #     # leverage web search feature
-        #     web_search = True
-        #     msg_plain = msg_plain.removeprefix("ws").strip()
         try:
             if not self.llm_tools.empty():
                 # tools-use

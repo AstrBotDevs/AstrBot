@@ -8,7 +8,6 @@ from type.types import Context
 from type.config import VERSION
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
-from nakuru.entities.components import Image
 from util.agent.web_searcher import search_from_bing, fetch_website_content
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
@@ -63,12 +62,12 @@ class InternalCommandHandler:
             return CommandResult().message("你没有权限使用该指令。")
         l = message_str.split(" ")
         if len(l) == 1:
-            return CommandResult().message(f"设置机器人唤醒词。以唤醒词开头的消息会唤醒机器人处理，起到 @ 的效果。\n示例：wake 昵称。当前唤醒词有：{context.nick}")
+            return CommandResult().message(f"设置机器人唤醒词。以唤醒词开头的消息会唤醒机器人处理，起到 @ 的效果。\n示例：wake 昵称。当前唤醒词是：{context.config_helper.wake_prefix[0]}")
         nick = l[1].strip()
         if not nick:
             return CommandResult().message("wake: 请指定唤醒词。")
-        context.config_helper.put("nick_qq", nick)
-        context.nick = tuple(nick)
+        context.config_helper.wake_prefix = [nick]
+        context.config_helper.save_config()
         return CommandResult(
             hit=True,
             success=True,
@@ -90,11 +89,7 @@ class InternalCommandHandler:
                 ret = f"当前已经是最新版本 v{VERSION}。"
             else:
                 ret = f"发现新版本 {update_info.version}，更新内容如下:\n---\n{update_info.body}\n---\n- 使用 /update latest 更新到最新版本。\n- 使用 /update vX.X.X 更新到指定版本。"
-            return CommandResult(
-                hit=True,
-                success=False,
-                message_chain=ret,
-            )
+            return CommandResult().message(ret)
         else:
             if tokens.get(1) == "latest":
                 try:
@@ -184,7 +179,7 @@ class InternalCommandHandler:
                 async with session.get("https://soulter.top/channelbot/notice.json") as resp:
                     notice = (await resp.json())["notice"]
         except BaseException as e:
-            logger.warn("An error occurred while fetching astrbot notice. Never mind, it's not important.")
+            logger.warning("An error occurred while fetching astrbot notice. Never mind, it's not important.")
 
         msg = "# Help Center\n## 指令列表\n"
         for key, value in self.manager.commands_handler.items():
@@ -209,10 +204,11 @@ class InternalCommandHandler:
             return CommandResult(
                 hit=True,
                 success=True,
-                message_chain=f"网页搜索功能当前状态: {context.web_search}",
+                message_chain=f"网页搜索功能当前状态: {context.config_helper.llm_settings.web_search}",
             )
         elif l[1] == 'on':
-            context.web_search = True
+            context.config_helper.llm_settings.web_search = True
+            context.config_helper.save_config()
             context.register_llm_tool("web_search", [{
                 "type": "string",
                 "name": "keyword",
@@ -236,7 +232,8 @@ class InternalCommandHandler:
                 message_chain="已开启网页搜索",
             )
         elif l[1] == 'off':
-            context.web_search = False
+            context.config_helper.llm_settings.web_search = False
+            context.config_helper.save_config()
             context.unregister_llm_tool("web_search")
             context.unregister_llm_tool("fetch_website_content")
             
@@ -253,17 +250,17 @@ class InternalCommandHandler:
             )
     
     def t2i_toggle(self, message: AstrMessageEvent, context: Context):
-        p = context.t2i_mode
+        p = context.config_helper.t2i
         if p:
-            context.config_helper.put("qq_pic_mode", False)
-            context.t2i_mode = False
+            context.config_helper.t2i = False
+            context.config_helper.save_config()
             return CommandResult(
                 hit=True,
                 success=True,
                 message_chain="已关闭文本转图片模式。",
             )
-        context.config_helper.put("qq_pic_mode", True)
-        context.t2i_mode = True
+        context.config_helper.t2i = True
+        context.config_helper.save_config()
         
         return CommandResult(
             hit=True,

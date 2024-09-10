@@ -26,7 +26,11 @@ jobs:
           mkdir temp
 
       - name: Run tests
-        run: PYTHONPATH=./ pytest --cov=. tests/ -v
+        run: |
+          export LLM_MODEL=${{ secrets.LLM_MODEL }}
+          export OPENAI_API_BASE=${{ secrets.OPENAI_API_BASE }}
+          export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          PYTHONPATH=./ pytest --cov=. tests/ -v
 
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v4

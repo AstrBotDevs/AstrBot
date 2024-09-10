@@ -18,6 +18,7 @@ from type.command import *
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from astrbot.message.handler import MessageHandler
+from util.cmd_config import PlatformConfig, NakuruPlatformConfig
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
@@ -28,47 +29,53 @@ class FakeSource:
         self.group_id = group_id
 
 
-class QQGOCQ(Platform):
-    def __init__(self, context: Context, message_handler: MessageHandler) -> None:
+class QQNakuru(Platform):
+    def __init__(self, context: Context, 
+                 message_handler: MessageHandler,
+                 platform_config: PlatformConfig) -> None:
         super().__init__("nakuru", context)
+        assert isinstance(platform_config, NakuruPlatformConfig), "gocq: 无法识别的配置类型。"
+        
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         
         self.message_handler = message_handler
         self.waiting = {}
         self.context = context
-        self.unique_session = self.context.unique_session
-        self.announcement = self.context.base_config.get("announcement", "欢迎新人！")
-
+        self.unique_session = context.config_helper.platform_settings.unique_session
+        self.announcement = context.config_helper.platform_settings.welcome_message_when_join
+        self.config = platform_config
+        self.admins = context.config_helper.admins_id
+        
         self.client = CQHTTP(
-            host=self.context.base_config.get("gocq_host", "127.0.0.1"),
-            port=self.context.base_config.get("gocq_websocket_port", 6700),
-            http_port=self.context.base_config.get("gocq_http_port", 5700),
+            host=self.config.host,
+            port=self.config.websocket_port,
+            http_port=self.config.port
         )
         gocq_app = self.client
 
         @gocq_app.receiver("GroupMessage")
         async def _(app: CQHTTP, source: GroupMessage):
-            if self.context.base_config.get("gocq_react_group", True):
+            if self.config.enable_group:
                 abm = self.convert_message(source)
                 await self.handle_msg(abm)
 
         @gocq_app.receiver("FriendMessage")
         async def _(app: CQHTTP, source: FriendMessage):
-            if self.context.base_config.get("gocq_react_friend", True):
+            if self.config.enable_direct_message:
                 abm = self.convert_message(source)
                 await self.handle_msg(abm)
 
         @gocq_app.receiver("GroupMemberIncrease")
         async def _(app: CQHTTP, source: GroupMemberIncrease):
-            if self.context.base_config.get("gocq_react_group_increase", True):
+            if self.config.enable_group_increase:
                 await app.sendGroupMessage(source.group_id, [
                     Plain(text=self.announcement)
                 ])
 
         @gocq_app.receiver("GuildMessage")
         async def _(app: CQHTTP, source: GuildMessage):
-            if self.cc.get("gocq_react_guild", True):
+            if self.config.enable_guild:
                 abm = self.convert_message(source)
                 await self.handle_msg(abm)
                         
@@ -117,8 +124,7 @@ class QQGOCQ(Platform):
 
         # 解析 role
         sender_id = str(message.raw_message.user_id)
-        if sender_id == self.context.base_config.get('admin_qq', '') or \
-                sender_id in self.context.base_config.get('other_admins', []):
+        if sender_id in self.admins:
             role = 'admin'
         else:
             role = 'member'
@@ -179,7 +185,7 @@ class QQGOCQ(Platform):
             res = [Plain(text=res), ]
 
         # if image mode, put all Plain texts into a new picture.
-        if use_t2i or (use_t2i == None and self.context.base_config.get("qq_pic_mode", False)) and isinstance(res, list):
+        if use_t2i or (use_t2i == None and self.context.config_helper.t2i) and isinstance(result_message, list):
             rendered_images = await self.convert_to_t2i_chain(res)
             if rendered_images:
                 try:
@@ -226,7 +232,7 @@ class QQGOCQ(Platform):
                     plain_text_len += len(i.text)
                 elif isinstance(i, Image):
                     image_num += 1
-            if plain_text_len > self.context.base_config.get('qq_forward_threshold', 200):
+            if plain_text_len > self.context.config_helper.platform_settings.forward_threshold or image_num > 1:
                 # 删除At
                 for i in message_chain:
                     if isinstance(i, At):

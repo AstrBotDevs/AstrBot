@@ -1,16 +1,15 @@
 from aip import AipContentCensor
+from util.cmd_config import BaiduAIPConfig
 
 
 class BaiduJudge:
-    def __init__(self, baidu_configs) -> None:
-        if 'app_id' in baidu_configs and 'api_key' in baidu_configs and 'secret_key' in baidu_configs:
-            self.app_id = str(baidu_configs['app_id'])
-            self.api_key = baidu_configs['api_key']
-            self.secret_key = baidu_configs['secret_key']
-            self.client = AipContentCensor(
-                self.app_id, self.api_key, self.secret_key)
-        else:
-            raise ValueError("Baidu configs error! 请填写百度内容审核服务相关配置！")
+    def __init__(self, baidu_configs: BaiduAIPConfig) -> None:
+        self.app_id = baidu_configs.app_id
+        self.api_key = baidu_configs.api_key
+        self.secret_key = baidu_configs.secret_key
+        self.client = AipContentCensor(self.app_id, 
+                                       self.api_key, 
+                                       self.secret_key)
 
     def judge(self, text):
         res = self.client.textCensorUserDefined(text)
