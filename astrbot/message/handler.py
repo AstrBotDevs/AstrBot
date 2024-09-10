@@ -1,5 +1,5 @@
-import time
-import re
+import time, json
+import re, os
 import asyncio
 import traceback
 import astrbot.message.unfit_words as uw
@@ -14,7 +14,10 @@ from type.command import CommandResult
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from nakuru.entities.components import Image
+from util.agent.func_call import FuncCall
 import util.agent.web_searcher as web_searcher
+from openai._exceptions import *
+from openai.types.chat.chat_completion_message_tool_call import Function
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
@@ -109,8 +112,9 @@ class MessageHandler():
             self.llm_wake_prefix = self.llm_wake_prefix.strip()
         self.nicks = self.context.config_helper.wake_prefix
         self.provider = self.context.llms[0] if len(self.context.llms) > 0 else None
-        self.reply_prefix = str(self.context.config_helper.platform_settings.reply_prefix)
-    
+        self.reply_prefix = str(self.context.config_helper.platform_settings.reply_prefix)        
+        self.llm_tools = FuncCall(self.provider)
+
     def set_provider(self, provider: Provider):
         self.provider = provider
 
@@ -121,18 +125,19 @@ class MessageHandler():
         `llm_provider`: the provider to use for LLM. If None, use the default provider
         '''
         msg_plain = message.message_str.strip()
-        provider = llm_provider if llm_provider else self.provider
-        inner_provider = False if llm_provider else True
+        provider = llm_provider if llm_provider else self.provider        
         
-        self.persist_manager.record_message(message.platform.platform_name, message.session_id)
+        if os.environ.get('TEST_MODE', 'off') != 'on':
+            self.persist_manager.record_message(message.platform.platform_name, message.session_id)
         
         # TODO: this should be configurable
-        if not message.message_str:
-            return MessageResult("Hi~")
+        # if not message.message_str:
+        #     return MessageResult("Hi~")
         
         # check the rate limit
         if not self.rate_limit_helper.check_frequency(message.message_obj.sender.user_id):
-            return MessageResult(f'你的发言超过频率限制(╯▔皿▔)╯。\n管理员设置 {self.rate_limit_helper.rate_limit_time} 秒内只能提问{self.rate_limit_helper.rate_limit_count} 次。')
+            logger.warning(f"用户 {message.message_obj.sender.user_id} 的发言频率超过限制，已忽略。")
+            return
 
         # remove the nick prefix
         for nick in self.nicks:
@@ -150,6 +155,11 @@ class MessageHandler():
                 is_command_call=True,
                 use_t2i=cmd_res.is_use_t2i
             )
+        
+        # next is the LLM part
+        
+        if message.only_command:
+            return
         
         # check if the message is a llm-wake-up command
         if self.llm_wake_prefix and not msg_plain.startswith(self.llm_wake_prefix):
@@ -169,31 +179,95 @@ class MessageHandler():
             if isinstance(comp, Image):
                 image_url = comp.url if comp.url else comp.file
                 break
-        web_search = self.context.config_helper.llm_settings.web_search
-        if not web_search and msg_plain.startswith("ws"):
-            # leverage web search feature
-            web_search = True
-            msg_plain = msg_plain.removeprefix("ws").strip()
-        
         try:
-            if web_search:
-                llm_result = await web_searcher.web_search(msg_plain, provider, message.session_id, inner_provider)
+            if not self.llm_tools.empty():
+                # tools-use
+                tool_use_flag = True
+                llm_result = await provider.text_chat(
+                    prompt=msg_plain, 
+                    session_id=message.session_id, 
+                    tools=self.llm_tools.get_func()
+                )
+                
+                if isinstance(llm_result, Function):
+                    logger.debug(f"function-calling: {llm_result}")
+                    func_obj = None
+                    for i in self.llm_tools.func_list:
+                        if i["name"] == llm_result.name:
+                            func_obj = i["func_obj"]
+                            break
+                    if not func_obj:
+                        return MessageResult("AstrBot Function-calling 异常：未找到请求的函数调用。")
+                    try:
+                        args = json.loads(llm_result.arguments)
+                        args['ame'] = message
+                        args['context'] = self.context
+                        try:
+                            cmd_res = await func_obj(**args)
+                        except TypeError as e:
+                            args.pop('ame')
+                            args.pop('context')
+                            cmd_res = await func_obj(**args)
+                        if isinstance(cmd_res, CommandResult):
+                            return MessageResult(
+                                cmd_res.message_chain,
+                                is_command_call=True,
+                                use_t2i=cmd_res.is_use_t2i
+                            )
+                        elif isinstance(cmd_res, str):
+                            return MessageResult(cmd_res)
+                        elif not cmd_res:
+                            return
+                        else:
+                            return MessageResult(f"AstrBot Function-calling 异常：调用：{llm_result} 时，返回了未知的返回值类型。")
+                    except BaseException as e:
+                        traceback.print_exc()
+                        return MessageResult("AstrBot Function-calling 异常：" + str(e))
+                else:
+                    return MessageResult(llm_result)
+        
             else:
+                # normal chat
+                tool_use_flag = False
                 llm_result = await provider.text_chat(
                     prompt=msg_plain, 
                     session_id=message.session_id, 
                     image_url=image_url
                 )
+        except BadRequestError as e:
+            if tool_use_flag:
+                # seems like the model don't support function-calling
+                logger.error(f"error: {e}. Using local function-calling implementation")
+                
+                try:
+                    # use local function-calling implementation
+                    args = {
+                        'question': llm_result,
+                        'func_definition': self.llm_tools.func_dump(),
+                    }
+                    _, has_func = await self.llm_tools.func_call(**args)
+                    
+                    if not has_func:
+                        # normal chat
+                        llm_result = await provider.text_chat(
+                            prompt=msg_plain, 
+                            session_id=message.session_id, 
+                            image_url=image_url
+                        )
+                except BaseException as e:
+                    logger.error(traceback.format_exc())
+                    return CommandResult("AstrBot Function-calling 异常：" + str(e))
+
         except BaseException as e:
             logger.error(traceback.format_exc())
             logger.error(f"LLM 调用失败。")
             return MessageResult("AstrBot 请求 LLM 资源失败：" + str(e))
-        
-        # concatenate the reply prefix
+
+        # concatenate reply prefix
         if self.reply_prefix:
             llm_result = self.reply_prefix + llm_result
         
-        # mask the unsafe content
+        # mask unsafe content
         llm_result = self.content_safety_helper.filter_content(llm_result)
         check = self.content_safety_helper.baidu_check(llm_result)
         if not check:

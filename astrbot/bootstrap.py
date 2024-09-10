@@ -22,7 +22,7 @@ logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 
 class AstrBotBootstrap():
-    def __init__(self) -> None:        
+    def __init__(self) -> None:
         self.context = Context()
         
         # load configs and ensure the backward compatibility
@@ -43,6 +43,8 @@ class AstrBotBootstrap():
             logger.info(f"使用代理: {http_proxy}, {https_proxy}")
         else:
             logger.info("未使用代理。")
+            
+        self.test_mode = os.environ.get('TEST_MODE', 'off') == 'on'
     
     async def run(self):
         self.command_manager = CommandManager()
@@ -63,6 +65,10 @@ class AstrBotBootstrap():
         self.context.updator = self.updator
         self.context.plugin_updator = self.plugin_manager.updator
         self.context.message_handler = self.message_handler
+        self.context.command_manager = self.command_manager
+        
+        if self.test_mode:
+            return
         
         # load plugins, plugins' commands.
         self.load_plugins()
@@ -84,10 +90,13 @@ class AstrBotBootstrap():
             try:
                 result = await task
                 return result
+            except asyncio.CancelledError:
+                logger.info(f"{task.get_name()} 任务已取消。")
+                return
             except Exception as e:
                 logger.error(traceback.format_exc())
-                logger.error(f"{task.get_name()} 任务发生错误，将在 5 秒后重试。")
-                await asyncio.sleep(5)
+                logger.error(f"{task.get_name()} 任务发生错误。")
+                return
     
     def load_llm(self):
         f = False

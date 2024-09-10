@@ -5,6 +5,7 @@ import traceback
 import uuid
 import shutil
 import yaml
+import subprocess
 
 from util.updator.plugin_updator import PluginUpdator
 from util.io import remove_dir, download_file
@@ -84,8 +85,28 @@ class PluginManager():
     def update_plugin_dept(self, path):
         mirror = "https://mirrors.aliyun.com/pypi/simple/"
         py = sys.executable
-        os.system(f"{py} -m pip install -r {path} -i {mirror} --quiet")
-
+        # os.system(f"{py} -m pip install -r {path} -i {mirror} --break-system-package --trusted-host mirrors.aliyun.com")
+        
+        process = subprocess.Popen(f"{py} -m pip install -r {path} -i {mirror} --break-system-package --trusted-host mirrors.aliyun.com", 
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, universal_newlines=True)
+        
+        while True:
+            output = process.stdout.readline()
+            if output == '' and process.poll() is not None:
+                break
+            if output:
+                output = output.strip()
+                if output.startswith("Requirement already satisfied"):
+                    continue
+                if output.startswith("Using cached"):
+                    continue
+                if output.startswith("Looking in indexes"):
+                    continue
+                logger.info(output)
+                
+        rc = process.poll()
+        
+        
     def install_plugin(self, repo_url: str):
         ppath = self.plugin_store_path
 
@@ -95,10 +116,13 @@ class PluginManager():
         plugin_path = self.updator.update(repo_url)
         with open(os.path.join(plugin_path, "REPO"), "w", encoding='utf-8') as f:
             f.write(repo_url)
+            
+        self.check_plugin_dept_update()
 
-        ok, err = self.plugin_reload()
-        if not ok:
-            raise Exception(err)
+        return plugin_path
+        # ok, err = self.plugin_reload()
+        # if not ok:
+        #     raise Exception(err)
         
     def download_from_repo_url(self, target_path: str, repo_url: str):
         repo_namespace = repo_url.split("/")[-2:]
@@ -158,7 +182,7 @@ class PluginManager():
                 
                 logger.info(f"正在加载插件 {root_dir_name} ...")
 
-                # self.check_plugin_dept_update(cached_plugins, root_dir_name)
+                self.check_plugin_dept_update(target_plugin=root_dir_name)
 
                 module = __import__("addons.plugins." +
                                         root_dir_name + "." + p, fromlist=[p])
@@ -227,10 +251,12 @@ class PluginManager():
 
         # remove the temp dir
         remove_dir(temp_dir)
+        
+        self.check_plugin_dept_update()
 
-        ok, err = self.plugin_reload()
-        if not ok:
-            raise Exception(err)
+        # ok, err = self.plugin_reload()
+        # if not ok:
+        #     raise Exception(err)
 
     def load_plugin_metadata(self, plugin_path: str, plugin_obj = None) -> PluginMetadata:
         metadata = None

@@ -2,7 +2,6 @@ from typing import Union, List, Callable
 from dataclasses import dataclass
 from nakuru.entities.components import Plain, Image
 
-
 @dataclass
 class CommandItem():
     '''
@@ -19,12 +18,17 @@ class CommandResult():
     用于在Command中返回多个值
     '''
 
-    def __init__(self, hit: bool = True, success: bool = True, message_chain: list = [], command_name: str = "unknown_command") -> None:
+    def __init__(self, 
+                 hit: bool = True, 
+                 success: bool = True, 
+                 message_chain: list = [], 
+                 command_name: str = "unknown_command",
+                 use_t2i: bool = None) -> None:
         self.hit = hit
         self.success = success
         self.message_chain = message_chain
         self.command_name = command_name
-        self.is_use_t2i = None # default
+        self.is_use_t2i = use_t2i
         
     def message(self, message: str):
         '''
@@ -63,14 +67,12 @@ class CommandResult():
         self.message_chain = [Image.fromFileSystem(path), ]
         return self
     
-    # def use_t2i(self, use_t2i: bool):
-    #     '''
-    #     设置是否使用文本转图片服务。如果不设置，则跟随用户的设置。
-        
-    #     CommandResult().use_t2i(False)
-    #     '''
-    #     self.is_use_t2i = use_t2i
-    #     return self
+    def use_t2i(self, use_t2i: bool):
+        '''
+        设置是否使用文本转图片服务。如果不设置，则跟随用户的设置。
+        '''
+        self.is_use_t2i = use_t2i
+        return self
 
     def _result_tuple(self):
         return (self.success, self.message_chain, self.command_name)

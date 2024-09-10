@@ -1,4 +1,4 @@
-VERSION = '3.3.7'
+VERSION = '3.3.9'
 
 DEFAULT_CONFIG = {
     "qqbot": {

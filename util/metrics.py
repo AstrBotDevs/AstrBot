@@ -66,6 +66,9 @@ class MetricUploader():
             except BaseException as e:
                 pass
             await asyncio.sleep(30*60)
+    
+    def increment_platform_stat(self, platform_name: str):
+        self.platform_stats[platform_name] = self.platform_stats.get(platform_name, 0) + 1
 
     def clear(self):
         self.platform_stats.clear()

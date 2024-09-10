@@ -1,3 +1,5 @@
+import os
+import asyncio
 import json
 import time
 import tiktoken
@@ -6,13 +8,12 @@ import traceback
 import base64
 
 from openai import AsyncOpenAI
-from openai.types.images_response import ImagesResponse
 from openai.types.chat.chat_completion import ChatCompletion
 from openai._exceptions import *
+from util.io import download_image_by_url
 
 from astrbot.persist.helper import dbConn
 from model.provider.provider import Provider
-from util import general_utils as gu
 from util.cmd_config import LLMConfig
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
@@ -149,7 +150,7 @@ class ProviderOpenAIOfficial(Provider):
         将图片转换为 base64
         '''
         if image_url.startswith("http"):
-            image_url = await gu.download_image_by_url(image_url)
+            image_url = await download_image_by_url(image_url)
         
         with open(image_url, "rb") as f:
             image_bs64 = base64.b64encode(f.read()).decode()
@@ -292,6 +293,9 @@ class ProviderOpenAIOfficial(Provider):
                         extra_conf: Dict = None,
                         **kwargs
                     ) -> str:
+        if os.environ.get("TEST_LLM", "off") != "on" and os.environ.get("TEST_MODE", "off") == "on":
+            return "这是一个测试消息。"
+        
         super().accu_model_stat()
         if not session_id:
             session_id = "unknown"
@@ -364,7 +368,9 @@ class ProviderOpenAIOfficial(Provider):
                 logger.error(f"OpenAI API Key {self.chosen_api_key} 达到请求速率限制或者官方服务器当前超载。详细原因：{e}")
                 await self.switch_to_next_key()
                 rate_limit_retry += 1
-                time.sleep(1)
+                await asyncio.sleep(1)
+            except NotFoundError as e:
+                raise e
             except Exception as e:
                 retry += 1
                 if retry >= 3:
@@ -376,7 +382,7 @@ class ProviderOpenAIOfficial(Provider):
                 
                 logger.warning(traceback.format_exc())
                 logger.warning(f"OpenAI 请求失败：{e}。重试第 {retry} 次。")
-                time.sleep(1)
+                await asyncio.sleep(1)
 
         assert isinstance(completion, ChatCompletion)
         logger.debug(f"openai completion: {completion.usage}")
@@ -446,7 +452,7 @@ class ProviderOpenAIOfficial(Provider):
                     logger.error(traceback.format_exc())
                     raise Exception(f"OpenAI 图片生成请求失败：{e}。重试次数已达到上限。")
                 logger.warning(f"OpenAI 图片生成请求失败：{e}。重试第 {retry} 次。")
-                time.sleep(1)
+                await asyncio.sleep(1)
 
     async def forget(self, session_id=None, keep_system_prompt: bool=False) -> bool:
         if session_id is None: return False

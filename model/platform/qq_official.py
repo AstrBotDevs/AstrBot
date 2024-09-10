@@ -57,6 +57,7 @@ class QQOfficial(Platform):
                  message_handler: MessageHandler, 
                  platform_config: PlatformConfig,
                  test_mode = False) -> None:
+        super().__init__("qqofficial", context)
         assert isinstance(platform_config, QQOfficialPlatformConfig), "qq_official: 无法识别的配置类型。"
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
@@ -86,12 +87,13 @@ class QQOfficial(Platform):
             )
         self.client = botClient(
             intents=self.intents,
-            bot_log=False
+            bot_log=False,
+            timeout=20,
         )
 
         self.client.set_platform(self)
         
-        self.test_mode = test_mode
+        self.test_mode = os.environ.get('TEST_MODE', 'off') == 'on'
 
     async def _parse_to_qqofficial(self, message: List[BaseMessageComponent], is_group: bool = False):
         plain_text = ""
@@ -117,7 +119,7 @@ class QQOfficial(Platform):
         abm.timestamp = int(time.time())
         abm.raw_message = message
         abm.message_id = message.id
-        abm.tag = "qqchan"
+        abm.tag = "qqofficial"
         msg: List[BaseMessageComponent] = []
 
         if isinstance(message, botpy.message.GroupMessage) or isinstance(message, botpy.message.C2CMessage):
@@ -177,7 +179,7 @@ class QQOfficial(Platform):
             appid=self.appid,
             secret=self.secret
         )
-            
+
     async def handle_msg(self, message: AstrBotMessage):
         assert isinstance(message.raw_message, (botpy.message.Message,
                           botpy.message.GroupMessage, botpy.message.DirectMessage, botpy.message.C2CMessage))
@@ -207,13 +209,13 @@ class QQOfficial(Platform):
             role = 'member'
             
         # construct astrbot message event
-        ame = AstrMessageEvent.from_astrbot_message(message, self.context, "qqchan", session_id, role)
+        ame = AstrMessageEvent.from_astrbot_message(message, self.context, "qqofficial", session_id, role)
         
         message_result = await self.message_handler.handle(ame)
         if not message_result:
             return
 
-        ret = await self.reply_msg(message, message_result.result_message)
+        ret = await self.reply_msg(message, message_result.result_message, message_result.use_t2i)
         if message_result.callback:
             message_result.callback()
 
@@ -225,7 +227,8 @@ class QQOfficial(Platform):
 
     async def reply_msg(self,
                         message: AstrBotMessage,
-                        result_message: List[BaseMessageComponent]):
+                        result_message: List[BaseMessageComponent],
+                        use_t2i: bool = None):
         '''
         回复频道消息
         '''
@@ -240,7 +243,7 @@ class QQOfficial(Platform):
         msg_ref = None
         rendered_images = []
         
-        if self.context.config_helper.t2i and isinstance(result_message, list):
+        if use_t2i or (use_t2i == None and self.context.base_config.get("qq_pic_mode", False)) and isinstance(res, list):
             rendered_images = await self.convert_to_t2i_chain(result_message)
         
         if isinstance(result_message, list):
@@ -311,6 +314,7 @@ class QQOfficial(Platform):
                         return await self._reply(**data)
 
     async def _reply(self, **kwargs):
+        await self.record_metrics()
         if 'group_openid' in kwargs or 'openid' in kwargs:
             # QQ群组消息
             if 'file_image' in kwargs and kwargs['file_image']:
@@ -379,6 +383,9 @@ class QQOfficial(Platform):
         if image_path:
             payload['file_image'] = image_path
         await self._reply(**payload)
+        
+    async def send_msg_new(self, message_type: MessageType, target: str, result_message: CommandResult):
+        raise NotImplementedError("qqofficial 不支持此方法。")
 
     def wait_for_message(self, channel_id: int) -> AstrBotMessage:
         '''
@@ -395,4 +402,4 @@ class QQOfficial(Platform):
             cnt += 1
             if cnt > 300:
                 raise Exception("等待消息超时。")
-            time.sleep(1)()
+            time.sleep(1)

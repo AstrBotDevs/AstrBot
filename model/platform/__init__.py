@@ -3,11 +3,13 @@ from typing import Union, Any, List
 from nakuru.entities.components import Plain, At, Image, BaseMessageComponent
 from type.astrbot_message import AstrBotMessage
 from type.command import CommandResult
+from type.astrbot_message import MessageType
 
 
 class Platform():
-    def __init__(self) -> None:
-        pass
+    def __init__(self, platform_name: str, context) -> None:
+        self.PLATFORM_NAME = platform_name
+        self.context = context
 
     @abc.abstractmethod
     async def handle_msg(self, message: AstrBotMessage):
@@ -26,6 +28,13 @@ class Platform():
 
     @abc.abstractmethod
     async def send_msg(self, target: Any, result_message: CommandResult):
+        '''
+        发送消息（主动）
+        '''
+        pass
+    
+    @abc.abstractmethod
+    async def send_msg_new(self, message_type: MessageType, target: str, result_message: CommandResult):
         '''
         发送消息（主动）
         '''
@@ -73,3 +82,5 @@ class Platform():
                 rendered_images.append(Image.fromFileSystem(p))
             return rendered_images
         
+    async def record_metrics(self):
+        self.context.metrics_uploader.increment_platform_stat(self.PLATFORM_NAME)

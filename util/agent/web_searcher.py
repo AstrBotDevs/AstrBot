@@ -1,13 +1,11 @@
-import traceback
 import random
-import json
-import asyncio
 import aiohttp
 import os
 
 from readability import Document
 from bs4 import BeautifulSoup
 from openai.types.chat.chat_completion_message_tool_call import Function
+from openai._exceptions import *
 from util.agent.func_call import FuncCall
 from util.websearch.config import HEADERS, USER_AGENTS
 from util.websearch.bing import Bing
@@ -16,6 +14,8 @@ from util.websearch.google import Google
 from model.provider.provider import Provider
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
+from type.types import Context
+from type.message_event import AstrMessageEvent
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
@@ -31,24 +31,7 @@ def tidy_text(text: str) -> str:
     '''
     return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
 
-# def special_fetch_zhihu(link: str) -> str:
-#     '''
-#     function-calling 函数, 用于获取知乎文章的内容
-#     '''
-#     response = requests.get(link, headers=HEADERS)
-#     response.encoding = "utf-8"
-#     soup = BeautifulSoup(response.text, "html.parser")
-
-#     if "zhuanlan.zhihu.com" in link:
-#         r = soup.find(class_="Post-RichTextContainer")
-#     else:
-#         r = soup.find(class_="List-item").find(class_="RichContent-inner")
-#     if r is None:
-#         print("debug: zhihu none")
-#         raise Exception("zhihu none")
-#     return tidy_text(r.text)
-
-async def search_from_bing(keyword: str) -> str:
+async def search_from_bing(context: Context, ame: AstrMessageEvent, keyword: str) -> str:
     '''
     tools, 从 bing 搜索引擎搜索
     '''
@@ -84,10 +67,11 @@ async def search_from_bing(keyword: str) -> str:
         site_result = site_result[:600] + "..." if len(site_result) > 600 else site_result
         ret += f"{idx}. {i.title} \n{i.snippet}\n{site_result}\n\n"
         idx += 1
-    return ret
+
+    return await summarize(context, ame, ret)
 
 
-async def fetch_website_content(url):
+async def fetch_website_content(context: Context, ame: AstrMessageEvent, url: str):
     header = HEADERS
     header.update({'User-Agent': random.choice(USER_AGENTS)})
     async with aiohttp.ClientSession() as session:
@@ -97,87 +81,25 @@ async def fetch_website_content(url):
             ret = doc.summary(html_partial=True)
             soup = BeautifulSoup(ret, 'html.parser')
             ret = tidy_text(soup.get_text())
-            return ret
-
-
-async def web_search(prompt, provider: Provider, session_id, official_fc=False):
-    '''
-    official_fc: 使用官方 function-calling
-    '''
-    new_func_call = FuncCall(provider)
-
-    new_func_call.add_func("web_search", [{
-        "type": "string",
-        "name": "keyword",
-        "description": "搜索关键词"
-    }],
-        "通过搜索引擎搜索。如果问题需要获取近期、实时的消息，在网页上搜索(如天气、新闻或任何需要通过网页获取信息的问题)，则调用此函数；如果没有，不要调用此函数。",
-        search_from_bing
-    )
-    new_func_call.add_func("fetch_website_content", [{
-        "type": "string",
-        "name": "url",
-        "description": "要获取内容的网页链接"
-    }],
-        "获取网页的内容。如果问题带有合法的网页链接并且用户有需求了解网页内容(例如: `帮我总结一下 https://github.com 的内容`), 就调用此函数。如果没有，不要调用此函数。",
-        fetch_website_content
-    )
+            return await summarize(context, ame, ret)
     
-    has_func = False
-    function_invoked_ret = ""
-    if official_fc:
-        # we use official function-calling
-        result = await provider.text_chat(prompt=prompt, session_id=session_id, tools=new_func_call.get_func())
-        if isinstance(result, Function):
-            logger.debug(f"web_searcher - function-calling: {result}")
-            func_obj = None
-            for i in new_func_call.func_list:
-                if i["name"] == result.name:
-                    func_obj = i["func_obj"]
-                    break
-            if not func_obj:
-                return await provider.text_chat(prompt=prompt, session_id=session_id, ) + "\n(网页搜索失败, 此为默认回复)"
-            try:
-                args = json.loads(result.arguments)
-                function_invoked_ret = await func_obj(**args)
-                has_func = True
-            except BaseException as e:
-                traceback.print_exc()
-                return await provider.text_chat(prompt=prompt, session_id=session_id, ) + "\n(网页搜索失败, 此为默认回复)"
-        else:
-            return result
-    else:
-        # we use our own function-calling
-        try:
-            args = {
-                'question': prompt,
-                'func_definition': new_func_call.func_dump(),
-                'is_task': False,
-                'is_summary': False,
-            }
-            function_invoked_ret, has_func = await asyncio.to_thread(new_func_call.func_call, **args)
-        except BaseException as e:
-            res = await provider.text_chat(prompt) + "\n(网页搜索失败, 此为默认回复)"
-            return res
-        has_func = True
-
-    if has_func:
-        await provider.forget(session_id=session_id, )
-        summary_prompt = f"""
+async def summarize(context: Context, ame: AstrMessageEvent, text: str):
+                
+    summary_prompt = f"""
 你是一个专业且高效的助手，你的任务是
-1. 根据下面的相关材料对用户的问题 `{prompt}` 进行总结;
-2. 简单地发表你对这个问题的简略看法。
+1. 根据下面的相关材料对用户的问题 `{ame.message_str}` 进行总结;
+2. 简单地发表你对这个问题的看法。
 
 # 例子
 1. 从网上的信息来看，可以知道...我个人认为...你觉得呢？
 2. 根据网上的最新信息，可以得知...我觉得...你怎么看？
 
 # 限制
-1. 限制在 200 字以内；
+1. 限制在 200-300 字；
 2. 请**直接输出总结**，不要输出多余的内容和提示语。
-        
+
 # 相关材料
-{function_invoked_ret}"""
-        ret = await provider.text_chat(prompt=summary_prompt, session_id=session_id)
-        return ret
-    return function_invoked_ret
+{text}"""
+    
+    provider = context.get_current_llm_provider()
+    return await provider.text_chat(prompt=summary_prompt, session_id=ame.session_id)
