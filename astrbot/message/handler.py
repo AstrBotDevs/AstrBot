@@ -110,8 +110,7 @@ class MessageHandler():
         self.llm_wake_prefix = self.context.config_helper.llm_settings.wake_prefix
         if self.llm_wake_prefix:
             self.llm_wake_prefix = self.llm_wake_prefix.strip()
-        self.nicks = self.context.config_helper.wake_prefix
-        self.provider = self.context.llms[0] if len(self.context.llms) > 0 else None
+        self.provider = self.context.llms[0].llm_instance if len(self.context.llms) > 0 else None
         self.reply_prefix = str(self.context.config_helper.platform_settings.reply_prefix)        
         self.llm_tools = FuncCall(self.provider)
 
@@ -140,7 +139,7 @@ class MessageHandler():
             return
 
         # remove the nick prefix
-        for nick in self.nicks:
+        for nick in self.context.config_helper.wake_prefix:
             if msg_plain.startswith(nick):
                 msg_plain = msg_plain.removeprefix(nick)
                 break

@@ -62,11 +62,12 @@ class InternalCommandHandler:
             return CommandResult().message("你没有权限使用该指令。")
         l = message_str.split(" ")
         if len(l) == 1:
-            return CommandResult().message(f"设置机器人唤醒词。以唤醒词开头的消息会唤醒机器人处理，起到 @ 的效果。\n示例：wake 昵称。当前唤醒词有：{context.config_helper.wake_prefix}")
+            return CommandResult().message(f"设置机器人唤醒词。以唤醒词开头的消息会唤醒机器人处理，起到 @ 的效果。\n示例：wake 昵称。当前唤醒词是：{context.config_helper.wake_prefix[0]}")
         nick = l[1].strip()
         if not nick:
             return CommandResult().message("wake: 请指定唤醒词。")
         context.config_helper.wake_prefix = [nick]
+        context.config_helper.save_config()
         return CommandResult(
             hit=True,
             success=True,
@@ -88,11 +89,7 @@ class InternalCommandHandler:
                 ret = f"当前已经是最新版本 v{VERSION}。"
             else:
                 ret = f"发现新版本 {update_info.version}，更新内容如下:\n---\n{update_info.body}\n---\n- 使用 /update latest 更新到最新版本。\n- 使用 /update vX.X.X 更新到指定版本。"
-            return CommandResult(
-                hit=True,
-                success=False,
-                message_chain=ret,
-            )
+            return CommandResult().message(ret)
         else:
             if tokens.get(1) == "latest":
                 try:
@@ -182,7 +179,7 @@ class InternalCommandHandler:
                 async with session.get("https://soulter.top/channelbot/notice.json") as resp:
                     notice = (await resp.json())["notice"]
         except BaseException as e:
-            logger.warn("An error occurred while fetching astrbot notice. Never mind, it's not important.")
+            logger.warning("An error occurred while fetching astrbot notice. Never mind, it's not important.")
 
         msg = "# Help Center\n## 指令列表\n"
         for key, value in self.manager.commands_handler.items():

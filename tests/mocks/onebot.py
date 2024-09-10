@@ -1,3 +1,4 @@
+import copy
 from aiocqhttp import Event
 
 class MockOneBotMessage():
@@ -11,3 +12,7 @@ class MockOneBotMessage():
         
     def create_random_direct_message(self):
         return self.friend_event_sample
+    
+    def create_msg(self, text: str):
+        self.group_event_sample.message = [{'data': {'qq': '3430871669'}, 'type': 'at'}, {'data': {'text': text}, 'type': 'text'}]
+        return self.group_event_sample

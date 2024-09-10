@@ -355,10 +355,10 @@ class ProviderOpenAIOfficial(Provider):
                 if ok: continue
                 else: raise Exception("所有 OpenAI API Key 目前都不可用。")
             except BadRequestError as e:
+                retry += 1
                 logger.warn(f"OpenAI 请求异常：{e}。")
                 if "image_url is only supported by certain models." in str(e):
                     raise Exception(f"当前模型 { self.get_curr_model() } 不支持图片输入，请更换模型。")
-                retry += 1
             except RateLimitError as e:
                 if "You exceeded your current quota" in str(e):
                     self.keys_data[self.chosen_api_key] = False

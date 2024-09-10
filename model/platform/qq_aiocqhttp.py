@@ -112,7 +112,7 @@ class AIOCQHTTP(Platform):
         while self.context.running:
             await asyncio.sleep(1)
     
-    def pre_check(self, message: AstrBotMessage) -> bool:
+    async def pre_check(self, message: AstrBotMessage) -> bool:
         # if message chain contains Plain components or 
         # At components which points to self_id, return True
         if message.type == MessageType.FRIEND_MESSAGE:
@@ -121,7 +121,7 @@ class AIOCQHTTP(Platform):
             if isinstance(comp, At) and str(comp.qq) == message.self_id:
                 return True, "at"
         # check commands which ignore prefix
-        if self.context.command_manager.check_command_ignore_prefix(message.message_str):
+        if await self.context.command_manager.check_command_ignore_prefix(message.message_str):
             return True, "command"
         # check nicks
         if self.check_nick(message.message_str):
@@ -132,7 +132,7 @@ class AIOCQHTTP(Platform):
         logger.info(
             f"{message.sender.nickname}/{message.sender.user_id} -> {self.parse_message_outline(message)}")
         
-        ok, reason = self.pre_check(message)
+        ok, reason = await self.pre_check(message)
         if not ok:
             return
         
@@ -173,6 +173,8 @@ class AIOCQHTTP(Platform):
         # 如果是等待回复的消息
         if message.session_id in self.waiting and self.waiting[message.session_id] == '':
             self.waiting[message.session_id] = message
+            
+        return message_result
 
     
     async def reply_msg(self,
@@ -188,17 +190,18 @@ class AIOCQHTTP(Platform):
             res = [Plain(text=res), ]
             
         # if image mode, put all Plain texts into a new picture.
-        if use_t2i or (use_t2i == None and self.context.config_helper.t2i) and isinstance(result_message, list):
+        if (use_t2i or (use_t2i == None and self.context.config_helper.t2i)) and isinstance(result_message, list):
             rendered_images = await self.convert_to_t2i_chain(res)
             if rendered_images:
                 try:
                     await self._reply(message, rendered_images)
-                    return
+                    return rendered_images
                 except BaseException as e:
                     logger.warn(traceback.format_exc())
                     logger.warn(f"以文本转图片的形式回复消息时发生错误: {e}，将尝试默认方式。")
         
         await self._reply(message, res)
+        return res
             
     async def _reply(self, message: Union[AstrBotMessage, Dict], message_chain: List[BaseMessageComponent]):
         await self.record_metrics()
