@@ -25,11 +25,6 @@ class HelloWorldPlugin:
     def __init__(self, context: Context) -> None:
         self.context = context
         self.context.register_commands("helloworld", "helloworld", "内置测试指令。", 1, self.helloworld)
-        self.context.register_middleware("audio_to_text", self.audio_to_text)
-        
-    async def audio_to_text(self, message: AstrMessageEvent, context: Context):
-        print(message)
-
         
     """
     指令处理函数。

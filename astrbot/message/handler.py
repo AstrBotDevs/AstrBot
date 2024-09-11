@@ -158,7 +158,8 @@ class MessageHandler():
         # middlewares
         for middleware in self.context.middlewares:
             try:
-                await middleware.func(message)
+                logger.info(f"执行中间件 {middleware.origin}/{middleware.name}...")
+                await middleware.func(message, self.context)
             except BaseException as e:
                 logger.error(f"中间件 {middleware.origin}/{middleware.name} 处理消息时发生异常：{e}，跳过。")
                 logger.error(traceback.format_exc())

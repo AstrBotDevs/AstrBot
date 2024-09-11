@@ -4,5 +4,5 @@ from dataclasses import dataclass
 class Middleware():
     name: str = ""
     description: str = ""
+    origin: str = ""  # 注册来源
     func: callable = None
-    origin: str  # 注册来源
