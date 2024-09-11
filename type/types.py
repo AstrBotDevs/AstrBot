@@ -9,6 +9,7 @@ from util.updator.astrbot_updator import AstrBotUpdator
 from util.image_uploader import ImageUploader
 from util.updator.plugin_updator import PluginUpdator
 from type.command import CommandResult
+from type.middleware import Middleware
 from type.astrbot_message import MessageType
 from model.plugin.command import PluginCommandBridge
 from model.provider.provider import Provider
@@ -43,6 +44,7 @@ class Context:
         self.image_uploader = ImageUploader()
         self.message_handler = None # see astrbot/message/handler.py
         self.ext_tasks: List[Task] = []
+        self.middlewares: List[Middleware] = []
         
         self.command_manager = None
         self.running = True
@@ -115,6 +117,14 @@ class Context:
         删除一个函数调用工具。
         '''
         self.message_handler.llm_tools.remove_func(tool_name)
+        
+    def register_middleware(self, middleware: Middleware):
+        '''
+        注册一个中间件。所有的消息事件都会经过中间件处理，然后再进入 LLM 聊天模块。
+        
+        在 AstrBot 中，会对到来的消息事件首先检查指令，然后再检查中间件。触发指令后将不会进入 LLM 聊天模块，而中间件会。
+        '''
+        self.middlewares.append(middleware)
      
     def find_platform(self, platform_name: str) -> RegisteredPlatform:
         for platform in self.platforms:

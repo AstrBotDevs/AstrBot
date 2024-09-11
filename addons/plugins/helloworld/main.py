@@ -1,7 +1,11 @@
 flag_not_support = False
 try:
-    from util.plugin_dev.api.v1.bot import Context, AstrMessageEvent, CommandResult
-    from util.plugin_dev.api.v1.config import *
+    from util.plugin_dev.api.v1 import (
+        Context,
+        CommandResult,
+        AstrMessageEvent,
+        Middleware,
+    )
 except ImportError:
     flag_not_support = True
     print("导入接口失败。请升级到 AstrBot 最新版本。")
@@ -21,12 +25,17 @@ class HelloWorldPlugin:
     def __init__(self, context: Context) -> None:
         self.context = context
         self.context.register_commands("helloworld", "helloworld", "内置测试指令。", 1, self.helloworld)
+        self.context.register_middleware("audio_to_text", self.audio_to_text)
+        
+    async def audio_to_text(self, message: AstrMessageEvent, context: Context):
+        print(message)
 
+        
     """
     指令处理函数。
     
     - 需要接收两个参数：message: AstrMessageEvent, context: Context
     - 返回 CommandResult 对象
     """
-    def helloworld(self, message: AstrMessageEvent, context: Context):
+    async def helloworld(self, message: AstrMessageEvent, context: Context):
         return CommandResult().message("Hello, World!")
