@@ -21,14 +21,6 @@ class HelloWorldPlugin:
     def __init__(self, context: Context) -> None:
         self.context = context
         self.context.register_commands("helloworld", "helloworld", "内置测试指令。", 1, self.helloworld)
-        self.context.register_llm_tool("welcome_somebody", [{
-            "type": "string",
-            "name": "name",
-            "description": "要欢迎的人的名字"
-        }], "给一个用户发送欢迎文本。", self.welcome_somebody)
-        
-    async def welcome_somebody(self, name: str):
-        return CommandResult().message(f"欢迎{name}！")
 
     """
     指令处理函数。
