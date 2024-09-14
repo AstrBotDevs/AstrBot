@@ -6,6 +6,9 @@ from PIL import ImageFont, Image, ImageDraw
 from util.io import save_temp_img
 
 class LocalRenderStrategy(RenderStrategy):
+
+    async def render_custom_template(self, tmpl_str: str, tmpl_data: dict, return_url: bool=True) -> str:
+        raise NotImplementedError
     
     def get_font(self, size: int) -> ImageFont.FreeTypeFont:
         # common and default fonts on Windows, macOS and Linux
