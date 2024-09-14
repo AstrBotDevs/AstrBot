@@ -21,7 +21,9 @@ class TextToImageRenderer:
 
         @example: 参见 https://astrbot.soulter.top 插件开发部分。
         '''
-        await self.network_strategy.render_custom_template(**locals())
+        local = locals()
+        local.pop('self')
+        return await self.network_strategy.render_custom_template(**local)
 
     async def render(self, text: str, use_network: bool = True, return_url: bool = False):
         '''使用默认文转图模板。
