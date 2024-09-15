@@ -43,7 +43,6 @@ class QQNakuru(Platform):
         self.waiting = {}
         self.context = context
         self.unique_session = context.config_helper.platform_settings.unique_session
-        self.announcement = context.config_helper.platform_settings.welcome_message_when_join
         self.config = platform_config
         self.admins = context.config_helper.admins_id
         
@@ -65,13 +64,6 @@ class QQNakuru(Platform):
             if self.config.enable_direct_message:
                 abm = self.convert_message(source)
                 await self.handle_msg(abm)
-
-        @gocq_app.receiver("GroupMemberIncrease")
-        async def _(app: CQHTTP, source: GroupMemberIncrease):
-            if self.config.enable_group_increase:
-                await app.sendGroupMessage(source.group_id, [
-                    Plain(text=self.announcement)
-                ])
 
         @gocq_app.receiver("GuildMessage")
         async def _(app: CQHTTP, source: GuildMessage):

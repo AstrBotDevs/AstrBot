@@ -16,7 +16,6 @@ class RateLimit:
 @dataclass
 class PlatformSettings:
     unique_session: bool = False
-    welcome_message_when_join: str = ""
     rate_limit: RateLimit = field(default_factory=RateLimit)
     reply_prefix: str = ""
     forward_threshold: int = 200
@@ -139,6 +138,9 @@ class AstrBotConfig():
         # compability
         if isinstance(self.wake_prefix, str):
             self.wake_prefix = [self.wake_prefix]
+            
+        if len(self.wake_prefix) == 0:
+            self.wake_prefix.append("/")
         
     def load_from_dict(self, data: Dict):
         '''从字典中加载配置到对象。

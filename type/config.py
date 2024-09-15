@@ -109,7 +109,6 @@ DEFAULT_CONFIG_VERSION_2 = {
     ],
     "platform_settings": {
         "unique_session": False,
-        "welcome_message_when_join": "",
         "rate_limit": {
             "time": 60,
             "count": 30,
@@ -159,7 +158,7 @@ DEFAULT_CONFIG_VERSION_2 = {
             "extra_keywords": [],
         }
     },
-    "wake_prefix": [],
+    "wake_prefix": ["/"],
     "t2i": True,
     "dump_history_interval": 10,
     "admins_id": [],
@@ -191,7 +190,6 @@ MAPPINGS_1_2 = [
     [["aiocqhttp", "ws_reverse_host"], ["platform", 2, "ws_reverse_host"]],
     [["aiocqhttp", "ws_reverse_port"], ["platform", 2, "ws_reverse_port"]],
     [["uniqueSessionMode"], ["platform_settings", "unique_session"]],
-    [["qq_welcome"], ["platform_settings", "welcome_message_when_join"]],
     [["limit", "time"], ["platform_settings", "rate_limit", "time"]],
     [["limit", "count"], ["platform_settings", "rate_limit", "count"]],
     [["reply_prefix"], ["platform_settings", "reply_prefix"]],
@@ -237,28 +235,27 @@ CONFIG_METADATA_2 = {
         "type": "list",
         "items": {
             "name": {"description": "平台名称", "type": "string"},
-            "enable": {"description": "是否启用", "type": "bool"},
-            "appid": {"description": "应用ID", "type": "string"},
-            "secret": {"description": "应用密钥", "type": "string"},
-            "enable_group_c2c": {"description": "启用群C2C", "type": "bool"},
-            "enable_guild_direct_message": {"description": "启用公会直接消息", "type": "bool"},
+            "enable": {"description": "启用", "type": "bool"},
+            "appid": {"description": "appid", "type": "string"},
+            "secret": {"description": "secret", "type": "string"},
+            "enable_group_c2c": {"description": "启用消息列表单聊", "type": "bool"},
+            "enable_guild_direct_message": {"description": "启用频道私聊", "type": "bool"},
             "host": {"description": "主机地址", "type": "string"},
             "port": {"description": "端口", "type": "int"},
-            "websocket_port": {"description": "WebSocket端口", "type": "int"},
-            "ws_reverse_host": {"description": "WebSocket反向主机", "type": "string"},
-            "ws_reverse_port": {"description": "WebSocket反向端口", "type": "int"},
-            "enable_group": {"description": "启用群组", "type": "bool"},
-            "enable_guild": {"description": "启用公会", "type": "bool"},
-            "enable_direct_message": {"description": "启用直接消息", "type": "bool"},
-            "enable_group_increase": {"description": "启用群组增加", "type": "bool"},
+            "websocket_port": {"description": "Websocket 端口", "type": "int"},
+            "ws_reverse_host": {"description": "反向 Websocket 主机地址", "type": "string"},
+            "ws_reverse_port": {"description": "反向 Websocket 端口", "type": "int"},
+            "enable_group": {"description": "接收群组消息", "type": "bool"},
+            "enable_guild": {"description": "接收频道消息", "type": "bool"},
+            "enable_direct_message": {"description": "接收频道私聊", "type": "bool"},
+            "enable_group_increase": {"description": "接收群组成员增加事件", "type": "bool"},
         }
     },
     "platform_settings": {
         "description": "平台设置",
         "type": "object",
         "items": {
-            "unique_session": {"description": "唯一会话", "type": "bool"},
-            "welcome_message_when_join": {"description": "加入时欢迎信息", "type": "string"},
+            "unique_session": {"description": "会话隔离到单个人", "type": "bool"},
             "rate_limit": {
                 "description": "速率限制",
                 "type": "object",
@@ -268,7 +265,7 @@ CONFIG_METADATA_2 = {
                 }
             },
             "reply_prefix": {"description": "回复前缀", "type": "string"},
-            "forward_threshold": {"description": "转发消息的阈值", "type": "int"},
+            "forward_threshold": {"description": "转发消息的字数阈值", "type": "int"},
         }
     },
     "llm": {
@@ -276,11 +273,11 @@ CONFIG_METADATA_2 = {
         "type": "list",
         "items": {
             "name": {"description": "模型名称", "type": "string"},
-            "enable": {"description": "是否启用", "type": "bool"},
-            "key": {"description": "密钥", "type": "list", "items": {"type": "string"}},
-            "api_base": {"description": "API基础URL", "type": "string"},
-            "prompt_prefix": {"description": "提示前缀", "type": "string"},
-            "default_personality": {"description": "默认个性", "type": "string"},
+            "enable": {"description": "启用", "type": "bool"},
+            "key": {"description": "API Key", "type": "list", "items": {"type": "string"}},
+            "api_base": {"description": "API Base URL", "type": "string"},
+            "prompt_prefix": {"description": "Prompt 前缀", "type": "string"},
+            "default_personality": {"description": "默认人格", "type": "string"},
             "model_config": {
                 "description": "模型配置",
                 "type": "object",
@@ -297,7 +294,7 @@ CONFIG_METADATA_2 = {
                 "description": "图像生成模型配置",
                 "type": "object",
                 "items": {
-                    "enable": {"description": "是否启用", "type": "bool"},
+                    "enable": {"description": "启用", "type": "bool"},
                     "model": {"description": "模型名称", "type": "string"},
                     "size": {"description": "图像尺寸", "type": "string"},
                     "style": {"description": "图像风格", "type": "string"},
@@ -311,28 +308,28 @@ CONFIG_METADATA_2 = {
         "type": "object",
         "items": {
             "wake_prefix": {"description": "唤醒前缀", "type": "string"},
-            "web_search": {"description": "启用网络搜索", "type": "bool"},
+            "web_search": {"description": "启用网页搜索", "type": "bool"},
         }
     },
     "content_safety": {
-        "description": "内容安全配置",
+        "description": "内容安全",
         "type": "object",
         "items": {
             "baidu_aip": {
-                "description": "百度AI平台配置",
+                "description": "百度内容审核配置",
                 "type": "object",
                 "items": {
-                    "enable": {"description": "是否启用", "type": "bool"},
-                    "app_id": {"description": "应用ID", "type": "string"},
-                    "api_key": {"description": "API密钥", "type": "string"},
-                    "secret_key": {"description": "秘密密钥", "type": "string"},
+                    "enable": {"description": "启用", "type": "bool"},
+                    "app_id": {"description": "", "type": "string"},
+                    "api_key": {"description": "", "type": "string"},
+                    "secret_key": {"description": "", "type": "string"},
                 }
             },
             "internal_keywords": {
                 "description": "内部关键词过滤",
                 "type": "object",
                 "items": {
-                    "enable": {"description": "是否启用", "type": "bool"},
+                    "enable": {"description": "启用", "type": "bool"},
                     "extra_keywords": {"description": "额外关键词", "type": "list", "items": {"type": "string"}},
                 }
             }
@@ -348,7 +345,7 @@ CONFIG_METADATA_2 = {
         "description": "仪表盘配置",
         "type": "object",
         "items": {
-            "enable": {"description": "是否启用", "type": "bool"},
+            "enable": {"description": "启用", "type": "bool"},
             "username": {"description": "用户名", "type": "string"},
             "password": {"description": "密码", "type": "string"},
         }

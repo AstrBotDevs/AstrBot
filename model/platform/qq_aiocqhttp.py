@@ -29,7 +29,6 @@ class AIOCQHTTP(Platform):
         self.context = context
         self.config = platform_config
         self.unique_session = context.config_helper.platform_settings.unique_session
-        self.announcement = context.config_helper.platform_settings.welcome_message_when_join
         self.host = platform_config.ws_reverse_host
         self.port = platform_config.ws_reverse_port
         self.admins = context.config_helper.admins_id
