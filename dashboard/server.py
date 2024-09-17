@@ -96,7 +96,7 @@ class AstrBotDashBoard():
             # 获得请求体
             post_data = request.json
             if post_data["password"] == password:
-                self.context.config_helper.put("dashboard_password", post_data["new_password"])
+                self.context.config_helper.dashboard.password = post_data['new_password']
                 return Response(
                     status="success",
                     message="修改成功。",
