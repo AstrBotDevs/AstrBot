@@ -124,8 +124,11 @@ class CommandManager():
             else:
                 command_result = handler(message_event, context)
             
-            if not isinstance(command_result, CommandResult):
-                raise ValueError(f"Command {command} handler should return CommandResult.")
+            # if not isinstance(command_result, CommandResult):
+            #     raise ValueError(f"Command {command} handler should return CommandResult.")
+
+            if not command_result:
+                return
             
             context.metrics_uploader.command_stats[command] += 1
             
