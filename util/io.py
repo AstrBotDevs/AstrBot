@@ -47,13 +47,11 @@ def port_checker(port: int, host: str = "localhost"):
     
 
 def save_temp_img(img: Image) -> str:
-    if not os.path.exists("temp"):
-        os.makedirs("temp")
-
+    os.makedirs("data/temp", exist_ok=True)
     # 获得文件创建时间，清除超过1小时的
     try:
-        for f in os.listdir("temp"):
-            path = os.path.join("temp", f)
+        for f in os.listdir("data/temp"):
+            path = os.path.join("data/temp", f)
             if os.path.isfile(path):
                 ctime = os.path.getctime(path)
                 if time.time() - ctime > 3600:
@@ -63,7 +61,7 @@ def save_temp_img(img: Image) -> str:
 
     # 获得时间戳
     timestamp = int(time.time())
-    p = f"temp/{timestamp}.jpg"
+    p = f"data/temp/{timestamp}.jpg"
 
     if isinstance(img, Image.Image):
         img.save(p)

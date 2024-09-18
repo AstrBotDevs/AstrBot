@@ -1,4 +1,4 @@
-import os, psutil, sys, zipfile, shutil, time
+import os, psutil, sys, time
 from util.updator.zip_updator import ReleaseInfo, RepoZipUpdator
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
@@ -65,7 +65,6 @@ class AstrBotUpdator(RepoZipUpdator):
                 raise Exception(f"未找到版本号为 {version} 的更新文件。")
             
         try:
-            # self.download_from_repo_url("temp", file_url)
             download_file(file_url, "temp.zip")
             self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:
@@ -78,40 +77,4 @@ class AstrBotUpdator(RepoZipUpdator):
         '''
         解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir
         '''
-        os.makedirs(target_dir, exist_ok=True)
-        update_dir = ""
-        logger.info(f"解压文件: {zip_path}")
-        with zipfile.ZipFile(zip_path, 'r') as z:
-            update_dir = z.namelist()[0]
-            z.extractall(target_dir)
-
-        avoid_dirs = ["logs", "data", "configs", "temp_plugins", update_dir]
-        # copy addons/plugins to the target_dir temporarily
-        if os.path.exists(os.path.join(target_dir, "addons/plugins")):
-            logger.info("备份插件目录：从 addons/plugins 到 temp_plugins")
-            shutil.copytree(os.path.join(target_dir, "addons/plugins"), "temp_plugins")
-
-        files = os.listdir(os.path.join(target_dir, update_dir))
-        for f in files:
-            logger.info(f"移动更新文件/目录: {f}")
-            if os.path.isdir(os.path.join(target_dir, update_dir, f)):
-                if f in avoid_dirs: continue
-                if os.path.exists(os.path.join(target_dir, f)):
-                    shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
-            else:
-                if os.path.exists(os.path.join(target_dir, f)):
-                    os.remove(os.path.join(target_dir, f))
-            shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
-        
-        # move back
-        if os.path.exists("temp_plugins"):
-            logger.info("恢复插件目录：从 temp_plugins 到 addons/plugins")
-            shutil.rmtree(os.path.join(target_dir, "addons/plugins"), onerror=on_error)
-            shutil.move("temp_plugins", os.path.join(target_dir, "addons/plugins"))
-        
-        try:
-            logger.info(f"删除临时更新文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}")
-            shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
-            os.remove(zip_path)
-        except:
-            logger.warn(f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}")
+        pass

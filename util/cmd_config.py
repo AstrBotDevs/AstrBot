@@ -1,6 +1,8 @@
 import os
 import json
+import shutil
 import logging
+from util.io import on_error
 from type.config import DEFAULT_CONFIG, DEFAULT_CONFIG_VERSION_2, MAPPINGS_1_2
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Optional
@@ -296,3 +298,26 @@ class AstrBotConfig():
 
     def check_exist(self) -> bool:
         return os.path.exists(ASTRBOT_CONFIG_PATH)
+    
+def try_migrate():
+    '''
+    - 将 cmd_config.json 迁移至 data/cmd_config.json (如果存在)
+    - 将 addons/plugins 迁移至 data/plugins (如果存在)
+    '''
+    if os.path.exists("cmd_config.json") and not os.path.exists("data/cmd_config.json"):
+        try:
+            shutil.move("cmd_config.json", "data/cmd_config.json")
+        except:
+            logger.error("迁移 cmd_config.json 失败。")
+
+    if os.path.exists("addons/plugins"):
+        if os.path.exists("data/plugins"):
+            try:
+                shutil.rmtree("data/plugins", onerror=on_error)
+            except:
+                logger.error("删除 data/plugins 失败。")
+        try:
+            shutil.move("addons/plugins", "data/")
+            shutil.rmtree("addons", onerror=on_error)
+        except:
+            logger.error("迁移 addons/plugins 失败。")

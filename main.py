@@ -42,7 +42,8 @@ def check_env():
         exit()
         
     os.makedirs("data/config", exist_ok=True)
-    os.makedirs("temp", exist_ok=True)
+    os.makedirs("data/plugins", exist_ok=True)
+    os.makedirs("data/temp", exist_ok=True)
 
     # workaround for issue #181
     mimetypes.add_type("text/javascript", ".js") 

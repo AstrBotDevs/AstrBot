@@ -24,4 +24,3 @@ class PluginCommandBridge():
         
     def register_command(self, plugin_name, command_name, description, priority, handler, use_regex=False, ignore_prefix=False):
         self.plugin_commands_waitlist.append(CommandRegisterRequest(command_name, description, priority, handler, use_regex, plugin_name, ignore_prefix))
-        

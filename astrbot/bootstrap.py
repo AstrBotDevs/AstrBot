@@ -1,21 +1,20 @@
 import asyncio
 import traceback
+import os
 from astrbot.message.handler import MessageHandler
 from astrbot.persist.helper import dbConn
 from dashboard.server import AstrBotDashBoard
-from model.provider.provider import Provider
 from model.command.manager import CommandManager
 from model.command.internal_handler import InternalCommandHandler
 from model.plugin.manager import PluginManager
 from model.platform.manager import PlatformManager
-from typing import Dict, List, Union
+from typing import Union
 from type.types import Context
 from type.config import VERSION
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
-from util.cmd_config import AstrBotConfig
+from util.cmd_config import AstrBotConfig, try_migrate
 from util.metrics import MetricUploader
-from util.config_utils import *
 from util.updator.astrbot_updator import AstrBotUpdator
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
@@ -26,7 +25,7 @@ class AstrBotBootstrap():
         self.context = Context()
         
         # load configs and ensure the backward compatibility
-        try_migrate_config()
+        try_migrate()
         self.config_helper = AstrBotConfig()
         self.context.config_helper = self.config_helper
         logger.info("AstrBot v" + VERSION)

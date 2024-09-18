@@ -19,23 +19,23 @@ class InternalCommandHandler:
         self.plugin_manager = plugin_manager
         
         self.manager.register("help", "查看帮助", 10, self.help)
-        self.manager.register("wake", "设置机器人唤醒词", 10, self.set_nick)
-        self.manager.register("update", "更新 AstrBot", 10, self.update)
+        self.manager.register("wake", "唤醒前缀", 10, self.set_nick)
+        self.manager.register("update", "更新管理", 10, self.update)
         self.manager.register("plugin", "插件管理", 10, self.plugin)
         self.manager.register("reboot", "重启 AstrBot", 10, self.reboot)
-        self.manager.register("websearch", "网页搜索开关", 10, self.web_search)
-        self.manager.register("t2i", "文本转图片开关", 10, self.t2i_toggle)
-        self.manager.register("myid", "获取你在此平台上的ID", 10, self.myid)
-        self.manager.register("provider", "查看和切换当前使用的 LLM 资源来源", 10, self.provider)
+        self.manager.register("websearch", "网页搜索", 10, self.web_search)
+        self.manager.register("t2i", "文转图", 10, self.t2i_toggle)
+        self.manager.register("myid", "用户ID", 10, self.myid)
+        self.manager.register("provider", "LLM 接入源", 10, self.provider)
         
     def provider(self, message: AstrMessageEvent, context: Context):
         if len(context.llms) == 0:
-            return CommandResult().message("当前没有加载任何 LLM 资源。")
+            return CommandResult().message("当前没有加载任何 LLM 接入源。")
 
         tokens = self.manager.command_parser.parse(message.message_str)
         
         if tokens.len == 1:
-            ret = "## 当前载入的 LLM 资源\n"
+            ret = "## 当前载入的 LLM 接入源\n"
             for idx, llm in enumerate(context.llms):
                 ret += f"{idx}. {llm.llm_name}"
                 if llm.origin:
@@ -44,7 +44,7 @@ class InternalCommandHandler:
                     ret += " (当前使用)"
                 ret += "\n"
             
-            ret += "\n使用 provider <序号> 切换 LLM 资源。" 
+            ret += "\n使用 provider <序号> 切换 LLM 接入源。" 
             return CommandResult().message(ret)
         else:
             try:
@@ -52,7 +52,7 @@ class InternalCommandHandler:
                 if idx >= len(context.llms):
                     return CommandResult().message("provider: 无效的序号。")
                 context.message_handler.set_provider(context.llms[idx].llm_instance)
-                return CommandResult().message(f"已经成功切换到 LLM 资源 {context.llms[idx].llm_name}。")
+                return CommandResult().message(f"已经成功切换到 LLM 接入源 {context.llms[idx].llm_name}。")
             except BaseException as e:
                 return CommandResult().message("provider: 参数错误。")
 
@@ -71,7 +71,7 @@ class InternalCommandHandler:
         return CommandResult(
             hit=True,
             success=True,
-            message_chain=f"已经成功将唤醒词设定为 {nick}。",
+            message_chain=f"已经成功将唤醒前缀设定为 {nick}。",
         )
         
     def update(self, message: AstrMessageEvent, context: Context):
@@ -280,5 +280,5 @@ class InternalCommandHandler:
             return CommandResult(
                 hit=True,
                 success=False,
-                message_chain=f"在 {message.platform} 上获取你的ID失败，原因: {str(e)}",
+                message_chain=f"获取失败，原因: {str(e)}",
             )

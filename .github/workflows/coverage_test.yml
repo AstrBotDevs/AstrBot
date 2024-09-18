@@ -22,6 +22,7 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov pytest-asyncio
           mkdir data
+          mkdir data/plugins
           mkdir data/config
           mkdir temp
 

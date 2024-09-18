@@ -228,8 +228,7 @@ class AstrBotDashBoard():
                 file = request.files['file']
                 print(file.filename)
                 logger.info(f"正在安装用户上传的插件 {file.filename}")
-                # save file to temp/
-                file_path = f"temp/{uuid.uuid4()}.zip"
+                file_path = f"data/temp/{uuid.uuid4()}.zip"
                 file.save(file_path)
                 self.plugin_manager.install_plugin_from_file(file_path)
                 logger.info(f"安装插件 {file.filename} 成功")

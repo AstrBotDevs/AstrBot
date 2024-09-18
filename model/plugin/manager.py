@@ -184,7 +184,7 @@ class PluginManager():
 
                 self.check_plugin_dept_update(target_plugin=root_dir_name)
 
-                module = __import__("addons.plugins." +
+                module = __import__("data.plugins." +
                                         root_dir_name + "." + p, fromlist=[p])
 
                 cls = self.get_classes(module)
