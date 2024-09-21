@@ -15,29 +15,48 @@ class DashBoardHelper():
         self.context = context
         self.config_key_dont_show = ['dashboard', 'config_version']
 
+    def try_cast(self, value: str, type_: str):
+        if type_ == "int" and value.isdigit():
+            return int(value)
+        elif type_ == "float" and isinstance(value, str) \
+            and value.replace(".", "", 1).isdigit():
+            return float(value)
+        elif type_ == "float" and isinstance(value, int):
+            return float(value)
+            
+
     def validate_config(self, data):
         errors = []
-        # 递归验证数据
-        def validate(data, path=""):
-            for key, meta in CONFIG_METADATA_2.items():
+        def validate(data, metadata=CONFIG_METADATA_2, path=""):
+            for key, meta in metadata.items():
                 if key not in data:
-                    if key not in self.config_key_dont_show:
-                        # 这些key不会传给前端，所以不需要验证
-                        errors.append(f"Missing key: {path}{key}")
                     continue
                 value = data[key]
-                if meta["type"] == "int" and not isinstance(value, int):
-                    errors.append(f"Invalid type for {path}{key}: expected int, got {type(value).__name__}")
-                elif meta["type"] == "bool" and not isinstance(value, bool):
-                    errors.append(f"Invalid type for {path}{key}: expected bool, got {type(value).__name__}")
-                elif meta["type"] == "string" and not isinstance(value, str):
-                    errors.append(f"Invalid type for {path}{key}: expected string, got {type(value).__name__}")
-                elif meta["type"] == "list" and not isinstance(value, list):
-                    errors.append(f"Invalid type for {path}{key}: expected list, got {type(value).__name__}")
+                # 递归验证
+                if meta["type"] == "list" and isinstance(value, list):
                     for item in value:
                         validate(item, meta["items"], path=f"{path}{key}.")
-                elif meta["type"] == "dict" and not isinstance(value, dict):
-                    errors.append(f"Invalid type for {path}{key}: expected dict, got {type(value).__name__}")
+                elif meta["type"] == "object" and isinstance(value, dict):
+                    validate(value, meta["items"], path=f"{path}{key}.")
+
+                if meta["type"] == "int" and not isinstance(value, int):
+                    casted = self.try_cast(value, "int")
+                    if casted is None:
+                        errors.append(f"错误的类型 {path}{key}: 期望是 int, 得到了 {type(value).__name__}")
+                    data[key] = casted
+                elif meta["type"] == "float" and not isinstance(value, float):
+                    casted = self.try_cast(value, "float")
+                    if casted is None:
+                        errors.append(f"错误的类型 {path}{key}: 期望是 float, 得到了 {type(value).__name__}")
+                    data[key] = casted
+                elif meta["type"] == "bool" and not isinstance(value, bool):
+                    errors.append(f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}")
+                elif meta["type"] == "string" and not isinstance(value, str):
+                    errors.append(f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}")
+                elif meta["type"] == "list" and not isinstance(value, list):
+                    errors.append(f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}")
+                elif meta["type"] == "object" and not isinstance(value, dict):
+                    errors.append(f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}")
                     validate(value, meta["items"], path=f"{path}{key}.")
         validate(data)
         
@@ -68,6 +87,6 @@ class DashBoardHelper():
             typ = item['val_type']
             if typ == 'int':
                 if not value.isdigit():
-                    raise ValueError(f"Invalid type for {namespace}.{key}: expected int, got {type(value).__name__}")
+                    raise ValueError(f"错误的类型 {namespace}.{key}: 期望是 int, 得到了 {type(value).__name__}")
                 value = int(value)
             update_config(namespace, key, value)
