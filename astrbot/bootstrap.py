@@ -65,6 +65,11 @@ class AstrBotBootstrap():
         self.context.plugin_updator = self.plugin_manager.updator
         self.context.message_handler = self.message_handler
         self.context.command_manager = self.command_manager
+
+
+        # load dashboard
+        self.dashboard.run_http_server()
+        dashboard_task = asyncio.create_task(self.dashboard.ws_server(), name="dashboard")
         
         if self.test_mode:
             return
@@ -77,9 +82,7 @@ class AstrBotBootstrap():
         platform_tasks = self.load_platform()
         # load metrics uploader
         metrics_upload_task = asyncio.create_task(self.metrics_uploader.upload_metrics(), name="metrics-uploader")
-        # load dashboard
-        self.dashboard.run_http_server()
-        dashboard_task = asyncio.create_task(self.dashboard.ws_server(), name="dashboard")
+        
         tasks = [metrics_upload_task, dashboard_task, *platform_tasks, *self.context.ext_tasks]
         tasks = [self.handle_task(task) for task in tasks]
         await asyncio.gather(*tasks)

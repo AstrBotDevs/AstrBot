@@ -31,6 +31,9 @@ class AstrBotUpdator(RepoZipUpdator):
             pass
     
     def _reboot(self, delay: int = None, context = None):
+        if os.environ.get('TEST_MODE', 'off') == 'on':
+            logger.info("测试模式下不会重启。")
+            return
         # if delay: time.sleep(delay)
         py = sys.executable
         context.running = False

@@ -109,7 +109,7 @@ class RepoZipUpdator():
         releases = await self.fetch_release_info(url=release_url)
         if not releases:
             # download from the default branch directly. 
-            logger.warn(f"未在仓库 {author}/{repo} 中找到任何发布版本，将从默认分支下载。")
+            logger.warning(f"未在仓库 {author}/{repo} 中找到任何发布版本，将从默认分支下载。")
             release_url = f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
         else:
             release_url = releases[0]['zipball_url']
