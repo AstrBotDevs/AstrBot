@@ -157,7 +157,7 @@ class InternalCommandHandler:
                 return CommandResult().message("plugin u: 请指定要更新的插件名。")
             plugin_name = tokens.get(2)
             try:
-                await context.updator.update(plugin_name)
+                await context.plugin_updator.update(plugin_name)
             except BaseException as e:
                 return CommandResult().message(f"plugin u: 更新插件失败。原因：{str(e)}")
             return CommandResult().message(f"plugin u: 已经成功更新插件 {plugin_name}。")
