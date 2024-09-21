@@ -135,7 +135,17 @@ class TestInteralCommandHsandle():
             abm = self.create("/t2i")
             await aiocqhttp.handle_msg(abm)
         await self.fast_test("/help")
-        
+
+    @pytest.mark.asyncio
+    async def test_plugin(self):
+        pname = "astrbot_plugin_bilibili"
+        url = f"https://github.com/Soulter/{pname}"
+        await self.fast_test("/plugin")
+        await self.fast_test(f"/plugin l")
+        await self.fast_test(f"/plugin i {url}")
+        await self.fast_test(f"/plugin u {url}")
+        await self.fast_test(f"/plugin d {pname}")
+
 class TestLLMChat():
     @pytest.mark.asyncio
     async def test_llm_chat(self):

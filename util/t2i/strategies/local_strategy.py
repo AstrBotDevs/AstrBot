@@ -1,5 +1,6 @@
 import re
-import requests
+import aiohttp
+from io import BytesIO
 
 from .base_strategy import RenderStrategy
 from PIL import ImageFont, Image, ImageDraw
@@ -82,8 +83,9 @@ class LocalRenderStrategy(RenderStrategy):
                 try:
                     image_url = re.findall(IMAGE_REGEX, line)[0]
                     print(image_url)
-                    image_res = Image.open(requests.get(
-                        image_url, stream=True, timeout=5).raw)
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(image_url) as resp:
+                            image_res = Image.open(BytesIO(await resp.read()))
                     images[i] = image_res
                     # 最大不得超过image_width的50%
                     img_height = image_res.size[1]

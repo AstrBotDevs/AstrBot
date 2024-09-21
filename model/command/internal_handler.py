@@ -1,4 +1,4 @@
-import aiohttp
+import aiohttp, os
 
 from model.command.manager import CommandManager
 from model.plugin.manager import PluginManager
@@ -27,6 +27,13 @@ class InternalCommandHandler:
         self.manager.register("t2i", "文转图", 10, self.t2i_toggle)
         self.manager.register("myid", "用户ID", 10, self.myid)
         self.manager.register("provider", "LLM 接入源", 10, self.provider)
+
+    def _check_auth(self, message: AstrMessageEvent, context: Context):
+        if os.environ.get("TEST_MODE", "off") == "on":
+            return
+        if message.role != "admin":
+            user_id = message.message_obj.sender.user_id
+            raise Exception(f"用户(ID: {user_id}) 没有足够的权限使用该指令。")
         
     def provider(self, message: AstrMessageEvent, context: Context):
         if len(context.llms) == 0:
@@ -57,9 +64,8 @@ class InternalCommandHandler:
                 return CommandResult().message("provider: 参数错误。")
 
     def set_nick(self, message: AstrMessageEvent, context: Context):
+        self._check_auth(message, context)
         message_str = message.message_str
-        if message.role != "admin":
-            return CommandResult().message("你没有权限使用该指令。")
         l = message_str.split(" ")
         if len(l) == 1:
             return CommandResult().message(f"设置机器人唤醒词。以唤醒词开头的消息会唤醒机器人处理，起到 @ 的效果。\n示例：wake 昵称。当前唤醒词是：{context.config_helper.wake_prefix[0]}")
@@ -74,15 +80,10 @@ class InternalCommandHandler:
             message_chain=f"已经成功将唤醒前缀设定为 {nick}。",
         )
         
-    def update(self, message: AstrMessageEvent, context: Context):
+    async def update(self, message: AstrMessageEvent, context: Context):
+        self._check_auth(message, context)
         tokens = self.manager.command_parser.parse(message.message_str)
-        if message.role != "admin":
-            return CommandResult(
-                hit=True,
-                success=False,
-                message_chain="你没有权限使用该指令",
-            )
-        update_info = context.updator.check_update(None, None)
+        update_info = await context.updator.check_update(None, None)
         if tokens.len == 1:
             ret = ""
             if not update_info:
@@ -93,13 +94,13 @@ class InternalCommandHandler:
         else:
             if tokens.get(1) == "latest":
                 try:
-                    context.updator.update()
+                    await context.updator.update()
                     return CommandResult().message(f"已经成功更新到最新版本 v{update_info.version}。要应用更新，请重启 AstrBot。输入 /reboot 即可重启")
                 except BaseException as e:
                     return CommandResult().message(f"更新失败。原因：{str(e)}")
             elif tokens.get(1).startswith("v"):
                 try:
-                    context.updator.update(version=tokens.get(1))
+                    await context.updator.update(version=tokens.get(1))
                     return CommandResult().message(f"已经成功更新到版本 v{tokens.get(1)}。要应用更新，请重启 AstrBot。输入 /reboot 即可重启")
                 except BaseException as e:
                     return CommandResult().message(f"更新失败。原因：{str(e)}")
@@ -107,12 +108,7 @@ class InternalCommandHandler:
                 return CommandResult().message("update: 参数错误。")
             
     def reboot(self, message: AstrMessageEvent, context: Context):
-        if message.role != "admin":
-            return CommandResult(
-                hit=True,
-                success=False,
-                message_chain="你没有权限使用该指令",
-            )
+        self._check_auth(message, context)
         context.updator._reboot(3, context)
         return CommandResult(
             hit=True,
@@ -120,7 +116,7 @@ class InternalCommandHandler:
             message_chain="AstrBot 将在 3s 后重启。",
         )
     
-    def plugin(self, message: AstrMessageEvent, context: Context):
+    async def plugin(self, message: AstrMessageEvent, context: Context):
         tokens = self.manager.command_parser.parse(message.message_str)
         if tokens.len == 1:
             ret = "# 插件指令面板 \n- 安装插件: `plugin i 插件Github地址`\n- 卸载插件: `plugin d 插件名`\n- 查看插件列表：`plugin l`\n - 更新插件: `plugin u 插件名`\n"
@@ -133,10 +129,10 @@ class InternalCommandHandler:
             if plugin_list_info.strip() == "":
                 return CommandResult().message("plugin v: 没有找到插件。")
             return CommandResult().message(plugin_list_info)
+
+        self._check_auth(message, context)
         
-        elif tokens.get(1) == "d":
-            if message.role != "admin":
-                return CommandResult().message("plugin d: 你没有权限使用该指令。")
+        if tokens.get(1) == "d":
             if tokens.len == 2:
                 return CommandResult().message("plugin d: 请指定要卸载的插件名。")
             plugin_name = tokens.get(2)
@@ -147,25 +143,21 @@ class InternalCommandHandler:
             return CommandResult().message(f"plugin d: 已经成功卸载插件 {plugin_name}。")
         
         elif tokens.get(1) == "i":
-            if message.role != "admin":
-                return CommandResult().message("plugin i: 你没有权限使用该指令。")
             if tokens.len == 2:
                 return CommandResult().message("plugin i: 请指定要安装的插件的 Github 地址，或者前往可视化面板安装。")
             plugin_url = tokens.get(2)
             try:
-                self.plugin_manager.install_plugin(plugin_url)
+                await self.plugin_manager.install_plugin(plugin_url)
             except BaseException as e:
                 return CommandResult().message(f"plugin i: 安装插件失败。原因：{str(e)}")
             return CommandResult().message("plugin i: 已经成功安装插件。")
         
         elif tokens.get(1) == "u":
-            if message.role != "admin":
-                return CommandResult().message("plugin u: 你没有权限使用该指令。")
             if tokens.len == 2:
                 return CommandResult().message("plugin u: 请指定要更新的插件名。")
             plugin_name = tokens.get(2)
             try:
-                self.plugin_manager.update_plugin(plugin_name)
+                await context.updator.update(plugin_name)
             except BaseException as e:
                 return CommandResult().message(f"plugin u: 更新插件失败。原因：{str(e)}")
             return CommandResult().message(f"plugin u: 已经成功更新插件 {plugin_name}。")

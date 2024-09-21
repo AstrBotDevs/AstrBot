@@ -206,7 +206,8 @@ class AstrBotDashBoard():
             repo_url = post_data["url"]
             try:
                 logger.info(f"正在安装插件 {repo_url}")
-                self.plugin_manager.install_plugin(repo_url)
+                # self.plugin_manager.install_plugin(repo_url)
+                asyncio.run_coroutine_threadsafe(self.plugin_manager.install_plugin(repo_url), self.loop).result()
                 threading.Thread(target=self.astrbot_updator._reboot, args=(2, self.context)).start()
                 logger.info(f"安装插件 {repo_url} 成功，2秒后重启")
                 return Response(
@@ -272,7 +273,8 @@ class AstrBotDashBoard():
             plugin_name = post_data["name"]
             try:
                 logger.info(f"正在更新插件 {plugin_name}")
-                self.plugin_manager.update_plugin(plugin_name)
+                # self.plugin_manager.update_plugin(plugin_name)
+                asyncio.run_coroutine_threadsafe(self.plugin_manager.update_plugin(plugin_name), self.loop).result()
                 threading.Thread(target=self.astrbot_updator._reboot, args=(2, self.context)).start()
                 logger.info(f"更新插件 {plugin_name} 成功，2秒后重启")
                 return Response(
@@ -301,7 +303,9 @@ class AstrBotDashBoard():
         @self.dashboard_be.get("/api/check_update")
         def get_update_info():
             try:
-                ret = self.astrbot_updator.check_update(None, None)
+                # ret = self.astrbot_updator.check_update(None, None)
+                ret = asyncio.run_coroutine_threadsafe(
+                    self.astrbot_updator.check_update(None, None), self.loop).result()
                 return Response(
                     status="success",
                     message=str(ret) if ret is not None else "已经是最新版本了。",
@@ -326,7 +330,8 @@ class AstrBotDashBoard():
             else:
                 latest = False
             try:
-                self.astrbot_updator.update(latest=latest, version=version)
+                # await self.astrbot_updator.update(latest=latest, version=version)
+                asyncio.run_coroutine_threadsafe(self.astrbot_updator.update(latest=latest, version=version), self.loop).result()
                 threading.Thread(target=self.astrbot_updator._reboot, args=(2, self.context)).start()
                 return Response(
                     status="success",

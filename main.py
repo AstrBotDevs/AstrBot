@@ -27,6 +27,8 @@ def main():
         # delete qqbotpy's logger
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
+        
+        logger.info(logo_tmpl)
 
         bootstrap = AstrBotBootstrap() 
         asyncio.run(bootstrap.run())
@@ -58,5 +60,4 @@ if __name__ == "__main__":
         out_to_console=True,
         custom_formatter=Formatter('[%(asctime)s| %(name)s - %(levelname)s|%(filename)s:%(lineno)d]: %(message)s', datefmt="%H:%M:%S")
     )
-    logger.info(logo_tmpl)
     main()

@@ -1,4 +1,4 @@
-import requests, os, zipfile, shutil
+import aiohttp, os, zipfile, shutil
 from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from util.io import on_error, download_file
@@ -23,14 +23,15 @@ class RepoZipUpdator():
         self.path = path
         self.rm_on_error = on_error
             
-    def fetch_release_info(self, url: str, latest: bool = True) -> list:
+    async def fetch_release_info(self, url: str, latest: bool = True) -> list:
         '''
         请求版本信息。
         返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         '''
-        result = requests.get(url).json()
-        
         try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    result = await response.json()
             if not result: return []
             if latest:
                 ret = self.github_api_release_parser([result[0]])
@@ -66,7 +67,7 @@ class RepoZipUpdator():
     def unzip(self):
         raise NotImplementedError()
     
-    def update(self):
+    async def update(self):
         raise NotImplementedError()
     
     def compare_version(self, v1: str, v2: str) -> int:
@@ -86,8 +87,8 @@ class RepoZipUpdator():
                 return -1
         return 0
     
-    def check_update(self, url: str, current_version: str) -> ReleaseInfo:
-        update_data = self.fetch_release_info(url)
+    async def check_update(self, url: str, current_version: str) -> ReleaseInfo:
+        update_data = await self.fetch_release_info(url)
         tag_name = update_data[0]['tag_name']
         
         if self.compare_version(current_version, tag_name) >= 0:
@@ -98,14 +99,14 @@ class RepoZipUpdator():
             body=update_data[0]['body']
         )
         
-    def download_from_repo_url(self, target_path: str, repo_url: str):
+    async def download_from_repo_url(self, target_path: str, repo_url: str):
         repo_namespace = repo_url.split("/")[-2:]
         author = repo_namespace[0]
         repo = repo_namespace[1]
 
         logger.info(f"正在下载更新 {repo} ...")
         release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
-        releases = self.fetch_release_info(url=release_url)
+        releases = await self.fetch_release_info(url=release_url)
         if not releases:
             # download from the default branch directly. 
             logger.warn(f"未在仓库 {author}/{repo} 中找到任何发布版本，将从默认分支下载。")
@@ -113,7 +114,7 @@ class RepoZipUpdator():
         else:
             release_url = releases[0]['zipball_url']
 
-        download_file(release_url, target_path + ".zip")
+        await download_file(release_url, target_path + ".zip")
         
         
     def unzip_file(self, zip_path: str, target_dir: str):

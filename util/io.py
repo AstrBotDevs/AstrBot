@@ -4,7 +4,6 @@ import shutil
 import socket
 import time
 import aiohttp
-import requests
 
 from PIL import Image
 from SparkleLogging.utils.core import LogManager
@@ -99,16 +98,20 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
     except Exception as e:
         raise e
     
-def download_file(url: str, path: str):
+async def download_file(url: str, path: str):
     '''
     从指定 url 下载文件到指定路径 path
     '''
     try:
         logger.info(f"下载文件: {url}")
-        with requests.get(url, stream=True) as r:
-            with open(path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                with open(path, 'wb') as f:
+                    while True:
+                        chunk = await resp.content.read(8192)
+                        if not chunk:
+                            break
+                        f.write(chunk)
     except Exception as e:
         raise e
 

@@ -107,13 +107,13 @@ class PluginManager():
         rc = process.poll()
         
         
-    def install_plugin(self, repo_url: str):
+    async def install_plugin(self, repo_url: str):
         ppath = self.plugin_store_path
 
         # we no longer use Git anymore :)
         # Repo.clone_from(repo_url, to_path=plugin_path, branch='master')
         
-        plugin_path = self.updator.update(repo_url)
+        plugin_path = await self.updator.update(repo_url)
         with open(os.path.join(plugin_path, "REPO"), "w", encoding='utf-8') as f:
             f.write(repo_url)
             
@@ -124,14 +124,14 @@ class PluginManager():
         # if not ok:
         #     raise Exception(err)
         
-    def download_from_repo_url(self, target_path: str, repo_url: str):
+    async def download_from_repo_url(self, target_path: str, repo_url: str):
         repo_namespace = repo_url.split("/")[-2:]
         author = repo_namespace[0]
         repo = repo_namespace[1]
 
         logger.info(f"正在下载插件 {repo} ...")
         release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
-        releases = self.updator.fetch_release_info(url=release_url)
+        releases = await self.updator.fetch_release_info(url=release_url)
         if not releases:
             # download from the default branch directly. 
             logger.warn(f"未在插件 {author}/{repo} 中找到任何发布版本，将从默认分支下载。")
@@ -139,7 +139,7 @@ class PluginManager():
         else:
             release_url = releases[0]['zipball_url']
 
-        download_file(release_url, target_path + ".zip")
+        await download_file(release_url, target_path + ".zip")
 
     def get_registered_plugin(self, plugin_name: str) -> RegisteredPlugin:
         for p in self.context.cached_plugins:
@@ -156,12 +156,12 @@ class PluginManager():
         if not remove_dir(os.path.join(ppath, root_dir_name)):
             raise Exception("移除插件成功，但是删除插件文件夹失败。您可以手动删除该文件夹，位于 addons/plugins/ 下。")
 
-    def update_plugin(self, plugin_name: str):
+    async def update_plugin(self, plugin_name: str):
         plugin = self.get_registered_plugin(plugin_name)
         if not plugin:
             raise Exception("插件不存在。")
         
-        self.updator.update(plugin)
+        await self.updator.update(plugin)
         
     def plugin_reload(self):
         cached_plugins = self.context.cached_plugins

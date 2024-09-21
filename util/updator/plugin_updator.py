@@ -18,7 +18,7 @@ class PluginUpdator(RepoZipUpdator):
     def get_plugin_store_path(self) -> str:
         return self.plugin_store_path
 
-    def update(self, plugin: Union[RegisteredPlugin, str]) -> str:
+    async def update(self, plugin: Union[RegisteredPlugin, str]) -> str:
         repo_url = None
         
         if not isinstance(plugin, str):
@@ -33,7 +33,7 @@ class PluginUpdator(RepoZipUpdator):
             plugin_path = os.path.join(self.plugin_store_path, self.format_repo_name(repo_url))
             
         logger.info(f"正在更新插件，路径: {plugin_path}，仓库地址: {repo_url}")
-        self.download_from_repo_url(plugin_path, repo_url)
+        await self.download_from_repo_url(plugin_path, repo_url)
         
         try:
             remove_dir(plugin_path)

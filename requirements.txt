@@ -1,6 +1,5 @@
 pydantic~=1.10.4
 aiohttp
-requests
 openai
 qq-botpy
 chardet~=5.1.0
@@ -10,7 +9,6 @@ beautifulsoup4
 googlesearch-python
 tiktoken
 readability-lxml
-baidu-aip
 websockets
 flask
 psutil

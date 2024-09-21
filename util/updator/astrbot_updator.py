@@ -43,11 +43,11 @@ class AstrBotUpdator(RepoZipUpdator):
             logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
             raise e
         
-    def check_update(self, url: str, current_version: str) -> ReleaseInfo:
-        return super().check_update(self.ASTRBOT_RELEASE_API, VERSION)
+    async def check_update(self, url: str, current_version: str) -> ReleaseInfo:
+        return await super().check_update(self.ASTRBOT_RELEASE_API, VERSION)
         
-    def update(self, reboot = False, latest = True, version = None):
-        update_data = self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
+    async def update(self, reboot = False, latest = True, version = None):
+        update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
         
         if latest:
@@ -65,7 +65,7 @@ class AstrBotUpdator(RepoZipUpdator):
                 raise Exception(f"未找到版本号为 {version} 的更新文件。")
             
         try:
-            download_file(file_url, "temp.zip")
+            await download_file(file_url, "temp.zip")
             self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:
             raise e

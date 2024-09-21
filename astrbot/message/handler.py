@@ -60,6 +60,9 @@ class ContentSafetyHelper():
                 from astrbot.message.baidu_aip_judge import BaiduJudge
                 self.baidu_judge = BaiduJudge(aip)
                 logger.info("已启用百度 AI 内容审核。")
+            except ImportError as e:
+                logger.error("检测到库依赖不完整，将不会启用百度 AI 内容审核。请先使用 pip 安装 `baidu_aip` 包。")
+                logger.error(e)
             except BaseException as e:
                 logger.error("百度 AI 内容审核初始化失败。")
                 logger.error(e)

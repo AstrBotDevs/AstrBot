@@ -1,5 +1,5 @@
 import asyncio
-import requests
+import aiohttp
 import json
 import sys
 
@@ -57,8 +57,9 @@ class MetricUploader():
                     "command_stats": self.command_stats,
                     "sys": sys.platform, # 系统版本
                 }
-                resp = requests.post(
-                    'https://api.soulter.top/upload', data=json.dumps(res), timeout=5)
+                async with aiohttp.ClientSession() as session:
+                    async with session.post('https://api.soulter.top/upload', data=json.dumps(res), timeout=5) as resp:
+                        pass
                 if resp.status_code == 200:
                     ok = resp.json()
                     if ok['status'] == 'ok':
