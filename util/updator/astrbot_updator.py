@@ -75,9 +75,3 @@ class AstrBotUpdator(RepoZipUpdator):
         
         if reboot:
             self._reboot()
-            
-    def unzip_file(self, zip_path: str, target_dir: str):
-        '''
-        解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir
-        '''
-        pass
