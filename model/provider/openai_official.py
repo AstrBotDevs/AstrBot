@@ -15,7 +15,7 @@ from util.io import download_image_by_url
 from astrbot.persist.helper import dbConn
 from model.provider.provider import Provider
 from util.cmd_config import LLMConfig
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from typing import List, Dict
 

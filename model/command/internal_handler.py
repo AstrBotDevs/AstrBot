@@ -6,7 +6,7 @@ from type.message_event import AstrMessageEvent
 from type.command import CommandResult
 from type.types import Context
 from type.config import VERSION
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from util.agent.web_searcher import search_from_bing, fetch_website_content
 

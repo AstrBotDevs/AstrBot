@@ -169,6 +169,7 @@ DEFAULT_CONFIG_VERSION_2 = {
         "username": "",
         "password": "",
     },
+    "log_level": "INFO",
 }
 
 # 这个是用于迁移旧版本配置文件的映射表
@@ -350,4 +351,5 @@ CONFIG_METADATA_2 = {
             "password": {"description": "密码", "type": "string"},
         }
     },
+    "log_level": {"description": "控制台日志级别(DEBUG, INFO, WARNING, ERROR)", "type": "string"},
 }

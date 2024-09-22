@@ -13,7 +13,7 @@ from types import ModuleType
 from type.types import Context
 from type.plugin import *
 from type.register import *
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')

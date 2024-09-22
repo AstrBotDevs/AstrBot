@@ -9,7 +9,7 @@ from type.command import CommandResult
 from type.register import RegisteredPlugins
 from model.command.parser import CommandParser
 from model.plugin.command import PluginCommandBridge
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from dataclasses import dataclass
 

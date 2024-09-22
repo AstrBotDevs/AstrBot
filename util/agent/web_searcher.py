@@ -12,7 +12,7 @@ from util.websearch.bing import Bing
 from util.websearch.sogo import Sogo
 from util.websearch.google import Google
 from model.provider.provider import Provider
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from type.types import Context
 from type.message_event import AstrMessageEvent

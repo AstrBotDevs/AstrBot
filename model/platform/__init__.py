@@ -40,14 +40,18 @@ class Platform():
         '''
         pass
 
-    def parse_message_outline(self, message: AstrBotMessage) -> str:
+    def parse_message_outline(self, message: Union[AstrBotMessage, list]) -> str:
         '''
         将消息解析成大纲消息形式，如: xxxxx[图片]xxxxx。用于输出日志等。
         '''
-        if isinstance(message, str):
-            return message
         ret = ''
-        parsed = message if isinstance(message, list) else message.message
+        if isinstance(message, list):
+            parsed = message
+        elif isinstance(message, AstrBotMessage):
+            parsed = message.message
+        elif isinstance(message, str):
+            return message
+        
         try:
             for node in parsed:
                 if isinstance(node, Plain):

@@ -4,7 +4,7 @@ from util.updator.zip_updator import RepoZipUpdator
 from util.io import remove_dir
 from type.register import RegisteredPlugin
 from typing import Union
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from util.io import on_error
 

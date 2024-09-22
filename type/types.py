@@ -13,7 +13,7 @@ from type.middleware import Middleware
 from type.astrbot_message import MessageType
 from model.plugin.command import PluginCommandBridge
 from model.provider.provider import Provider
-from util.agent.func_call import FuncCall
+from type.cached_queue import CachedQueue
 
 
 class Context:
@@ -48,6 +48,8 @@ class Context:
         
         self.command_manager = None
         self.running = True
+
+        self._log_queue = CachedQueue()
 
         # useless
         # self.reply_prefix = ""

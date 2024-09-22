@@ -15,7 +15,7 @@ from . import Platform
 from type.astrbot_message import *
 from type.message_event import *
 from type.command import *
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from astrbot.message.handler import MessageHandler
 from util.cmd_config import PlatformConfig, NakuruPlatformConfig
@@ -171,7 +171,7 @@ class QQNakuru(Platform):
                 (GroupMessage, FriendMessage, GuildMessage))
 
         logger.info(
-            f"{source.user_id} <- {self.parse_message_outline(res)}")
+            f"{message.sender.nickname}/{message.sender.user_id} <- {self.parse_message_outline(res)}")
 
         if isinstance(res, str):
             res = [Plain(text=res), ]

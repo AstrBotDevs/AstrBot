@@ -11,16 +11,11 @@ from model.platform.qq_aiocqhttp import AIOCQHTTP
 from model.provider.openai_official import ProviderOpenAIOfficial
 from type.astrbot_message import *
 from type.message_event import *
-from SparkleLogging.utils.core import LogManager
-from logging import Formatter
+from util.log import LogManager
 
 from util.cmd_config import QQOfficialPlatformConfig, AiocqhttpPlatformConfig
 
-logger = LogManager.GetLogger(
-log_name='astrbot',
-    out_to_console=True,
-    custom_formatter=Formatter('[%(asctime)s| %(name)s - %(levelname)s|%(filename)s:%(lineno)d]: %(message)s', datefmt="%H:%M:%S")
-)
+logger = LogManager.GetLogger(log_name='astrbot')
 pytest_plugins = ('pytest_asyncio',)
 
 os.environ['TEST_MODE'] = 'on'

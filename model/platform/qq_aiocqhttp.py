@@ -10,7 +10,7 @@ from type.message_event import *
 from type.command import *
 from typing import Union, List, Dict
 from nakuru.entities.components import *
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from astrbot.message.handler import MessageHandler
 from util.cmd_config import PlatformConfig, AiocqhttpPlatformConfig
@@ -209,7 +209,7 @@ class AIOCQHTTP(Platform):
         
         if isinstance(message, AstrBotMessage):
             logger.info(
-                f"{message.sender.user_id} <- {self.parse_message_outline(message)}")
+                f"{message.sender.nickname}/{message.sender.user_id} <- {self.parse_message_outline(message_chain)}")
         else:
             logger.info(f"回复消息: {message_chain}")
 

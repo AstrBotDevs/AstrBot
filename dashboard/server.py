@@ -13,7 +13,7 @@ from werkzeug.serving import make_server
 from astrbot.persist.helper import dbConn
 from type.types import Context
 from typing import List
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from dashboard.helper import DashBoardHelper
 from util.io import get_local_ip_addresses
@@ -290,16 +290,6 @@ class AstrBotDashBoard():
                     data=None
                 ).__dict__
 
-        @self.dashboard_be.post("/api/log")
-        def log():
-            for item in self.ws_clients:
-                try:
-                    asyncio.run_coroutine_threadsafe(
-                        self.ws_clients[item].send(request.data.decode()), self.loop).result()
-                except Exception as e:
-                    pass
-            return 'ok'
-
         @self.dashboard_be.get("/api/check_update")
         def get_update_info():
             try:
@@ -422,18 +412,22 @@ class AstrBotDashBoard():
 
     async def get_log_history(self):
         try:
-            with open("logs/astrbot/astrbot.log", "r", encoding="utf-8") as f:
-                return f.readlines()[-100:]
+            dq = self.context._log_queue.get_cache()
+            ret = ""
+            for log in dq:
+                ret += log + "\n\r"
+            return ret
         except Exception as e:
             logger.warning(f"读取日志历史失败: {e.__str__()}")
-            return []
+            return ""
 
     async def __handle_msg(self, websocket, path):
         address = websocket.remote_address
         self.ws_clients[address] = websocket
-        data = await self.get_log_history()
-        data = ''.join(data).replace('\n', '\r\n')
-        await websocket.send(data)
+        
+        # 发送日志历史
+        await websocket.send(await self.get_log_history())
+
         while True:
             try:
                 msg = await websocket.recv()
@@ -450,6 +444,15 @@ class AstrBotDashBoard():
         ws_server = websockets.serve(self.__handle_msg, "0.0.0.0", 6186)
         logger.info("WebSocket 服务器已启动。")
         await ws_server
+
+    async def log_consumer(self):
+        while True:
+            log = await self.context._log_queue.get()
+            for ws in self.ws_clients.values():
+                try:
+                    await ws.send(log)
+                except Exception as e:
+                    pass
         
     def http_server(self):
         http_server = make_server(

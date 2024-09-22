@@ -133,6 +133,7 @@ class AstrBotConfig():
     dashboard: DashboardConfig = field(default_factory=DashboardConfig)
     platform: List[PlatformConfig] = field(default_factory=list)
     wake_prefix: List[str] = field(default_factory=list)
+    log_level: str = "INFO"
 
     def __init__(self) -> None:
         self.init_configs()
@@ -174,6 +175,7 @@ class AstrBotConfig():
         self.http_proxy=data.get("http_proxy", "")
         self.dashboard=DashboardConfig(**data.get("dashboard", {}))
         self.wake_prefix=data.get("wake_prefix", [])
+        self.log_level=data.get("log_level", "INFO")
 
     def migrate_config_1_2(self, old: dict) -> dict:
         '''将配置文件从版本 1 迁移至版本 2'''

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from type.register import RegisteredPlugins
 from typing import List, Union, Callable
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')

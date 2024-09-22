@@ -2,7 +2,7 @@ from . import DashBoardData
 from util.cmd_config import AstrBotConfig
 from dataclasses import dataclass, asdict
 from util.plugin_dev.api.v1.config import update_config
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from type.types import Context
 from type.config import CONFIG_METADATA_2

@@ -6,7 +6,7 @@ import time
 import aiohttp
 
 from PIL import Image
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')

@@ -1,6 +1,6 @@
 import os, psutil, sys, time
 from util.updator.zip_updator import ReleaseInfo, RepoZipUpdator
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from type.config import VERSION
 from util.io import on_error, download_file

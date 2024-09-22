@@ -3,7 +3,7 @@ import asyncio
 from util.io import port_checker
 from type.register import RegisteredPlatform
 from type.types import Context
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from astrbot.message.handler import MessageHandler
 from util.cmd_config import (

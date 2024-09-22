@@ -11,14 +11,13 @@ from model.platform.manager import PlatformManager
 from typing import Union
 from type.types import Context
 from type.config import VERSION
-from SparkleLogging.utils.core import LogManager
 from logging import Logger
 from util.cmd_config import AstrBotConfig, try_migrate
 from util.metrics import MetricUploader
 from util.updator.astrbot_updator import AstrBotUpdator
+from util.log import LogManager
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
-
 
 class AstrBotBootstrap():
     def __init__(self) -> None:
@@ -28,7 +27,11 @@ class AstrBotBootstrap():
         try_migrate()
         self.config_helper = AstrBotConfig()
         self.context.config_helper = self.config_helper
+        # set log queue handler 
+        LogManager.set_queue_handler(logger, self.context._log_queue)
         logger.info("AstrBot v" + VERSION)
+        # set log level
+        logger.setLevel(self.config_helper.log_level)
         # apply proxy settings
         http_proxy = self.context.config_helper.http_proxy
         https_proxy = self.context.config_helper.https_proxy
@@ -66,11 +69,11 @@ class AstrBotBootstrap():
         self.context.message_handler = self.message_handler
         self.context.command_manager = self.command_manager
 
-
         # load dashboard
         self.dashboard.run_http_server()
-        dashboard_task = asyncio.create_task(self.dashboard.ws_server(), name="dashboard")
-        
+        dashboard_ws_task = asyncio.create_task(self.dashboard.ws_server(), name="dashboard")
+        dashboard_log_task = asyncio.create_task(self.dashboard.log_consumer(), name="log")
+
         if self.test_mode:
             return
         
@@ -82,8 +85,8 @@ class AstrBotBootstrap():
         platform_tasks = self.load_platform()
         # load metrics uploader
         metrics_upload_task = asyncio.create_task(self.metrics_uploader.upload_metrics(), name="metrics-uploader")
-        
-        tasks = [metrics_upload_task, dashboard_task, *platform_tasks, *self.context.ext_tasks]
+
+        tasks = [metrics_upload_task, dashboard_ws_task, dashboard_log_task, *platform_tasks, *self.context.ext_tasks]
         tasks = [self.handle_task(task) for task in tasks]
         await asyncio.gather(*tasks)
 

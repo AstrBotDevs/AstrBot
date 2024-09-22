@@ -1,7 +1,7 @@
 from util.t2i.strategies.local_strategy import LocalRenderStrategy
 from util.t2i.strategies.network_strategy import NetworkRenderStrategy
 from util.t2i.context import RenderContext
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')

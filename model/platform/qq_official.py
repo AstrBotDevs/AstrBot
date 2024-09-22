@@ -16,7 +16,7 @@ from type.message_event import *
 from type.command import *
 from typing import Union, List, Dict
 from nakuru.entities.components import *
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from astrbot.message.handler import MessageHandler
 from util.cmd_config import PlatformConfig, QQOfficialPlatformConfig

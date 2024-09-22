@@ -1,5 +1,5 @@
 import aiohttp, os, zipfile, shutil
-from SparkleLogging.utils.core import LogManager
+from util.log import LogManager
 from logging import Logger
 from util.io import on_error, download_file
 
