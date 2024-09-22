@@ -7,10 +7,16 @@ from logging import Logger
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 class TextToImageRenderer:
-    def __init__(self):
-        self.network_strategy = NetworkRenderStrategy()
+    def __init__(self, endpoint_url: str = None):
+        self.network_strategy = NetworkRenderStrategy(endpoint_url)
         self.local_strategy = LocalRenderStrategy()
         self.context = RenderContext(self.network_strategy)
+
+    def set_network_endpoint(self, endpoint_url: str):
+        '''设置 t2i 的网络端点。
+        '''
+        logger.info("文本转图像服务接口: " + endpoint_url)
+        self.network_strategy.set_endpoint(endpoint_url)
 
     async def render_custom_template(self, tmpl_str: str, tmpl_data: dict, return_url: bool = False):
         '''使用自定义文转图模板。该方法会通过网络调用 t2i 终结点图文渲染API。

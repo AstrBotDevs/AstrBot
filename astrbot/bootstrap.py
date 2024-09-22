@@ -47,6 +47,12 @@ class AstrBotBootstrap():
             logger.info("未使用代理。")
             
         self.test_mode = os.environ.get('TEST_MODE', 'off') == 'on'
+
+        # set t2i endpoint
+        if self.context.config_helper.t2i_endpoint:
+            self.context.image_renderer.set_network_endpoint(
+                self.context.config_helper.t2i_endpoint
+            )
     
     async def run(self):
         self.command_manager = CommandManager()

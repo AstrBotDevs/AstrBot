@@ -10,8 +10,15 @@ ASTRBOT_T2I_DEFAULT_ENDPOINT = "https://t2i.soulter.top/text2img"
 class NetworkRenderStrategy(RenderStrategy):
     def __init__(self, base_url: str = ASTRBOT_T2I_DEFAULT_ENDPOINT) -> None:
         super().__init__()
+        if not base_url:
+            base_url = ASTRBOT_T2I_DEFAULT_ENDPOINT
         self.BASE_RENDER_URL = base_url
         self.TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template")
+
+    def set_endpoint(self, base_url: str):
+        if not base_url:
+            base_url = ASTRBOT_T2I_DEFAULT_ENDPOINT
+        self.BASE_RENDER_URL = base_url
 
     async def render_custom_template(self, tmpl_str: str, tmpl_data: dict, return_url: bool=True) -> str:
         '''使用自定义文转图模板'''

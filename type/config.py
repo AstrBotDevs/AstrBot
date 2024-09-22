@@ -170,6 +170,7 @@ DEFAULT_CONFIG_VERSION_2 = {
         "password": "",
     },
     "log_level": "INFO",
+    "t2i_endpoint": "",
 }
 
 # 这个是用于迁移旧版本配置文件的映射表
@@ -352,4 +353,5 @@ CONFIG_METADATA_2 = {
         }
     },
     "log_level": {"description": "控制台日志级别(DEBUG, INFO, WARNING, ERROR)", "type": "string"},
+    "t2i_endpoint": {"description": "文本转图像服务接口(为空时使用公共服务器)", "type": "string"},
 }
