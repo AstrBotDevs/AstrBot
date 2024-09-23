@@ -336,12 +336,14 @@ class ProviderOpenAIOfficial(Provider):
             if tools:
                 completion_coro = self.client.chat.completions.create(
                     messages=contexts,
+                    stream=False,
                     tools=tools,
                     **conf
                 )
             else:
                 completion_coro = self.client.chat.completions.create(
                     messages=contexts,
+                    stream=False,
                     **conf
                 )
             try:
