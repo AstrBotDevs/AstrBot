@@ -23,6 +23,20 @@ class DashBoardHelper():
             return float(value)
         elif type_ == "float" and isinstance(value, int):
             return float(value)
+
+    def get_default_val_by_type(self, type_: str):
+        if type_ == "int":
+            return 0
+        elif type_ == "float":
+            return 0.0
+        elif type_ == "bool":
+            return False
+        elif type_ == "string":
+            return ""
+        elif type_ == "list":
+            return []
+        elif type_ == "object":
+            return {}
             
 
     def validate_config(self, data):
@@ -32,6 +46,10 @@ class DashBoardHelper():
                 if key not in data:
                     continue
                 value = data[key]
+                # null 转换
+                if value is None:
+                    data[key] = self.get_default_val_by_type(meta["type"])
+                    continue
                 # 递归验证
                 if meta["type"] == "list" and isinstance(value, list):
                     for item in value:
