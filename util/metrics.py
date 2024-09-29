@@ -59,11 +59,10 @@ class MetricUploader():
                 }
                 async with aiohttp.ClientSession() as session:
                     async with session.post('https://api.soulter.top/upload', data=json.dumps(res), timeout=5) as resp:
-                        pass
-                if resp.status_code == 200:
-                    ok = resp.json()
-                    if ok['status'] == 'ok':
-                        self.clear()
+                        if resp.status == 200:
+                            ok = await resp.json()
+                            if ok['status'] == 'ok':
+                                self.clear()
             except BaseException as e:
                 pass
             await asyncio.sleep(30*60)
