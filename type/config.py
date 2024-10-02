@@ -263,8 +263,8 @@ CONFIG_METADATA_2 = {
                 "description": "速率限制",
                 "type": "object",
                 "items": {
-                    "time": {"description": "时间", "type": "int"},
-                    "count": {"description": "计数", "type": "int"},
+                    "time": {"description": "消息速率限制时间", "type": "int"},
+                    "count": {"description": "消息速率限制计数", "type": "int"},
                 }
             },
             "reply_prefix": {"description": "回复前缀", "type": "string"},
@@ -297,7 +297,7 @@ CONFIG_METADATA_2 = {
                 "description": "图像生成模型配置",
                 "type": "object",
                 "items": {
-                    "enable": {"description": "启用", "type": "bool"},
+                    "enable": {"description": "启用(需要该提供商支持图像生成模型)", "type": "bool"},
                     "model": {"description": "模型名称", "type": "string"},
                     "size": {"description": "图像尺寸", "type": "string"},
                     "style": {"description": "图像风格", "type": "string"},
@@ -310,8 +310,8 @@ CONFIG_METADATA_2 = {
         "description": "大语言模型设置",
         "type": "object",
         "items": {
-            "wake_prefix": {"description": "唤醒前缀", "type": "string"},
-            "web_search": {"description": "启用网页搜索", "type": "bool"},
+            "wake_prefix": {"description": "LLM 聊天额外唤醒前缀", "type": "string"},
+            "web_search": {"description": "启用网页搜索(能访问 Google 时效果最佳)", "type": "bool"},
         }
     },
     "content_safety": {
@@ -322,18 +322,18 @@ CONFIG_METADATA_2 = {
                 "description": "百度内容审核配置",
                 "type": "object",
                 "items": {
-                    "enable": {"description": "启用", "type": "bool"},
-                    "app_id": {"description": "", "type": "string"},
-                    "api_key": {"description": "", "type": "string"},
-                    "secret_key": {"description": "", "type": "string"},
+                    "enable": {"description": "启用百度内容审核(需手动安装 baidu-aip 库)", "type": "bool"},
+                    "app_id": {"description": "APP ID", "type": "string"},
+                    "api_key": {"description": "API Key", "type": "string"},
+                    "secret_key": {"description": "Secret Key", "type": "string"},
                 }
             },
             "internal_keywords": {
                 "description": "内部关键词过滤",
                 "type": "object",
                 "items": {
-                    "enable": {"description": "启用", "type": "bool"},
-                    "extra_keywords": {"description": "额外关键词", "type": "list", "items": {"type": "string"}},
+                    "enable": {"description": "启用内部关键词过滤", "type": "bool"},
+                    "extra_keywords": {"description": "额外关键词(支持正则)", "type": "list", "items": {"type": "string"}},
                 }
             }
         }
