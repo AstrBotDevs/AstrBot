@@ -12,7 +12,7 @@ from openai.types.chat.chat_completion import ChatCompletion
 from openai._exceptions import *
 from util.io import download_image_by_url
 
-from astrbot.persist.helper import dbConn
+from astrbot.db import BaseDatabase
 from model.provider.provider import Provider
 from util.cmd_config import LLMConfig
 from util.log import LogManager
@@ -47,7 +47,7 @@ MODELS = {
 }
 
 class ProviderOpenAIOfficial(Provider):
-    def __init__(self, llm_config: LLMConfig) -> None:
+    def __init__(self, llm_config: LLMConfig, db_helper: BaseDatabase) -> None:
         super().__init__()
 
         self.api_keys = []
@@ -86,39 +86,28 @@ class ProviderOpenAIOfficial(Provider):
         }
         self.curr_personality = self.DEFAULT_PERSONALITY
         self.session_personality = {} # 记录了某个session是否已设置人格。
-        # 从 SQLite DB 读取历史记录
+        # 读取历史记录
+        self.db_helper = db_helper
         try:
-            db1 = dbConn()
-            for session in db1.get_all_session():
+            for history in db_helper.get_llm_history():
                 self.session_memory_lock.acquire()
-                self.session_memory[session[0]] = json.loads(session[1])['data']
+                self.session_memory[history.session_id] = json.loads(history.content)
                 self.session_memory_lock.release()
         except BaseException as e:
-            logger.warn(f"读取 OpenAI LLM 对话历史记录 失败：{e}。仍可正常使用。")
+            logger.warning(f"读取 OpenAI LLM 对话历史记录 失败：{e}。仍可正常使用。")
         
         # 定时保存历史记录
         threading.Thread(target=self.dump_history, daemon=True).start()
 
     def dump_history(self):
-        '''
-        转储历史记录
-        '''
-        time.sleep(10)
-        db = dbConn()
+        '''转储历史记录'''
+        time.sleep(30)
         while True:
             try:
-                for key in self.session_memory:
-                    data = self.session_memory[key]
-                    data_json = {
-                        'data': data
-                    }
-                    if db.check_session(key):
-                        db.update_session(key, json.dumps(data_json))
-                    else:
-                        db.insert_session(key, json.dumps(data_json))
-                logger.debug("已保存 OpenAI 会话历史记录")
+                for session_id, content in self.session_memory.items():
+                    self.db_helper.update_llm_history(session_id, json.dumps(content))
             except BaseException as e:
-                print(e)
+                logger.error("保存 LLM 历史记录失败: " + str(e))
             finally:
                 time.sleep(10*60)
     

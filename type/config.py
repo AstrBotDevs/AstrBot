@@ -1,4 +1,5 @@
-VERSION = '3.3.15'
+VERSION = '3.3.16'
+DB_PATH = 'data/data_v2.db'
 
 DEFAULT_CONFIG = {
     "qqbot": {

@@ -82,16 +82,25 @@ class PluginManager():
                 logger.info(f"正在检查更新插件 {p} 的依赖: {pth}")
                 self.update_plugin_dept(os.path.join(plugin_path, "requirements.txt"))
 
-    def update_plugin_dept(self, path):
+    def update_plugin_dept(self, path, break_system_package=True):
         mirror = "https://mirrors.aliyun.com/pypi/simple/"
         py = sys.executable
-        # os.system(f"{py} -m pip install -r {path} -i {mirror} --break-system-package --trusted-host mirrors.aliyun.com")
-        
-        process = subprocess.Popen(f"{py} -m pip install -r {path} -i {mirror} --break-system-package --trusted-host mirrors.aliyun.com", 
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, universal_newlines=True)
+        cmd = f"{py} -m pip install -r {path} -i {mirror} --trusted-host mirrors.aliyun.com"
+        if break_system_package:
+            cmd += " --break-system-package"
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, universal_newlines=True)
         
         while True:
             output = process.stdout.readline()
+            err = process.stderr.readline()
+            if err:
+                err = err.strip()
+                logger.error(err)
+                if "no such option: --break-system-package" in err:
+                    self.update_plugin_dept(path, break_system_package=False)
+                    break
+                else:
+                    logger.error("可能发生插件依赖安装失败导致插件无法被正常载入。请手动更新插件依赖。路径: " + path)
             if output == '' and process.poll() is not None:
                 break
             if output:
@@ -103,7 +112,7 @@ class PluginManager():
                 if output.startswith("Looking in indexes"):
                     continue
                 logger.info(output)
-                
+            
         rc = process.poll()
         
         

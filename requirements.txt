@@ -9,8 +9,7 @@ beautifulsoup4
 googlesearch-python
 tiktoken
 readability-lxml
-websockets
-flask
+quart
 psutil
 lxml_html_clean
 colorlog

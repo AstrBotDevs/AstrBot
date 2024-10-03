@@ -1,4 +1,4 @@
-import asyncio, os
+import asyncio, os, time
 from asyncio import Task
 from type.register import *
 from typing import List, Awaitable
@@ -48,6 +48,8 @@ class Context:
         
         self.command_manager = None
         self.running = True
+        self._loop = asyncio.get_event_loop()
+        self._start_running = int(time.time())
 
         self._log_queue = CachedQueue()
 

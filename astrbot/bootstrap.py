@@ -2,27 +2,27 @@ import asyncio
 import traceback
 import os
 from astrbot.message.handler import MessageHandler
-from astrbot.persist.helper import dbConn
-from dashboard.server import AstrBotDashBoard
+from astrbot.db.sqlite import SQLiteDatabase
+from dashboard.server import AstrBotDashboard
 from model.command.manager import CommandManager
 from model.command.internal_handler import InternalCommandHandler
 from model.plugin.manager import PluginManager
 from model.platform.manager import PlatformManager
 from typing import Union
 from type.types import Context
-from type.config import VERSION
+from type.config import VERSION, DB_PATH
 from logging import Logger
 from util.cmd_config import AstrBotConfig, try_migrate
 from util.metrics import MetricUploader
 from util.updator.astrbot_updator import AstrBotUpdator
 from util.log import LogManager
 
+
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 class AstrBotBootstrap():
     def __init__(self) -> None:
         self.context = Context()
-        
         # load configs and ensure the backward compatibility
         try_migrate()
         self.config_helper = AstrBotConfig()
@@ -59,15 +59,18 @@ class AstrBotBootstrap():
         self.plugin_manager = PluginManager(self.context)
         self.updator = AstrBotUpdator()
         self.cmd_handler = InternalCommandHandler(self.command_manager, self.plugin_manager)
-        self.db_conn_helper = dbConn()
+        self.db_helper = SQLiteDatabase(DB_PATH)
         
         # load llm provider
         self.load_llm()
         
-        self.message_handler = MessageHandler(self.context, self.command_manager, self.db_conn_helper)
+        self.message_handler = MessageHandler(self.context, self.command_manager, self.db_helper)
         self.platfrom_manager = PlatformManager(self.context, self.message_handler)
-        self.dashboard = AstrBotDashBoard(self.context, plugin_manager=self.plugin_manager, astrbot_updator=self.updator)
-        self.metrics_uploader = MetricUploader(self.context)
+        self.dashboard = AstrBotDashboard(self.context, 
+                                          plugin_manager=self.plugin_manager, 
+                                          astrbot_updator=self.updator,
+                                          db_helper=self.db_helper)
+        self.metrics_uploader = MetricUploader(self.context, self.db_helper)
         
         self.context.metrics_uploader = self.metrics_uploader
         self.context.updator = self.updator
@@ -76,9 +79,7 @@ class AstrBotBootstrap():
         self.context.command_manager = self.command_manager
 
         # load dashboard
-        self.dashboard.run_http_server()
-        dashboard_ws_task = asyncio.create_task(self.dashboard.ws_server(), name="dashboard")
-        dashboard_log_task = asyncio.create_task(self.dashboard.log_consumer(), name="log")
+        dashboard_server_task = asyncio.create_task(self.dashboard.run(), name="dashboard")
 
         if self.test_mode:
             return
@@ -91,8 +92,9 @@ class AstrBotBootstrap():
         platform_tasks = self.load_platform()
         # load metrics uploader
         metrics_upload_task = asyncio.create_task(self.metrics_uploader.upload_metrics(), name="metrics-uploader")
-
-        tasks = [metrics_upload_task, dashboard_ws_task, dashboard_log_task, *platform_tasks, *self.context.ext_tasks]
+        
+        log_task = asyncio.create_task(self.dashboard.lr._receive_log_task(), name="log")
+        tasks = [metrics_upload_task, dashboard_server_task, log_task, *platform_tasks, *self.context.ext_tasks]
         tasks = [self.handle_task(task) for task in tasks]
         await asyncio.gather(*tasks)
 
@@ -115,12 +117,13 @@ class AstrBotBootstrap():
         logger.info(f"加载 {len(llms)} 个 LLM Provider...")
         for llm in llms:
             if llm.enable:
-                if llm.name == "openai" and llm.key and llm.enable:
+                if llm.name == "openai":
+                    if not llm.key or not llm.enable:
+                        logger.warning("没有开启 LLM Provider 或 API Key 未填写。")
+                        continue
                     self.load_openai(llm)
                     f = True
-                    logger.info(f"已启用 OpenAI API 支持。")
-                else:
-                    logger.warn(f"未知的 LLM Provider: {llm.name}")
+                    logger.info(f"已启用 LLM Provider(OpenAI API): {llm.name}。")
         if f:
             from model.command.openai_official_handler import OpenAIOfficialCommandHandler
             self.openai_command_handler = OpenAIOfficialCommandHandler(self.command_manager)
@@ -128,7 +131,7 @@ class AstrBotBootstrap():
 
     def load_openai(self, llm_config):
         from model.provider.openai_official import ProviderOpenAIOfficial
-        inst = ProviderOpenAIOfficial(llm_config)
+        inst = ProviderOpenAIOfficial(llm_config, self.db_helper)
         self.context.register_provider("internal_openai", inst)
     
     def load_plugins(self):
@@ -137,5 +140,5 @@ class AstrBotBootstrap():
     def load_platform(self):
         platforms = self.platfrom_manager.load_platforms()
         if not platforms:
-            logger.warn("未启用任何消息平台。")
+            logger.warning("未启用任何消息平台。")
         return platforms

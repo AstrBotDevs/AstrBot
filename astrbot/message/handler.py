@@ -5,7 +5,7 @@ import traceback
 import astrbot.message.unfit_words as uw
 
 from typing import Dict
-from astrbot.persist.helper import dbConn
+from astrbot.db import BaseDatabase
 from model.provider.provider import Provider
 from model.command.manager import CommandManager
 from type.message_event import AstrMessageEvent, MessageResult
@@ -15,7 +15,6 @@ from util.log import LogManager
 from logging import Logger
 from nakuru.entities.components import Image
 from util.agent.func_call import FuncCall
-import util.agent.web_searcher as web_searcher
 from openai._exceptions import *
 from openai.types.chat.chat_completion_message_tool_call import Function
 
@@ -104,10 +103,10 @@ class ContentSafetyHelper():
 class MessageHandler():
     def __init__(self, context: Context,
                  command_manager: CommandManager,
-                 persist_manager: dbConn) -> None:
+                 db_helper: BaseDatabase) -> None:
         self.context = context
         self.command_manager = command_manager
-        self.persist_manager = persist_manager
+        self.db_helper = db_helper
         self.rate_limit_helper = RateLimitHelper(context)
         self.content_safety_helper = ContentSafetyHelper(context)
         self.llm_wake_prefix = self.context.config_helper.llm_settings.wake_prefix
@@ -128,9 +127,6 @@ class MessageHandler():
         '''
         msg_plain = message.message_str.strip()
         provider = llm_provider if llm_provider else self.provider        
-        
-        if os.environ.get('TEST_MODE', 'off') != 'on':
-            self.persist_manager.record_message(message.platform.platform_name, message.session_id)
         
         # TODO: this should be configurable
         # if not message.message_str:
