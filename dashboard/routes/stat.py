@@ -46,7 +46,7 @@ class StatRoute(Route):
             
             stat_dict.update({
                 "platform": self.db_helper.get_grouped_base_stats(offset_sec).platform,
-                "message_count": self.db_helper.get_total_message_count(),
+                "message_count": self.db_helper.get_total_message_count() or 0,
                 "platform_count": len(self.context.platforms),
                 "message_time_series": message_time_based_stats,
                 "running": self.format_sec(int(time.time() - self.context._start_running)),
