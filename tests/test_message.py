@@ -26,8 +26,8 @@ llm_config.api_base = os.environ['OPENAI_API_BASE']
 llm_config.key = [os.environ['OPENAI_API_KEY']]
 llm_config.model_config.model = os.environ['LLM_MODEL']
 llm_config.model_config.max_tokens = 1000
-llm_provider = ProviderOpenAIOfficial(llm_config)
 asyncio.run(bootstrap.run())
+llm_provider = ProviderOpenAIOfficial(llm_config, bootstrap.db_helper)
 bootstrap.message_handler.provider = llm_provider
 bootstrap.config_helper.wake_prefix = ["/"]
 bootstrap.config_helper.admins_id = ["905617992"]
