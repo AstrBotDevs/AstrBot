@@ -146,6 +146,7 @@ DEFAULT_CONFIG_VERSION_2 = {
     "llm_settings": {
         "wake_prefix": "",
         "web_search": False,
+        "identifier": False,
     },
     "content_safety": {
         "baidu_aip": {
@@ -312,6 +313,7 @@ CONFIG_METADATA_2 = {
         "items": {
             "wake_prefix": {"description": "LLM 聊天额外唤醒前缀", "type": "string"},
             "web_search": {"description": "启用网页搜索(能访问 Google 时效果最佳)", "type": "bool"},
+            "identifier": {"description": "启动识别群员(略微增加token开销)", "type": "bool"},
         }
     },
     "content_safety": {
