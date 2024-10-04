@@ -3,7 +3,7 @@ import json
 import shutil
 import logging
 from util.io import on_error
-from type.config import DEFAULT_CONFIG, DEFAULT_CONFIG_VERSION_2, MAPPINGS_1_2
+from type.config import DEFAULT_CONFIG_VERSION_2, MAPPINGS_1_2
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Optional
 
@@ -175,7 +175,7 @@ class AstrBotConfig():
         self.https_proxy=data.get("https_proxy", "")
         self.http_proxy=data.get("http_proxy", "")
         self.dashboard=DashboardConfig(**data.get("dashboard", {}))
-        self.wake_prefix=data.get("wake_prefix", [])
+        self.wake_prefix=data.get("wake_prefix", ["/"])
         self.log_level=data.get("log_level", "INFO")
         self.t2i_endpoint=data.get("t2i_endpoint", "")
 
@@ -228,22 +228,15 @@ class AstrBotConfig():
                 config = self.migrate_config_1_2(config)
                 self.flush_config(config)
         
-        _tag = False
-        for key, val in DEFAULT_CONFIG_VERSION_2.items():
-            if key not in config:
-                config[key] = val
-                _tag = True
-        if _tag:
-            with open(ASTRBOT_CONFIG_PATH, "w", encoding="utf-8-sig") as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-                f.flush()
-
+        # 加载配置到对象
         self.load_from_dict(config)
+        # 保存到文件
+        # 这一步操作是为了保证配置文件中的字段的完整性。
+        # 在版本变动新增配置项时，将对象中新增的配置项的默认值写入文件。
+        self.save_config()
 
     def get(self, key: str, default=None):
-        '''
-        从文件系统中直接获取配置
-        '''
+        '''从文件系统中直接获取配置'''
         with open(ASTRBOT_CONFIG_PATH, "r", encoding="utf-8-sig") as f:
             d = json.load(f)
             if key in d:
@@ -252,9 +245,7 @@ class AstrBotConfig():
                 return default
 
     def get_all(self):
-        '''
-        从文件系统中获取所有配置
-        '''
+        '''从文件系统中获取所有配置'''
         with open(ASTRBOT_CONFIG_PATH, "r", encoding="utf-8-sig") as f:
             conf_str = f.read() 
         if conf_str.startswith(u'/ufeff'): # remove BOM
@@ -274,31 +265,6 @@ class AstrBotConfig():
                 
     def to_dict(self) -> Dict:
         return asdict(self)
-        
-    def put_by_dot_str(self, key: str, value):
-        '''根据点分割的字符串，将值写入配置文件'''
-        with open(ASTRBOT_CONFIG_PATH, "r", encoding="utf-8-sig") as f:
-            d = json.load(f)
-            _d = d
-            _ks = key.split(".")
-            for i in range(len(_ks)):
-                if i == len(_ks) - 1:
-                    _d[_ks[i]] = value
-                else:
-                    _d = _d[_ks[i]]
-            with open(ASTRBOT_CONFIG_PATH, "w", encoding="utf-8-sig") as f:
-                json.dump(d, f, indent=2, ensure_ascii=False)
-                f.flush()
-                
-    def update_by_path(self, path: List):
-        '''根据路径更新配置文件。
-        
-        这个方法首先会更新缓存在内存中的配置，然后再写入文件。
-        '''
-        
-        for key in path:
-            if key not in self:
-                raise KeyError(f"Key {key} not found in config.")
 
     def check_exist(self) -> bool:
         return os.path.exists(ASTRBOT_CONFIG_PATH)

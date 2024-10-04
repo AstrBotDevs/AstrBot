@@ -58,14 +58,19 @@ class AstrBotUpdator(RepoZipUpdator):
             if self.compare_version(VERSION, latest_version) >= 0:
                 raise Exception("当前已经是最新版本。")
             file_url = update_data[0]['zipball_url']
-        else:
+        elif str(version).startswith("v"):
             # 更新到指定版本
-            print(f"请求更新到指定版本: {version}")
+            logger.info(f"正在更新到指定版本: {version}")
             for data in update_data:
                 if data['tag_name'] == version:
                     file_url = data['zipball_url']
             if not file_url:
                 raise Exception(f"未找到版本号为 {version} 的更新文件。")
+        else:
+            if len(str(version)) != 40:
+                raise Exception("commit hash 长度不正确，应为 40")
+            logger.info(f"正在尝试更新到指定 commit: {version}")
+            file_url = "https://github.com/Soulter/AstrBot/archive/" + version + ".zip"
             
         try:
             await download_file(file_url, "temp.zip")
