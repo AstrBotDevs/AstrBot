@@ -110,6 +110,7 @@ class MessageHandler():
         self.rate_limit_helper = RateLimitHelper(context)
         self.content_safety_helper = ContentSafetyHelper(context)
         self.llm_wake_prefix = self.context.config_helper.llm_settings.wake_prefix
+        self.llm_identifier = self.context.config_helper.llm_settings.identifier
         if self.llm_wake_prefix:
             self.llm_wake_prefix = self.llm_wake_prefix.strip()
         self.provider = self.context.llms[0].llm_instance if len(self.context.llms) > 0 else None
@@ -235,6 +236,13 @@ class MessageHandler():
             else:
                 # normal chat
                 tool_use_flag = False
+                # add user info to the prompt
+                if self.llm_identifier:
+                    user_id = message.message_obj.sender.user_id
+                    user_nickname = message.message_obj.sender.nickname
+                    user_info = f"[User ID: {user_id}, Nickname: {user_nickname}]\n"
+                    msg_plain = user_info + msg_plain
+
                 llm_result = await provider.text_chat(
                     prompt=msg_plain, 
                     session_id=message.session_id, 

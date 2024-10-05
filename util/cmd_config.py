@@ -90,6 +90,7 @@ class LLMConfig:
 class LLMSettings:
     wake_prefix: str = ""
     web_search: bool = False
+    identifier: bool = False
 
 @dataclass
 class BaiduAIPConfig:
