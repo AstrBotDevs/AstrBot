@@ -4,7 +4,7 @@ import traceback
 import logging
 from aiocqhttp import CQHttp, Event
 from aiocqhttp.exceptions import ActionFailed
-from . import Platform
+from . import Platform, T2IException
 from type.astrbot_message import *
 from type.message_event import *
 from type.command import *
@@ -25,13 +25,11 @@ class AIOCQHTTP(Platform):
         assert isinstance(platform_config, AiocqhttpPlatformConfig), "aiocqhttp: 无法识别的配置类型。"
         
         self.message_handler = message_handler
-        self.waiting = {}
         self.context = context
         self.config = platform_config
         self.unique_session = context.config_helper.platform_settings.unique_session
         self.host = platform_config.ws_reverse_host
         self.port = platform_config.ws_reverse_port
-        self.admins = context.config_helper.admins_id
         
     def convert_message(self, event: Event) -> AstrBotMessage:
         
@@ -134,13 +132,6 @@ class AIOCQHTTP(Platform):
         ok, reason = await self.pre_check(message)
         if not ok:
             return
-        
-        # 解析 role
-        sender_id = str(message.sender.user_id)
-        if sender_id in self.admins:
-            role = 'admin'
-        else:
-            role = 'member'
             
         # parse unified message origin
         unified_msg_origin = None
@@ -157,7 +148,6 @@ class AIOCQHTTP(Platform):
                                                     self.context, 
                                                     "aiocqhttp", 
                                                     message.session_id, 
-                                                    role, 
                                                     unified_msg_origin,
                                                     reason == "command") # only_command
         
@@ -169,10 +159,6 @@ class AIOCQHTTP(Platform):
         if message_result.callback:
             message_result.callback()
 
-        # 如果是等待回复的消息
-        if message.session_id in self.waiting and self.waiting[message.session_id] == '':
-            self.waiting[message.session_id] = message
-            
         return message_result
 
     
@@ -183,36 +169,35 @@ class AIOCQHTTP(Platform):
         """
         回复用户唤醒机器人的消息。（被动回复）
         """
-        res = result_message
-        
-        if isinstance(res, str):
-            res = [Plain(text=res), ]
+        try:
+            await self._reply(message, result_message, use_t2i)
+        except T2IException as e:
+            logger.error(traceback.format_exc())
+            logger.warning(f"文本转图片时发生错误，将使用纯文本发送。")
+            await self._reply(message, result_message, False)
+        return result_message
             
-        # if image mode, put all Plain texts into a new picture.
-        if (use_t2i or (use_t2i == None and self.context.config_helper.t2i)) and isinstance(result_message, list):
-            rendered_images = await self.convert_to_t2i_chain(res)
-            if rendered_images:
-                try:
-                    await self._reply(message, rendered_images)
-                    return rendered_images
-                except BaseException as e:
-                    logger.warn(traceback.format_exc())
-                    logger.warn(f"以文本转图片的形式回复消息时发生错误: {e}，将尝试默认方式。")
-        
-        await self._reply(message, res)
-        return res
-            
-    async def _reply(self, message: Union[AstrBotMessage, Dict], message_chain: List[BaseMessageComponent]):
+    async def _reply(self, message: Union[AstrBotMessage, Dict], message_chain: List[BaseMessageComponent], use_t2i: bool = None):
         await self.record_metrics()
         if isinstance(message_chain, str): 
             message_chain = [Plain(text=message_chain), ]
+            
+        # 文转图处理
+        if (use_t2i or (use_t2i == None and self.context.config_helper.t2i)) and isinstance(message_chain, list):
+            try:
+                message_chain = await self.convert_to_t2i_chain(message_chain)
+                if not message_chain: raise T2IException()
+            except BaseException as e:
+                raise T2IException()
         
+        # log
         if isinstance(message, AstrBotMessage):
             logger.info(
                 f"{message.sender.nickname}/{message.sender.user_id} <- {self.parse_message_outline(message_chain)}")
         else:
             logger.info(f"回复消息: {message_chain}")
-
+            
+        # 解析成 OneBot json 格式并发送
         ret = []
         image_idx = []
         for idx, segment in enumerate(message_chain):
@@ -232,10 +217,11 @@ class AIOCQHTTP(Platform):
                 # ENOENT
                 if not image_idx:
                     raise e
-                logger.warn("回复失败。检测到失败原因为文件未找到，猜测用户的协议端与 AstrBot 位于不同的文件系统上。尝试采用上传图片的方式发图。")
+                logger.warning("回复失败。检测到失败原因为文件未找到，猜测用户的协议端与 AstrBot 位于不同的文件系统上。尝试采用上传图片的方式发图。")
                 for idx in image_idx:
                     if ret[idx]['data']['file'].startswith('file://'):
                         logger.info(f"正在上传图片: {ret[idx]['data']['path']}")
+                        # 除了上传到图床，想不到更好的办法。
                         image_url = await self.context.image_uploader.upload_image(ret[idx]['data']['path'])
                         logger.info(f"上传成功。")
                         ret[idx]['data']['file'] = image_url
@@ -267,8 +253,12 @@ class AIOCQHTTP(Platform):
         - 要发给某个群聊，请添加 key `group_id`，值为 int 类型的 qq 群号；
         
         '''
-        
-        await self._reply(target, result_message.message_chain)
+        try:
+            await self._reply(target, result_message, result_message.is_use_t2i)
+        except T2IException as e:
+            logger.error(traceback.format_exc())
+            logger.warning(f"文本转图片时发生错误，将使用纯文本发送。")
+            await self._reply(target, result_message, False)
         
     async def send_msg_new(self, message_type: MessageType, target: str, result_message: CommandResult):
         if message_type == MessageType.GROUP_MESSAGE:

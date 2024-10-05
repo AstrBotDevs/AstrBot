@@ -11,7 +11,7 @@ from nakuru import (
 )
 from typing import Union, List, Dict
 from type.types import Context
-from . import Platform
+from . import Platform, T2IException
 from type.astrbot_message import *
 from type.message_event import *
 from type.command import *
@@ -40,11 +40,9 @@ class QQNakuru(Platform):
         asyncio.set_event_loop(self.loop)
         
         self.message_handler = message_handler
-        self.waiting = {}
         self.context = context
         self.unique_session = context.config_helper.platform_settings.unique_session
         self.config = platform_config
-        self.admins = context.config_helper.admins_id
         
         self.client = CQHTTP(
             host=self.config.host,
@@ -113,13 +111,6 @@ class QQNakuru(Platform):
             session_id = message.raw_message.user_id
 
         message.session_id = session_id
-
-        # 解析 role
-        sender_id = str(message.raw_message.user_id)
-        if sender_id in self.admins:
-            role = 'admin'
-        else:
-            role = 'member'
             
         # parse unified message origin
         unified_msg_origin = None
@@ -141,7 +132,6 @@ class QQNakuru(Platform):
                                                     self.context, 
                                                     "nakuru", 
                                                     session_id, 
-                                                    role,
                                                     unified_msg_origin,
                                                     reason == 'command') # only_command
         
@@ -153,49 +143,47 @@ class QQNakuru(Platform):
         if message_result.callback:
             message_result.callback()
 
-        # 如果是等待回复的消息
-        if session_id in self.waiting and self.waiting[session_id] == '':
-            self.waiting[session_id] = message
-
     async def reply_msg(self,
                         message: AstrBotMessage,
                         result_message: List[BaseMessageComponent],
                         use_t2i: bool = None):
         """
         回复用户唤醒机器人的消息。（被动回复）
-        """
-        source = message.raw_message
-        res = result_message
+        """        
+        assert isinstance(message.raw_message, (GroupMessage, FriendMessage, GuildMessage))
+
+        try:
+            await self._reply(message, result_message, use_t2i)
+        except T2IException as e:
+            logger.error(traceback.format_exc())
+            logger.warning(f"文本转图片时发生错误，将使用纯文本发送。")
+            await self._reply(message, result_message, False)
+        return result_message
         
-        assert isinstance(source,
-                (GroupMessage, FriendMessage, GuildMessage))
-
-        logger.info(
-            f"{message.sender.nickname}/{message.sender.user_id} <- {self.parse_message_outline(res)}")
-
-        if isinstance(res, str):
-            res = [Plain(text=res), ]
-
-        # if image mode, put all Plain texts into a new picture.
-        if use_t2i or (use_t2i == None and self.context.config_helper.t2i) and isinstance(result_message, list):
-            rendered_images = await self.convert_to_t2i_chain(res)
-            if rendered_images:
-                try:
-                    await self._reply(source, rendered_images)
-                    return
-                except BaseException as e:
-                    logger.warn(traceback.format_exc())
-                    logger.warn(f"以文本转图片的形式回复消息时发生错误: {e}，将尝试默认方式。")
-            
-        await self._reply(source, res)
-        
-    async def _reply(self, source, message_chain: List[BaseMessageComponent]):
+    async def _reply(self, message: Union[AstrBotMessage, Dict], message_chain: List[BaseMessageComponent], use_t2i: bool = None):
         await self.record_metrics()
         if isinstance(message_chain, str): 
             message_chain = [Plain(text=message_chain), ]
+            
+        # 文转图处理
+        if (use_t2i or (use_t2i == None and self.context.config_helper.t2i)) and isinstance(message_chain, list):
+            try:
+                message_chain = await self.convert_to_t2i_chain(message_chain)
+                if not message_chain: raise T2IException()
+            except BaseException as e:
+                raise T2IException()
+                
+        # log
+        if isinstance(message, AstrBotMessage):
+            logger.info(
+                f"{message.sender.nickname}/{message.sender.user_id} <- {self.parse_message_outline(message_chain)}")
+        else:
+            logger.info(f"回复消息: {message_chain}")
         
+        source = message.raw_message
         is_dict = isinstance(source, dict)
         
+        # 发消息
         typ = None
         if is_dict:
             if "group_id" in source:
@@ -250,7 +238,13 @@ class QQNakuru(Platform):
         
         guild_id 不是频道号。
         '''
-        await self._reply(target, result_message.message_chain)
+        try:
+            await self._reply(target, result_message, result_message.is_use_t2i)
+        except T2IException as e:
+            logger.error(traceback.format_exc())
+            logger.warning(f"文本转图片时发生错误，将使用纯文本发送。")
+            await self._reply(target, result_message, False)
+        return result_message
         
     async def send_msg_new(self, message_type: MessageType, target: str, result_message: CommandResult):
         '''
@@ -291,20 +285,3 @@ class QQNakuru(Platform):
         abm.tag = "nakuru"
         abm.message = message.message
         return abm
-    
-    def wait_for_message(self, group_id) -> Union[GroupMessage, FriendMessage, GuildMessage]:
-        '''
-        等待下一条消息，超时 300s 后抛出异常
-        '''
-        self.waiting[group_id] = ''
-        cnt = 0
-        while True:
-            if group_id in self.waiting and self.waiting[group_id] != '':
-                # 去掉
-                ret = self.waiting[group_id]
-                del self.waiting[group_id]
-                return ret
-            cnt += 1
-            if cnt > 300:
-                raise Exception("等待消息超时。")
-            time.sleep(1)

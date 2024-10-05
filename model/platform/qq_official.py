@@ -63,10 +63,8 @@ class QQOfficial(Platform):
         asyncio.set_event_loop(self.loop)
         
         self.message_handler = message_handler
-        self.waiting: dict = {}
         self.context = context
         self.config = platform_config
-        self.admins = context.config_helper.admins_id
         
         self.appid = platform_config.appid
         self.secret = platform_config.secret
@@ -201,15 +199,8 @@ class QQOfficial(Platform):
                 session_id = str(message.raw_message.author.id)
         message.session_id = session_id
 
-        # 解析出 role
-        sender_id = message.sender.user_id
-        if sender_id in self.admins:
-            role = 'admin'
-        else:
-            role = 'member'
-            
         # construct astrbot message event
-        ame = AstrMessageEvent.from_astrbot_message(message, self.context, "qqofficial", session_id, role)
+        ame = AstrMessageEvent.from_astrbot_message(message, self.context, "qqofficial", session_id)
         
         message_result = await self.message_handler.handle(ame)
         if not message_result:
@@ -219,10 +210,6 @@ class QQOfficial(Platform):
         if message_result.callback:
             message_result.callback()
 
-        # 如果是等待回复的消息
-        if session_id in self.waiting and self.waiting[session_id] == '':
-            self.waiting[session_id] = message
-            
         return ret
 
     async def reply_msg(self,
@@ -241,10 +228,15 @@ class QQOfficial(Platform):
         plain_text = ''
         image_path = ''
         msg_ref = None
-        rendered_images = []
+        rendered_images = None
         
         if use_t2i or (use_t2i == None and self.context.config_helper.t2i) and isinstance(result_message, list):
-            rendered_images = await self.convert_to_t2i_chain(result_message)
+            try:
+                rendered_images = await self.convert_to_t2i_chain(result_message)
+            except BaseException as e:
+                logger.warning(traceback.format_exc())
+                logger.warning(f"文本转图片时发生错误: {e}，将尝试默认方式。")
+                rendered_images = None
         
         if isinstance(result_message, list):
             plain_text, image_path = await self._parse_to_qqofficial(result_message, message.type == MessageType.GROUP_MESSAGE)
@@ -386,20 +378,3 @@ class QQOfficial(Platform):
         
     async def send_msg_new(self, message_type: MessageType, target: str, result_message: CommandResult):
         raise NotImplementedError("qqofficial 不支持此方法。")
-
-    def wait_for_message(self, channel_id: int) -> AstrBotMessage:
-        '''
-        等待指定 channel_id 的下一条信息，超时 300s 后抛出异常
-        '''
-        self.waiting[channel_id] = ''
-        cnt = 0
-        while True:
-            if channel_id in self.waiting and self.waiting[channel_id] != '':
-                # 去掉
-                ret = self.waiting[channel_id]
-                del self.waiting[channel_id]
-                return ret
-            cnt += 1
-            if cnt > 300:
-                raise Exception("等待消息超时。")
-            time.sleep(1)

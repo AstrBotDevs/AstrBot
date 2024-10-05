@@ -5,6 +5,9 @@ from type.astrbot_message import AstrBotMessage
 from type.command import CommandResult
 from type.astrbot_message import MessageType
 
+class T2IException(Exception):
+    def __init__(self, message: str = "文本转图片时发生错误") -> None:
+        super().__init__(message)
 
 class Platform():
     def __init__(self, platform_name: str, context) -> None:

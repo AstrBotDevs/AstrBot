@@ -47,10 +47,17 @@ class AstrMessageEvent():
                              context: Context,
                              platform_name: str, 
                              session_id: str,
-                             role: str = "member",
+
                              unified_msg_origin: str = None,
                              only_command: bool = False):
         
+        # 解析 role
+        sender_id = str(message.sender.user_id)
+        if sender_id in context.config_helper.admins_id:
+            role = 'admin'
+        else:
+            role = 'member'
+            
         ame = AstrMessageEvent(message.message_str, 
                                message, 
                                context.find_platform(platform_name), 
