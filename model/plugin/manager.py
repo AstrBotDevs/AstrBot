@@ -99,8 +99,6 @@ class PluginManager():
                 if "no such option: --break-system-package" in err:
                     self.update_plugin_dept(path, break_system_package=False)
                     break
-                else:
-                    logger.error("可能发生插件依赖安装失败导致插件无法被正常载入。请手动更新插件依赖。路径: " + path)
             if output == '' and process.poll() is not None:
                 break
             if output:

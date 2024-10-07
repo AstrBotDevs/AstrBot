@@ -160,8 +160,7 @@ class AIOCQHTTP(Platform):
             message_result.callback()
 
         return message_result
-
-    
+   
     async def reply_msg(self,
                         message: AstrBotMessage,
                         result_message: list,
@@ -254,11 +253,11 @@ class AIOCQHTTP(Platform):
         
         '''
         try:
-            await self._reply(target, result_message, result_message.is_use_t2i)
+            await self._reply(target, result_message.message_chain, result_message.is_use_t2i)
         except T2IException as e:
             logger.error(traceback.format_exc())
             logger.warning(f"文本转图片时发生错误，将使用纯文本发送。")
-            await self._reply(target, result_message, False)
+            await self._reply(target, result_message.message_chain, False)
         
     async def send_msg_new(self, message_type: MessageType, target: str, result_message: CommandResult):
         if message_type == MessageType.GROUP_MESSAGE:

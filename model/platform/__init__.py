@@ -88,6 +88,7 @@ class Platform():
             else:
                 rendered_images.append(Image.fromFileSystem(p))
             return rendered_images
+        return message_result
         
     async def record_metrics(self):
         self.context.metrics_uploader.increment_platform_stat(self.PLATFORM_NAME)
