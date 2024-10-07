@@ -1,4 +1,4 @@
-VERSION = '3.3.16'
+VERSION = '3.3.17'
 DB_PATH = 'data/data_v2.db'
 
 # 新版本配置文件，摈弃旧版本令人困惑的配置项 :D
