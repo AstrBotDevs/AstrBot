@@ -9,6 +9,7 @@
 <img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="python">
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg"/></a>
 [![codecov](https://codecov.io/gh/Soulter/AstrBot/graph/badge.svg?token=FF3P5967B8)](https://codecov.io/gh/Soulter/AstrBot)
+![过去3天消息数](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fstats&query=results.A.frames%5B0%5D.data.values%5B0%5D%5B0%5D&suffix=%E6%9D%A1&label=%E8%BF%87%E5%8E%BB%203%20%E5%A4%A9%E6%B6%88%E6%81%AF%E6%95%B0)
 <a href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft">
 <img alt="Static Badge" src="https://img.shields.io/badge/QQ群-322154837-purple">
 </a>
