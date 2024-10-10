@@ -5,7 +5,7 @@ import traceback
 import uuid
 import shutil
 import yaml
-import subprocess
+import logging
 
 from util.updator.plugin_updator import PluginUpdator
 from util.io import remove_dir, download_file
@@ -15,6 +15,7 @@ from type.plugin import *
 from type.register import *
 from util.log import LogManager
 from logging import Logger
+from pip import main as pip_main
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
@@ -82,36 +83,37 @@ class PluginManager():
                 logger.info(f"正在检查更新插件 {p} 的依赖: {pth}")
                 self.update_plugin_dept(os.path.join(plugin_path, "requirements.txt"))
 
-    def update_plugin_dept(self, path, break_system_package=True):
-        mirror = "https://mirrors.aliyun.com/pypi/simple/"
-        py = sys.executable
-        cmd = f"{py} -m pip install -r {path} -i {mirror} --trusted-host mirrors.aliyun.com"
-        if break_system_package:
-            cmd += " --break-system-package"
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, universal_newlines=True)
+    def update_plugin_dept(self, path):
+        pip_main(['install', '-r', path, '--trusted-host', 'mirrors.aliyun.com', '-i', 'https://mirrors.aliyun.com/pypi/simple/'])
+        # mirror = "https://mirrors.aliyun.com/pypi/simple/"
+        # py = sys.executable
+        # cmd = f"{py} -m pip install -r {path} -i {mirror} --trusted-host mirrors.aliyun.com"
+        # if break_system_package:
+        #     cmd += " --break-system-package"
+        # process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, universal_newlines=True)
         
-        while True:
-            output = process.stdout.readline()
-            err = process.stderr.readline()
-            if err:
-                err = err.strip()
-                logger.error(err)
-                if "no such option: --break-system-package" in err:
-                    self.update_plugin_dept(path, break_system_package=False)
-                    break
-            if output == '' and process.poll() is not None:
-                break
-            if output:
-                output = output.strip()
-                if output.startswith("Requirement already satisfied"):
-                    continue
-                if output.startswith("Using cached"):
-                    continue
-                if output.startswith("Looking in indexes"):
-                    continue
-                logger.info(output)
+        # while True:
+        #     output = process.stdout.readline()
+        #     err = process.stderr.readline()
+        #     if err:
+        #         err = err.strip()
+        #         logger.error(err)
+        #         if "no such option: --break-system-package" in err:
+        #             self.update_plugin_dept(path, break_system_package=False)
+        #             break
+        #     if output == '' and process.poll() is not None:
+        #         break
+        #     if output:
+        #         output = output.strip()
+        #         if output.startswith("Requirement already satisfied"):
+        #             continue
+        #         if output.startswith("Using cached"):
+        #             continue
+        #         if output.startswith("Looking in indexes"):
+        #             continue
+        #         logger.info(output)
             
-        rc = process.poll()
+        # rc = process.poll()
         
         
     async def install_plugin(self, repo_url: str):
@@ -124,7 +126,7 @@ class PluginManager():
         with open(os.path.join(plugin_path, "REPO"), "w", encoding='utf-8') as f:
             f.write(repo_url)
             
-        self.check_plugin_dept_update()
+        # self.check_plugin_dept_update()
 
         return plugin_path
         # ok, err = self.plugin_reload()
@@ -189,9 +191,16 @@ class PluginManager():
                 
                 logger.info(f"正在加载插件 {root_dir_name} ...")
 
-                self.check_plugin_dept_update(target_plugin=root_dir_name)
-
-                module = __import__("data.plugins." +
+                # self.check_plugin_dept_update(target_plugin=root_dir_name)
+                
+                try:
+                    module = __import__("data.plugins." +
+                                        root_dir_name + "." + p, fromlist=[p])
+                except (ModuleNotFoundError, ImportError) as e:
+                    # 尝试安装插件依赖
+                    logger.error(f"尝试安装插件依赖。")
+                    self.check_plugin_dept_update(target_plugin=root_dir_name)
+                    module = __import__("data.plugins." +
                                         root_dir_name + "." + p, fromlist=[p])
 
                 cls = self.get_classes(module)
@@ -223,6 +232,11 @@ class PluginManager():
                 traceback.print_exc()
                 fail_rec += f"加载{p}插件出现问题，原因 {str(e)}\n"
 
+        # 清除 pip.main 导致的多余的 logging handlers
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
+        
+        
         if not fail_rec:
             return True, None
         else:
@@ -259,7 +273,7 @@ class PluginManager():
         # remove the temp dir
         remove_dir(temp_dir)
         
-        self.check_plugin_dept_update()
+        # self.check_plugin_dept_update()
 
         # ok, err = self.plugin_reload()
         # if not ok:
