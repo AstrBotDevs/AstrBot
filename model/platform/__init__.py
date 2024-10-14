@@ -75,7 +75,7 @@ class Platform():
                 return True
         return False
 
-    async def convert_to_t2i_chain(self, message_result: list) -> list:
+    async def convert_to_t2i_chain(self, message_result: list) -> Union[List[Image], None]:
         plain_str = ""
         rendered_images = []
         for i in message_result:
@@ -88,7 +88,6 @@ class Platform():
             else:
                 rendered_images.append(Image.fromFileSystem(p))
             return rendered_images
-        return message_result
         
     async def record_metrics(self):
         self.context.metrics_uploader.increment_platform_stat(self.PLATFORM_NAME)
