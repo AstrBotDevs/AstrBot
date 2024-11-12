@@ -23,29 +23,6 @@ from dataclasses import asdict
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
-MODELS = {
-    "gpt-4o": 128000,
-    "gpt-4o-2024-05-13": 128000,
-    "gpt-4-turbo": 128000,
-    "gpt-4-turbo-2024-04-09": 128000,
-    "gpt-4-turbo-preview": 128000,
-    "gpt-4-0125-preview": 128000,
-    "gpt-4-1106-preview": 128000,
-    "gpt-4-vision-preview": 128000,
-    "gpt-4-1106-vision-preview": 128000,
-    "gpt-4": 8192,
-    "gpt-4-0613": 8192,
-    "gpt-4-32k": 32768,
-    "gpt-4-32k-0613": 32768,
-    "gpt-3.5-turbo-0125": 16385,
-    "gpt-3.5-turbo": 16385,
-    "gpt-3.5-turbo-1106": 16385,
-    "gpt-3.5-turbo-instruct": 4096,
-    "gpt-3.5-turbo-16k": 16385,
-    "gpt-3.5-turbo-0613": 16385,
-    "gpt-3.5-turbo-16k-0613": 16385, 
-}
-
 class ProviderOpenAIOfficial(Provider):
     def __init__(self, llm_config: LLMConfig, db_helper: BaseDatabase) -> None:
         super().__init__()
@@ -120,8 +97,6 @@ class ProviderOpenAIOfficial(Provider):
         encoded_prompt = self.tokenizer.encode(default_personality['prompt'])
         tokens_num = len(encoded_prompt)
         model = self.get_curr_model()
-        if model in MODELS and tokens_num > MODELS[model] - 500:
-            default_personality['prompt'] = self.tokenizer.decode(encoded_prompt[:MODELS[model] - 500])
 
         new_record = {
             "user": {
@@ -222,28 +197,6 @@ class ProviderOpenAIOfficial(Provider):
         message["user"] = user_content
         self.session_memory[session_id].append(message)
 
-        # 根据 模型的上下文窗口 淘汰掉多余的记录
-        curr_model = self.get_curr_model()
-        if curr_model in MODELS:
-            maxium_tokens_num = MODELS[curr_model] - 300 # 至少预留 300 给 completion
-            # if message['usage_tokens'] > maxium_tokens_num:
-                # 淘汰多余的记录，使得最终的 usage_tokens 不超过 maxium_tokens_num - 300
-                # contexts = self.session_memory[session_id]
-                # need_to_remove_idx = 0
-                # freed_tokens_num = contexts[0]['single-tokens']
-                # while freed_tokens_num < message['usage_tokens'] - maxium_tokens_num:
-                #     need_to_remove_idx += 1
-                #     freed_tokens_num += contexts[need_to_remove_idx]['single-tokens']
-                # # 更新之后的所有记录的 usage_tokens
-                # for i in range(len(contexts)):
-                #     if i > need_to_remove_idx:
-                #         contexts[i]['usage_tokens'] -= freed_tokens_num
-                # logger.debug(f"淘汰上下文记录 {need_to_remove_idx+1} 条，释放 {freed_tokens_num} 个 token。当前上下文总 token 为 {contexts[-1]['usage_tokens']}。")
-                # self.session_memory[session_id] = contexts[need_to_remove_idx+1:]
-            while len(self.session_memory[session_id]) and self.session_memory[session_id][-1]['usage_tokens'] > maxium_tokens_num:
-                self.pop_record(session_id)
-
-
     async def pop_record(self, session_id: str, pop_system_prompt: bool = False):
         '''
         弹出第一条记录
@@ -297,15 +250,6 @@ class ProviderOpenAIOfficial(Provider):
         if session_id not in self.session_personality or not self.session_personality[session_id]:
             self.personality_set(self.curr_personality, session_id)
             self.session_personality[session_id] = True
-        
-        # 如果 prompt 超过了最大窗口，截断。
-        # 1. 可以保证之后 pop 的时候不会出现问题
-        # 2. 可以保证不会超过最大 token 数
-        _encoded_prompt = self.tokenizer.encode(prompt)
-        curr_model = self.get_curr_model()
-        if curr_model in MODELS and len(_encoded_prompt) > MODELS[curr_model] - 300:
-            _encoded_prompt = _encoded_prompt[:MODELS[curr_model] - 300]
-            prompt = self.tokenizer.decode(_encoded_prompt)
         
         # 组装上下文，并且根据当前上下文窗口大小截断
         await self.assemble_context(session_id, prompt, image_url)
@@ -458,17 +402,6 @@ class ProviderOpenAIOfficial(Provider):
         '''
         获取缓存的会话
         '''
-        # contexts_str = ""
-        # for i, key in enumerate(self.session_memory):
-        #     if i < (page-1)*size or i >= page*size:
-        #         continue
-        #     contexts_str += f"Session ID: {key}\n"
-        #     for record in self.session_memory[key]:
-        #         if "user" in record:
-        #             contexts_str += f"User: {record['user']['content']}\n"
-        #         if "AI" in record:
-        #             contexts_str += f"AI: {record['AI']['content']}\n"
-        #     contexts_str += "---\n"
         contexts_str = ""
         if session_id in self.session_memory:
             for record in self.session_memory[session_id]:

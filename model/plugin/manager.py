@@ -198,7 +198,6 @@ class PluginManager():
                                         root_dir_name + "." + p, fromlist=[p])
                 except (ModuleNotFoundError, ImportError) as e:
                     # 尝试安装插件依赖
-                    logger.error(f"尝试安装插件依赖。")
                     self.check_plugin_dept_update(target_plugin=root_dir_name)
                     module = __import__("data.plugins." +
                                         root_dir_name + "." + p, fromlist=[p])

@@ -48,14 +48,15 @@ class PluginRoute(Route):
         
     async def install_plugin_upload(self):
         try:
-            file = request.files['file']
-            print(file.filename)
+            file = await request.files
+            file = file['file']
             logger.info(f"正在安装用户上传的插件 {file.filename}")
             file_path = f"data/temp/{uuid.uuid4()}.zip"
-            file.save(file_path)
+            await file.save(file_path)
             self.plugin_manager.install_plugin_from_file(file_path)
             logger.info(f"安装插件 {file.filename} 成功")
-            return Response().ok(None, "安装成功！！").__dict__
+            threading.Thread(target=self.astrbot_updator._reboot, args=(2, self.context)).start()
+            return Response().ok(None, "安装成功，程序将在 2 秒内重启。").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__

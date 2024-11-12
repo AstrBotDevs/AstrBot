@@ -5,7 +5,6 @@ from type.types import Context
 from util.log import LogManager
 from logging import Logger
 from nakuru.entities.components import Image
-from model.provider.openai_official import ProviderOpenAIOfficial, MODELS
 from util.personality import personalities
 from util.io import download_image_by_url
 
@@ -96,8 +95,6 @@ class OpenAIOfficialCommandHandler():
 
         conf = self.provider.get_configs()
         ret += "\n当前模型: " + conf['model']
-        if conf['model'] in MODELS:
-            ret += "\n最大上下文窗口: " + str(MODELS[conf['model']]) + " tokens"
 
         if message.session_id in self.provider.session_memory and len(self.provider.session_memory[message.session_id]):
             ret += "\n你的会话上下文: " + str(self.provider.session_memory[message.session_id][-1]['usage_tokens']) + " tokens"
