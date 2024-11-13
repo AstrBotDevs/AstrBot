@@ -19,8 +19,8 @@ class ReleaseInfo():
         return f"新版本: {self.version}, 发布于: {self.published_at}, 详细内容: {self.body}"
 
 class RepoZipUpdator():
-    def __init__(self, path):
-        self.path = path
+    def __init__(self, repo_mirror: str = "") -> None:
+        self.repo_mirror = repo_mirror
         self.rm_on_error = on_error
             
     async def fetch_release_info(self, url: str, latest: bool = True) -> list:
@@ -38,8 +38,8 @@ class RepoZipUpdator():
             else:
                 ret = self.github_api_release_parser(result)
         except BaseException as e:
-            logger.error(f"解析版本信息失败: {result}")
-            raise Exception(f"解析版本信息失败: {result}")
+            logger.error(f"解析版本信息失败")
+            raise Exception(f"解析版本信息失败")
         return ret
     
     def github_api_release_parser(self, releases: list) -> list:
@@ -113,6 +113,13 @@ class RepoZipUpdator():
             release_url = f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
         else:
             release_url = releases[0]['zipball_url']
+            
+        # 镜像站点
+        if self.repo_mirror:
+            if self.repo_mirror == 'default':
+                pass
+            elif self.repo_mirror == 'https://github-mirror.us.kg/':
+                release_url = self.repo_mirror + release_url
 
         await download_file(release_url, target_path + ".zip")
         

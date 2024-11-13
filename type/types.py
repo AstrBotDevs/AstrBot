@@ -30,12 +30,6 @@ class Context:
         self.llms: List[RegisteredLLM] = []
         self.default_personality: dict = None
         
-        # self.unique_session = False # 独立会话
-        # self.version: str = None  # 机器人版本
-        # self.nick: tuple = None  # gocq 的唤醒词
-        # self.t2i_mode = False
-        # self.web_search = False  # 是否开启了网页搜索
-        
         self.metrics_uploader = None
         self.updator: AstrBotUpdator = None
         self.plugin_updator: PluginUpdator = None
@@ -52,9 +46,6 @@ class Context:
         self._start_running = int(time.time())
 
         self._log_queue = CachedQueue()
-
-        # useless
-        # self.reply_prefix = ""
 
     def register_commands(self, 
                           plugin_name: str, 

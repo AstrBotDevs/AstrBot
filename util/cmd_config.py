@@ -136,6 +136,8 @@ class AstrBotConfig():
     wake_prefix: List[str] = field(default_factory=list)
     log_level: str = "INFO"
     t2i_endpoint: str = ""
+    pip_install_arg: str = ""
+    plugin_repo_mirror: str = ""
 
     def __init__(self) -> None:
         self.init_configs()
@@ -179,6 +181,9 @@ class AstrBotConfig():
         self.wake_prefix=data.get("wake_prefix", ["/"])
         self.log_level=data.get("log_level", "INFO")
         self.t2i_endpoint=data.get("t2i_endpoint", "")
+        self.pip_install_arg=data.get("pip_install_arg", "")
+        self.plugin_repo_mirror=data.get("plugin_repo_mirror", "")
+        
 
     def migrate_config_1_2(self, old: dict) -> dict:
         '''将配置文件从版本 1 迁移至版本 2'''

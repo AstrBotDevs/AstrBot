@@ -11,6 +11,7 @@ class StatRoute(Route):
         self.routes = {
             '/stat/get': ('GET', self.get_stat),
             '/stat/version': ('GET', self.get_version),
+            '/stat/start-time': ('GET', self.get_start_time)
         }
         self.db_helper = db_helper
         self.register_routes()
@@ -23,6 +24,11 @@ class StatRoute(Route):
     async def get_version(self):
         return Response().ok({
             "version": VERSION
+        }).__dict__
+
+    async def get_start_time(self):
+        return Response().ok({
+            "start_time": self.context._start_running,
         }).__dict__
     
     async def get_stat(self):

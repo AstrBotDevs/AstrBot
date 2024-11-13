@@ -14,6 +14,8 @@ class Broker:
                 await connection.send(message)
             except Exception as e:
                 logger.warning(f"发送日志失败: {e.__str__()}")
+                connection.close()
+                del connection 
 
             
 class LogRoute:

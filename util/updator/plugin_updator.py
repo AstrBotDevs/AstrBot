@@ -12,7 +12,8 @@ logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 
 class PluginUpdator(RepoZipUpdator):
-    def __init__(self) -> None:
+    def __init__(self, repo_mirror: str = "") -> None:
+        super().__init__(repo_mirror)
         self.plugin_store_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data/plugins"))
         
     def get_plugin_store_path(self) -> str:

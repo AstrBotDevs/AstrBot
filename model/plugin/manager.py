@@ -21,7 +21,7 @@ logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
 class PluginManager():
     def __init__(self, context: Context):
-        self.updator = PluginUpdator()
+        self.updator = PluginUpdator(context.config_helper.plugin_repo_mirror)
         self.plugin_store_path = self.updator.get_plugin_store_path()
         self.context = context
 
@@ -80,75 +80,26 @@ class PluginManager():
             plugin_path = os.path.join(plugin_dir, p)
             if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
                 pth = os.path.join(plugin_path, "requirements.txt")
-                logger.info(f"正在检查更新插件 {p} 的依赖: {pth}")
-                self.update_plugin_dept(os.path.join(plugin_path, "requirements.txt"))
+                logger.info(f"正在检查插件 {p} 的依赖: {pth}")
+                try:
+                    self.update_plugin_dept(os.path.join(plugin_path, "requirements.txt"))
+                except Exception as e:
+                    logger.error(f"更新插件 {p} 的依赖失败。Code: {str(e)}")
 
     def update_plugin_dept(self, path):
-        pip_main(['install', '-r', path, '--trusted-host', 'mirrors.aliyun.com', '-i', 'https://mirrors.aliyun.com/pypi/simple/'])
-        # mirror = "https://mirrors.aliyun.com/pypi/simple/"
-        # py = sys.executable
-        # cmd = f"{py} -m pip install -r {path} -i {mirror} --trusted-host mirrors.aliyun.com"
-        # if break_system_package:
-        #     cmd += " --break-system-package"
-        # process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, universal_newlines=True)
-        
-        # while True:
-        #     output = process.stdout.readline()
-        #     err = process.stderr.readline()
-        #     if err:
-        #         err = err.strip()
-        #         logger.error(err)
-        #         if "no such option: --break-system-package" in err:
-        #             self.update_plugin_dept(path, break_system_package=False)
-        #             break
-        #     if output == '' and process.poll() is not None:
-        #         break
-        #     if output:
-        #         output = output.strip()
-        #         if output.startswith("Requirement already satisfied"):
-        #             continue
-        #         if output.startswith("Using cached"):
-        #             continue
-        #         if output.startswith("Looking in indexes"):
-        #             continue
-        #         logger.info(output)
-            
-        # rc = process.poll()
-        
+        args = ['install', '-r', path, '--trusted-host', 'mirrors.aliyun.com', '-i', 'https://mirrors.aliyun.com/pypi/simple/', '--break-system-package']
+        if self.context.config_helper.pip_install_arg:
+            args.extend(self.context.config_helper.pip_install_arg)
+        result_code = pip_main(args)
+        if result_code != 0:
+            raise Exception(str(result_code))
         
     async def install_plugin(self, repo_url: str):
-        ppath = self.plugin_store_path
-
-        # we no longer use Git anymore :)
-        # Repo.clone_from(repo_url, to_path=plugin_path, branch='master')
-        
         plugin_path = await self.updator.update(repo_url)
         with open(os.path.join(plugin_path, "REPO"), "w", encoding='utf-8') as f:
             f.write(repo_url)
-            
         # self.check_plugin_dept_update()
-
         return plugin_path
-        # ok, err = self.plugin_reload()
-        # if not ok:
-        #     raise Exception(err)
-        
-    async def download_from_repo_url(self, target_path: str, repo_url: str):
-        repo_namespace = repo_url.split("/")[-2:]
-        author = repo_namespace[0]
-        repo = repo_namespace[1]
-
-        logger.info(f"正在下载插件 {repo} ...")
-        release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
-        releases = await self.updator.fetch_release_info(url=release_url)
-        if not releases:
-            # download from the default branch directly. 
-            logger.warn(f"未在插件 {author}/{repo} 中找到任何发布版本，将从默认分支下载。")
-            release_url = f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
-        else:
-            release_url = releases[0]['zipball_url']
-
-        await download_file(release_url, target_path + ".zip")
 
     def get_registered_plugin(self, plugin_name: str) -> RegisteredPlugin:
         for p in self.context.cached_plugins:

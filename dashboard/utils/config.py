@@ -21,6 +21,8 @@ def get_default_val_by_type(type_: str):
         return False
     elif type_ == "string":
         return ""
+    elif type_ == "text":
+        return ""
     elif type_ == "list":
         return []
     elif type_ == "object":
@@ -57,7 +59,7 @@ def validate_config(data, context: Context):
                 data[key] = casted
             elif meta["type"] == "bool" and not isinstance(value, bool):
                 errors.append(f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}")
-            elif meta["type"] == "string" and not isinstance(value, str):
+            elif meta["type"] in ["string", "text"] and not isinstance(value, str):
                 errors.append(f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}")
             elif meta["type"] == "list" and not isinstance(value, list):
                 errors.append(f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}")
