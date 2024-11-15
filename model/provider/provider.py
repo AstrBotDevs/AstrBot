@@ -2,7 +2,6 @@ from collections import defaultdict
 
 class Provider:
     def __init__(self) -> None:
-        self.model_stat = defaultdict(int) # 用于记录 LLM Model 使用数据
         self.curr_model_name = "unknown"
         
     def reset_model_stat(self):
@@ -12,16 +11,8 @@ class Provider:
         self.curr_model_name = model_name
     
     def get_curr_model(self):
-        '''
-        返回当前正在使用的 LLM
-        '''
         return self.curr_model_name
     
-    def accu_model_stat(self, model: str = None):
-        if not model:
-            model = self.get_curr_model()
-        self.model_stat[model] += 1
-        
     async def text_chat(self,
                         prompt: str,
                         session_id: str,

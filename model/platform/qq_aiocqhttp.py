@@ -185,7 +185,6 @@ class AIOCQHTTP(Platform):
         if (use_t2i or (use_t2i == None and self.context.config_helper.t2i)) and isinstance(message_chain, list):
             try:
                 message_chain = await self.convert_to_t2i_chain(message_chain)
-                if not message_chain: raise T2IException()
             except BaseException as e:
                 raise T2IException()
         

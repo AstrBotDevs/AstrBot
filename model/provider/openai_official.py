@@ -94,9 +94,6 @@ class ProviderOpenAIOfficial(Provider):
             self.session_memory[session_id] = []
         self.curr_personality = default_personality
         self.session_personality = {} # 重置
-        encoded_prompt = self.tokenizer.encode(default_personality['prompt'])
-        tokens_num = len(encoded_prompt)
-        model = self.get_curr_model()
 
         new_record = {
             "user": {
@@ -117,8 +114,9 @@ class ProviderOpenAIOfficial(Provider):
             image_url = await download_image_by_url(image_url)
         
         with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode()
+            image_bs64 = base64.b64encode(f.read()).decode('utf-8')
             return "data:image/jpeg;base64," + image_bs64
+        return ''
 
     async def retrieve_context(self, session_id: str):
         '''
@@ -129,24 +127,14 @@ class ProviderOpenAIOfficial(Provider):
         
         # 转换为 openai 要求的格式
         context = []
-        is_lvm = await self.is_lvm()
         for record in self.session_memory[session_id]:
             if "user" in record and record['user']:
-                if not is_lvm and "content" in record['user'] and isinstance(record['user']['content'], list):
-                    logger.warn(f"由于当前模型 {self.get_curr_model()} 不支持视觉，将忽略上下文中的图片输入。如果一直弹出此警告，可以尝试 reset 指令。")
-                    continue
                 context.append(record['user'])
             if "AI" in record and record['AI']:
                 context.append(record['AI'])
 
         return context
 
-    async def is_lvm(self):
-        '''
-        是否是 LVM
-        '''
-        return self.get_curr_model().startswith("gpt-4")
-    
     async def get_models(self):
         try:
             models = await self.client.models.list()
@@ -173,6 +161,7 @@ class ProviderOpenAIOfficial(Provider):
             "AI": None
         }
         if image_url:
+            base_64_image = await self.encode_image_bs64(image_url)
             user_content = {
                 "role": "user",
                 "content": [
@@ -183,7 +172,7 @@ class ProviderOpenAIOfficial(Provider):
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": await self.encode_image_bs64(image_url)
+                            "url": base_64_image
                         }
                     }
                 ]
@@ -237,8 +226,6 @@ class ProviderOpenAIOfficial(Provider):
                     ) -> str:
         if os.environ.get("TEST_LLM", "off") != "on" and os.environ.get("TEST_MODE", "off") == "on":
             return "这是一个测试消息。"
-        
-        super().accu_model_stat()
         if not session_id:
             session_id = "unknown"
             if "unknown" in self.session_memory:
@@ -289,11 +276,6 @@ class ProviderOpenAIOfficial(Provider):
                 ok = await self.switch_to_next_key()
                 if ok: continue
                 else: raise Exception("所有 OpenAI API Key 目前都不可用。")
-            except BadRequestError as e:
-                retry += 1
-                logger.warn(f"OpenAI 请求异常：{e}。")
-                if "image_url is only supported by certain models." in str(e):
-                    raise Exception(f"当前模型 { self.get_curr_model() } 不支持图片输入，请更换模型。")
             except RateLimitError as e:
                 if "You exceeded your current quota" in str(e):
                     self.keys_data[self.chosen_api_key] = False
@@ -304,6 +286,8 @@ class ProviderOpenAIOfficial(Provider):
                 await self.switch_to_next_key()
                 rate_limit_retry += 1
                 await asyncio.sleep(1)
+            except BadRequestError as e:
+                raise e
             except NotFoundError as e:
                 raise e
             except Exception as e:
@@ -372,7 +356,6 @@ class ProviderOpenAIOfficial(Provider):
         if not conf:
             logger.error("OpenAI 图片生成模型配置不存在。")
             raise Exception("OpenAI 图片生成模型配置不存在。")
-        super().accu_model_stat(model=conf['model'])
         while retry < 3:
             try:
                 images_response = await self.client.images.generate(

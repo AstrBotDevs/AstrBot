@@ -1,4 +1,4 @@
-import traceback, psutil, time, datetime
+import traceback, psutil, time, aiohttp
 from .. import Route, Response, logger
 from quart import Quart, request
 from type.types import Context
@@ -11,6 +11,7 @@ class StatRoute(Route):
         self.routes = {
             '/stat/get': ('GET', self.get_stat),
             '/stat/version': ('GET', self.get_version),
+            '/stat/dashboard-version': ('GET', self.get_dashboard_version),
             '/stat/start-time': ('GET', self.get_start_time)
         }
         self.db_helper = db_helper
@@ -25,7 +26,17 @@ class StatRoute(Route):
         return Response().ok({
             "version": VERSION
         }).__dict__
-
+        
+    async def get_dashboard_version(self):
+        async with aiohttp.ClientSession() as session:
+            async with session.get('https://api.github.com/repos/Soulter/Astrbot-dashboard/actions/artifacts') as resp:
+                data = await resp.json()
+                return Response().ok({
+                    "data": data,
+                    "mark": "unimplemented feature"
+                }).__dict__
+        
+        
     async def get_start_time(self):
         return Response().ok({
             "start_time": self.context._start_running,

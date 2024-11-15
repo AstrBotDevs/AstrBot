@@ -16,7 +16,7 @@ from util.cmd_config import AstrBotConfig, try_migrate
 from util.metrics import MetricUploader
 from util.updator.astrbot_updator import AstrBotUpdator
 from util.log import LogManager
-
+from util.cmd_config import LLMConfig
 
 logger: Logger = LogManager.GetLogger(log_name='astrbot')
 
@@ -28,7 +28,7 @@ class AstrBotBootstrap():
         self.config_helper = AstrBotConfig()
         self.context.config_helper = self.config_helper
         # set log queue handler 
-        LogManager.set_queue_handler(logger, self.context._log_queue)
+        LogManager.set_queue_handler(logger, self.context.log_broker)
         logger.info("AstrBot v" + VERSION)
         # set log level
         logger.setLevel(self.config_helper.log_level)
@@ -70,7 +70,7 @@ class AstrBotBootstrap():
                                           plugin_manager=self.plugin_manager, 
                                           astrbot_updator=self.updator,
                                           db_helper=self.db_helper)
-        self.metrics_uploader = MetricUploader(self.context, self.db_helper)
+        self.metrics_uploader = MetricUploader(self.db_helper)
         
         self.context.metrics_uploader = self.metrics_uploader
         self.context.updator = self.updator
@@ -93,8 +93,7 @@ class AstrBotBootstrap():
         # load metrics uploader
         metrics_upload_task = asyncio.create_task(self.metrics_uploader.upload_metrics(), name="metrics-uploader")
         
-        log_task = asyncio.create_task(self.dashboard.lr._receive_log_task(), name="log")
-        tasks = [metrics_upload_task, dashboard_server_task, log_task, *platform_tasks, *self.context.ext_tasks]
+        tasks = [metrics_upload_task, dashboard_server_task, *platform_tasks, *self.context.ext_tasks]
         tasks = [self.handle_task(task) for task in tasks]
         await asyncio.gather(*tasks)
 
@@ -129,10 +128,10 @@ class AstrBotBootstrap():
             self.openai_command_handler = OpenAIOfficialCommandHandler(self.command_manager)
             self.openai_command_handler.set_provider(self.context.llms[0].llm_instance)
 
-    def load_openai(self, llm_config):
+    def load_openai(self, llm_config: LLMConfig):
         from model.provider.openai_official import ProviderOpenAIOfficial
         inst = ProviderOpenAIOfficial(llm_config, self.db_helper)
-        self.context.register_provider("internal_openai", inst)
+        self.context.register_provider(llm_config.id, inst)
     
     def load_plugins(self):
         self.plugin_manager.plugin_reload()

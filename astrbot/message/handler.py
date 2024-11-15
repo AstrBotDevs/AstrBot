@@ -186,6 +186,7 @@ class MessageHandler():
             if isinstance(comp, Image):
                 image_url = comp.url if comp.url else comp.file
                 break
+        llm_result = None
         try:
             if not self.llm_tools.empty():
                 # tools-use
@@ -195,6 +196,7 @@ class MessageHandler():
                     session_id=message.session_id, 
                     tools=self.llm_tools.get_func()
                 )
+                self.context.metrics_uploader[provider.get_curr_model()] += 1
                 
                 if isinstance(llm_result, Function):
                     logger.debug(f"function-calling: {llm_result}")
@@ -248,6 +250,7 @@ class MessageHandler():
                     session_id=message.session_id, 
                     image_url=image_url
                 )
+                self.context.metrics_uploader.llm_stats[provider.get_curr_model()] += 1
         except BadRequestError as e:
             if tool_use_flag:
                 # seems like the model don't support function-calling
@@ -271,7 +274,10 @@ class MessageHandler():
                 except BaseException as e:
                     logger.error(traceback.format_exc())
                     return CommandResult("AstrBot Function-calling 异常：" + str(e))
-
+            else:
+                logger.error(traceback.format_exc())
+                logger.error(f"LLM 调用失败。")
+                return MessageResult("AstrBot 请求 LLM 资源失败：" + str(e))
         except BaseException as e:
             logger.error(traceback.format_exc())
             logger.error(f"LLM 调用失败。")

@@ -13,7 +13,8 @@ from type.middleware import Middleware
 from type.astrbot_message import MessageType
 from model.plugin.command import PluginCommandBridge
 from model.provider.provider import Provider
-from type.cached_queue import CachedQueue
+from util.log import LogBroker
+from util.metrics import MetricUploader
 
 
 class Context:
@@ -30,7 +31,7 @@ class Context:
         self.llms: List[RegisteredLLM] = []
         self.default_personality: dict = None
         
-        self.metrics_uploader = None
+        self.metrics_uploader: MetricUploader = None
         self.updator: AstrBotUpdator = None
         self.plugin_updator: PluginUpdator = None
         self.plugin_command_bridge = PluginCommandBridge(self.cached_plugins)
@@ -44,8 +45,8 @@ class Context:
         self.running = True
         self._loop = asyncio.get_event_loop()
         self._start_running = int(time.time())
-
-        self._log_queue = CachedQueue()
+        
+        self.log_broker = LogBroker()
 
     def register_commands(self, 
                           plugin_name: str, 
@@ -92,6 +93,7 @@ class Context:
         '''
         注册一个提供 LLM 资源的 Provider。
         
+        `llm_name`: 自定义的用于识别 Provider 的名称。在 AstrBot 配置中，是 `llm` 字段下的 `id` 字段。
         `provider`: Provider 对象。即你的实现需要继承 Provider 类。至少应该实现 text_chat() 方法。
         '''
         self.llms.append(RegisteredLLM(llm_name, provider, origin))

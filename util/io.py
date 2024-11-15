@@ -86,8 +86,7 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
     except aiohttp.client_exceptions.ClientConnectorSSLError as e:
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
+        ssl_context.set_ciphers('DEFAULT')
         async with aiohttp.ClientSession(trust_env=False) as session:
             if post:
                 async with session.get(url, ssl=ssl_context) as resp:
