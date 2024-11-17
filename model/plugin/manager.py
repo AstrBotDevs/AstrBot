@@ -167,8 +167,6 @@ class PluginManager():
 
                 plugin_path = os.path.join(self.plugin_store_path, root_dir_name)
                 metadata = self.load_plugin_metadata(plugin_path=plugin_path, plugin_obj=obj)
-                
-                logger.info(f"插件 {metadata.plugin_name}({metadata.author}) 加载成功。")
 
                 if module_path not in registered_map:
                     cached_plugins.append(RegisteredPlugin(

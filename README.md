@@ -34,9 +34,9 @@
 - Ollama 
 - 几乎所有已知模型（可接入 [OneAPI](https://astrbot.soulter.top/docs/docs/adavanced/one-api)）
 
-🌍 机器人支持的能力一览：
+🌍 机器人支持的能力：
 - 大模型对话、人格、网页搜索
-- 可视化仪表盘
+- 可视化管理面板
 - 同时处理多平台消息
 - 精确到个人的会话隔离
 - 插件支持

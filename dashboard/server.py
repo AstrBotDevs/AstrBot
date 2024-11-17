@@ -35,5 +35,5 @@ class AstrBotDashboard():
         
     def run(self):
         ip_addr = get_local_ip_addresses()
-        logger.info(f"仪表盘已启动，可访问 http://{ip_addr}:6185 登录。")
+        logger.info(f"管理面板已启动，可访问 http://{ip_addr}:6185 登录。")
         return self.app.run_task(host="0.0.0.0", port=6185, shutdown_trigger=self.shutdown_trigger_placeholder)

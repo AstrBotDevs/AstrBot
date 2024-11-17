@@ -59,9 +59,9 @@ class CommandManager():
             description=description
         )
         if plugin_metadata:
-            logger.info(f"已注册 {plugin_metadata.author}/{plugin_metadata.plugin_name} 的指令 {command}。")
+            logger.debug(f"已注册 {plugin_metadata.author}/{plugin_metadata.plugin_name} 的指令 {command}。")
         else:
-            logger.info(f"已注册指令 {command}。")
+            logger.debug(f"已注册指令 {command}。")
         
     def register_from_pcb(self, pcb: PluginCommandBridge):
         for request in pcb.plugin_commands_waitlist:

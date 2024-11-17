@@ -122,7 +122,7 @@ class AstrBotBootstrap():
                         continue
                     self.load_openai(llm)
                     f = True
-                    logger.info(f"已启用 LLM Provider(OpenAI API): {llm.name}。")
+                    logger.info(f"已启用 LLM Provider(OpenAI API): {llm.id}({llm.name})。")
         if f:
             from model.command.openai_official_handler import OpenAIOfficialCommandHandler
             self.openai_command_handler = OpenAIOfficialCommandHandler(self.command_manager)

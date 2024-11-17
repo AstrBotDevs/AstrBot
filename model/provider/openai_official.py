@@ -55,8 +55,7 @@ class ProviderOpenAIOfficial(Provider):
         
         logger.info("正在载入分词器 cl100k_base...")
         self.tokenizer = tiktoken.get_encoding("cl100k_base") # todo: 根据 model 切换分词器
-        logger.info("分词器载入完成。")
-        
+
         self.DEFAULT_PERSONALITY = {
             "prompt": self.llm_config.default_personality,
             "name": "default"

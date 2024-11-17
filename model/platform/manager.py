@@ -25,7 +25,6 @@ class PlatformManager():
         tasks = []
         
         platforms = self.context.config_helper.platform
-        logger.info(f"加载 {len(platforms)} 个机器人消息平台...")
         for platform in platforms:
             if not platform.enable:
                 continue

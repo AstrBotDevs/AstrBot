@@ -278,7 +278,7 @@ CONFIG_METADATA_2 = {
     "https_proxy": {"description": "HTTPS 代理", "type": "string", "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`"},
     "http_proxy": {"description": "HTTP 代理", "type": "string", "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`"},
     "dashboard": {
-        "description": "仪表盘配置",
+        "description": "管理面板配置",
         "type": "object",
         "items": {
             "enable": {"description": "启用", "type": "bool"},
