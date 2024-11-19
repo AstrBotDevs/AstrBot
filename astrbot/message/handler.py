@@ -196,7 +196,7 @@ class MessageHandler():
                     session_id=message.session_id, 
                     tools=self.llm_tools.get_func()
                 )
-                self.context.metrics_uploader[provider.get_curr_model()] += 1
+                self.context.metrics_uploader.llm_stats[provider.get_curr_model()] += 1
                 
                 if isinstance(llm_result, Function):
                     logger.debug(f"function-calling: {llm_result}")

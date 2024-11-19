@@ -179,13 +179,7 @@ class InternalCommandHandler:
                 msg += f"- `{key}` ({value.plugin_metadata.plugin_name}): {value.description}\n"
             else: msg += f"- `{key}`: {value.description}\n"
         # plugins
-        if context.cached_plugins:
-            plugin_list_info = ""
-            for plugin in context.cached_plugins:
-                plugin_list_info += f"- `{plugin.metadata.plugin_name}` {plugin.metadata.desc}\n"
-            if plugin_list_info.strip() != "":
-                msg += "\n## 插件\n> 使用plugin v 插件名 查看插件帮助\n"
-                msg += plugin_list_info
+        msg += "\n> 使用 plugin l 查看已加载的插件\n"
         msg += notice
 
         return CommandResult().message(msg)
