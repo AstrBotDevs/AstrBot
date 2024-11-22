@@ -1,4 +1,4 @@
-import asyncio
+import asyncio, aiohttp
 import pytest
 import os
 
@@ -52,14 +52,6 @@ class TestBasicMessageHandle():
         abm = qq_official._parse_from_qqofficial(guild_message, MessageType.GUILD_MESSAGE)
         ret = await qq_official.handle_msg(abm)
         print(ret)
-
-    # 有共同性，为了节约开销，不测试频道私聊。
-    # @pytest.mark.asyncio
-    # async def test_qqofficial_private_message(self):
-    #     private_message = MockQQOfficialMessage().create_random_direct_message()
-    #     abm = qq_official._parse_from_qqofficial(private_message, MessageType.FRIEND_MESSAGE)
-    #     ret = await qq_official.handle_msg(abm)
-    #     print(ret)
     
     @pytest.mark.asyncio
     async def test_aiocqhttp_group_message(self):
@@ -75,7 +67,7 @@ class TestBasicMessageHandle():
         ret = await aiocqhttp.handle_msg(abm)
         print(ret)
         
-class TestInteralCommandHsandle():
+class TestInteralCommandHandle():
     def create(self, text: str):
         event = MockOneBotMessage().create_msg(text)
         abm = aiocqhttp.convert_message(event)
@@ -140,10 +132,10 @@ class TestInteralCommandHsandle():
         await self.fast_test(f"/plugin i {url}")
         await self.fast_test(f"/plugin u {url}")
         await self.fast_test(f"/plugin d {pname}")
-
-class TestLLMChat():
+        
     @pytest.mark.asyncio
-    async def test_llm_chat(self):
+    async def test_llm(self):
+        await self.fast_test("/reset")        
         os.environ["TEST_LLM"] = "on"
         ret = await llm_provider.text_chat("Just reply `ok`", "test")
         print(ret)
@@ -152,4 +144,72 @@ class TestLLMChat():
         ret = await aiocqhttp.handle_msg(abm)
         print(ret)
         os.environ["TEST_LLM"] = "off"
+        await self.fast_test("/reset")
+        await self.fast_test("/status")
+        await self.fast_test("/his")
+        await self.fast_test("/switch")
+        await self.fast_test("/set")
+        await self.fast_test("/set list")
+        await self.fast_test("/unset")
+
+BASE_URL = "http://0.0.0.0:6185/api"
+class TestHTTPServer:
+    
+    async def get_url(self, url):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                return await response.json(), response.status
+            
+    async def post_url(self, url, data):
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=data) as response:
+                return await response.json(), response.status
         
+    @pytest.mark.asyncio
+    async def test_config(self):
+        configs, status = await self.get_url(f"{BASE_URL}/config/get")
+        assert status == 200
+        assert 'data' in configs and 'metadata' in configs['data'] \
+            and 'config' in configs['data']
+        config = configs['data']['config']
+        # test post config
+        await self.post_url(f"{BASE_URL}/config/astrbot/update", config)
+        # text post config with invalid data
+        assert 'rate_limit' in config['platform_settings']
+        config['platform_settings']['rate_limit'] = "invalid"
+        ret, status = await self.post_url(f"{BASE_URL}/config/astrbot/update", config)
+        assert status == 200
+        assert 'status' in ret and ret['status'] == 'error'
+    
+    @pytest.mark.asyncio
+    async def test_update(self):
+        _, status = await self.get_url(f"{BASE_URL}/update/check")
+        assert status == 200
+        
+    @pytest.mark.asyncio
+    async def test_stats(self):
+        _, status = await self.get_url(f"{BASE_URL}/stat/get")
+        _, status = await self.get_url(f"{BASE_URL}/stat/version")
+        _, status = await self.get_url(f"{BASE_URL}/stat/start-time")
+        assert status == 200
+    
+    @pytest.mark.asyncio
+    async def test_plugins(self):
+        pname = "astrbot_plugin_bilibili"
+        url = f"https://github.com/Soulter/{pname}"
+
+        _, status = await self.get_url(f"{BASE_URL}/plugin/get")
+
+        # test install plugin
+        _, status = await self.post_url(f"{BASE_URL}/plugin/install", {
+            "url": url
+        })
+        
+        # test uninstall plugin
+        _, status = await self.post_url(f"{BASE_URL}/plugin/uninstall", {
+            "name": pname
+        })
+        
+        assert status == 200
+        
+        bootstrap.context.running = False

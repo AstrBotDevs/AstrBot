@@ -1,6 +1,7 @@
 import asyncio
 import traceback
 import os
+import threading
 from astrbot.message.handler import MessageHandler
 from astrbot.db.sqlite import SQLiteDatabase
 from dashboard.server import AstrBotDashboard
@@ -82,6 +83,10 @@ class AstrBotBootstrap():
         dashboard_server_task = asyncio.create_task(self.dashboard.run(), name="dashboard")
 
         if self.test_mode:
+            def run_dashboard():
+                asyncio.run(self.dashboard.run())
+            dashboard_thread = threading.Thread(target=run_dashboard, name="dashboard_thread", daemon=False)
+            dashboard_thread.start()
             return
         
         # load plugins, plugins' commands.
