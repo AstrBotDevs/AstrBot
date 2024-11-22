@@ -39,6 +39,7 @@
 7. 经过多轮对话与指令微调过的带有 ATRI（亚托莉） 人格的 LLM(基于 LLama-3.1-Chinese-Chat-8B) [已完成! 一同期待 v3.5.0！](https://github.com/Soulter/AstrBot/issues/218)
 8. 事件驱动的机器人**主动回复**！[开发中 ... 一同期待 v3.5.0！](https://github.com/Soulter/AstrBot/issues/218)
 9. 基于多因素人格的事件驱动人格 [🧐 研究中 ...]
+10. LLM + Live2D，带有情绪反馈和 TTS。[开发中 ... 一同期待 v3.5.0！](https://github.com/Soulter/AstrBot/issues/218)
 
 #### ✨ 美观实用的管理面板
 1. 支持可视化修改配置
