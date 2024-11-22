@@ -21,28 +21,36 @@
 
 ## 🛠️ 功能
 
-🌍 支持的消息平台
-- QQ 群、QQ 频道（OneBot、QQ 官方接口）
-- Telegram（[astrbot_plugin_telegram](https://github.com/Soulter/astrbot_plugin_telegram) 插件）
+#### 🌟 多消息平台支持
 
-🌍 支持的大模型/底座：
+1. 支持在 QQ 群、QQ 频道、Telegram 等平台同时部署。
+2. 支持文本转图片，Markdown 渲染。
+   
+#### 🌟 多 LLM 支持
 
-- OpenAI GPT、DallE 系列
-- Claude（由[LLMs插件](https://github.com/Soulter/llms)支持）
-- HuggingChat（由[LLMs插件](https://github.com/Soulter/llms)支持）
-- Gemini（由[LLMs插件](https://github.com/Soulter/llms)支持）
-- Ollama 
-- 几乎所有已知模型（可接入 [OneAPI](https://astrbot.soulter.top/docs/docs/adavanced/one-api)）
+1. 适配 OpenAI API，支持接入 Gemini、GPT、Llama、Claude、HuggingChat 等大语言模型和多实例上线。
+2. 完善的上下文管理功能，支持持久化。
+3. 适配了 OneAPI 等分发平台。
+4. 支持网页搜索（Web Search）。
 
-🌍 机器人支持的能力：
-- 大模型对话、人格、网页搜索
-- 可视化管理面板
-- 同时处理多平台消息
-- 精确到个人的会话隔离
-- 插件支持
-- 文本转图片回复（Markdown）
+#### ☺️ [NEW] 强大且完善的 Agent
+5. 基于 RAG 的长短期记忆支持。[开发中 ... 一同期待 v3.5.0！](https://github.com/Soulter/AstrBot/issues/218)
+6. 多模态信息理解与回复（图文、**表情包**） [开发中 ... 一同期待 v3.5.0！](https://github.com/Soulter/AstrBot/issues/218)
+7. 经过多轮对话与指令微调过的带有 ATRI（亚托莉） 人格的 LLM(基于 LLama-3.1-Chinese-Chat-8B) [已完成! 一同期待 v3.5.0！](https://github.com/Soulter/AstrBot/issues/218)
+8. 事件驱动的机器人**主动回复**！[开发中 ... 一同期待 v3.5.0！](https://github.com/Soulter/AstrBot/issues/218)
+9. 基于多因素人格的事件驱动人格 [🧐 研究中 ...]
 
-## 🧩 插件
+#### ✨ 美观实用的管理面板
+1. 支持可视化修改配置
+2. 日志实时查看
+3. 简单的信息统计
+4. 微调数据集管理 [开发中 ... 一同期待 v3.5.0！](https://github.com/Soulter/AstrBot/issues/218)
+5. 插件管理
+
+#### 🧩 插件支持
+
+1. 简单易用的开发接口
+2. 基于工作流的插件模型 [开发中 ... 一同期待 v3.?.0！](https://github.com/Soulter/AstrBot/issues/218)
 
 有关插件的使用和列表请移步：[AstrBot 文档 - 插件](https://astrbot.soulter.top/docs/get-started/plugin)
 
@@ -58,11 +66,21 @@
 
 ## 🔭 展望
 
-- [ ] 更多、更开放的 LLM Agent 能力
+1. 更强大的 Agent 系统。
+2. 打造插件工作流平台。
 
 ## ✨ Demo
 
-<img width="900" alt="image" src="https://github.com/Soulter/AstrBot/assets/37870767/824d1ff3-7b85-481c-b795-8e62dedb9fd7">
+<img width="600" alt="image" src="https://github.com/user-attachments/assets/404b0509-3a6c-4e70-9c03-a8a884c5ff2b">
 
+<img width="600" alt="image" src="https://github.com/user-attachments/assets/bb57bd05-4c6d-4898-841e-cef321277675">
 
+<img width="600" alt="image" src="https://github.com/user-attachments/assets/ade1e966-a312-4dd5-ae65-ce37f074e73f">
 
+<img width="600" alt="image" src="https://github.com/user-attachments/assets/a02d25f0-9e34-4304-b5fb-8fb8df02e7b7">
+
+## ✨ Support
+
+- Star 这个项目！
+- 在[爱发电](https://afdian.com/a/soulter)支持我！
+- 在[微信](https://drive.soulter.top/f/pYfA/d903f4fa49a496fda3f16d2be9e023b5.png)支持我~
