@@ -6,7 +6,6 @@ from core.config.astrbot_config import AstrBotConfig
 from core.message_event_handler import MessageEventHandler
 from core.plugin import PluginManager
 from core import LogBroker
-from core.utils.metrics import MetricUploader
 from core.db import BaseDatabase
 from core.updator import AstrBotUpdator
 from core import logger
@@ -22,7 +21,6 @@ class AstrBotCoreLifecycle:
         self.event_queue.closed = False
         self.plugin_manager = PluginManager(self.astrbot_config, self.event_queue, db)
         self.message_event_handler = MessageEventHandler(self.astrbot_config, self.plugin_manager)
-        self.metrics_uploader = MetricUploader(db)
         self.astrbot_updator = AstrBotUpdator(self.astrbot_config.plugin_repo_mirror)
         self.event_bus = EventBus(self.event_queue, self.message_event_handler)
         self.stop_flag = False
@@ -35,9 +33,8 @@ class AstrBotCoreLifecycle:
 
         platform_tasks = self.load_platform()
         event_bus_task = asyncio.create_task(self.event_bus.dispatch(), name="event_bus")
-        metrics_uploader_task = asyncio.create_task(self.metrics_uploader.upload_metrics(), name="metrics")
         
-        self.curr_tasks = [event_bus_task, metrics_uploader_task, *platform_tasks]
+        self.curr_tasks = [event_bus_task, *platform_tasks]
         self.start_time = int(time.time())
     
     async def start(self):

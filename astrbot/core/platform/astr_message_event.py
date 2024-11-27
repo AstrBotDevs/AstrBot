@@ -6,6 +6,7 @@ from core.message_event_result import MessageEventResult, MessageChain
 from core.platform.message_type import MessageType
 from typing import List
 from nakuru.entities.components import BaseMessageComponent, Plain, Image
+from core.utils.metrics import Metric
 
 @dataclass
 class MessageSesion:
@@ -134,9 +135,8 @@ class AstrMessageEvent(abc.ABC):
         '''
         return self.is_wake
     
-    @abc.abstractmethod
     async def send(self, message: MessageChain):
         '''
-        发送消息。
+        发送消息到消息平台。
         '''
-        raise NotImplementedError()
+        await Metric.upload(msg_event_tick = 1, adapter_name = self.platform_meta.name)

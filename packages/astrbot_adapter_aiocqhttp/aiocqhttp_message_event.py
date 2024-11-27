@@ -35,3 +35,4 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         if os.environ.get('TEST_MODE', 'off') == 'on':
             return
         await self.bot.send(self.message_obj.raw_message, ret)
+        await super().send(message)

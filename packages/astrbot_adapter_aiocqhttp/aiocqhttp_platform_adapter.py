@@ -36,10 +36,11 @@ class AiocqhttpAdapter(Platform):
                     # 独立会话
                     _, group_id = session.session_id.split("_")
                     await self.bot.send_group_msg(group_id=group_id, message=ret)
-                    return
-                await self.bot.send_group_msg(group_id=session.session_id, message=ret)
+                else:
+                    await self.bot.send_group_msg(group_id=session.session_id, message=ret)
             case MessageType.FRIEND_MESSAGE.value:
                 await self.bot.send_private_msg(user_id=session.session_id, message=ret)
+        await super().send_by_session(session, message_chain)
         
     def convert_message(self, event: Event) -> AstrBotMessage:
         abm = AstrBotMessage()

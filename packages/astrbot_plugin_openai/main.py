@@ -10,6 +10,7 @@ from openai._exceptions import *
 from openai.types.chat.chat_completion_message_tool_call import Function
 from astrbot.api import command_parser
 from .web_searcher import search_from_bing, fetch_website_content
+from astrbot.core.utils.metrics import Metric
 
 class Main:
     def __init__(self, context: Context) -> None:
@@ -128,7 +129,7 @@ class Main:
                     session_id=event.session_id, 
                     tools=self.context.llm_tools.get_func()
                 )
-                # self.context.metrics_uploader.llm_stats[provider.get_curr_model()] += 1
+                await Metric.upload(llm_tick=1, llm_name=self.provider.get_model(), llm_api_base=self.provider.base_url)
                 
                 if isinstance(llm_result, Function):
                     logger.debug(f"function-calling: {llm_result}")
@@ -176,7 +177,7 @@ class Main:
                     session_id=event.session_id, 
                     image_url=image_url
                 )
-                # self.context.metrics_uploader.llm_stats[provider.get_curr_model()] += 1
+                await Metric.upload(llm_tick=1, llm_name=self.provider.get_model(), llm_api_base=self.provider.base_url)
         except BadRequestError as e:
             if tool_use_flag:
                 # seems like the model don't support function-calling

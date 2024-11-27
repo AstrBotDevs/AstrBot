@@ -5,6 +5,7 @@ from .platform_metadata import PlatformMetadata
 from .astr_message_event import AstrMessageEvent
 from core.message_event_result import MessageChain
 from .astr_message_event import MessageSesion
+from core.utils.metrics import Metric
 
 class Platform(abc.ABC):
     def __init__(self, event_queue: Queue):
@@ -26,14 +27,13 @@ class Platform(abc.ABC):
         '''
         raise NotImplementedError
     
-    @abc.abstractmethod
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain) -> Awaitable[Any]:
         '''
         通过会话发送消息。该方法旨在让插件能够直接通过**可持久化的会话数据**发送消息，而不需要保存 event 对象。
         
         异步方法。
-        '''
-        raise NotImplementedError
+        '''            
+        await Metric.upload(msg_event_tick = 1, adapter_name = self.meta().name)
     
     def commit_event(self, event: AstrMessageEvent):
         '''

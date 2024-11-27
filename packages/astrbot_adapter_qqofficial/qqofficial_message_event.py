@@ -45,6 +45,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     payload['file_image'] = image_path
                 await self.bot.api.post_dms(guild_id=source.guild_id, **payload)
 
+        await super().send(message)
             
     async def upload_group_and_c2c_image(self, image_base64: str, file_type: int, **kwargs) -> botpy.types.message.Media:
         payload = {

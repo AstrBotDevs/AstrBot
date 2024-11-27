@@ -84,23 +84,23 @@ class ProviderOpenAIOfficial(Provider):
             finally:
                 time.sleep(10*60)
     
-    def personality_set(self, default_personality: dict, session_id: str):
-        if not default_personality: return
+    def personality_set(self, personality: dict, session_id: str):
+        if not personality or not personality['prompt']: return
         if session_id not in self.session_memory:
             self.session_memory[session_id] = []
-        self.curr_personality = default_personality
+        self.curr_personality = personality
         self.session_personality = {} # 重置
 
         new_record = {
             "user": {
                 "role": "system",
-                "content": default_personality['prompt'],
+                "content": personality['prompt'],
             },
             'usage_tokens': 0, # 到该条目的总 token 数
             'single-tokens': 0 # 该条目的 token 数
         }
 
-        self.session_memory[session_id].append(new_record)
+        self.session_memory[session_id] = [new_record]
 
     async def encode_image_bs64(self, image_url: str) -> str:
         '''
@@ -238,6 +238,8 @@ class ProviderOpenAIOfficial(Provider):
 
         # 获取上下文，openai 格式
         contexts = await self.retrieve_context(session_id)
+        
+        logger.debug(f"OpenAI 请求上下文：{contexts}")
 
         conf = asdict(self.llm_config.model_config)
 

@@ -6,7 +6,6 @@ from .platform import AstrMessageEvent
 from .config.astrbot_config import AstrBotConfig
 from .message_event_result import MessageEventResult, CommandResult, MessageChain
 from .plugin import PluginManager, Context, CommandMetadata
-from .provider import Provider
 from nakuru.entities.components import *
 from core import logger
 from core import html_renderer

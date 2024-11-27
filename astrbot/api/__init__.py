@@ -12,4 +12,6 @@ from astrbot.core.utils.command_parser import CommandParser, CommandTokens
 from astrbot.core.utils.func_call import FuncCall
 from astrbot.core import html_renderer
 
+from astrbot.core.plugin.config import *
+
 command_parser = CommandParser()
