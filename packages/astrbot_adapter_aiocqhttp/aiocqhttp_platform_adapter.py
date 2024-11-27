@@ -90,19 +90,35 @@ class AiocqhttpAdapter(Platform):
         abm.message_str = message_str
         abm.raw_message = event
         return abm
-            
+
+    def handle_whitelist(self, event: Event) -> bool:
+        match event['message_type']:
+            case "group":
+                if self.config.qq_group_id_whitelist and str(event.group_id) in self.config.qq_group_id_whitelist:
+                    return True
+            case "private":
+                if self.config.qq_id_whitelist and str(event.sender['user_id']) in self.config.qq_id_whitelist:
+                    return True
+        return False
+    
     def run(self) -> Awaitable[Any]:
         if not self.host or not self.port:
             return
         self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp', api_timeout_sec=180)
         @self.bot.on_message('group')
         async def group(event: Event):
+            if not self.handle_whitelist(event):
+                logger.debug(f"一个群消息({event.group_id})事件由于不在白名单而被过滤。")
+                return
             abm = self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
         
         @self.bot.on_message('private')
         async def private(event: Event):
+            if not self.handle_whitelist(event):
+                logger.debug(f"一个私聊消息({event.sender['nickname']}/{event.sender['user_id']})事件由于不在白名单而被过滤。")
+                return
             abm = self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)

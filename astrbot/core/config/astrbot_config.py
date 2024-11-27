@@ -38,19 +38,11 @@ class QQOfficialPlatformConfig(PlatformConfig):
     enable_guild_direct_message: bool = True
     
 @dataclass
-class NakuruPlatformConfig(PlatformConfig):
-    host: str = "172.0.0.1",
-    port: int = 5700,
-    websocket_port: int = 6700,
-    enable_group: bool = True,
-    enable_guild: bool = True,
-    enable_direct_message: bool = True,
-    enable_group_increase: bool = True
-    
-@dataclass
 class AiocqhttpPlatformConfig(PlatformConfig):
     ws_reverse_host: str = ""
     ws_reverse_port: int = 6199
+    qq_id_whitelist: List[str] = field(default_factory=list)
+    qq_group_id_whitelist: List[str] = field(default_factory=list)
     
 @dataclass
 class ModelConfig:
@@ -161,12 +153,8 @@ class AstrBotConfig():
                 continue
             if p["name"] == "qq_official":
                 self.platform.append(QQOfficialPlatformConfig(**p))
-            elif p["name"] == "nakuru":
-                self.platform.append(NakuruPlatformConfig(**p))
             elif p["name"] == "aiocqhttp":
                 self.platform.append(AiocqhttpPlatformConfig(**p))
-            else:
-                self.platform.append(PlatformConfig(**p))
         self.platform_settings=PlatformSettings(**data.get("platform_settings", {}))
         self.llm=[LLMConfig(**l) for l in data.get("llm", [])]
         self.llm_settings=LLMSettings(**data.get("llm_settings", {}))

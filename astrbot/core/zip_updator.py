@@ -112,11 +112,13 @@ class RepoZipUpdator():
             release_url = releases[0]['zipball_url']
             
         # 镜像站点
-        if self.repo_mirror:
-            if self.repo_mirror == 'default':
-                pass
-            elif self.repo_mirror == 'https://github-mirror.us.kg/':
+        match self.repo_mirror:
+            case 'https://github-mirror.us.kg/':
                 release_url = self.repo_mirror + release_url
+            case "https://ghp.ci/":
+                release_url = self.repo_mirror + release_url
+            case _:
+                pass
 
         await download_file(release_url, target_path + ".zip")
         

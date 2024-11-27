@@ -20,6 +20,8 @@ DEFAULT_CONFIG_VERSION_2 = {
             "enable": False,
             "ws_reverse_host": "",
             "ws_reverse_port": 6199,
+            "qq_id_whitelist": [],
+            "qq_group_id_whitelist": []
         }
     ],
     "platform_settings": {
@@ -93,20 +95,16 @@ CONFIG_METADATA_2 = {
         "type": "list",
         "items": {
             "id": {"description": "ID", "type": "string", "hint": "提供商 ID 名，用于在多实例下方便管理和识别。自定义，ID 不能重复。"},
-            "name": {"description": "适配器类型", "type": "string", "hint": "当前版本下，支持 `qq_official`（QQ 官方机器人）, `aiocqhttp`(Onebot 适用), `nakuru` 三种适配器类型。", "options": ["qq_official", "aiocqhttp", "nakuru"]},
+            "name": {"description": "适配器类型", "type": "string", "hint": "当前版本下，内置支持 `qq_official`（QQ 官方机器人）, `aiocqhttp`(Onebot 适用) 适配器类型。", "options": ["qq_official", "aiocqhttp"]},
             "enable": {"description": "启用", "type": "bool", "hint": "是否启用该适配器。未启用的适配器对应的消息平台将不会接收到消息。"},
             "appid": {"description": "appid", "type": "string", "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。"},
             "secret": {"description": "secret", "type": "string", "hint": "必填项。QQ 官方机器人平台的 secret。如何获取请参考文档。"},
             "enable_group_c2c": {"description": "启用消息列表单聊", "type": "bool", "hint": "启用后，机器人可以接收到 QQ 消息列表中的私聊消息。你可能需要在 QQ 机器人平台上通过扫描二维码的方式添加机器人为你的好友。详见文档。"},
             "enable_guild_direct_message": {"description": "启用频道私聊", "type": "bool", "hint": "启用后，机器人可以接收到频道的私聊消息。"},
-            "host": {"description": "主机地址", "type": "string", "hint": "Nakuru 适配器的服务器 IP 地址，不包含端口号。"},
-            "port": {"description": "端口", "type": "int", "hint": "Nakuru 适配器的 HTTP 端口。"},
-            "websocket_port": {"description": "Websocket 端口", "type": "int", "hint": "Nakuru 适配器的 Websocket 端口。"},
             "ws_reverse_host": {"description": "反向 Websocket 主机地址", "type": "string", "hint": "aiocqhttp 适配器的反向 Websocket 服务器 IP 地址，不包含端口号。"},
             "ws_reverse_port": {"description": "反向 Websocket 端口", "type": "int", "hint": "aiocqhttp 适配器的反向 Websocket 端口。"},
-            "enable_group": {"description": "接收群组消息", "type": "bool", "hint": "启用后，机器人可以接收到群组消息。"},
-            "enable_guild": {"description": "接收频道消息", "type": "bool", "hint": "启用后，机器人可以接收到频道消息。"},
-            "enable_direct_message": {"description": "接收频道私聊", "type": "bool", "hint": "启用后，机器人可以接收到频道的私聊消息。"},
+            "qq_id_whitelist": {"description": "QQ 号白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的 QQ 号发来的消息事件。为空时表示不启用白名单过滤。"},
+            "qq_group_id_whitelist": {"description": "QQ 群号白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的 QQ 群发来的消息事件。为空时表示不启用白名单过滤。"},
         }
     },
     "platform_settings": {
@@ -214,7 +212,7 @@ CONFIG_METADATA_2 = {
     "log_level": {"description": "控制台日志级别", "type": "string", "hint": "控制台输出日志的级别。", "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
     "t2i_endpoint": {"description": "文本转图像服务接口", "type": "string", "hint": "为空时使用 AstrBot API 服务"},
     "pip_install_arg": {"description": "pip 安装参数", "type": "string", "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。"},
-    "plugin_repo_mirror": {"description": "插件仓库镜像", "type": "string", "hint": "插件仓库的镜像地址，用于加速插件的下载。", "options": ["default", "https://github-mirror.us.kg/"]},
+    "plugin_repo_mirror": {"description": "插件仓库镜像", "type": "string", "hint": "插件仓库的镜像地址，用于加速插件的下载。", "options": ["default", "https://ghp.ci/", "https://github-mirror.us.kg/"]},
 }
         
 DEFAULT_VALUE_MAP = {

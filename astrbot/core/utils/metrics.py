@@ -21,9 +21,8 @@ class Metric():
         }
         try:
             async with aiohttp.ClientSession() as session:
-                logger.debug(f"Uploading metric: {kwargs}")
                 async with session.post(base_url, json=payload, timeout=3) as response:
                     if response.status != 200:
-                        logger.error(f"Failed to upload metric: {response.status} {response.reason}")
+                        pass
         except Exception as e:
-            logger.error(f"Failed to upload metric: {e}")
+            pass
