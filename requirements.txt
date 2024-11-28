@@ -1,4 +1,5 @@
 pydantic~=1.10.4
+vchat
 aiohttp
 openai
 qq-botpy

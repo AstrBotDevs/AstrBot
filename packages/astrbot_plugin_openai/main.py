@@ -61,7 +61,7 @@ class Main:
             fetch_website_content
         )
     
-    async def remove_web_search_tools(self):
+    def remove_web_search_tools(self):
         self.context.unregister_llm_tool("web_search")
         self.context.unregister_llm_tool("fetch_website_content")
         

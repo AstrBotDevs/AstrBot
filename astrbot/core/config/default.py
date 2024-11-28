@@ -22,6 +22,12 @@ DEFAULT_CONFIG_VERSION_2 = {
             "ws_reverse_port": 6199,
             "qq_id_whitelist": [],
             "qq_group_id_whitelist": []
+        },
+        {
+            "id": "default",
+            "name": "wechat",
+            "enable": False,
+            "wechat_id_whitelist": []
         }
     ],
     "platform_settings": {
@@ -105,6 +111,7 @@ CONFIG_METADATA_2 = {
             "ws_reverse_port": {"description": "反向 Websocket 端口", "type": "int", "hint": "aiocqhttp 适配器的反向 Websocket 端口。"},
             "qq_id_whitelist": {"description": "QQ 号白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的 QQ 号发来的消息事件。为空时表示不启用白名单过滤。"},
             "qq_group_id_whitelist": {"description": "QQ 群号白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的 QQ 群发来的消息事件。为空时表示不启用白名单过滤。"},
+            "wechat_id_whitelist": {"description": "微信私聊/群聊白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的微信私聊/群聊发来的消息事件。为空时表示不启用白名单过滤。使用 /wechatid 指令获取微信 ID（不是微信号）。"},
         }
     },
     "platform_settings": {

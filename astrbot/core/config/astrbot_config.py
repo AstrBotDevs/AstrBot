@@ -45,6 +45,10 @@ class AiocqhttpPlatformConfig(PlatformConfig):
     qq_group_id_whitelist: List[str] = field(default_factory=list)
     
 @dataclass
+class WechatPlatformConfig(PlatformConfig):
+    wechat_id_whitelist: List[str] = field(default_factory=list)
+    
+@dataclass
 class ModelConfig:
     model: str = "gpt-4o"
     max_tokens: int = 6000
@@ -147,14 +151,30 @@ class AstrBotConfig():
         '''
         self.config_version=data.get("version", 2)
         self.platform=[]
+        
+        left_platforms = ["qq_official", "aiocqhttp", "wechat"]
         for p in data.get("platform", []):
             if 'name' not in p:
                 logger.warning("A platform config missing name, skipping.")
                 continue
             if p["name"] == "qq_official":
                 self.platform.append(QQOfficialPlatformConfig(**p))
+                left_platforms.remove(p["name"])
             elif p["name"] == "aiocqhttp":
                 self.platform.append(AiocqhttpPlatformConfig(**p))
+                left_platforms.remove(p["name"])
+            elif p["name"] == "wechat":
+                self.platform.append(WechatPlatformConfig(**p))
+                left_platforms.remove(p["name"])
+        # 注入默认配置
+        for p in left_platforms:
+            if p == "qq_official":
+                self.platform.append(QQOfficialPlatformConfig(id="default", name=p))
+            elif p == "aiocqhttp":
+                self.platform.append(AiocqhttpPlatformConfig(id="default", name=p))
+            elif p == "wechat":
+                self.platform.append(WechatPlatformConfig(id="default", name=p))
+                
         self.platform_settings=PlatformSettings(**data.get("platform_settings", {}))
         self.llm=[LLMConfig(**l) for l in data.get("llm", [])]
         self.llm_settings=LLMSettings(**data.get("llm_settings", {}))
@@ -190,10 +210,6 @@ class AstrBotConfig():
             config = DEFAULT_CONFIG_VERSION_2
         else:
             config = self.get_all()
-            # check if the config is outdated
-            if 'config_version' not in config: # version 1
-                config = self.migrate_config_1_2(config)
-                self.flush_config(config)
         
         # 加载配置到对象
         self.load_from_dict(config)
