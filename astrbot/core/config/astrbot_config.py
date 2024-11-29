@@ -54,8 +54,10 @@ class ModelConfig:
     max_tokens: int = 6000
     temperature: float = 0.9
     top_p: float = 1
-    frequency_penalty: float = 0
-    presence_penalty: float = 0
+    
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 @dataclass
 class ImageGenerationModelConfig:
@@ -122,7 +124,6 @@ class AstrBotConfig():
     llm_settings: LLMSettings = field(default_factory=LLMSettings)
     content_safety: ContentSafetyConfig = field(default_factory=ContentSafetyConfig)
     t2i: bool = True
-    dump_history_interval: int = 10
     admins_id: List[str] = field(default_factory=list)
     https_proxy: str = ""
     http_proxy: str = ""
@@ -180,7 +181,6 @@ class AstrBotConfig():
         self.llm_settings=LLMSettings(**data.get("llm_settings", {}))
         self.content_safety=ContentSafetyConfig(**data.get("content_safety", {}))
         self.t2i=data.get("t2i", True)
-        self.dump_history_interval=data.get("dump_history_interval", 10)
         self.admins_id=data.get("admins_id", [])
         self.https_proxy=data.get("https_proxy", "")
         self.http_proxy=data.get("http_proxy", "")

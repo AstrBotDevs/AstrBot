@@ -1,5 +1,5 @@
 import json, traceback
-from typing import List
+from typing import List, Dict
 from astrbot.api import Context, AstrMessageEvent, MessageEventResult
 from .openai_adapter import ProviderOpenAIOfficial
 from .commands import OpenAIAdapterCommand
@@ -11,31 +11,38 @@ from openai.types.chat.chat_completion_message_tool_call import Function
 from astrbot.api import command_parser
 from .web_searcher import search_from_bing, fetch_website_content
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.config.astrbot_config import LLMConfig
 
 class Main:
     def __init__(self, context: Context) -> None:
+        supported_provider_names = ["openai", "ollama", "gemini", "deepseek", "zhipu"]
+        
         self.context = context
         
         self.provider_insts: List[ProviderOpenAIOfficial] = []
+        self.provider_llm_configs: List[LLMConfig] = []
         self.provider = None
+        self.provider_config = None
         
         llms_config = self.context.get_config().llm
         loaded = False
         for llm in llms_config:
             if llm.enable:
-                if llm.name == "openai":
+                if llm.name in supported_provider_names:
                     if not llm.key or not llm.enable:
                         logger.warning("没有开启 LLM Provider 或 API Key 未填写。")
                         continue
                     self.provider_insts.append(ProviderOpenAIOfficial(llm, self.context.get_db()))
+                    self.provider_llm_configs.append(llm)
                     loaded = True
-                    logger.info(f"已启用 LLM Provider(OpenAI API): {llm.id}({llm.name})。")
+                    logger.info(f"已启用 LLM Provider(OpenAI API 适配器): {llm.id}({llm.name})。")
         
         if loaded:
             self.command_handler = OpenAIAdapterCommand(self.context)
             self.command_handler.set_provider(self.provider_insts[0])
             self.context.register_listener(PLUGIN_NAME, "openai_adapter_chat", self.chat, "OpenAI Adapter LLM 调用监听器", after_commands=True)
             self.provider = self.command_handler.provider
+            self.provider_config = self.provider_llm_configs[0]
         
         self.context.register_commands(PLUGIN_NAME, "provider", "查看当前 LLM Provider", 10, self.provider_info)
         self.context.register_commands(PLUGIN_NAME, "websearch", "启用/关闭网页搜索", 10, self.web_search)
@@ -88,6 +95,7 @@ class Main:
                 if idx >= len(self.provider_insts):
                     event.set_result(MessageEventResult().message("无效的序号。"))
                 self.provider = self.provider_insts[idx]
+                self.provider_config = self.provider_llm_configs[idx]
                 self.command_handler.set_provider(self.provider)
                 event.set_result(MessageEventResult().message(f"已经成功切换到 LLM 接入源 {self.provider.llm_config.id}。"))
                 return 
@@ -113,6 +121,10 @@ class Main:
     async def chat(self, event: AstrMessageEvent):
         if not event.is_wake_up():
             return
+        
+        # prompt 前缀
+        if self.provider_config.prompt_prefix:
+            event.message_str = self.provider_config.prompt_prefix + event.message_str
         
         image_url = None
         for comp in event.message_obj.message:

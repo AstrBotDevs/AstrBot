@@ -1,5 +1,85 @@
+'''
+这里定义了一些默认配置文件，请不要修改这个文件。如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
+'''
+
 VERSION = '3.4.0'
 DB_PATH = 'data/data_v2.db'
+
+# LLM 提供商配置模板
+PROVIDER_CONFIG_TEMPLATE = {
+    "openai": {
+        "id": "default",
+        "name": "openai",
+        "enable": True,
+        "key": [],
+        "api_base": "",
+        "prompt_prefix": "",
+        "default_personality": "",
+        "model_config": {
+            "model": "gpt-4o",
+            "max_tokens": 6000,
+            "temperature": 0.9,
+            "top_p": 1,
+        },
+        "image_generation_model_config": {
+            "enable": False,
+            "model": "dall-e-3",
+            "size": "1024x1024",
+            "style": "vivid",
+            "quality": "standard",
+        }
+    },
+    "ollama": {
+        "id": "ollama_default",
+        "name": "ollama",
+        "enable": True,
+        "key": ["ollama"], # ollama 的 key 默认是 ollama
+        "api_base": "http://localhost:11434",
+        "prompt_prefix": "",
+        "default_personality": "",
+        "model_config": {
+            "model": "llama3.1-8b",
+            "temperature": 0.9,
+            "top_p": 1,
+        }
+    },
+    "gemini": {
+        "id": "gemini_default",
+        "name": "gemini",
+        "enable": True,
+        "key": [],
+        "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "prompt_prefix": "",
+        "default_personality": "",
+        "model_config": {
+            "model": "gemini-1.5-flash",
+        }
+    },
+    "deepseek": {
+        "id": "deepseek_default",
+        "name": "deepseek",
+        "enable": True,
+        "key": [],
+        "api_base": "https://api.deepseek.com/v1",
+        "prompt_prefix": "",
+        "default_personality": "",
+        "model_config": {
+            "model": "deepseek-chat",
+        }
+    },
+    "zhipu": {
+        "id": "zhipu_default",
+        "name": "zhipu(glm)",
+        "enable": True,
+        "key": [],
+        "api_base": "https://open.bigmodel.cn/api/paas/v4/",
+        "prompt_prefix": "",
+        "default_personality": "",
+        "model_config": {
+            "model": "glm-4-flash",
+        }
+    },
+}
 
 # 新版本配置文件，摈弃旧版本令人困惑的配置项 :D
 DEFAULT_CONFIG_VERSION_2 = {
@@ -37,33 +117,10 @@ DEFAULT_CONFIG_VERSION_2 = {
             "count": 30,
         },
         "reply_prefix": "",
-        "forward_threshold": 200, # 转发消息的阈值
+        "forward_threshold": 200,  # 转发消息的阈值
     },
     "llm": [
-        {
-            "id": "default",
-            "name": "openai",
-            "enable": True,
-            "key": [],
-            "api_base": "",
-            "prompt_prefix": "",
-            "default_personality": "",
-            "model_config": {
-                "model": "gpt-4o",
-                "max_tokens": 6000,
-                "temperature": 0.9,
-                "top_p": 1,
-                "frequency_penalty": 0,
-                "presence_penalty": 0,
-            },
-            "image_generation_model_config": {
-                "enable": True,
-                "model": "dall-e-3",
-                "size": "1024x1024",
-                "style": "vivid",
-                "quality": "standard",
-            }
-        },
+        PROVIDER_CONFIG_TEMPLATE["openai"]
     ],
     "llm_settings": {
         "wake_prefix": "",
@@ -78,7 +135,6 @@ DEFAULT_CONFIG_VERSION_2 = {
     },
     "wake_prefix": ["/"],
     "t2i": True,
-    "dump_history_interval": 10,
     "admins_id": [],
     "https_proxy": "",
     "http_proxy": "",
@@ -101,7 +157,7 @@ CONFIG_METADATA_2 = {
         "type": "list",
         "items": {
             "id": {"description": "ID", "type": "string", "hint": "提供商 ID 名，用于在多实例下方便管理和识别。自定义，ID 不能重复。"},
-            "name": {"description": "适配器类型", "type": "string", "hint": "当前版本下，内置支持 `qq_official`（QQ 官方机器人）, `aiocqhttp`(Onebot 适用) 适配器类型。", "options": ["qq_official", "aiocqhttp"]},
+            "name": {"description": "适配器类型", "type": "string", "hint": "当前版本下，内置支持 `qq_official`（QQ 官方机器人）, `aiocqhttp`(Onebot 适用) 适配器类型。", "options": ["qq_official", "aiocqhttp", "wechat"], "readonly": True},
             "enable": {"description": "启用", "type": "bool", "hint": "是否启用该适配器。未启用的适配器对应的消息平台将不会接收到消息。"},
             "appid": {"description": "appid", "type": "string", "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。"},
             "secret": {"description": "secret", "type": "string", "hint": "必填项。QQ 官方机器人平台的 secret。如何获取请参考文档。"},
@@ -137,7 +193,7 @@ CONFIG_METADATA_2 = {
         "type": "list",
         "items": {
             "id": {"description": "ID", "type": "string", "hint": "提供商 ID 名，用于在多实例下方便管理和识别。自定义，ID 不能重复。"},
-            "name": {"description": "模型提供商类型", "type": "string", "hint": "当前版本下，支持 `openai` 一个模型提供商。", "options": ["openai"]},
+            "name": {"description": "模型提供商类型", "type": "string", "hint": "如需变更模型提供商，请点击上面的 + 新建一个。如果没有找到你想要接入的提供商，可以前往你的提供商的官网查看是否兼容 OpenAI API，如兼容，可以选择 `openai`。大多数提供商都是兼容的。", "options": list(PROVIDER_CONFIG_TEMPLATE.keys()), "obvious_hint": True, "readonly": True},
             "enable": {"description": "启用", "type": "bool", "hint": "是否启用该模型。未启用的模型将不会被使用。"},
             "key": {"description": "API Key", "type": "list", "items": {"type": "string"}, "hint": "API Key 列表。填写好后输入回车即可添加 API Key。支持多个 API Key。"},
             "api_base": {"description": "API Base URL", "type": "string", "hint": "API Base URL 请在在模型提供商处获得。支持 Ollama 开放的 API 地址。如果您确认填写正确但是使用时出现了 404 异常，可以尝试在地址末尾加上 `/v1`。"},
@@ -151,8 +207,6 @@ CONFIG_METADATA_2 = {
                     "max_tokens": {"description": "最大令牌数", "type": "int"},
                     "temperature": {"description": "温度", "type": "float"},
                     "top_p": {"description": "Top P值", "type": "float"},
-                    "frequency_penalty": {"description": "频率惩罚", "type": "float"},
-                    "presence_penalty": {"description": "存在惩罚", "type": "float"},
                 }
             },
             "image_generation_model_config": {
@@ -203,7 +257,6 @@ CONFIG_METADATA_2 = {
     },
     "wake_prefix": {"description": "机器人唤醒前缀", "type": "list", "items": {"type": "string"}, "hint": "在不 @ 机器人的情况下，可以通过外加消息前缀来唤醒机器人。"},
     "t2i": {"description": "文本转图像", "type": "bool", "hint": "启用后，超出一定长度的文本将会通过 AstrBot API 渲染成 Markdown 图片发送。可以缓解审核和消息过长刷屏的问题，并提高 Markdown 文本的可读性。"},
-    "dump_history_interval": {"description": "历史记录保存间隔", "type": "int", "hint": "每隔多少分钟将 LLM 聊天的历史记录转储到数据库。"},
     "admins_id": {"description": "管理员 ID", "type": "list", "items": {"type": "int"}, "hint": "管理员 ID 列表，管理员可以使用一些特权命令，如 `update`, `plugin` 等。ID 可以通过 `/myid` 指令获得。回车添加，可添加多个。"},
     "https_proxy": {"description": "HTTPS 代理", "type": "string", "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`"},
     "http_proxy": {"description": "HTTP 代理", "type": "string", "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`"},
@@ -221,7 +274,7 @@ CONFIG_METADATA_2 = {
     "pip_install_arg": {"description": "pip 安装参数", "type": "string", "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。"},
     "plugin_repo_mirror": {"description": "插件仓库镜像", "type": "string", "hint": "插件仓库的镜像地址，用于加速插件的下载。", "options": ["default", "https://ghp.ci/", "https://github-mirror.us.kg/"]},
 }
-        
+
 DEFAULT_VALUE_MAP = {
     "int": 0,
     "float": 0.0,

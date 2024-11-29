@@ -1,7 +1,7 @@
 import os, json
 from .route import Route, Response
 from quart import Quart, request
-from core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
+from core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP, PROVIDER_CONFIG_TEMPLATE
 from core.config.astrbot_config import AstrBotConfig
 from core.plugin.config import update_config
 from core.core_lifecycle import AstrBotCoreLifecycle
@@ -130,6 +130,7 @@ class ConfigRoute(Route):
         return {
             "metadata": CONFIG_METADATA_2,
             "config": config,
+            "provider_config_tmpl": PROVIDER_CONFIG_TEMPLATE
         }
             
     async def _get_extension_config(self, namespace: str):
