@@ -1,5 +1,5 @@
 import logging
-import asyncio
+import asyncio, os
 from quart import Quart
 from quart.logging import default_handler
 from core.core_lifecycle import AstrBotCoreLifecycle
@@ -16,6 +16,7 @@ class AstrBotDashboard():
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle, db: BaseDatabase) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
+        self.data_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data/dist"))
         self.app = Quart("dashboard", static_folder="dist", static_url_path="/")
         self.app.json.sort_keys = False
         
