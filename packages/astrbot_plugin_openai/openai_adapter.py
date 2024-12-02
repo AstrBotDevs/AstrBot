@@ -94,21 +94,20 @@ class ProviderOpenAIOfficial(Provider):
 
         return record
 
-    async def assemble_context(self, contexts: List, text: str, image_urls: List[str] = None):
+    async def assemble_context(self, text: str, image_urls: List[str] = None):
         '''
         组装上下文。
         '''
+
         if image_urls:
+            user_content = {"role": "user","content": [{"type": "text", "text": text}]}
             for image_url in image_urls:
                 base_64_image = await self.encode_image_bs64(image_url)
-                user_content = {"role": "user","content": [
-                    {"type": "text", "text": text},
-                    {"type": "image_url", "image_url": {"url": base_64_image}}
-                ]}
-                contexts.append(user_content)
+                user_content["content"].append({"type": "image_url", "image_url": {"url": base_64_image}})
+            return user_content
         else:
-            user_content = {"role": "user","content": text}
-            contexts.append(user_content)
+            return {"role": "user","content": text}
+        
     
     async def text_chat(self,
                         prompt: str,
@@ -127,12 +126,11 @@ class ProviderOpenAIOfficial(Provider):
         if os.environ.get("TEST_LLM", "off") != "on" and os.environ.get("TEST_MODE", "off") == "on":
             return "这是一个测试消息。"
             
-        await self.assemble_context(self.session_memory[session_id], prompt, image_urls)
+        new_record = await self.assemble_context(prompt, image_urls)
         if not contexts:
-            contexts = [*self.session_memory[session_id]]
+            contexts = [*self.session_memory[session_id], new_record]
             if self.curr_personality["prompt"]:
                 contexts.insert(0, {"role": "system", "content": self.curr_personality["prompt"]})
-            
             
         logger.debug(f"请求上下文：{contexts}")
         conf = asdict(self.llm_config.model_config)
@@ -173,6 +171,9 @@ class ProviderOpenAIOfficial(Provider):
         if choice.message.content:
             # 返回文本
             completion_text = str(choice.message.content).strip()
+            # 添加用户 record
+            self.session_memory[session_id].append(new_record)
+            # 添加 assistant record
             self.session_memory[session_id].append({
                 "role": "assistant",
                 "content": completion_text
