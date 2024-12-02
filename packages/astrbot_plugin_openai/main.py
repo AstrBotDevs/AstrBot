@@ -13,7 +13,6 @@ from astrbot.api import command_parser
 from .web_searcher import search_from_bing, fetch_website_content
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.config.astrbot_config import LLMConfig
-from .atri import ATRI
 
 class Main:
     def __init__(self, context: Context) -> None:
@@ -58,6 +57,7 @@ class Main:
         self.atri = None
         if atri_config.enable:
             try:
+                from .atri import ATRI
                 self.atri = ATRI(self.provider_llm_configs, atri_config, self.context)
                 self.command_handler.provider = self.atri.atri_chat_provider
             except ImportError as e:
