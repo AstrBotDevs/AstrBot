@@ -68,6 +68,11 @@ class ImageGenerationModelConfig:
     quality: str = "standard"
     
 @dataclass
+class EmbeddingModel:
+    enable: bool = False
+    model: str = ""
+    
+@dataclass
 class LLMConfig:
     id: str = ""
     name: str = "openai"
@@ -77,12 +82,17 @@ class LLMConfig:
     prompt_prefix: str = ""
     default_personality: str = ""
     model_config: ModelConfig = field(default_factory=ModelConfig)
-    image_generation_model_config: Optional[ImageGenerationModelConfig] = None
+    image_generation_model_config: Optional[ImageGenerationModelConfig] = field(default_factory=ImageGenerationModelConfig)
+    embedding_model: Optional[EmbeddingModel] = field(default_factory=EmbeddingModel)
 
     def __post_init__(self):
-        self.model_config = ModelConfig(**self.model_config)
-        if self.image_generation_model_config:
-            self.image_generation_model_config = ImageGenerationModelConfig(**self.image_generation_model_config)
+        if isinstance(self.model_config, dict):
+            self.model_config = ModelConfig(**self.model_config)
+        if isinstance(self.image_generation_model_config, dict):
+            self.image_generation_model_config = ImageGenerationModelConfig(**self.image_generation_model_config) if self.image_generation_model_config else None
+        if isinstance(self.embedding_model, dict):
+            self.embedding_model = EmbeddingModel(**self.embedding_model) if self.embedding_model else None
+
 @dataclass
 class LLMSettings:
     wake_prefix: str = ""
@@ -115,6 +125,35 @@ class DashboardConfig:
     enable: bool = True
     username: str = ""
     password: str = ""
+    
+    
+@dataclass
+class ATRILongTermMemory:
+    enable: bool = False
+    summary_threshold_cnt: int = 5
+    
+@dataclass
+class ATRIActiveMessage:
+    enable: bool = False
+    
+@dataclass
+class ProjectATRI:
+    enable: bool = False
+    long_term_memory: ATRILongTermMemory = field(default_factory=ATRILongTermMemory)
+    active_message: ATRIActiveMessage = field(default_factory=ATRIActiveMessage)
+    persona: str = ""
+    embedding_provider_id: str = ""
+    summarize_provider_id: str = ""
+    chat_provider_id: str = ""
+    chat_base_model_path: str = ""
+    chat_adapter_model_path: str = ""
+    quantization_bit: int = 4
+    
+    def __post_init__(self):
+        if isinstance(self.long_term_memory, dict):
+            self.long_term_memory = ATRILongTermMemory(**self.long_term_memory)
+        if isinstance(self.active_message, dict):
+            self.active_message = ATRIActiveMessage(**self.active_message)
 
 @dataclass
 class AstrBotConfig():
@@ -134,6 +173,7 @@ class AstrBotConfig():
     t2i_endpoint: str = ""
     pip_install_arg: str = ""
     plugin_repo_mirror: str = ""
+    project_atri: ProjectATRI = field(default_factory=ProjectATRI)
 
     def __init__(self) -> None:
         self.init_configs()
@@ -190,6 +230,7 @@ class AstrBotConfig():
         self.t2i_endpoint=data.get("t2i_endpoint", "")
         self.pip_install_arg=data.get("pip_install_arg", "")
         self.plugin_repo_mirror=data.get("plugin_repo_mirror", "")
+        self.project_atri=ProjectATRI(**data.get("project_atri", {}))
         
     def flush_config(self, config: dict = None):
         '''将配置写入文件, 如果没有传入配置，则写入默认配置'''

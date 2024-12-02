@@ -2,8 +2,8 @@ import aiohttp
 import os
 
 from . import RenderStrategy
-from core.config import VERSION
-from core.utils.io import download_image_by_url
+from astrbot.core.config import VERSION
+from astrbot.core.utils.io import download_image_by_url
 
 ASTRBOT_T2I_DEFAULT_ENDPOINT = "https://t2i.soulter.top/text2img"
 

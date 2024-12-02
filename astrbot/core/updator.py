@@ -1,8 +1,8 @@
 import os, psutil, sys, time
 from .zip_updator import ReleaseInfo, RepoZipUpdator
-from core import logger
-from core.config.default import VERSION
-from core.utils.io import download_file
+from astrbot.core import logger
+from astrbot.core.config.default import VERSION
+from astrbot.core.utils.io import download_file
 
 class AstrBotUpdator(RepoZipUpdator):
     def __init__(self, repo_mirror: str = "") -> None:

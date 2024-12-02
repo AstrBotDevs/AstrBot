@@ -2,11 +2,11 @@ import abc
 from dataclasses import dataclass
 from .astrbot_message import AstrBotMessage
 from .platform_metadata import PlatformMetadata
-from core.message_event_result import MessageEventResult, MessageChain
-from core.platform.message_type import MessageType
+from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
+from astrbot.core.platform.message_type import MessageType
 from typing import List
-from nakuru.entities.components import BaseMessageComponent, Plain, Image
-from core.utils.metrics import Metric
+from astrbot.core.message.components import BaseMessageComponent, Plain, Image
+from astrbot.core.utils.metrics import Metric
 
 @dataclass
 class MessageSesion:

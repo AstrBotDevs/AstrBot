@@ -1,14 +1,12 @@
-pydantic~=1.10.4
+pydantic
 vchat
 aiohttp
 openai
 qq-botpy
 chardet~=5.1.0
 Pillow
-nakuru-project
 beautifulsoup4
 googlesearch-python
-tiktoken
 readability-lxml
 quart
 psutil

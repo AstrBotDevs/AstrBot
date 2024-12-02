@@ -2,10 +2,10 @@ import asyncio
 from asyncio import Queue
 from collections import defaultdict
 from typing import List
-from .message_event_handler import MessageEventHandler
-from core import logger
+from astrbot.core.message.message_event_handler import MessageEventHandler
+from astrbot.core import logger
 from .platform import AstrMessageEvent
-from nakuru.entities.components import Plain, Image
+from astrbot.core.message.components import Image, Plain
 
 class EventBus:
     def __init__(self, event_queue: Queue, message_event_handler: MessageEventHandler):

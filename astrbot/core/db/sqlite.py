@@ -1,7 +1,7 @@
 import sqlite3
 import os
 import time
-from core.db.po import (
+from astrbot.core.db.po import (
     Platform, 
     Command, 
     Provider,

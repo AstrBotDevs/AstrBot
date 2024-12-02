@@ -2,13 +2,13 @@ import asyncio, re, time
 import inspect
 import traceback
 from typing import List, Union
-from .platform import AstrMessageEvent
-from .config.astrbot_config import AstrBotConfig
+from astrbot.core.platform import AstrMessageEvent
+from astrbot.core.config.astrbot_config import AstrBotConfig
 from .message_event_result import MessageEventResult, CommandResult, MessageChain
-from .plugin import PluginManager, Context, CommandMetadata
-from nakuru.entities.components import *
-from core import logger
-from core import html_renderer
+from astrbot.core.plugin import PluginManager, Context, CommandMetadata
+from .components import *
+from astrbot.core import logger
+from astrbot.core import html_renderer
 
 class CommandTokens():
     def __init__(self) -> None:

@@ -1,9 +1,10 @@
 from astrbot.api import Context, AstrMessageEvent, MessageEventResult, MessageChain
 from . import PLUGIN_NAME
-from astrbot.api import logger, Image, Plain
+from astrbot.api import logger
+from astrbot.api.message_components import Image, Plain
 from astrbot.api import personalities
 from astrbot.api import command_parser
-from astrbot.api import Provider
+from astrbot.api import Provider, Personality
 
 
 class OpenAIAdapterCommand:
@@ -25,7 +26,7 @@ class OpenAIAdapterCommand:
     async def reset(self, message: AstrMessageEvent):
         tokens = command_parser.parse(message.message_str)
         if tokens.len == 1:
-            await self.provider.forget(message.session_id, keep_system_prompt=True)
+            await self.provider.forget(message.session_id)
             message.set_result(MessageEventResult().message("重置成功"))
         elif tokens.get(1) == 'p':
             await self.provider.forget(message.session_id)
@@ -81,16 +82,12 @@ class OpenAIAdapterCommand:
         message.set_result(MessageEventResult().message(f"历史记录：\n\n{contexts}\n第 {page} 页 | 共 {t_pages} 页\n\n*输入 /his 2 跳转到第 2 页"))
     
     def status(self, message: AstrMessageEvent):
-        keys_data = self.provider.get_keys_data()
-        ret = "OpenAI Key"
+        keys_data = self.provider.get_all_keys()
+        ret = "{} Key"
         for k in keys_data:
-            status = "🟢" if keys_data[k] else "🔴"
-            ret += "\n|- " + k[:8] + " " + status
+            ret += "\n|- " + k[:8]
 
         ret += "\n当前模型: " + self.provider.get_model()
-
-        if message.session_id in self.provider.session_memory and len(self.provider.session_memory[message.session_id]):
-            ret += "\n你的会话上下文: " + str(self.provider.session_memory[message.session_id][-1]['usage_tokens']) + " tokens"
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
     
@@ -160,18 +157,10 @@ class OpenAIAdapterCommand:
         else:
             ps = "".join(l[1:]).strip()
             if ps in personalities:
-                self.provider.curr_personality = {
-                    'name': ps,
-                    'prompt': personalities[ps]
-                }
-                self.provider.personality_set(self.provider.curr_personality, message.session_id)
+                self.provider.curr_personality = Personality(name=ps, prompt=personalities[ps])
                 message.set_result(MessageEventResult().message(f"人格已设置。 \n人格信息: {ps}"))
             else:
-                self.provider.curr_personality = {
-                    'name': '自定义人格',
-                    'prompt': ps
-                }
-                self.provider.personality_set(self.provider.curr_personality, message.session_id)
+                self.provider.curr_personality = Personality(name="自定义人格", prompt=ps)
                 message.set_result(MessageEventResult().message(f"人格已设置。 \n人格信息: {ps}"))
 
     async def draw(self, message: AstrMessageEvent):

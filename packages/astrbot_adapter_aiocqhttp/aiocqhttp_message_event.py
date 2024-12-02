@@ -1,7 +1,7 @@
-import os, traceback
+import os, traceback, random, asyncio
 
 from astrbot.api import AstrMessageEvent, MessageChain, logger
-from astrbot.api import Plain, Image
+from astrbot.api.message_components import Plain, Image
 from aiocqhttp import CQHttp
 from astrbot.core.utils.io import file_to_base64, download_image_by_url
 
@@ -11,7 +11,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         self.bot = bot
     
     @staticmethod
-    async def _parse_onebot_josn(message_chain: MessageChain):
+    async def _parse_onebot_json(message_chain: MessageChain):
         '''解析成 OneBot json 格式'''
         ret = []
         for segment in message_chain.chain:
@@ -31,8 +31,14 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         return ret
 
     async def send(self, message: MessageChain):
-        ret = await AiocqhttpMessageEvent._parse_onebot_josn(message)
+        ret = await AiocqhttpMessageEvent._parse_onebot_json(message)
         if os.environ.get('TEST_MODE', 'off') == 'on':
             return
-        await self.bot.send(self.message_obj.raw_message, ret)
+        
+        if message.is_split_: # 分条发送
+            for m in ret:
+                await self.bot.send(self.message_obj.raw_message, [m])
+                await asyncio.sleep(random.uniform(0.75, 2.5))
+        else:
+            await self.bot.send(self.message_obj.raw_message, ret)
         await super().send(message)

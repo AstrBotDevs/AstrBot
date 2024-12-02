@@ -27,6 +27,10 @@ PROVIDER_CONFIG_TEMPLATE = {
             "size": "1024x1024",
             "style": "vivid",
             "quality": "standard",
+        },
+        "embedding_model": {
+            "enable": False,
+            "model": "text-embedding-3-small"
         }
     },
     "ollama": {
@@ -147,6 +151,23 @@ DEFAULT_CONFIG_VERSION_2 = {
     "t2i_endpoint": "",
     "pip_install_arg": "",
     "plugin_repo_mirror": "default",
+    "project_atri": {
+        "enable": False,
+        "long_term_memory": {
+            "enable": False,
+            "summary_threshold_cnt": 6,
+        },
+        "active_message": {
+            "enable": False,
+        },
+        "persona": "",
+        "embedding_provider_id": "",
+        "summarize_provider_id": "",
+        "chat_provider_id": "",
+        "chat_base_model_path": "",
+        "chat_adapter_model_path": "",
+        "quantization_bit": 4
+    }
 }
 
 # 配置项的中文描述、值类型
@@ -167,7 +188,7 @@ CONFIG_METADATA_2 = {
             "ws_reverse_port": {"description": "反向 Websocket 端口", "type": "int", "hint": "aiocqhttp 适配器的反向 Websocket 端口。"},
             "qq_id_whitelist": {"description": "QQ 号白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的 QQ 号发来的消息事件。为空时表示不启用白名单过滤。"},
             "qq_group_id_whitelist": {"description": "QQ 群号白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的 QQ 群发来的消息事件。为空时表示不启用白名单过滤。"},
-            "wechat_id_whitelist": {"description": "微信私聊/群聊白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的微信私聊/群聊发来的消息事件。为空时表示不启用白名单过滤。使用 /wechatid 指令获取微信 ID（不是微信号）。"},
+            "wechat_id_whitelist": {"description": "微信私聊/群聊白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的微信私聊/群聊发来的消息事件。为空时表示不启用白名单过滤。使用 /wechatid 指令获取微信 ID（不是微信号）。注意：每次扫码登录之后，相同联系人的 ID 会发生变化，白名单内的 ID 会失效。"},
         }
     },
     "platform_settings": {
@@ -200,17 +221,17 @@ CONFIG_METADATA_2 = {
             "prompt_prefix": {"description": "Prompt 前缀", "type": "text", "hint": "每次与 LLM 对话时在对话前加上的自定义文本。默认为空。"},
             "default_personality": {"description": "默认人格", "type": "text", "hint": "在当前版本下，默认人格文本会被添加到 LLM 对话的 `system` 字段中。"},
             "model_config": {
-                "description": "模型配置",
+                "description": "文本生成模型",
                 "type": "object",
                 "items": {
                     "model": {"description": "模型名称", "type": "string", "hint": "大语言模型的名称，一般是小写的英文。如 gpt-4o-mini, deepseek-chat 等。"},
-                    "max_tokens": {"description": "最大令牌数", "type": "int"},
+                    "max_tokens": {"description": "模型最大输出长度（tokens）", "type": "int"},
                     "temperature": {"description": "温度", "type": "float"},
                     "top_p": {"description": "Top P值", "type": "float"},
                 }
             },
             "image_generation_model_config": {
-                "description": "图像生成模型配置",
+                "description": "图像生成模型",
                 "type": "object",
                 "items": {
                     "enable": {"description": "启用", "type": "bool", "hint": "启用该功能需要提供商支持图像生成。如 dall-e-3"},
@@ -220,6 +241,14 @@ CONFIG_METADATA_2 = {
                     "quality": {"description": "图像质量", "type": "string"},
                 }
             },
+            "embedding_model": {
+                "description": "文本嵌入模型",
+                "type": "object",
+                "items": {
+                    "enable": {"description": "启用", "type": "bool", "hint": "启用该功能需要提供商支持文本嵌入。"},
+                    "model": {"description": "模型名称", "type": "string", "hint": "文本嵌入模型的名称，一般是小写的英文。如 text-embedding-3-small"},
+                }
+            }
         }
     },
     "llm_settings": {
@@ -273,6 +302,35 @@ CONFIG_METADATA_2 = {
     "t2i_endpoint": {"description": "文本转图像服务接口", "type": "string", "hint": "为空时使用 AstrBot API 服务"},
     "pip_install_arg": {"description": "pip 安装参数", "type": "string", "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。"},
     "plugin_repo_mirror": {"description": "插件仓库镜像", "type": "string", "hint": "插件仓库的镜像地址，用于加速插件的下载。", "options": ["default", "https://ghp.ci/", "https://github-mirror.us.kg/"]},
+    "project_atri": {
+        "description": "Project ATRI 配置",
+        "type": "object",
+        "items": {
+            "enable": {"description": "启用", "type": "bool"},
+            "long_term_memory": {
+                "description": "长期记忆",
+                "type": "object",
+                "items": {
+                    "enable": {"description": "启用", "type": "bool"},
+                    "summary_threshold_cnt": {"description": "摘要阈值", "type": "int", "hint": "当一个会话的对话记录数量超过该阈值时，会自动进行摘要。"},
+                }
+            },
+            "active_message": {
+                "description": "主动消息",
+                "type": "object",
+                "items": {
+                    "enable": {"description": "启用", "type": "bool"},
+                }
+            },
+            "persona": {"description": "人格", "type": "string", "hint": "默认人格。当启动 ATRI 之后，在 Provider 处设置的人格将会失效。", "obvious_hint": True},
+            "embedding_provider_id": {"description": "Embedding provider ID", "type": "string", "hint": "只有当启用了长期记忆时，才需要填写此项。将会使用指定的 provider 来获取 Embedding，请确保所填的 provider id 在 `配置页` 中存在并且设置了 Embedding 配置", "obvious_hint": True},
+            "summarize_provider_id": {"description": "Summary provider ID", "type": "string", "hint": "只有当启用了长期记忆时，才需要填写此项。将会使用指定的 provider 来获取 Summary，请确保所填的 provider id 在 `配置页` 中存在。", "obvious_hint": True},
+            "chat_provider_id": {"description": "Chat provider ID", "type": "string", "hint": "将会使用指定的 provider 来进行文本聊天，请确保所填的 provider id 在 `配置页` 中存在。", "obvious_hint": True},
+            "chat_base_model_path": {"description": "用于聊天的基座模型路径", "type": "string", "hint": "用于聊天的基座模型路径。当填写此项和 Lora 路径后，将会忽略上面设置的 Chat provider ID。", "obvious_hint": True},
+            "chat_adapter_model_path": {"description": "用于聊天的 Lora 模型路径", "type": "string", "hint": "Lora 模型路径。", "obvious_hint": True},
+            "quantization_bit": {"description": "量化位数", "type": "int", "hint": "模型量化位数。如果你不知道这是什么，请不要修改。默认为 4。", "obvious_hint": True},
+        }
+    }
 }
 
 DEFAULT_VALUE_MAP = {

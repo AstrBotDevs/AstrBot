@@ -7,7 +7,7 @@ from aiocqhttp import CQHttp, Event
 from astrbot.api import Platform
 from astrbot.api import MessageChain, MessageEventResult, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
 from .aiocqhttp_message_event import *
-from nakuru.entities.components import *
+from astrbot.api.message_components import *
 from astrbot.api import logger
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.config.astrbot_config import PlatformConfig, AiocqhttpPlatformConfig, PlatformSettings
@@ -29,7 +29,7 @@ class AiocqhttpAdapter(Platform):
         )
         
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
-        ret = await AiocqhttpMessageEvent._parse_onebot_josn(message_chain)
+        ret = await AiocqhttpMessageEvent._parse_onebot_json(message_chain)
         match session.message_type.value:
             case MessageType.GROUP_MESSAGE.value:
                 if "_" in session.session_id:

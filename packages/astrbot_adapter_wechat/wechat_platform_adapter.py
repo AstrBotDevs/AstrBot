@@ -4,7 +4,7 @@ import asyncio
 from astrbot.api import Platform
 from astrbot.api import MessageChain, MessageEventResult, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
 from typing import Union, List, Dict
-from nakuru.entities.components import *
+from astrbot.api.message_components import *
 from astrbot.api import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from .wechat_message_event import WechatPlatformEvent
@@ -24,6 +24,7 @@ class WechatPlatformAdapter(Platform):
     def __init__(self, platform_config: WechatPlatformConfig, platform_settings: PlatformSettings, event_queue: asyncio.Queue) -> None:
         super().__init__(event_queue)
         self.config = platform_config
+        self.settingss = platform_settings
         self.test_mode = os.environ.get('TEST_MODE', 'off') == 'on'
         self.client_self_id = uuid.uuid4().hex[:8]
     
@@ -51,6 +52,7 @@ class WechatPlatformAdapter(Platform):
             if msg.create_time < self.start_time:
                 logger.debug(f"忽略旧消息: {msg}")
                 return
+            logger.debug(f"收到消息: {msg.todict()}")
             if self.config.wechat_id_whitelist and msg.from_.username not in self.config.wechat_id_whitelist:
                 logger.debug(f"忽略不在白名单的微信消息。username: {msg.from_.username}")
                 return
@@ -80,7 +82,11 @@ class WechatPlatformAdapter(Platform):
         
         sender = msg.chatroom_sender or msg.from_
         amsg.sender = MessageMember(sender.username, sender.nickname)
-        amsg.message_str = msg.content.content
+        
+        if msg.content.is_at_me:
+            amsg.message_str = msg.content.content.split("\u2005")[1].strip()
+        else:
+            amsg.message_str = msg.content.content
         amsg.message_id = msg.message_id
         if isinstance(msg.from_, model.User):
             amsg.type = MessageType.FRIEND_MESSAGE
@@ -91,10 +97,13 @@ class WechatPlatformAdapter(Platform):
             
         amsg.raw_message = msg
         
-        session_id = msg.from_.username + "$$" + msg.to.username
-        if msg.chatroom_sender is not None:
-            session_id += '$$' + msg.chatroom_sender.username
-            
+        if self.settingss.unique_session:
+            session_id = msg.from_.username + "$$" + msg.to.username
+            if msg.chatroom_sender is not None:
+                session_id += '$$' + msg.chatroom_sender.username
+        else:
+            session_id = msg.from_.username
+                
         amsg.session_id = session_id
         return amsg
     

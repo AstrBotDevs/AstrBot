@@ -1,10 +1,10 @@
 import os, zipfile, shutil
 
 from ..updator import RepoZipUpdator
-from core.utils.io import remove_dir, on_error
+from astrbot.core.utils.io import remove_dir, on_error
 from ..plugin import RegisteredPlugin
 from typing import Union
-from core import logger
+from astrbot.core import logger
 
 class PluginUpdator(RepoZipUpdator):
     def __init__(self, repo_mirror: str = "") -> None:

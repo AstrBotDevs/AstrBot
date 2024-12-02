@@ -1,10 +1,9 @@
 
 from astrbot.core.plugin import Context
 from astrbot.core.platform import AstrMessageEvent, Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
-from astrbot.core.message_event_result import MessageEventResult, MessageChain, CommandResult
-from astrbot.core.provider import Provider
+from astrbot.core.message.message_event_result import MessageEventResult, MessageChain, CommandResult
+from astrbot.core.provider import Provider, Personality
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from nakuru.entities.components import *
 from astrbot import logger
 from astrbot.core.utils.personality import personalities
 

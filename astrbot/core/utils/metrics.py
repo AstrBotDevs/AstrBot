@@ -1,7 +1,7 @@
 import aiohttp
 import sys
 import logging
-from core.config import VERSION
+from astrbot.core.config import VERSION
 
 logger = logging.getLogger("astrbot")
 

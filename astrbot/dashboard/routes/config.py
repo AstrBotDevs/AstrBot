@@ -1,10 +1,10 @@
 import os, json
 from .route import Route, Response
 from quart import Quart, request
-from core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP, PROVIDER_CONFIG_TEMPLATE
-from core.config.astrbot_config import AstrBotConfig
-from core.plugin.config import update_config
-from core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP, PROVIDER_CONFIG_TEMPLATE
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.plugin.config import update_config
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from dataclasses import asdict
 
 def try_cast(value: str, type_: str):

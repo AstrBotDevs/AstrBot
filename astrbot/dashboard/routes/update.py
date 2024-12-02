@@ -1,9 +1,9 @@
 import threading, traceback
 from .route import Route, Response
 from quart import Quart, request
-from core.config.astrbot_config import AstrBotConfig
-from core.updator import AstrBotUpdator
-from core import logger
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.updator import AstrBotUpdator
+from astrbot.core import logger
 
 class UpdateRoute(Route):
     def __init__(self, config: AstrBotConfig, app: Quart, astrbot_updator: AstrBotUpdator) -> None:

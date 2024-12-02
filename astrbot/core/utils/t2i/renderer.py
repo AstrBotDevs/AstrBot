@@ -1,6 +1,6 @@
 from .network_strategy import NetworkRenderStrategy
 from .local_strategy import LocalRenderStrategy
-from core.log import LogManager
+from astrbot.core.log import LogManager
 
 logger = LogManager.GetLogger(log_name='astrbot')
 

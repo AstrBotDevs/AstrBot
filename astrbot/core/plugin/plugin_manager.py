@@ -10,13 +10,13 @@ from asyncio import Queue
 from types import ModuleType
 from typing import List, Awaitable
 from pip import main as pip_main
-from core.config.astrbot_config import AstrBotConfig
-from core import logger
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core import logger
 from .context import Context
 from . import RegisteredPlugin, PluginMetadata
 from .updator import PluginUpdator
-from core.db import BaseDatabase
-from core.utils.io import remove_dir
+from astrbot.core.db import BaseDatabase
+from astrbot.core.utils.io import remove_dir
 
 class PluginManager:
     def __init__(self, config: AstrBotConfig, event_queue: Queue, db: BaseDatabase):

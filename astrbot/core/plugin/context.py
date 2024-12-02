@@ -4,12 +4,12 @@ from . import RegisteredPlugin, PluginMetadata
 from typing import List, Dict, Awaitable, Union
 from dataclasses import dataclass
 
-from core.platform import Platform
-from core.db import BaseDatabase
-from core.config.astrbot_config import AstrBotConfig
-from core.utils.func_call import FuncCall
-from core.platform.astr_message_event import MessageSesion
-from core.message_event_result import MessageChain
+from astrbot.core.platform import Platform
+from astrbot.core.db import BaseDatabase
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.utils.func_call import FuncCall
+from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.message.message_event_result import MessageChain
 
 @dataclass
 class CommandMetadata():
@@ -66,6 +66,9 @@ class Context:
     
     # 维护了 LLM Tools 信息
     llm_tools: FuncCall = FuncCall()
+    
+    # 维护插件存储的数据
+    plugin_data: Dict[str, Dict[str, any]] = {}
     
     def __init__(self, event_queue: Queue, config: AstrBotConfig, db: BaseDatabase):
         self._event_queue = event_queue
@@ -206,3 +209,9 @@ class Context:
                 await platform.send_by_session(session, message_chain)
                 return True
         return False
+    
+    def set_data(self, plugin_name: str, key: str, value: any):
+        '''
+        设置插件数据。
+        '''
+        self.plugin_data[plugin_name][key] = value

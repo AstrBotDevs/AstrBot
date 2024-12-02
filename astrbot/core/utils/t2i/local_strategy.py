@@ -4,7 +4,7 @@ from io import BytesIO
 
 from . import RenderStrategy
 from PIL import ImageFont, Image, ImageDraw
-from core.utils.io import save_temp_img
+from astrbot.core.utils.io import save_temp_img
 
 class LocalRenderStrategy(RenderStrategy):
 

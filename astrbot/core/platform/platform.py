@@ -3,9 +3,9 @@ from typing import Awaitable, Any
 from asyncio import Queue
 from .platform_metadata import PlatformMetadata
 from .astr_message_event import AstrMessageEvent
-from core.message_event_result import MessageChain
+from astrbot.core.message.message_event_result import MessageChain
 from .astr_message_event import MessageSesion
-from core.utils.metrics import Metric
+from astrbot.core.utils.metrics import Metric
 
 class Platform(abc.ABC):
     def __init__(self, event_queue: Queue):

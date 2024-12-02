@@ -1,9 +1,9 @@
 import asyncio
 from multiprocessing import Process
-from core import logger
-from core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core import logger
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from .server import AstrBotDashboard
-from core.db import BaseDatabase
+from astrbot.core.db import BaseDatabase
 
 class AstrBotDashBoardLifecycle:
     def __init__(self, db: BaseDatabase):

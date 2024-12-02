@@ -1,6 +1,6 @@
 from .route import Route, Response
 from quart import Quart, request
-from core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.astrbot_config import AstrBotConfig
 
 class AuthRoute(Route):
     def __init__(self, config: AstrBotConfig, app: Quart) -> None:

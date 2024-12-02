@@ -5,28 +5,34 @@ from .openai_adapter import ProviderOpenAIOfficial
 from .commands import OpenAIAdapterCommand
 from astrbot.api import logger
 from . import PLUGIN_NAME
-from astrbot.api import Image, Plain, MessageChain
+from astrbot.api import MessageChain
+from astrbot.api.message_components import Image, Plain
 from openai._exceptions import *
 from openai.types.chat.chat_completion_message_tool_call import Function
 from astrbot.api import command_parser
 from .web_searcher import search_from_bing, fetch_website_content
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.config.astrbot_config import LLMConfig
+from .atri import ATRI
 
 class Main:
     def __init__(self, context: Context) -> None:
         supported_provider_names = ["openai", "ollama", "gemini", "deepseek", "zhipu"]
-        
         self.context = context
         
+        # 各 Provider 实例
         self.provider_insts: List[ProviderOpenAIOfficial] = []
+        # Provider 的配置
         self.provider_llm_configs: List[LLMConfig] = []
+        # 当前使用的 Provider
         self.provider = None
+        # 当前使用的 Provider 的配置
         self.provider_config = None
         
-        llms_config = self.context.get_config().llm
+        atri_config = self.context.get_config().project_atri
+        
         loaded = False
-        for llm in llms_config:
+        for llm in self.context.get_config().llm:
             if llm.enable:
                 if llm.name in supported_provider_names:
                     if not llm.key or not llm.enable:
@@ -36,20 +42,33 @@ class Main:
                     self.provider_llm_configs.append(llm)
                     loaded = True
                     logger.info(f"已启用 LLM Provider(OpenAI API 适配器): {llm.id}({llm.name})。")
-        
         if loaded:
             self.command_handler = OpenAIAdapterCommand(self.context)
             self.command_handler.set_provider(self.provider_insts[0])
-            self.context.register_listener(PLUGIN_NAME, "openai_adapter_chat", self.chat, "OpenAI Adapter LLM 调用监听器", after_commands=True)
+            self.context.register_listener(PLUGIN_NAME, "llm_chat_listener", self.chat, "llm_chat_listener", after_commands=True)
             self.provider = self.command_handler.provider
             self.provider_config = self.provider_llm_configs[0]
-        
         self.context.register_commands(PLUGIN_NAME, "provider", "查看当前 LLM Provider", 10, self.provider_info)
         self.context.register_commands(PLUGIN_NAME, "websearch", "启用/关闭网页搜索", 10, self.web_search)
         
         if self.context.get_config().llm_settings.web_search:
             self.add_web_search_tools()
-        
+            
+        # load atri
+        self.atri = None
+        if atri_config.enable:
+            try:
+                self.atri = ATRI(self.provider_llm_configs, atri_config, self.context)
+                self.command_handler.provider = self.atri.atri_chat_provider
+            except ImportError as e:
+                logger.error(traceback.format_exc())
+                logger.error("载入 ATRI 失败。请确保使用 pip 安装了 requirements_atri.txt 下的库。")
+                self.atri = None
+            except BaseException as e:
+                logger.error(traceback.format_exc())
+                logger.error("载入 ATRI 失败。")
+                self.atri = None
+            
     def add_web_search_tools(self):
         self.context.register_llm_tool("web_search", [{
             "type": "string",
@@ -121,7 +140,10 @@ class Main:
     async def chat(self, event: AstrMessageEvent):
         if not event.is_wake_up():
             return
-        
+        if self.atri:
+            await self.atri.chat(event)
+            return
+
         # prompt 前缀
         if self.provider_config.prompt_prefix:
             event.message_str = self.provider_config.prompt_prefix + event.message_str
@@ -131,6 +153,8 @@ class Main:
             if isinstance(comp, Image):
                 image_url = comp.url if comp.url else comp.file
                 break
+        
+        tool_use_flag = False
         llm_result = None
         try:
             if not self.context.llm_tools.empty():
@@ -177,7 +201,6 @@ class Main:
                     return
             else:
                 # normal chat
-                tool_use_flag = False
                 # add user info to the prompt
                 if self.context.get_config().llm_settings.identifier:
                     user_id = event.message_obj.sender.user_id

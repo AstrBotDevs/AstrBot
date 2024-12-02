@@ -9,7 +9,7 @@ from botpy import Client
 from astrbot.api import Platform
 from astrbot.api import MessageChain, MessageEventResult, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
 from typing import Union, List, Dict
-from nakuru.entities.components import *
+from astrbot.api.message_components import *
 from astrbot.api import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from .qqofficial_message_event import QQOfficialMessageEvent

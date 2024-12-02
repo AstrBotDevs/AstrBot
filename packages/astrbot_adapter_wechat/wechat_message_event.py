@@ -1,7 +1,7 @@
 import random, asyncio
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.api import AstrMessageEvent, MessageChain, logger, AstrBotMessage, PlatformMetadata
-from astrbot.api import Plain, Image
+from astrbot.api.message_components import Plain, Image
 from vchat import Core
 
 class WechatPlatformEvent(AstrMessageEvent):
@@ -14,7 +14,10 @@ class WechatPlatformEvent(AstrMessageEvent):
         plain = ""
         for comp in message.chain:
             if isinstance(comp, Plain):
-                plain += comp.text
+                if message.is_split_:
+                    await client.send_msg(comp.text, user_name)
+                else:
+                    plain += comp.text
             elif isinstance(comp, Image):
                 if comp.file and comp.file.startswith("file:///"):
                     file_path = comp.file.replace("file:///", "")

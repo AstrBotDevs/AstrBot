@@ -1,10 +1,10 @@
 import threading, traceback, uuid
 from .route import Route, Response
-from core import logger
+from astrbot.core import logger
 from quart import Quart, request
-from core.config.astrbot_config import AstrBotConfig
-from core.plugin.plugin_manager import PluginManager
-from core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.plugin.plugin_manager import PluginManager
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 
 class PluginRoute(Route):
     def __init__(self, config: AstrBotConfig, app: Quart, core_lifecycle: AstrBotCoreLifecycle, plugin_manager: PluginManager) -> None:

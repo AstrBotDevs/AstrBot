@@ -1,6 +1,6 @@
 from .route import Route
 from quart import Quart
-from core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.astrbot_config import AstrBotConfig
 
 class StaticFileRoute(Route):
     def __init__(self, config: AstrBotConfig, app: Quart) -> None:

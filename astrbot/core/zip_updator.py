@@ -1,6 +1,6 @@
 import aiohttp, os, zipfile, shutil
-from core.utils.io import on_error, download_file
-from core import logger
+from astrbot.core.utils.io import on_error, download_file
+from astrbot.core import logger
 
 class ReleaseInfo():
     version: str

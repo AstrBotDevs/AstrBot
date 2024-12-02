@@ -1,8 +1,8 @@
 import asyncio
 from quart import websocket
 from quart import Quart
-from core.config.astrbot_config import AstrBotConfig
-from core import logger, LogBroker
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core import logger, LogBroker
 from .route import Route, Response
             
 class LogRoute(Route):

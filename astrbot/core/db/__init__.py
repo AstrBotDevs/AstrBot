@@ -1,7 +1,7 @@
 import abc
 from dataclasses import dataclass
 from typing import List
-from core.db.po import Stats, LLMHistory
+from astrbot.core.db.po import Stats, LLMHistory
 
 @dataclass
 class BaseDatabase(abc.ABC):

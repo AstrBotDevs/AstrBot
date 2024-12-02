@@ -4,7 +4,7 @@ import botpy.types
 import botpy.types.message
 from astrbot.core.utils.io import file_to_base64, download_image_by_url
 from astrbot.api import AstrMessageEvent, MessageChain, logger, AstrBotMessage, PlatformMetadata, MessageType
-from astrbot.api import Plain, Image
+from astrbot.api.message_components import Plain, Image
 from botpy import Client
 from botpy.http import Route
 

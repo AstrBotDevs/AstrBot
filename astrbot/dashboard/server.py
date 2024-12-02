@@ -2,22 +2,23 @@ import logging
 import asyncio, os
 from quart import Quart
 from quart.logging import default_handler
-from core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from .routes import *
-from core import logger
-from core.db import BaseDatabase
-from core.plugin.plugin_manager import PluginManager
-from core.updator import AstrBotUpdator
-from core.utils.io import get_local_ip_addresses
-from core.config import AstrBotConfig
-from core.db import BaseDatabase
+from astrbot.core import logger
+from astrbot.core.db import BaseDatabase
+from astrbot.core.plugin.plugin_manager import PluginManager
+from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.utils.io import get_local_ip_addresses
+from astrbot.core.config import AstrBotConfig
+from astrbot.core.db import BaseDatabase
 
 class AstrBotDashboard():
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle, db: BaseDatabase) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.data_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data/dist"))
-        self.app = Quart("dashboard", static_folder="dist", static_url_path="/")
+        logger.info(f"Dashboard data path: {self.data_path}")
+        self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         self.app.json.sort_keys = False
         
         logging.getLogger(self.app.name).removeHandler(default_handler)

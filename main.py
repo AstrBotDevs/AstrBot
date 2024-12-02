@@ -6,12 +6,12 @@ import mimetypes
 import aiohttp
 import zipfile
 from typing import List
-from core.core_lifecycle import AstrBotCoreLifecycle
-from core.db.sqlite import SQLiteDatabase
-from core.config import DB_PATH
-from dashboard import AstrBotDashBoardLifecycle
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.config import DB_PATH
+from astrbot.dashboard import AstrBotDashBoardLifecycle
 
-from core import logger, LogManager, LogBroker
+from astrbot.core import logger, LogManager, LogBroker
 
 # add parent path to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

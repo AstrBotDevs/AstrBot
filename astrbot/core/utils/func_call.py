@@ -1,4 +1,4 @@
-from core.provider import Provider
+from astrbot.core.provider import Provider
 from typing import Awaitable
 import json
 import textwrap

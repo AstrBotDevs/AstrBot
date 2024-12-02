@@ -2,14 +2,14 @@ import asyncio, time, threading
 from .event_bus import EventBus
 from asyncio import Queue
 from typing import List
-from core.config.astrbot_config import AstrBotConfig
-from core.message_event_handler import MessageEventHandler
-from core.plugin import PluginManager
-from core import LogBroker
-from core.db import BaseDatabase
-from core.updator import AstrBotUpdator
-from core import logger
-from core.config.default import VERSION
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.message.message_event_handler import MessageEventHandler
+from astrbot.core.plugin import PluginManager
+from astrbot.core import LogBroker
+from astrbot.core.db import BaseDatabase
+from astrbot.core.updator import AstrBotUpdator
+from astrbot.core import logger
+from astrbot.core.config.default import VERSION
 
 class AstrBotCoreLifecycle:
     def __init__(self, log_broker: LogBroker, db: BaseDatabase):
