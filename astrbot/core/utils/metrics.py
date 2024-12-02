@@ -2,6 +2,7 @@ import aiohttp
 import sys
 import logging
 from astrbot.core.config import VERSION
+from astrbot.core import db_helper, logger
 
 logger = logging.getLogger("astrbot")
 
@@ -19,6 +20,15 @@ class Metric():
         payload = {
             "metrics_data": kwargs
         }
+        try:
+            if 'adapter_name' in kwargs:
+                db_helper.insert_platform_metrics({kwargs['adapter_name']: 1})
+            if 'llm_name' in kwargs:
+                db_helper.insert_llm_metrics({kwargs['llm_name']: 1})
+        except Exception as e:
+            logger.error(f"保存指标到数据库失败: {e}")
+            pass
+        
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(base_url, json=payload, timeout=3) as response:

@@ -7,10 +7,9 @@ import aiohttp
 import zipfile
 from typing import List
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.config import DB_PATH
 from astrbot.dashboard import AstrBotDashBoardLifecycle
-
+from astrbot.core import db_helper
 from astrbot.core import logger, LogManager, LogBroker
 
 # add parent path to sys.path
@@ -92,8 +91,7 @@ if __name__ == "__main__":
     # check dashboard files
     asyncio.run(check_dashboard_files())
     
-    # start db
-    db = SQLiteDatabase(DB_PATH)
+    db = db_helper
     
     # print logo
     logger.info(logo_tmpl)

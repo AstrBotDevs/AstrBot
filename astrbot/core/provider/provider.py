@@ -15,10 +15,9 @@ class Provider(abc.ABC):
         # 维护了 session_id 的上下文，不包含 system 指令
         self.session_memory = defaultdict(list)
         self.curr_personality = Personality(prompt=default_personality, name="")
-        
+        self.db_helper = db_helper
         if persistant_history:
             # 读取历史记录
-            self.db_helper = db_helper
             try:
                 for history in db_helper.get_llm_history():
                     self.session_memory[history.session_id] = json.loads(history.content)

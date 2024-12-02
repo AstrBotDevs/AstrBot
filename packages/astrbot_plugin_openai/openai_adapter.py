@@ -19,7 +19,6 @@ from dataclasses import asdict
 class ProviderOpenAIOfficial(Provider):
     def __init__(self, llm_config: LLMConfig, db_helper: BaseDatabase, persistant_history = True) -> None:
         super().__init__(db_helper, llm_config.default_personality, persistant_history)
-
         self.api_keys = []
         self.chosen_api_key = None
         self.base_url = None
