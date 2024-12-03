@@ -1,13 +1,11 @@
 import asyncio
 from quart import websocket
-from quart import Quart
-from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core import logger, LogBroker
-from .route import Route, Response
+from .route import Route, Response, RouteContext
             
 class LogRoute(Route):
-    def __init__(self, config: AstrBotConfig, app: Quart, log_broker: LogBroker) -> None:
-        super().__init__(config, app)
+    def __init__(self, context: RouteContext, log_broker: LogBroker) -> None:
+        super().__init__(context)
         self.log_broker = log_broker
         self.app.add_url_rule('/api/live-log', view_func=self.log, methods=['GET'], websocket=True)
 

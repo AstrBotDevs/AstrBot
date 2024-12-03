@@ -2,11 +2,15 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from dataclasses import dataclass
 from quart import Quart
 
+@dataclass
+class RouteContext:
+    config: AstrBotConfig
+    app: Quart
 
 class Route():
-    def __init__(self, config: AstrBotConfig, app: Quart):
-        self.app = app
-        self.config = config
+    def __init__(self, context: RouteContext):
+        self.app = context.app
+        self.config = context.config
     
     def register_routes(self):
         for route, (method, func) in self.routes.items():

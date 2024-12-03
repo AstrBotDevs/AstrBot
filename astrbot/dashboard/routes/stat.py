@@ -1,5 +1,5 @@
 import traceback, psutil, time, aiohttp
-from .route import Route, Response
+from .route import Route, Response, RouteContext
 from astrbot.core import logger
 from quart import Quart, request
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -8,8 +8,8 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.config import VERSION
 
 class StatRoute(Route):
-    def __init__(self, config: AstrBotConfig, app: Quart, db_helper: BaseDatabase, core_lifecycle: AstrBotCoreLifecycle) -> None:
-        super().__init__(config, app)
+    def __init__(self, context: RouteContext, db_helper: BaseDatabase, core_lifecycle: AstrBotCoreLifecycle) -> None:
+        super().__init__(context)
         self.routes = {
             '/stat/get': ('GET', self.get_stat),
             '/stat/version': ('GET', self.get_version),

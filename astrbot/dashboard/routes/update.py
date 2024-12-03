@@ -1,13 +1,12 @@
 import threading, traceback
-from .route import Route, Response
+from .route import Route, Response, RouteContext
 from quart import Quart, request
-from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core import logger
 
 class UpdateRoute(Route):
-    def __init__(self, config: AstrBotConfig, app: Quart, astrbot_updator: AstrBotUpdator) -> None:
-        super().__init__(config, app)
+    def __init__(self, context: RouteContext, astrbot_updator: AstrBotUpdator) -> None:
+        super().__init__(context)
         self.routes = {
             '/update/check': ('GET', self.check_update),
             '/update/do': ('POST', self.update_project),

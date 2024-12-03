@@ -417,6 +417,7 @@ class Unknown(BaseMessageComponent):
 
 ComponentTypes = {
     "plain": Plain,
+    "text": Plain,
     "face": Face,
     "record": Record,
     "video": Video,

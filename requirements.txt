@@ -13,3 +13,4 @@ psutil
 lxml_html_clean
 colorlog
 aiocqhttp
+pyjwt

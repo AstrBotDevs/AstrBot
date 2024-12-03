@@ -142,6 +142,7 @@ class ProjectATRI:
     long_term_memory: ATRILongTermMemory = field(default_factory=ATRILongTermMemory)
     active_message: ATRIActiveMessage = field(default_factory=ATRIActiveMessage)
     persona: str = ""
+    split_response: bool = True
     embedding_provider_id: str = ""
     summarize_provider_id: str = ""
     chat_provider_id: str = ""

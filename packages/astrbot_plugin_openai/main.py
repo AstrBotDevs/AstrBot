@@ -148,11 +148,11 @@ class Main:
         if self.provider_config.prompt_prefix:
             event.message_str = self.provider_config.prompt_prefix + event.message_str
         
-        image_url = None
+        image_urls = []
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 image_url = comp.url if comp.url else comp.file
-                break
+                image_urls.append(image_url)
         
         tool_use_flag = False
         llm_result = None
@@ -210,7 +210,7 @@ class Main:
                 llm_result = await self.provider.text_chat(
                     prompt=event.message_str, 
                     session_id=event.session_id, 
-                    image_url=image_url
+                    image_urls=image_urls
                 )
                 await Metric.upload(llm_tick=1, llm_name=self.provider.get_model(), llm_api_base=self.provider.base_url)
         except BadRequestError as e:
@@ -231,7 +231,7 @@ class Main:
                         llm_result = await self.provider.text_chat(
                             prompt=event.message_str, 
                             session_id=event.session_id, 
-                            image_url=image_url
+                            image_urls=image_urls
                         )
                 except BaseException as e:
                     logger.error(traceback.format_exc())

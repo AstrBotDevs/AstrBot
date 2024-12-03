@@ -1,5 +1,5 @@
 import os, json
-from .route import Route, Response
+from .route import Route, Response, RouteContext
 from quart import Quart, request
 from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP, PROVIDER_CONFIG_TEMPLATE
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -87,8 +87,8 @@ def save_extension_config(post_config: dict):
         update_config(namespace, key, value)
 
 class ConfigRoute(Route):
-    def __init__(self, config: AstrBotConfig, app: Quart, core_lifecycle: AstrBotCoreLifecycle) -> None:
-        super().__init__(config, app)
+    def __init__(self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle) -> None:
+        super().__init__(context)
         self.config_key_dont_show = ['dashboard', 'config_version']
         self.core_lifecycle = core_lifecycle
         self.routes = {

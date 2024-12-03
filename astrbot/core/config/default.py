@@ -3,7 +3,7 @@
 '''
 
 VERSION = '3.4.0'
-DB_PATH = 'data/data_v2.db'
+DB_PATH = 'data/data_v3.db'
 
 # LLM 提供商配置模板
 PROVIDER_CONFIG_TEMPLATE = {
@@ -144,8 +144,8 @@ DEFAULT_CONFIG_VERSION_2 = {
     "http_proxy": "",
     "dashboard": {
         "enable": True,
-        "username": "",
-        "password": "",
+        "username": "astrbot",
+        "password": "77b90590a8945a7d36c963981a307dc9",
     },
     "log_level": "INFO",
     "t2i_endpoint": "",
@@ -160,7 +160,12 @@ DEFAULT_CONFIG_VERSION_2 = {
         "active_message": {
             "enable": False,
         },
+        "vision": {
+            "enable": False,
+            "provider_id_or_ofa_model_path": "",
+        },
         "persona": "",
+        "split_response": True,
         "embedding_provider_id": "",
         "summarize_provider_id": "",
         "chat_provider_id": "",
@@ -188,7 +193,7 @@ CONFIG_METADATA_2 = {
             "ws_reverse_port": {"description": "反向 Websocket 端口", "type": "int", "hint": "aiocqhttp 适配器的反向 Websocket 端口。"},
             "qq_id_whitelist": {"description": "QQ 号白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的 QQ 号发来的消息事件。为空时表示不启用白名单过滤。"},
             "qq_group_id_whitelist": {"description": "QQ 群号白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的 QQ 群发来的消息事件。为空时表示不启用白名单过滤。"},
-            "wechat_id_whitelist": {"description": "微信私聊/群聊白名单", "type": "list", "items": {"type": "string"}, "hint": "填写后，将只处理所填写的微信私聊/群聊发来的消息事件。为空时表示不启用白名单过滤。使用 /wechatid 指令获取微信 ID（不是微信号）。注意：每次扫码登录之后，相同联系人的 ID 会发生变化，白名单内的 ID 会失效。"},
+            "wechat_id_whitelist": {"description": "微信私聊/群聊白名单", "type": "list", "items": {"type": "string"}, "obvious_hint": True, "hint": "填写后，将只处理所填写的微信私聊/群聊发来的消息事件。为空时表示不启用白名单过滤。使用 /wechatid 指令获取微信 ID（不是微信号）。注意：每次扫码登录之后，相同联系人的 ID 会发生变化，白名单内的 ID 会失效。"},
         }
     },
     "platform_settings": {
@@ -322,6 +327,15 @@ CONFIG_METADATA_2 = {
                     "enable": {"description": "启用", "type": "bool"},
                 }
             },
+            "vision": {
+                "description": "视觉理解",
+                "type": "object",
+                "items": {
+                    "enable": {"description": "启用", "type": "bool"},
+                    "provider_id_or_ofa_model_path": {"description": "提供商 ID 或 OFA 模型路径", "type": "string", "hint": "将会使用指定的 provider 来进行视觉处理，请确保所填的 provider id 在 `配置页` 中存在。"},
+                }
+            },
+            "split_response": {"description": "是否分割回复", "type": "bool", "hint": "启用后，将会根据句子分割回复以更像人类回复。每次回复之间具有随机的事件间隔。默认启用。"},
             "persona": {"description": "人格", "type": "string", "hint": "默认人格。当启动 ATRI 之后，在 Provider 处设置的人格将会失效。", "obvious_hint": True},
             "embedding_provider_id": {"description": "Embedding provider ID", "type": "string", "hint": "只有当启用了长期记忆时，才需要填写此项。将会使用指定的 provider 来获取 Embedding，请确保所填的 provider id 在 `配置页` 中存在并且设置了 Embedding 配置", "obvious_hint": True},
             "summarize_provider_id": {"description": "Summary provider ID", "type": "string", "hint": "只有当启用了长期记忆时，才需要填写此项。将会使用指定的 provider 来获取 Summary，请确保所填的 provider id 在 `配置页` 中存在。", "obvious_hint": True},

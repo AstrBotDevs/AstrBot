@@ -50,9 +50,6 @@ class ProviderOpenAIOfficial(Provider):
         '''
         将图片转换为 base64
         '''
-        if image_url.startswith("http"):
-            image_url = await download_image_by_url(image_url)
-
         with open(image_url, "rb") as f:
             image_bs64 = base64.b64encode(f.read()).decode('utf-8')
             return "data:image/jpeg;base64," + image_bs64
@@ -98,12 +95,14 @@ class ProviderOpenAIOfficial(Provider):
         '''
         组装上下文。
         '''
-
         if image_urls:
             user_content = {"role": "user","content": [{"type": "text", "text": text}]}
             for image_url in image_urls:
-                base_64_image = await self.encode_image_bs64(image_url)
-                user_content["content"].append({"type": "image_url", "image_url": {"url": base_64_image}})
+                if image_url.startswith("http"):
+                    image_data = image_url
+                else:
+                    image_data = await self.encode_image_bs64(image_url)
+                user_content["content"].append({"type": "image_url", "image_url": {"url": image_data}})
             return user_content
         else:
             return {"role": "user","content": text}
