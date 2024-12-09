@@ -1,6 +1,0 @@
-name: astrbot_adapter_qqofficial # 插件名称
-desc: 支持 QQ 官方机器人平台的消息平台适配器
-help: 
-version: v1.3.0 # 插件版本号。格式：v1.1.1 或者 v1.1
-author: Soulter # 作者
-repo: https://github.com/Soulter/AstrBot

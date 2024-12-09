@@ -41,7 +41,7 @@ class AuthRoute(Route):
         if new_username:
             self.config.dashboard.username = new_username
 
-        self.config.flush_config()
+        self.config.save_config()
 
         return Response().ok(None, "修改成功").__dict__
     

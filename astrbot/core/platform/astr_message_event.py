@@ -1,11 +1,11 @@
-import abc
+import abc, logging
 from dataclasses import dataclass
 from .astrbot_message import AstrBotMessage
 from .platform_metadata import PlatformMetadata
-from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
+from astrbot.core.message.message_event_result import MessageEventResult, MessageChain, EventResultType
 from astrbot.core.platform.message_type import MessageType
 from typing import List
-from astrbot.core.message.components import BaseMessageComponent, Plain, Image
+from astrbot.core.message.components import *
 from astrbot.core.utils.metrics import Metric
 
 @dataclass
@@ -34,8 +34,6 @@ class AstrMessageEvent(abc.ABC):
         self.session_id = session_id
         self.role = "member"
         self.is_wake = False
-        
-        self._result: MessageEventResult = None
         self._extras = {}
         self.session = MessageSesion(
             platform_name=platform_meta.name,
@@ -43,6 +41,9 @@ class AstrMessageEvent(abc.ABC):
             session_id=session_id
         )
         self.unified_msg_origin = str(self.session)
+        
+        self._result: MessageEventResult = None
+        '''消息事件的结果'''
     
     def get_platform_name(self):
         return self.platform_meta.name
@@ -58,8 +59,19 @@ class AstrMessageEvent(abc.ABC):
         for i in chain:
             if isinstance(i, Plain):
                 outline += i.text
-            if isinstance(i, Image):
+            elif isinstance(i, Image):
                 outline += "[图片]"
+            elif isinstance(i, Face):
+                outline += f"[表情:{i.id}]"
+            elif isinstance(i, At):
+                outline += f"[At:{i.qq}]"
+            elif isinstance(i, AtAll):
+                outline += "[At:全体成员]"
+            elif isinstance(i, Forward):
+                # 转发消息
+                outline += f"[转发消息]"
+            else:
+                outline += f"[{i.type}]"
         return outline
     
     def get_message_outline(self) -> str:
@@ -76,11 +88,23 @@ class AstrMessageEvent(abc.ABC):
         '''
         return self.message_obj.message
     
+    def get_message_type(self) -> MessageType:
+        '''
+        获取消息类型。
+        '''
+        return self.message_obj.type
+    
     def get_session_id(self) -> str:
         '''
         获取会话id。
         '''
         return self.session_id
+    
+    def get_group_id(self) -> str:
+        '''
+        获取群组id。如果不是群组消息，返回空字符串。
+        '''
+        return self.message_obj.group_id
     
     def get_self_id(self) -> str:
         '''
@@ -101,22 +125,82 @@ class AstrMessageEvent(abc.ABC):
         return self.message_obj.sender.nickname
         
     def set_result(self, result: MessageEventResult):
-        '''
-        设置消息事件的结果。当设置了结果后，消息事件将不再继续传递。
+        '''设置消息事件的结果。
+        
+        Note:
+            事件处理器可以通过设置结果来控制事件是否继续传播，并向消息适配器发送消息。
+            
+            如果没有设置 `MessageEventResult` 中的 result_type，默认为 CONTINUE。即事件将会继续向后面的 listener 或者 command 传播。
+        
+        Example:
+        
+            async def ban_handler(self, event: AstrMessageEvent):
+                if event.get_sender_id() in self.blacklist:
+                    event.set_result(MessageEventResult().set_console_log("由于用户在黑名单，因此消息事件中断处理。")).set_result_type(EventResultType.STOP)
+                    return
+                
+            async def check_count(self, event: AstrMessageEvent):
+                self.count += 1
+                event.set_result(MessageEventResult().set_console_log("数量已增加", logging.DEBUG).set_result_type(EventResultType.CONTINUE))
+                return
         '''
         self._result = result
+        
+    def stop_event(self):
+        '''终止事件传播。
+        '''
+        if self._result is None:
+            self.set_result(MessageEventResult().stop_event())
+        else:
+            self._result.stop_event()
+        
+    def continue_event(self):
+        '''继续事件传播。
+        '''
+        if self._result is None:
+            self.set_result(MessageEventResult().continue_event())
+        else:
+            self._result.continue_event()
+            
+    def is_stopped(self) -> bool:
+        '''
+        是否终止事件传播。
+        '''
+        if self._result is None:
+            return False # 默认是继续传播
+        return self._result.is_stopped()        
         
     def get_result(self) -> MessageEventResult:
         '''
         获取消息事件的结果。
         '''
         return self._result
+    
+    def clear_result(self):
+        '''
+        清除消息事件的结果。
+        '''
+        self._result = None
         
     def set_extra(self, key, value):
         '''
         设置额外的信息。
         '''
         self._extras[key] = value
+        
+    def get_extra(self, key = None):
+        '''
+        获取额外的信息。
+        '''
+        if key is None:
+            return self._extras
+        return self._extras.get(key, None)
+    
+    def clear_extra(self):
+        '''
+        清除额外的信息。
+        '''
+        self._extras.clear()
         
     def is_private_chat(self) -> bool:
         '''

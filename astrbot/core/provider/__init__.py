@@ -1,1 +1,1 @@
-from .provider import Provider, Personality
+from .provider import Provider, Personality, ProviderMetaData

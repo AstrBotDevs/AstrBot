@@ -1,7 +1,7 @@
 import abc
 from dataclasses import dataclass
 from typing import List
-from astrbot.core.db.po import Stats, LLMHistory
+from astrbot.core.db.po import Stats, LLMHistory, ATRIVision
 
 @dataclass
 class BaseDatabase(abc.ABC):
@@ -39,12 +39,12 @@ class BaseDatabase(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    def update_llm_history(self, session_id: str, content: str):
+    def update_llm_history(self, session_id: str, content: str, provider_type: str):
         '''更新 LLM 历史记录。当不存在 session_id 时插入'''
         raise NotImplementedError
     
     @abc.abstractmethod
-    def get_llm_history(self, session_id: str = None) -> List[LLMHistory]:
+    def get_llm_history(self, session_id: str = None, provider_type: str = None) -> List[LLMHistory]:
         '''获取 LLM 历史记录, 如果 session_id 为 None, 返回所有'''
         raise NotImplementedError
     
@@ -61,4 +61,19 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     def get_grouped_base_stats(self, offset_sec: int = 86400) -> Stats:
         '''获取基础统计数据(合并)'''
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def insert_atri_vision_data(self, vision_data: ATRIVision):
+        '''插入 ATRI 视觉数据'''
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    def get_atri_vision_data(self) -> List[ATRIVision]:
+        '''获取 ATRI 视觉数据'''
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    def get_atri_vision_data_by_path_or_id(self, url_or_path: str, id: str) -> ATRIVision:
+        '''通过 url 或 path 获取 ATRI 视觉数据'''
         raise NotImplementedError

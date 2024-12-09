@@ -2,22 +2,22 @@ import asyncio
 from asyncio import Queue
 from collections import defaultdict
 from typing import List
-from astrbot.core.message.message_event_handler import MessageEventHandler
+from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core import logger
 from .platform import AstrMessageEvent
 from astrbot.core.message.components import Image, Plain
 
 class EventBus:
-    def __init__(self, event_queue: Queue, message_event_handler: MessageEventHandler):
+    def __init__(self, event_queue: Queue, pipeline_scheduler: PipelineScheduler):
         self.event_queue = event_queue
-        self.message_event_handler = message_event_handler
+        self.pipeline_scheduler = pipeline_scheduler
 
     async def dispatch(self):
         logger.info("事件总线已打开。")
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
             self._print_event(event)
-            asyncio.create_task(self.message_event_handler.handle(event))
+            asyncio.create_task(self.pipeline_scheduler.execute(event))
             
     def _print_event(self, event: AstrMessageEvent):        
         if event.get_sender_name():

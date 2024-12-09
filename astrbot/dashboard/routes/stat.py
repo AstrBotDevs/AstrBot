@@ -72,8 +72,8 @@ class StatRoute(Route):
             stat_dict.update({
                 "platform": self.db_helper.get_grouped_base_stats(offset_sec).platform,
                 "message_count": self.db_helper.get_total_message_count() or 0,
-                "platform_count": len(self.core_lifecycle.plugin_manager.get_platform_insts()),
-                "plugin_count": len(self.core_lifecycle.plugin_manager.get_loaded_plugins()),
+                "platform_count": len(self.core_lifecycle.platform_manager.get_insts()),
+                "plugin_count": len(self.core_lifecycle.star_context.get_all_stars()),
                 "message_time_series": message_time_based_stats,
                 "running": self.format_sec(int(time.time()) - self.core_lifecycle.start_time),
                 "memory": {

@@ -2,6 +2,7 @@ __pycache__
 botpy.log
 .vscode
 data_v2.db
+data_v3.db
 configs/session
 configs/config.yaml
 **/.DS_Store
@@ -12,3 +13,7 @@ cookies.json
 logs/
 addons/plugins
 .coverage
+
+
+tests/astrbot_plugin_openai
+chroma

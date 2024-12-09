@@ -1,11 +1,10 @@
-import os, json
+import os, json, traceback
 from .route import Route, Response, RouteContext
 from quart import Quart, request
-from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP, PROVIDER_CONFIG_TEMPLATE
+from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP, PROVIDER_CONFIG_TEMPLATE, ADAPTER_CONFIG_TEMPLATE
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.plugin.config import update_config
+from astrbot.core.star.config import update_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from dataclasses import asdict
 
 def try_cast(value: str, type_: str):
     if type_ == "int" and value.isdigit():
@@ -55,10 +54,6 @@ def validate_config(data, config: AstrBotConfig):
                 validate(value, meta["items"], path=f"{path}{key}.")
     validate(data)
     
-    # hardcode warning
-    data['config_version'] = config.config_version
-    data['dashboard'] = asdict(config.dashboard)
-    
     return errors
 
 def save_astrbot_config(post_config: dict, config: AstrBotConfig):
@@ -66,7 +61,7 @@ def save_astrbot_config(post_config: dict, config: AstrBotConfig):
     errors = validate_config(post_config, config)
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
-    config.flush_config(post_config)
+    config.save_config(post_config)
     
 def save_extension_config(post_config: dict):
     if 'namespace' not in post_config:
@@ -112,6 +107,7 @@ class ConfigRoute(Route):
             await self._save_astrbot_configs(post_configs)
             return Response().ok(None, "保存成功~ 机器人正在重载配置。").__dict__
         except Exception as e:
+            traceback.print_exc()
             return Response().error(str(e)).__dict__
     
     async def post_extension_configs(self):
@@ -123,14 +119,15 @@ class ConfigRoute(Route):
             return Response().error(str(e)).__dict__
             
     async def _get_astrbot_config(self):
-        config = self.config.to_dict()
+        config = self.config
         for key in self.config_key_dont_show:
             if key in config:
                 del config[key]
         return {
             "metadata": CONFIG_METADATA_2,
             "config": config,
-            "provider_config_tmpl": PROVIDER_CONFIG_TEMPLATE
+            "provider_config_tmpl": PROVIDER_CONFIG_TEMPLATE,
+            "adapter_config_tmpl": ADAPTER_CONFIG_TEMPLATE
         }
             
     async def _get_extension_config(self, namespace: str):

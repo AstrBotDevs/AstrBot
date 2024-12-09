@@ -2,7 +2,7 @@ import threading, traceback, uuid
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
 from quart import Quart, request
-from astrbot.core.plugin.plugin_manager import PluginManager
+from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 
 class PluginRoute(Route):
@@ -21,14 +21,14 @@ class PluginRoute(Route):
     
     async def get_plugins(self):
         _plugin_resp = []
-        for plugin in self.plugin_manager.context.registered_plugins:
-            _p = plugin.metadata
+        for plugin in self.plugin_manager.context.get_all_stars():
             _t = {
-                "name": _p.plugin_name,
-                "repo": '' if _p.repo is None else _p.repo,
-                "author": _p.author,
-                "desc": _p.desc,
-                "version": _p.version
+                "name": plugin.name,
+                "repo": '' if plugin.repo is None else plugin.repo,
+                "author": plugin.author,
+                "desc": plugin.desc,
+                "version": plugin.version,
+                "reserved": plugin.reserved
             }
             _plugin_resp.append(_t)
         return Response().ok(_plugin_resp).__dict__

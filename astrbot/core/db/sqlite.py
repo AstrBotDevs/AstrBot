@@ -6,7 +6,8 @@ from astrbot.core.db.po import (
     Command, 
     Provider,
     Stats,
-    LLMHistory
+    LLMHistory,
+    ATRIVision
 )
 from . import BaseDatabase
 from typing import Tuple
@@ -75,28 +76,39 @@ class SQLiteDatabase(BaseDatabase):
                 ''', (k, v, int(time.time()))
             )
 
-    def update_llm_history(self, session_id: str, content: str):
-        res = self.get_llm_history(session_id)
+    def update_llm_history(self, session_id: str, content: str, provider_type: str):
+        res = self.get_llm_history(session_id, provider_type)
         if res:
             self._exec_sql(
                 '''
-                UPDATE llm_history SET content = ? WHERE session_id = ?
-                ''', (content, session_id)
+                UPDATE llm_history SET content = ? WHERE session_id = ? AND provider_type = ?
+                ''', (content, session_id, provider_type)
             )
         else:
             self._exec_sql(
                 '''
-                INSERT INTO llm_history(session_id, content) VALUES (?, ?)
-                ''', (session_id, content)
+                INSERT INTO llm_history(provider_type, session_id, content) VALUES (?, ?, ?)
+                ''', (provider_type, session_id, content)
             )
 
-    def get_llm_history(self, session_id: str = None) -> Tuple:
+    def get_llm_history(self, session_id: str = None, provider_type: str = None) -> Tuple:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
             c = self._get_conn(self.db_path).cursor()
-            
-        where_clause = "" if session_id is None else f"WHERE session_id = '{session_id}'"
+        
+        where_clause = ""
+        if session_id or provider_type:
+            where_clause += " WHERE "
+            has = False
+            if session_id:
+                where_clause += f"session_id = '{session_id}'"
+                has = True
+            if provider_type:
+                if has:
+                    where_clause += " AND "
+                where_clause += f"provider_type = '{provider_type}'"
+        
         c.execute(
             '''
             SELECT * FROM llm_history
@@ -186,26 +198,53 @@ class SQLiteDatabase(BaseDatabase):
         for row in c.fetchall():
             platform.append(Platform(*row))
             
-        # c.execute(
-        #     '''
-        #     SELECT name, SUM(count), timestamp FROM command
-        #     ''' + where_clause + " GROUP BY name"
-        # )
-        
-        # command = []
-        # for row in c.fetchall():
-        #     command.append(Command(*row))
-            
-        # c.execute(
-        #     '''
-        #     SELECT name, SUM(count), timestamp FROM llm
-        #     ''' + where_clause + " GROUP BY name"
-        # )
-        
-        # llm = []
-        # for row in c.fetchall():
-        #     llm.append(Provider(*row))
-            
         c.close()
             
         return Stats(platform, [], [])
+
+
+    def insert_atri_vision_data(self, vision: ATRIVision):
+        ts = int(time.time())
+        keywords = ",".join(vision.keywords)
+        self._exec_sql(
+            '''
+            INSERT INTO atri_vision(id, url_or_path, caption, is_meme, keywords, platform_name, session_id, sender_nickname, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (vision.id, vision.url_or_path, vision.caption, vision.is_meme, keywords, vision.platform_name, vision.session_id, vision.sender_nickname, ts)
+        )
+        
+    def get_atri_vision_data(self) -> Tuple:
+        try:
+            c = self.conn.cursor()
+        except sqlite3.ProgrammingError:
+            c = self._get_conn(self.db_path).cursor()
+            
+        c.execute(
+            '''
+            SELECT * FROM atri_vision
+            '''
+        )
+        
+        res = c.fetchall()
+        visions = []
+        for row in res:
+            visions.append(ATRIVision(*row))
+        c.close()
+        return visions
+    
+    def get_atri_vision_data_by_path_or_id(self, url_or_path: str, id: str) -> ATRIVision:
+        try:
+            c = self.conn.cursor()
+        except sqlite3.ProgrammingError:
+            c = self._get_conn(self.db_path).cursor()
+            
+        c.execute(
+            '''
+            SELECT * FROM atri_vision WHERE url_or_path = ? OR id = ?
+            ''', (url_or_path, id)
+        )
+        
+        res = c.fetchone()
+        c.close()
+        if res:
+            return ATRIVision(*res)
+        return None

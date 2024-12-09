@@ -39,10 +39,10 @@ class AstrBotDashboard():
             return
         # claim jwt
         token = request.headers.get("Authorization")
-        if token.startswith("Bearer "):
-            token = token[7:]
         if not token:
             return Response().error("未授权").__dict__
+        if token.startswith("Bearer "):
+            token = token[7:]
         try:
             jwt.decode(token, WEBUI_SK, algorithms=["HS256"])
         except jwt.ExpiredSignatureError:

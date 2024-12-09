@@ -21,4 +21,4 @@ class AstrBotDashBoardLifecycle:
             await task
         except asyncio.CancelledError as e:
             logger.info("🌈 正在关闭 AstrBot...")
-            core_lifecycle.stop()
+            await core_lifecycle.stop()

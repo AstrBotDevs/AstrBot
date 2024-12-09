@@ -10,13 +10,10 @@ class CommandTokens():
             return None
         return self.tokens[idx].strip()
 
-class CommandParser():
-    def __init__(self):
-        pass
-        
-    def parse(self, message: str):
+class CommandParserMixin():
+    def parse_commands(self, message: str):
         cmd_tokens = CommandTokens()
-        cmd_tokens.tokens = message.split(" ")
+        cmd_tokens.tokens = re.split(r"\s+", message)
         cmd_tokens.len = len(cmd_tokens.tokens)
         return cmd_tokens
     

@@ -1,6 +1,0 @@
-name: astrbot # 插件名称
-desc: AstrBot 内置指令集
-help: 
-version: v1.3.0 # 插件版本号。格式：v1.1.1 或者 v1.1
-author: AstrBot # 作者
-repo: https://github.com/Soulter/AstrBot

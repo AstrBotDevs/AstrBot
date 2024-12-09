@@ -19,6 +19,20 @@ CREATE TABLE IF NOT EXISTS command(
     timestamp INTEGER
 );
 CREATE TABLE IF NOT EXISTS llm_history(
+    provider_type VARCHAR(32),
     session_id VARCHAR(32),
     content TEXT
+);
+
+-- ATRI
+CREATE TABLE IF NOT EXISTS atri_vision(
+    id TEXT,
+    url_or_path TEXT,
+    caption TEXT,
+    is_meme BOOLEAN,
+    keywords TEXT,
+    platform_name VARCHAR(32),
+    session_id VARCHAR(32),
+    sender_nickname VARCHAR(32),
+    timestamp INTEGER
 );

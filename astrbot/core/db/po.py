@@ -37,5 +37,18 @@ class Stats():
 
 @dataclass
 class LLMHistory():
+    provider_type: str
     session_id: str
     content: str
+    
+@dataclass
+class ATRIVision():
+    id: str
+    url_or_path: str
+    caption: str
+    is_meme: bool
+    keywords: List[str]
+    platform_name: str
+    session_id: str
+    sender_nickname: str
+    timestamp: int = -1

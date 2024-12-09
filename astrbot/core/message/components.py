@@ -271,6 +271,7 @@ class Image(BaseMessageComponent):
     c: T.Optional[int] = 2
     # 额外
     path: T.Optional[str] = ""
+    file_unique: T.Optional[str] = "" # 某些平台可能有图片缓存的唯一标识
 
     def __init__(self, file: T.Optional[str], **_):
         # for k in _.keys():

@@ -1,91 +1,134 @@
-import abc, json, threading, time
+import abc, json
 from collections import defaultdict
 from typing import List
 from astrbot.core.db import BaseDatabase
 from astrbot.core import logger
 from typing import TypedDict
-
+from .provider_metadata import ProviderMetaData
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.tool import FuncCall
+from astrbot.core.provider.llm_response import LLMResponse
+from dataclasses import dataclass
 class Personality(TypedDict):
-    prompt: str
-    name: str
+    prompt: str = ""
+    name: str = ""
+    
+@dataclass
+class ProviderMeta():
+    id: str
+    model: str
+    type: str
+
 
 class Provider(abc.ABC):
-    def __init__(self, db_helper: BaseDatabase, default_personality: str = None, persistant_history: bool = True) -> None:
-        self.model_name = "unknown"
-        # 维护了 session_id 的上下文，不包含 system 指令
+    def __init__(
+        self, 
+        provider_config: dict,
+        provider_settings: dict, 
+        persistant_history: bool = True,
+        db_helper: BaseDatabase = None
+    ) -> None:
+        self.model_name = ""
+        '''当前使用的模型名称'''
+        
         self.session_memory = defaultdict(list)
-        self.curr_personality = Personality(prompt=default_personality, name="")
+        '''维护了 session_id 的上下文，**不包含 system 指令**。'''
+        
+        self.provider_config = provider_config
+        
+        self.provider_settings = provider_settings
+        
+        self.curr_personality = Personality(prompt=provider_settings['default_personality'])
+        '''维护了当前的使用的 persona，即人格。'''
+        
         self.db_helper = db_helper
+        '''用于持久化的数据库操作对象。'''
+
         if persistant_history:
             # 读取历史记录
             try:
-                for history in db_helper.get_llm_history():
+                for history in db_helper.get_llm_history(provider_type=provider_config['type']):
                     self.session_memory[history.session_id] = json.loads(history.content)
             except BaseException as e:
                 logger.warning(f"读取 LLM 对话历史记录 失败：{e}。仍可正常使用。")
 
-        
     def set_model(self, model_name: str):
+        '''设置当前使用的模型名称'''
         self.model_name = model_name
     
-    def get_model(self):
+    def get_model(self) -> str:
+        '''获得当前使用的模型名称'''
         return self.model_name
     
-    async def get_human_readable_context(self, session_id: str) -> List[str]:
+    @abc.abstractmethod
+    def get_current_key(self) -> str:
+        raise NotImplementedError()
+    
+    def get_keys(self) -> List[str]:
+        '''获得提供商 Key'''
+        return self.provider_config['key']
+    
+    @abc.abstractmethod
+    def set_key(self, key: str):
+        raise NotImplementedError()
+    
+    @abc.abstractmethod
+    def get_models(self) -> List[str]:
+        '''获得支持的模型列表'''
+        raise NotImplementedError()
+    
+    @abc.abstractmethod
+    async def get_human_readable_context(self, session_id: str, page: int, page_size: int):
+        '''获取人类可读的上下文
+
+        Example:
+            
+            ["User: 你好", "Assistant: 你好！"]
+            
+        Return:
+            contexts: List[str]: 上下文列表
+            total_pages: int: 总页数
         '''
-        获取人类可读的上下文
-
-        example:
-        ["User: 你好", "Assistant: 你好"]
-        '''
-        if session_id not in self.session_memory:
-            raise Exception("会话 ID 不存在")
-
-        contexts = []
-        for record in self.session_memory[session_id]:
-            if record['role'] == "user":
-                contexts.append(f"User: {record['content']}")
-            elif record['role'] == "assistant":
-                contexts.append(f"Assistant: {record['content']}")
-
-        return contexts
+        raise NotImplementedError()
     
     @abc.abstractmethod
     async def text_chat(self,
                         prompt: str,
-                        session_id: str,
-                        image_urls: List[str] = None,
-                        tools = None,
-                        contexts=None,
-                        **kwargs) -> str:
-        '''
-        prompt: 提示词
-        session_id: 会话id
+                        session_id: str=None,
+                        image_urls: List[str]=None,
+                        func_tool: FuncCall=None,
+                        contexts: List=None,
+                        **kwargs) -> LLMResponse:
+        '''获得 LLM 的文本对话结果。会使用当前的模型进行对话。
+        
+        Args:
+            prompt: 提示词
+            session_id: 会话 ID
+            image_urls: 图片 URL 列表
+            tools: Function-calling 工具
+            contexts: 上下文
+            kwargs: 其他参数
+            
+        Notes:
+            - 可以选择性地传入 session_id，如果传入了 session_id，将会使用 session_id 对应的上下文进行对话，
+            并且也会记录相应的对话上下文，实现多轮对话。如果不传入则不会记录上下文。
+            - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
+            - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
+            - 如果传入了 contexts，将会**直接**使用所提供的 contexts 进行对话。
+            传入此值通常意味着你需要自己维护 context，AstrBot 将不会记录上下文，并且会忽略 prompt、session_id、image_urls、tools。
 
-        [optional]
-        image_url: 图片url（识图）
-        tools: 函数调用工具
-        '''
-        raise NotImplementedError()
-    
-    @abc.abstractmethod
-    async def image_generate(self, prompt: str, session_id: str, **kwargs) -> str:
-        '''
-        prompt: 提示词
-        session_id: 会话id
-        '''
-        raise NotImplementedError()
-    
-    @abc.abstractmethod
-    async def get_embedding(self, text: str) -> List[float]:
-        '''
-        获取文本的嵌入
         '''
         raise NotImplementedError()
     
     @abc.abstractmethod
     async def forget(self, session_id: str) -> bool:
-        '''
-        重置会话
-        '''
+        '''重置某一个 session_id 的上下文'''
         raise NotImplementedError()
+
+    def meta(self) -> ProviderMeta:
+        '''获取 Provider 的元数据'''
+        return ProviderMeta(
+            id=self.provider_config['id'],
+            model=self.get_model(),
+            type=self.provider_config['type']
+        )

@@ -96,7 +96,8 @@ if __name__ == "__main__":
     # print logo
     logger.info(logo_tmpl)
     
-    dashboard_lifecycle = AstrBotDashBoardLifecycle(db)
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
+    asyncio.run(core_lifecycle.initialize())
     
+    dashboard_lifecycle = AstrBotDashBoardLifecycle(db)
     asyncio.run(dashboard_lifecycle.start(core_lifecycle))
