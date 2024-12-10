@@ -110,6 +110,7 @@ class Context:
                 handler_md=md
             ))
         star_handlers_registry.append(md)
+        star_handlers_map[md.handler_full_name] = md
     
     def register_provider(self, provider: Provider):
         '''

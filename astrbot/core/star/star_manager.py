@@ -193,6 +193,8 @@ class PluginManager:
                     metadata.star_cls_type = obj.__class__
                     metadata.module_path = path
                     star_map[path] = metadata
+                    star_registry.append(metadata)
+                    logger.debug(f"插件 {root_dir_name} 载入成功。")
                     
             except BaseException as e:
                 traceback.print_exc()
