@@ -13,8 +13,8 @@ class AuthRoute(Route):
         self.register_routes()
     
     async def login(self):
-        username = self.config.dashboard.username
-        password = self.config.dashboard.password
+        username = self.config['dashboard']['username']
+        password = self.config['dashboard']['password']
         post_data = await request.json
         if post_data["username"] == username and post_data["password"] == password:
             return Response().ok({
@@ -25,7 +25,7 @@ class AuthRoute(Route):
             return Response().error("用户名或密码错误").__dict__
         
     async def edit_account(self):
-        password = self.config.dashboard.password
+        password = self.config['dashboard']['password']
         post_data = await request.json
         
         if post_data["password"] != password:
@@ -37,9 +37,9 @@ class AuthRoute(Route):
             return Response().error("新用户名和新密码不能同时为空，你改了个寂寞").__dict__
 
         if new_pwd:
-            self.config.dashboard.password = new_pwd
+            self.config['dashboard']['password'] = new_pwd
         if new_username:
-            self.config.dashboard.username = new_username
+            self.config['dashboard']['username'] = new_username
 
         self.config.save_config()
 

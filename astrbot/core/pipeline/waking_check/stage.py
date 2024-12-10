@@ -15,6 +15,7 @@ class WakingCheckStage(Stage):
     2. 机器人的消息被提到了
     3. 以 wake_prefix 前缀开头
     4. 插件（Star）的 handler filter 通过
+    5. 私聊情况下，位于 admins_id 列表中的管理员的消息
     '''
 
     async def initialize(self, ctx: PipelineContext) -> None:

@@ -51,9 +51,8 @@ class Main(star.Star):
     @filter.command("plugin")
     async def plugin(self, event: AstrMessageEvent):
         plugin_list_info = "已加载的插件：\n"
-        for plugin in self.context.registered_plugins:
-            plugin_list_info += f"- `{plugin.metadata.plugin_name}` By {
-                plugin.metadata.author}: {plugin.metadata.desc}\n"
+        for plugin in self.context.get_all_stars():
+            plugin_list_info += f"- `{plugin.name}` By {plugin.author}: {plugin.desc}\n"
         if plugin_list_info.strip() == "":
             plugin_list_info = "没有加载任何插件。"
 
@@ -62,12 +61,12 @@ class Main(star.Star):
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent):
         config = self.context.get_config()
-        if config.t2i:
-            config.t2i = False
+        if config['t2i']:
+            config['t2i'] = False
             config.save_config()
             event.set_result(MessageEventResult().message("已关闭文本转图片模式。"))
             return
-        config.t2i = True
+        config['t2i'] = True
         config.save_config()
         event.set_result(MessageEventResult().message("已开启文本转图片模式。"))
 
