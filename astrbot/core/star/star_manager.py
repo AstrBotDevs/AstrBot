@@ -4,7 +4,7 @@ import traceback
 import yaml
 import logging
 from types import ModuleType
-from typing import List, Awaitable
+from typing import List
 from pip import main as pip_main
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core import logger
@@ -147,7 +147,7 @@ class PluginManager:
         for plugin_module in plugin_modules:
             try:
                 module_str = plugin_module['module']
-                module_path = plugin_module['module_path']
+                # module_path = plugin_module['module_path']
                 root_dir_name = plugin_module['pname']
                 reserved = plugin_module.get('reserved', False)
                 
@@ -158,7 +158,7 @@ class PluginManager:
                 path += root_dir_name + "." + module_str
                 try:
                     module = __import__(path, fromlist=[module_str])
-                except (ModuleNotFoundError, ImportError) as e:
+                except (ModuleNotFoundError, ImportError):
                     # 尝试安装依赖
                     self._check_plugin_dept_update(target_plugin=root_dir_name)
                     module = __import__(path, fromlist=[module_str])

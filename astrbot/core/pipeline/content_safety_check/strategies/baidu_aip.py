@@ -3,7 +3,6 @@
 '''
 from . import ContentSafetyStrategy
 from aip import AipContentCensor
-from astrbot.core import logger
 
 class BaiduAipStrategy(ContentSafetyStrategy):
     def __init__(self, appid: str, ak: str, sk: str) -> None:

@@ -4,12 +4,11 @@ import os
 
 from readability import Document
 from bs4 import BeautifulSoup
-from openai._exceptions import *
 from engines.config import HEADERS, USER_AGENTS
 from engines.bing import Bing
 from engines.sogo import Sogo
 from engines.google import Google
-from astrbot.api.event import AstrMessageEvent, MessageChain, MessageEventResult
+from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api.provider import Provider
 from astrbot.api import logger
 
@@ -55,7 +54,7 @@ async def search_from_bing(keyword: str, event: AstrMessageEvent = None, provide
         logger.info(f"web_searcher - scraping web: {i.title} - {i.url}")
         try:
             site_result = await fetch_website_content(i.url)
-        except:
+        except BaseException:
             site_result = ""
         site_result = site_result[:600] + "..." if len(site_result) > 600 else site_result
         ret += f"{idx}. {i.title} \n{i.snippet}\n{site_result}\n\n"

@@ -1,5 +1,5 @@
-import asyncio, traceback, json
-from typing import DefaultDict, Deque, List, Union, AsyncGenerator
+import traceback
+from typing import Union, AsyncGenerator
 from ...context import PipelineContext
 from ..stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -7,7 +7,6 @@ from astrbot.core.message.message_event_result import MessageEventResult, Comman
 from astrbot.core.message.components import Image
 from astrbot.core import logger
 from astrbot.core.utils.metrics import Metric
-from astrbot.core.provider.llm_response import LLMResponse
 
 
 class LLMRequestSubStage(Stage):
@@ -62,7 +61,7 @@ class LLMRequestSubStage(Stage):
                         # 执行后续步骤来发送消息
                         yield
 
-                    except BaseException as e:
+                    except BaseException:
                         logger.error(traceback.format_exc())
                 
         except BaseException as e:

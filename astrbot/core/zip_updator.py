@@ -1,4 +1,7 @@
-import aiohttp, os, zipfile, shutil
+import aiohttp
+import os
+import zipfile
+import shutil
 from astrbot.core.utils.io import on_error, download_file
 from astrbot.core import logger
 
@@ -29,14 +32,15 @@ class RepoZipUpdator():
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     result = await response.json()
-            if not result: return []
+            if not result: 
+                return []
             if latest:
                 ret = self.github_api_release_parser([result[0]])
             else:
                 ret = self.github_api_release_parser(result)
-        except BaseException as e:
-            logger.error(f"解析版本信息失败")
-            raise Exception(f"解析版本信息失败")
+        except BaseException:
+            logger.error("解析版本信息失败")
+            raise Exception("解析版本信息失败")
         return ret
     
     def github_api_release_parser(self, releases: list) -> list:
@@ -50,7 +54,8 @@ class RepoZipUpdator():
             commit_hash = ''
             # 规范是: v3.0.7.xxxxxx，其中xxxxxx为 commit hash
             _t = version.split(".")
-            if len(_t) == 4: commit_hash = _t[3]
+            if len(_t) == 4: 
+                commit_hash = _t[3]
             ret.append({
                 "version": release['name'],
                 "published_at": release['published_at'],
@@ -149,7 +154,7 @@ class RepoZipUpdator():
             logger.info(f"删除临时更新文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}")
             shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
             os.remove(zip_path)
-        except:
+        except BaseException:
             logger.warn(f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}")
 
     def format_repo_name(self, repo_url: str) -> str:

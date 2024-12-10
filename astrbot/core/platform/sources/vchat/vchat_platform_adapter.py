@@ -1,4 +1,6 @@
-import sys, time, uuid
+import sys
+import time
+import uuid
 import asyncio
 
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata

@@ -1,11 +1,11 @@
-import abc, logging
+import abc
 from dataclasses import dataclass
 from .astrbot_message import AstrBotMessage
 from .platform_metadata import PlatformMetadata
-from astrbot.core.message.message_event_result import MessageEventResult, MessageChain, EventResultType
+from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
 from astrbot.core.platform.message_type import MessageType
 from typing import List
-from astrbot.core.message.components import *
+from astrbot.core.message.components import Plain, Image, BaseMessageComponent, Face, At, AtAll, Forward
 from astrbot.core.utils.metrics import Metric
 
 @dataclass
@@ -69,7 +69,7 @@ class AstrMessageEvent(abc.ABC):
                 outline += "[At:全体成员]"
             elif isinstance(i, Forward):
                 # 转发消息
-                outline += f"[转发消息]"
+                outline += "[转发消息]"
             else:
                 outline += f"[{i.type}]"
         return outline

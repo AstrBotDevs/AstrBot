@@ -1,6 +1,6 @@
 from typing import List
 from .engine import SearchEngine, SearchResult
-from .config import HEADERS, USER_AGENT_BING
+from .config import USER_AGENT_BING
 
 class Bing(SearchEngine):
     def __init__(self) -> None:

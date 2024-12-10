@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from collections import defaultdict, deque
-from typing import DefaultDict, Deque, List, Union, AsyncGenerator
+from typing import DefaultDict, Deque, Union, AsyncGenerator
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent

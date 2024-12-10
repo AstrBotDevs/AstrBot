@@ -1,16 +1,14 @@
 import time
 import asyncio
-import traceback
 import logging
 from typing import Awaitable, Any
 from aiocqhttp import CQHttp, Event
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
-from astrbot.api.event import MessageChain, MessageEventResult
+from astrbot.api.event import MessageChain
 from .aiocqhttp_message_event import *
 from astrbot.api.message_components import *
 from astrbot.api import logger
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
-from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 

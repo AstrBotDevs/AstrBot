@@ -1,4 +1,6 @@
-import os, traceback, random, asyncio
+import os
+import random
+import asyncio
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image

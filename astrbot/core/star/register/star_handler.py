@@ -7,7 +7,7 @@ from ..filter.event_message_type import EventMessageTypeFilter, EventMessageType
 from ..filter.platform_adapter_type import PlatformAdapterTypeFilter, PlatformAdapterType
 from ..filter.permission import PermissionTypeFilter, PermissionType
 from ..filter.regex import RegexFilter
-from typing import Awaitable, List, Dict
+from typing import Awaitable
 
 
 def get_handler_full_name(awatable: Awaitable) -> str:

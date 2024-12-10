@@ -2,8 +2,8 @@ from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from typing import Union, AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageEventResult, EventResultType
-from astrbot.core.message.components import At, Plain
+from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.message.components import At
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 

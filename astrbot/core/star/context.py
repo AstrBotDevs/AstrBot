@@ -1,9 +1,6 @@
-import heapq
 from asyncio import Queue
-from . import StarMetadata
-from typing import List, Dict, TypedDict, Union
+from typing import List, TypedDict, Union
 
-from astrbot.core.platform import Platform
 from astrbot.core.provider import Provider
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config.astrbot_config import AstrBotConfig

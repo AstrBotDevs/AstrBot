@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Type
 @dataclass
 class PlatformMetadata():
     name: str # 平台的名称

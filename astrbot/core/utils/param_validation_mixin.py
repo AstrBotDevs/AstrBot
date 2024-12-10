@@ -1,5 +1,5 @@
 import inspect
-from typing import Awaitable, List, Union, Dict, Any, Type
+from typing import List, Dict, Any, Type
 
 class ParameterValidationMixin:
     def validate_and_convert_params(self, params: List[Any], param_type: Dict[str, Type]) -> Dict[str, Any]:

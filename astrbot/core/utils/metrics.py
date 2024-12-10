@@ -34,5 +34,5 @@ class Metric():
                 async with session.post(base_url, json=payload, timeout=3) as response:
                     if response.status != 200:
                         pass
-        except Exception as e:
+        except Exception:
             pass

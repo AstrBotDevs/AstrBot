@@ -1,11 +1,10 @@
-import abc, json
+import abc
+import json
 from collections import defaultdict
 from typing import List
 from astrbot.core.db import BaseDatabase
 from astrbot.core import logger
 from typing import TypedDict
-from .provider_metadata import ProviderMetaData
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.tool import FuncCall
 from astrbot.core.provider.llm_response import LLMResponse
 from dataclasses import dataclass

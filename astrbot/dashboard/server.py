@@ -1,5 +1,7 @@
-import logging, jwt
-import asyncio, os
+import logging
+import jwt
+import asyncio
+import os
 from quart import Quart, request
 from quart.logging import default_handler
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -8,7 +10,6 @@ from .routes.route import RouteContext, Response
 from astrbot.core import logger, WEBUI_SK
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.io import get_local_ip_addresses
-from astrbot.core.db import BaseDatabase
 
 DATAPATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data"))
 

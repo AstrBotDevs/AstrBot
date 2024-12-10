@@ -5,9 +5,7 @@ import sys
 import mimetypes
 import aiohttp
 import zipfile
-from typing import List
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.config import DB_PATH
 from astrbot.dashboard import AstrBotDashBoardLifecycle
 from astrbot.core import db_helper
 from astrbot.core import logger, LogManager, LogBroker

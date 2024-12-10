@@ -1,13 +1,9 @@
-import asyncio, time
-from datetime import datetime, timedelta
-from collections import defaultdict, deque
-from typing import DefaultDict, Deque, List, Union, AsyncGenerator
-from ..stage import Stage, register_stage
+import time
+from typing import Union, AsyncGenerator
+from ..stage import register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core import logger
-from astrbot.core.config.astrbot_config import RateLimitStrategy
 from astrbot.core.message.components import Plain, Image
 from astrbot.core import html_renderer
 
@@ -44,6 +40,6 @@ class ResultDecorateStage:
                         logger.error("文本转图片失败，使用文本发送。")
                         return
                     if time.time() - render_start > 3:
-                        logger.warning(f"文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。")
+                        logger.warning("文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。")
                     if url:
                         result.chain = [Image.fromURL(url)]

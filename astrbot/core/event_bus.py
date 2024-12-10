@@ -1,11 +1,8 @@
 import asyncio
 from asyncio import Queue
-from collections import defaultdict
-from typing import List
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core import logger
 from .platform import AstrMessageEvent
-from astrbot.core.message.components import Image, Plain
 
 class EventBus:
     def __init__(self, event_queue: Queue, pipeline_scheduler: PipelineScheduler):

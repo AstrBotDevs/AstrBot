@@ -1,11 +1,10 @@
-import asyncio
 import traceback
 import base64
 import json
 
 from openai import AsyncOpenAI, NOT_GIVEN
 from openai.types.chat.chat_completion import ChatCompletion
-from openai._exceptions import *
+from openai._exceptions import NotFoundError
 from astrbot.core.utils.io import download_image_by_url
 
 from astrbot.core.db import BaseDatabase
@@ -13,7 +12,6 @@ from astrbot.api.provider import Provider
 from astrbot import logger
 from astrbot.core.provider.tool import FuncCall
 from typing import List
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from ..register import register_provider_adapter
 from astrbot.core.provider.llm_response import LLMResponse
 

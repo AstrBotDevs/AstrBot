@@ -1,8 +1,10 @@
-import traceback, psutil, time, aiohttp
+import traceback
+import psutil
+import time
+import aiohttp
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
-from quart import Quart, request
-from astrbot.core.config.astrbot_config import AstrBotConfig
+from quart import request
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config import VERSION

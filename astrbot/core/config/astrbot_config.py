@@ -3,7 +3,7 @@ import json
 import logging
 import enum
 from .default import DEFAULT_CONFIG
-from typing import List, Dict
+from typing import Dict
 
 ASTRBOT_CONFIG_PATH = "data/cmd_config.json"
 logger = logging.getLogger("astrbot")
@@ -47,7 +47,7 @@ class AstrBotConfig(dict):
                 conf[key] = value
                 has_new = True
             else:
-                if conf[key] == None:
+                if conf[key] is None:
                     conf[key] = value
                     has_new = True
                 elif isinstance(value, dict):

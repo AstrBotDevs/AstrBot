@@ -288,15 +288,6 @@ CONFIG_METADATA_2 = {
     "t2i": {"description": "文本转图像", "type": "bool", "hint": "启用后，超出一定长度的文本将会通过 AstrBot API 渲染成 Markdown 图片发送。可以缓解审核和消息过长刷屏的问题，并提高 Markdown 文本的可读性。"},
     "admins_id": {"description": "管理员 ID", "type": "list", "items": {"type": "int"}, "hint": "管理员 ID 列表，管理员可以使用一些特权命令，如 `update`, `plugin` 等。ID 可以通过 `/myid` 指令获得。回车添加，可添加多个。"},
     "http_proxy": {"description": "HTTP 代理", "type": "string", "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`"},
-    "dashboard": {
-        "description": "管理面板配置",
-        "type": "object",
-        "items": {
-            "enable": {"description": "启用", "type": "bool"},
-            "username": {"description": "用户名", "type": "string"},
-            "password": {"description": "密码", "type": "string"},
-        }
-    },
     "log_level": {"description": "控制台日志级别", "type": "string", "hint": "控制台输出日志的级别。", "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
     "t2i_endpoint": {"description": "文本转图像服务接口", "type": "string", "hint": "为空时使用 AstrBot API 服务"},
     "pip_install_arg": {"description": "pip 安装参数", "type": "string", "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。"},

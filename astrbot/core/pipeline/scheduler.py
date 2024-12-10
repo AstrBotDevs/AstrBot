@@ -1,9 +1,8 @@
 from . import STAGES_ORDER
-from .stage import registered_stages, Stage
+from .stage import registered_stages
 from .context import PipelineContext
 from typing import AsyncGenerator
 from astrbot.core.platform import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageEventResult, EventResultType
 from astrbot.core import logger
 
 class PipelineScheduler():

@@ -1,6 +1,7 @@
-import threading, traceback
+import threading
+import traceback
 from .route import Route, Response, RouteContext
-from quart import Quart, request
+from quart import request
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core import logger
 

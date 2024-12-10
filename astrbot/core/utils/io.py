@@ -25,7 +25,7 @@ def remove_dir(file_path) -> bool:
     try:
         shutil.rmtree(file_path, onerror=on_error)
         return True
-    except BaseException as e:
+    except BaseException:
         return False
     
 def port_checker(port: int, host: str = "localhost"):
@@ -76,7 +76,7 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
             else:
                 async with session.get(url) as resp:
                     return save_temp_img(await resp.read())
-    except aiohttp.client_exceptions.ClientConnectorSSLError as e:
+    except aiohttp.client_exceptions.ClientConnectorSSLError:
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()
         ssl_context.set_ciphers('DEFAULT')
@@ -118,7 +118,7 @@ def get_local_ip_addresses():
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('8.8.8.8', 80))
         ip = s.getsockname()[0]
-    except BaseException as e:
+    except BaseException:
         pass
     finally:
         s.close()

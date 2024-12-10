@@ -4,7 +4,7 @@ from typing import List
 from astrbot.core.db import BaseDatabase
 from collections import defaultdict
 from astrbot.core.provider.tool import FuncCall
-from .register import provider_cls_map, provider_registry
+from .register import provider_cls_map
 from astrbot.core import logger
 
 class ProviderManager():
@@ -28,7 +28,8 @@ class ProviderManager():
             
             match provider_cfg['type']:
                 case "openai_chat_completion":
-                    from .sources.openai_source import ProviderOpenAIOfficial
+                    from .sources.openai_source import ProviderOpenAIOfficial # noqa: F401
+                    
             
     async def initialize(self):
         for provider_config in self.providers_config:

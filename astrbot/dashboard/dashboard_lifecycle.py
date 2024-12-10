@@ -1,5 +1,4 @@
 import asyncio
-from multiprocessing import Process
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from .server import AstrBotDashboard
@@ -19,6 +18,6 @@ class AstrBotDashBoardLifecycle:
         
         try:
             await task
-        except asyncio.CancelledError as e:
+        except asyncio.CancelledError:
             logger.info("🌈 正在关闭 AstrBot...")
             await core_lifecycle.stop()

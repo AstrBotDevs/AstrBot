@@ -1,4 +1,6 @@
-import logging, colorlog, asyncio
+import logging
+import colorlog
+import asyncio
 from collections import deque
 from asyncio import Queue
 from typing import List

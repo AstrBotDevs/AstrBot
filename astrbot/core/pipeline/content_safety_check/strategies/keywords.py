@@ -1,6 +1,8 @@
-import re, os, json, base64
+import re
+import os
+import json
+import base64
 from . import ContentSafetyStrategy
-from astrbot.core import logger
 
 class KeywordsStrategy(ContentSafetyStrategy):
     def __init__(self, extra_keywords: list) -> None:
@@ -17,5 +19,5 @@ class KeywordsStrategy(ContentSafetyStrategy):
     def check(self, content: str) -> bool:
         for keyword in self.keywords:
             if re.search(keyword, content):
-                return False, f"内容安全检查不通过，匹配到敏感词。"
+                return False, "内容安全检查不通过，匹配到敏感词。"
         return True, ""

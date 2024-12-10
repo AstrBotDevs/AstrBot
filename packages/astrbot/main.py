@@ -1,10 +1,7 @@
 import aiohttp
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
-from typing import Dict
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.api.platform import MessageType
-from astrbot.api import logger
 from astrbot.api import personalities
 from astrbot.api.provider import Personality
 
@@ -14,15 +11,21 @@ from typing import Union
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
+    
+    async def _query_astrbot_notice(self):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://astrbot.soulter.top/notice.json", timeout=2) as resp:
+                    return (await resp.json())["notice"]
+        except BaseException:
+            return ""
         
     @filter.command("help")
     async def help(self, event: AstrMessageEvent):
         notice = ""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get("https://astrbot.soulter.top/notice.json") as resp:
-                    notice = (await resp.json())["notice"]
-        except BaseException as e:
+            notice = await self._query_astrbot_notice()
+        except BaseException:
             pass
 
         msg = "已注册的 AstrBot 内置指令:\n"
@@ -201,7 +204,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.command("key")
     async def key(self, message: AstrMessageEvent, index: int=None):
         
-        if index == None:
+        if index is None:
             keys_data = self.context.get_using_provider().get_keys()
             curr_key = self.context.get_using_provider().get_current_key()
             ret = "Key:"

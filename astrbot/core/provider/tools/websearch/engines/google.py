@@ -2,7 +2,6 @@ import os
 from googlesearch import search
 
 from .engine import SearchEngine, SearchResult
-from .config import HEADERS, USER_AGENTS
 
 from typing import List
 

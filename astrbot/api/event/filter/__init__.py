@@ -10,3 +10,18 @@ from astrbot.core.star.register import (
 from astrbot.core.star.filter.event_message_type import EventMessageTypeFilter, EventMessageType
 from astrbot.core.star.filter.platform_adapter_type import PlatformAdapterTypeFilter, PlatformAdapterType
 from astrbot.core.star.filter.permission import PermissionTypeFilter, PermissionType
+
+__all__ = [
+    'command',
+    'command_group',
+    'event_message_type',
+    'regex',
+    'platform_adapter_type',
+    'permission_type',
+    'EventMessageTypeFilter',
+    'EventMessageType',
+    'PlatformAdapterTypeFilter',
+    'PlatformAdapterType',
+    'PermissionTypeFilter',
+    'PermissionType',
+]

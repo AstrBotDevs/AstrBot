@@ -1,4 +1,5 @@
-import random, asyncio
+import random
+import asyncio
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain

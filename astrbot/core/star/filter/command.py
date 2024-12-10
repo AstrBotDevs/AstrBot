@@ -1,10 +1,10 @@
 
-import re, inspect
+import re
+import inspect
 from . import HandlerFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.utils.param_validation_mixin import ParameterValidationMixin
-from typing import Awaitable
 from ..star_handler import StarHandlerMetadata
 
 # 标准指令受到 wake_prefix 的制约。

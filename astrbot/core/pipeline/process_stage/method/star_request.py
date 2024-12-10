@@ -2,7 +2,7 @@ from ...context import PipelineContext
 from ..stage import Stage
 from typing import Dict, Any, List, AsyncGenerator, Union
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageEventResult, CommandResult, EventResultType
+from astrbot.core.message.message_event_result import MessageEventResult, CommandResult
 from astrbot.core import logger
 from astrbot.core.star.star_handler import StarHandlerMetadata
 from astrbot.core.star.star import star_map
@@ -36,7 +36,9 @@ class StarRequestSubStage(Stage):
                         # 向下兼容
                         ret = await handler.handler(event, self.ctx.plugin_manager.context, **params)
                 else:
+                    logger.debug("calling star handler: %s" % handler.handler_full_name)
                     ret = await handler.handler(star_cls_obj, event, **params)
+                    logger.debug("star handler %s called" % handler.handler_full_name)
                 if ret:
                     assert isinstance(ret, (MessageEventResult, CommandResult)), "如果有返回值，事件监听器的返回值必须是 MessageEventResult 或 CommandResult 类型。"
                     event.stop_event()

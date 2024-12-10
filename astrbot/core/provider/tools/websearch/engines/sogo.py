@@ -1,7 +1,8 @@
-import random, re
+import random
+import re
 from bs4 import BeautifulSoup
 from .engine import SearchEngine, SearchResult
-from .config import HEADERS, USER_AGENTS
+from .config import USER_AGENTS
 
 from typing import List
 

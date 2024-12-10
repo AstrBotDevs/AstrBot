@@ -1,7 +1,8 @@
-import threading, traceback, uuid
+import traceback
+import uuid
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
-from quart import Quart, request
+from quart import request
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 

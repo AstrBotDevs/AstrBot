@@ -18,7 +18,7 @@ class LocalRenderStrategy(RenderStrategy):
             try:
                 font = ImageFont.truetype(font, size)
                 return font
-            except Exception as e:
+            except Exception:
                 pass
 
     async def render(self, text: str, return_url: bool=False) -> str:

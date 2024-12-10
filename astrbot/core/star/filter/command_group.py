@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Awaitable, List, Union, Tuple
+from typing import List, Union, Tuple
 from . import HandlerFilter
 from .command import CommandFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -27,7 +27,7 @@ class CommandGroupFilter(HandlerFilter):
                 if cmd_th:
                     result += f" ({cmd_th})"
                 else:
-                    result += f" (无参数指令)"
+                    result += " (无参数指令)"
                 
                 result += "\n"
             elif isinstance(sub_filter, CommandGroupFilter):

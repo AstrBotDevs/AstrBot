@@ -1,8 +1,8 @@
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from .platform import PlatformMetadata, Platform
+from .platform import Platform
 from typing import List
 from asyncio import Queue
-from .register import platform_registry, platform_cls_map
+from .register import platform_cls_map
 from astrbot.core import logger
 
 
@@ -20,11 +20,11 @@ class PlatformManager():
                 continue
             match platform['name']:
                 case "aiocqhttp":
-                    from .sources.aiocqhttp.aiocqhttp_platform_adapter import AiocqhttpAdapter
+                    from .sources.aiocqhttp.aiocqhttp_platform_adapter import AiocqhttpAdapter  # noqa: F401
                 case "qqofficial":
-                    from .sources.qqofficial.qqofficial_platform_adapter import QQOfficialAdapter
+                    from .sources.qqofficial.qqofficial_platform_adapter import QQOfficialAdapter # noqa: F401
                 case "vchat":
-                    from .sources.vchat.vchat_platform_adapter import VChatAdapter
+                    from .sources.vchat.vchat_platform_adapter import VChatAdapter # noqa: F401
 
     async def initialize(self):
         for platform in self.platforms_config:

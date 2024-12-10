@@ -1,6 +1,6 @@
 from __future__ import annotations
 import abc
-from typing import List, Dict, AsyncGenerator, Union
+from typing import List, AsyncGenerator, Union
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from .context import PipelineContext
 

@@ -2,7 +2,6 @@ import enum
 from . import HandlerFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.config import AstrBotConfig
-from astrbot.core.platform.message_type import MessageType
 
 class PermissionType(enum.Flag):
     '''权限类型。当选择 MEMBER，ADMIN 也可以通过。

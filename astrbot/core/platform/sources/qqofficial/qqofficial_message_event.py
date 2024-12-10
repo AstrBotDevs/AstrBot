@@ -1,4 +1,4 @@
-import os, traceback, base64, botpy
+import botpy
 import botpy.message
 import botpy.types
 import botpy.types.message

@@ -1,8 +1,8 @@
-import enum, logging
+import enum
 
 from typing import List, Optional
 from dataclasses import dataclass, field
-from astrbot.core.message.components import *
+from astrbot.core.message.components import BaseMessageComponent, Plain, Image
 from typing_extensions import deprecated
 
 @dataclass
