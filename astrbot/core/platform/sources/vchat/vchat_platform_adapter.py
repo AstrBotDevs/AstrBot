@@ -65,7 +65,7 @@ class VChatPlatformAdapter(Platform):
             
     async def _run(self):
         await self.client.init()
-        await self.client.auto_login(hot_reload=True)
+        await self.client.auto_login(hot_reload=True, enable_cmd_qr=True)
         await self.client.run()
     
     def convert_message(self, msg: model.Message) -> AstrBotMessage:

@@ -2,7 +2,7 @@ import logging
 import jwt
 import asyncio
 import os
-from quart import Quart, request
+from quart import Quart, request, jsonify
 from quart.logging import default_handler
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from .routes import *
@@ -41,15 +41,21 @@ class AstrBotDashboard():
         # claim jwt
         token = request.headers.get("Authorization")
         if not token:
-            return Response().error("未授权").__dict__
+            r = jsonify(Response().error("未授权").__dict__)
+            r.status_code = 401
+            return r
         if token.startswith("Bearer "):
             token = token[7:]
         try:
             jwt.decode(token, WEBUI_SK, algorithms=["HS256"])
         except jwt.ExpiredSignatureError:
-            return Response().error("Token 过期").__dict__
+            r = jsonify(Response().error("Token 过期").__dict__)
+            r.status_code = 401
+            return r
         except jwt.InvalidTokenError:
-            return Response().error("Token 无效").__dict__
+            r = jsonify(Response().error("Token 无效").__dict__)
+            r.status_code = 401
+            return r
         
         
     async def shutdown_trigger_placeholder(self):

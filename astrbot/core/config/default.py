@@ -137,7 +137,7 @@ PROVIDER_CONFIG_TEMPLATE = {
 
 # 平台适配器配置模板
 ADAPTER_CONFIG_TEMPLATE = {
-    "qq_official": {
+    "qq_official(QQ)": {
         "id": "default",
         "name": "qq_official",
         "enable": False,
@@ -146,14 +146,14 @@ ADAPTER_CONFIG_TEMPLATE = {
         "enable_group_c2c": True,
         "enable_guild_direct_message": True,
     },
-    "aiocqhtp": {
+    "aiocqhtp(QQ)": {
         "id": "default",
         "name": "aiocqhttp",
         "enable": False,
         "ws_reverse_host": "",
         "ws_reverse_port": 6199
     },
-    "wechat": {
+    "vchat(微信)": {
         "id": "default",
         "name": "vchat",
         "enable": False
@@ -218,8 +218,6 @@ CONFIG_METADATA_2 = {
             "enable": {"description": "启用", "type": "bool", "hint": "是否启用该模型。未启用的模型将不会被使用。"},
             "key": {"description": "API Key", "type": "list", "items": {"type": "string"}, "hint": "API Key 列表。填写好后输入回车即可添加 API Key。支持多个 API Key。"},
             "api_base": {"description": "API Base URL", "type": "string", "hint": "API Base URL 请在在模型提供商处获得。支持 Ollama 开放的 API 地址。如果您确认填写正确但是使用时出现了 404 异常，可以尝试在地址末尾加上 `/v1`。"},
-            "prompt_prefix": {"description": "Prompt 前缀", "type": "text", "hint": "每次与 LLM 对话时在对话前加上的自定义文本。默认为空。"},
-            "default_personality": {"description": "默认人格", "type": "text", "hint": "在当前版本下，默认人格文本会被添加到 LLM 对话的 `system` 字段中。"},
             "model_config": {
                 "description": "文本生成模型",
                 "type": "object",
@@ -230,25 +228,6 @@ CONFIG_METADATA_2 = {
                     "top_p": {"description": "Top P值", "type": "float"},
                 }
             },
-            "image_generation_model_config": {
-                "description": "图像生成模型",
-                "type": "object",
-                "items": {
-                    "enable": {"description": "启用", "type": "bool", "hint": "启用该功能需要提供商支持图像生成。如 dall-e-3"},
-                    "model": {"description": "模型名称", "type": "string", "hint": "图像生成模型的名称，一般是小写的英文。如 dall-e-3"},
-                    "size": {"description": "图像尺寸", "type": "string"},
-                    "style": {"description": "图像风格", "type": "string"},
-                    "quality": {"description": "图像质量", "type": "string"},
-                }
-            },
-            "embedding_model": {
-                "description": "文本嵌入模型",
-                "type": "object",
-                "items": {
-                    "enable": {"description": "启用", "type": "bool", "hint": "启用该功能需要提供商支持文本嵌入。"},
-                    "model": {"description": "模型名称", "type": "string", "hint": "文本嵌入模型的名称，一般是小写的英文。如 text-embedding-3-small"},
-                }
-            }
         }
     },
     "provider_settings": {
