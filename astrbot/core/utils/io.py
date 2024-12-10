@@ -2,7 +2,6 @@ import os
 import ssl
 import shutil
 import socket
-import ifaddr
 import time
 import aiohttp
 import base64

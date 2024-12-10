@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
     "wake_prefix": "",
     "web_search": False,
     "identifier": False,
-    "default_personality": "",
+    "default_personality": "如果用户寻求帮助或者打招呼，请告诉他可以用 /help 查看 AstrBot 帮助。",
     "prompt_prefix": ""
   },
   "content_safety": {

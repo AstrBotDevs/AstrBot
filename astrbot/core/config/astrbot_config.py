@@ -41,7 +41,9 @@ class AstrBotConfig(dict):
         has_new = False
         for key, value in refer_conf.items():
             if key not in conf:
-                logger.info(f"检查到配置项 {path + "." + key if path else key} 不存在，已插入默认值 {value}")
+                # logger.info(f"检查到配置项 {path + "." + key if path else key} 不存在，已插入默认值 {value}")
+                path_ = path + "." + key if path else key
+                logger.info(f"检查到配置项 {path_} 不存在，已插入默认值 {value}")
                 conf[key] = value
                 has_new = True
             else:
