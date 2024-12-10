@@ -5,6 +5,7 @@ from ..filter.command import CommandFilter
 from ..filter.command_group import CommandGroupFilter
 from ..filter.event_message_type import EventMessageTypeFilter, EventMessageType
 from ..filter.platform_adapter_type import PlatformAdapterTypeFilter, PlatformAdapterType
+from ..filter.permission import PermissionTypeFilter, PermissionType
 from ..filter.regex import RegexFilter
 from typing import Awaitable, List, Dict
 
@@ -13,7 +14,7 @@ def get_handler_full_name(awatable: Awaitable) -> str:
     '''获取 Handler 的全名'''
     return f"{awatable.__module__}_{awatable.__name__}"
 
-def get_handler_or_create(handler: Awaitable) -> StarHandlerMetadata:
+def get_handler_or_create(handler: Awaitable, dont_add = False) -> StarHandlerMetadata:
     '''获取 Handler 或者创建一个新的 Handler'''
     handler_full_name = get_handler_full_name(handler)
     if handler_full_name in star_handlers_map:
@@ -26,8 +27,9 @@ def get_handler_or_create(handler: Awaitable) -> StarHandlerMetadata:
             handler=handler,
             event_filters=[]
         )
-        star_handlers_registry.append(md)
-        star_handlers_map[handler_full_name] = md
+        if not dont_add:
+            star_handlers_registry.append(md)
+            star_handlers_map[handler_full_name] = md
         return md
 
 def register_command(command_name: str = None, *args):
@@ -110,6 +112,20 @@ def register_regex(regex: str):
     def decorator(awatable):
         handler_md = get_handler_or_create(awatable)
         handler_md.event_filters.append(RegexFilter(regex))
+        return awatable
+
+    return decorator
+
+def register_permission_type(permission_type: PermissionType, raise_error: bool = True):
+    '''注册一个 PermissionType
+    
+    Args:
+        permission_type: PermissionType
+        raise_error: 如果没有权限，是否抛出错误到消息平台，并且停止事件传播。默认为 True
+    '''
+    def decorator(awatable):
+        handler_md = get_handler_or_create(awatable)
+        handler_md.event_filters.append(PermissionTypeFilter(permission_type, raise_error))
         return awatable
 
     return decorator

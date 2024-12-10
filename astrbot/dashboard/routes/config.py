@@ -84,7 +84,6 @@ def save_extension_config(post_config: dict):
 class ConfigRoute(Route):
     def __init__(self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle) -> None:
         super().__init__(context)
-        self.config_key_dont_show = ['dashboard', 'config_version']
         self.core_lifecycle = core_lifecycle
         self.routes = {
             '/config/get': ('GET', self.get_configs),
@@ -120,9 +119,6 @@ class ConfigRoute(Route):
             
     async def _get_astrbot_config(self):
         config = self.config
-        for key in self.config_key_dont_show:
-            if key in config:
-                del config[key]
         return {
             "metadata": CONFIG_METADATA_2,
             "config": config,

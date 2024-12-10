@@ -60,8 +60,9 @@ class ProviderOpenAIOfficial(Provider):
         try:
             models_str = []
             models = await self.client.models.list()
+            models = models.data
             for model in models:
-                models_str.append(model['id'])
+                models_str.append(model.id)
             return models_str
         except NotFoundError as e:
             raise Exception(f"获取模型列表失败：{e}")

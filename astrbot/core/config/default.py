@@ -17,7 +17,9 @@ DEFAULT_CONFIG = {
     },
     "reply_prefix": "",
     "forward_threshold": 200,
-    "id_whitelist": []
+    "id_whitelist": [],
+    "wl_ignore_admin_on_group": True,
+    "wl_ignore_admin_on_friend": True
   },
   "provider": [],
   "provider_settings": {
@@ -160,7 +162,13 @@ ADAPTER_CONFIG_TEMPLATE = {
 
 # 配置项的中文描述、值类型
 CONFIG_METADATA_2 = {
-    "config_version": {"description": "配置版本", "type": "int"},
+    "config_version": {"description": "配置版本", "type": "int", "invisible": True},
+    "dashboard": {
+        "invisible": True,
+        "description": "",
+        "type": "object",
+        "items": {}
+    },
     "platform": {
         "description": "平台配置",
         "type": "list",
@@ -196,7 +204,9 @@ CONFIG_METADATA_2 = {
             },
             "reply_prefix": {"description": "回复前缀", "type": "string", "hint": "机器人回复消息时带有的前缀。"},
             "forward_threshold": {"description": "转发消息的字数阈值", "type": "int", "hint": "超过一定字数后，机器人会将消息折叠成 QQ 群聊的 “转发消息”，以防止刷屏。目前仅 QQ 平台适配器适用。"},
-            "id_whitelist": {"description": "ID 白名单", "type": "list", "items": {"type": "int"}, "hint": "填写后，将只处理所填写的 ID 发来的消息事件。为空时表示不启用白名单过滤。可以使用 /myid 指令获取在某个平台上的 ID。"},
+            "id_whitelist": {"description": "ID 白名单", "type": "list", "items": {"type": "int"}, "hint": "填写后，将只处理所填写的 ID 发来的消息事件。为空时表示不启用白名单过滤。可以使用 /myid 指令获取在某个平台上的会话 ID。也可在 AstrBot 日志内获取会话 ID，当一条消息没通过白名单时，会输出 INFO 级别的日志。会话 ID 类似 aiocqhttp:GroupMessage:547540978"},
+            "wl_ignore_admin_on_group": {"description": "管理员群组消息无视 ID 白名单", "type": "bool"},
+            "wl_ignore_admin_on_friend": {"description": "管理员私聊消息无视 ID 白名单", "type": "bool"}
         }
     },
     "provider": {

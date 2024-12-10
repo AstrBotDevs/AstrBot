@@ -25,7 +25,7 @@ class Main(star.Star):
         except BaseException as e:
             pass
 
-        msg = "已注册的 AstrBot 内置指令:"
+        msg = "已注册的 AstrBot 内置指令:\n"
         msg += f"""[System]
 /plugin: 插件管理
 /t2i: 开启/关闭文本转图片模式
@@ -76,14 +76,16 @@ class Main(star.Star):
         user_id = str(event.get_sender_id())
         ret = f"""SID: {sid} 此 ID 可用于设置会话白名单。/wl <SID> 添加白名单, /dwl <SID> 删除白名单。
 UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deop <UID> 取消管理员。"""
-        event.set_result(MessageEventResult().message(ret))
+        event.set_result(MessageEventResult().message(ret).use_t2i(False))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("op")
     async def op(self, event: AstrMessageEvent, admin_id: str):
         self.context.get_config()['admins_id'].append(admin_id)
         self.context.get_config().save_config()
         event.set_result(MessageEventResult().message("授权成功。"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("deop")
     async def deop(self, event: AstrMessageEvent, admin_id: str):
         try:
@@ -92,13 +94,15 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             event.set_result(MessageEventResult().message("取消授权成功。"))
         except ValueError:
             event.set_result(MessageEventResult().message("此用户 ID 不在管理员名单内。"))
-        
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("wl")
     async def wl(self, event: AstrMessageEvent, sid: str):
         self.context.get_config()['platform_settings']['id_whitelist'].append(sid)
         self.context.get_config().save_config()
         event.set_result(MessageEventResult().message("添加白名单成功。"))
         
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dwl")
     async def dwl(self, event: AstrMessageEvent, sid: str):
         try:
@@ -142,7 +146,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             try:
                 models = await self.context.get_using_provider().get_models()
             except BaseException as e:
-                message.set_result(MessageEventResult().message("获取模型列表失败: " + str(e)))
+                message.set_result(MessageEventResult().message("获取模型列表失败: " + str(e)).use_t2i(False))
                 return
             i = 1
             ret = "下面列出了此服务提供商可用模型:"
@@ -193,6 +197,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("key")
     async def key(self, message: AstrMessageEvent, index: int=None):
         

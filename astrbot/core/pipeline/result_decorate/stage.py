@@ -38,7 +38,11 @@ class ResultDecorateStage:
                         break
                 if plain_str and len(plain_str) > 150:
                     render_start = time.time()
-                    url = await html_renderer.render_t2i(plain_str, return_url=True)
+                    try:
+                        url = await html_renderer.render_t2i(plain_str, return_url=True)
+                    except BaseException:
+                        logger.error("文本转图片失败，使用文本发送。")
+                        return
                     if time.time() - render_start > 3:
                         logger.warning(f"文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。")
                     if url:

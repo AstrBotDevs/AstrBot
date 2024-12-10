@@ -211,13 +211,14 @@ class AstrMessageEvent(abc.ABC):
     def is_wake_up(self) -> bool:
         '''
         是否是唤醒机器人的事件。
-        
-        机器人被唤醒的条件：
-        1. 消息以用户设置的唤醒前缀开头，默认是 `/`.
-        2. 消息中有 at 机器人的消息。
-        3. 是私聊。
         '''
         return self.is_wake
+    
+    def is_admin(self) -> bool:
+        '''
+        是否是管理员。
+        '''
+        return self.role == "admin"
     
     async def send(self, message: MessageChain):
         '''

@@ -59,9 +59,10 @@ class CommandFilter(HandlerFilter, ParameterValidationMixin):
         params = {}
         try:
             params = self.validate_and_convert_params(ls, self.handler_params)
-            # 解析完成咱也不能丢掉呀，留着给后面的用
+            
         except ValueError as e:
             raise e
+        
         event.set_extra("parsed_params", params)
         
         return True

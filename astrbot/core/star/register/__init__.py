@@ -4,5 +4,6 @@ from .star_handler import (
     register_command_group,
     register_event_message_type,
     register_platform_adapter_type,
-    register_regex
+    register_regex,
+    register_permission_type
 )

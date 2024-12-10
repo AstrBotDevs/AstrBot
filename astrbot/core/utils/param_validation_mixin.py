@@ -24,7 +24,7 @@ class ParameterValidationMixin:
                         else:
                             result[param_name] = params[i]
                     else:
-                        result[param_name] = type(param_type_or_default_val)(params[i])
+                        result[param_name] = param_type_or_default_val(params[i])
                 except ValueError:
                     raise ValueError(f"参数 {param_name} 类型错误")
         print(result)

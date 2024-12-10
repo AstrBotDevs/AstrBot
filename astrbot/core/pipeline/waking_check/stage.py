@@ -58,20 +58,27 @@ class WakingCheckStage(Stage):
         handlers_parsed_params = {} # 注册了指令的 handler
         for handler in star_handlers_registry:
             # filter 需要满足 AND 的逻辑关系
-            passed = False
+            print(handler.handler_full_name)
+            passed = True
             child_command_handler_md = None
+            
+            if len(handler.event_filters) == 0:
+                # 不可能有这种情况, 也不允许有这种情况
+                continue
+            
             for filter in handler.event_filters:
                 try:
                     if isinstance(filter, CommandGroupFilter):
                         '''如果指令组过滤成功, 会返回叶子指令的 StarHandlerMetadata'''
                         ok, child_command_handler_md = filter.filter(event, self.ctx.astrbot_config)
-                        if ok:
-                            passed = True
+                        if not ok:
+                            passed = False
+                        else:
                             handler = child_command_handler_md # handler 覆盖
                             break
                     else:
-                        if filter.filter(event, self.ctx.astrbot_config):
-                            passed = True
+                        if not filter.filter(event, self.ctx.astrbot_config):
+                            passed = False
                             break
                 except Exception as e:
                     # event.set_result(MessageEventResult().message(f"插件 {handler.handler_full_name} 报错：{e}"))
