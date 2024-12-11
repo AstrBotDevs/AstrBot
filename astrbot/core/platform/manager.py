@@ -18,7 +18,7 @@ class PlatformManager():
         for platform in self.platforms_config:
             if not platform['enable']:
                 continue
-            match platform['name']:
+            match platform['type']:
                 case "aiocqhttp":
                     from .sources.aiocqhttp.aiocqhttp_platform_adapter import AiocqhttpAdapter  # noqa: F401
                 case "qqofficial":
@@ -30,11 +30,11 @@ class PlatformManager():
         for platform in self.platforms_config:
             if not platform['enable']:
                 continue
-            if platform['name'] not in platform_cls_map:
-                logger.error(f"未找到适用于 {platform['name']}({platform['id']}) 平台适配器，请检查是否已经安装或者名称填写错误。已跳过。")
+            if platform['type'] not in platform_cls_map:
+                logger.error(f"未找到适用于 {platform['type']}({platform['id']}) 平台适配器，请检查是否已经安装或者名称填写错误。已跳过。")
                 continue
-            cls_type = platform_cls_map[platform['name']]
-            logger.info(f"尝试实例化 {platform['name']}({platform['id']}) 平台适配器 ...")
+            cls_type = platform_cls_map[platform['type']]
+            logger.info(f"尝试实例化 {platform['type']}({platform['id']}) 平台适配器 ...")
             inst = cls_type(platform, self.settings, self.event_queue)
             self.platform_insts.append(inst)
                     

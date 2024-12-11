@@ -3,7 +3,7 @@ import json
 import traceback
 from .route import Route, Response, RouteContext
 from quart import request
-from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP, PROVIDER_CONFIG_TEMPLATE, ADAPTER_CONFIG_TEMPLATE
+from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.config import update_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -123,11 +123,9 @@ class ConfigRoute(Route):
         config = self.config
         return {
             "metadata": CONFIG_METADATA_2,
-            "config": config,
-            "provider_config_tmpl": PROVIDER_CONFIG_TEMPLATE,
-            "adapter_config_tmpl": ADAPTER_CONFIG_TEMPLATE
+            "config": config
         }
-            
+
     async def _get_extension_config(self, namespace: str):
         path = f"data/config/{namespace}.json"
         if not os.path.exists(path):

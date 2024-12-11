@@ -1,4 +1,4 @@
-pydantic
+pydantic~=2.10.3
 vchat
 aiohttp
 openai
