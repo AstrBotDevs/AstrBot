@@ -1,6 +1,7 @@
 import traceback
 import base64
 import json
+import datetime
 
 from openai import AsyncOpenAI, NOT_GIVEN
 from openai.types.chat.chat_completion import ChatCompletion
@@ -28,6 +29,7 @@ class ProviderOpenAIOfficial(Provider):
         self.chosen_api_key = None
         self.api_keys: List = provider_config.get("key", [])
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
+        self.enable_datetime = provider_config.get("datetime_system_prompt", True)
 
         self.client = AsyncOpenAI(
             api_key=self.chosen_api_key,
@@ -136,15 +138,19 @@ class ProviderOpenAIOfficial(Provider):
         new_record = await self.assemble_context(prompt, image_urls)
         
         context_query = []
-        
         if not contexts:
             context_query = [*self.session_memory[session_id], new_record]
+            system_prompt = ""
             if self.curr_personality["prompt"]:
-                context_query.insert(0, {"role": "system", "content": self.curr_personality["prompt"]})
+                system_prompt = self.curr_personality["prompt"]
+            if self.enable_datetime:
+                system_prompt += f"Current datetime: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            if system_prompt:
+                context_query.insert(0, {"role": "system", "content": system_prompt})
         else:
             context_query = contexts
             
-        logger.debug(f"请求上下文：{context_query}")
+        logger.debug(f"请求上下文：{context_query}, {self.get_model()}")
         
         payloads = {
             "messages": context_query,

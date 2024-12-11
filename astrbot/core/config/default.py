@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
     "wake_prefix": "",
     "web_search": False,
     "identifier": False,
+    "datetime_system_prompt": True,
     "default_personality": "如果用户寻求帮助或者打招呼，请告诉他可以用 /help 查看 AstrBot 帮助。",
     "prompt_prefix": ""
   },
@@ -237,6 +238,9 @@ CONFIG_METADATA_2 = {
             "wake_prefix": {"description": "LLM 聊天额外唤醒前缀", "type": "string", "hint": "使用 LLM 聊天额外的触发条件。如填写 `chat`，则需要消息前缀加上 `/chat` 才能触发 LLM 聊天，是一个防止滥用的手段。"},
             "web_search": {"description": "启用网页搜索", "type": "bool", "hint": "能访问 Google 时效果最佳。如果 Google 访问失败，程序会依次访问 Bing, Sogo 搜索引擎。"},
             "identifier": {"description": "启动识别群员", "type": "bool", "hint": "在 Prompt 前加上群成员的名字以让模型更好地了解群聊状态。启用将略微增加 token 开销，"},
+            "datetime_system_prompt": {"description": "启用日期时间系统提示", "type": "bool", "hint": "启用后，会在系统提示词中加上当前机器的日期时间。"},
+            "default_personality": {"description": "默认人格", "type": "string", "hint": "默认人格（情境设置/System Prompt）文本。"},
+            "prompt_prefix": {"description": "Prompt 前缀文本", "type": "string", "hint": "添加之后，会在每次对话的 Prompt 前加上此文本。"},
         }
     },
     "content_safety": {

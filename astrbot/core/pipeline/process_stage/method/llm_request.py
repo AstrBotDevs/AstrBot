@@ -13,7 +13,6 @@ from astrbot.core.star.star import star_map
 class LLMRequestSubStage(Stage):
     
     async def initialize(self, ctx: PipelineContext) -> None:
-        self.curr_provider = ctx.plugin_manager.context.get_using_provider()
         self.prompt_prefix = ctx.astrbot_config['provider_settings']['prompt_prefix']
         self.identifier = ctx.astrbot_config['provider_settings']['identifier']
         self.ctx = ctx
@@ -35,14 +34,15 @@ class LLMRequestSubStage(Stage):
         
         tools = self.ctx.plugin_manager.context.get_llm_tool_manager()
         
+        provider = self.ctx.plugin_manager.context.get_using_provider()
         try:
-            llm_response = await self.curr_provider.text_chat(
+            llm_response = await provider.text_chat(
                 prompt=event.message_str, 
                 session_id=event.session_id, 
                 image_urls=image_urls,
                 func_tool=tools
             )
-            await Metric.upload(llm_tick=1, model_name=self.curr_provider.get_model(), provider_type=self.curr_provider.meta().type)
+            await Metric.upload(llm_tick=1, model_name=provider.get_model(), provider_type=provider.meta().type)
             
             if llm_response.role == 'assistant':
                 # text completion
