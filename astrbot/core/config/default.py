@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
     },
     "provider": [],
     "provider_settings": {
+        "enable": True,
         "wake_prefix": "",
         "web_search": False,
         "identifier": False,
@@ -47,29 +48,7 @@ DEFAULT_CONFIG = {
     "log_level": "INFO",
     "t2i_endpoint": "",
     "pip_install_arg": "",
-    "plugin_repo_mirror": "",
-    "project_atri": {
-        "enable": False,
-        "long_term_memory": {
-            "enable": False,
-            "summary_threshold_cnt": 5,
-            "embedding_provider_id": "",
-            "summarize_provider_id": "",
-        },
-        "active_message": {"enable": False},
-        "vision": {
-            "enable": False,
-            "provider_id_or_ofa_model_path": "",
-            "reply_meme_prob": 0.4,
-            "reply_meme_similar_threshold": 0.7,
-        },
-        "persona": "",
-        "split_response": True,
-        "chat_provider_id": "",
-        "chat_base_model_path": "",
-        "chat_adapter_model_path": "",
-        "quantization_bit": 4,
-    },
+    "plugin_repo_mirror": ""
 }
 
 
@@ -296,6 +275,16 @@ CONFIG_METADATA_2 = {
                             "model": "glm-4-flash",
                         },
                     },
+                    "llmtuner": {
+                        "id": "llmtuner_default",
+                        "type": "llm_tuner",
+                        "enable": True,
+                        "base_model_path": "",
+                        "adapter_model_path": "",
+                        "llmtuner_template": "",
+                        "finetuning_type": "lora",
+                        "quantization_bit": 4,
+                    }
                 },
                 "items": {
                     "id": {
@@ -324,6 +313,31 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "API Base URL 请在在模型提供商处获得。支持 Ollama 开放的 API 地址。如果您确认填写正确但是使用时出现了 404 异常，可以尝试在地址末尾加上 `/v1`。",
                     },
+                    "base_model_path": {
+                        "description": "基座模型路径",
+                        "type": "string",
+                        "hint": "基座模型路径。",
+                    },
+                    "adapter_model_path": {
+                        "description": "Adapter 模型路径",
+                        "type": "string",
+                        "hint": "Adapter 模型路径。如 Lora",
+                    },
+                    "llmtuner_template": {
+                        "description": "template",
+                        "type": "string",
+                        "hint": "基座模型的类型。如 llama3, qwen, 请参考 LlamaFactory 文档。",
+                    },
+                    "finetuning_type": {
+                        "description": "微调类型",
+                        "type": "string",
+                        "hint": "微调类型。如 `lora`",
+                    },
+                    "quantization_bit": {
+                        "description": "量化位数",
+                        "type": "int",
+                        "hint": "量化位数。如 4",
+                    },
                     "model_config": {
                         "description": "文本生成模型",
                         "type": "object",
@@ -347,6 +361,11 @@ CONFIG_METADATA_2 = {
                 "description": "大语言模型设置",
                 "type": "object",
                 "items": {
+                    "enable": {
+                        "description": "启用大语言模型聊天",
+                        "type": "bool",
+                        "hint": "是否启用大语言模型聊天。默认启用",
+                    },
                     "wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀",
                         "type": "string",

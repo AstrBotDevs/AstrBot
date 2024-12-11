@@ -133,6 +133,15 @@ class Context:
         注册一个 LLM Provider。
         '''
         self.provider_manager.provider_insts.append(provider)
+        
+    def get_provider_by_id(self, provider_id: str) -> Provider:
+        '''
+        通过 ID 获取 LLM Provider。
+        '''
+        for provider in self.provider_manager.provider_insts:
+            if provider.meta().id == provider_id:
+                return provider
+        return None
     
     def get_all_providers(self) -> List[Provider]:
         '''

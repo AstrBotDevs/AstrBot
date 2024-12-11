@@ -10,6 +10,7 @@ from astrbot.core.star.star_handler import StarHandlerMetadata
 class ProcessStage(Stage):
     
     async def initialize(self, ctx: PipelineContext) -> None:
+        self.ctx = ctx
         self.config = ctx.astrbot_config
         self.plugin_manager = ctx.plugin_manager
         self.llm_request_sub_stage = LLMRequestSubStage()
@@ -23,10 +24,13 @@ class ProcessStage(Stage):
         '''
         activated_handlers: List[StarHandlerMetadata] = event.get_extra("activated_handlers")
         
-        if not activated_handlers:
-            async for _ in self.llm_request_sub_stage.process(event):
-                yield
-        else:
+        if activated_handlers:
             async for _ in self.star_request_sub_stage.process(event):
                 yield
-    
+
+        if self.ctx.astrbot_config['provider_settings'].get('enable', True):
+            if not event._has_send_oper:
+                '''当没有发送操作'''
+                if (event.get_result() and not event.get_result().is_stopped()) or not event.get_result():
+                    async for _ in self.llm_request_sub_stage.process(event):
+                        yield

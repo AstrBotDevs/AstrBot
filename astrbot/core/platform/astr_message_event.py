@@ -44,6 +44,9 @@ class AstrMessageEvent(abc.ABC):
         
         self._result: MessageEventResult = None
         '''消息事件的结果'''
+        
+        self._has_send_oper = False 
+        '''是否有过至少一次发送操作'''
     
     def get_platform_name(self):
         return self.platform_meta.name
@@ -228,3 +231,4 @@ class AstrMessageEvent(abc.ABC):
         发送消息到消息平台。
         '''
         await Metric.upload(msg_event_tick = 1, adapter_name = self.platform_meta.name)
+        self._has_send_oper = True

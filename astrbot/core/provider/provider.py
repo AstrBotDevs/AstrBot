@@ -65,7 +65,7 @@ class Provider(abc.ABC):
     
     def get_keys(self) -> List[str]:
         '''获得提供商 Key'''
-        return self.provider_config['key']
+        return self.provider_config.get("key", [])
     
     @abc.abstractmethod
     def set_key(self, key: str):

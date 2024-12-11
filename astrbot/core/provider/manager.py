@@ -28,6 +28,9 @@ class ProviderManager():
             match provider_cfg['type']:
                 case "openai_chat_completion":
                     from .sources.openai_source import ProviderOpenAIOfficial # noqa: F401
+                case "llm_tuner":
+                    logger.info("加载 LLM Tuner 工具 ...")
+                    from .sources.llmtuner_source import LLMTunerModelLoader # noqa: F401
                     
             
     async def initialize(self):
