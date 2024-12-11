@@ -40,7 +40,7 @@ class StarRequestSubStage(Stage):
                     ret = await handler.handler(star_cls_obj, event, **params)
                     logger.debug("star handler %s called" % handler.handler_full_name)
                 if ret:
-                    assert isinstance(ret, (MessageEventResult, CommandResult)), "如果有返回值，事件监听器的返回值必须是 MessageEventResult 或 CommandResult 类型。"
+                    assert isinstance(ret, (MessageEventResult, CommandResult)), "如果有返回值，必须是 MessageEventResult 或 CommandResult 类型。"
                     event.stop_event()
                     event.set_result(ret)
                 # 执行后续步骤来发送消息

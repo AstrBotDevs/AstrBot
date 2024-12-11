@@ -52,29 +52,25 @@ class Context:
         获取 LLM Tools。
         '''
         return self.provider_manager.llm_tools
-    
-    
-    # def get_star_commands(self, star_name: str) -> List[]:
-    #     '''获得一个'''
         
-    # def register_llm_tool(self, name: str, func_args: list, desc: str, func_obj: Awaitable) -> None:
-    #     '''
-    #     为函数调用（function-calling / tools-use）添加工具。
+    def register_llm_tool(self, name: str, func_args: list, desc: str, func_obj: Awaitable) -> None:
+        '''
+        为函数调用（function-calling / tools-use）添加工具。
         
-    #     @param name: 函数名
-    #     @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
-    #     @param desc: 函数描述
-    #     @param func_obj: 异步处理函数。
+        @param name: 函数名
+        @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
+        @param desc: 函数描述
+        @param func_obj: 异步处理函数。
         
-    #     异步处理函数会接收到额外的的关键词参数：event: AstrMessageEvent, context: Context。
-    #     '''
-    #     self.llm_tools.add_func(name, func_args, desc, func_obj)
+        异步处理函数会接收到额外的的关键词参数：event: AstrMessageEvent, context: Context。
+        '''
+        self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj, func_obj.__module__)
     
-    # def unregister_llm_tool(self, name: str) -> None:
-    #     '''
-    #     删除一个函数调用工具。
-    #     '''
-    #     self.llm_tools.remove_func(name)
+    def unregister_llm_tool(self, name: str) -> None:
+        '''
+        删除一个函数调用工具。
+        '''
+        self.provider_manager.llm_tools.remove_func(name)
     
     def register_commands(self, star_name: str, command_name: str, desc: str, priority: int, awaitable: Awaitable, use_regex=False, ignore_prefix=False):
         '''

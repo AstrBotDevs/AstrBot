@@ -2,22 +2,27 @@ from . import ContentSafetyStrategy
 from typing import List, Tuple
 
 
-class StrategySelector():
+class StrategySelector:
     def __init__(self, config: dict) -> None:
         self.enabled_strategies: List[ContentSafetyStrategy] = []
-        if config['internal_keywords']['enable']:
+        if config["internal_keywords"]["enable"]:
             from .keywords import KeywordsStrategy
-            self.enabled_strategies.append(KeywordsStrategy(
-                config['internal_keywords']['extra_keywords']))
-        if config['baidu_aip']['enable']:
+
+            self.enabled_strategies.append(
+                KeywordsStrategy(config["internal_keywords"]["extra_keywords"])
+            )
+        if config["baidu_aip"]["enable"]:
             try:
                 from .baidu_aip import BaiduAipStrategy
             except ImportError:
                 raise ImportError("使用百度内容审核应该先 pip install baidu-aip")
-            self.enabled_strategies.append(BaiduAipStrategy(config['baidu_aip']['app_id'],
-                                                            config['baidu_aip']['api_key'],
-                                                            config['baidu_aip']['secret_key']
-                                                            ))
+            self.enabled_strategies.append(
+                BaiduAipStrategy(
+                    config["baidu_aip"]["app_id"],
+                    config["baidu_aip"]["api_key"],
+                    config["baidu_aip"]["secret_key"],
+                )
+            )
 
     def check(self, content: str) -> Tuple[bool, str]:
         for strategy in self.enabled_strategies:

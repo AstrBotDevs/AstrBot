@@ -1,7 +1,7 @@
 import json
 import textwrap
 from typing import Awaitable, Dict, List
-from typing_extensions import TypedDict
+from dataclasses import dataclass
 
 
 class FuncCallJsonFormatError(Exception):
@@ -11,6 +11,7 @@ class FuncCallJsonFormatError(Exception):
     def __str__(self):
         return self.msg
 
+
 class FuncNotFoundError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -18,86 +19,115 @@ class FuncNotFoundError(Exception):
     def __str__(self):
         return self.msg
 
-class FuncTool(TypedDict):
-    '''
+
+@dataclass
+class FuncTool:
+    """
     用于描述一个函数调用工具。
-    '''
+    """
+
     name: str
     parameters: Dict
     description: str
     func_obj: Awaitable
+    module_name: str = None
 
 
-class FuncCall():
+SUPPORTED_TYPES = [
+    "string",
+    "number",
+    "object",
+    "array",
+    "boolean",
+]  # json schema 支持的数据类型
+
+
+class FuncCall:
     def __init__(self) -> None:
         self.func_list: List[FuncTool] = []
-        
+
     def empty(self) -> bool:
         return len(self.func_list) == 0
 
-    def add_func(self, name: str, func_args: list, desc: str, func_obj: Awaitable) -> None:
-        '''
+    def add_func(
+        self,
+        name: str,
+        func_args: list,
+        desc: str,
+        func_obj: Awaitable,
+        module_name: str = None,
+    ) -> None:
+        """
         为函数调用（function-calling / tools-use）添加工具。
-        
+
         @param name: 函数名
         @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
         @param desc: 函数描述
         @param func_obj: 处理函数
-        '''
+        """
         params = {
             "type": "object",  # hard-coded here
-            "properties": {}
+            "properties": {},
         }
         for param in func_args:
-            params['properties'][param['name']] = {
-                "type": param['type'],
-                "description": param['description']
+            params["properties"][param["name"]] = {
+                "type": param["type"],
+                "description": param["description"],
             }
-        _func = FuncTool(name=name, parameters=params, description=desc, func_obj=func_obj)
+        _func = FuncTool(
+            name=name,
+            parameters=params,
+            description=desc,
+            func_obj=func_obj,
+            module_name=module_name,
+        )
         self.func_list.append(_func)
-        
+
     def remove_func(self, name: str) -> None:
-        '''
+        """
         删除一个函数调用工具。
-        '''
+        """
         for i, f in enumerate(self.func_list):
             if f["name"] == name:
                 self.func_list.pop(i)
                 break
-    
+
     def get_func(self, name) -> FuncTool:
         for f in self.func_list:
-            if f["name"] == name:
+            if f.name == name:
                 return f
         return None
-    
+
     def get_func_desc_openai_style(self) -> list:
-        '''
+        """
         获得 OpenAI API 风格的工具描述
-        '''
+        """
         _l = []
         for f in self.func_list:
-            _l.append({
-                "type": "function",
-                "function": {
+            _l.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": f.name,
+                        "parameters": f.parameters,
+                        "description": f.description,
+                    },
+                }
+            )
+        return _l
+
+    async def func_call(self, question: str, session_id: str, provider) -> tuple:
+        _l = []
+        for f in self.func_list:
+            _l.append(
+                {
                     "name": f["name"],
                     "parameters": f["parameters"],
                     "description": f["description"],
                 }
-            })
-        return _l
-
-    async def func_call(self, question: str, session_id: str, provider) -> tuple:
-        
-        _l = []
-        for f in self.func_list:
-            _l.append({
-                "name": f["name"],
-                "parameters": f["parameters"],
-                "description": f["description"],
-            })
+            )
         func_definition = json.dumps(_l, ensure_ascii=False)
-    
+
         prompt = textwrap.dedent(f"""
             ROLE:
             你是一个 Function calling AI Agent, 你的任务是将用户的提问转化为函数调用。
@@ -123,8 +153,8 @@ class FuncCall():
         while _c < 3:
             try:
                 res = await provider.text_chat(prompt, session_id)
-                if res.find('```') != -1:
-                    res = res[res.find('```json') + 7: res.rfind('```')]
+                if res.find("```") != -1:
+                    res = res[res.find("```json") + 7 : res.rfind("```")]
                 res = json.loads(res)
                 break
             except Exception as e:
@@ -133,8 +163,8 @@ class FuncCall():
                     raise e
                 if "The message you submitted was too long" in str(e):
                     raise e
-        
-        if 'res' in res and not res['res']:
+
+        if "res" in res and not res["res"]:
             return "", False
 
         tool_call_result = []
@@ -149,8 +179,7 @@ class FuncCall():
                     tool_callable = func["func_obj"]
                     break
             if not tool_callable:
-                raise FuncNotFoundError(
-                    f"Request function {func_name} not found.")
+                raise FuncNotFoundError(f"Request function {func_name} not found.")
             ret = await tool_callable(**args)
             if ret:
                 tool_call_result.append(str(ret))

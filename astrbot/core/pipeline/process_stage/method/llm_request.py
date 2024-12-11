@@ -7,6 +7,7 @@ from astrbot.core.message.message_event_result import MessageEventResult, Comman
 from astrbot.core.message.components import Image
 from astrbot.core import logger
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.star.star import star_map
 
 
 class LLMRequestSubStage(Stage):
@@ -39,7 +40,7 @@ class LLMRequestSubStage(Stage):
                 prompt=event.message_str, 
                 session_id=event.session_id, 
                 image_urls=image_urls,
-                tools=tools
+                func_tool=tools
             )
             await Metric.upload(llm_tick=1, model_name=self.curr_provider.get_model(), provider_type=self.curr_provider.meta().type)
             
@@ -50,16 +51,29 @@ class LLMRequestSubStage(Stage):
                 # function calling
                 for func_tool_name, func_tool_args in zip(llm_response.tools_call_name, llm_response.tools_call_args):
                     func_tool = tools.get_func(func_tool_name)
-                    logger.debug(f"调用工具函数：{func_tool_name}，参数：{func_tool_args}")
+                    logger.info(f"调用工具函数：{func_tool_name}，参数：{func_tool_args}")
                     try:
-                        ret = await func_tool(event=event, *func_tool_args)
+                        # 尝试调用工具函数
+                        
+                        star_cls_obj = star_map.get(func_tool.module_name).star_cls
+                        # 判断 handler 是否是类方法（通过装饰器注册的没有 __self__ 属性）
+                        if hasattr(func_tool.func_obj, '__self__'):
+                            # 猜测没有通过装饰器去注册
+                            try:
+                                ret = await func_tool.func_obj(event, **func_tool_args)
+                            except TypeError:
+                                # 向下兼容
+                                ret = await func_tool.func_obj(event, self.ctx.plugin_manager.context, **func_tool_args)
+                        else:
+                            ret = await func_tool.func_obj(star_cls_obj, event, **func_tool_args)
 
                         if ret:
-                            assert isinstance(ret, (MessageEventResult, CommandResult)), "如果有返回值，事件监听器的返回值必须是 MessageEventResult 或 CommandResult 类型。"
+                            assert isinstance(ret, (MessageEventResult, CommandResult)), "如果有返回值，必须是 MessageEventResult 或 CommandResult 类型。"
                             event.stop_event()
                             event.set_result(ret)
                         # 执行后续步骤来发送消息
                         yield
+                        event.clear_result() # 清除上一个 func tool 的结果
 
                     except BaseException:
                         logger.error(traceback.format_exc())

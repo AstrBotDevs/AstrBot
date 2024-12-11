@@ -3,8 +3,7 @@ from .provider import Provider
 from typing import List
 from astrbot.core.db import BaseDatabase
 from collections import defaultdict
-from astrbot.core.provider.tool import FuncCall
-from .register import provider_cls_map
+from .register import provider_cls_map, llm_tools
 from astrbot.core import logger
 
 class ProviderManager():
@@ -13,7 +12,7 @@ class ProviderManager():
         self.provider_settings: dict = config['provider_settings']
         self.provider_insts: List[Provider] = []
         '''加载的 Provider 的实例'''
-        self.llm_tools: FuncCall = FuncCall()
+        self.llm_tools = llm_tools
         self.curr_provider_inst: Provider = None
         self.loaded_ids = defaultdict(bool)
         self.db_helper = db_helper

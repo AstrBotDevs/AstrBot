@@ -58,7 +58,6 @@ class WakingCheckStage(Stage):
         handlers_parsed_params = {} # 注册了指令的 handler
         for handler in star_handlers_registry:
             # filter 需要满足 AND 的逻辑关系
-            print(handler.handler_full_name)
             passed = True
             child_command_handler_md = None
             

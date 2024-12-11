@@ -93,6 +93,7 @@ class ProviderOpenAIOfficial(Provider):
     
     async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
         if tools:
+            logger.debug("request with llm tools")
             payloads["tools"] = tools.get_func_desc_openai_style()
         
         completion = await self.client.chat.completions.create(
@@ -117,7 +118,7 @@ class ProviderOpenAIOfficial(Provider):
             func_name_ls = []
             for tool_call in choice.message.tool_calls:
                 for tool in tools.func_list:
-                    if tool['name'] == tool_call.function.name:
+                    if tool.name == tool_call.function.name:
                         args = json.loads(tool_call.function.arguments)
                         args_ls.append(args)
                         func_name_ls.append(tool_call.function.name)
