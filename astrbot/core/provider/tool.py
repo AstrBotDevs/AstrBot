@@ -32,6 +32,8 @@ class FuncTool:
     func_obj: Awaitable
     module_name: str = None
 
+    active: bool = True
+    '''是否激活'''
 
 SUPPORTED_TYPES = [
     "string",
@@ -100,10 +102,12 @@ class FuncCall:
 
     def get_func_desc_openai_style(self) -> list:
         """
-        获得 OpenAI API 风格的工具描述
+        获得 OpenAI API 风格的**已经激活**的工具描述
         """
         _l = []
         for f in self.func_list:
+            if not f.active:
+                continue
             _l.append(
                 {
                     "type": "function",

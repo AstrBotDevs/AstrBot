@@ -33,7 +33,7 @@ class LLMRequestSubStage(Stage):
                 image_url = comp.url if comp.url else comp.file
                 image_urls.append(image_url)
         
-        tools = self.ctx.plugin_manager.context.get_llm_tools()
+        tools = self.ctx.plugin_manager.context.get_llm_tool_manager()
         
         try:
             llm_response = await self.curr_provider.text_chat(

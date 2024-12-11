@@ -47,9 +47,9 @@ class Context:
     def get_all_stars(self) -> List[StarMetadata]:
         return star_registry
     
-    def get_llm_tools(self) -> FuncCall:
+    def get_llm_tool_manager(self) -> FuncCall:
         '''
-        获取 LLM Tools。
+        获取 LLM Tool Manager
         '''
         return self.provider_manager.llm_tools
         
@@ -67,10 +67,31 @@ class Context:
         self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj, func_obj.__module__)
     
     def unregister_llm_tool(self, name: str) -> None:
-        '''
-        删除一个函数调用工具。
-        '''
+        '''删除一个函数调用工具。如果再要启用，需要重新注册。'''
         self.provider_manager.llm_tools.remove_func(name)
+        
+    def activate_llm_tool(self, name: str) -> bool:
+        '''激活一个已经注册的函数调用工具。注册的工具默认是激活状态。
+        
+        Returns:
+            如果没找到，会返回 False
+        '''
+        func_tool = self.provider_manager.llm_tools.get_func(name)
+        if func_tool is not None:
+            func_tool.active = True
+            return True
+        return False
+            
+    def deactivate_llm_tool(self, name: str) -> bool:
+        '''停用一个已经注册的函数调用工具。
+        
+        Returns:
+            如果没找到，会返回 False'''
+        func_tool = self.provider_manager.llm_tools.get_func(name)
+        if func_tool is not None:
+            func_tool.active = False
+            return True
+        return False
     
     def register_commands(self, star_name: str, command_name: str, desc: str, priority: int, awaitable: Awaitable, use_regex=False, ignore_prefix=False):
         '''

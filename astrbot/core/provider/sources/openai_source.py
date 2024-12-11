@@ -93,7 +93,6 @@ class ProviderOpenAIOfficial(Provider):
     
     async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
         if tools:
-            logger.debug("request with llm tools")
             payloads["tools"] = tools.get_func_desc_openai_style()
         
         completion = await self.client.chat.completions.create(

@@ -44,6 +44,7 @@ def register_llm_tool(name: str = None):
         # 处理逻辑
     ```
     
+    可接受的参数类型有：string, number, object, array, boolean。
     '''
     name_ = name
     

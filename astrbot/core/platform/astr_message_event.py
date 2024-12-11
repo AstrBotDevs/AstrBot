@@ -133,16 +133,17 @@ class AstrMessageEvent(abc.ABC):
             如果没有设置 `MessageEventResult` 中的 result_type，默认为 CONTINUE。即事件将会继续向后面的 listener 或者 command 传播。
         
         Example:
-        
-            async def ban_handler(self, event: AstrMessageEvent):
-                if event.get_sender_id() in self.blacklist:
-                    event.set_result(MessageEventResult().set_console_log("由于用户在黑名单，因此消息事件中断处理。")).set_result_type(EventResultType.STOP)
-                    return
-                
-            async def check_count(self, event: AstrMessageEvent):
-                self.count += 1
-                event.set_result(MessageEventResult().set_console_log("数量已增加", logging.DEBUG).set_result_type(EventResultType.CONTINUE))
+        ```
+        async def ban_handler(self, event: AstrMessageEvent):
+            if event.get_sender_id() in self.blacklist:
+                event.set_result(MessageEventResult().set_console_log("由于用户在黑名单，因此消息事件中断处理。")).set_result_type(EventResultType.STOP)
                 return
+            
+        async def check_count(self, event: AstrMessageEvent):
+            self.count += 1
+            event.set_result(MessageEventResult().set_console_log("数量已增加", logging.DEBUG).set_result_type(EventResultType.CONTINUE))
+            return
+        ```
         '''
         self._result = result
         

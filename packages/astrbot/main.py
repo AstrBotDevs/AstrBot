@@ -45,11 +45,41 @@ class Main(star.Star):
 /reset: 重置 LLM 会话
 /history: 获取会话历史记录
 /persona: 情境人格设置
+/tool ls: 查看、激活、停用当前注册的函数工具
 
 提示：如果要查看插件指令，请输入 /plugin 查看具体信息。
 {notice}"""
 
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
+        
+    @filter.command_group("tool")
+    def tool(self):
+        pass
+    
+    @tool.command("ls")
+    async def tool_ls(self, event: AstrMessageEvent):
+        tm = self.context.get_llm_tool_manager()
+        msg = "函数工具：\n"
+        for tool in tm.func_list:
+            active = " (启用)" if tool.active else "(停用)"
+            msg += f"- {tool.name}: {tool.description} {active}\n"
+            
+        msg += "\n使用 /tool on/off <工具名> 激活或者停用工具。"
+        event.set_result(MessageEventResult().message(msg).use_t2i(False))
+        
+    @tool.command("on")
+    async def tool_on(self, event: AstrMessageEvent, tool_name: str):
+        if self.context.activate_llm_tool(tool_name):
+            event.set_result(MessageEventResult().message(f"激活工具 {tool_name} 成功。"))
+        else:
+            event.set_result(MessageEventResult().message(f"激活工具 {tool_name} 失败，未找到此工具。"))
+            
+    @tool.command("off")
+    async def tool_off(self, event: AstrMessageEvent, tool_name: str):
+        if self.context.deactivate_llm_tool(tool_name):
+            event.set_result(MessageEventResult().message(f"停用工具 {tool_name} 成功。"))
+        else:
+            event.set_result(MessageEventResult().message(f"停用工具 {tool_name} 失败，未找到此工具。"))
 
     @filter.command("plugin")
     async def plugin(self, event: AstrMessageEvent):
