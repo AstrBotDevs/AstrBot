@@ -17,7 +17,6 @@ class CommandFilter(HandlerFilter, ParameterValidationMixin):
             
     def print_types(self):
         result = ""
-        print(self.handler_params)
         for k, v in self.handler_params.items():
             if isinstance(v, type):
                 result += f"{k}({v.__name__}),"

@@ -6,7 +6,6 @@ class ParameterValidationMixin:
         '''将参数列表 params 根据 param_type 转换为参数字典。
         '''
         result = {}
-        print(params, param_type)
         for i, (param_name, param_type_or_default_val) in enumerate(param_type.items()):
             if i >= len(params):
                 if isinstance(param_type_or_default_val, Type) or param_type_or_default_val is inspect.Parameter.empty:
@@ -18,7 +17,7 @@ class ParameterValidationMixin:
             else:
                 # 尝试强制转换
                 try:
-                    if param_type_or_default_val == None:
+                    if param_type_or_default_val is None:
                         if params[i].isdigit():
                             result[param_name] = int(params[i])
                         else:
@@ -27,5 +26,4 @@ class ParameterValidationMixin:
                         result[param_name] = param_type_or_default_val(params[i])
                 except ValueError:
                     raise ValueError(f"参数 {param_name} 类型错误")
-        print(result)
         return result

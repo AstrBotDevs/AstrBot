@@ -30,7 +30,7 @@ class Main(star.Star):
 
         msg = "已注册的 AstrBot 内置指令:\n"
         msg += f"""[System]
-/plugin: 插件管理
+/plugin: 查看注册的插件、插件帮助
 /t2i: 开启/关闭文本转图片模式
 /sid: 获取当前会话的 ID
 /op <admin_id>: 授权管理员
@@ -82,14 +82,24 @@ class Main(star.Star):
             event.set_result(MessageEventResult().message(f"停用工具 {tool_name} 失败，未找到此工具。"))
 
     @filter.command("plugin")
-    async def plugin(self, event: AstrMessageEvent):
-        plugin_list_info = "已加载的插件：\n"
-        for plugin in self.context.get_all_stars():
-            plugin_list_info += f"- `{plugin.name}` By {plugin.author}: {plugin.desc}\n"
-        if plugin_list_info.strip() == "":
-            plugin_list_info = "没有加载任何插件。"
-
-        event.set_result(MessageEventResult().message(f"{plugin_list_info}"))
+    async def plugin(self, event: AstrMessageEvent, oper: str = None):
+        if oper is None:
+            plugin_list_info = "已加载的插件：\n"
+            for plugin in self.context.get_all_stars():
+                plugin_list_info += f"- `{plugin.name}` By {plugin.author}: {plugin.desc}\n"
+            if plugin_list_info.strip() == "":
+                plugin_list_info = "没有加载任何插件。"
+            
+            plugin_list_info += "\n使用 /plugin <插件名> 查看插件帮助。"
+            event.set_result(MessageEventResult().message(f"{plugin_list_info}").use_t2i(False))
+        else:
+            plugin = self.context.get_registered_star(oper)
+            if plugin is None:
+                event.set_result(MessageEventResult().message("未找到此插件。"))
+            else:
+                help_msg = plugin.star_cls.__doc__ if plugin.star_cls.__doc__ else "该插件未提供帮助信息"
+                ret = f"插件 {oper} 帮助信息：\n" + help_msg
+                event.set_result(MessageEventResult().message(ret).use_t2i(False))
 
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent):

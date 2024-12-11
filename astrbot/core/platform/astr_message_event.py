@@ -4,7 +4,7 @@ from .astrbot_message import AstrBotMessage
 from .platform_metadata import PlatformMetadata
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
 from astrbot.core.platform.message_type import MessageType
-from typing import List
+from typing import List, Union
 from astrbot.core.message.components import Plain, Image, BaseMessageComponent, Face, At, AtAll, Forward
 from astrbot.core.utils.metrics import Metric
 
@@ -124,7 +124,7 @@ class AstrMessageEvent(abc.ABC):
         '''
         return self.message_obj.sender.nickname
         
-    def set_result(self, result: MessageEventResult):
+    def set_result(self, result: Union[MessageEventResult, str]):
         '''设置消息事件的结果。
         
         Note:
@@ -145,6 +145,8 @@ class AstrMessageEvent(abc.ABC):
             return
         ```
         '''
+        if isinstance(result, str):
+            result = MessageEventResult().message(result)
         self._result = result
         
     def stop_event(self):

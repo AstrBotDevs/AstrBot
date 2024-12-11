@@ -9,7 +9,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.platform.manager import PlatformManager
-from .star import star_registry, star_map, StarMetadata
+from .star import star_registry, StarMetadata
 from .star_handler import star_handlers_registry, star_handlers_map, StarHandlerMetadata
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
@@ -42,8 +42,10 @@ class Context:
         self._db = db
 
     def get_registered_star(self, star_name: str) -> StarMetadata:
-        return star_map.get(star_name, None)
-    
+        for star in star_registry:
+            if star.name == star_name:
+                return star
+
     def get_all_stars(self) -> List[StarMetadata]:
         return star_registry
     
