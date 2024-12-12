@@ -18,6 +18,12 @@ class LLMRequestSubStage(Stage):
         self.ctx = ctx
         
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
+        # Chat 唤醒前缀
+        if self.ctx.astrbot_config['provider_settings']['wake_prefix']:
+            if not event.message_str.startswith(self.ctx.astrbot_config['provider_settings']['wake_prefix']):
+                return
+            event.message_str = event.message_str[len(self.ctx.astrbot_config['provider_settings']['wake_prefix']):]
+        
         if self.prompt_prefix:
             event.message_str = self.prompt_prefix + event.message_str
         if self.identifier:
