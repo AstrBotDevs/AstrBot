@@ -3,16 +3,10 @@ from __future__ import annotations
 from types import ModuleType
 from typing import List, Dict
 from dataclasses import dataclass
-from astrbot.core.utils.command_parser import CommandParserMixin
 
 star_registry: List[StarMetadata] = []
 star_map: Dict[str, StarMetadata] = {}
 '''key 是模块路径，__module__'''
-
-class Star(CommandParserMixin):
-    '''所有插件（Star）的父类，所有插件都应该继承于这个类'''
-    def __init__(self):
-        pass
 
 @dataclass
 class StarMetadata:
