@@ -379,7 +379,7 @@ CONFIG_METADATA_2 = {
                     "identifier": {
                         "description": "启动识别群员",
                         "type": "bool",
-                        "hint": "在 Prompt 前加上群成员的名字以让模型更好地了解群聊状态。启用将略微增加 token 开销，",
+                        "hint": "在 Prompt 前加上群成员的名字以让模型更好地了解群聊状态。启用将略微增加 token 开销。",
                     },
                     "datetime_system_prompt": {
                         "description": "启用日期时间系统提示",

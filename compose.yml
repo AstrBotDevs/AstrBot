@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  astrbot:
+    image: soulter/astrbot:latest
+    container_name: astrbot
+    network_mode: "host"
+    volumes:
+      - ./data:/AstrBot/data
