@@ -68,7 +68,7 @@ class LLMTunerModelLoader(Provider):
             
         responses = await self.model.achat(**conf)
         logger.debug(f"返回上下文：{responses}")
-        self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]))
+        self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.meta().type)
         self.session_memory[session_id].append({"role": "user", "content": prompt})
         self.session_memory[session_id].append({"role": "assistant", "content": responses[-1].response_text})
         return responses[-1].response_text
@@ -92,11 +92,17 @@ class LLMTunerModelLoader(Provider):
         if session_id not in self.session_memory:
             raise Exception("会话 ID 不存在")
         contexts = []
+        temp_contexts = []
         for record in self.session_memory[session_id]:
             if record['role'] == "user":
-                contexts.append(f"User: {record['content']}")
+                temp_contexts.append(f"User: {record['content']}")
             elif record['role'] == "assistant":
-                contexts.append(f"Assistant: {record['content']}")
+                temp_contexts.append(f"Assistant: {record['content']}")
+                contexts.insert(0, temp_contexts)
+                temp_contexts = []
+
+        # 展平 contexts 列表
+        contexts = [item for sublist in contexts for item in sublist]
 
         # 计算分页
         paged_contexts = contexts[(page-1)*page_size:page*page_size]

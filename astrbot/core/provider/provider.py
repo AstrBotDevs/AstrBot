@@ -79,6 +79,8 @@ class Provider(abc.ABC):
     @abc.abstractmethod
     async def get_human_readable_context(self, session_id: str, page: int, page_size: int):
         '''获取人类可读的上下文
+        
+        page 从 1 开始
 
         Example:
             
