@@ -100,6 +100,10 @@ class AiocqhttpAdapter(Platform):
             abm = self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
+                
+        @self.bot.on_websocket_connection
+        def on_websocket_connection(_):
+            logger.info("aiocqhttp 适配器已连接。")
         
         bot = self.bot.run_task(host=self.host, port=int(self.port), shutdown_trigger=self.shutdown_trigger_placeholder)
         

@@ -74,6 +74,7 @@ class AstrBotCoreLifecycle:
     
     async def start(self):
         self._load()
+        logger.info("AstrBot 启动完成。")
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
         
     async def stop(self):
