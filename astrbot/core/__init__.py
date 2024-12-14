@@ -1,7 +1,10 @@
+import os
 from .log import LogManager, LogBroker
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.config.default import DB_PATH
+
+os.makedirs("data", exist_ok=True)
 
 html_renderer = HtmlRenderer()
 logger = LogManager.GetLogger(log_name='astrbot')
