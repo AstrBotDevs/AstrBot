@@ -47,6 +47,10 @@ class AstrMessageEvent(abc.ABC):
         
         self._has_send_oper = False 
         '''是否有过至少一次发送操作'''
+        
+        
+        # back_compability
+        self.platform = platform_meta
     
     def get_platform_name(self):
         return self.platform_meta.name

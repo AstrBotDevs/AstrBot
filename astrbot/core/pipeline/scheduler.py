@@ -41,3 +41,4 @@ class PipelineScheduler():
     async def execute(self, event: AstrMessageEvent):
         '''执行 pipeline'''
         await self._process_stages(event)
+        logger.debug("pipeline 执行完毕。")

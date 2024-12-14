@@ -35,6 +35,9 @@ class Context:
     provider_manager: ProviderManager = None
     
     platform_manager: PlatformManager = None
+    
+    # back compatibility
+    _register_tasks: List[Awaitable] = []
 
     def __init__(self, event_queue: Queue, config: AstrBotConfig, db: BaseDatabase):
         self._event_queue = event_queue
@@ -198,3 +201,9 @@ class Context:
                 await platform.send_by_session(session, message_chain)
                 return True
         return False
+
+    def register_task(self, task: Awaitable, desc: str):
+        '''
+        注册一个异步任务。
+        '''
+        self._register_tasks.append(task)

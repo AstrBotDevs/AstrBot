@@ -29,6 +29,7 @@ class StarRequestSubStage(Stage):
                     continue
                 star_cls_obj = star_map.get(handler.handler_module_str).star_cls
                 
+                logger.debug(f"执行 Star Handler {handler.handler_full_name}")
                 # 判断 handler 是否是类方法（通过装饰器注册的没有 __self__ 属性）
                 ready_to_call = None
                 if hasattr(handler.handler, '__self__'):
@@ -39,9 +40,7 @@ class StarRequestSubStage(Stage):
                         # 向下兼容
                         ready_to_call = handler.handler(event, self.ctx.plugin_manager.context, **params)
                 else:
-                    logger.debug("calling star handler: %s" % handler.handler_full_name)
                     ready_to_call = handler.handler(star_cls_obj, event, **params)
-                    logger.debug("star handler %s called" % handler.handler_full_name)
                 
                 if isinstance(ready_to_call, AsyncGenerator):
                     async for mer in ready_to_call:
@@ -59,13 +58,13 @@ class StarRequestSubStage(Stage):
                     if ret:
                         # 如果有返回值
                         assert isinstance(ret, (MessageEventResult, CommandResult)), "如果有返回值，必须是 MessageEventResult 或 CommandResult 类型。"
-                        event.stop_event()
                         event.set_result(ret)
                     # 执行后续步骤来发送消息
                     if event.is_stopped() and event.get_result():
                         # 插件主动停止事件传播，并且有结果
                         event.continue_event()
                         yield
+                        event.clear_result()
                         event.stop_event()
                         yield
                     elif not event.is_stopped and not event.get_result():
@@ -79,4 +78,5 @@ class StarRequestSubStage(Stage):
                 ret = f":(\n\n在调用插件 {star_map.get(handler.handler_module_str).name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
                 event.set_result(MessageEventResult().message(ret))
                 yield
+                event.clear_result()
                 event.stop_event()

@@ -163,6 +163,7 @@ class PluginManager:
                     self._check_plugin_dept_update(target_plugin=root_dir_name)
                     module = __import__(path, fromlist=[module_str])
                 except Exception as e:
+                    logger.error(traceback.format_exc())
                     logger.error(f"插件 {root_dir_name} 导入失败。原因：{str(e)}")
                     continue
 

@@ -2,7 +2,7 @@ import json
 import os
 from llmtuner.chat import ChatModel
 from typing import List
-from .. import ProviderMetaData, Provider
+from .. import Provider
 from astrbot.core.db import BaseDatabase
 from astrbot import logger
 

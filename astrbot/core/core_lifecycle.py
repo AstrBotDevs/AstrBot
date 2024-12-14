@@ -65,7 +65,11 @@ class AstrBotCoreLifecycle:
         platform_tasks = self.load_platform()
         event_bus_task = asyncio.create_task(self.event_bus.dispatch(), name="event_bus")
         
-        self.curr_tasks = [event_bus_task, *platform_tasks]
+        extra_tasks = []
+        for task in self.star_context._register_tasks:
+            extra_tasks.append(asyncio.create_task(task, name=task.__name__))
+        
+        self.curr_tasks = [event_bus_task, *platform_tasks, *extra_tasks]
         self.start_time = int(time.time())
     
     async def start(self):
