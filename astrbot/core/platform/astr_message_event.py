@@ -127,6 +127,51 @@ class AstrMessageEvent(abc.ABC):
         '''
         return self.message_obj.sender.nickname
         
+    def set_extra(self, key, value):
+        '''
+        设置额外的信息。
+        '''
+        self._extras[key] = value
+        
+    def get_extra(self, key = None):
+        '''
+        获取额外的信息。
+        '''
+        if key is None:
+            return self._extras
+        return self._extras.get(key, None)
+    
+    def clear_extra(self):
+        '''
+        清除额外的信息。
+        '''
+        self._extras.clear()
+        
+    def is_private_chat(self) -> bool:
+        '''
+        是否是私聊。
+        '''
+        return self.message_obj.type.value == (MessageType.FRIEND_MESSAGE).value
+    
+    def is_wake_up(self) -> bool:
+        '''
+        是否是唤醒机器人的事件。
+        '''
+        return self.is_wake
+    
+    def is_admin(self) -> bool:
+        '''
+        是否是管理员。
+        '''
+        return self.role == "admin"
+    
+    async def send(self, message: MessageChain):
+        '''
+        发送消息到消息平台。
+        '''
+        await Metric.upload(msg_event_tick = 1, adapter_name = self.platform_meta.name)
+        self._has_send_oper = True
+        
     def set_result(self, result: Union[MessageEventResult, str]):
         '''设置消息事件的结果。
         
@@ -188,47 +233,42 @@ class AstrMessageEvent(abc.ABC):
         '''
         self._result = None
         
-    def set_extra(self, key, value):
+    def make_result(self) -> MessageEventResult:
         '''
-        设置额外的信息。
-        '''
-        self._extras[key] = value
+        创建一个空的消息事件结果。
         
-    def get_extra(self, key = None):
-        '''
-        获取额外的信息。
-        '''
-        if key is None:
-            return self._extras
-        return self._extras.get(key, None)
-    
-    def clear_extra(self):
-        '''
-        清除额外的信息。
-        '''
-        self._extras.clear()
+        Example:
         
-    def is_private_chat(self) -> bool:
+        ```python
+        # 纯文本回复
+        yield event.make_result().message("Hi")
+        # 发送图片
+        yield event.make_result().url_image("https://example.com/image.jpg")
+        yield event.make_result().file_image("image.jpg")
+        ```
         '''
-        是否是私聊。
-        '''
-        return self.message_obj.type.value == (MessageType.FRIEND_MESSAGE).value
+        return MessageEventResult()
     
-    def is_wake_up(self) -> bool:
+    def plain_result(self, text: str) -> MessageEventResult:
         '''
-        是否是唤醒机器人的事件。
+        创建一个空的消息事件结果，只包含一条文本消息。
         '''
-        return self.is_wake
+        return MessageEventResult().message(text)
     
-    def is_admin(self) -> bool:
+    def image_result(self, url_or_path: str) -> MessageEventResult:
         '''
-        是否是管理员。
+        创建一个空的消息事件结果，只包含一条图片消息。
+        
+        根据开头是否包含 http 来判断是网络图片还是本地图片。
         '''
-        return self.role == "admin"
+        if url_or_path.startswith("http"):
+            return MessageEventResult().url_image(url_or_path)
+        return MessageEventResult().file_image(url_or_path)
     
-    async def send(self, message: MessageChain):
+    def chain_result(self, chain: List[BaseMessageComponent]) -> MessageEventResult:
         '''
-        发送消息到消息平台。
+        创建一个空的消息事件结果，包含指定的消息链。
         '''
-        await Metric.upload(msg_event_tick = 1, adapter_name = self.platform_meta.name)
-        self._has_send_oper = True
+        mer = MessageEventResult()
+        mer.chain = chain
+        return mer
