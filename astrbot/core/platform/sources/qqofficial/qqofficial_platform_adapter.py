@@ -1,21 +1,27 @@
 import botpy
+import logging
 import time
 import asyncio
 import botpy.message
 import botpy.types
 import botpy.types.message
+import os
 
 from botpy import Client
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
 from astrbot.api.event import MessageChain
 from typing import Union, List
-from astrbot.api.message_components import *
+from astrbot.api.message_components import Image, Plain
 from astrbot.core.platform.astr_message_event import MessageSesion
 from .qqofficial_message_event import QQOfficialMessageEvent
 from ...register import register_platform_adapter
+from astrbot.core.message.components import BaseMessageComponent
+
+# remove logger handler
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
 
 # QQ 机器人官方框架
-@register_platform_adapter("qqofficial", "QQ 机器人官方 API 适配器")
 class botClient(Client):
     def set_platform(self, platform: 'QQOfficialPlatformAdapter'):
         self.platform = platform
@@ -52,7 +58,7 @@ class botClient(Client):
             abm.session_id,
             self.platform.client
         ))
-
+@register_platform_adapter("qq_official", "QQ 机器人官方 API 适配器")
 class QQOfficialPlatformAdapter(Platform):
 
     def __init__(self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue) -> None:
@@ -94,7 +100,7 @@ class QQOfficialPlatformAdapter(Platform):
         
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            "qqofficial",
+            "qq_official",
             "QQ 机器人官方 API 适配器",
         )
 
@@ -105,7 +111,7 @@ class QQOfficialPlatformAdapter(Platform):
         abm.timestamp = int(time.time())
         abm.raw_message = message
         abm.message_id = message.id
-        abm.tag = "qqofficial"
+        abm.tag = "qq_official"
         msg: List[BaseMessageComponent] = []
 
         if isinstance(message, botpy.message.GroupMessage) or isinstance(message, botpy.message.C2CMessage):
@@ -137,7 +143,7 @@ class QQOfficialPlatformAdapter(Platform):
         elif isinstance(message, botpy.message.Message) or isinstance(message, botpy.message.DirectMessage):
             try:
                 abm.self_id = str(message.mentions[0].id)
-            except:
+            except BaseException as _:
                 abm.self_id = ""
 
             plain_content = message.content.replace(

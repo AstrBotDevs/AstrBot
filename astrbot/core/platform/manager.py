@@ -21,8 +21,8 @@ class PlatformManager():
             match platform['type']:
                 case "aiocqhttp":
                     from .sources.aiocqhttp.aiocqhttp_platform_adapter import AiocqhttpAdapter  # noqa: F401
-                case "qqofficial":
-                    from .sources.qqofficial.qqofficial_platform_adapter import QQOfficialAdapter # noqa: F401
+                case "qq_official":
+                    from .sources.qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter # noqa: F401
                 case "vchat":
                     from .sources.vchat.vchat_platform_adapter import VChatPlatformAdapter # noqa: F401
 
