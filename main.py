@@ -5,7 +5,6 @@ import sys
 import mimetypes
 import aiohttp
 import zipfile
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.dashboard import AstrBotDashBoardLifecycle
 from astrbot.core import db_helper
 from astrbot.core import logger, LogManager, LogBroker
@@ -94,8 +93,5 @@ if __name__ == "__main__":
     # print logo
     logger.info(logo_tmpl)
     
-    core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
-    asyncio.run(core_lifecycle.initialize())
-    
-    dashboard_lifecycle = AstrBotDashBoardLifecycle(db)
-    asyncio.run(dashboard_lifecycle.start(core_lifecycle))
+    dashboard_lifecycle = AstrBotDashBoardLifecycle(db, log_broker)
+    asyncio.run(dashboard_lifecycle.start())

@@ -63,8 +63,6 @@ class QQOfficialPlatformAdapter(Platform):
 
     def __init__(self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue) -> None:
         super().__init__(event_queue)
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
         
         self.config = platform_config
         

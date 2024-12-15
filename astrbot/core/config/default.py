@@ -18,6 +18,7 @@ DEFAULT_CONFIG = {
         "reply_prefix": "",
         "forward_threshold": 200,
         "id_whitelist": [],
+        "id_whitelist_log": True,
         "wl_ignore_admin_on_group": True,
         "wl_ignore_admin_on_friend": True,
     },
@@ -166,6 +167,11 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "int"},
                         "hint": "填写后，将只处理所填写的 ID 发来的消息事件。为空时表示不启用白名单过滤。可以使用 /myid 指令获取在某个平台上的会话 ID。也可在 AstrBot 日志内获取会话 ID，当一条消息没通过白名单时，会输出 INFO 级别的日志。会话 ID 类似 aiocqhttp:GroupMessage:547540978",
+                    },
+                    "id_whitelist_log": {
+                        "description": "打印白名单日志",
+                        "type": "bool",
+                        "hint": "启用后，当一条消息没通过白名单时，会输出 INFO 级别的日志。",
                     },
                     "wl_ignore_admin_on_group": {
                         "description": "管理员群组消息无视 ID 白名单",
