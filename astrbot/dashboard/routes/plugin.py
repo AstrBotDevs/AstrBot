@@ -1,4 +1,5 @@
 import traceback
+import aiohttp
 import uuid
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
@@ -15,10 +16,22 @@ class PluginRoute(Route):
             '/plugin/install-upload': ('POST', self.install_plugin_upload),
             '/plugin/update': ('POST', self.update_plugin),
             '/plugin/uninstall': ('POST', self.uninstall_plugin),
+            '/plugin/market_list': ('GET', self.get_online_plugins)
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
         self.register_routes()
+    
+    async def get_online_plugins(self):
+        url = "https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    result = await response.json()
+            return Response().ok(result).__dict__
+        except Exception as e:
+            logger.error(f"获取插件列表失败：{e}")
+            return Response().error(str(e)).__dict__
     
     async def get_plugins(self):
         _plugin_resp = []
