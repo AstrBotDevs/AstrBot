@@ -1,0 +1,24 @@
+on:
+  push:
+    tags:
+      - 'v*'
+
+name: Auto Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch Changelog
+        run: |
+          echo "changelog=changelogs/${{github.ref_name}}.md" >> "$GITHUB_ENV"
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          bodyFile: ${{ env.changelog }}
