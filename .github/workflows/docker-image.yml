@@ -1,8 +1,9 @@
 name: Docker Image CI/CD
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -35,7 +36,7 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:latest
-            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ github.event.release.tag_name }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ github.ref_name }}
 
       - name: Post build notifications
         run: echo "Docker image has been built and pushed successfully"
