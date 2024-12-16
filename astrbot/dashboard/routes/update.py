@@ -39,7 +39,7 @@ class UpdateRoute(Route):
             latest = False
         try:
             await self.astrbot_updator.update(latest=latest, version=version)
-            threading.Thread(target=self.astrbot_updator._reboot, args=(2, self.context)).start()
+            threading.Thread(target=self.astrbot_updator._reboot, args=(2, )).start()
             return Response().ok(None, "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。").__dict__
         except Exception as e:
             logger.error(f"/api/update_project: {traceback.format_exc()}")
