@@ -196,7 +196,7 @@ class Context:
             except BaseException as e:
                 raise ValueError("不合法的 session 字符串: " + str(e))
 
-        for platform in self.registered_platforms:
+        for platform in self.platform_manager.platform_insts:
             if platform.meta().name == session.platform_name:
                 await platform.send_by_session(session, message_chain)
                 return True

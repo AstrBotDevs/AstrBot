@@ -1,4 +1,5 @@
 import traceback
+import inspect
 from typing import Union, AsyncGenerator
 from ...context import PipelineContext
 from ..stage import Stage
@@ -63,23 +64,46 @@ class LLMRequestSubStage(Stage):
                         
                         star_cls_obj = star_map.get(func_tool.module_name).star_cls
                         # 判断 handler 是否是类方法（通过装饰器注册的没有 __self__ 属性）
+                        ready_to_call = None
                         if hasattr(func_tool.func_obj, '__self__'):
                             # 猜测没有通过装饰器去注册
                             try:
-                                ret = await func_tool.func_obj(event, **func_tool_args)
+                                ready_to_call = func_tool.func_obj(event, **func_tool_args)
                             except TypeError:
                                 # 向下兼容
-                                ret = await func_tool.func_obj(event, self.ctx.plugin_manager.context, **func_tool_args)
+                                ready_to_call = func_tool.func_obj(event, self.ctx.plugin_manager.context, **func_tool_args)
                         else:
-                            ret = await func_tool.func_obj(star_cls_obj, event, **func_tool_args)
-
-                        if ret:
-                            assert isinstance(ret, (MessageEventResult, CommandResult)), "如果有返回值，必须是 MessageEventResult 或 CommandResult 类型。"
-                            event.stop_event()
-                            event.set_result(ret)
-                        # 执行后续步骤来发送消息
-                        yield
-                        event.clear_result() # 清除上一个 func tool 的结果
+                            ready_to_call = func_tool.func_obj(star_cls_obj, event, **func_tool_args)
+                        if isinstance(ready_to_call, AsyncGenerator):
+                            async for mer in ready_to_call:
+                                # 如果处理函数是生成器，返回值只能是 MessageEventResult 或者 None（无返回值）
+                                if mer:
+                                    assert isinstance(mer, (MessageEventResult, CommandResult)), "如果有返回值，必须是 MessageEventResult 或 CommandResult 类型。"
+                                    event.set_result(mer)
+                                    yield
+                                else:
+                                    if event.get_result():
+                                        yield
+                        elif inspect.iscoroutine(ready_to_call):
+                            # 如果只是一个 coroutine
+                            ret = await ready_to_call
+                            if ret:
+                                # 如果有返回值
+                                assert isinstance(ret, (MessageEventResult, CommandResult)), "如果有返回值，必须是 MessageEventResult 或 CommandResult 类型。"
+                                event.set_result(ret)
+                            # 执行后续步骤来发送消息
+                            if event.is_stopped() and event.get_result():
+                                # 主动停止事件传播，并且有结果
+                                event.continue_event()
+                                yield
+                                event.clear_result()
+                                event.stop_event()
+                                yield
+                            elif not event.is_stopped and not event.get_result():
+                                continue
+                            else:
+                                yield
+                        event.clear_result() # 清除上一个 handler 的结果
 
                     except BaseException:
                         logger.error(traceback.format_exc())
