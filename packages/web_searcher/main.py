@@ -22,7 +22,7 @@ class Main(star.Star):
         self.sogo_search = Sogo()
         self.google = Google()
         
-    async def _tidy_text(text: str) -> str:
+    async def _tidy_text(self, text: str) -> str:
         '''清理文本，去除空格、换行符等'''
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
         
@@ -36,7 +36,7 @@ class Main(star.Star):
                 doc = Document(html)
                 ret = doc.summary(html_partial=True)
                 soup = BeautifulSoup(ret, 'html.parser')
-                ret = self._tidy_text(soup.get_text())
+                ret = await self._tidy_text(soup.get_text())
                 return ret
 
     async def _request_from_llm(self, event: AstrMessageEvent, resources: str) -> str:
@@ -126,4 +126,5 @@ class Main(star.Star):
             url(string): The url of the website to fetch content from
         '''
         resp = await self._get_from_url(url)
+        resp = await self._request_from_llm(event, resp)
         event.set_result(MessageEventResult().message(resp))
