@@ -1,0 +1,51 @@
+/*This is for the logo*/
+.leftSidebar {
+  border: 0px;
+  box-shadow: none !important;
+}
+.listitem {
+  height: calc(100vh - 100px);
+  .v-list {
+    color: rgb(var(--v-theme-lightText));
+  }
+  .v-list-group__items .v-list-item,
+  .v-list-item {
+    border-radius: $border-radius-root;
+    padding-inline-start: calc(12px + var(--indent-padding) / 2) !important;
+    &:hover {
+      color: rgb(var(--v-theme-secondary));
+    }
+  }
+  .leftPadding {
+    margin-left: 4px;
+  }
+}
+.v-navigation-drawer--rail {
+  .scrollnavbar .v-list .v-list-group__items,
+  .hide-menu {
+    opacity: 1;
+  }
+  .leftPadding {
+    margin-left: 0px;
+  }
+}
+@media only screen and (min-width: 1170px) {
+  .mini-sidebar {
+    .logo {
+      width: 90px;
+      overflow: hidden;
+    }
+    .leftSidebar:hover {
+      box-shadow: $box-shadow !important;
+    }
+    .v-navigation-drawer--expand-on-hover:hover {
+      .logo {
+        width: 100%;
+      }
+      .v-list .v-list-group__items,
+      .hide-menu {
+        opacity: 1;
+      }
+    }
+  }
+}

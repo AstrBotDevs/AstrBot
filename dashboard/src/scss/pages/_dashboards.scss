@@ -1,0 +1,93 @@
+.bubble-shape {
+  position: relative;
+  &:before {
+    content: '';
+    position: absolute;
+    width: 210px;
+    height: 210px;
+    border-radius: 50%;
+    top: -125px;
+    right: -15px;
+    opacity: 0.5;
+  }
+  &:after {
+    content: '';
+    position: absolute;
+    width: 210px;
+    height: 210px;
+    border-radius: 50%;
+    top: -85px;
+    right: -95px;
+  }
+
+  // &.bubble-primary-shape {
+  //   &::before {
+  //     background: rgb(var(--v-theme-darkprimary));
+  //   }
+  //   &::after {
+  //     background: rgb(var(--v-theme-darkprimary));
+  //   }
+  // }
+
+  // &.bubble-secondary-shape {
+  //   &::before {
+  //     background: rgb(var(--v-theme-darksecondary));
+  //   }
+  //   &::after {
+  //     background: rgb(var(--v-theme-darksecondary));
+  //   }
+  // }
+}
+
+.z-1 {
+  z-index: 1;
+  position: relative;
+}
+.bubble-shape-sm {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    width: 210px;
+    height: 210px;
+    border-radius: 50%;
+    top: -160px;
+    right: -130px;
+  }
+  // &.bubble-primary {
+  //   &::before {
+  //     background: linear-gradient(140.9deg, rgb(var(--v-theme-lightprimary)) -14.02%, rgba(var(--v-theme-darkprimary), 0) 77.58%);
+  //   }
+  // }
+  &::after {
+    content: '';
+    position: absolute;
+    width: 210px;
+    height: 210px;
+    border-radius: 50%;
+    top: -30px;
+    right: -180px;
+  }
+  // &.bubble-primary {
+  //   &::after {
+  //     background: linear-gradient(210.04deg, rgb(var(--v-theme-lightprimary)) -50.94%, rgba(var(--v-theme-darkprimary), 0) 83.49%);
+  //   }
+  // }
+
+  // &.bubble-warning {
+  //   &::before {
+  //     background: linear-gradient(140.9deg, rgb(var(--v-theme-warning)) -14.02%, rgba(144, 202, 249, 0) 70.5%);
+  //   }
+  // }
+
+  // &.bubble-warning {
+  //   &::after {
+  //     background: linear-gradient(210.04deg, rgb(var(--v-theme-warning)) -50.94%, rgba(144, 202, 249, 0) 83.49%);
+  //   }
+  // }
+}
+
+.rounded-square {
+  width: 20px;
+  height: 20px;
+}

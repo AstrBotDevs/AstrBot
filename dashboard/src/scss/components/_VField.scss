@@ -1,0 +1,9 @@
+.v-field--variant-outlined .v-field__outline__start.v-locale--is-ltr,
+.v-locale--is-ltr .v-field--variant-outlined .v-field__outline__start {
+  border-radius: $border-radius-root 0 0 $border-radius-root;
+}
+
+.v-field--variant-outlined .v-field__outline__end.v-locale--is-ltr,
+.v-locale--is-ltr .v-field--variant-outlined .v-field__outline__end {
+  border-radius: 0 $border-radius-root $border-radius-root 0;
+}

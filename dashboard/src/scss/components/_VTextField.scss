@@ -1,0 +1,17 @@
+.v-text-field input {
+  font-size: 0.875rem;
+}
+.v-input--density-default {
+  .v-field__input {
+    min-height: 51px;
+  }
+}
+
+.v-field__outline {
+  color: rgb(var(--v-theme-inputBorder));
+}
+.inputWithbg {
+  .v-field--variant-outlined {
+    background-color: rgba(0, 0, 0, 0.025);
+  }
+}
