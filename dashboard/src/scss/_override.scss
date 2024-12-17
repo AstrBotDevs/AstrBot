@@ -1,0 +1,36 @@
+html {
+  .bg-success {
+    color: white !important;
+  }
+}
+
+.v-row + .v-row {
+  margin-top: 0px;
+}
+
+.v-divider {
+  opacity: 1;
+  border-color: rgba(var(--v-theme-borderLight), 0.36);
+}
+
+.v-selection-control {
+  flex: unset;
+}
+
+.customizer-btn .icon {
+  animation: progress-circular-rotate 1.4s linear infinite;
+  transform-origin: center center;
+  transition: all 0.2s ease-in-out;
+}
+
+.no-spacer {
+  .v-list-item__spacer {
+    display: none !important;
+  }
+}
+
+@keyframes progress-circular-rotate {
+  100% {
+    transform: rotate(270deg);
+  }
+}
