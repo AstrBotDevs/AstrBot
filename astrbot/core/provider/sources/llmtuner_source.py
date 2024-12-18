@@ -18,6 +18,8 @@ class LLMTunerModelLoader(Provider):
         persistant_history = True
     ) -> None:
         super().__init__(provider_config, provider_settings, persistant_history, db_helper)
+        if not os.path.exists(provider_config['base_model_path']) or not os.path.exists(provider_config['adapter_model_path']):
+            raise FileNotFoundError("模型文件路径不存在。")
         self.base_model_path = provider_config['base_model_path']
         self.adapter_model_path = provider_config['adapter_model_path']
         self.model = ChatModel({
