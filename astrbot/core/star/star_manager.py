@@ -1,4 +1,5 @@
 import inspect
+import functools
 import os
 import traceback
 import yaml
@@ -174,6 +175,13 @@ class PluginManager:
                     star_metadata.module = module
                     star_metadata.root_dir_name = root_dir_name
                     star_metadata.reserved = reserved
+                    
+                    related_handlers = star_handlers_registry.get_handlers_by_module_name(star_metadata.module_path)
+                    for handler in related_handlers:
+                        logger.debug(f"bind handler {handler.handler_name} to {star_metadata.name}")
+                        # handler.handler.__self__ = star_metadata.star_cls # 绑定 handler 的 self
+                        handler.handler = functools.partial(handler.handler, star_metadata.star_cls)
+                    
                 else:
                     # v3.4.0 以前的方式注册插件
                     logger.debug(f"插件 {path} 未通过装饰器注册。尝试通过旧版本方式载入。")

@@ -97,7 +97,14 @@ class EventResultType(enum.Enum):
     '''
     CONTINUE = enum.auto()
     STOP = enum.auto()
-
+    
+class ResultContentType(enum.Enum):
+    '''用于描述事件结果的内容的类型。
+    '''
+    LLM_RESULT = enum.auto()
+    '''调用 LLM 产生的结果'''
+    GENERAL_RESULT = enum.auto()
+    '''普通的消息结果'''
 @dataclass
 class MessageEventResult(MessageChain):
     '''MessageEventResult 描述了一整条消息中带有的所有组件以及事件处理的结果。
@@ -111,6 +118,8 @@ class MessageEventResult(MessageChain):
     '''
     
     result_type: Optional[EventResultType] = field(default_factory=lambda: EventResultType.CONTINUE)
+    
+    result_content_type: Optional[ResultContentType] = field(default_factory=lambda: ResultContentType.GENERAL_RESULT)
     
     def stop_event(self) -> 'MessageEventResult':
         '''终止事件传播。
@@ -129,6 +138,15 @@ class MessageEventResult(MessageChain):
         是否终止事件传播。
         '''
         return self.result_type == EventResultType.STOP
+    
+    def set_result_content_type(self, result_type: EventResultType) -> 'MessageEventResult':
+        '''设置事件处理的结果类型。
+        
+        Args:
+            result_type (EventResultType): 事件处理的结果类型。
+        '''
+        self.result_type = result_type
+        return self
     
     
 CommandResult = MessageEventResult

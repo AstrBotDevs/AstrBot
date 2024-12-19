@@ -99,6 +99,7 @@ class Provider(abc.ABC):
                         image_urls: List[str]=None,
                         func_tool: FuncCall=None,
                         contexts: List=None,
+                        system_prompt: str=None,
                         **kwargs) -> LLMResponse:
         '''获得 LLM 的文本对话结果。会使用当前的模型进行对话。
         

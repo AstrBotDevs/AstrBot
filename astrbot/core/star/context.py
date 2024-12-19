@@ -10,7 +10,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.platform.manager import PlatformManager
 from .star import star_registry, StarMetadata
-from .star_handler import star_handlers_registry, star_handlers_map, StarHandlerMetadata
+from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
 from typing import Awaitable
@@ -69,6 +69,15 @@ class Context:
         
         异步处理函数会接收到额外的的关键词参数：event: AstrMessageEvent, context: Context。
         '''
+        md = StarHandlerMetadata(
+            event_type=EventType.OnLLMRequestEvent,
+            handler_full_name=func_obj.__module__ + "_" + func_obj.__name__,
+            handler_name=func_obj.__name__,
+            handler_module_str=func_obj.__module__,
+            handler=func_obj,
+            event_filters=[],
+            desc=desc
+        )
         self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj, func_obj.__module__)
     
     def unregister_llm_tool(self, name: str) -> None:
@@ -112,6 +121,7 @@ class Context:
         
         '''
         md = StarHandlerMetadata(
+            event_type=EventType.AdapterMessageEvent,
             handler_full_name=awaitable.__module__ + "_" + awaitable.__name__,
             handler_name=awaitable.__name__,
             handler_module_str=awaitable.__module__,
@@ -129,7 +139,6 @@ class Context:
                 handler_md=md
             ))
         star_handlers_registry.append(md)
-        star_handlers_map[md.handler_full_name] = md
     
     def register_provider(self, provider: Provider):
         '''

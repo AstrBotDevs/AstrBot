@@ -236,7 +236,9 @@ class AstrMessageEvent(abc.ABC):
         清除消息事件的结果。
         '''
         self._result = None
-        
+    
+    '''消息链相关'''
+    
     def make_result(self) -> MessageEventResult:
         '''
         创建一个空的消息事件结果。
@@ -276,3 +278,7 @@ class AstrMessageEvent(abc.ABC):
         mer = MessageEventResult()
         mer.chain = chain
         return mer
+    
+    '''LLM 请求相关'''
+    
+    

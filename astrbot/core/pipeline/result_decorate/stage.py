@@ -6,6 +6,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core import logger
 from astrbot.core.message.components import Plain, Image
 from astrbot.core import html_renderer
+from astrbot.core.star.star_handler import star_handlers_registry, EventType
 
 @register_stage
 class ResultDecorateStage:
@@ -18,6 +19,11 @@ class ResultDecorateStage:
         result = event.get_result()
         if result is None:
             return
+        
+        handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnDecoratingResultEvent)
+        for handler in handlers:
+            # TODO: 如何让这里的 handler 也能使用 LLM 能力。也许需要将 LLMRequestSubStage 提取出来。
+            await handler.handler(event)
         
         if len(result.chain) > 0:
             # 回复前缀

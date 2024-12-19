@@ -4,7 +4,10 @@ from astrbot.core.star.register import (
     register_event_message_type as event_message_type,
     register_regex as regex,
     register_platform_adapter_type as platform_adapter_type,
-    register_permission_type as permission_type
+    register_permission_type as permission_type,
+    register_on_llm_request as on_llm_request,
+    register_llm_tool as llm_tool,
+    register_on_decorating_result as on_decorating_result
 )
 
 from astrbot.core.star.filter.event_message_type import EventMessageTypeFilter, EventMessageType
@@ -24,4 +27,7 @@ __all__ = [
     'PlatformAdapterType',
     'PermissionTypeFilter',
     'PermissionType',
+    'on_llm_request',
+    'llm_tool',
+    'on_decorating_result'
 ]

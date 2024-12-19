@@ -6,8 +6,8 @@ from astrbot.core.config import AstrBotConfig
 class PermissionType(enum.Flag):
     '''权限类型。当选择 MEMBER，ADMIN 也可以通过。
     '''
-    ADMIN = "admin"
-    MEMBER = "member"
+    ADMIN = enum.auto()
+    MEMBER = enum.auto()
 
 class PermissionTypeFilter(HandlerFilter):
     def __init__(self, permission_type: PermissionType, raise_error: bool = True):

@@ -1,3 +1,4 @@
+import traceback
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from .provider import Provider
 from typing import List
@@ -42,8 +43,12 @@ class ProviderManager():
                 continue
             cls_type = provider_cls_map[provider_config['type']]
             logger.info(f"尝试实例化 {provider_config['type']}({provider_config['id']}) 大模型提供商适配器 ...")
-            inst = cls_type(provider_config, self.provider_settings, self.db_helper, self.provider_settings.get('persistant_history', True))
-            self.provider_insts.append(inst)
+            try:
+                inst = cls_type(provider_config, self.provider_settings, self.db_helper, self.provider_settings.get('persistant_history', True))
+                self.provider_insts.append(inst)
+            except Exception as e:
+                traceback.print_exc()
+                logger.error(f"实例化 {provider_config['type']}({provider_config['id']}) 大模型提供商适配器 失败：{e}")
         
         if len(self.provider_insts) > 0:
             self.curr_provider_inst = self.provider_insts[0]

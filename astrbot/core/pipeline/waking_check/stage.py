@@ -4,7 +4,7 @@ from typing import Union, AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.message.components import At
-from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 
 
@@ -70,7 +70,7 @@ class WakingCheckStage(Stage):
         # 检查插件的 handler filter
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
-        for handler in star_handlers_registry:
+        for handler in star_handlers_registry.get_handlers_by_event_type(EventType.AdapterMessageEvent):
             # filter 需要满足 AND 的逻辑关系
             passed = True
             child_command_handler_md = None

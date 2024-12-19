@@ -5,7 +5,10 @@ from .star_handler import (
     register_event_message_type,
     register_platform_adapter_type,
     register_regex,
-    register_permission_type
+    register_permission_type,
+    register_on_llm_request,
+    register_llm_tool,
+    register_on_decorating_result
 )
 
 __all__ = [
@@ -15,5 +18,8 @@ __all__ = [
     'register_event_message_type',
     'register_platform_adapter_type',
     'register_regex',
-    'register_permission_type'
+    'register_permission_type',
+    'register_on_llm_request',
+    'register_llm_tool',
+    'register_on_decorating_result'
 ]
