@@ -8,7 +8,8 @@ from .star_handler import (
     register_permission_type,
     register_on_llm_request,
     register_llm_tool,
-    register_on_decorating_result
+    register_on_decorating_result,
+    register_after_message_sent
 )
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     'register_permission_type',
     'register_on_llm_request',
     'register_llm_tool',
-    'register_on_decorating_result'
+    'register_on_decorating_result',
+    'register_after_message_sent'
 ]

@@ -20,14 +20,18 @@ class Main(star.Star):
                 f.write("{}")
         with open("data/astrbot-reminder.json", "r") as f:
             self.reminder_data = json.load(f)
-
+            
+        self._init_scheduler()
         self.scheduler.start()
-        
+       
     async def _init_scheduler(self):
         '''Initialize the scheduler.'''
         for group in self.reminder_data:
             for reminder in self.reminder_data[group]:
-                self.scheduler.add_job(self._reminder_callback, 'cron', args=[reminder["text"]], id=group, trigger=reminder["cron"])
+                if "datetime" in reminder:
+                    self.scheduler.add_job(self._reminder_callback, 'date', args=[reminder["text"]], id=group, run_date=datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M"))
+                elif "cron" in reminder:
+                    self.scheduler.add_job(self._reminder_callback, 'cron', args=[reminder["text"]], id=group, trigger=reminder["cron"])
                 
     async def _save_data(self):
         '''Save the reminder data.'''

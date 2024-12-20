@@ -199,3 +199,11 @@ def register_on_decorating_result():
         return awaitable
     
     return decorator
+
+def register_after_message_sent():
+    '''在消息发送后的事件'''
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnAfterMessageSentEvent)
+        return awaitable
+    
+    return decorator

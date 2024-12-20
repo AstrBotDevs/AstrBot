@@ -35,16 +35,22 @@ class ProviderOpenAIOfficial(Provider):
             timeout=provider_config.get("timeout", NOT_GIVEN),
         )
         self.set_model(provider_config['model_config']['model'])
-        
+    
     async def get_human_readable_context(self, session_id, page, page_size):
         if session_id not in self.session_memory:
             raise Exception("会话 ID 不存在")
         contexts = []
+        temp_contexts = []
         for record in self.session_memory[session_id]:
             if record['role'] == "user":
-                contexts.append(f"User: {record['content']}")
+                temp_contexts.append(f"User: {record['content']}")
             elif record['role'] == "assistant":
-                contexts.append(f"Assistant: {record['content']}")
+                temp_contexts.append(f"Assistant: {record['content']}")
+                contexts.insert(0, temp_contexts)
+                temp_contexts = []
+
+        # 展平 contexts 列表
+        contexts = [item for sublist in contexts for item in sublist]
 
         # 计算分页
         paged_contexts = contexts[(page-1)*page_size:page*page_size]

@@ -40,6 +40,7 @@ class EventType(enum.Enum):
     OnLLMRequestEvent = enum.auto() # 收到 LLM 请求（可以是用户也可以是插件）
     OnDecoratingResultEvent = enum.auto() # 发送消息前
     OnCallingFuncToolEvent = enum.auto() # 调用函数工具
+    OnAfterMessageSentEvent = enum.auto() # 发送消息后
 
 @dataclass
 class StarHandlerMetadata():
