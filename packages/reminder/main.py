@@ -95,7 +95,8 @@ class Main(star.Star):
             for i, reminder in enumerate(reminders):
                 time_ = reminder.get("datetime", "")
                 if not time_:
-                    time_ = reminder.get("cron_h", "") + f"(Cron: {reminder.get('cron', "")})"
+                    cron_expr = reminder.get("cron", "")
+                    time_ = reminder.get("cron_h", "") + f"(Cron: {cron_expr})"
                 reminder_str += f"{i + 1}. {reminder['text']} - {time_}\n"
             reminder_str += "\n使用 /reminder rm <index> 删除待办事项。"
             yield event.plain_result(reminder_str)
