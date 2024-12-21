@@ -23,16 +23,24 @@ class Main(star.Star):
         
         self._init_scheduler()
         self.scheduler.start()
-       
+
     def _init_scheduler(self):
         '''Initialize the scheduler.'''
         for group in self.reminder_data:
             for reminder in self.reminder_data[group]:
                 if "datetime" in reminder:
+                    if self.check_is_outdated(reminder):
+                        continue
                     self.scheduler.add_job(self._reminder_callback, 'date', args=[reminder["text"], reminder], run_date=datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M"))
                 elif "cron" in reminder:
                     self.scheduler.add_job(self._reminder_callback, 'cron', args=[reminder["text"], reminder], **self._parse_cron_expr(reminder["cron"]))
-                
+    
+    def check_is_outdated(self, reminder: dict):
+        '''Check if the reminder is outdated.'''
+        if "datetime" in reminder:
+            return datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M") < datetime.datetime.now()
+        return False
+    
     async def _save_data(self):
         '''Save the reminder data.'''
         with open("data/astrbot-reminder.json", "w") as f:
