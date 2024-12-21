@@ -1,6 +1,6 @@
 from .provider import Provider, Personality
 
-from .provider_metadata import ProviderMetaData
+from .entites import ProviderMetaData
 
 __all__ = [
     "Provider",

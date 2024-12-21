@@ -20,18 +20,18 @@ class Main(star.Star):
                 f.write("{}")
         with open("data/astrbot-reminder.json", "r") as f:
             self.reminder_data = json.load(f)
-            
+        
         self._init_scheduler()
         self.scheduler.start()
        
-    async def _init_scheduler(self):
+    def _init_scheduler(self):
         '''Initialize the scheduler.'''
         for group in self.reminder_data:
             for reminder in self.reminder_data[group]:
                 if "datetime" in reminder:
-                    self.scheduler.add_job(self._reminder_callback, 'date', args=[reminder["text"]], id=group, run_date=datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M"))
+                    self.scheduler.add_job(self._reminder_callback, 'date', args=[reminder["text"], reminder], run_date=datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M"))
                 elif "cron" in reminder:
-                    self.scheduler.add_job(self._reminder_callback, 'cron', args=[reminder["text"]], id=group, trigger=reminder["cron"])
+                    self.scheduler.add_job(self._reminder_callback, 'cron', args=[reminder["text"], reminder], **self._parse_cron_expr(reminder["cron"]))
                 
     async def _save_data(self):
         '''Save the reminder data.'''
@@ -67,14 +67,14 @@ class Main(star.Star):
         if cron_expression:
             d = { "text": text, "cron": cron_expression, "cron_h": human_readable_cron }
             self.reminder_data[event.unified_msg_origin].append(d)
-            self.scheduler.add_job(self._reminder_callback, 'cron', **self._parse_cron_expr(cron_expression), args=[event.unified_msg_origin, d], id=event.unified_msg_origin)
+            self.scheduler.add_job(self._reminder_callback, 'cron', **self._parse_cron_expr(cron_expression), args=[event.unified_msg_origin, d])
             if human_readable_cron:
                 reminder_time = f"{human_readable_cron}(Cron: {cron_expression})"
         else:
             d = { "text": text, "datetime": datetime_str }
             self.reminder_data[event.unified_msg_origin].append(d)
             datetime_scheduled = datetime.datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
-            self.scheduler.add_job(self._reminder_callback, 'date', args=[event.unified_msg_origin, d], id=event.unified_msg_origin, run_date=datetime_scheduled)
+            self.scheduler.add_job(self._reminder_callback, 'date', args=[event.unified_msg_origin, d], run_date=datetime_scheduled)
             reminder_time = datetime_str
         await self._save_data()
         yield event.plain_result("成功设置待办事项。\n内容: " + text + "\n时间: " + reminder_time + "\n\n使用 /reminder ls 查看所有待办事项。")

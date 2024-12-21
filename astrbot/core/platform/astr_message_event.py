@@ -7,6 +7,8 @@ from astrbot.core.platform.message_type import MessageType
 from typing import List, Union
 from astrbot.core.message.components import Plain, Image, BaseMessageComponent, Face, At, AtAll, Forward
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.provider.entites import ProviderRequest
+
 
 @dataclass
 class MessageSesion:
@@ -281,4 +283,29 @@ class AstrMessageEvent(abc.ABC):
     
     '''LLM 请求相关'''
     
-    
+    def request_llm(
+        self,
+        prompt: str,
+        session_id: str = None,
+        image_urls: List[str] = None,
+        contexts: List = None,
+        system_prompt: str = ""
+    ) -> ProviderRequest:
+        '''
+        创建一个 LLM 请求。
+        
+        Examples:
+        ```py
+        yield event.request_llm(prompt="hi")
+        ```
+        
+        image_urls: 可以是 base64:// 或者 http:// 开头的图片链接，也可以是本地图片路径。
+        contexts: 当指定 contexts 时，将会**只**使用 contexts 作为上下文。
+        '''
+        return ProviderRequest(
+            prompt = prompt,
+            session_id = session_id,
+            image_urls = image_urls,
+            contexts = contexts,
+            system_prompt = system_prompt
+        )

@@ -10,10 +10,10 @@ from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.db import BaseDatabase
 from astrbot.api.provider import Provider
 from astrbot import logger
-from astrbot.core.provider.tool import FuncCall
+from astrbot.core.provider.func_tool_manager import FuncCall
 from typing import List
 from ..register import register_provider_adapter
-from astrbot.core.provider.llm_response import LLMResponse
+from astrbot.core.provider.entites import LLMResponse
 
 @register_provider_adapter("openai_chat_completion", "OpenAI API Chat Completion 提供商适配器")
 class ProviderOpenAIOfficial(Provider):
@@ -131,31 +131,30 @@ class ProviderOpenAIOfficial(Provider):
         else:
             raise Exception("Internal Error")
 
-    async def text_chat(self,
-                        prompt: str,
-                        session_id: str,
-                        image_urls: List[str]=None,
-                        func_tool: FuncCall=None,
-                        contexts=None,
-                        system_prompt=None,
-                        **kwargs
-                        ) -> LLMResponse: 
+    async def text_chat(
+        self,
+        prompt: str,
+        session_id: str,
+        image_urls: List[str]=None,
+        func_tool: FuncCall=None,
+        contexts=None,
+        system_prompt=None,
+        **kwargs
+    ) -> LLMResponse: 
         new_record = await self.assemble_context(prompt, image_urls)
         context_query = []
         if not contexts:
             context_query = [*self.session_memory[session_id], new_record]
-            if system_prompt:
-                context_query.insert(0, {"role": "system", "content": system_prompt})
         else:
-            context_query = contexts
-            
-        logger.debug(f"请求上下文：{context_query}, {self.get_model()}")
-        
+            context_query = [*contexts, new_record]
+        if system_prompt:
+            context_query.insert(0, {"role": "system", "content": system_prompt})
+
         payloads = {
             "messages": context_query,
             **self.provider_config.get("model_config", {})
         }
-        
+
         try:
             llm_response = await self._query(payloads, func_tool)
         except Exception as e:
@@ -164,7 +163,7 @@ class ProviderOpenAIOfficial(Provider):
                 self.pop_record(session_id)
             logger.warning(traceback.format_exc())
         
-        if llm_response.role == "assistant":
+        if llm_response.role == "assistant" and session_id:
             # 文本回复
             if not contexts:
                 # 添加用户 record
@@ -174,7 +173,12 @@ class ProviderOpenAIOfficial(Provider):
                     "role": "assistant",
                     "content": llm_response.completion_text
                 })
-                self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['type'])
+            else:
+                self.session_memory[session_id] = [*contexts, new_record, {
+                    "role": "assistant",
+                    "content": llm_response.completion_text
+                }]
+            self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['type'])
         
         return llm_response
 

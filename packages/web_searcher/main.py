@@ -39,19 +39,6 @@ class Main(star.Star):
                 ret = await self._tidy_text(soup.get_text())
                 return ret
 
-    async def _request_from_llm(self, event: AstrMessageEvent, resources: str) -> str:
-        '''使用 LLM 对文本进行生成'''
-        
-        if self.context.get_using_provider() is None:
-            raise ValueError("未找到可用的 LLM Provider，无法进行摘要总结")
-        provider = self.context.get_using_provider()
-        summary_prompt = f"""{event.get_message_str()}
-
-# Provided Sources:
-{resources}"""
-        ret = await provider.text_chat(summary_prompt, session_id=event.session_id)
-        return ret.completion_text
-    
     @filter.command("websearch")
     async def websearch(self, event: AstrMessageEvent, oper: str = None) -> str:
         websearch = self.context.get_config()['provider_settings']['web_search']
@@ -84,20 +71,21 @@ class Main(star.Star):
         '''
         logger.info("web_searcher - search_from_search_engine: " + query)
         results = []
+        RESULT_NUM = 5
         try:
-            results = await self.google.search(query, 3)
+            results = await self.google.search(query, RESULT_NUM)
         except BaseException as e:
             logger.error(f"google search error: {e}, try the next one...")
         if len(results) == 0:
             logger.debug("search google failed")
             try:
-                results = await self.bing_search.search(query, 3)
+                results = await self.bing_search.search(query, RESULT_NUM)
             except BaseException as e:
                 logger.error(f"bing search error: {e}, try the next one...")
         if len(results) == 0:
             logger.debug("search bing failed")
             try:
-                results = await self.sogo_search.search(query, 3)
+                results = await self.sogo_search.search(query, RESULT_NUM)
             except BaseException as e:
                 logger.error(f"sogo search error: {e}")
         if len(results) == 0:
@@ -111,12 +99,11 @@ class Main(star.Star):
                 site_result = await self._get_from_url(i.url)
             except BaseException:
                 site_result = ""
-            site_result = site_result[:1000] + "..." if len(site_result) > 1000 else site_result
+            site_result = site_result[:700] + "..." if len(site_result) > 700 else site_result
             ret += f"{idx}. {i.title} \n{i.snippet}\n{site_result}\n\n"
             idx += 1
         
-        resp = await self._request_from_llm(event, ret)
-        event.set_result(MessageEventResult().message(resp))
+        return ret
 
     @llm_tool("fetch_url")
     async def fetch_website_content(self, event: AstrMessageEvent, url: str) -> str:
@@ -126,5 +113,4 @@ class Main(star.Star):
             url(string): The url of the website to fetch content from
         '''
         resp = await self._get_from_url(url)
-        resp = await self._request_from_llm(event, resp)
-        event.set_result(MessageEventResult().message(resp))
+        return resp

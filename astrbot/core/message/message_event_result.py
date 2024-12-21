@@ -139,13 +139,13 @@ class MessageEventResult(MessageChain):
         '''
         return self.result_type == EventResultType.STOP
     
-    def set_result_content_type(self, result_type: EventResultType) -> 'MessageEventResult':
+    def set_result_content_type(self, typ: EventResultType) -> 'MessageEventResult':
         '''设置事件处理的结果类型。
         
         Args:
             result_type (EventResultType): 事件处理的结果类型。
         '''
-        self.result_type = result_type
+        self.result_content_type = typ
         return self
     
     

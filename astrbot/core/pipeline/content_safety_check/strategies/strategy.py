@@ -1,6 +1,6 @@
 from . import ContentSafetyStrategy
 from typing import List, Tuple
-
+from astrbot import logger
 
 class StrategySelector:
     def __init__(self, config: dict) -> None:
@@ -15,7 +15,8 @@ class StrategySelector:
             try:
                 from .baidu_aip import BaiduAipStrategy
             except ImportError:
-                raise ImportError("使用百度内容审核应该先 pip install baidu-aip")
+                logger.warning("使用百度内容审核应该先 pip install baidu-aip")
+                return
             self.enabled_strategies.append(
                 BaiduAipStrategy(
                     config["baidu_aip"]["app_id"],

@@ -5,8 +5,8 @@ from typing import List
 from astrbot.core.db import BaseDatabase
 from astrbot.core import logger
 from typing import TypedDict
-from astrbot.core.provider.tool import FuncCall
-from astrbot.core.provider.llm_response import LLMResponse
+from astrbot.core.provider.func_tool_manager import FuncCall
+from astrbot.core.provider.entites import LLMResponse
 from dataclasses import dataclass
 class Personality(TypedDict):
     prompt: str = ""
@@ -112,13 +112,11 @@ class Provider(abc.ABC):
             kwargs: 其他参数
             
         Notes:
+            - 如果传入了 contexts，将会提前加上上下文。否则使用 session_memory 中的上下文。
             - 可以选择性地传入 session_id，如果传入了 session_id，将会使用 session_id 对应的上下文进行对话，
             并且也会记录相应的对话上下文，实现多轮对话。如果不传入则不会记录上下文。
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
-            - 如果传入了 contexts，将会**直接**使用所提供的 contexts 进行对话。
-            传入此值通常意味着你需要自己维护 context，AstrBot 将不会记录上下文，并且会忽略 prompt、session_id、image_urls、tools。
-
         '''
         raise NotImplementedError()
     

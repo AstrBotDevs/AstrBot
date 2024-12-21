@@ -30,8 +30,8 @@ class StarRequestSubStage(Stage):
                 
                 logger.debug(f"执行 Star Handler {handler.handler_full_name}")
                 wrapper = self._call_handler(self.ctx, event, handler.handler, **params)
-                async for _ in wrapper:
-                    yield
+                async for ret in wrapper:
+                    yield ret
                 event.clear_result() # 清除上一个 handler 的结果
             except Exception as e:
                 logger.error(traceback.format_exc())

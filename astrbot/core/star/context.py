@@ -1,10 +1,10 @@
 from asyncio import Queue
 from typing import List, TypedDict, Union
 
-from astrbot.core.provider import Provider
+from astrbot.core.provider.provider import Provider
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.provider.tool import FuncCall
+from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.manager import ProviderManager
@@ -78,7 +78,8 @@ class Context:
             event_filters=[],
             desc=desc
         )
-        self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj, func_obj.__module__)
+        star_handlers_registry.append(md)
+        self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj, func_obj)
     
     def unregister_llm_tool(self, name: str) -> None:
         '''删除一个函数调用工具。如果再要启用，需要重新注册。'''

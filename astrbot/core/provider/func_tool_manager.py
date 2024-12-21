@@ -1,23 +1,7 @@
 import json
 import textwrap
-from typing import Dict, List
+from typing import Dict, List, Awaitable
 from dataclasses import dataclass
-from astrbot.core.star.star_handler import StarHandlerMetadata
-
-class FuncCallJsonFormatError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return self.msg
-
-
-class FuncNotFoundError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return self.msg
 
 
 @dataclass
@@ -29,7 +13,7 @@ class FuncTool:
     name: str
     parameters: Dict
     description: str
-    star_handler_metadata: StarHandlerMetadata
+    handler: Awaitable
 
     active: bool = True
     '''是否激活'''
@@ -55,7 +39,7 @@ class FuncCall:
         name: str,
         func_args: list,
         desc: str,
-        star_handler_metadata: StarHandlerMetadata,
+        handler: Awaitable,
     ) -> None:
         """
         为函数调用（function-calling / tools-use）添加工具。
@@ -78,7 +62,7 @@ class FuncCall:
             name=name,
             parameters=params,
             description=desc,
-            star_handler_metadata=star_handler_metadata,
+            handler=handler,
         )
         self.func_list.append(_func)
 
@@ -180,7 +164,7 @@ class FuncCall:
                     tool_callable = func.star_handler_metadata.handler
                     break
             if not tool_callable:
-                raise FuncNotFoundError(f"Request function {func_name} not found.")
+                raise Exception(f"Request function {func_name} not found.")
             ret = await tool_callable(**args)
             if ret:
                 tool_call_result.append(str(ret))

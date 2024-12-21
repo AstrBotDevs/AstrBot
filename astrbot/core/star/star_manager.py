@@ -14,6 +14,7 @@ from . import StarMetadata
 from .updator import PluginUpdator
 from astrbot.core.utils.io import remove_dir
 from .star import star_registry, star_map
+from astrbot.core.provider.register import llm_tools
 
 from .star_handler import star_handlers_registry
 
@@ -181,6 +182,10 @@ class PluginManager:
                         logger.debug(f"bind handler {handler.handler_name} to {star_metadata.name}")
                         # handler.handler.__self__ = star_metadata.star_cls # 绑定 handler 的 self
                         handler.handler = functools.partial(handler.handler, star_metadata.star_cls)
+                    # llm_tool
+                    for func_tool in llm_tools.func_list:
+                        if func_tool.handler.__module__ == star_metadata.module_path:
+                            func_tool.handler = functools.partial(func_tool.handler, star_metadata.star_cls)
                     
                 else:
                     # v3.4.0 以前的方式注册插件

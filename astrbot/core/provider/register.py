@@ -1,7 +1,7 @@
 from typing import List, Dict, Type
-from .provider_metadata import ProviderMetaData
+from .entites import ProviderMetaData
 from astrbot.core import logger
-from .tool import FuncCall
+from .func_tool_manager import FuncCall
 
 provider_registry: List[ProviderMetaData] = []
 '''维护了通过装饰器注册的 Provider'''
