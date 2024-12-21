@@ -11,7 +11,7 @@ from botpy import Client
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
 from astrbot.api.event import MessageChain
 from typing import Union, List
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import Image, Plain, At
 from astrbot.core.platform.astr_message_event import MessageSesion
 from .qqofficial_message_event import QQOfficialMessageEvent
 from ...register import register_platform_adapter
@@ -111,6 +111,7 @@ class QQOfficialPlatformAdapter(Platform):
         abm.message_id = message.id
         abm.tag = "qq_official"
         msg: List[BaseMessageComponent] = []
+        
 
         if isinstance(message, botpy.message.GroupMessage) or isinstance(message, botpy.message.C2CMessage):
             if isinstance(message, botpy.message.GroupMessage):
@@ -126,7 +127,7 @@ class QQOfficialPlatformAdapter(Platform):
                 )
             abm.message_str = message.content.strip()
             abm.self_id = "unknown_selfid"
-
+            msg.append(At(qq="qq_official"))
             msg.append(Plain(abm.message_str))
             if message.attachments:
                 for i in message.attachments:
@@ -146,7 +147,7 @@ class QQOfficialPlatformAdapter(Platform):
 
             plain_content = message.content.replace(
                 "<@!"+str(abm.self_id)+">", "").strip()
-            msg.append(Plain(plain_content))
+
             if message.attachments:
                 for i in message.attachments:
                     if i.content_type.startswith("image"):
@@ -161,11 +162,14 @@ class QQOfficialPlatformAdapter(Platform):
                 str(message.author.id),
                 str(message.author.username)
             )
+            msg.append(At(qq="qq_official"))
+            msg.append(Plain(plain_content))
             
             if isinstance(message, botpy.message.Message):
                 abm.group_id = message.channel_id
         else:
             raise ValueError(f"Unknown message type: {message_type}")
+        abm.self_id = "qq_official"
         return abm
 
     def run(self):
