@@ -1,5 +1,4 @@
 import traceback
-import datetime
 from typing import Union, AsyncGenerator
 from ...context import PipelineContext
 from ..stage import Stage
@@ -14,9 +13,6 @@ from astrbot.core.star.star_handler import star_handlers_registry, EventType
 class LLMRequestSubStage(Stage):
     
     async def initialize(self, ctx: PipelineContext) -> None:
-        self.prompt_prefix = ctx.astrbot_config['provider_settings']['prompt_prefix']
-        self.identifier = ctx.astrbot_config['provider_settings']['identifier']
-        self.enable_datetime = ctx.astrbot_config['provider_settings']["datetime_system_prompt"]
         self.ctx = ctx
         
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
@@ -41,18 +37,6 @@ class LLMRequestSubStage(Stage):
             event.set_extra("provider_request", req)
             session_provider_context = provider.session_memory.get(event.session_id)
             req.contexts = session_provider_context if session_provider_context else []
-        
-        if self.prompt_prefix:
-            req.prompt = self.prompt_prefix + req.prompt
-        if self.identifier:
-            user_id = event.message_obj.sender.user_id
-            user_nickname = event.message_obj.sender.nickname
-            user_info = f"[User ID: {user_id}, Nickname: {user_nickname}]\n"
-            req.prompt = user_info + req.prompt
-        if self.enable_datetime:
-            req.system_prompt += f"\nCurrent datetime: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        if provider.curr_personality['prompt']:
-            req.system_prompt += f"\n{provider.curr_personality['prompt']}"
             
         # 执行请求 LLM 前事件。
         # 装饰 system_prompt 等功能

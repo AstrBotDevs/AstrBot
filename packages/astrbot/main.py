@@ -1,9 +1,10 @@
 import aiohttp
+import datetime
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import personalities
-from astrbot.api.provider import Personality
+from astrbot.api.provider import Personality, ProviderRequest
 
 from typing import Union
 
@@ -11,6 +12,10 @@ from typing import Union
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
+        cfg = context.get_config()
+        self.prompt_prefix = cfg['provider_settings']['prompt_prefix']
+        self.identifier = cfg['provider_settings']['identifier']
+        self.enable_datetime = cfg['provider_settings']["datetime_system_prompt"]
     
     async def _query_astrbot_notice(self):
         try:
@@ -313,3 +318,23 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                     name="自定义人格", prompt=ps)
                 message.set_result(
                     MessageEventResult().message(f"人格已设置。 \n人格信息: {ps}"))
+
+    @filter.on_llm_request()
+    async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
+        provider = self.context.get_using_provider()
+        if self.prompt_prefix:
+            req.prompt = self.prompt_prefix + req.prompt
+        if self.identifier:
+            user_id = event.message_obj.sender.user_id
+            user_nickname = event.message_obj.sender.nickname
+            user_info = f"[User ID: {user_id}, Nickname: {user_nickname}]\n"
+            req.prompt = user_info + req.prompt
+        if self.enable_datetime:
+            req.system_prompt += f"\nCurrent datetime: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        if provider.curr_personality['prompt']:
+            req.system_prompt += f"\n{provider.curr_personality['prompt']}"
+            
+    @filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)
+    async def other_message(self, event: AstrMessageEvent):
+        print("triggered")
+        event.stop_event()
