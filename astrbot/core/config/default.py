@@ -17,6 +17,7 @@ DEFAULT_CONFIG = {
         },
         "reply_prefix": "",
         "forward_threshold": 200,
+        "enable_id_white_list": True,
         "id_whitelist": [],
         "id_whitelist_log": True,
         "wl_ignore_admin_on_group": True,
@@ -161,6 +162,10 @@ CONFIG_METADATA_2 = {
                         "description": "转发消息的字数阈值",
                         "type": "int",
                         "hint": "超过一定字数后，机器人会将消息折叠成 QQ 群聊的 “转发消息”，以防止刷屏。目前仅 QQ 平台适配器适用。",
+                    },
+                    "enable_id_white_list": {
+                        "description": "启用 ID 白名单",
+                        "type": "bool"
                     },
                     "id_whitelist": {
                         "description": "ID 白名单",
