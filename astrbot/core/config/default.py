@@ -278,7 +278,7 @@ CONFIG_METADATA_2 = {
                     },
                     "zhipu": {
                         "id": "zhipu_default",
-                        "type": "openai_chat_completion",
+                        "type": "zhipu_chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://open.bigmodel.cn/api/paas/v4/",

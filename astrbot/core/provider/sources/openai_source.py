@@ -162,7 +162,12 @@ class ProviderOpenAIOfficial(Provider):
                 logger.warning(f"请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。")
                 self.pop_record(session_id)
             logger.warning(traceback.format_exc())
-        
+            
+        await self.save_history(contexts, new_record, session_id, llm_response)
+
+        return llm_response
+    
+    async def save_history(self, contexts: List, new_record: dict, session_id: str, llm_response: LLMResponse):
         if llm_response.role == "assistant" and session_id:
             # 文本回复
             if not contexts:
@@ -180,8 +185,6 @@ class ProviderOpenAIOfficial(Provider):
                 }]
             self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['type'])
         
-        return llm_response
-
     async def forget(self, session_id: str) -> bool:
         self.session_memory[session_id] = []
         return True
