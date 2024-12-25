@@ -21,16 +21,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov pytest-asyncio
-          mkdir data
-          mkdir data/plugins
-          mkdir data/config
-          mkdir temp
 
       - name: Run tests
         run: |
-          export LLM_MODEL=${{ secrets.LLM_MODEL }}
-          export OPENAI_API_BASE=${{ secrets.OPENAI_API_BASE }}
-          export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
           PYTHONPATH=./ pytest --cov=. tests/ -v
 
       - name: Upload results to Codecov

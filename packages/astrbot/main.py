@@ -289,7 +289,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 - 重置 LLM 会话(保留人格): /reset p
 
 【当前人格】: {str(self.context.get_using_provider().curr_personality['prompt'])}
-"""))
+""").use_t2i(False))
         elif l[1] == "list":
             msg = "人格列表：\n"
             for key in personalities.keys():
