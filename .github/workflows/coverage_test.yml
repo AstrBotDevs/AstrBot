@@ -1,7 +1,10 @@
 name: Run tests and upload coverage
 
 on: 
-  push
+  push:
+    branches:
+      - master
+  workflow_dispatch:
 
 jobs:
   test:
