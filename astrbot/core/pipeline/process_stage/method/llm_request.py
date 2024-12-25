@@ -19,6 +19,9 @@ class LLMRequestSubStage(Stage):
         req: ProviderRequest = None
         
         provider = self.ctx.plugin_manager.context.get_using_provider()
+        if provider is None:
+            return
+        
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
             assert isinstance(req, ProviderRequest), "provider_request 必须是 ProviderRequest 类型。"
