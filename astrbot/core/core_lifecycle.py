@@ -37,9 +37,13 @@ class AstrBotCoreLifecycle:
         
         self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
         
-        self.star_context = Context(self.event_queue, self.astrbot_config, self.db)
-        self.star_context.platform_manager = self.platform_manager
-        self.star_context.provider_manager = self.provider_manager
+        self.star_context = Context(
+            self.event_queue, 
+            self.astrbot_config, 
+            self.db,
+            self.provider_manager,
+            self.platform_manager
+        )
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
         
         self.plugin_manager.reload()

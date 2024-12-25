@@ -39,10 +39,18 @@ class Context:
     # back compatibility
     _register_tasks: List[Awaitable] = []
 
-    def __init__(self, event_queue: Queue, config: AstrBotConfig, db: BaseDatabase):
+    def __init__(self, 
+        event_queue: Queue, 
+        config: AstrBotConfig, 
+        db: BaseDatabase, 
+        provider_manager: ProviderManager = None, 
+        platform_manager: PlatformManager = None
+    ):
         self._event_queue = event_queue
         self._config = config
         self._db = db
+        self.provider_manager = provider_manager
+        self.platform_manager = platform_manager
 
     def get_registered_star(self, star_name: str) -> StarMetadata:
         for star in star_registry:
@@ -73,7 +81,7 @@ class Context:
             event_type=EventType.OnLLMRequestEvent,
             handler_full_name=func_obj.__module__ + "_" + func_obj.__name__,
             handler_name=func_obj.__name__,
-            handler_module_str=func_obj.__module__,
+            handler_module_path=func_obj.__module__,
             handler=func_obj,
             event_filters=[],
             desc=desc
@@ -125,7 +133,7 @@ class Context:
             event_type=EventType.AdapterMessageEvent,
             handler_full_name=awaitable.__module__ + "_" + awaitable.__name__,
             handler_name=awaitable.__name__,
-            handler_module_str=awaitable.__module__,
+            handler_module_path=awaitable.__module__,
             handler=awaitable,
             event_filters=[],
             desc=desc

@@ -80,7 +80,7 @@ class PluginRoute(Route):
         plugin_name = post_data["name"]
         try:
             logger.info(f"正在卸载插件 {plugin_name}")
-            self.plugin_manager.uninstall_plugin(plugin_name)
+            await self.plugin_manager.uninstall_plugin(plugin_name)
             logger.info(f"卸载插件 {plugin_name} 成功")
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:

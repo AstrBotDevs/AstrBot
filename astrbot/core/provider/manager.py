@@ -54,6 +54,8 @@ class ProviderManager():
         
         if len(self.provider_insts) > 0:
             self.curr_provider_inst = self.provider_insts[0]
+        else:
+            logger.warning("未启用任何大模型提供商适配器。")
 
     def get_insts(self):
         return self.provider_insts
