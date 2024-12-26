@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - 'README.md'
+      - 'changelogs/**'
+      - 'dashboard/**'
   workflow_dispatch:
 
 jobs:
