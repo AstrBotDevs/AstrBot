@@ -29,7 +29,10 @@ class AstrBotCoreLifecycle:
     
     async def initialize(self):
         logger.info("AstrBot v"+ VERSION)
-        logger.setLevel(self.astrbot_config['log_level'])
+        if os.environ.get("TESTING", ""):
+            logger.setLevel("DEBUG")
+        else:
+            logger.setLevel(self.astrbot_config['log_level'])
         self.event_queue = Queue()
         self.event_queue.closed = False
         

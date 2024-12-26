@@ -17,7 +17,7 @@ db = SQLiteDatabase("data/data_v3.db")
 star_context = Context(event_queue, config, db)
 
 @pytest.fixture
-def plugin_manager_pm(star_context, config):
+def plugin_manager_pm():
     return PluginManager(star_context, config)
 
 def test_plugin_manager_initialization(plugin_manager_pm: PluginManager):

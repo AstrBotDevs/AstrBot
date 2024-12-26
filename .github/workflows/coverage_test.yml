@@ -31,6 +31,7 @@ jobs:
           mkdir data/plugins
           mkdir data/config
           mkdir data/temp
+          export TESTING=true
           export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
           PYTHONPATH=./ pytest --cov=. tests/ -v -o log_cli=true -o log_level=DEBUG
 
