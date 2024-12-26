@@ -140,6 +140,11 @@ class PluginManager:
     
     def reload(self):
         '''扫描并加载所有的 Star'''
+        for smd in star_registry:
+            logger.debug(f"尝试终止插件 {smd.name} ...")
+            if hasattr(smd.star_cls, "__del__"):
+                smd.star_cls.__del__()
+            
         star_handlers_registry.clear()
         star_handlers_registry.star_handlers_map.clear()
         star_map.clear()
@@ -272,6 +277,7 @@ class PluginManager:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
         
         await self.updator.update(plugin)
+        self.reload()
         
     def install_plugin_from_file(self, zip_file_path: str):
         desti_dir = os.path.join(self.plugin_store_path, os.path.basename(zip_file_path))

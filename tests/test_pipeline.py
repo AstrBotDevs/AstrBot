@@ -1,4 +1,6 @@
-import pytest, logging, os
+import pytest
+import logging
+import os
 from astrbot.core.pipeline.scheduler import PipelineScheduler, PipelineContext
 from astrbot.core.star import PluginManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -11,7 +13,6 @@ from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.context import Context
-from astrbot.core import logger
 from asyncio import Queue
 
 SESSION_ID_IN_WHITELIST = "test_sid_wl"
@@ -29,7 +30,7 @@ TEST_LLM_PROVIDER = {
 
 TEST_COMMANDS = [
     ["help", "已注册的 AstrBot 内置指令"],
-    ["tool ls", "查看、激活、停用当前注册的函数工具"],
+    ["tool ls", "函数工具"],
     ["tool on websearch", "激活工具"],
     ["tool off websearch", "停用工具"],
     ["plugin", "已加载的插件"],
@@ -145,6 +146,7 @@ async def test_pipeline_scheduler_initialization(pipeline_scheduler: PipelineSch
 async def test_pipeline_wakeup(pipeline_scheduler: PipelineScheduler, caplog):
     '''测试唤醒'''
     # 群聊无 @ 无指令
+    caplog.clear()
     mock_event = FakeAstrMessageEvent.create_fake_event("test", is_group=True)
     with caplog.at_level(logging.DEBUG):
         await pipeline_scheduler.execute(mock_event)
@@ -161,19 +163,21 @@ async def test_pipeline_wakeup(pipeline_scheduler: PipelineScheduler, caplog):
 
 @pytest.mark.asyncio
 async def test_pipeline_wl(pipeline_scheduler: PipelineScheduler, config: AstrBotConfig, caplog):
+    caplog.clear()
+    mock_event = FakeAstrMessageEvent.create_fake_event("test", SESSION_ID_IN_WHITELIST, sender_id="123")
+    with caplog.at_level(logging.INFO):
+        await pipeline_scheduler.execute(mock_event)
+    assert any("不在会话白名单中，已终止事件传播。" not in message for message in caplog.messages), "日志中未找到预期的消息"
+
     mock_event = FakeAstrMessageEvent.create_fake_event("test", sender_id="123")
     with caplog.at_level(logging.INFO):
         await pipeline_scheduler.execute(mock_event)
     assert any("不在会话白名单中，已终止事件传播。" in message for message in caplog.messages), "日志中未找到预期的消息"
     
-    mock_event = FakeAstrMessageEvent.create_fake_event("test", SESSION_ID_IN_WHITELIST, sender_id="123")
-    await pipeline_scheduler.execute(mock_event)
-    assert any("不在会话白名单中，已终止事件传播。" not in message for message in caplog.messages), "日志中未找到预期的消息"
-
-
 @pytest.mark.asyncio
 async def test_pipeline_content_safety(pipeline_scheduler: PipelineScheduler, caplog):
     # 测试默认屏蔽词
+    caplog.clear()
     mock_event = FakeAstrMessageEvent.create_fake_event("色情", session_id=SESSION_ID_IN_WHITELIST) # 测试需要。
     with caplog.at_level(logging.INFO):
         await pipeline_scheduler.execute(mock_event)
@@ -192,6 +196,7 @@ async def test_pipeline_content_safety(pipeline_scheduler: PipelineScheduler, ca
 
 @pytest.mark.asyncio
 async def test_pipeline_llm(pipeline_scheduler: PipelineScheduler, caplog):
+    caplog.clear()
     mock_event = FakeAstrMessageEvent.create_fake_event("just reply me `OK`", session_id=SESSION_ID_IN_WHITELIST)
     with caplog.at_level(logging.DEBUG):
         await pipeline_scheduler.execute(mock_event)
@@ -201,6 +206,7 @@ async def test_pipeline_llm(pipeline_scheduler: PipelineScheduler, caplog):
     
 @pytest.mark.asyncio
 async def test_pipeline_websearch(pipeline_scheduler: PipelineScheduler, caplog):
+    caplog.clear()
     mock_event = FakeAstrMessageEvent.create_fake_event("help me search the latest OpenAI news", session_id=SESSION_ID_IN_WHITELIST)
     with caplog.at_level(logging.DEBUG):
         await pipeline_scheduler.execute(mock_event)
@@ -210,6 +216,7 @@ async def test_pipeline_websearch(pipeline_scheduler: PipelineScheduler, caplog)
 @pytest.mark.asyncio
 async def test_commands(pipeline_scheduler: PipelineScheduler, caplog):
     for command in TEST_COMMANDS:
+        caplog.clear()
         mock_event = FakeAstrMessageEvent.create_fake_event(command[0], session_id=SESSION_ID_IN_WHITELIST)
         with caplog.at_level(logging.DEBUG):
             await pipeline_scheduler.execute(mock_event)

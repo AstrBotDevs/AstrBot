@@ -58,7 +58,7 @@ class ProviderZhipu(ProviderOpenAIOfficial):
         payloads = {
             "messages": context_query,
             **model_cfgs
-        }    
+        }
         llm_response = None
         try:
             llm_response = await self._query(payloads, func_tool)

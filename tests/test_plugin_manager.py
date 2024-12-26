@@ -1,6 +1,5 @@
 import pytest
 import os
-import shutil
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.star.star import star_registry
@@ -34,7 +33,8 @@ def test_plugin_manager_initialization(plugin_manager_pm: PluginManager):
     assert plugin_manager_pm.context is not None
     assert plugin_manager_pm.config is not None
 
-def test_plugin_manager_reload(plugin_manager_pm: PluginManager):
+@pytest.mark.asyncio
+async def test_plugin_manager_reload(plugin_manager_pm: PluginManager):
     success, err_message = plugin_manager_pm.reload()
     assert success is True
     assert err_message is None
@@ -86,8 +86,3 @@ async def test_plugin_crud(plugin_manager_pm: PluginManager):
         await plugin_manager_pm.uninstall_plugin("astrbot_plugin_essentialhaha")
 
     # TODO: file installation
-
-
-
-
-    
