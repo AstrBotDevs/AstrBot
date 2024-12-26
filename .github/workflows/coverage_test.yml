@@ -32,7 +32,7 @@ jobs:
           mkdir data/config
           mkdir data/temp
           export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          PYTHONPATH=./ pytest --cov=. tests/test_pipeline.py -v -o log_cli=true -o log_level=DEBUG
+          PYTHONPATH=./ pytest --cov=. tests/ -v -o log_cli=true -o log_level=DEBUG
 
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v4
