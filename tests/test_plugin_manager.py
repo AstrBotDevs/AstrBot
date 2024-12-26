@@ -8,21 +8,13 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db.sqlite import SQLiteDatabase
 from asyncio import Queue
 
-@pytest.fixture
-def event_queue():
-    return Queue()
+event_queue = Queue()
 
-@pytest.fixture
-def config():
-    return AstrBotConfig()
+config = AstrBotConfig()
 
-@pytest.fixture
-def db():
-    return SQLiteDatabase("data/data_v3.db")
+db = SQLiteDatabase("data/data_v3.db")
 
-@pytest.fixture
-def star_context(event_queue, config, db):
-    return Context(event_queue, config, db)
+star_context = Context(event_queue, config, db)
 
 @pytest.fixture
 def plugin_manager_pm(star_context, config):

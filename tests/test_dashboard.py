@@ -7,20 +7,19 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core import LogBroker
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.star.star import star_registry
-from astrbot.core.updator import AstrBotUpdator
 
 
 @pytest.fixture(scope="module")
-def core_lifecycle():
+def core_lifecycle_td():
     db = SQLiteDatabase("data/data_v3.db")
     log_broker = LogBroker()
-    core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
-    return core_lifecycle
+    core_lifecycle_td = AstrBotCoreLifecycle(log_broker, db)
+    return core_lifecycle_td
 
 @pytest.fixture(scope="module")
-def app(core_lifecycle):
+def app(core_lifecycle_td):
     db = SQLiteDatabase("data/data_v3.db")
-    server = AstrBotDashboard(core_lifecycle, db)
+    server = AstrBotDashboard(core_lifecycle_td, db)
     return server.app
 
 @pytest.fixture(scope="module")
@@ -28,12 +27,12 @@ def header():
     return {}
 
 @pytest.mark.asyncio
-async def test_init_core_lifecycle(core_lifecycle):
-    await core_lifecycle.initialize()
-    assert core_lifecycle is not None
+async def test_init_core_lifecycle_td(core_lifecycle_td):
+    await core_lifecycle_td.initialize()
+    assert core_lifecycle_td is not None
 
 @pytest.mark.asyncio
-async def test_auth_login(app: Quart, core_lifecycle: AstrBotCoreLifecycle, header: dict):
+async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle, header: dict):
     test_client = app.test_client()
     response = await test_client.post('/api/auth/login', json={
         "username": "wrong",
@@ -43,8 +42,8 @@ async def test_auth_login(app: Quart, core_lifecycle: AstrBotCoreLifecycle, head
     assert data['status'] == 'error'
     
     response = await test_client.post('/api/auth/login', json={
-        "username": core_lifecycle.astrbot_config['dashboard']['username'],
-        "password": core_lifecycle.astrbot_config['dashboard']['password']
+        "username": core_lifecycle_td.astrbot_config['dashboard']['username'],
+        "password": core_lifecycle_td.astrbot_config['dashboard']['password']
     })
     data = await response.get_json()
     assert data['status'] == 'ok' and 'token' in data['data']
@@ -126,11 +125,11 @@ async def test_check_update(app: Quart, header: dict):
     assert data['status'] == 'success' 
     
 @pytest.mark.asyncio
-async def test_do_update(app: Quart, header: dict, core_lifecycle: AstrBotCoreLifecycle):
+async def test_do_update(app: Quart, header: dict, core_lifecycle_td: AstrBotCoreLifecycle):
     global VERSION
     test_client = app.test_client()
     os.makedirs("data/astrbot_release", exist_ok=True)
-    core_lifecycle.astrbot_updator.MAIN_PATH = "data/astrbot_release"
+    core_lifecycle_td.astrbot_updator.MAIN_PATH = "data/astrbot_release"
     VERSION = "114.514.1919810"
     response = await test_client.post('/api/update/do', headers=header, json={
         "version": "latest"
