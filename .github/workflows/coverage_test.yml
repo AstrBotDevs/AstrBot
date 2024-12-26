@@ -27,9 +27,10 @@ jobs:
 
       - name: Run tests
         run: |
-          mkdir -r data/plugins
-          mkdir -r data/config
-          mkdir -r data/temp
+          mkdir data
+          mkdir data/plugins
+          mkdir data/config
+          mkdir data/temp
           export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
           PYTHONPATH=./ pytest --cov=. tests/test_pipeline.py -v -o log_cli=true -o log_level=DEBUG
 
