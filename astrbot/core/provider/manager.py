@@ -18,6 +18,11 @@ class ProviderManager():
         self.loaded_ids = defaultdict(bool)
         self.db_helper = db_helper
         
+        self.curr_kdb_name = ""
+        kdb_cfg = config.get("knowledge_db", {})
+        if kdb_cfg and len(kdb_cfg):
+            self.curr_kdb_name = list(kdb_cfg.keys())[0]
+        
         for provider_cfg in self.providers_config:
             if not provider_cfg['enable']:
                 continue

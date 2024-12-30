@@ -50,7 +50,8 @@ DEFAULT_CONFIG = {
     "log_level": "INFO",
     "t2i_endpoint": "",
     "pip_install_arg": "",
-    "plugin_repo_mirror": ""
+    "plugin_repo_mirror": "",
+    "knowledge_db": {},
 }
 
 

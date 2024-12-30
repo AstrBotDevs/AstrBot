@@ -18,8 +18,6 @@ from .star import star_registry, star_map
 from .star_handler import star_handlers_registry
 from astrbot.core.provider.register import llm_tools
 
-from .star_handler import star_handlers_registry
-
 class PluginManager:
     def __init__(
         self, 

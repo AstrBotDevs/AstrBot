@@ -16,6 +16,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 
 class AstrBotCoreLifecycle:
     def __init__(self, log_broker: LogBroker, db: BaseDatabase):
@@ -40,12 +41,15 @@ class AstrBotCoreLifecycle:
         
         self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
         
+        self.knowledge_db_manager = KnowledgeDBManager(self.astrbot_config)
+        
         self.star_context = Context(
             self.event_queue, 
             self.astrbot_config, 
             self.db,
             self.provider_manager,
-            self.platform_manager
+            self.platform_manager,
+            self.knowledge_db_manager
         )
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
         
