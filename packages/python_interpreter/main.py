@@ -130,7 +130,7 @@ class Main(star.Star):
                 extra_prompt=obs,
             )
             provider = self.context.get_using_provider()
-            llm_response = await provider.text_chat(prompt=PROMPT_, session_id=event.session_id)
+            llm_response = await provider.text_chat(prompt=PROMPT_, session_id=event.session_id+"_"+magic_code)
             
             logger.debug("code interpreter llm gened code:" + llm_response.completion_text)
             
