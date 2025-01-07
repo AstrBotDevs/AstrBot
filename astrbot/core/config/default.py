@@ -225,10 +225,10 @@ CONFIG_METADATA_2 = {
         },
     },
     "provider_group": {
-        "name": "大语言模型",
+        "name": "服务提供商",
         "metadata": {
             "provider": {
-                "description": "大语言模型配置",
+                "description": "服务提供商配置",
                 "type": "list",
                 "config_template": {
                     "openai": {
@@ -290,6 +290,15 @@ CONFIG_METADATA_2 = {
                         "llmtuner_template": "",
                         "finetuning_type": "lora",
                         "quantization_bit": 4,
+                    },
+                    "dify": {
+                        "id": "dify_app_default",
+                        "type": "dify",
+                        "enable": True,
+                        "dify_api_type": "chat",
+                        "dify_api_key": "",
+                        "dify_api_base": "https://api.dify.ai/v1",
+                        "dify_workflow_output_key": "",
                     }
                 },
                 "items": {
@@ -361,6 +370,27 @@ CONFIG_METADATA_2 = {
                             "top_p": {"description": "Top P值", "type": "float"},
                         },
                     },
+                    "dify_api_key": {
+                        "description": "API Key",
+                        "type": "string",
+                        "hint": "Dify API Key。此项必填。",
+                    },
+                    "dify_api_base": {
+                        "description": "API Base URL",
+                        "type": "string",
+                        "hint": "Dify API Base URL。默认为 https://api.dify.ai/v1",
+                    },
+                    "dify_api_type": {
+                        "description": "Dify 应用类型",
+                        "type": "string",
+                        "hint": "Dify API 类型。根据 Dify 官网，目前支持 chat, agent, workflow 三种应用类型",
+                        "options": ["chat", "agent", "workflow"],
+                    },
+                    "dify_workflow_output_key": {
+                        "description": "Dify Workflow 输出变量名",
+                        "type": "string",
+                        "hint": "Dify Workflow 输出变量名。当应用类型为 workflow 时才使用。默认为 astrbot_wf_output。",
+                    }
                 },
             },
             "provider_settings": {

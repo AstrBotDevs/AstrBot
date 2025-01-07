@@ -1,3 +1,6 @@
+'''
+本地 Agent 模式的 LLM 调用 Stage
+'''
 import traceback
 from typing import Union, AsyncGenerator
 from ...context import PipelineContext
@@ -48,7 +51,7 @@ class LLMRequestSubStage(Stage):
                 logger.error(traceback.format_exc())
         
         try:
-            logger.debug(f"请求 LLM：{req.__dict__}")
+            logger.debug(f"提供商请求 Payload: {req.__dict__}")
             llm_response = await provider.text_chat(**req.__dict__) # 请求 LLM
             await Metric.upload(llm_tick=1, model_name=provider.get_model(), provider_type=provider.meta().type)
 

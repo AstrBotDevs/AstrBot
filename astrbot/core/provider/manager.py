@@ -32,6 +32,8 @@ class ProviderManager():
                 case "llm_tuner":
                     logger.info("加载 LLM Tuner 工具 ...")
                     from .sources.llmtuner_source import LLMTunerModelLoader # noqa: F401
+                case "dify":
+                    from .sources.dify_source import ProviderDify # noqa: F401
                     
             
     async def initialize(self):

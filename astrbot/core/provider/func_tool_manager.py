@@ -104,6 +104,8 @@ class FuncCall:
     async def func_call(self, question: str, session_id: str, provider) -> tuple:
         _l = []
         for f in self.func_list:
+            if not f.active:
+                continue
             _l.append(
                 {
                     "name": f["name"],
@@ -169,3 +171,10 @@ class FuncCall:
             if ret:
                 tool_call_result.append(str(ret))
         return tool_call_result, True
+
+    
+    def __str__(self):
+        return str(self.func_list)
+    
+    def __repr__(self):
+        return str(self.func_list)
