@@ -39,7 +39,10 @@ class DifyRequestSubStage(Stage):
                     req.image_urls.append(image_url)
             req.session_id = event.session_id
             event.set_extra("provider_request", req)
-        
+            
+        if not req.prompt:
+            return
+            
         try:
             logger.debug(f"Dify 请求 Payload: {req.__dict__}")
             llm_response = await provider.text_chat(**req.__dict__) # 请求 LLM
