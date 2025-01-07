@@ -16,3 +16,4 @@ aiocqhttp
 pyjwt
 apscheduler
 docstring_parser
+aiodocker
