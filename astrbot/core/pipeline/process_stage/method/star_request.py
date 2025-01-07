@@ -1,3 +1,6 @@
+'''
+本地 Agent 模式的 AstrBot 插件调用 Stage
+'''
 from ...context import PipelineContext
 from ..stage import Stage
 from typing import Dict, Any, List, AsyncGenerator, Union

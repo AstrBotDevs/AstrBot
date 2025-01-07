@@ -1,3 +1,6 @@
+'''
+本地 Agent 模式的 LLM 调用 Stage
+'''
 import traceback
 from typing import Union, AsyncGenerator
 from ...context import PipelineContext
@@ -41,6 +44,9 @@ class LLMRequestSubStage(Stage):
             session_provider_context = provider.session_memory.get(event.session_id)
             req.contexts = session_provider_context if session_provider_context else []
             
+        if not req.prompt:
+            return
+            
         # 执行请求 LLM 前事件。
         # 装饰 system_prompt 等功能
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMRequestEvent)
@@ -51,7 +57,7 @@ class LLMRequestSubStage(Stage):
                 logger.error(traceback.format_exc())
         
         try:
-            logger.debug(f"请求 LLM：{req.__dict__}")
+            logger.debug(f"提供商请求 Payload: {req.__dict__}")
             llm_response = await provider.text_chat(**req.__dict__) # 请求 LLM
             await Metric.upload(llm_tick=1, model_name=provider.get_model(), provider_type=provider.meta().type)
 

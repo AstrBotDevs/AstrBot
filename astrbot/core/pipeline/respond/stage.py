@@ -23,3 +23,5 @@ class RespondStage(Stage):
         for handler in handlers:
             # TODO: 如何让这里的 handler 也能使用 LLM 能力。也许需要将 LLMRequestSubStage 提取出来。
             await handler.handler(event)
+            
+        event.clear_result()
