@@ -16,6 +16,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 
 class AstrBotCoreLifecycle:
     def __init__(self, log_broker: LogBroker, db: BaseDatabase):
@@ -29,7 +30,10 @@ class AstrBotCoreLifecycle:
     
     async def initialize(self):
         logger.info("AstrBot v"+ VERSION)
-        logger.setLevel(self.astrbot_config['log_level'])
+        if os.environ.get("TESTING", ""):
+            logger.setLevel("DEBUG")
+        else:
+            logger.setLevel(self.astrbot_config['log_level'])
         self.event_queue = Queue()
         self.event_queue.closed = False
         
@@ -37,9 +41,16 @@ class AstrBotCoreLifecycle:
         
         self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
         
-        self.star_context = Context(self.event_queue, self.astrbot_config, self.db)
-        self.star_context.platform_manager = self.platform_manager
-        self.star_context.provider_manager = self.provider_manager
+        self.knowledge_db_manager = KnowledgeDBManager(self.astrbot_config)
+        
+        self.star_context = Context(
+            self.event_queue, 
+            self.astrbot_config, 
+            self.db,
+            self.provider_manager,
+            self.platform_manager,
+            self.knowledge_db_manager
+        )
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
         
         self.plugin_manager.reload()

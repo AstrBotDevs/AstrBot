@@ -53,7 +53,6 @@ class PluginUpdator(RepoZipUpdator):
 
         files = os.listdir(os.path.join(target_dir, update_dir))
         for f in files:
-            logger.info(f"移动更新文件/目录: {f}")
             if os.path.isdir(os.path.join(target_dir, update_dir, f)):
                 if os.path.exists(os.path.join(target_dir, f)):
                     shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
@@ -63,7 +62,7 @@ class PluginUpdator(RepoZipUpdator):
             shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
         
         try:
-            logger.info(f"删除临时更新文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}")
+            logger.info(f"删除临时文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}")
             shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
             os.remove(zip_path)
         except BaseException:

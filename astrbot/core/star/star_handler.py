@@ -1,11 +1,11 @@
 from __future__ import annotations
 import enum
 from dataclasses import dataclass
-from typing import Awaitable, List, Dict
+from typing import Awaitable, List, Dict, TypeVar, Generic
 from .filter import HandlerFilter
 
-
-class StarHandlerRegistry(List):
+T = TypeVar('T', bound='StarHandlerMetadata')
+class StarHandlerRegistry(Generic[T], List[T]):
     '''用于存储所有的 Star Handler'''
     
     star_handlers_map: Dict[str, StarHandlerMetadata] = {}
@@ -26,8 +26,7 @@ class StarHandlerRegistry(List):
     
     def get_handlers_by_module_name(self, module_name: str) -> List[StarHandlerMetadata]:
         '''通过模块名获取 Handler'''
-        return [handler for handler in self if handler.handler_module_str == module_name]
-    
+        return [handler for handler in self if handler.handler_module_path == module_name]
     
 star_handlers_registry = StarHandlerRegistry()
 
@@ -55,7 +54,7 @@ class StarHandlerMetadata():
     handler_name: str
     '''Handler 的名字，也就是方法名'''
     
-    handler_module_str: str
+    handler_module_path: str
     '''Handler 所在的模块路径。'''
     
     handler: Awaitable

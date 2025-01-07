@@ -17,6 +17,7 @@ DEFAULT_CONFIG = {
         },
         "reply_prefix": "",
         "forward_threshold": 200,
+        "enable_id_white_list": True,
         "id_whitelist": [],
         "id_whitelist_log": True,
         "wl_ignore_admin_on_group": True,
@@ -49,7 +50,8 @@ DEFAULT_CONFIG = {
     "log_level": "INFO",
     "t2i_endpoint": "",
     "pip_install_arg": "",
-    "plugin_repo_mirror": ""
+    "plugin_repo_mirror": "",
+    "knowledge_db": {},
 }
 
 
@@ -162,6 +164,10 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "超过一定字数后，机器人会将消息折叠成 QQ 群聊的 “转发消息”，以防止刷屏。目前仅 QQ 平台适配器适用。",
                     },
+                    "enable_id_white_list": {
+                        "description": "启用 ID 白名单",
+                        "type": "bool"
+                    },
                     "id_whitelist": {
                         "description": "ID 白名单",
                         "type": "list",
@@ -273,7 +279,7 @@ CONFIG_METADATA_2 = {
                     },
                     "zhipu": {
                         "id": "zhipu_default",
-                        "type": "openai_chat_completion",
+                        "type": "zhipu_chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://open.bigmodel.cn/api/paas/v4/",

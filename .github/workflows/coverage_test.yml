@@ -1,7 +1,14 @@
 name: Run tests and upload coverage
 
 on: 
-  push
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - 'README.md'
+      - 'changelogs/**'
+      - 'dashboard/**'
+  workflow_dispatch:
 
 jobs:
   test:
@@ -21,17 +28,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov pytest-asyncio
-          mkdir data
-          mkdir data/plugins
-          mkdir data/config
-          mkdir temp
 
       - name: Run tests
         run: |
-          export LLM_MODEL=${{ secrets.LLM_MODEL }}
-          export OPENAI_API_BASE=${{ secrets.OPENAI_API_BASE }}
-          export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          PYTHONPATH=./ pytest --cov=. tests/ -v
+          mkdir data
+          mkdir data/plugins
+          mkdir data/config
+          mkdir data/temp
+          export TESTING=true
+          export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          PYTHONPATH=./ pytest --cov=. tests/ -v -o log_cli=true -o log_level=DEBUG
 
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v4

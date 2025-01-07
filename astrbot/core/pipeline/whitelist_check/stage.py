@@ -10,12 +10,16 @@ class WhitelistCheckStage(Stage):
     '''检查是否在群聊/私聊白名单
     '''
     async def initialize(self, ctx: PipelineContext) -> None:
+        self.enable_whitelist_check = ctx.astrbot_config['platform_settings']['enable_id_white_list']
         self.whitelist = ctx.astrbot_config['platform_settings']['id_whitelist']
         self.wl_ignore_admin_on_group = ctx.astrbot_config['platform_settings']['wl_ignore_admin_on_group']
         self.wl_ignore_admin_on_friend = ctx.astrbot_config['platform_settings']['wl_ignore_admin_on_friend']    
         self.wl_log = ctx.astrbot_config['platform_settings']['id_whitelist_log']
         
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
+        if not self.enable_whitelist_check:
+            return
+        
         # 检查是否在白名单
         if self.wl_ignore_admin_on_group:
             if event.role == 'admin' and event.get_message_type() == MessageType.GROUP_MESSAGE:

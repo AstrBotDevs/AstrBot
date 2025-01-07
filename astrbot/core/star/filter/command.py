@@ -51,6 +51,9 @@ class CommandFilter(HandlerFilter, ParameterValidationMixin):
         ls = re.split(r"\s+", message_str)
         if self.command_name != ls[0]:
             return False
+        # if len(self.handler_params) == 0 and len(ls) > 1:
+        #     # 一定程度避免 LLM 聊天时误判为指令
+        #     return False
         # params_str = message_str[len(self.command_name):].strip()
         ls = ls[1:]
         # 去除空字符串

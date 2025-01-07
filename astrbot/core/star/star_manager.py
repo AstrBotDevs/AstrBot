@@ -1,6 +1,7 @@
 import inspect
 import functools
 import os
+import sys
 import traceback
 import yaml
 import logging
@@ -14,9 +15,8 @@ from . import StarMetadata
 from .updator import PluginUpdator
 from astrbot.core.utils.io import remove_dir
 from .star import star_registry, star_map
-from astrbot.core.provider.register import llm_tools
-
 from .star_handler import star_handlers_registry
+from astrbot.core.provider.register import llm_tools
 
 class PluginManager:
     def __init__(
@@ -138,7 +138,18 @@ class PluginManager:
     
     def reload(self):
         '''扫描并加载所有的 Star'''
+        for smd in star_registry:
+            logger.debug(f"尝试终止插件 {smd.name} ...")
+            if hasattr(smd.star_cls, "__del__"):
+                smd.star_cls.__del__()
+            
         star_handlers_registry.clear()
+        star_handlers_registry.star_handlers_map.clear()
+        star_map.clear()
+        star_registry.clear()
+        for key in list(sys.modules.keys()):
+            if key.startswith("data.plugins") or key.startswith("packages"):
+                del sys.modules[key]
         
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -225,10 +236,11 @@ class PluginManager:
         
     async def install_plugin(self, repo_url: str):
         plugin_path = await self.updator.install(repo_url)
-        self._check_plugin_dept_update()
+        # reload the plugin
+        self.reload()
         return plugin_path
     
-    def uninstall_plugin(self, plugin_name: str):
+    async def uninstall_plugin(self, plugin_name: str):
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
             raise Exception("插件不存在。")
@@ -237,7 +249,20 @@ class PluginManager:
         root_dir_name = plugin.root_dir_name
         ppath = self.plugin_store_path
         
+        # 从 star_registry 和 star_map 中删除
         del star_map[plugin.module_path]
+        for i, p in enumerate(star_registry):
+            if p.name == plugin_name:
+                del star_registry[i]
+                break
+        for handler in star_handlers_registry.get_handlers_by_module_name(plugin.module_path):
+            logger.debug(f"unbind handler {handler.handler_name} from {plugin_name}")
+            star_handlers_registry.remove(handler)
+        keys_to_delete = [k for k, v in star_handlers_registry.star_handlers_map.items() if k.startswith(plugin.module_path)]
+        for k in keys_to_delete:
+            v = star_handlers_registry.star_handlers_map[k]
+            logger.debug(f"unbind handler {v.handler_name} from {plugin_name} (map)")
+            del star_handlers_registry.star_handlers_map[k]
         
         if not remove_dir(os.path.join(ppath, root_dir_name)):
             raise Exception("移除插件成功，但是删除插件文件夹失败。您可以手动删除该文件夹，位于 addons/plugins/ 下。")
@@ -250,6 +275,7 @@ class PluginManager:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
         
         await self.updator.update(plugin)
+        self.reload()
         
     def install_plugin_from_file(self, zip_file_path: str):
         desti_dir = os.path.join(self.plugin_store_path, os.path.basename(zip_file_path))
@@ -262,3 +288,4 @@ class PluginManager:
             logger.warning(f"删除插件压缩包失败: {str(e)}")
         
         self._check_plugin_dept_update()
+

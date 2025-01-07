@@ -32,6 +32,7 @@ class UpdateRoute(Route):
     async def update_project(self):
         data = await request.json
         version = data.get('version', '')
+        reboot = data.get('reboot', True)
         if version == "" or version == "latest":
             latest = True
             version = ''
@@ -39,8 +40,11 @@ class UpdateRoute(Route):
             latest = False
         try:
             await self.astrbot_updator.update(latest=latest, version=version)
-            threading.Thread(target=self.astrbot_updator._reboot, args=(2, )).start()
-            return Response().ok(None, "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。").__dict__
+            if reboot:
+                threading.Thread(target=self.astrbot_updator._reboot, args=(2, )).start()
+                return Response().ok(None, "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。").__dict__
+            else:
+                return Response().ok(None, "更新成功，AstrBot 将在下次启动时应用新的代码。").__dict__
         except Exception as e:
             logger.error(f"/api/update_project: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__

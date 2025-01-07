@@ -27,7 +27,7 @@ class StarRequestSubStage(Stage):
         for handler in activated_handlers:
             params = handlers_parsed_params.get(handler.handler_full_name, {})
             try:
-                if handler.handler_module_str not in star_map:
+                if handler.handler_module_path not in star_map:
                     # 孤立无援的 star handler 
                     continue
                 
@@ -39,7 +39,7 @@ class StarRequestSubStage(Stage):
             except Exception as e:
                 logger.error(traceback.format_exc())
                 logger.error(f"Star {handler.handler_full_name} handle error: {e}")
-                ret = f":(\n\n在调用插件 {star_map.get(handler.handler_module_str).name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
+                ret = f":(\n\n在调用插件 {star_map.get(handler.handler_module_path).name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
                 event.set_result(MessageEventResult().message(ret))
                 yield
                 event.clear_result()

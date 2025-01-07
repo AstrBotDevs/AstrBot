@@ -1,4 +1,3 @@
-
 import os
 import asyncio
 import sys
@@ -42,14 +41,16 @@ async def check_dashboard_files():
         return
     dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
     logger.info("开始下载管理面板文件...")
+    ok = False
     async with aiohttp.ClientSession() as session:
         async with session.get(dashboard_release_url) as resp:
             if resp.status != 200:
                 logger.error(f"下载管理面板文件失败: {resp.status}")
-            with open("data/dashboard.zip", "wb") as f:
-                f.write(await resp.read())
-            logger.info("管理面板文件下载完成。")
-            ok = True
+            else:
+                with open("data/dashboard.zip", "wb") as f:
+                    f.write(await resp.read())
+                logger.info("管理面板文件下载完成。")
+                ok = True
                 
     if not ok:
         logger.critical("下载管理面板文件失败")

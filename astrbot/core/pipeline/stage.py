@@ -44,7 +44,6 @@ class Stage(abc.ABC):
         try:
             ready_to_call = handler(event, **params)
         except TypeError as e:
-            print(e)
             # 向下兼容
             ready_to_call = handler(event, ctx.plugin_manager.context, **params)
         

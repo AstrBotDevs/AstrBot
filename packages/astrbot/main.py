@@ -16,6 +16,8 @@ class Main(star.Star):
         self.prompt_prefix = cfg['provider_settings']['prompt_prefix']
         self.identifier = cfg['provider_settings']['identifier']
         self.enable_datetime = cfg['provider_settings']["datetime_system_prompt"]
+        
+        self.kdb_enabled = False
     
     async def _query_astrbot_notice(self):
         try:
@@ -289,7 +291,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 - 重置 LLM 会话(保留人格): /reset p
 
 【当前人格】: {str(self.context.get_using_provider().curr_personality['prompt'])}
-"""))
+""").use_t2i(False))
         elif l[1] == "list":
             msg = "人格列表：\n"
             for key in personalities.keys():
@@ -338,3 +340,32 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     async def other_message(self, event: AstrMessageEvent):
         print("triggered")
         event.stop_event()
+        
+    @filter.command_group("kdb")
+    def kdb(self):
+        pass
+        
+    @kdb.command("on")
+    async def on_kdb(self, event: AstrMessageEvent):
+        self.kdb_enabled = True
+        curr_kdb_name = self.context.provider_manager.curr_kdb_name
+        if not curr_kdb_name:
+            yield event.plain_result("未载入任何知识库")
+        else:
+            yield event.plain_result(f"知识库已打开。当前载入的知识库: {curr_kdb_name}")
+        
+    @kdb.command("off")
+    async def off_kdb(self, event: AstrMessageEvent):
+        self.kdb_enabled = False
+        yield event.plain_result("知识库已关闭")
+        
+    @filter.on_llm_request()
+    async def on_llm_response(self, event: AstrMessageEvent, req: ProviderRequest):
+        curr_kdb_name = self.context.provider_manager.curr_kdb_name
+        if self.kdb_enabled and curr_kdb_name:
+            mgr = self.context.knowledge_db_manager
+            results = await mgr.retrive_records(curr_kdb_name, req.prompt)
+            if results:
+                req.system_prompt += "\nHere are documents that related to user's query: \n"
+                for result in results:
+                    req.system_prompt += f"- {result}\n"

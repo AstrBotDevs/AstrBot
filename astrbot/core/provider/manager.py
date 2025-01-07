@@ -18,6 +18,11 @@ class ProviderManager():
         self.loaded_ids = defaultdict(bool)
         self.db_helper = db_helper
         
+        self.curr_kdb_name = ""
+        kdb_cfg = config.get("knowledge_db", {})
+        if kdb_cfg and len(kdb_cfg):
+            self.curr_kdb_name = list(kdb_cfg.keys())[0]
+        
         for provider_cfg in self.providers_config:
             if not provider_cfg['enable']:
                 continue
@@ -29,6 +34,8 @@ class ProviderManager():
             match provider_cfg['type']:
                 case "openai_chat_completion":
                     from .sources.openai_source import ProviderOpenAIOfficial # noqa: F401
+                case "zhipu_chat_completion":
+                    from .sources.zhipu_source import ProviderZhipu # noqa: F401
                 case "llm_tuner":
                     logger.info("加载 LLM Tuner 工具 ...")
                     from .sources.llmtuner_source import LLMTunerModelLoader # noqa: F401
@@ -54,6 +61,8 @@ class ProviderManager():
         
         if len(self.provider_insts) > 0:
             self.curr_provider_inst = self.provider_insts[0]
+        else:
+            logger.warning("未启用任何大模型提供商适配器。")
 
     def get_insts(self):
         return self.provider_insts

@@ -53,7 +53,6 @@ class PluginRoute(Route):
         try:
             logger.info(f"正在安装插件 {repo_url}")
             await self.plugin_manager.install_plugin(repo_url)
-            self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")
             return Response().ok(None, "安装成功。").__dict__
         except Exception as e:
@@ -69,7 +68,6 @@ class PluginRoute(Route):
             await file.save(file_path)
             self.plugin_manager.install_plugin_from_file(file_path)
             logger.info(f"安装插件 {file.filename} 成功")
-            self.core_lifecycle.restart()
             return Response().ok(None, "安装成功。").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -80,7 +78,7 @@ class PluginRoute(Route):
         plugin_name = post_data["name"]
         try:
             logger.info(f"正在卸载插件 {plugin_name}")
-            self.plugin_manager.uninstall_plugin(plugin_name)
+            await self.plugin_manager.uninstall_plugin(plugin_name)
             logger.info(f"卸载插件 {plugin_name} 成功")
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:
@@ -93,9 +91,8 @@ class PluginRoute(Route):
         try:
             logger.info(f"正在更新插件 {plugin_name}")
             await self.plugin_manager.update_plugin(plugin_name)
-            self.core_lifecycle.restart()
-            logger.info(f"更新插件 {plugin_name} 成功，2秒后重启")
-            return Response().ok(None, "更新成功，程序将在 2 秒内重启。").__dict__
+            logger.info(f"更新插件 {plugin_name} 成功。")
+            return Response().ok(None, "更新成功。").__dict__
         except Exception as e:
             logger.error(f"/api/extensions/update: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__

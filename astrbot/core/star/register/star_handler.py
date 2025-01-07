@@ -28,7 +28,7 @@ def get_handler_or_create(handler: Awaitable, event_type: EventType, dont_add = 
             event_type=event_type,
             handler_full_name=handler_full_name,
             handler_name=handler.__name__,
-            handler_module_str=handler.__module__,
+            handler_module_path=handler.__module__,
             handler=handler,
             event_filters=[]
         )
