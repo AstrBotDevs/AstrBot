@@ -29,7 +29,9 @@ import axios from 'axios';
             <v-btn variant="plain" @click="updateExtension(extension.name)">更新</v-btn>
             <v-btn variant="plain" @click="uninstallExtension(extension.name)">卸载</v-btn>
           </div>
-          <span v-else>保留插件</span>
+          <!-- <span v-else>保留插件</span> -->
+          <v-btn variant="plain" v-if="extension.activated" @click="pluginOff(extension)">禁用</v-btn>
+          <v-btn variant="plain" v-else @click="pluginOn(extension)">启用</v-btn>
         </div>
       </ExtensionCard>
     </v-col>
@@ -325,6 +327,36 @@ export default {
           this.onLoadingDialogResult(1, res.data.message);
           this.dialog = false;
           this.$refs.wfr.check();
+        }).catch((err) => {
+          this.toast(err, "error");
+        });
+    },
+    pluginOn(extension) {
+      axios.post('/api/plugin/on',
+        {
+          name: extension.name
+        }).then((res) => {
+          if (res.data.status === "error") {
+            this.toast(res.data.message, "error");
+            return;
+          }
+          this.toast(res.data.message, "success");
+          this.getExtensions();
+        }).catch((err) => {
+          this.toast(err, "error");
+        });
+    },
+    pluginOff(extension) {
+      axios.post('/api/plugin/off',
+        {
+          name: extension.name
+        }).then((res) => {
+          if (res.data.status === "error") {
+            this.toast(res.data.message, "error");
+            return;
+          }
+          this.toast(res.data.message, "success");
+          this.getExtensions();
         }).catch((err) => {
           this.toast(err, "error");
         });

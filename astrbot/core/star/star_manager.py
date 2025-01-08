@@ -186,22 +186,22 @@ class PluginManager:
 
                 if path in star_map:
                     # 通过装饰器的方式注册插件
-                    star_metadata = star_map[path]
-                    star_metadata.star_cls = star_metadata.star_cls_type(context=self.context)
-                    star_metadata.module = module
-                    star_metadata.root_dir_name = root_dir_name
-                    star_metadata.reserved = reserved
+                    metadata = star_map[path]
+                    metadata.star_cls = metadata.star_cls_type(context=self.context)
+                    metadata.module = module
+                    metadata.root_dir_name = root_dir_name
+                    metadata.reserved = reserved
                     
-                    related_handlers = star_handlers_registry.get_handlers_by_module_name(star_metadata.module_path)
+                    related_handlers = star_handlers_registry.get_handlers_by_module_name(metadata.module_path)
                     for handler in related_handlers:
-                        logger.debug(f"bind handler {handler.handler_name} to {star_metadata.name}")
+                        logger.debug(f"bind handler {handler.handler_name} to {metadata.name}")
                         # handler.handler.__self__ = star_metadata.star_cls # 绑定 handler 的 self
-                        handler.handler = functools.partial(handler.handler, star_metadata.star_cls)
+                        handler.handler = functools.partial(handler.handler, metadata.star_cls)
                     # llm_tool
                     for func_tool in llm_tools.func_list:
-                        if func_tool.handler.__module__ == star_metadata.module_path:
-                            func_tool.handler_module_path = star_metadata.module_path
-                            func_tool.handler = functools.partial(func_tool.handler, star_metadata.star_cls)
+                        if func_tool.handler.__module__ == metadata.module_path:
+                            func_tool.handler_module_path = metadata.module_path
+                            func_tool.handler = functools.partial(func_tool.handler, metadata.star_cls)
                         if func_tool.name in inactivated_llm_tools:
                             func_tool.active = False
                     
@@ -227,7 +227,7 @@ class PluginManager:
                     star_map[path] = metadata
                     star_registry.append(metadata)
                     logger.debug(f"插件 {root_dir_name} 载入成功。")
-                    
+                
                 if metadata.module_path in inactivated_plugins:
                     metadata.activated = False
                     
