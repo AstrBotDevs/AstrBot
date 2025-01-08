@@ -113,8 +113,8 @@ class Main(star.Star):
     async def initialize(self):
         ok = await self.is_docker_available()
         if not ok:
-            logger.warning("Docker 不可用，代码解释器将无法使用吗，astrbot-python-interpreter 将自动禁用。")
-            self.context._star_manager.turn_off_star(self.__module__)
+            logger.warning("Docker 不可用，代码解释器将无法使用，astrbot-python-interpreter 将自动禁用。")
+            await self.context._star_manager.turn_off_plugin("astrbot-python-interpreter")
                 
     async def file_upload(self, file_path: str):
         '''
