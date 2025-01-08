@@ -53,7 +53,7 @@ class AstrBotCoreLifecycle:
         )
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
         
-        self.plugin_manager.reload()
+        await self.plugin_manager.reload()
         '''扫描、注册插件、实例化插件类'''
         
         await self.provider_manager.initialize()

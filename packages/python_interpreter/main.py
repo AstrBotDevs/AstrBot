@@ -109,6 +109,12 @@ class Main(star.Star):
         else:
             with open(PATH, "r") as f:
                 self.config = json.load(f)
+    
+    async def initialize(self):
+        ok = await self.is_docker_available()
+        if not ok:
+            logger.warning("Docker 不可用，代码解释器将无法使用吗，astrbot-python-interpreter 将自动禁用。")
+            self.context._star_manager.turn_off_star(self.__module__)
                 
     async def file_upload(self, file_path: str):
         '''
@@ -135,7 +141,7 @@ class Main(star.Star):
             await docker.version()
             return True
         except aiodocker.exceptions.DockerError as e:
-            logger.error(f"Error when check docker: {e}")
+            logger.error(f"检查 Docker 可用性时出现问题: {e}")
             return False
         
     async def get_image_name(self) -> str:
@@ -352,7 +358,7 @@ class Main(star.Star):
                     
             if not ok:
                 if traceback:
-                    obs = f"## Observation\When execute the code: ```python\n{code_clean}\n```\n\n Error occured:\n\n{traceback}\n Need to improve/fix the code."
+                    obs = f"## Observation \n When execute the code: ```python\n{code_clean}\n```\n\n Error occured:\n\n{traceback}\n Need to improve/fix the code."
                 else:
                     logger.warning(f"未从沙箱输出中捕获到合法的输出。沙箱输出日志: {logs}")
                     break
