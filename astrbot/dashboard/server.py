@@ -18,7 +18,6 @@ class AstrBotDashboard():
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.data_path = os.path.abspath(os.path.join(DATAPATH, "dist"))
-        logger.info(f"Dashboard data path: {self.data_path}")
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         self.app.json.sort_keys = False
         self.app.before_request(self.auth_middleware)

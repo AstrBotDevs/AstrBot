@@ -7,6 +7,8 @@ import zipfile
 from astrbot.dashboard import AstrBotDashBoardLifecycle
 from astrbot.core import db_helper
 from astrbot.core import logger, LogManager, LogBroker
+from astrbot.core.config.default import VERSION
+from astrbot.core.utils.io import download_dashboard
 
 # add parent path to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,27 +40,20 @@ def check_env():
 async def check_dashboard_files():
     '''下载管理面板文件'''
     if os.path.exists("data/dist"):
-        return
-    dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
-    logger.info("开始下载管理面板文件...")
-    ok = False
-    async with aiohttp.ClientSession() as session:
-        async with session.get(dashboard_release_url) as resp:
-            if resp.status != 200:
-                logger.error(f"下载管理面板文件失败: {resp.status}")
-            else:
-                with open("data/dashboard.zip", "wb") as f:
-                    f.write(await resp.read())
-                logger.info("管理面板文件下载完成。")
-                ok = True
-                
-    if not ok:
-        logger.critical("下载管理面板文件失败")
+        if os.path.exists("data/dist/assets/version"):
+            with open("data/dist/assets/version", "r") as f:
+                if f.read() != VERSION:
+                    logger.warning("检测到管理面板有更新。可以使用 /dashboard update 命令更新。")
         return
     
-    # unzip
-    with zipfile.ZipFile("data/dashboard.zip", "r") as z:
-        z.extractall("data")
+    logger.info("开始下载管理面板文件...")
+    
+    try:
+        await download_dashboard()
+    except Exception as e:
+        logger.critical(f"下载管理面板文件失败: {e}")
+        return
+
     logger.info("管理面板下载完成。")
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ import socket
 import time
 import aiohttp
 import base64
+import zipfile
 
 from PIL import Image
 
@@ -97,6 +98,8 @@ async def download_file(url: str, path: str):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=20) as resp:
+                if resp.status != 200:
+                    raise Exception(f"下载文件失败: {resp.status}")
                 with open(path, 'wb') as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -123,3 +126,10 @@ def get_local_ip_addresses():
     finally:
         s.close()
     return ip
+
+async def download_dashboard():
+    '''下载管理面板文件'''
+    dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
+    await download_file(dashboard_release_url, "data/dashboard.zip")
+    with zipfile.ZipFile("data/dashboard.zip", "r") as z:
+        z.extractall("data")

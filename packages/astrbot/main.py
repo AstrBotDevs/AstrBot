@@ -5,6 +5,7 @@ import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import personalities, sp
 from astrbot.api.provider import Personality, ProviderRequest
+from astrbot.core.utils.io import download_dashboard
 
 from typing import Union
 
@@ -44,6 +45,7 @@ class Main(star.Star):
 /deop <admin_id>: 取消管理员
 /wl <sid>: 添加会话白名单
 /dwl <sid>: 删除会话白名单
+/dashboard update: 更新管理面板
 
 [大模型]
 /provider: 查看、切换大模型提供商
@@ -341,6 +343,17 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                     name="自定义人格", prompt=ps)
                 message.set_result(
                     MessageEventResult().message(f"人格已设置。 \n人格信息: {ps}"))
+
+    @filter.command_group("dashboard")
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    def dashboard(self):
+        pass
+    
+    @dashboard.command("update")
+    async def update_dashboard(self, event: AstrMessageEvent):
+        yield event.plain_result("正在尝试更新管理面板...")
+        await download_dashboard()
+        yield event.plain_result("管理面板更新完成。")
 
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
