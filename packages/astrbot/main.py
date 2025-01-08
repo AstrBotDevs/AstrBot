@@ -3,7 +3,7 @@ import datetime
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.api import personalities
+from astrbot.api import personalities, sp
 from astrbot.api.provider import Personality, ProviderRequest
 
 from typing import Union
@@ -89,24 +89,41 @@ class Main(star.Star):
             event.set_result(MessageEventResult().message(f"停用工具 {tool_name} 失败，未找到此工具。"))
 
     @filter.command("plugin")
-    async def plugin(self, event: AstrMessageEvent, oper: str = None):
-        if oper is None:
+    async def plugin(self, event: AstrMessageEvent, oper1: str = None, oper2: str = None):
+        if oper1 is None:
             plugin_list_info = "已加载的插件：\n"
             for plugin in self.context.get_all_stars():
                 plugin_list_info += f"- `{plugin.name}` By {plugin.author}: {plugin.desc}\n"
             if plugin_list_info.strip() == "":
                 plugin_list_info = "没有加载任何插件。"
             
-            plugin_list_info += "\n使用 /plugin <插件名> 查看插件帮助。"
+            plugin_list_info += "\n使用 /plugin <插件名> 查看插件帮助。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
             event.set_result(MessageEventResult().message(f"{plugin_list_info}").use_t2i(False))
         else:
-            plugin = self.context.get_registered_star(oper)
-            if plugin is None:
-                event.set_result(MessageEventResult().message("未找到此插件。"))
+            if oper1 == "off":
+                # 禁用插件
+                if oper2 is None:
+                    event.set_result(MessageEventResult().message("/plugin off <插件名> 禁用插件。"))
+                    return
+                await self.context._star_manager.turn_off_plugin(oper2)
+                event.set_result(MessageEventResult().message(f"插件 {oper2} 已禁用。"))
+            elif oper1 == "on":
+                # 启用插件
+                if oper2 is None:
+                    event.set_result(MessageEventResult().message("/plugin on <插件名> 启用插件。"))
+                    return
+                await self.context._star_manager.turn_on_plugin(oper2)
+                event.set_result(MessageEventResult().message(f"插件 {oper2} 已启用。"))
+            
             else:
-                help_msg = plugin.star_cls.__doc__ if plugin.star_cls.__doc__ else "该插件未提供帮助信息"
-                ret = f"插件 {oper} 帮助信息：\n" + help_msg
-                event.set_result(MessageEventResult().message(ret).use_t2i(False))
+                # 获取插件帮助
+                plugin = self.context.get_registered_star(oper1)
+                if plugin is None:
+                    event.set_result(MessageEventResult().message("未找到此插件。"))
+                else:
+                    help_msg = plugin.star_cls.__doc__ if plugin.star_cls.__doc__ else "该插件未提供帮助信息"
+                    ret = f"插件 {oper1} 帮助信息：\n" + help_msg
+                    event.set_result(MessageEventResult().message(ret).use_t2i(False))
 
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent):
@@ -169,8 +186,9 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         if idx is None:
             ret = "## 当前载入的 LLM 提供商\n"
             for idx, llm in enumerate(self.context.get_all_providers()):
-                ret += f"{idx + 1}. {llm.meta().id} ({llm.meta().model})"
-                if self.provider == llm:
+                id_ = llm.meta().id
+                ret += f"{idx + 1}. {id_} ({llm.meta().model})"
+                if self.context.get_using_provider().meta().id == id_:
                     ret += " (当前使用)"
                 ret += "\n"
 
@@ -180,9 +198,12 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             if idx > len(self.context.get_all_providers()) or idx < 1:
                 event.set_result(MessageEventResult().message("无效的序号。"))
 
-            self.context.provider_manager.curr_provider_inst = self.context.get_all_providers()[idx - 1]
+            provider = self.context.get_all_providers()[idx - 1]
+            id_ = provider.meta().id
+            self.context.provider_manager.curr_provider_inst = provider
+            sp.put("curr_provider", id_)
 
-            event.set_result(MessageEventResult().message(f"成功切换到 {self.context.provider_manager.curr_provider_inst.meta().id}。"))
+            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
 
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent):

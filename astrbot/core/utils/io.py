@@ -96,7 +96,7 @@ async def download_file(url: str, path: str):
     '''
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
+            async with session.get(url, timeout=20) as resp:
                 with open(path, 'wb') as f:
                     while True:
                         chunk = await resp.content.read(8192)

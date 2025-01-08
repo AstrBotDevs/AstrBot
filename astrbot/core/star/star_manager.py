@@ -9,7 +9,7 @@ from types import ModuleType
 from typing import List
 from pip import main as pip_main
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core import logger
+from astrbot.core import logger, sp
 from .context import Context
 from . import StarMetadata
 from .updator import PluginUpdator
@@ -27,6 +27,7 @@ class PluginManager:
         self.updator = PluginUpdator(config['plugin_repo_mirror'])
         
         self.context = context
+        self.context._star_manager = self # 就这样吧，不想改了
                 
         self.config = config
         self.plugin_store_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../data/plugins"))
@@ -156,6 +157,9 @@ class PluginManager:
             return False, "未找到任何插件模块"
         fail_rec = ""
         
+        inactivated_plugins: list = sp.get("inactivated_plugins", [])
+        inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
+        
         # 导入 Star 模块，并尝试实例化 Star 类
         for plugin_module in plugin_modules:
             try:
@@ -182,21 +186,24 @@ class PluginManager:
 
                 if path in star_map:
                     # 通过装饰器的方式注册插件
-                    star_metadata = star_map[path]
-                    star_metadata.star_cls = star_metadata.star_cls_type(context=self.context)
-                    star_metadata.module = module
-                    star_metadata.root_dir_name = root_dir_name
-                    star_metadata.reserved = reserved
+                    metadata = star_map[path]
+                    metadata.star_cls = metadata.star_cls_type(context=self.context)
+                    metadata.module = module
+                    metadata.root_dir_name = root_dir_name
+                    metadata.reserved = reserved
                     
-                    related_handlers = star_handlers_registry.get_handlers_by_module_name(star_metadata.module_path)
+                    related_handlers = star_handlers_registry.get_handlers_by_module_name(metadata.module_path)
                     for handler in related_handlers:
-                        logger.debug(f"bind handler {handler.handler_name} to {star_metadata.name}")
+                        logger.debug(f"bind handler {handler.handler_name} to {metadata.name}")
                         # handler.handler.__self__ = star_metadata.star_cls # 绑定 handler 的 self
-                        handler.handler = functools.partial(handler.handler, star_metadata.star_cls)
+                        handler.handler = functools.partial(handler.handler, metadata.star_cls)
                     # llm_tool
                     for func_tool in llm_tools.func_list:
-                        if func_tool.handler.__module__ == star_metadata.module_path:
-                            func_tool.handler = functools.partial(func_tool.handler, star_metadata.star_cls)
+                        if func_tool.handler.__module__ == metadata.module_path:
+                            func_tool.handler_module_path = metadata.module_path
+                            func_tool.handler = functools.partial(func_tool.handler, metadata.star_cls)
+                        if func_tool.name in inactivated_llm_tools:
+                            func_tool.active = False
                     
                 else:
                     # v3.4.0 以前的方式注册插件
@@ -220,6 +227,9 @@ class PluginManager:
                     star_map[path] = metadata
                     star_registry.append(metadata)
                     logger.debug(f"插件 {root_dir_name} 载入成功。")
+                
+                if metadata.module_path in inactivated_plugins:
+                    metadata.activated = False
                     
             except BaseException as e:
                 traceback.print_exc()
@@ -250,22 +260,25 @@ class PluginManager:
         ppath = self.plugin_store_path
         
         # 从 star_registry 和 star_map 中删除
-        del star_map[plugin.module_path]
+        await self._unbind_plugin(plugin_name, plugin.module_path)
+        
+        if not remove_dir(os.path.join(ppath, root_dir_name)):
+            raise Exception("移除插件成功，但是删除插件文件夹失败。您可以手动删除该文件夹，位于 addons/plugins/ 下。")
+        
+    async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str):
+        del star_map[plugin_module_path]
         for i, p in enumerate(star_registry):
             if p.name == plugin_name:
                 del star_registry[i]
                 break
-        for handler in star_handlers_registry.get_handlers_by_module_name(plugin.module_path):
+        for handler in star_handlers_registry.get_handlers_by_module_name(plugin_module_path):
             logger.debug(f"unbind handler {handler.handler_name} from {plugin_name}")
             star_handlers_registry.remove(handler)
-        keys_to_delete = [k for k, v in star_handlers_registry.star_handlers_map.items() if k.startswith(plugin.module_path)]
+        keys_to_delete = [k for k, v in star_handlers_registry.star_handlers_map.items() if k.startswith(plugin_module_path)]
         for k in keys_to_delete:
             v = star_handlers_registry.star_handlers_map[k]
             logger.debug(f"unbind handler {v.handler_name} from {plugin_name} (map)")
             del star_handlers_registry.star_handlers_map[k]
-        
-        if not remove_dir(os.path.join(ppath, root_dir_name)):
-            raise Exception("移除插件成功，但是删除插件文件夹失败。您可以手动删除该文件夹，位于 addons/plugins/ 下。")
 
     async def update_plugin(self, plugin_name: str):
         plugin = self.context.get_registered_star(plugin_name)
@@ -276,6 +289,47 @@ class PluginManager:
         
         await self.updator.update(plugin)
         self.reload()
+    
+    async def turn_off_plugin(self, plugin_name: str):
+        plugin = self.context.get_registered_star(plugin_name)
+        if not plugin:
+            raise Exception("插件不存在。")
+        inactivated_plugins: list = sp.get("inactivated_plugins", [])
+        if plugin.module_path not in inactivated_plugins:
+            inactivated_plugins.append(plugin.module_path)
+            
+        inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
+        
+        # 禁用插件启用的 llm_tool
+        for func_tool in llm_tools.func_list:
+            if func_tool.handler_module_path == plugin.module_path:
+                func_tool.active = False
+                inactivated_llm_tools.append(func_tool.name)
+    
+        sp.put("inactivated_plugins", inactivated_plugins)
+        sp.put("inactivated_llm_tools", inactivated_llm_tools)
+        
+        plugin.activated = False
+        
+    async def turn_on_plugin(self, plugin_name: str):
+        plugin = self.context.get_registered_star(plugin_name)
+        if not plugin:
+            raise Exception("插件已经启用，无需重新启用。")
+        inactivated_plugins: list = sp.get("inactivated_plugins", [])
+        inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
+        if plugin.module_path in inactivated_plugins:
+            inactivated_plugins.remove(plugin.module_path)
+        sp.put("inactivated_plugins", inactivated_plugins)
+        
+        # 启用插件启用的 llm_tool
+        for func_tool in llm_tools.func_list:
+            if func_tool.handler_module_path == plugin.module_path:
+                inactivated_llm_tools.remove(func_tool.name)
+                func_tool.active = True
+        sp.put("inactivated_llm_tools", inactivated_llm_tools)
+        
+        plugin.activated = True
+        
         
     def install_plugin_from_file(self, zip_file_path: str):
         desti_dir = os.path.join(self.plugin_store_path, os.path.basename(zip_file_path))

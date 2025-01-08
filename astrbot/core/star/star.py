@@ -32,6 +32,9 @@ class StarMetadata:
     '''Star 的根目录名'''
     reserved: bool = False
     '''是否是 AstrBot 的保留 Star'''
+    
+    activated: bool = True
+    '''是否被激活'''
 
     def __str__(self) -> str:
         return f"StarMetadata({self.name}, {self.desc}, {self.version}, {self.repo})"

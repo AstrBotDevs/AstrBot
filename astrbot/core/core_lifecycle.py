@@ -92,6 +92,8 @@ class AstrBotCoreLifecycle:
         self.event_queue.closed = True
         for task in self.curr_tasks:
             task.cancel()
+            
+        await self.provider_manager.terminate()
         
         for task in self.curr_tasks:
             try:

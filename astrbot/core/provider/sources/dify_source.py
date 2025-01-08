@@ -126,3 +126,6 @@ class ProviderDify(Provider):
 
     async def get_human_readable_context(self, session_id, page, page_size):
         raise Exception("暂不支持获得 Dify 的历史消息记录。")
+
+    async def terminate(self):
+        await self.api_client.close()

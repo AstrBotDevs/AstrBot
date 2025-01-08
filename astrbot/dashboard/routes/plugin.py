@@ -16,7 +16,9 @@ class PluginRoute(Route):
             '/plugin/install-upload': ('POST', self.install_plugin_upload),
             '/plugin/update': ('POST', self.update_plugin),
             '/plugin/uninstall': ('POST', self.uninstall_plugin),
-            '/plugin/market_list': ('GET', self.get_online_plugins)
+            '/plugin/market_list': ('GET', self.get_online_plugins),
+            '/plugin/off': ('POST', self.off_plugin),
+            '/plugin/on': ('POST', self.on_plugin)
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
@@ -42,7 +44,8 @@ class PluginRoute(Route):
                 "author": plugin.author,
                 "desc": plugin.desc,
                 "version": plugin.version,
-                "reserved": plugin.reserved
+                "reserved": plugin.reserved,
+                "activated": plugin.activated
             }
             _plugin_resp.append(_t)
         return Response().ok(_plugin_resp).__dict__
@@ -95,4 +98,26 @@ class PluginRoute(Route):
             return Response().ok(None, "更新成功。").__dict__
         except Exception as e:
             logger.error(f"/api/extensions/update: {traceback.format_exc()}")
+            return Response().error(str(e)).__dict__
+        
+    async def off_plugin(self):
+        post_data = await request.json
+        plugin_name = post_data["name"]
+        try:
+            await self.plugin_manager.turn_off_plugin(plugin_name)
+            logger.info(f"停用插件 {plugin_name} 。")
+            return Response().ok(None, "停用成功。").__dict__
+        except Exception as e:
+            logger.error(f"/api/extensions/off: {traceback.format_exc()}")
+            return Response().error(str(e)).__dict__
+
+    async def on_plugin(self):
+        post_data = await request.json
+        plugin_name = post_data["name"]
+        try:
+            await self.plugin_manager.turn_on_plugin(plugin_name)
+            logger.info(f"启用插件 {plugin_name} 。")
+            return Response().ok(None, "启用成功。").__dict__
+        except Exception as e:
+            logger.error(f"/api/extensions/on: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
