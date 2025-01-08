@@ -1,4 +1,5 @@
 import os
+import json
 import aiohttp
 import uuid
 import asyncio
@@ -7,6 +8,7 @@ import astrbot.api.star as star
 import aiodocker
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api import llm_tool, logger
+from astrbot.api.event import filter
 from astrbot.api.message_components import Image
 
 PROMPT = """
@@ -16,12 +18,13 @@ You need to generate python codes to solve user's problem: {prompt}
 {extra_input}
 
 ## Limit
-1. The python libraries you can use include python standard libraries and `Pillow`, `requests`, `numpy`, `matplotlib`.
-2. You must not generate malicious code.
-3. You can only output text, image. For Image, you need save it to `output` folder.
+1. Available libraries: standard libs, `Pillow`, `requests`, `numpy`, `matplotlib`, `scipy`, `scikit-learn`, `beautifulsoup4`, `pandas`, `opencv-python`
+2. Do not generate malicious code.
+3. Only output text, image. For Image, you need save it to `output` folder.
 4. Use given `shared.api` package to output the result.
-5. Your must only output the code, do not output the result of the code and other any information.
-6. The output language is same as the user's input language.
+5. You must only output the code, do not output the result of the code and any other information.
+6. The output language is same as user's input language.
+7. Please first provide relevant knowledge about user's problem appropriately.
 
 ## Example
 1. The user's problem is: `please solve the fabonacci sequence problem.`
@@ -36,7 +39,6 @@ def fabonacci(n):
         return fabonacci(n-1) + fabonacci(n-2)
         
 result = fabonacci(10)
-# introduce the fabonacci sequence briefly
 send_text("The fabonacci sequence is a series of numbers in which each number is the sum of the two preceding ones, starting from 0 and 1.")
 send_text("Let's calculate the fabonacci sequence of 10: " + result) # send_text is a function to send pure text to user
 ```
@@ -52,13 +54,21 @@ x = np.linspace(0, 2*np.pi, 100)
 y = np.sin(x)
 plt.plot(x, y)
 plt.savefig("output/sin_x.png")
-send_text("The sin(x) is a periodic function with a period of 2π, and the value range is [-1, 1]. The following is the image of sin(x).") # introduce the sin(x) function briefly
+send_text("The sin(x) is a periodic function with a period of 2π, and the value range is [-1, 1]. The following is the image of sin(x).")
 send_image("output/sin_x.png") # send_image is a function to send image to user
 send_text("If you need more information, please let me know :)")
 ```
 
 {extra_prompt}
 """
+
+DEFAULT_CONFIG = {
+    "sandbox": {
+        "image": "soulter/astrbot-code-interpreter-sandbox",
+        "docker_mirror": "", # cjie.eu.org
+    }
+}
+PATH = "data/config/python_interpreter.json"
 
 @star.register(name="astrbot-python-interpreter", desc="Python 代码执行器", author="Soulter", version="0.0.1")
 class Main(star.Star):
@@ -69,6 +79,35 @@ class Main(star.Star):
         self.workplace_path = os.path.join(self.curr_dir, "workplace")
         self.shared_path = os.path.join(self.curr_dir, "shared")
         os.makedirs(self.workplace_path, exist_ok=True)
+        
+        # 加载配置
+        if not os.path.exists(PATH):
+            self.config = DEFAULT_CONFIG
+            self._save_config()
+        else:
+            with open(PATH, "r") as f:
+                self.config = json.load(f)
+                
+                
+    async def is_docker_available(self) -> bool:
+        '''Check if docker is available'''
+        try:
+            docker = aiodocker.Docker()
+            await docker.version()
+            return True
+        except aiodocker.exceptions.DockerError as e:
+            logger.error(f"Error when check docker: {e}")
+            return False
+        
+    async def get_image_name(self) -> str:
+        '''Get the image name'''
+        if self.config["sandbox"]["docker_mirror"]:
+            return f"{self.config['sandbox']['docker_mirror']}/{self.config['sandbox']['image']}"
+        return self.config["sandbox"]["image"]
+    
+    async def _save_config(self):
+        with open(PATH, "w") as f:
+            json.dump(self.config, f)
         
     async def gen_magic_code(self) -> str:
         return uuid.uuid4().hex[:8]
@@ -91,11 +130,47 @@ class Main(star.Star):
         if match is None:
             raise ValueError("The code is not in the code block.")
         return match.group(1)
+    
+
+    @filter.command_group("pi")
+    def pi(self):
+        pass
+
+
+    @pi.command("mirror")
+    async def pi_mirror(self, event: AstrMessageEvent, url: str = ""):
+        '''Docker 镜像地址'''
+        if not url:
+            yield event.plain_result(f"""当前 Docker 镜像地址: {self.config['sandbox']['docker_mirror']}。
+使用 `pi mirror <url>` 来设置 Docker 镜像地址。
+您所设置的 Docker 镜像地址将会自动加在 Docker 镜像名前。如: `soulter/astrbot-code-interpreter-sandbox` -> `cjie.eu.org/soulter/astrbot-code-interpreter-sandbox`。
+""")
+        else:
+            self.config["sandbox"]["docker_mirror"] = url
+            await self._save_config()
+            yield event.plain_result("设置 Docker 镜像地址成功。")
+
+    @pi.command("repull")
+    async def pi_repull(self, event: AstrMessageEvent):
+        '''重新拉取沙箱镜像'''
+        docker = aiodocker.Docker()
+        image_name = await self.get_image_name()
+        try:
+            await docker.images.get(image_name)
+            await docker.images.delete(image_name, force=True)
+        except aiodocker.exceptions.DockerError:
+            pass
+        await docker.images.pull(image_name)
+        yield event.plain_result("重新拉取沙箱镜像成功。")
+        
 
     @llm_tool("python_interpreter")
     async def python_interpreter(self, event: AstrMessageEvent):
         '''Use this tool only if user really want to solve a complex problem and the problem can be solved very well by Python code. For example, user can use this tool to solve a math problem, edit Image, etc. 
         '''
+        if not await self.is_docker_available():
+            yield event.plain_result("Docker 在当前机器不可用，无法沙箱化执行代码。")
+        
         plain_text = event.message_str
 
         # 创建必要的工作目录和幻术码
@@ -130,7 +205,7 @@ class Main(star.Star):
                 extra_prompt=obs,
             )
             provider = self.context.get_using_provider()
-            llm_response = await provider.text_chat(prompt=PROMPT_, session_id=event.session_id+"_"+magic_code)
+            llm_response = await provider.text_chat(prompt=PROMPT_, session_id=f"{event.session_id}_{magic_code}_{str(i)}")
             
             logger.debug("code interpreter llm gened code:" + llm_response.completion_text)
             
@@ -143,17 +218,18 @@ class Main(star.Star):
             docker = aiodocker.Docker()
             
             # 检查有没有image
+            image_name = await self.get_image_name()
             try:
-                await docker.images.get("cjie.eu.org/soulter/astrbot-code-interpreter-sandbox")
+                await docker.images.get(image_name)
             except aiodocker.exceptions.DockerError:
                 # 拉取镜像
-                logger.debug("Pulling image soulter/astrbot-code-interpreter-sandbo...")
-                await docker.images.pull("cjie.eu.org/soulter/astrbot-code-interpreter-sandbox")
+                logger.info(f"未找到沙箱镜像，正在尝试拉取 {image_name}...")
+                await docker.images.pull(image_name)
                 
             yield event.plain_result(f"使用沙箱执行代码中，请稍等...(尝试次数: {i+1}/{n})")
             
             container = await docker.containers.run({
-                "Image": "cjie.eu.org/soulter/astrbot-code-interpreter-sandbox",
+                "Image": image_name,
                 "Cmd": ["python", "exec.py"],
                 "Memory": 512 * 1024 * 1024,
                 "NanoCPUs": 1000000000,
@@ -190,7 +266,8 @@ class Main(star.Star):
                         image_path = os.path.join(workplace_path, match.group(2))
                         logger.debug(f"Sending image: {image_path}")
                         yield event.image_result(image_path)
-                elif "Traceback (most recent call last)" in log:
+                elif "Traceback (most recent call last)" in log \
+                    or "[Error]: " in log:
                     traceback = "\n".join(logs[idx:])
                     
             if not ok:
@@ -214,6 +291,6 @@ class Main(star.Star):
         except asyncio.TimeoutError:
             logger.warning(f"Container {container.id} timeout.")
             await container.kill()
-            return f"Container has been killed due to timeout ({timeout}s)."
+            return [f"[Error]: Container has been killed due to timeout ({timeout}s)."]
         finally:
             await container.delete()
