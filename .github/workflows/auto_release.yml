@@ -2,6 +2,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 name: Auto Release
 
@@ -14,6 +15,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Dashboard Build
+        run: |
+          cd dashboard
+          npm install
+          npm run build
+          echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          echo ${{ github.ref_name }} > dist/assets/version
+          zip -r dist.zip dist
+
       - name: Fetch Changelog
         run: |
           echo "changelog=changelogs/${{github.ref_name}}.md" >> "$GITHUB_ENV"
@@ -22,3 +32,4 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           bodyFile: ${{ env.changelog }}
+          artifacts: "dashboard/dist.zip"
