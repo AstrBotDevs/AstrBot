@@ -35,7 +35,8 @@ class AstrMessageEvent(abc.ABC):
         self.platform_meta = platform_meta
         self.session_id = session_id
         self.role = "member"
-        self.is_wake = False
+        self.is_wake = False # 是否通过 WakingStage
+        self.is_at_or_wake_command = False # 是否是 At 机器人或者带有唤醒词或者是私聊（事件监听器会让 is_wake 设为 True）
         self._extras = {}
         self.session = MessageSesion(
             platform_name=platform_meta.name,
