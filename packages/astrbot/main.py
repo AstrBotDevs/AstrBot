@@ -3,7 +3,7 @@ import datetime
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.api import personalities
+from astrbot.api import personalities, sp
 from astrbot.api.provider import Personality, ProviderRequest
 
 from typing import Union
@@ -169,8 +169,9 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         if idx is None:
             ret = "## 当前载入的 LLM 提供商\n"
             for idx, llm in enumerate(self.context.get_all_providers()):
-                ret += f"{idx + 1}. {llm.meta().id} ({llm.meta().model})"
-                if self.provider == llm:
+                id_ = llm.meta().id
+                ret += f"{idx + 1}. {id_} ({llm.meta().model})"
+                if self.context.get_using_provider().meta().id == id_:
                     ret += " (当前使用)"
                 ret += "\n"
 
@@ -180,9 +181,12 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             if idx > len(self.context.get_all_providers()) or idx < 1:
                 event.set_result(MessageEventResult().message("无效的序号。"))
 
-            self.context.provider_manager.curr_provider_inst = self.context.get_all_providers()[idx - 1]
+            provider = self.context.get_all_providers()[idx - 1]
+            id_ = provider.meta().id
+            self.context.provider_manager.curr_provider_inst = provider
+            sp.put("curr_provider", id_)
 
-            event.set_result(MessageEventResult().message(f"成功切换到 {self.context.provider_manager.curr_provider_inst.meta().id}。"))
+            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
 
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent):
