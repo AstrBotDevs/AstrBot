@@ -66,3 +66,8 @@ class ProviderManager():
 
     def get_insts(self):
         return self.provider_insts
+    
+    async def terminate(self):
+        for provider_inst in self.provider_insts:
+            if hasattr(provider_inst, "terminate"):
+                await provider_inst.terminate()
