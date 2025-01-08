@@ -3,6 +3,7 @@ import enum
 from dataclasses import dataclass
 from typing import Awaitable, List, Dict, TypeVar, Generic
 from .filter import HandlerFilter
+from .star import star_map
 
 T = TypeVar('T', bound='StarHandlerMetadata')
 class StarHandlerRegistry(Generic[T], List[T]):
@@ -16,9 +17,18 @@ class StarHandlerRegistry(Generic[T], List[T]):
         super().append(handler)
         self.star_handlers_map[handler.handler_full_name] = handler
         
-    def get_handlers_by_event_type(self, event_type: EventType) -> List[StarHandlerMetadata]:
+    def get_handlers_by_event_type(self, event_type: EventType, only_activated = True) -> List[StarHandlerMetadata]:
         '''通过事件类型获取 Handler'''
-        return [handler for handler in self if handler.event_type == event_type]
+        if only_activated:
+            return [
+                handler 
+                for handler in self 
+                if handler.event_type == event_type and 
+                star_map[handler.handler_module_path] and 
+                star_map[handler.handler_module_path].activated
+            ]
+        else:
+            return [handler for handler in self if handler.event_type == event_type]
     
     def get_handler_by_full_name(self, full_name: str) -> StarHandlerMetadata:
         '''通过 Handler 的全名获取 Handler'''

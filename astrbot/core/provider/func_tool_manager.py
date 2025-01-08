@@ -14,6 +14,7 @@ class FuncTool:
     parameters: Dict
     description: str
     handler: Awaitable
+    handler_module_path: str = None # 必须要保留这个，handler 在初始化会被 functools.partial 包装，导致 handler 的 __module__ 为 functools
 
     active: bool = True
     '''是否激活'''

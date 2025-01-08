@@ -89,24 +89,41 @@ class Main(star.Star):
             event.set_result(MessageEventResult().message(f"停用工具 {tool_name} 失败，未找到此工具。"))
 
     @filter.command("plugin")
-    async def plugin(self, event: AstrMessageEvent, oper: str = None):
-        if oper is None:
+    async def plugin(self, event: AstrMessageEvent, oper1: str = None, oper2: str = None):
+        if oper1 is None:
             plugin_list_info = "已加载的插件：\n"
             for plugin in self.context.get_all_stars():
                 plugin_list_info += f"- `{plugin.name}` By {plugin.author}: {plugin.desc}\n"
             if plugin_list_info.strip() == "":
                 plugin_list_info = "没有加载任何插件。"
             
-            plugin_list_info += "\n使用 /plugin <插件名> 查看插件帮助。"
+            plugin_list_info += "\n使用 /plugin <插件名> 查看插件帮助。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
             event.set_result(MessageEventResult().message(f"{plugin_list_info}").use_t2i(False))
         else:
-            plugin = self.context.get_registered_star(oper)
-            if plugin is None:
-                event.set_result(MessageEventResult().message("未找到此插件。"))
+            if oper1 == "off":
+                # 禁用插件
+                if oper2 is None:
+                    event.set_result(MessageEventResult().message("/plugin off <插件名> 禁用插件。"))
+                    return
+                await self.context._star_manager.turn_off_plugin(oper2)
+                event.set_result(MessageEventResult().message(f"插件 {oper2} 已禁用。"))
+            elif oper1 == "on":
+                # 启用插件
+                if oper2 is None:
+                    event.set_result(MessageEventResult().message("/plugin on <插件名> 启用插件。"))
+                    return
+                await self.context._star_manager.turn_on_plugin(oper2)
+                event.set_result(MessageEventResult().message(f"插件 {oper2} 已启用。"))
+            
             else:
-                help_msg = plugin.star_cls.__doc__ if plugin.star_cls.__doc__ else "该插件未提供帮助信息"
-                ret = f"插件 {oper} 帮助信息：\n" + help_msg
-                event.set_result(MessageEventResult().message(ret).use_t2i(False))
+                # 获取插件帮助
+                plugin = self.context.get_registered_star(oper1)
+                if plugin is None:
+                    event.set_result(MessageEventResult().message("未找到此插件。"))
+                else:
+                    help_msg = plugin.star_cls.__doc__ if plugin.star_cls.__doc__ else "该插件未提供帮助信息"
+                    ret = f"插件 {oper1} 帮助信息：\n" + help_msg
+                    event.set_result(MessageEventResult().message(ret).use_t2i(False))
 
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent):

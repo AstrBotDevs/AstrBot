@@ -1,6 +1,7 @@
 from asyncio import Queue
 from typing import List, TypedDict, Union
 
+from astrbot.core import sp
 from astrbot.core.provider.provider import Provider
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -39,6 +40,7 @@ class Context:
     
     # back compatibility
     _register_tasks: List[Awaitable] = []
+    _star_manager = None
 
     def __init__(self, 
         event_queue: Queue, 
@@ -105,6 +107,12 @@ class Context:
         func_tool = self.provider_manager.llm_tools.get_func(name)
         if func_tool is not None:
             func_tool.active = True
+            
+            inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
+            if name in inactivated_llm_tools:
+                inactivated_llm_tools.remove(name)
+                sp.put("inactivated_llm_tools", inactivated_llm_tools)
+            
             return True
         return False
             
@@ -116,6 +124,12 @@ class Context:
         func_tool = self.provider_manager.llm_tools.get_func(name)
         if func_tool is not None:
             func_tool.active = False
+            
+            inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
+            if name not in inactivated_llm_tools:
+                inactivated_llm_tools.append(name)
+                sp.put("inactivated_llm_tools", inactivated_llm_tools)
+                
             return True
         return False
     

@@ -65,7 +65,8 @@ class ProviderManager():
         
         if len(self.provider_insts) > 0 and not self.curr_provider_inst:
             self.curr_provider_inst = self.provider_insts[0]
-        else:
+            
+        if not self.curr_provider_inst:
             logger.warning("未启用任何提供商适配器。")
 
     def get_insts(self):
