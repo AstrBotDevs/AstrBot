@@ -1,3 +1,4 @@
+import os
 import time
 import asyncio
 import logging
@@ -5,12 +6,13 @@ from typing import Awaitable, Any
 from aiocqhttp import CQHttp, Event
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
 from astrbot.api.event import MessageChain
-from .aiocqhttp_message_event import *
-from astrbot.api.message_components import *
+from .aiocqhttp_message_event import *  # noqa: F403
+from astrbot.api.message_components import *  # noqa: F403
 from astrbot.api import logger
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
+from aiocqhttp.exceptions import ActionFailed
 
 @register_platform_adapter("aiocqhttp", "适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。")
 class AiocqhttpAdapter(Platform):
@@ -42,7 +44,7 @@ class AiocqhttpAdapter(Platform):
                 await self.bot.send_private_msg(user_id=session.session_id, message=ret)
         await super().send_by_session(session, message_chain)
         
-    def convert_message(self, event: Event) -> AstrBotMessage:
+    async def convert_message(self, event: Event) -> AstrBotMessage:
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.tag = "aiocqhttp"
@@ -78,7 +80,25 @@ class AiocqhttpAdapter(Platform):
             a = None
             if t == 'text':
                 message_str += m['data']['text'].strip()
-            a = ComponentTypes[t](**m['data'])
+            elif t == 'file':
+                try:
+                    # Napcat, LLBot
+                    ret = await self.bot.call_action(action="get_file", file_id=event.message[0]['data']['file_id'])
+                    if not ret.get('file', None):
+                        raise ValueError(f"无法解析文件响应: {ret}")
+                    if not os.path.exists(ret['file']):
+                        raise FileNotFoundError(f"文件不存在: {ret['file']}。如果您使用 Docker 部署了 AstrBot 或者消息协议端(Napcat等),暂时无法获取用户上传的文件。")
+                    
+                    m['data'] = {
+                        "file": ret['file'],
+                        "name": ret['file_name']
+                    }
+                except ActionFailed as e:
+                    logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
+                except BaseException as e:
+                    logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
+                    
+            a = ComponentTypes[t](**m['data'])  # noqa: F405
             abm.message.append(a)
         abm.timestamp = int(time.time())
         abm.message_str = message_str
@@ -91,13 +111,13 @@ class AiocqhttpAdapter(Platform):
         self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp', api_timeout_sec=180)
         @self.bot.on_message('group')
         async def group(event: Event):
-            abm = self.convert_message(event)
+            abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
         
         @self.bot.on_message('private')
         async def private(event: Event):
-            abm = self.convert_message(event)
+            abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
                 

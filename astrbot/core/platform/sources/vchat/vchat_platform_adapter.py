@@ -2,6 +2,7 @@ import sys
 import time
 import uuid
 import asyncio
+import os
 
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
 from astrbot.api.event import MessageChain
@@ -62,7 +63,7 @@ class VChatPlatformAdapter(Platform):
         self.start_time = int(time.time())
         return self._run()
     
-            
+
     async def _run(self):
         await self.client.init()
         await self.client.auto_login(hot_reload=True, enable_cmd_qr=True)
