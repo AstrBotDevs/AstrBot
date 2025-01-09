@@ -31,9 +31,21 @@ class Main(star.Star):
                 if "datetime" in reminder:
                     if self.check_is_outdated(reminder):
                         continue
-                    self.scheduler.add_job(self._reminder_callback, 'date', args=[reminder["text"], reminder], run_date=datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M"))
+                    self.scheduler.add_job(
+                        self._reminder_callback, 
+                        trigger='date', 
+                        args=[reminder["text"], reminder], 
+                        run_date=datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M"),
+                        misfire_grace_time=60
+                    )
                 elif "cron" in reminder:
-                    self.scheduler.add_job(self._reminder_callback, 'cron', args=[reminder["text"], reminder], **self._parse_cron_expr(reminder["cron"]))
+                    self.scheduler.add_job(
+                        self._reminder_callback, 
+                        trigger='cron', 
+                        args=[reminder["text"], reminder], 
+                        misfire_grace_time=60,
+                        **self._parse_cron_expr(reminder["cron"])
+                    )
     
     def check_is_outdated(self, reminder: dict):
         '''Check if the reminder is outdated.'''
@@ -75,14 +87,25 @@ class Main(star.Star):
         if cron_expression:
             d = { "text": text, "cron": cron_expression, "cron_h": human_readable_cron }
             self.reminder_data[event.unified_msg_origin].append(d)
-            self.scheduler.add_job(self._reminder_callback, 'cron', **self._parse_cron_expr(cron_expression), args=[event.unified_msg_origin, d])
+            self.scheduler.add_job(
+                self._reminder_callback, 
+                'cron', 
+                misfire_grace_time=60,
+                **self._parse_cron_expr(cron_expression), args=[event.unified_msg_origin, d]
+            )
             if human_readable_cron:
                 reminder_time = f"{human_readable_cron}(Cron: {cron_expression})"
         else:
             d = { "text": text, "datetime": datetime_str }
             self.reminder_data[event.unified_msg_origin].append(d)
             datetime_scheduled = datetime.datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
-            self.scheduler.add_job(self._reminder_callback, 'date', args=[event.unified_msg_origin, d], run_date=datetime_scheduled)
+            self.scheduler.add_job(
+                self._reminder_callback, 
+                'date', 
+                args=[event.unified_msg_origin, d], 
+                run_date=datetime_scheduled,
+                misfire_grace_time=60
+            )
             reminder_time = datetime_str
         await self._save_data()
         yield event.plain_result("成功设置待办事项。\n内容: " + text + "\n时间: " + reminder_time + "\n\n使用 /reminder ls 查看所有待办事项。")
