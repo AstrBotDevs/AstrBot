@@ -41,6 +41,8 @@ class ProviderManager():
                     from .sources.llmtuner_source import LLMTunerModelLoader # noqa: F401
                 case "dify":
                     from .sources.dify_source import ProviderDify # noqa: F401
+                case "googlegenai_chat_completion":
+                    from .sources.gemini_source import ProviderGoogleGenAI # noqa: F401
                     
             
     async def initialize(self):

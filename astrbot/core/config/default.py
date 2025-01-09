@@ -257,12 +257,22 @@ CONFIG_METADATA_2 = {
                             "model": "llama3.1-8b",
                         },
                     },
-                    "gemini": {
+                    "gemini(OpenAI兼容)": {
                         "id": "gemini_default",
                         "type": "openai_chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
+                        "model_config": {
+                            "model": "gemini-1.5-flash",
+                        },
+                    },
+                    "gemini(googlegenai原生)": {
+                        "id": "gemini_default",
+                        "type": "googlegenai_chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://generativelanguage.googleapis.com/",
                         "model_config": {
                             "model": "gemini-1.5-flash",
                         },

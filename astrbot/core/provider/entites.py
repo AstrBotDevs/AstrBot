@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict
 from .func_tool_manager import FuncCall
 
@@ -32,9 +32,9 @@ class ProviderRequest():
 class LLMResponse:
     role: str
     '''角色'''
-    completion_text: str = None
+    completion_text: str = ""
     '''LLM 返回的文本'''
-    tools_call_args: List[Dict[str, any]] = None
+    tools_call_args: List[Dict[str, any]] = field(default_factory=list)
     '''工具调用参数'''
-    tools_call_name: List[str] = None
+    tools_call_name: List[str] = field(default_factory=list)
     '''工具调用名称'''
