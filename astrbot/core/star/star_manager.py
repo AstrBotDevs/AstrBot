@@ -188,9 +188,6 @@ class PluginManager:
                     # 通过装饰器的方式注册插件
                     metadata = star_map[path]
                     metadata.star_cls = metadata.star_cls_type(context=self.context)
-                    # 执行 initialize 函数
-                    if hasattr(metadata.star_cls, "initialize"):
-                        await metadata.star_cls.initialize()
                     metadata.module = module
                     metadata.root_dir_name = root_dir_name
                     metadata.reserved = reserved
@@ -233,6 +230,10 @@ class PluginManager:
                 
                 if metadata.module_path in inactivated_plugins:
                     metadata.activated = False
+                    
+                # 执行 initialize 函数
+                if hasattr(metadata.star_cls, "initialize"):
+                    await metadata.star_cls.initialize()
                     
             except BaseException as e:
                 traceback.print_exc()
