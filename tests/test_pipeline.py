@@ -1,6 +1,7 @@
 import pytest
 import logging
 import os
+import asyncio
 from astrbot.core.pipeline.scheduler import PipelineScheduler, PipelineContext
 from astrbot.core.star import PluginManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -117,10 +118,10 @@ def star_context(event_queue, config, db, platform_manager, provider_manager):
     return star_context
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
-async def plugin_manager(star_context, config):
+def plugin_manager(star_context, config):
     plugin_manager = PluginManager(star_context, config)
-    await plugin_manager.reload()
+    # await plugin_manager.reload()
+    asyncio.run(plugin_manager.reload())
     return plugin_manager
 
 @pytest.fixture(scope="module")
