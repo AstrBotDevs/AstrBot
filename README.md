@@ -17,7 +17,7 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 [![codecov](https://codecov.io/gh/Soulter/AstrBot/graph/badge.svg?token=FF3P5967B8)](https://codecov.io/gh/Soulter/AstrBot)
 </a>
 
-<a href="https://astrbot.soulter.top/">查看文档</a> ｜
+<a href="https://astrbot.lwl.lol/">查看文档</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
 </div>
 
