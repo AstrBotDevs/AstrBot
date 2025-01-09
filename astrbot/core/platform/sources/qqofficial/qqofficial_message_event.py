@@ -31,11 +31,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(image_base64, 1, group_openid=source.group_openid)
                     payload['media'] = media
+                    payload['msg_type'] = 7
                 await self.bot.api.post_group_message(group_openid=source.group_openid, **payload)
             case botpy.message.C2CMessage:
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(image_base64, 1, openid=source.author.user_openid)
                     payload['media'] = media
+                    payload['msg_type'] = 7
                 await self.bot.api.post_c2c_message(openid=source.author.user_openid, **payload)
             case botpy.message.Message:
                 if image_path:
@@ -73,9 +75,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 plain_text += i.text
             elif isinstance(i, Image) and not image_base64:
                 if i.file and i.file.startswith("file:///"):
-                    image_base64 = file_to_base64(i.file[8:])
+                    image_base64 = file_to_base64(i.file[8:]).replace("base64://", "")
                     image_file_path = i.file[8:]
                 elif i.file and i.file.startswith("http"):
                     image_file_path = await download_image_by_url(i.file)
-                    image_base64 = file_to_base64(image_file_path)
+                    image_base64 = file_to_base64(image_file_path).replace("base64://", "")
         return plain_text, image_base64, image_file_path

@@ -54,6 +54,7 @@ class ComponentType(Enum):
     CardImage = "CardImage"
     TTS = "TTS"
     Unknown = "Unknown"
+    File = "File"
 
 
 class BaseMessageComponent(BaseModel):
@@ -415,6 +416,17 @@ class Unknown(BaseMessageComponent):
     def toString(self):
         return ""
 
+class File(BaseMessageComponent):
+    '''
+    目前此消息段只适配了 Napcat。
+    '''
+    type: ComponentType = "File"
+    name: T.Optional[str] = "" # 名字
+    file: T.Optional[str] = "" # url（本地路径）
+    
+    def __init__(self, name: str, file: str):
+        super().__init__(name=name, file=file)
+
 
 ComponentTypes = {
     "plain": Plain,
@@ -441,5 +453,6 @@ ComponentTypes = {
     "json": Json,
     "cardimage": CardImage,
     "tts": TTS,
-    "unknown": Unknown
+    "unknown": Unknown,
+    'file': File,
 }

@@ -43,7 +43,10 @@ class ProcessStage(Stage):
                     yield
         
         # 调用提供商相关请求
-        if self.ctx.astrbot_config['provider_settings'].get('enable', True) and not event._has_send_oper:
+        if not self.ctx.astrbot_config['provider_settings'].get('enable', True):
+            return
+        
+        if not event._has_send_oper and event.is_at_or_wake_command:
             if (event.get_result() and not event.get_result().is_stopped()) or not event.get_result():
                 provider = self.ctx.plugin_manager.context.get_using_provider()
                 match provider.meta().type:

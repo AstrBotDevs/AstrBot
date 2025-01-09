@@ -117,9 +117,10 @@ def star_context(event_queue, config, db, platform_manager, provider_manager):
     return star_context
 
 @pytest.fixture(scope="module")
-def plugin_manager(star_context, config):
+@pytest.mark.asyncio
+async def plugin_manager(star_context, config):
     plugin_manager = PluginManager(star_context, config)
-    plugin_manager.reload()
+    await plugin_manager.reload()
     return plugin_manager
 
 @pytest.fixture(scope="module")

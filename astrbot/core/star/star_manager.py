@@ -137,7 +137,7 @@ class PluginManager:
             
         return metadata
     
-    def reload(self):
+    async def reload(self):
         '''扫描并加载所有的 Star'''
         for smd in star_registry:
             logger.debug(f"尝试终止插件 {smd.name} ...")
@@ -231,6 +231,10 @@ class PluginManager:
                 if metadata.module_path in inactivated_plugins:
                     metadata.activated = False
                     
+                # 执行 initialize 函数
+                if hasattr(metadata.star_cls, "initialize"):
+                    await metadata.star_cls.initialize()
+                    
             except BaseException as e:
                 traceback.print_exc()
                 fail_rec += f"加载 {path} 插件时出现问题，原因 {str(e)}\n"
@@ -247,7 +251,7 @@ class PluginManager:
     async def install_plugin(self, repo_url: str):
         plugin_path = await self.updator.install(repo_url)
         # reload the plugin
-        self.reload()
+        await self.reload()
         return plugin_path
     
     async def uninstall_plugin(self, plugin_name: str):
@@ -288,7 +292,7 @@ class PluginManager:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
         
         await self.updator.update(plugin)
-        self.reload()
+        await self.reload()
     
     async def turn_off_plugin(self, plugin_name: str):
         plugin = self.context.get_registered_star(plugin_name)

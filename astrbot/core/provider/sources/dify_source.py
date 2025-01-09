@@ -1,4 +1,3 @@
-import base64
 from typing import List
 from .. import Provider
 from ..entites import LLMResponse

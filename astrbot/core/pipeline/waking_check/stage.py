@@ -47,6 +47,7 @@ class WakingCheckStage(Stage):
                     # 如果是群聊，且第一个消息段是 At 消息，但不是 At 机器人或 At 全体成员，则不唤醒
                     break
                 is_wake = True
+                event.is_at_or_wake_command = True
                 event.is_wake = True
                 event.message_str = event.message_str[len(wake_prefix) :].strip()
                 break
@@ -60,11 +61,13 @@ class WakingCheckStage(Stage):
                     is_wake = True
                     event.is_wake = True
                     wake_prefix = ""
+                    event.is_at_or_wake_command = True
                     break
             # 检查是否是私聊
             if event.is_private_chat():
                 is_wake = True
                 event.is_wake = True
+                event.is_at_or_wake_command = True
                 wake_prefix = ""
 
         # 检查插件的 handler filter
