@@ -317,8 +317,6 @@ class PluginManager:
         
     async def turn_on_plugin(self, plugin_name: str):
         plugin = self.context.get_registered_star(plugin_name)
-        if not plugin:
-            raise Exception("插件已经启用，无需重新启用。")
         inactivated_plugins: list = sp.get("inactivated_plugins", [])
         inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
         if plugin.module_path in inactivated_plugins:

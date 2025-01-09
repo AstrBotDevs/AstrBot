@@ -22,6 +22,18 @@ class Main(star.Star):
         self.sogo_search = Sogo()
         self.google = Google()
         
+        self.enable_jinaai = self.context.get_config()['provider_settings']['web_search_jinaai']
+        self.jinaai_api_key = self.context.get_config()['provider_settings']['web_search_jinaai_api_key']
+        
+    async def initialize(self):
+        websearch = self.context.get_config()['provider_settings']['web_search']
+        if websearch:
+            self.context.activate_llm_tool("web_search")
+            self.context.activate_llm_tool("fetch_url")
+        else:
+            self.context.deactivate_llm_tool("web_search")
+            self.context.deactivate_llm_tool("fetch_url")
+        
     async def _tidy_text(self, text: str) -> str:
         '''清理文本，去除空格、换行符等'''
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
