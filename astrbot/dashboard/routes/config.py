@@ -7,6 +7,7 @@ from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.config import update_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.platform.register import platform_registry
 
 def try_cast(value: str, type_: str):
     if type_ == "int" and value.isdigit():
@@ -121,6 +122,12 @@ class ConfigRoute(Route):
             
     async def _get_astrbot_config(self):
         config = self.config
+        
+        platform_default_tmpl = CONFIG_METADATA_2['platform_group']['metadata']['platform']['config_template']
+        for platform in platform_registry:
+            if platform.default_config_tmpl:
+                platform_default_tmpl[platform.name] = platform.default_config_tmpl
+        
         return {
             "metadata": CONFIG_METADATA_2,
             "config": config

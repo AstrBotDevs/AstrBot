@@ -102,7 +102,7 @@ class PluginManager:
         '''更新插件的依赖'''
         args = ['install', '-r', path, '--trusted-host', 'mirrors.aliyun.com', '-i', 'https://mirrors.aliyun.com/pypi/simple/']
         if self.config.pip_install_arg:
-            args.extend(self.config.pip_install_arg)
+            args.extend([self.config.pip_install_arg])
         result_code = pip_main(args)
         if result_code != 0:
             raise Exception(str(result_code))  
