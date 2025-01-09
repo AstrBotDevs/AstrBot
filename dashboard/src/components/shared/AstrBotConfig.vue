@@ -10,7 +10,7 @@
             </v-alert>
 
             <div style="display: flex; align-items: center; justify-content: center; gap: 16px">
-                <div style="width: 100%;">
+                <div style="width: 100%;" v-if="metadata[metadataKey].items[key]">
                     <v-select v-if="metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible" v-model="iterable[key]"
                         variant="outlined" :items="metadata[metadataKey].items[key]?.options"
                         :label="metadata[metadataKey].items[key]?.description + '(' + key + ')'" dense :disabled="metadata[metadataKey].items[key]?.readonly"></v-select>
@@ -44,6 +44,11 @@
                             :metadataKey=key>
                         </AstrBotConfig>
                     </div>
+                </div>
+
+                <div style="width: 100%;" v-else>
+                    <!-- 在 metadata 中没有 key -->
+                    <v-text-field v-model="iterable[key]" :label="key" variant="outlined" dense></v-text-field>
                 </div>
 
                 <div
