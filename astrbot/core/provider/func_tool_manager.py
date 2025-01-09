@@ -101,6 +101,23 @@ class FuncCall:
                 }
             )
         return _l
+    
+    def get_func_desc_google_genai_style(self) -> Dict:
+        declarations = {}
+        tools = []
+        for f in self.func_list:
+            if not f.active:
+                continue
+            tools.append(
+                {
+                    "name": f.name,
+                    "parameters": f.parameters,
+                    "description": f.description,
+                }
+            )
+        declarations["function_declarations"] = tools
+        return declarations
+        
 
     async def func_call(self, question: str, session_id: str, provider) -> tuple:
         _l = []
