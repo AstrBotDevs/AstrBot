@@ -22,9 +22,6 @@ class Main(star.Star):
         self.sogo_search = Sogo()
         self.google = Google()
         
-        self.enable_jinaai = self.context.get_config()['provider_settings']['web_search_jinaai']
-        self.jinaai_api_key = self.context.get_config()['provider_settings']['web_search_jinaai_api_key']
-        
     async def initialize(self):
         websearch = self.context.get_config()['provider_settings']['web_search']
         if websearch:
