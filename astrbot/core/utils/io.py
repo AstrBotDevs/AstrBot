@@ -129,7 +129,7 @@ def get_local_ip_addresses():
 
 async def download_dashboard():
     '''下载管理面板文件'''
-    dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
+    dashboard_release_url = "https://astrbot-registry.lwl.lol/download/astrbot-dashboard/latest/dist.zip"
     await download_file(dashboard_release_url, "data/dashboard.zip")
     with zipfile.ZipFile("data/dashboard.zip", "r") as z:
         z.extractall("data")
