@@ -45,7 +45,27 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 ## ✨ 支持 Dify
 
-1. 对接了 LLMOps 平台 Dify，便捷接入 Dify 智能助手、知识库和 Dify 工作流！
+1. 对接了 LLMOps 平台 Dify，便捷接入 Dify 智能助手、知识库和 Dify 工作流！[接入 Dify - AstrBot 文档](https://astrbot.lwl.lol/others/dify.html)
+
+## ✨ 代码执行器(Beta)
+
+基于 Docker 的沙箱化代码执行器（Beta 测试中）
+
+> [!NOTE]
+> 文件输入/输出目前仅支持 Napcat（QQ）
+
+<div align='center'>
+<img src="https://github.com/user-attachments/assets/700a545e-7450-4f23-90ff-af6d0d60e501" height=300>
+
+<img src="https://github.com/user-attachments/assets/0b0c5344-e98b-4902-92ad-fe9f0bb10c2a" height=300>
+
+<img src="https://github.com/user-attachments/assets/b9b98ff4-8630-46fb-9a39-ecbad9d601ae" height=300>
+
+<img src="https://github.com/user-attachments/assets/9fe6e44c-e4f6-4347-9d5f-281677d47feb" height=300>
+
+</div>
+
+
 
 ## ✨ Demo
 
