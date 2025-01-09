@@ -343,13 +343,9 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                     name="自定义人格", prompt=ps)
                 message.set_result(
                     MessageEventResult().message(f"人格已设置。 \n人格信息: {ps}"))
-
-    @filter.command_group("dashboard")
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    def dashboard(self):
-        pass
     
-    @dashboard.command("update")
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("dashboard update")
     async def update_dashboard(self, event: AstrMessageEvent):
         yield event.plain_result("正在尝试更新管理面板...")
         await download_dashboard()
