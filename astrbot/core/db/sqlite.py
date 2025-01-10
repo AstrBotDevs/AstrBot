@@ -5,7 +5,8 @@ from astrbot.core.db.po import (
     Platform, 
     Stats,
     LLMHistory,
-    ATRIVision
+    ATRIVision,
+    WebChatConversation
 )
 from . import BaseDatabase
 from typing import Tuple
@@ -199,6 +200,69 @@ class SQLiteDatabase(BaseDatabase):
         c.close()
             
         return Stats(platform, [], [])
+    
+    
+    def get_webchat_conversation_by_user_id(self, user_id: str, cid: str) -> WebChatConversation:
+        try:
+            c = self.conn.cursor()
+        except sqlite3.ProgrammingError:
+            c = self._get_conn(self.db_path).cursor()
+            
+        c.execute(
+            '''
+            SELECT * FROM webchat_conversation WHERE user_id = ? AND cid = ?
+            ''', (user_id, cid)
+        )
+        
+        res = c.fetchone()
+        c.close()
+        return WebChatConversation(*res)
+    
+    def webchat_new_conversation(self, user_id: str, cid: str):
+        history = "[]"
+        updated_at = int(time.time())
+        created_at = updated_at
+        self._exec_sql(
+            '''
+            INSERT INTO webchat_conversation(user_id, cid, history, updated_at, created_at) VALUES (?, ?, ?, ?, ?)
+            ''', (user_id, cid, history, updated_at, created_at)
+        )
+        
+    def get_webchat_conversations(self, user_id: str) -> Tuple:
+        try:
+            c = self.conn.cursor()
+        except sqlite3.ProgrammingError:
+            c = self._get_conn(self.db_path).cursor()
+            
+        c.execute(
+            '''
+            SELECT cid, created_at, updated_at FROM webchat_conversation WHERE user_id = ? ORDER BY updated_at DESC
+            ''', (user_id,)
+        )
+        
+        res = c.fetchall()
+        c.close()
+        conversations = []
+        for row in res:
+            cid = row[0]
+            created_at = row[1]
+            updated_at = row[2]
+            conversations.append(WebChatConversation("", cid, '[]', created_at, updated_at))
+        return conversations
+    
+    def update_webchat_conversation(self, user_id: str, cid: str, history: str):
+        self._exec_sql(
+            '''
+            UPDATE webchat_conversation SET history = ? WHERE user_id = ? AND cid = ?
+            ''', (history, user_id, cid)
+        )
+    
+    def delete_webchat_conversation(self, user_id: str, cid: str):
+        self._exec_sql(
+            '''
+            DELETE FROM webchat_conversation WHERE user_id = ? AND cid = ?
+            ''', (user_id, cid)
+        )
 
 
     def insert_atri_vision_data(self, vision: ATRIVision):

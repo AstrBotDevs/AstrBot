@@ -36,6 +36,11 @@ const MainRoutes = {
       name: 'Project ATRI',
       path: '/project-atri',
       component: () => import('@/views/ATRIProject.vue')
+    },
+    {
+      name: 'Chat',
+      path: '/chat',
+      component: () => import('@/views/ChatPage.vue')
     }
   ]
 };

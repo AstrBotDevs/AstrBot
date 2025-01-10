@@ -65,7 +65,7 @@ def save_temp_img(img: Image) -> str:
             f.write(img)
     return p
 
-async def download_image_by_url(url: str, post: bool = False, post_data: dict = None) -> str:
+async def download_image_by_url(url: str, post: bool = False, post_data: dict = None, path = None) -> str:
     '''
     下载图片, 返回 path
     '''
@@ -73,10 +73,20 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
         async with aiohttp.ClientSession() as session:
             if post:
                 async with session.post(url, json=post_data) as resp:
-                    return save_temp_img(await resp.read())
+                    if not path:
+                        return save_temp_img(await resp.read())
+                    else:
+                        with open(path, "wb") as f:
+                            f.write(await resp.read())
+                        return path
             else:
                 async with session.get(url) as resp:
-                    return save_temp_img(await resp.read())
+                    if not path:
+                        return save_temp_img(await resp.read())
+                    else:
+                        with open(path, "wb") as f:
+                            f.write(await resp.read())
+                        return path
     except aiohttp.client_exceptions.ClientConnectorSSLError:
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()

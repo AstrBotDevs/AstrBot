@@ -1,7 +1,7 @@
 import abc
 from dataclasses import dataclass
 from typing import List
-from astrbot.core.db.po import Stats, LLMHistory, ATRIVision
+from astrbot.core.db.po import Stats, LLMHistory, ATRIVision, WebChatConversation
 
 @dataclass
 class BaseDatabase(abc.ABC):
@@ -76,4 +76,28 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     def get_atri_vision_data_by_path_or_id(self, url_or_path: str, id: str) -> ATRIVision:
         '''通过 url 或 path 获取 ATRI 视觉数据'''
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    def get_webchat_conversation_by_user_id(self, user_id: str, cid: str) -> WebChatConversation:
+        '''通过 user_id 和 cid 获取 WebChatConversation'''
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    def webchat_new_conversation(self, user_id: str, cid: str):
+        '''新建 WebChatConversation'''
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    def get_webchat_conversations(self, user_id: str) -> List[WebChatConversation]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def update_webchat_conversation(self, user_id: str, cid: str, history: str):
+        '''更新 WebChatConversation'''
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    def delete_webchat_conversation(self, user_id: str, cid: str):
+        '''删除 WebChatConversation'''
         raise NotImplementedError

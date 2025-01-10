@@ -31,6 +31,11 @@ const sidebarItem: menu[] = [
     to: '/extension'
   },
   {
+    title: '聊天',
+    icon: 'mdi-chat',
+    to: '/chat'
+  },
+  {
     title: '控制台',
     icon: 'mdi-console',
     to: '/console'
