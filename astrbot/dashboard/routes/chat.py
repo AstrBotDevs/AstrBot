@@ -68,8 +68,9 @@ class ChatRoute(Route):
             
             conversation = self.db.get_webchat_conversation_by_user_id(username, conversation_id)
             try:
-                history = json.loads(conversation['history'])
-            except BaseException:
+                history = json.loads(conversation.history)
+            except BaseException as e:
+                print(e)
                 history = []
             history.append({
                 'type': 'user',

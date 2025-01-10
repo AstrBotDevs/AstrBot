@@ -14,12 +14,13 @@ marked.setOptions({
     <v-card style="margin-bottom: 16px; width: 100%; background-color: #fff; height: 100%;">
         <v-card-text style="width: 100%; height: calc(100vh - 120px);">
             <div style="height: 100%; display: flex; gap: 16px;">
-                <div style="max-width: 120px;">
+                <div style="max-width: 200px;">
                     <!-- conversation -->
-                    <v-btn style="margin-bottom: 16px;" @click="newC">创建对话</v-btn>
-                    <v-btn style="margin-bottom: 16px;" v-if="currCid" @click="deleteConversation(currCid)" color="error">删除对话</v-btn>
+                    <v-btn variant="tonal" rounded="xl" style="margin-bottom: 16px; min-width: 200px;" @click="newC" :disabled="!currCid">+ 创建对话</v-btn>
+                    
                     <v-card class="mx-auto" min-width="200">
                         <v-list dense nav
+                        rounded="xl"
                         v-if="conversations.length > 0"
                         @update:selected="getConversationMessages"
                         >
@@ -36,6 +37,8 @@ marked.setOptions({
                         </v-list-item>
                         </v-list>
                     </v-card>
+
+                    <v-btn variant="tonal" rounded="xl" style="position: fixed; bottom: 48px; margin-bottom: 16px; min-width: 200px;" v-if="currCid" @click="deleteConversation(currCid)" color="error">删除此对话</v-btn>
                 </div>
                 <div style="height: 100%; width: 100%;">
                     <div style="height: calc(100% - 64px); overflow-y: auto; padding: 16px; " ref="messageContainer">
