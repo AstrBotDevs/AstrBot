@@ -1,10 +1,11 @@
 import time
 import asyncio
 import uuid
+import os
 from typing import Awaitable, Any
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import *  # noqa: F403
+from astrbot.api.message_components import Plain, Image  # noqa: F403
 from astrbot.api import logger
 from astrbot.core import web_chat_queue, web_chat_back_queue
 from .webchat_event import WebChatMessageEvent
@@ -29,6 +30,7 @@ class WebChatAdapter(Platform):
         self.config = platform_config
         self.settings = platform_settings
         self.unique_session = platform_settings['unique_session']
+        self.imgs_dir = "data/webchat/imgs"
 
         self.metadata = PlatformMetadata(
             "webchat",
@@ -45,7 +47,7 @@ class WebChatAdapter(Platform):
         await super().send_by_session(session, message_chain)
         
     async def convert_message(self, data: tuple) -> AstrBotMessage:
-        username, cid, message = data
+        username, cid, payload = data
         
         
         abm = AstrBotMessage()
@@ -58,8 +60,20 @@ class WebChatAdapter(Platform):
         abm.session_id = f"webchat!{username}!{cid}"
         
         abm.message_id = str(uuid.uuid4())
-        abm.message = [Plain(message)]
-        message_str = message
+        abm.message = []
+        
+        if payload['message']:
+            abm.message.append(Plain(payload['message']))
+        if payload['image_url']:
+            if isinstance(payload['image_url'], list):
+                for img in payload['image_url']:
+                    abm.message.append(Image.fromFileSystem(os.path.join(self.imgs_dir, img)))
+            else:
+                abm.message.append(Image.fromFileSystem(os.path.join(self.imgs_dir, payload['image_url'])))
+            
+        logger.debug(f"WebChatAdapter: {abm.message}")
+        
+        message_str = payload['message']
         abm.timestamp = int(time.time())
         abm.message_str = message_str
         abm.raw_message = data

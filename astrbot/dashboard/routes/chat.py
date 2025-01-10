@@ -16,7 +16,8 @@ class ChatRoute(Route):
             '/chat/conversations': ('GET', self.get_conversations),
             '/chat/get_conversation': ('GET', self.get_conversation),
             '/chat/delete_conversation': ('GET', self.delete_conversation),
-            '/chat/get_file': ('GET', self.get_file)
+            '/chat/get_file': ('GET', self.get_file),
+            '/chat/post_image': ('POST', self.post_image)
         }
         self.db = db
         self.register_routes()
@@ -32,25 +33,43 @@ class ChatRoute(Route):
                 return QuartResponse(f.read(), mimetype="image/jpeg")
         except FileNotFoundError:
             return Response().error("File not found").__dict__
+        
+    async def post_image(self):
+        post_data = await request.files
+        if 'file' not in post_data:
+            return Response().error("Missing key: file").__dict__
+        
+        file = post_data['file']
+        filename = str(uuid.uuid4()) + ".jpg"
+        path = os.path.join(self.imgs_dir, filename)
+        await file.save(path)
+        
+        return Response().ok(data={
+            'filename': filename
+        }).__dict__
 
     async def chat(self):
         username = g.get('username', 'guest')
         
         post_data = await request.json
-        if 'message' not in post_data:
-            return Response().error("Missing key: message").__dict__
+        if 'message' not in post_data and 'image_url' not in post_data:
+            return Response().error("Missing key: message or image_url").__dict__
         
         if 'conversation_id' not in post_data:
             return Response().error("Missing key: conversation_id").__dict__
         
         message = post_data['message']
         conversation_id = post_data['conversation_id']
-        if not message:
-            return Response().error("Message is empty").__dict__
+        image_url = post_data.get('image_url')
+        if not message and not image_url:
+            return Response().error("Message and image_url are empty").__dict__
         if not conversation_id:
             return Response().error("conversation_id is empty").__dict__
         
-        await web_chat_queue.put((username, conversation_id, message))
+        await web_chat_queue.put((username, conversation_id, {
+            'message': message,
+            'image_url': image_url # list
+        }))
         
         async def stream():
             ret = []
@@ -72,14 +91,14 @@ class ChatRoute(Route):
             except BaseException as e:
                 print(e)
                 history = []
-            history.append({
+            
+            new_his = {
                 'type': 'user',
                 'message': message
-            })
-            # history.append({
-            #     'type': 'bot',
-            #     'message': ret
-            # })
+            }
+            if image_url:
+                new_his['image_url'] = image_url
+            history.append(new_his)
             for r in ret:
                 history.append({
                     'type': 'bot',

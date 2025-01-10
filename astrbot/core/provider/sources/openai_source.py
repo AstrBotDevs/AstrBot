@@ -209,6 +209,8 @@ class ProviderOpenAIOfficial(Provider):
                     image_path = await download_image_by_url(image_url)
                     image_data = await self.encode_image_bs64(image_path)
                 else:
+                    if image_url.startswith("file:///"):
+                        image_url = image_url.replace("file:///", "")
                     image_data = await self.encode_image_bs64(image_url)
                 user_content["content"].append({"type": "image_url", "image_url": {"url": image_data}})
             return user_content
