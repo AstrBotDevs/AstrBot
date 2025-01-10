@@ -23,6 +23,7 @@
     "date-fns": "2.30.0",
     "js-md5": "^0.8.3",
     "lodash": "4.17.21",
+    "marked": "^15.0.6",
     "pinia": "2.1.6",
     "remixicon": "3.5.0",
     "vee-validate": "4.11.3",

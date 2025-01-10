@@ -52,3 +52,14 @@ class ATRIVision():
     session_id: str
     sender_nickname: str
     timestamp: int = -1
+    
+    
+
+@dataclass
+class WebChatConversation():
+    user_id: str
+    cid: str
+    history: str = ""
+    created_at: int = 0
+    updated_at: int = 0
+    

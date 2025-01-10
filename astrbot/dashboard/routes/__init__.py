@@ -5,6 +5,7 @@ from .update import UpdateRoute
 from .stat import StatRoute
 from .log import LogRoute
 from .static_file import StaticFileRoute
+from .chat import ChatRoute
 
 
 __all__ = [
@@ -14,6 +15,7 @@ __all__ = [
     "UpdateRoute",
     "StatRoute",
     "LogRoute",
-    "StaticFileRoute"
+    "StaticFileRoute",
+    "ChatRoute",
 ]
 

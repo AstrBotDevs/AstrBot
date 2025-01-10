@@ -2,7 +2,7 @@ import logging
 import jwt
 import asyncio
 import os
-from quart import Quart, request, jsonify
+from quart import Quart, request, jsonify, g
 from quart.logging import default_handler
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from .routes import *
@@ -31,11 +31,14 @@ class AstrBotDashboard():
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context)
+        self.chat_route = ChatRoute(self.context, db)
         
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
             return
         if request.path == "/api/auth/login":
+            return
+        if request.path == "/api/chat/get_file":
             return
         # claim jwt
         token = request.headers.get("Authorization")
@@ -46,7 +49,8 @@ class AstrBotDashboard():
         if token.startswith("Bearer "):
             token = token[7:]
         try:
-            jwt.decode(token, WEBUI_SK, algorithms=["HS256"])
+            payload = jwt.decode(token, WEBUI_SK, algorithms=["HS256"])
+            g.username = payload["username"]
         except jwt.ExpiredSignatureError:
             r = jsonify(Response().error("Token 过期").__dict__)
             r.status_code = 401

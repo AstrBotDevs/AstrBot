@@ -36,3 +36,11 @@ CREATE TABLE IF NOT EXISTS atri_vision(
     sender_nickname VARCHAR(32),
     timestamp INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS webchat_conversation(
+    user_id TEXT,
+    cid TEXT,
+    history TEXT,
+    created_at INTEGER,
+    updated_at INTEGER
+);
