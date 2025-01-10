@@ -2,8 +2,6 @@ import os
 import asyncio
 import sys
 import mimetypes
-import aiohttp
-import zipfile
 from astrbot.dashboard import AstrBotDashBoardLifecycle
 from astrbot.core import db_helper
 from astrbot.core import logger, LogManager, LogBroker

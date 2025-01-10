@@ -9,7 +9,7 @@ from types import ModuleType
 from typing import List
 from pip import main as pip_main
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core import logger, sp
+from astrbot.core import logger, sp, pip_installer
 from .context import Context
 from . import StarMetadata
 from .updator import PluginUpdator
@@ -92,20 +92,11 @@ class PluginManager:
             plugin_path = os.path.join(plugin_dir, p)
             if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
                 pth = os.path.join(plugin_path, "requirements.txt")
-                logger.info(f"正在检查插件 {p} 的依赖: {pth}")
+                logger.info(f"正在安装插件 {p} 所需的依赖库: {pth}")
                 try:
-                    self._update_plugin_dept(os.path.join(plugin_path, "requirements.txt"))
+                    pip_installer.install(requirements_path=pth)
                 except Exception as e:
                     logger.error(f"更新插件 {p} 的依赖失败。Code: {str(e)}")
-
-    def _update_plugin_dept(self, path):
-        '''更新插件的依赖'''
-        args = ['install', '-r', path, '--trusted-host', 'mirrors.aliyun.com', '-i', 'https://mirrors.aliyun.com/pypi/simple/']
-        if self.config.pip_install_arg:
-            args.extend([self.config.pip_install_arg])
-        result_code = pip_main(args)
-        if result_code != 0:
-            raise Exception(str(result_code))  
 
     def _load_plugin_metadata(self, plugin_path: str, plugin_obj = None) -> StarMetadata:
         '''v3.4.0 以前的方式载入插件元数据

@@ -9,8 +9,8 @@ import axios from 'axios';
 
 <template>
   <v-row>
-    <v-alert style="margin: 16px" text="1. 如果因为网络问题安装失败，可以前往 配置->其他配置->插件仓库镜像 修改安装镜像源。2. 如需插件帮助请点击 `仓库` 查看 README"
-      title="💡小提示" type="info" variant="tonal">
+    <v-alert style="margin: 16px" text="1. 如果因为网络问题安装失败，可以自行前往仓库下载压缩包，然后从本地上传。2. 如需插件帮助请点击 `仓库` 查看 README"
+      title="💡提示" type="info" variant="tonal">
     </v-alert>
     <v-col cols="12" md="12">
       <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
@@ -80,7 +80,7 @@ import axios from 'axios';
     </v-card>
   </v-dialog>
 
-  <v-dialog v-model="dialog" persistent width="700">
+  <v-dialog v-model="dialog" width="700">
     <template v-slot:activator="{ props }">
       <v-btn v-bind="props" icon="mdi-plus" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
         color="darkprimary">

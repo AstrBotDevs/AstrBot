@@ -3,7 +3,7 @@ import traceback
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core.updator import AstrBotUpdator
-from astrbot.core import logger
+from astrbot.core import logger, pip_installer
 
 class UpdateRoute(Route):
     def __init__(self, context: RouteContext, astrbot_updator: AstrBotUpdator) -> None:
@@ -11,6 +11,7 @@ class UpdateRoute(Route):
         self.routes = {
             '/update/check': ('GET', self.check_update),
             '/update/do': ('POST', self.update_project),
+            '/update/pip-install': ('POST', self.install_pip_package)
         }
         self.astrbot_updator = astrbot_updator
         self.register_routes()
@@ -47,4 +48,16 @@ class UpdateRoute(Route):
                 return Response().ok(None, "更新成功，AstrBot 将在下次启动时应用新的代码。").__dict__
         except Exception as e:
             logger.error(f"/api/update_project: {traceback.format_exc()}")
+            return Response().error(e.__str__()).__dict__
+        
+    async def install_pip_package(self):
+        data = await request.json
+        package = data.get('package', '')
+        if not package:
+            return Response().error("缺少参数 package 或不合法。").__dict__
+        try:
+            pip_installer.install(package)
+            return Response().ok(None, "安装成功。").__dict__
+        except Exception as e:
+            logger.error(f"/api/update_pip: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__

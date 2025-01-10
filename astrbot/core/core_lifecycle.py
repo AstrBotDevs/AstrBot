@@ -3,6 +3,7 @@ import time
 import threading
 import os
 from .event_bus import EventBus
+from . import astrbot_config
 from asyncio import Queue
 from typing import List
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -21,7 +22,7 @@ from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 class AstrBotCoreLifecycle:
     def __init__(self, log_broker: LogBroker, db: BaseDatabase):
         self.log_broker = log_broker
-        self.astrbot_config = AstrBotConfig()
+        self.astrbot_config = astrbot_config
         self.db = db
         
         if self.astrbot_config['http_proxy']:
