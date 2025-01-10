@@ -1,4 +1,5 @@
 import json
+from astrbot.core import logger
 from aiohttp import ClientSession
 from typing import Dict, List, Any, AsyncGenerator
 
@@ -29,11 +30,18 @@ class DifyAPIClient:
         async with self.session.post(
             url, json=payload, headers=self.headers, timeout=timeout
         ) as resp:
-            async for data in resp.content:
+            while True:
+                data = await resp.content.read(8192) # 防止数据过大导致高水位报错
+                if not data:
+                    break
                 if not data.strip():
                     continue
-                if data.startswith(b"data:"):
-                    yield json.loads(data[5:])
+                elif data.startswith(b"data:"):
+                    try:
+                        json_ = json.loads(data[5:])
+                        yield json_
+                    except BaseException:
+                        pass
                     
     async def workflow_run(
         self,
@@ -50,11 +58,18 @@ class DifyAPIClient:
         async with self.session.post(
             url, json=payload, headers=self.headers, timeout=timeout
         ) as resp:
-            async for data in resp.content:
+            while True:
+                data = await resp.content.read(8192) # 防止数据过大导致高水位报错
+                if not data:
+                    break
                 if not data.strip():
                     continue
-                if data.startswith(b"data:"):
-                    yield json.loads(data[5:])
+                elif data.startswith(b"data:"):
+                    try:
+                        json_ = json.loads(data[5:])
+                        yield json_
+                    except BaseException:
+                        pass
                     
     async def file_upload(
         self,
@@ -70,9 +85,6 @@ class DifyAPIClient:
             url, data=payload, headers=self.headers
         ) as resp:
             return await resp.json() # {"id": "xxx", ...}
-        
-        
-        
                 
     async def close(self):
         await self.session.close()

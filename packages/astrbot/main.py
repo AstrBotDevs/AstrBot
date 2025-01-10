@@ -56,6 +56,10 @@ class Main(star.Star):
 /persona: 情境人格设置
 /tool ls: 查看、激活、停用当前注册的函数工具
 
+[其他]
+/set <变量名> <值>: 为当前会话定义一个变量。适用于 Dify 工作流输入。
+/unset <变量名>: 删除当前会话的变量。
+
 提示：如果要查看插件指令，请输入 /plugin 查看具体信息。
 {notice}"""
 
@@ -365,12 +369,35 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             req.system_prompt += f"\nCurrent datetime: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
         if provider.curr_personality['prompt']:
             req.system_prompt += f"\n{provider.curr_personality['prompt']}"
-            
-    @filter.event_message_type(filter.EventMessageType.OTHER_MESSAGE)
-    async def other_message(self, event: AstrMessageEvent):
-        print("triggered")
-        event.stop_event()
         
+    @filter.command("set")
+    async def set_variable(self, event: AstrMessageEvent, key: str, value: str):
+        session_id = event.get_session_id()
+        session_vars = sp.get("session_variables", {})
+        
+        session_var = session_vars.get(session_id, {})
+        session_var[key] = value
+        
+        session_vars[session_id] = session_var
+        
+        sp.put("session_variables", session_vars)
+        
+        yield event.plain_result(f"会话 {session_id} 变量 {key} 存储成功。")
+        
+    @filter.command("unset")
+    async def unset_variable(self, event: AstrMessageEvent, key: str):
+        session_id = event.get_session_id()
+        session_vars = sp.get("session_variables", {})
+        
+        session_var = session_vars.get(session_id, {})
+        
+        if key not in session_var:
+            yield event.plain_result("没有那个变量名。")
+        else:
+            del session_var[key]
+            sp.put("session_variables", session_vars)
+            yield event.plain_result(f"会话 {session_id} 变量 {key} 移除成功。")
+                
     @filter.command_group("kdb")
     def kdb(self):
         pass

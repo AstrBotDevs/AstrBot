@@ -6,8 +6,7 @@ from astrbot.core.db import BaseDatabase
 from ..register import register_provider_adapter
 from astrbot.core.utils.dify_api_client import DifyAPIClient
 from astrbot.core.utils.io import download_image_by_url
-from astrbot.core import logger
-
+from astrbot.core import logger, sp
 
 @register_provider_adapter("dify", "Dify APP 适配器。")
 class ProviderDify(Provider):
@@ -67,10 +66,16 @@ class ProviderDify(Provider):
             
         logger.debug(files_payload)
         
+        # 获得会话变量
+        session_vars = sp.get("session_variables", {})
+        session_var = session_vars.get(session_id, {})
+        
         match self.api_type:
             case "chat" | "agent":
                 async for chunk in self.api_client.chat_messages(
-                    inputs={},
+                    inputs={
+                        **session_var
+                    },
                     query=prompt,
                     user=session_id,
                     conversation_id=conversation_id,
@@ -88,7 +93,8 @@ class ProviderDify(Provider):
                 async for chunk in self.api_client.workflow_run(
                     inputs={
                         "astrbot_text_query": prompt,
-                        "astrbot_session_id": session_id
+                        "astrbot_session_id": session_id,
+                        **session_var
                     },
                     user=session_id,
                     files=files_payload
