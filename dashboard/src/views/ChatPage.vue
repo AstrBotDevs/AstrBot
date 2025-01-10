@@ -43,9 +43,17 @@ marked.setOptions({
                 <div style="height: 100%; width: 100%;">
                     <div style="height: calc(100% - 64px); overflow-y: auto; padding: 16px; " ref="messageContainer">
                         <div class="fade-in" v-if="messages.length == 0"
-                            style="height: 100%; display: flex; justify-content: center; align-items: center;">
-                            <span style="font-size: 28px;">Hello, I'm</span>
-                            <span style="font-weight: 1000; font-size: 28px; margin-left: 8px;">AstrBot ⭐</span>
+                            style="height: 100%; display: flex; justify-content: center; align-items: center; flex-direction: column;">
+                            <div>
+                                <span style="font-size: 28px;">Hello, I'm</span>
+                                <span style="font-weight: 1000; font-size: 28px; margin-left: 8px;">AstrBot ⭐</span>
+                            </div>
+                            <div style="margin-top: 8px; color: #aaa;">
+                                <span >输入</span>
+                                <span style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">/help</span>
+                                <span >获取帮助 😊</span>
+                            </div>
+                            
                         </div>
                         <div v-else style="max-height: 100%; padding: 16px; max-width: 700px; margin: 0 auto;">
                             <div class="fade-in" v-for="(msg, index) in messages" :key="index"
