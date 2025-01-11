@@ -1,6 +1,11 @@
 
 <p align="center">
-<img width=200 src="https://github.com/user-attachments/assets/3dd6a669-0830-4db4-b821-c8b279ea19a6"/>
+
+
+<img src="https://github.com/user-attachments/assets/2f13241f-f5c2-4164-8111-6e617c073c2c" width=500>
+
+
+
 </p>
 
 <div align="center">
@@ -26,7 +31,8 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 ## ✨ 多消息平台部署
 
 1. QQ 群、QQ 频道、微信个人号、Telegram。
-2. 支持文本转图片，Markdown 渲染。
+2. 内置 Web Chat，即使不部署到消息平台也能聊天。
+3. 支持文本转图片，Markdown 渲染。
    
 ## ✨ 多 LLM 配置
 
@@ -121,4 +127,6 @@ _✨ 内置 Web Chat，在线与机器人交互 ✨_
 3. 表情包理解与回复
 4. TTS
     -->
+
+_アトリは、高性能ですから!_
 
