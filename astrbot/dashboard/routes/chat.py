@@ -116,7 +116,11 @@ class ChatRoute(Route):
         async def stream():
             ret = []
             while True:
-                result = await web_chat_back_queue.get()
+                try:
+                    result = await asyncio.wait_for(web_chat_back_queue.get(), timeout=30)  # 设置超时时间为5秒
+                except asyncio.TimeoutError:
+                    yield '[Error] 30 秒内没有返回数据，已放弃。\n'
+                    return
                 
                 if result is None:
                     break

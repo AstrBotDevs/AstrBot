@@ -64,6 +64,8 @@ class ProviderManager():
                 continue
             selected_provider_id = sp.get("curr_provider")
             selected_stt_provider_id = self.provider_stt_settings.get("provider_id")
+            provider_enabled = self.provider_settings.get("enable", False)
+            stt_enabled = self.provider_stt_settings.get("enable", False)
             
             provider_metadata = provider_cls_map[provider_config['type']]
             logger.info(f"尝试实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器 ...")
@@ -74,7 +76,7 @@ class ProviderManager():
                     # STT 任务
                     inst = provider_metadata.cls_type(provider_config, self.provider_settings)
                     self.stt_provider_insts.append(inst)
-                    if selected_stt_provider_id == provider_config['id']:
+                    if selected_stt_provider_id == provider_config['id'] and stt_enabled:
                         self.curr_stt_provider_inst = inst
                         logger.info(f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。")
                     
@@ -82,7 +84,7 @@ class ProviderManager():
                     # 文本生成任务
                     inst = provider_metadata.cls_type(provider_config, self.provider_settings, self.db_helper, self.provider_settings.get('persistant_history', True))
                     self.provider_insts.append(inst)
-                    if selected_provider_id == provider_config['id']:
+                    if selected_provider_id == provider_config['id'] and provider_enabled:
                         self.curr_provider_inst = inst
                         logger.info(f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。")
                         
@@ -90,10 +92,10 @@ class ProviderManager():
                 traceback.print_exc()
                 logger.error(f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}")
         
-        if len(self.provider_insts) > 0 and not self.curr_provider_inst:
+        if len(self.provider_insts) > 0 and not self.curr_provider_inst and provider_enabled:
             self.curr_provider_inst = self.provider_insts[0]
             
-        if len(self.stt_provider_insts) > 0 and not self.curr_stt_provider_inst:
+        if len(self.stt_provider_insts) > 0 and not self.curr_stt_provider_inst and stt_enabled:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
             
         if not self.curr_provider_inst:
