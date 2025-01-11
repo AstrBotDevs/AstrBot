@@ -323,13 +323,26 @@ CONFIG_METADATA_2 = {
                     "whisper(API)": {
                         "id": "whisper",
                         "type": "openai_whisper_api",
-                        "enable": True,
+                        "enable": False,
                         "api_key": "",
                         "api_base": "",
                         "model": "whisper-1",
+                    },
+                    "whisper(本地加载)": {
+                        "whisper_hint": "(不用修改我)",
+                        "enable": False,
+                        "id": "whisper",
+                        "type": "openai_whisper_selfhost",
+                        "model": "tiny",
                     }
                 },
                 "items": {
+                    "whisper_hint": {
+                        "description": "本地部署 Whisper 模型须知",
+                        "type": "string",
+                        "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
+                        "obvious_hint": True
+                    },
                     "id": {
                         "description": "ID",
                         "type": "string",

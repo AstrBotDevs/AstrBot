@@ -13,12 +13,12 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain):
         if not message:
-            await web_chat_back_queue.put_nowait(None)
+            web_chat_back_queue.put_nowait(None)
             return
         
         for comp in message.chain:
             if isinstance(comp, Plain):
-                await web_chat_back_queue.put_nowait(comp.text)
+                web_chat_back_queue.put_nowait(comp.text)
             elif isinstance(comp, Image):
                 # save image to local
                 filename = str(uuid.uuid4()) + ".jpg"
@@ -30,6 +30,6 @@ class WebChatMessageEvent(AstrMessageEvent):
                             f.write(f2.read())
                 elif comp.file and comp.file.startswith("http"):
                     await download_image_by_url(comp.file, path=path)
-                await web_chat_back_queue.put_nowait(f"[IMAGE]{filename}")
-        await web_chat_back_queue.put_nowait(None)
+                web_chat_back_queue.put_nowait(f"[IMAGE]{filename}")
+        web_chat_back_queue.put_nowait(None)
         await super().send(message)

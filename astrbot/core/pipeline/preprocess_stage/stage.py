@@ -43,8 +43,9 @@ class PreProcessStage(Stage):
                                     event.message_str += result
                                     event.message_obj.message_str += result
                                 break
-                            except FileNotFoundError:
+                            except FileNotFoundError as e:
                                 # napcat workaround
+                                logger.warning(e)
                                 logger.warning(f"语音文件不存在: {path}, 重试中: {i + 1}/{retry}")
                                 await asyncio.sleep(0.5)
                                 continue
