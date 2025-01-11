@@ -49,6 +49,12 @@ marked.setOptions({
                                     style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">/help</span>
                                 <span>获取帮助 😊</span>
                             </div>
+                            <div style="margin-top: 8px; color: #aaa;">
+                                <span>按</span>
+                                <span
+                                    style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">K</span>
+                                <span>开始语音 🎤</span>
+                            </div>
 
                         </div>
                         <div v-else style="max-height: 100%; padding: 16px; max-width: 700px; margin: 0 auto;">
@@ -90,15 +96,21 @@ marked.setOptions({
 
                             <v-text-field id="input-field" variant="outlined" v-model="prompt" :label="inputFieldLabel"
                                 placeholder="Start typing..." loading clear-icon="mdi-close-circle" clearable
-                                @click:clear="clearMessage" @keyup.enter="sendMessage"
+                                @click:clear="clearMessage"
                                 style="width: 100%; max-width: 850px;">
                                 <template v-slot:loader>
-                                    <v-progress-linear :active="loadingChat" :color="color" height="6"
+                                    <v-progress-linear :active="loadingChat" height="6"
                                         indeterminate></v-progress-linear>
                                 </template>
 
                                 <template v-slot:append>
-                                    <v-icon @click="sendMessage" size="35" icon="mdi-arrow-up-circle" />
+                                    <v-tooltip text="发送">
+                                        <template v-slot:activator="{ props }">
+                                            <v-icon v-bind="props" @click="sendMessage" size="35" icon="mdi-arrow-up-circle" />
+                                        </template>
+                                    </v-tooltip>
+                                    
+                                    
                                     <v-tooltip text="语音输入">
                                         <template v-slot:activator="{ props }">
                                             <v-icon :color="isRecording ? 'error' : ''" v-bind="props" @click="isRecording ? stopRecording() : startRecording()" size="35" icon="mdi-record-circle" />
@@ -161,6 +173,18 @@ export default {
         this.getConversations();
         let inputField = document.getElementById('input-field');
         inputField.addEventListener('paste', this.handlePaste);
+        inputField.addEventListener('keydown', function (e) {
+            console.log(e);
+            if (e.keyCode == 13 && !e.shiftKey) {
+                e.preventDefault();
+                this.sendMessage();
+            }
+        }.bind(this));
+        document.addEventListener('keydown', function (e) {
+            if (e.keyCode == 75) {
+                this.isRecording ? this.stopRecording() : this.startRecording();
+            }
+        }.bind(this));
     },
 
     methods: {
