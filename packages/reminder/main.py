@@ -34,7 +34,7 @@ class Main(star.Star):
                     self.scheduler.add_job(
                         self._reminder_callback, 
                         trigger='date', 
-                        args=[reminder["text"], reminder], 
+                        args=[group, reminder], 
                         run_date=datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M"),
                         misfire_grace_time=60
                     )
@@ -42,7 +42,7 @@ class Main(star.Star):
                     self.scheduler.add_job(
                         self._reminder_callback, 
                         trigger='cron', 
-                        args=[reminder["text"], reminder], 
+                        args=[group, reminder], 
                         misfire_grace_time=60,
                         **self._parse_cron_expr(reminder["cron"])
                     )
