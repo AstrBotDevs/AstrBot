@@ -35,6 +35,7 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 3. 支持 LLMTuner 载入微调模型。
 4. 支持 Ollama 载入自部署模型。
 4. 支持网页搜索（Web Search）、自然语言待办提醒。
+5. 支持 Whisper 语音转文字
 
 ## ✨ 管理面板
 
@@ -55,55 +56,11 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 > 文件输入/输出目前仅支持 Napcat（QQ）
 
 <div align='center'>
-<img src="https://github.com/user-attachments/assets/700a545e-7450-4f23-90ff-af6d0d60e501" height=300>
 
-<img src="https://github.com/user-attachments/assets/0b0c5344-e98b-4902-92ad-fe9f0bb10c2a" height=300>
-
-<img src="https://github.com/user-attachments/assets/b9b98ff4-8630-46fb-9a39-ecbad9d601ae" height=300>
-
-<img src="https://github.com/user-attachments/assets/9fe6e44c-e4f6-4347-9d5f-281677d47feb" height=300>
+<img src="https://github.com/user-attachments/assets/4ee688d9-467d-45c8-99d6-368f9a8a92d8" width="600">
 
 </div>
 
-
-
-## ✨ Demo
-
-<div align='center'>
-
-<img src="https://github.com/user-attachments/assets/0378f407-6079-4f64-ae4c-e97ab20611d2" height=500>
-
-_✨ 多模态、网页搜索、长文本转图片（可配置） ✨_
-
-<img src="https://github.com/user-attachments/assets/8ec12797-e70f-460a-959e-48eca39ca2bb" height=100>
-
-_✨ 自然语言待办事项 ✨_
-
-<img src="https://github.com/user-attachments/assets/e137a9e1-340a-4bf2-bb2b-771132780735" height=150>
-<img src="https://github.com/user-attachments/assets/480f5e82-cf6a-4955-a869-0d73137aa6e1" height=150>
-
-_✨ 插件系统——部分插件展示 ✨_
-
-<img src="https://github.com/user-attachments/assets/caadf2bd-a0ee-43d0-a95e-566d63e3e34d" height=330>
-<img src="https://github.com/user-attachments/assets/b418f281-e920-49db-9fe1-d6a13ce28a84" height=350>
-
-_✨ 管理面板 ✨_
-
-
-
-
-</div>
-
-
-<!-- ## ✨ ATRI [Beta 测试]
-
-该功能作为插件载入。插件仓库地址：[astrbot_plugin_atri](https://github.com/Soulter/astrbot_plugin_atri)
-
-1. 基于《ATRI ~ My Dear Moments》主角 ATRI 角色台词作为微调数据集的 `Qwen1.5-7B-Chat Lora` 微调模型。
-2. 长期记忆
-3. 表情包理解与回复
-4. TTS
-    -->
 ## ✨ 云部署
 
 [![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
@@ -124,3 +81,44 @@ _✨ 管理面板 ✨_
 - Star 这个项目！
 - 在[爱发电](https://afdian.com/a/soulter)支持我！
 - 在[微信](https://drive.soulter.top/f/pYfA/d903f4fa49a496fda3f16d2be9e023b5.png)支持我~
+
+
+
+## ✨ Demo
+
+<div align='center'>
+
+<img src="https://github.com/user-attachments/assets/0378f407-6079-4f64-ae4c-e97ab20611d2" height=500>
+
+_✨ 多模态、网页搜索、长文本转图片（可配置） ✨_
+
+<img src="https://github.com/user-attachments/assets/8ec12797-e70f-460a-959e-48eca39ca2bb" height=100>
+
+_✨ 自然语言待办事项 ✨_
+
+<img src="https://github.com/user-attachments/assets/e137a9e1-340a-4bf2-bb2b-771132780735" height=150>
+<img src="https://github.com/user-attachments/assets/480f5e82-cf6a-4955-a869-0d73137aa6e1" height=150>
+
+_✨ 插件系统——部分插件展示 ✨_
+
+<img src="https://github.com/user-attachments/assets/592a8630-14c7-4e06-b496-9c0386e4f36c" width=600>
+
+_✨ 管理面板 ✨_
+
+![webchat](https://drive.soulter.top/f/vlsA/ezgif-5-fb044b2542.gif)
+
+_✨ 内置 Web Chat，在线与机器人交互 ✨_
+
+</div>
+
+
+<!-- ## ✨ ATRI [Beta 测试]
+
+该功能作为插件载入。插件仓库地址：[astrbot_plugin_atri](https://github.com/Soulter/astrbot_plugin_atri)
+
+1. 基于《ATRI ~ My Dear Moments》主角 ATRI 角色台词作为微调数据集的 `Qwen1.5-7B-Chat Lora` 微调模型。
+2. 长期记忆
+3. 表情包理解与回复
+4. TTS
+    -->
+
