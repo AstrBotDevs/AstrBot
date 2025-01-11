@@ -33,6 +33,10 @@ DEFAULT_CONFIG = {
         "default_personality": "如果用户寻求帮助或者打招呼，请告诉他可以用 /help 查看 AstrBot 帮助。",
         "prompt_prefix": "",
     },
+    "provider_stt_settings": {
+      "enable": False,
+      "provider_id": "",  
+    },
     "content_safety": {
         "internal_keywords": {"enable": True, "extra_keywords": []},
         "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
@@ -315,9 +319,30 @@ CONFIG_METADATA_2 = {
                         "dify_api_key": "",
                         "dify_api_base": "https://api.dify.ai/v1",
                         "dify_workflow_output_key": "",
+                    },
+                    "whisper(API)": {
+                        "id": "whisper",
+                        "type": "openai_whisper_api",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "",
+                        "model": "whisper-1",
+                    },
+                    "whisper(本地加载)": {
+                        "whisper_hint": "(不用修改我)",
+                        "enable": False,
+                        "id": "whisper",
+                        "type": "openai_whisper_selfhost",
+                        "model": "tiny",
                     }
                 },
                 "items": {
+                    "whisper_hint": {
+                        "description": "本地部署 Whisper 模型须知",
+                        "type": "string",
+                        "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
+                        "obvious_hint": True
+                    },
                     "id": {
                         "description": "ID",
                         "type": "string",
@@ -416,7 +441,8 @@ CONFIG_METADATA_2 = {
                     "enable": {
                         "description": "启用大语言模型聊天",
                         "type": "bool",
-                        "hint": "是否启用大语言模型聊天。默认启用",
+                        "hint": "如需切换大语言模型提供商，请使用 `/provider` 命令。",
+                        "obvious_hint": True
                     },
                     "wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀",
@@ -447,6 +473,23 @@ CONFIG_METADATA_2 = {
                         "description": "Prompt 前缀文本",
                         "type": "string",
                         "hint": "添加之后，会在每次对话的 Prompt 前加上此文本。",
+                    },
+                },
+            },
+            "provider_stt_settings": {
+                "description": "语音转文本(STT)",
+                "type": "object",
+                "items": {
+                    "enable": {
+                        "description": "启用语音转文本(STT)",
+                        "type": "bool",
+                        "hint": "启用前请在 服务提供商配置 处创建支持 语音转文本任务 的提供商。如 whisper。",
+                        "obvious_hint": True
+                    },
+                    "provider_id": {
+                        "description": "提供商 ID，不填则默认第一个STT提供商",
+                        "type": "string",
+                        "hint": "语音转文本提供商 ID。如果不填写将使用载入的第一个提供商。",
                     },
                 },
             },

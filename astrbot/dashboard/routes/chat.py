@@ -6,9 +6,11 @@ from astrbot.core import web_chat_queue, web_chat_back_queue
 from quart import request, Response as QuartResponse, g
 from astrbot.core.db import BaseDatabase
 import asyncio
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+
 
 class ChatRoute(Route):
-    def __init__(self, context: RouteContext, db: BaseDatabase) -> None:
+    def __init__(self, context: RouteContext, db: BaseDatabase, core_lifecycle: AstrBotCoreLifecycle) -> None:
         super().__init__(context)
         self.routes = {
             '/chat/send': ('POST', self.chat),
@@ -17,11 +19,24 @@ class ChatRoute(Route):
             '/chat/get_conversation': ('GET', self.get_conversation),
             '/chat/delete_conversation': ('GET', self.delete_conversation),
             '/chat/get_file': ('GET', self.get_file),
-            '/chat/post_image': ('POST', self.post_image)
+            '/chat/post_image': ('POST', self.post_image),
+            '/chat/post_file': ('POST', self.post_file),
+            '/chat/status': ('GET', self.status),
         }
         self.db = db
+        self.core_lifecycle = core_lifecycle
         self.register_routes()
         self.imgs_dir = "data/webchat/imgs"
+        
+        self.supported_imgs = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+        
+    async def status(self):
+        has_llm_enabled = self.core_lifecycle.provider_manager.curr_provider_inst is not None
+        has_stt_enabled = self.core_lifecycle.provider_manager.curr_stt_provider_inst is not None
+        return Response().ok(data={
+            'llm_enabled': has_llm_enabled,
+            'stt_enabled': has_stt_enabled
+        }).__dict__
     
     async def get_file(self):
         filename = request.args.get('filename')
@@ -30,7 +45,13 @@ class ChatRoute(Route):
         
         try:
             with open(os.path.join(self.imgs_dir, filename), "rb") as f:
-                return QuartResponse(f.read(), mimetype="image/jpeg")
+                if filename.endswith(".wav"):
+                    return QuartResponse(f.read(), mimetype="audio/wav")
+                elif filename.split('.')[-1] in self.supported_imgs:
+                    return QuartResponse(f.read(), mimetype="image/jpeg")
+                else:
+                    return QuartResponse(f.read())
+                
         except FileNotFoundError:
             return Response().error("File not found").__dict__
         
@@ -41,6 +62,25 @@ class ChatRoute(Route):
         
         file = post_data['file']
         filename = str(uuid.uuid4()) + ".jpg"
+        path = os.path.join(self.imgs_dir, filename)
+        await file.save(path)
+        
+        return Response().ok(data={
+            'filename': filename
+        }).__dict__
+        
+    async def post_file(self):
+        post_data = await request.files
+        if 'file' not in post_data:
+            return Response().error("Missing key: file").__dict__
+        
+        file = post_data['file']
+        filename = f"{str(uuid.uuid4())}"
+        print(file)
+        # 通过文件格式判断文件类型
+        if file.content_type.startswith('audio'):
+            filename += ".wav"
+        
         path = os.path.join(self.imgs_dir, filename)
         await file.save(path)
         
@@ -61,20 +101,26 @@ class ChatRoute(Route):
         message = post_data['message']
         conversation_id = post_data['conversation_id']
         image_url = post_data.get('image_url')
-        if not message and not image_url:
-            return Response().error("Message and image_url are empty").__dict__
+        audio_url = post_data.get('audio_url')
+        if not message and not image_url and not audio_url:
+            return Response().error("Message and image_url and audio_url are empty").__dict__
         if not conversation_id:
             return Response().error("conversation_id is empty").__dict__
         
         await web_chat_queue.put((username, conversation_id, {
             'message': message,
-            'image_url': image_url # list
+            'image_url': image_url, # list
+            'audio_url': audio_url
         }))
         
         async def stream():
             ret = []
             while True:
-                result = await web_chat_back_queue.get()
+                try:
+                    result = await asyncio.wait_for(web_chat_back_queue.get(), timeout=30)  # 设置超时时间为5秒
+                except asyncio.TimeoutError:
+                    yield '[Error] 30 秒内没有返回数据，已放弃。\n'
+                    return
                 
                 if result is None:
                     break
@@ -98,6 +144,8 @@ class ChatRoute(Route):
             }
             if image_url:
                 new_his['image_url'] = image_url
+            if audio_url:
+                new_his['audio_url'] = audio_url
             history.append(new_his)
             for r in ret:
                 history.append({

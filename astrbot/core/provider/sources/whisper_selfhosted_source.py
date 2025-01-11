@@ -1,0 +1,92 @@
+import uuid
+import os
+import io
+import asyncio
+import whisper
+from ..provider import STTProvider
+from ..entites import ProviderType
+from astrbot.core.utils.io import download_file
+from ..register import register_provider_adapter
+from astrbot.core import logger
+
+
+@register_provider_adapter("openai_whisper_selfhost", "OpenAI Whisper 模型部署", provider_type=ProviderType.SPEECH_TO_TEXT)
+class ProviderOpenAIWhisperSelfHost(STTProvider):
+    def __init__(
+        self, 
+        provider_config: dict, 
+        provider_settings: dict,
+    ) -> None:
+        super().__init__(provider_config, provider_settings)
+        self.set_model(provider_config.get("model", None))
+        self.model = None
+    
+    async def initialize(self):
+        loop = asyncio.get_event_loop()
+        logger.info("下载或者加载 Whisper 模型中，这可能需要一些时间 ...")
+        self.model = await loop.run_in_executor(None, whisper.load_model, self.model_name)
+        logger.info("Whisper 模型加载完成。")
+        
+    async def _convert_audio(self, path: str) -> str:
+        from pyffmpeg import FFmpeg
+        filename = str(uuid.uuid4()) + '.mp3'
+        ff = FFmpeg()
+        output_path = ff.convert(path, os.path.join('data/temp', filename))
+        return output_path
+    
+    async def _pcm_to_wav(self, input_io: io.BytesIO, output_path: str) -> str:
+        import wave
+        
+        with wave.open(output_path, 'wb') as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(24000)
+            wav.writeframes(input_io.read())
+            
+        return output_path
+
+    async def _convert_silk(self, path: str) -> str:
+        import pysilk
+        filename = str(uuid.uuid4()) + '.wav'
+        output_path = os.path.join('data/temp', filename)
+        with open(path, "rb") as f:
+            input_data = f.read()
+            if input_data.startswith(b'\x02'):
+                # tencent 我爱你
+                input_data = input_data[1:]
+            input_io = io.BytesIO(input_data)
+            output_io = io.BytesIO()
+            pysilk.decode(input_io, output_io, 24000)
+            output_io.seek(0)
+            await self._pcm_to_wav(output_io, output_path)
+        
+        return output_path
+    
+    async def _is_silk_file(self, file_path):
+        silk_header = b"SILK"
+        with open(file_path, "rb") as f:
+            file_header = f.read(8)
+
+        if silk_header in file_header:
+            return True
+        else:
+            return False
+
+    async def get_text(self, audio_url: str) -> str:
+        loop = asyncio.get_event_loop()
+        if audio_url.startswith("http"):
+            name = str(uuid.uuid4())
+            path = os.path.join("data/temp", name)
+            audio_url = await download_file(audio_url, path)
+        
+        if not os.path.exists(audio_url):
+            raise FileNotFoundError(f"文件不存在: {audio_url}")
+        
+        if audio_url.endswith(".amr") or audio_url.endswith(".silk"):
+            is_silk = await self._is_silk_file(audio_url)
+            if is_silk:
+                logger.info("Converting silk file to wav ...")
+                audio_url = await self._convert_silk(audio_url)
+
+        result = await loop.run_in_executor(None, self.model.transcribe, audio_url)
+        return result['text']

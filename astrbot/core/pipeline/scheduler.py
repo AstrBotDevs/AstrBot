@@ -41,4 +41,8 @@ class PipelineScheduler():
     async def execute(self, event: AstrMessageEvent):
         '''执行 pipeline'''
         await self._process_stages(event)
+        
+        if not event._has_send_oper and event.get_platform_name() == "webchat":
+            await event.send(None)
+        
         logger.debug("pipeline 执行完毕。")

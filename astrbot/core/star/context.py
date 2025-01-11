@@ -17,10 +17,6 @@ from .filter.regex import RegexFilter
 from typing import Awaitable
 from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 
-class StarCommand(TypedDict):
-    full_command_name: str
-    command_name: str
-
 class Context:
     '''
     暴露给插件的接口上下文。
@@ -168,13 +164,13 @@ class Context:
     
     def register_provider(self, provider: Provider):
         '''
-        注册一个 LLM Provider。
+        注册一个 LLM Provider(Chat_Completion 类型)。
         '''
         self.provider_manager.provider_insts.append(provider)
         
     def get_provider_by_id(self, provider_id: str) -> Provider:
         '''
-        通过 ID 获取 LLM Provider。
+        通过 ID 获取 LLM Provider(Chat_Completion 类型)。
         '''
         for provider in self.provider_manager.provider_insts:
             if provider.meta().id == provider_id:
@@ -183,13 +179,13 @@ class Context:
     
     def get_all_providers(self) -> List[Provider]:
         '''
-        获取所有 LLM Provider。
+        获取所有 LLM Provider(Chat_Completion 类型)。
         '''
         return self.provider_manager.provider_insts
     
     def get_using_provider(self) -> Provider:
         '''
-        获取当前使用的 LLM Provider。
+        获取当前使用的 LLM Provider(Chat_Completion 类型)。
         
         通过 /provider 指令切换。
         '''

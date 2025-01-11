@@ -33,8 +33,6 @@
     "vue3-apexcharts": "1.4.4",
     "vue3-print-nb": "0.1.4",
     "vuetify": "3.3.14",
-    "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.8.0",
     "yup": "1.2.0"
   },
   "devDependencies": {

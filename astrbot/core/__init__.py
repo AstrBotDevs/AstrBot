@@ -20,6 +20,6 @@ if os.environ.get('TESTING', ""):
 db_helper = SQLiteDatabase(DB_PATH)
 sp = SharedPreferences() # 简单的偏好设置存储
 pip_installer = PipInstaller(astrbot_config.get('pip_install_arg', ''))
-web_chat_queue = asyncio.Queue()
-web_chat_back_queue = asyncio.Queue()
+web_chat_queue = asyncio.Queue(maxsize=32)
+web_chat_back_queue = asyncio.Queue(maxsize=32)
 WEBUI_SK = "Advanced_System_for_Text_Response_and_Bot_Operations_Tool"

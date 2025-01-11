@@ -5,7 +5,7 @@ import os
 from typing import Awaitable, Any
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image  # noqa: F403
+from astrbot.api.message_components import Plain, Image, Record  # noqa: F403
 from astrbot.api import logger
 from astrbot.core import web_chat_queue, web_chat_back_queue
 from .webchat_event import WebChatMessageEvent
@@ -70,6 +70,14 @@ class WebChatAdapter(Platform):
                     abm.message.append(Image.fromFileSystem(os.path.join(self.imgs_dir, img)))
             else:
                 abm.message.append(Image.fromFileSystem(os.path.join(self.imgs_dir, payload['image_url'])))
+        if payload['audio_url']:
+            if isinstance(payload['audio_url'], list):
+                for audio in payload['audio_url']:
+                    path = os.path.join(self.imgs_dir, audio)
+                    abm.message.append(Record(file=path, path=path))
+            else:
+                path = os.path.join(self.imgs_dir, payload['audio_url'])
+                abm.message.append(Record(file=path, path=path))
             
         logger.debug(f"WebChatAdapter: {abm.message}")
         

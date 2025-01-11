@@ -20,7 +20,7 @@ marked.setOptions({
                         :disabled="!currCid">+ 创建对话</v-btn>
 
                     <v-card class="mx-auto" min-width="200">
-                        <v-list dense nav rounded="xl" v-if="conversations.length > 0"
+                        <v-list dense nav v-if="conversations.length > 0" style="max-height: 500px; overflow-y: auto;"
                             @update:selected="getConversationMessages">
                             <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                 color="primary" rounded="xl">
@@ -31,12 +31,24 @@ marked.setOptions({
                         </v-list>
                     </v-card>
 
+                    <div>
+
+                        <v-chip class="mt-4" color="primary" :append-icon="status?.llm_enabled ? 'mdi-check' : 'mdi-close'">
+                            LLM
+                        </v-chip>
+
+                        <v-chip class="mt-4 ml-2" color="success" :append-icon="status?.stt_enabled ? 'mdi-check' : 'mdi-close'">
+                            语音转文本
+                        </v-chip>
+                    </div>
+
                     <v-btn variant="tonal" rounded="xl"
                         style="position: fixed; bottom: 48px; margin-bottom: 16px; min-width: 200px;" v-if="currCid"
                         @click="deleteConversation(currCid)" color="error">删除此对话</v-btn>
                 </div>
+
                 <div style="height: 100%; width: 100%;">
-                    <div style="height: calc(100% - 130px); overflow-y: auto; padding: 16px; " ref="messageContainer">
+                    <div style="height: calc(100% - 120px); overflow-y: auto; padding: 16px; " ref="messageContainer">
                         <div class="fade-in" v-if="messages.length == 0"
                             style="height: 100%; display: flex; justify-content: center; align-items: center; flex-direction: column;">
                             <div>
@@ -49,6 +61,12 @@ marked.setOptions({
                                     style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">/help</span>
                                 <span>获取帮助 😊</span>
                             </div>
+                            <div style="margin-top: 8px; color: #aaa;">
+                                <span>按</span>
+                                <span
+                                    style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">K</span>
+                                <span>开始语音 🎤</span>
+                            </div>
 
                         </div>
                         <div v-else style="max-height: 100%; padding: 16px; max-width: 700px; margin: 0 auto;">
@@ -58,12 +76,20 @@ marked.setOptions({
                                     <div
                                         style="padding: 12px; border-radius: 8px; background-color: rgba(94, 53, 177, 0.15)">
                                         <span>{{ msg.message }}</span>
-                                        <div style="display: flex; gap: 8px; margin-top: 8px;" v-if="msg.image_url && msg.image_url.length > 0">
+                                        <div style="display: flex; gap: 8px; margin-top: 8px;"
+                                            v-if="msg.image_url && msg.image_url.length > 0">
                                             <div v-for="(img, index) in msg.image_url" :key="index"
                                                 style="position: relative; display: inline-block;">
                                                 <img :src="img"
                                                     style="width: 100px; height: 100px; border-radius: 8px; box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);" />
                                             </div>
+                                        </div>
+                                        <!-- audio -->
+                                        <div>
+                                            <audio controls v-if="msg.audio_url && msg.audio_url.length > 0">
+                                                <source :src="msg.audio_url" type="audio/wav">
+                                                Your browser does not support the audio element.
+                                            </audio>
                                         </div>
                                     </div>
                                 </div>
@@ -79,32 +105,51 @@ marked.setOptions({
 
                         <div
                             style="width: 100%; justify-content: center; align-items: center; display: flex; flex-direction: column; margin-top: 8px;">
-                            
-                            <v-text-field id="input-field" variant="outlined" v-model="prompt" label="聊天吧!"
+
+                            <v-text-field id="input-field" variant="outlined" v-model="prompt" :label="inputFieldLabel"
                                 placeholder="Start typing..." loading clear-icon="mdi-close-circle" clearable
-                                @click:clear="clearMessage" @keyup.enter="sendMessage"
-                                style="width: 100%; max-width: 930px;">
+                                @click:clear="clearMessage" style="width: 100%; max-width: 850px;">
                                 <template v-slot:loader>
-                                    <v-progress-linear
-                                    :active="loadingChat"
-                                    :color="color"
-                                    height="6"
-                                    indeterminate
-                                    ></v-progress-linear>
+                                    <v-progress-linear :active="loadingChat" height="6"
+                                        indeterminate></v-progress-linear>
                                 </template>
 
                                 <template v-slot:append>
-                                    <v-icon @click="sendMessage" size="35" icon="mdi-arrow-up-circle" />
+                                    <v-tooltip text="发送">
+                                        <template v-slot:activator="{ props }">
+                                            <v-icon v-bind="props" @click="sendMessage" size="35"
+                                                icon="mdi-arrow-up-circle" />
+                                        </template>
+                                    </v-tooltip>
+
+
+                                    <v-tooltip text="语音输入">
+                                        <template v-slot:activator="{ props }">
+                                            <v-icon :color="isRecording ? 'error' : ''" v-bind="props"
+                                                @click="isRecording ? stopRecording() : startRecording()" size="35"
+                                                icon="mdi-record-circle" />
+                                        </template>
+                                    </v-tooltip>
+
                                 </template>
                             </v-text-field>
 
-                            <div>
+                            <div style="display: flex; gap: 8px; margin-top: -8px;">
                                 <div v-for="(img, index) in stagedImagesUrl" :key="index"
                                     style="position: relative; display: inline-block;">
                                     <img :src="img"
                                         style="width: 50px; height: 50px; border-radius: 8px; box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);" />
                                     <v-icon @click="removeImage(index)" size="20" color="red"
                                         style="position: absolute; top: 0; right: 0; cursor: pointer;">mdi-close-circle</v-icon>
+                                </div>
+                                <div style="display: inline-block; width: 50px; height: 50px;">
+                                    <div v-if="stagedAudioUrl"
+                                        style="position: relative; padding: 6px; border-radius: 8px; background-color: rgba(94, 53, 177, 0.15); display: inline-block;">
+                                        新录音
+                                        <v-icon @click="removeAudio" size="20" color="red"
+                                            style="position: absolute; top: 0; right: 0; cursor: pointer;">mdi-close-circle</v-icon>
+                                    </div>
+
                                 </div>
                             </div>
                         </div>
@@ -128,18 +173,95 @@ export default {
             conversations: [],
             currCid: '',
             stagedImagesUrl: [],
-            loadingChat: false
+            loadingChat: false,
+
+            inputFieldLabel: '聊天吧!',
+
+            isRecording: false,
+            audioChunks: [],
+            stagedAudioUrl: "",
+            mediaRecorder: null,
+
+            status: {},
+            statusText: ''
         }
     },
 
     mounted() {
+        this.checkStatus();
         this.getConversations();
         let inputField = document.getElementById('input-field');
         inputField.addEventListener('paste', this.handlePaste);
-
+        inputField.addEventListener('keydown', function (e) {
+            if (e.keyCode == 13 && !e.shiftKey) {
+                e.preventDefault();
+                this.sendMessage();
+            }
+        }.bind(this));
+        document.addEventListener('keydown', function (e) {
+            if (e.keyCode == 75) {
+                this.isRecording ? this.stopRecording() : this.startRecording();
+            }
+        }.bind(this));
     },
 
     methods: {
+
+        removeAudio() {
+            this.stagedAudioUrl = null;
+        },
+
+        checkStatus() {
+            axios.get('/api/chat/status').then(response => {
+                console.log(response.data);
+                this.status = response.data.data;
+            }).catch(err => {
+                console.error(err);
+            });
+        },
+
+        async startRecording() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.mediaRecorder = new MediaRecorder(stream);
+            this.mediaRecorder.ondataavailable = (event) => {
+                this.audioChunks.push(event.data);
+            };
+            this.mediaRecorder.start();
+            this.isRecording = true;
+            this.inputFieldLabel = "录音中，请说话...";
+        },
+
+        async stopRecording() {
+            this.isRecording = false;
+            this.inputFieldLabel = "聊天吧!";
+            this.mediaRecorder.stop();
+            this.mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+                this.audioChunks = [];
+
+                this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+
+                const formData = new FormData();
+                formData.append('file', audioBlob);
+
+                try {
+                    const response = await axios.post('/api/chat/post_file', formData, {
+                        headers: {
+                            'Content-Type': 'multipart/form-data',
+                            'Authorization': 'Bearer ' + localStorage.getItem('token')
+                        }
+                    });
+
+                    const audio = response.data.data.filename;
+                    console.log('Audio uploaded:', audio);
+
+                    this.stagedAudioUrl = `/api/chat/get_file?filename=${audio}`;
+                } catch (err) {
+                    console.error('Error uploading audio:', err);
+                }
+            };
+        },
+
         async handlePaste(event) {
             console.log('Pasting image...');
             const items = event.clipboardData.items;
@@ -160,7 +282,6 @@ export default {
                         const img = response.data.data.filename;
                         this.stagedImagesUrl.push(`/api/chat/get_file?filename=${img}`);
 
-                        scrollToBottom();
                     } catch (err) {
                         console.error('Error uploading image:', err);
                     }
@@ -197,6 +318,9 @@ export default {
                         for (let j = 0; j < message[i].image_url.length; j++) {
                             message[i].image_url[j] = `/api/chat/get_file?filename=${message[i].image_url[j]}`;
                         }
+                    }
+                    if (message[i].audio_url) {
+                        message[i].audio_url = `/api/chat/get_file?filename=${message[i].audio_url}`;
                     }
                 }
                 this.messages = message;
@@ -250,22 +374,24 @@ export default {
             this.messages.push({
                 type: 'user',
                 message: this.prompt,
-                image_url: this.stagedImagesUrl
+                image_url: this.stagedImagesUrl,
+                audio_url: this.stagedAudioUrl
             });
-
-            // let bot_resp = {
-            //     type: 'bot',
-            //     message: ref('')
-            // }
-
-            // this.messages.push(bot_resp);
 
             this.scrollToBottom();
 
+            // images
             let image_filenames = [];
             for (let i = 0; i < this.stagedImagesUrl.length; i++) {
                 let img = this.stagedImagesUrl[i].replace('/api/chat/get_file?filename=', '');
                 image_filenames.push(img);
+            }
+
+            // audio
+            let audio_filenames = [];
+            if (this.stagedAudioUrl) {
+                let audio = this.stagedAudioUrl.replace('/api/chat/get_file?filename=', '');
+                audio_filenames.push(audio);
             }
 
             this.loadingChat = true;
@@ -277,11 +403,17 @@ export default {
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer ' + localStorage.getItem('token')
                 },
-                body: JSON.stringify({ message: this.prompt, conversation_id: this.currCid, image_url: image_filenames })  // 发送请求体
+                body: JSON.stringify({
+                    message: this.prompt,
+                    conversation_id: this.currCid,
+                    image_url: image_filenames,
+                    audio_url: audio_filenames
+                })  // 发送请求体
             })
                 .then(response => {
                     this.prompt = '';
                     this.stagedImagesUrl = [];
+                    this.stagedAudioUrl = "";
 
                     this.loadingChat = false;
 
