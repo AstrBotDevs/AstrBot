@@ -363,10 +363,24 @@ class Main(star.Star):
                     logger.warning(f"未从沙箱输出中捕获到合法的输出。沙箱输出日志: {logs}")
                     break
             else:
+                # 成功了
+                self.user_file_msg_buffer.pop(event.get_session_id())
                 return
         
         yield event.plain_result("经过多次尝试后，未从沙箱输出中捕获到合法的输出，请更换问法或者查看日志。")
-            
+        
+    @pi.command("cleanfile")
+    async def pi_cleanfile(self, event: AstrMessageEvent):
+        '''清理用户上传的文件'''
+        for file in self.user_file_msg_buffer[event.get_session_id()]:
+            try:
+                os.remove(file)
+            except BaseException as e:
+                logger.error(f"删除文件 {file} 失败: {e}")
+                
+        self.user_file_msg_buffer.pop(event.get_session_id())
+        yield event.plain_result(f"用户 {event.get_session_id()} 上传的文件已清理。")
+
     
     async def run_container(self, container: aiodocker.docker.DockerContainer, timeout: int = 20) -> list[str]:
         '''Run the container and get the output'''
