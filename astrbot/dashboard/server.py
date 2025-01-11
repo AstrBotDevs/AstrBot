@@ -31,7 +31,7 @@ class AstrBotDashboard():
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context)
-        self.chat_route = ChatRoute(self.context, db)
+        self.chat_route = ChatRoute(self.context, db, core_lifecycle)
         
     async def auth_middleware(self):
         if not request.path.startswith("/api"):

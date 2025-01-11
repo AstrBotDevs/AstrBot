@@ -6,9 +6,11 @@ from astrbot.core import web_chat_queue, web_chat_back_queue
 from quart import request, Response as QuartResponse, g
 from astrbot.core.db import BaseDatabase
 import asyncio
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+
 
 class ChatRoute(Route):
-    def __init__(self, context: RouteContext, db: BaseDatabase) -> None:
+    def __init__(self, context: RouteContext, db: BaseDatabase, core_lifecycle: AstrBotCoreLifecycle) -> None:
         super().__init__(context)
         self.routes = {
             '/chat/send': ('POST', self.chat),
@@ -18,13 +20,23 @@ class ChatRoute(Route):
             '/chat/delete_conversation': ('GET', self.delete_conversation),
             '/chat/get_file': ('GET', self.get_file),
             '/chat/post_image': ('POST', self.post_image),
-            '/chat/post_file': ('POST', self.post_file)
+            '/chat/post_file': ('POST', self.post_file),
+            '/chat/status': ('GET', self.status),
         }
         self.db = db
+        self.core_lifecycle = core_lifecycle
         self.register_routes()
         self.imgs_dir = "data/webchat/imgs"
         
         self.supported_imgs = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+        
+    async def status(self):
+        has_llm_enabled = self.core_lifecycle.provider_manager.curr_provider_inst is not None
+        has_stt_enabled = self.core_lifecycle.provider_manager.curr_stt_provider_inst is not None
+        return Response().ok(data={
+            'llm_enabled': has_llm_enabled,
+            'stt_enabled': has_stt_enabled
+        }).__dict__
     
     async def get_file(self):
         filename = request.args.get('filename')

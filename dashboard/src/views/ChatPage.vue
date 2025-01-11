@@ -20,7 +20,7 @@ marked.setOptions({
                         :disabled="!currCid">+ 创建对话</v-btn>
 
                     <v-card class="mx-auto" min-width="200">
-                        <v-list dense nav rounded="xl" v-if="conversations.length > 0"
+                        <v-list dense nav v-if="conversations.length > 0" style="max-height: 500px; overflow-y: auto;"
                             @update:selected="getConversationMessages">
                             <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                 color="primary" rounded="xl">
@@ -31,12 +31,24 @@ marked.setOptions({
                         </v-list>
                     </v-card>
 
+                    <div>
+
+                        <v-chip class="mt-4" color="primary" :append-icon="status?.llm_enabled ? 'mdi-check' : 'mdi-close'">
+                            LLM
+                        </v-chip>
+
+                        <v-chip class="mt-4 ml-2" color="success" :append-icon="status?.stt_enabled ? 'mdi-check' : 'mdi-close'">
+                            语音转文本
+                        </v-chip>
+                    </div>
+
                     <v-btn variant="tonal" rounded="xl"
                         style="position: fixed; bottom: 48px; margin-bottom: 16px; min-width: 200px;" v-if="currCid"
                         @click="deleteConversation(currCid)" color="error">删除此对话</v-btn>
                 </div>
+
                 <div style="height: 100%; width: 100%;">
-                    <div style="height: calc(100% - 130px); overflow-y: auto; padding: 16px; " ref="messageContainer">
+                    <div style="height: calc(100% - 120px); overflow-y: auto; padding: 16px; " ref="messageContainer">
                         <div class="fade-in" v-if="messages.length == 0"
                             style="height: 100%; display: flex; justify-content: center; align-items: center; flex-direction: column;">
                             <div>
@@ -96,8 +108,7 @@ marked.setOptions({
 
                             <v-text-field id="input-field" variant="outlined" v-model="prompt" :label="inputFieldLabel"
                                 placeholder="Start typing..." loading clear-icon="mdi-close-circle" clearable
-                                @click:clear="clearMessage"
-                                style="width: 100%; max-width: 850px;">
+                                @click:clear="clearMessage" style="width: 100%; max-width: 850px;">
                                 <template v-slot:loader>
                                     <v-progress-linear :active="loadingChat" height="6"
                                         indeterminate></v-progress-linear>
@@ -106,17 +117,20 @@ marked.setOptions({
                                 <template v-slot:append>
                                     <v-tooltip text="发送">
                                         <template v-slot:activator="{ props }">
-                                            <v-icon v-bind="props" @click="sendMessage" size="35" icon="mdi-arrow-up-circle" />
+                                            <v-icon v-bind="props" @click="sendMessage" size="35"
+                                                icon="mdi-arrow-up-circle" />
                                         </template>
                                     </v-tooltip>
-                                    
-                                    
+
+
                                     <v-tooltip text="语音输入">
                                         <template v-slot:activator="{ props }">
-                                            <v-icon :color="isRecording ? 'error' : ''" v-bind="props" @click="isRecording ? stopRecording() : startRecording()" size="35" icon="mdi-record-circle" />
+                                            <v-icon :color="isRecording ? 'error' : ''" v-bind="props"
+                                                @click="isRecording ? stopRecording() : startRecording()" size="35"
+                                                icon="mdi-record-circle" />
                                         </template>
                                     </v-tooltip>
-                                    
+
                                 </template>
                             </v-text-field>
 
@@ -129,12 +143,13 @@ marked.setOptions({
                                         style="position: absolute; top: 0; right: 0; cursor: pointer;">mdi-close-circle</v-icon>
                                 </div>
                                 <div style="display: inline-block; width: 50px; height: 50px;">
-                                    <div v-if="stagedAudioUrl" style="position: relative; padding: 6px; border-radius: 8px; background-color: rgba(94, 53, 177, 0.15); display: inline-block;">
+                                    <div v-if="stagedAudioUrl"
+                                        style="position: relative; padding: 6px; border-radius: 8px; background-color: rgba(94, 53, 177, 0.15); display: inline-block;">
                                         新录音
                                         <v-icon @click="removeAudio" size="20" color="red"
                                             style="position: absolute; top: 0; right: 0; cursor: pointer;">mdi-close-circle</v-icon>
                                     </div>
-                                    
+
                                 </div>
                             </div>
                         </div>
@@ -165,16 +180,19 @@ export default {
             isRecording: false,
             audioChunks: [],
             stagedAudioUrl: "",
-            mediaRecorder: null
+            mediaRecorder: null,
+
+            status: {},
+            statusText: ''
         }
     },
 
     mounted() {
+        this.checkStatus();
         this.getConversations();
         let inputField = document.getElementById('input-field');
         inputField.addEventListener('paste', this.handlePaste);
         inputField.addEventListener('keydown', function (e) {
-            console.log(e);
             if (e.keyCode == 13 && !e.shiftKey) {
                 e.preventDefault();
                 this.sendMessage();
@@ -191,6 +209,15 @@ export default {
 
         removeAudio() {
             this.stagedAudioUrl = null;
+        },
+
+        checkStatus() {
+            axios.get('/api/chat/status').then(response => {
+                console.log(response.data);
+                this.status = response.data.data;
+            }).catch(err => {
+                console.error(err);
+            });
         },
 
         async startRecording() {
@@ -211,6 +238,8 @@ export default {
             this.mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
                 this.audioChunks = [];
+
+                this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
 
                 const formData = new FormData();
                 formData.append('file', audioBlob);
@@ -253,7 +282,6 @@ export default {
                         const img = response.data.data.filename;
                         this.stagedImagesUrl.push(`/api/chat/get_file?filename=${img}`);
 
-                        scrollToBottom();
                     } catch (err) {
                         console.error('Error uploading image:', err);
                     }
@@ -375,9 +403,9 @@ export default {
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer ' + localStorage.getItem('token')
                 },
-                body: JSON.stringify({ 
-                    message: this.prompt, 
-                    conversation_id: this.currCid, 
+                body: JSON.stringify({
+                    message: this.prompt,
+                    conversation_id: this.currCid,
                     image_url: image_filenames,
                     audio_url: audio_filenames
                 })  // 发送请求体
