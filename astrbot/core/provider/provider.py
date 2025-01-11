@@ -132,3 +132,30 @@ class Provider(abc.ABC):
             model=self.get_model(),
             type=self.provider_config['type']
         )
+        
+        
+class STTProvider():
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        self.provider_config = provider_config
+        self.provider_settings = provider_settings
+    
+    @abc.abstractmethod
+    async def get_text(self, audio_url: str) -> str:
+        '''获取音频的文本'''
+        raise NotImplementedError()
+    
+    def set_model(self, model_name: str):
+        '''设置当前使用的模型名称'''
+        self.model_name = model_name
+    
+    def get_model(self) -> str:
+        '''获取当前使用的模型'''
+        return self.provider_config.get("model", "")
+    
+    def meta(self) -> ProviderMeta:
+        '''获取 Provider 的元数据'''
+        return ProviderMeta(
+            id=self.provider_config['id'],
+            model=self.get_model(),
+            type=self.provider_config['type']
+        )

@@ -1,16 +1,20 @@
 from typing import List, Dict, Type
-from .entites import ProviderMetaData
+from .entites import ProviderMetaData, ProviderType
 from astrbot.core import logger
 from .func_tool_manager import FuncCall
 
 provider_registry: List[ProviderMetaData] = []
 '''维护了通过装饰器注册的 Provider'''
-provider_cls_map: Dict[str, Type] = {}
-'''维护了 Provider 类型名称和 Provider 类的映射'''
+provider_cls_map: Dict[str, ProviderMetaData] = {}
+'''维护了 Provider 类型名称和 ProviderMetadata 的映射'''
 
 llm_tools = FuncCall()
 
-def register_provider_adapter(provider_type_name: str, desc: str):
+def register_provider_adapter(
+    provider_type_name: str, 
+    desc: str, 
+    provider_type: ProviderType = ProviderType.CHAT_COMPLETION
+):
     '''用于注册平台适配器的带参装饰器'''
     def decorator(cls):
         if provider_type_name in provider_cls_map:
@@ -19,9 +23,11 @@ def register_provider_adapter(provider_type_name: str, desc: str):
         pm = ProviderMetaData(
             type=provider_type_name,
             desc=desc,
+            provider_type=provider_type,
+            cls_type=cls
         )
         provider_registry.append(pm)
-        provider_cls_map[provider_type_name] = cls
+        provider_cls_map[provider_type_name] = pm
         logger.debug(f"Provider {provider_type_name} 已注册")
         return cls
     

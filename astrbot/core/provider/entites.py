@@ -1,13 +1,22 @@
+import enum
 from dataclasses import dataclass, field
-from typing import List, Dict
+from typing import List, Dict, Type
 from .func_tool_manager import FuncCall
 
 
+class ProviderType(enum.Enum):
+    CHAT_COMPLETION = "chat_completion"
+    SPEECH_TO_TEXT = "speech_to_text"
+    TEXT_TO_SPEECH = "text_to_speech"
+    
 @dataclass
 class ProviderMetaData():
-    type: str # 提供商适配器名称，如 openai, ollama
-    desc: str = "" # 提供商适配器描述.
-    
+    type: str
+    '''提供商适配器名称，如 openai, ollama'''
+    desc: str = ""
+    '''提供商适配器描述.'''
+    provider_type: ProviderType = ProviderType.CHAT_COMPLETION
+    cls_type: Type = None
 
 @dataclass
 class ProviderRequest():
