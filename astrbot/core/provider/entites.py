@@ -17,6 +17,11 @@ class ProviderMetaData():
     '''提供商适配器描述.'''
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
     cls_type: Type = None
+    
+    default_config_tmpl: dict = None
+    '''平台的默认配置模板'''
+    provider_display_name: str = None
+    '''显示在 WebUI 配置页中的提供商名称，如空则是 type'''
 
 @dataclass
 class ProviderRequest():

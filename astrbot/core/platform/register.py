@@ -7,7 +7,12 @@ platform_registry: List[PlatformMetadata] = []
 platform_cls_map: Dict[str, Type] = {}
 '''维护了平台适配器名称和适配器类的映射'''
 
-def register_platform_adapter(adapter_name: str, desc: str, default_config_tmpl: dict = None):
+def register_platform_adapter(
+    adapter_name: str, 
+    desc: str, 
+    default_config_tmpl: dict = None,
+    adapter_display_name: str = None
+):
     '''用于注册平台适配器的带参装饰器。
     
     default_config_tmpl 指定了平台适配器的默认配置模板。用户填写好后将会作为 platform_config 传入你的 Platform 类的实现类。 
@@ -26,7 +31,8 @@ def register_platform_adapter(adapter_name: str, desc: str, default_config_tmpl:
         pm = PlatformMetadata(
             name=adapter_name,
             description=desc,
-            default_config_tmpl=default_config_tmpl
+            default_config_tmpl=default_config_tmpl,
+            adapter_display_name=adapter_display_name
         )
         platform_registry.append(pm)
         platform_cls_map[adapter_name] = cls

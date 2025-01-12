@@ -8,6 +8,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.config import update_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_registry
+from astrbot.core.provider.register import provider_registry
 
 def try_cast(value: str, type_: str):
     if type_ == "int" and value.isdigit():
@@ -123,10 +124,17 @@ class ConfigRoute(Route):
     async def _get_astrbot_config(self):
         config = self.config
         
+        # 平台适配器的默认配置模板注入
         platform_default_tmpl = CONFIG_METADATA_2['platform_group']['metadata']['platform']['config_template']
         for platform in platform_registry:
             if platform.default_config_tmpl:
                 platform_default_tmpl[platform.name] = platform.default_config_tmpl
+        
+        # 服务提供商的默认配置模板注入
+        provider_default_tmpl = CONFIG_METADATA_2['provider_group']['metadata']['provider']['config_template']
+        for provider in provider_registry:
+            if provider.default_config_tmpl:
+                provider_default_tmpl[provider.type] = provider.default_config_tmpl
         
         return {
             "metadata": CONFIG_METADATA_2,

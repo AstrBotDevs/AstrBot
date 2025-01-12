@@ -150,7 +150,7 @@ class Main(star.Star):
             return f"{self.config['sandbox']['docker_mirror']}/{self.config['sandbox']['image']}"
         return self.config["sandbox"]["image"]
     
-    async def _save_config(self):
+    def _save_config(self):
         with open(PATH, "w") as f:
             json.dump(self.config, f)
         
@@ -207,7 +207,7 @@ class Main(star.Star):
 """)
         else:
             self.config["sandbox"]["docker_mirror"] = url
-            await self._save_config()
+            self._save_config()
             yield event.plain_result("设置 Docker 镜像地址成功。")
 
     @pi.command("repull")
