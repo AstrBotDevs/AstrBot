@@ -83,7 +83,7 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 
       <div style="margin-left: 16px; padding-bottom: 16px">
         <small>不了解配置？请见 <a
-            href="https://astrbot.soulter.top/docs/%E5%BC%80%E5%A7%8B%E4%B8%8A%E6%89%8B/%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6">官方文档</a>
+            href="https://astrbot.soulter.top/">官方文档</a>
           或 <a
             href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft">加群询问</a>。</small>
       </div>

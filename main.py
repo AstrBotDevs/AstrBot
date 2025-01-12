@@ -40,8 +40,11 @@ async def check_dashboard_files():
     if os.path.exists("data/dist"):
         if os.path.exists("data/dist/assets/version"):
             with open("data/dist/assets/version", "r") as f:
-                if f.read() != VERSION:
+                v = f.read().strip()
+                if v != f"v{VERSION}":
                     logger.warning("检测到管理面板有更新。可以使用 /dashboard update 命令更新。")
+                else:
+                    logger.info("管理面板文件已是最新。")
         return
     
     logger.info("开始下载管理面板文件...")
