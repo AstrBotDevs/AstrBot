@@ -3,7 +3,7 @@ class StaticFileRoute(Route):
     def __init__(self, context: RouteContext) -> None:
         super().__init__(context)
         
-        index_ = ['/', '/auth/login', '/config', '/logs', '/extension', '/dashboard/default', '/project-atri', '/console']
+        index_ = ['/', '/auth/login', '/config', '/logs', '/extension', '/dashboard/default', '/project-atri', '/console', '/chat']
         for i in index_:
             self.app.add_url_rule(i, view_func=self.index)
     

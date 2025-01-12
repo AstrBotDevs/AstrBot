@@ -45,7 +45,7 @@ class Main(star.Star):
 /deop <admin_id>: 取消管理员
 /wl <sid>: 添加会话白名单
 /dwl <sid>: 删除会话白名单
-/dashboard update: 更新管理面板
+/dashboard_update: 更新管理面板
 
 [大模型]
 /provider: 查看、切换大模型提供商
