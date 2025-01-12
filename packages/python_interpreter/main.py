@@ -113,7 +113,7 @@ class Main(star.Star):
     async def initialize(self):
         ok = await self.is_docker_available()
         if not ok:
-            logger.warning("Docker 不可用，代码解释器将无法使用，astrbot-python-interpreter 将自动禁用。")
+            logger.info("Docker 不可用，代码解释器将无法使用，astrbot-python-interpreter 将自动禁用。")
             await self.context._star_manager.turn_off_plugin("astrbot-python-interpreter")
                 
     async def file_upload(self, file_path: str):
@@ -141,7 +141,7 @@ class Main(star.Star):
             await docker.version()
             return True
         except aiodocker.exceptions.DockerError as e:
-            logger.error(f"检查 Docker 可用性时出现问题: {e}")
+            logger.info(f"检查 Docker 可用性: {e}")
             return False
         
     async def get_image_name(self) -> str:
