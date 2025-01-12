@@ -41,6 +41,11 @@ const MainRoutes = {
       name: 'Chat',
       path: '/chat',
       component: () => import('@/views/ChatPage.vue')
+    },
+    {
+      name: 'About',
+      path: '/about',
+      component: () => import('@/views/AboutPage.vue')
     }
   ]
 };

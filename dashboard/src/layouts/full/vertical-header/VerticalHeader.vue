@@ -213,11 +213,5 @@ commonStore.getStartTime();
         </v-card-actions>
       </v-card>
     </v-dialog>
-
-
-    <v-btn class="text-primary mr-4" @click="open('https://github.com/Soulter/AstrBot')" color="lightprimary"
-      variant="flat" rounded="sm">
-      GitHub Star! 🌟
-    </v-btn>
   </v-app-bar>
 </template>

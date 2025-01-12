@@ -40,6 +40,11 @@ const sidebarItem: menu[] = [
     icon: 'mdi-console',
     to: '/console'
   },
+  {
+    title: '关于',
+    icon: 'mdi-information',
+    to: '/about'
+  },
   // {
   //   title: 'Project ATRI',
   //   icon: 'mdi-grain',

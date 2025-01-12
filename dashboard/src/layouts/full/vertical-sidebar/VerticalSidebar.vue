@@ -17,7 +17,7 @@ const sidebarMenu = shallowRef(sidebarItems);
       </template>
     </v-list>
     <div class="text-center">
-      <v-chip color="inputBorder" size="small"> v{{ version }} </v-chip>
+      <v-chip color="inputBorder" size="small"> {{ version }} </v-chip>
     </div>
 
     <div style="position: absolute; bottom: 32px; width: 100%" class="text-center">
@@ -28,7 +28,14 @@ const sidebarMenu = shallowRef(sidebarItems);
       </v-list-item>
       <small style="display: block;" v-if="buildVer">构建: {{ buildVer }}</small>
       <small style="display: block;" v-else="buildVer">构建: embedded</small>
-      <small style="display: block; margin-top: 8px;">© 2024 AstrBot</small>
+      <v-tooltip text="使用 /dashbord_update 指令更新管理面板">
+        <template v-slot:activator="{ props }">
+          <small v-bind="props" v-if="buildVer != version" style="display: block; margin-top: 4px;">面板有更新</small>
+        </template>
+      </v-tooltip>
+
+      
+      <small style="display: block; margin-top: 8px;">© 2025 AstrBot</small>
     </div>
 
   </v-navigation-drawer>
@@ -54,14 +61,14 @@ export default {
         // 不是版本，不显示 😎
         return
       }
-      this.buildVer = res
+      this.buildVer = res.replace(/\s+/g, '')
     })
   },
   methods: {
     get_version() {
       axios.get('/api/stat/version')
         .then((res) => {
-          this.version = res.data.data.version;
+          this.version = "v" + res.data.data.version;
         })
         .catch((err) => {
           console.log(err);
