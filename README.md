@@ -56,7 +56,7 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 基于 Docker 的沙箱化代码执行器（Beta 测试中）
 
 > [!NOTE]
-> 文件输入/输出目前仅支持 Napcat（QQ）
+> 文件输入/输出目前仅测试了 Napcat(QQ), Lagrange(QQ)
 
 <div align='center'>
 
