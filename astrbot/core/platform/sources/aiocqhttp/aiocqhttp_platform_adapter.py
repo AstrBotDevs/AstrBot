@@ -13,6 +13,7 @@ from .aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 from aiocqhttp.exceptions import ActionFailed
+from astrbot.core.utils.io import download_file
 
 @register_platform_adapter("aiocqhttp", "适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。")
 class AiocqhttpAdapter(Platform):
@@ -81,22 +82,36 @@ class AiocqhttpAdapter(Platform):
             if t == 'text':
                 message_str += m['data']['text'].strip()
             elif t == 'file':
-                try:
-                    # Napcat, LLBot
-                    ret = await self.bot.call_action(action="get_file", file_id=event.message[0]['data']['file_id'])
-                    if not ret.get('file', None):
-                        raise ValueError(f"无法解析文件响应: {ret}")
-                    if not os.path.exists(ret['file']):
-                        raise FileNotFoundError(f"文件不存在: {ret['file']}。如果您使用 Docker 部署了 AstrBot 或者消息协议端(Napcat等),暂时无法获取用户上传的文件。")
+                if m['data']['url'] and m['data']['url'].startswith("http"):
+                    # Lagrange
+                    logger.info("guessing lagrange")
+                    
+                    file_name = m['data'].get('file_name', "file")
+                    path = os.path.join("data/temp", file_name)
+                    await download_file(m['data']['url'], path)
                     
                     m['data'] = {
-                        "file": ret['file'],
-                        "name": ret['file_name']
+                        "file": path,
+                        "name": file_name
                     }
-                except ActionFailed as e:
-                    logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
-                except BaseException as e:
-                    logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
+                
+                else:
+                    try:
+                        # Napcat, LLBot
+                        ret = await self.bot.call_action(action="get_file", file_id=event.message[0]['data']['file_id'])
+                        if not ret.get('file', None):
+                            raise ValueError(f"无法解析文件响应: {ret}")
+                        if not os.path.exists(ret['file']):
+                            raise FileNotFoundError(f"文件不存在: {ret['file']}。如果您使用 Docker 部署了 AstrBot 或者消息协议端(Napcat等),暂时无法获取用户上传的文件。")
+                        
+                        m['data'] = {
+                            "file": ret['file'],
+                            "name": ret['file_name']
+                        }
+                    except ActionFailed as e:
+                        logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
+                    except BaseException as e:
+                        logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
                     
             a = ComponentTypes[t](**m['data'])  # noqa: F405
             abm.message.append(a)

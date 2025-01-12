@@ -28,9 +28,11 @@ class PreProcessStage(Stage):
             if stt_provider:
                 message_chain = event.get_messages()
                 for idx, component in enumerate(message_chain):
-                    if isinstance(component, Record) and component.path:
+                    if isinstance(component, Record) and component.url:
                         
-                        path = component.path
+                        path = component.url
+                        
+                        path.removeprefix("file:///")
                         
                         retry = 5
                         

@@ -73,15 +73,21 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
     async def get_text(self, audio_url: str) -> str:
         '''only supports mp3, mp4, mpeg, m4a, wav, webm'''
+        is_tencent = False
+        
         if audio_url.startswith("http"):
+            if "multimedia.nt.qq.com.cn" in audio_url:
+                is_tencent = True
+            
             name = str(uuid.uuid4())
             path = os.path.join("data/temp", name)
-            audio_url = await download_file(audio_url, path)
+            await download_file(audio_url, path)
+            audio_url = path
         
         if not os.path.exists(audio_url):
             raise FileNotFoundError(f"文件不存在: {audio_url}")
         
-        if audio_url.endswith(".amr") or audio_url.endswith(".silk"):
+        if audio_url.endswith(".amr") or audio_url.endswith(".silk") or is_tencent:
             is_silk = await self._is_silk_file(audio_url)
             if is_silk:
                 logger.info("Converting silk file to wav ...")
