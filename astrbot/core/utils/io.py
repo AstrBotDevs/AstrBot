@@ -87,7 +87,7 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
                         with open(path, "wb") as f:
                             f.write(await resp.read())
                         return path
-    except aiohttp.client_exceptions.ClientConnectorSSLError:
+    except aiohttp.client.ClientConnectorSSLError:
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()
         ssl_context.set_ciphers('DEFAULT')
@@ -116,8 +116,18 @@ async def download_file(url: str, path: str):
                         if not chunk:
                             break
                         f.write(chunk)
-    except Exception as e:
-        raise e
+    except aiohttp.client.ClientConnectorSSLError:
+        # 关闭SSL验证
+        ssl_context = ssl.create_default_context()
+        ssl_context.set_ciphers('DEFAULT')
+        async with aiohttp.ClientSession(trust_env=False) as session:
+            async with session.get(url, ssl=ssl_context, timeout=20) as resp:
+                with open(path, 'wb') as f:
+                    while True:
+                        chunk = await resp.content.read(8192)
+                        if not chunk:
+                            break
+                        f.write(chunk)
 
 def file_to_base64(file_path: str) -> str:
     with open(file_path, "rb") as f:
