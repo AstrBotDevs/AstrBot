@@ -1,8 +1,6 @@
 <script setup>
 import axios from 'axios';
-import { ref } from 'vue';
 import { marked } from 'marked';
-
 
 marked.setOptions({
     breaks: true
@@ -183,11 +181,14 @@ export default {
             mediaRecorder: null,
 
             status: {},
-            statusText: ''
+            statusText: '',
+            
+            eventSource: null
         }
     },
 
     mounted() {
+        this.startListeningEvent();
         this.checkStatus();
         this.getConversations();
         let inputField = document.getElementById('input-field');
@@ -205,7 +206,69 @@ export default {
         }.bind(this));
     },
 
+    beforeUnmount() {
+        console.log("111")
+        if (this.eventSource) {
+            this.eventSource.cancel();
+            console.log('SSE连接已断开');
+        }
+    },
+
     methods: {
+
+        async startListeningEvent() {
+            const response = await fetch('/api/chat/listen', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+                }
+            })
+
+            if (!response.ok) {
+                console.error('SSE连接失败:', response.statusText);
+                return;
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            this.eventSource = reader
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) {
+                    console.log('SSE连接关闭');
+                    break;
+                }
+
+                const chunk = decoder.decode(value, { stream: true });
+                console.log("!!!!", chunk);
+
+                if (chunk === '[HB]\n') {
+                    continue; // 心跳包
+                }
+                if (chunk === '[ERROR]\n') {
+                    continue;
+                }
+
+                if (chunk.startsWith('[IMAGE]')) {
+                    let img = chunk.replace('[IMAGE]', '');
+                    let bot_resp = {
+                        type: 'bot',
+                        message: `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                    }
+                    this.messages.push(bot_resp);
+                } else {
+                    let bot_resp = {
+                        type: 'bot',
+                        message: chunk
+                    }
+                    this.messages.push(bot_resp);
+                }
+                this.scrollToBottom();
+            }
+        },
 
         removeAudio() {
             this.stagedAudioUrl = null;
@@ -417,41 +480,41 @@ export default {
 
                     this.loadingChat = false;
 
-                    const reader = response.body.getReader();  // 获取流的 Reader
-                    const decoder = new TextDecoder();
+                    // const reader = response.body.getReader();  // 获取流的 Reader
+                    // const decoder = new TextDecoder();
 
-                    const readStream = async () => {
-                        const { done, value } = await reader.read();  // 读取流中的数据
-                        if (done) {
-                            console.log("Stream finished.");
-                            return;
-                        }
+                    // const readStream = async () => {
+                    //     const { done, value } = await reader.read();  // 读取流中的数据
+                    //     if (done) {
+                    //         console.log("Stream finished.");
+                    //         return;
+                    //     }
 
-                        const chunk = decoder.decode(value, { stream: true });
-                        // bot_resp.message.value += chunk;
+                    //     const chunk = decoder.decode(value, { stream: true });
+                    //     // bot_resp.message.value += chunk;
 
-                        console.log("!!!!", chunk);
-                        if (chunk.startsWith('[IMAGE]')) {
-                            let img = chunk.replace('[IMAGE]', '');
-                            let bot_resp = {
-                                type: 'bot',
-                                message: `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
-                            }
-                            this.messages.push(bot_resp);
-                        } else {
-                            let bot_resp = {
-                                type: 'bot',
-                                message: chunk
-                            }
+                    //     console.log("!!!!", chunk);
+                    //     if (chunk.startsWith('[IMAGE]')) {
+                    //         let img = chunk.replace('[IMAGE]', '');
+                    //         let bot_resp = {
+                    //             type: 'bot',
+                    //             message: `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                    //         }
+                    //         this.messages.push(bot_resp);
+                    //     } else {
+                    //         let bot_resp = {
+                    //             type: 'bot',
+                    //             message: chunk
+                    //         }
 
-                            this.messages.push(bot_resp);
-                        }
+                    //         this.messages.push(bot_resp);
+                    //     }
 
-                        this.scrollToBottom();
-                        readStream();  // 递归读取流
-                    };
+                    //     this.scrollToBottom();
+                    //     readStream();  // 递归读取流
+                    // };
 
-                    readStream();
+                    // readStream();
                 })
                 .catch(err => {
                     console.error(err);
@@ -463,7 +526,7 @@ export default {
                 container.scrollTop = container.scrollHeight;
             });
         }
-    }
+    },
 }
 
 </script>
