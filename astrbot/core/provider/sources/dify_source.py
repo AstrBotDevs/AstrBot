@@ -1,5 +1,5 @@
 from typing import List
-from .. import Provider
+from .. import Provider, Personality
 from ..entites import LLMResponse
 from ..func_tool_manager import FuncCall
 from astrbot.core.db import BaseDatabase
@@ -16,9 +16,10 @@ class ProviderDify(Provider):
         provider_settings: dict,
         db_helper: BaseDatabase,
         persistant_history=False,
+        default_persona: Personality=None
     ) -> None:
         super().__init__(
-            provider_config, provider_settings, persistant_history, db_helper
+            provider_config, provider_settings, persistant_history, db_helper, default_persona
         )
         self.api_key = provider_config.get("dify_api_key", "")
         if not self.api_key:

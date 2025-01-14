@@ -3,6 +3,7 @@ import axios from 'axios';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
+import config from '@/config';
 </script>
 
 <template>
@@ -44,7 +45,10 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
               <v-expansion-panel-text v-if="metadata[key]['metadata'][key2]?.config_template">
                 <!-- 带有 config_template 的配置项 -->
                 <v-tabs style="margin-top: 16px;" align-tabs="left" color="deep-purple-accent-4" v-model="config_template_tab">
-                  <v-tab v-for="(item, index) in config_data[key2]" :key="index" :value="index">
+                  <v-tab v-if="metadata[key]['metadata'][key2]?.tmpl_display_title" v-for="(item, index) in config_data[key2]" :key="index" :value="index">
+                    {{ item[metadata[key]['metadata'][key2]?.tmpl_display_title] }}
+                  </v-tab>
+                  <v-tab v-else v-for="(item, index) in config_data[key2]" :key="index + '_'" :value="index">
                     {{ item.id }}({{ item.type }})
                   </v-tab>
                   <v-menu>
@@ -64,6 +68,10 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
                   <v-tabs-window-item v-for="(config_item, index) in config_data[key2]" v-show="config_template_tab === index"
                     :key="index" :value="index">
                     <v-container>
+                      <v-btn variant="tonal" rounded="xl" color="error" @click="config_data[key2].splice(index, 1)">
+                        删除这项
+                      </v-btn>
+
                       <AstrBotConfig :metadata="metadata[key]['metadata']" :iterable="config_item" :metadataKey="key2"></AstrBotConfig>
                     </v-container>
                   </v-tabs-window-item>
@@ -204,7 +212,7 @@ export default {
 
       let tmpl = this.metadata[group_name]['metadata'][config_item_name]['config_template'][val];
       let new_tmpl_cfg = JSON.parse(JSON.stringify(tmpl));
-      new_tmpl_cfg.id = "new_" + val + "_" + this.config_data[config_item_name].length;
+      // new_tmpl_cfg.id = "new_" + val + "_" + this.config_data[config_item_name].length;
       this.config_data[config_item_name].push(new_tmpl_cfg);
       this.config_template_tab = this.config_data[config_item_name].length - 1;
     }

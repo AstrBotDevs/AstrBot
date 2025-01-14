@@ -1,6 +1,6 @@
 import traceback
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from .provider import Provider, STTProvider
+from .provider import Provider, STTProvider, Personality
 from .entites import ProviderType
 from typing import List
 from astrbot.core.db import BaseDatabase
@@ -13,6 +13,52 @@ class ProviderManager():
         self.providers_config: List = config['provider']
         self.provider_settings: dict = config['provider_settings']
         self.provider_stt_settings: dict = config.get('provider_stt_settings', {})
+        self.persona_configs: list = config.get('persona', [])
+        
+        self.default_persona_name = self.provider_settings.get('default_personality', 'default')
+        self.personas: List[Personality] = []
+        self.selected_default_persona = None
+        for persona in self.persona_configs:
+            begin_dialogs = persona.get("begin_dialogs", [])
+            mood_imitation_dialogs = persona.get("mood_imitation_dialogs", [])
+            bd_processed = []
+            mid_processed = ""
+            if begin_dialogs:
+                if len(begin_dialogs) % 2 != 0:
+                    logger.error(f"{persona['name']} 人格情景预设对话格式不对，条数应该为偶数。")
+                    continue
+                user_turn = True
+                for dialog in begin_dialogs:
+                    bd_processed.append({
+                        "role": "user" if user_turn else "assistant",
+                        "content": dialog,
+                        "_no_save": None # 不持久化到 db
+                    })
+                    user_turn = not user_turn
+            if mood_imitation_dialogs:
+                if len(mood_imitation_dialogs) % 2 != 0:
+                    logger.error(f"{persona['name']} 对话风格对话格式不对，条数应该为偶数。")
+                    continue
+                user_turn = True
+                for dialog in begin_dialogs:
+                    role = "A" if user_turn else "B"
+                    mid_processed += f"{role}: {dialog}\n"
+                    if not user_turn:
+                        mid_processed += '\n'
+                    user_turn = not user_turn
+            
+            try:
+                persona = Personality(
+                    **persona, 
+                    _begin_dialogs_processed=bd_processed,
+                    _mood_imitation_dialogs_processed=mid_processed
+                )
+                if persona['name'] == self.default_persona_name:
+                    self.selected_default_persona = persona
+                self.personas.append(persona)
+            except Exception as e:
+                logger.error(f"解析 Persona 配置失败：{e}")
+        
         
         self.provider_insts: List[Provider] = []
         '''加载的 Provider 的实例'''
@@ -26,6 +72,7 @@ class ProviderManager():
         self.loaded_ids = defaultdict(bool)
         self.db_helper = db_helper
         
+        # kdb(experimental)
         self.curr_kdb_name = ""
         kdb_cfg = config.get("knowledge_db", {})
         if kdb_cfg and len(kdb_cfg):
@@ -94,7 +141,13 @@ class ProviderManager():
                     
                 elif provider_metadata.provider_type == ProviderType.CHAT_COMPLETION:
                     # 文本生成任务
-                    inst = provider_metadata.cls_type(provider_config, self.provider_settings, self.db_helper, self.provider_settings.get('persistant_history', True))
+                    inst = provider_metadata.cls_type(
+                        provider_config, 
+                        self.provider_settings, 
+                        self.db_helper,
+                        self.provider_settings.get('persistant_history', True),
+                        self.selected_default_persona
+                    )
                     
                     if getattr(inst, "initialize", None):
                         await inst.initialize()
