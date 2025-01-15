@@ -83,7 +83,9 @@ class LLMTunerModelLoader(Provider):
             "system": system_prompt,
         }
         if func_tool:
-            conf["tools"] = func_tool
+            tool_list = func_tool.get_func_desc_openai_style()
+            if tool_list:
+                conf['tools'] = tool_list
 
         responses = await self.model.achat(**conf)
 

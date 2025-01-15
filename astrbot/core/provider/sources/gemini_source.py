@@ -130,6 +130,8 @@ class ProviderGoogleGenAI(Provider):
         tool = None
         if tools:
             tool = tools.get_func_desc_google_genai_style()
+            if not tool:
+                tool = None
         
         system_instruction = ""
         for message in payloads["messages"]:
