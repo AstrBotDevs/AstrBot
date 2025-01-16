@@ -8,7 +8,7 @@ from openai._exceptions import NotFoundError
 from astrbot.core.utils.io import download_image_by_url
 
 from astrbot.core.db import BaseDatabase
-from astrbot.api.provider import Provider
+from astrbot.api.provider import Provider, Personality
 from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
 from typing import List
@@ -22,9 +22,10 @@ class ProviderOpenAIOfficial(Provider):
         provider_config: dict, 
         provider_settings: dict,
         db_helper: BaseDatabase, 
-        persistant_history = True
+        persistant_history = True,
+        default_persona: Personality = None
     ) -> None:
-        super().__init__(provider_config, provider_settings, persistant_history, db_helper)
+        super().__init__(provider_config, provider_settings, persistant_history, db_helper, default_persona)
         self.chosen_api_key = None
         self.api_keys: List = provider_config.get("key", [])
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
@@ -152,6 +153,10 @@ class ProviderOpenAIOfficial(Provider):
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 
+        for part in context_query:
+            if '_no_save' in part:
+                del part['_no_save']
+
         payloads = {
             "messages": context_query,
             **self.provider_config.get("model_config", {})
@@ -181,7 +186,8 @@ class ProviderOpenAIOfficial(Provider):
                     "content": llm_response.completion_text
                 })
             else:
-                self.session_memory[session_id] = [*contexts, new_record, {
+                contexts_to_save = list(filter(lambda item: '_no_save' not in item, contexts))
+                self.session_memory[session_id] = [*contexts_to_save, new_record, {
                     "role": "assistant",
                     "content": llm_response.completion_text
                 }]

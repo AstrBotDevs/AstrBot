@@ -11,6 +11,13 @@ from dataclasses import dataclass
 class Personality(TypedDict):
     prompt: str = ""
     name: str = ""
+    begin_dialogs: List[str] = []
+    mood_imitation_dialogs: List[str] = []
+    
+    # cache
+    _begin_dialogs_processed: List[dict]
+    _mood_imitation_dialogs_processed: str
+    
     
 @dataclass
 class ProviderMeta():
@@ -25,7 +32,8 @@ class Provider(abc.ABC):
         provider_config: dict,
         provider_settings: dict, 
         persistant_history: bool = True,
-        db_helper: BaseDatabase = None
+        db_helper: BaseDatabase = None,
+        default_persona: Personality = None
     ) -> None:
         self.model_name = ""
         '''当前使用的模型名称'''
@@ -37,8 +45,8 @@ class Provider(abc.ABC):
         
         self.provider_settings = provider_settings
         
-        self.curr_personality = Personality(prompt=provider_settings['default_personality'])
-        '''维护了当前的使用的 persona，即人格。'''
+        self.curr_personality: Personality = default_persona
+        '''维护了当前的使用的 persona，即人格。可能为 None'''
         
         self.db_helper = db_helper
         '''用于持久化的数据库操作对象。'''

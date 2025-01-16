@@ -30,7 +30,7 @@ DEFAULT_CONFIG = {
         "web_search": False,
         "identifier": False,
         "datetime_system_prompt": True,
-        "default_personality": "如果用户寻求帮助或者打招呼，请告诉他可以用 /help 查看 AstrBot 帮助。",
+        "default_personality": "default",
         "prompt_prefix": "",
     },
     "provider_stt_settings": {
@@ -56,6 +56,14 @@ DEFAULT_CONFIG = {
     "pip_install_arg": "",
     "plugin_repo_mirror": "",
     "knowledge_db": {},
+    "persona": [
+        {
+            "name": "default",
+            "prompt": "如果用户寻求帮助或者打招呼，请告诉他可以用 /help 查看 AstrBot 帮助。",
+            "begin_dialogs": [],
+            "mood_imitation_dialogs": []
+        }
+    ]
 }
 
 
@@ -465,9 +473,9 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，会在系统提示词中加上当前机器的日期时间。",
                     },
                     "default_personality": {
-                        "description": "默认人格",
+                        "description": "默认采用的人格情景的名称",
                         "type": "string",
-                        "hint": "默认人格（情境设置/System Prompt）文本。",
+                        "hint": "",
                     },
                     "prompt_prefix": {
                         "description": "Prompt 前缀文本",
@@ -476,6 +484,47 @@ CONFIG_METADATA_2 = {
                     },
                 },
             },
+            "persona": {
+                "description": "人格情景设置",
+                "type": "list",
+                "config_template": {
+                    "新人格情景": {
+                        "name": "",
+                        "prompt": "",
+                        "begin_dialogs": [],
+                        "mood_imitation_dialogs": []
+                    }
+                },
+                "tmpl_display_title": "name",
+                "items": {
+                    "name": {
+                        "description": "人格名称",
+                        "type": "string",
+                        "hint": "人格名称，用于在多个人格中区分。使用 /persona 指令可切换人格。在 大语言模型设置 处可以设置默认人格。",
+                        "obvious_hint": True
+                    },
+                    "prompt": {
+                        "description": "设定(系统提示词)",
+                        "type": "text",
+                        "hint": "填写人格的身份背景、性格特征、兴趣爱好、个人经历、口头禅等。",
+                    },
+                    "begin_dialogs": {
+                        "description": "预设对话",
+                        "type": "list",
+                        "items": {},
+                        "hint": "可选。在每个对话前会插入这些预设对话。格式要求：第一句为用户，第二句为助手，以此类推。",
+                        "obvious_hint": True
+                    },
+                    "mood_imitation_dialogs": {
+                        "description": "对话风格模仿",
+                        "type": "list",
+                        "items": {},
+                        "hint": "旨在让模型尽可能模仿学习到所填写的对话的语气风格。格式和 `预设对话` 一样。",
+                        "obvious_hint": True
+                    },
+                }
+            },
+            
             "provider_stt_settings": {
                 "description": "语音转文本(STT)",
                 "type": "object",

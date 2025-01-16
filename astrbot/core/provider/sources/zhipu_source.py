@@ -14,9 +14,10 @@ class ProviderZhipu(ProviderOpenAIOfficial):
         provider_config: dict, 
         provider_settings: dict,
         db_helper: BaseDatabase, 
-        persistant_history = True
+        persistant_history = True,
+        default_persona = None
     ) -> None:
-        super().__init__(provider_config, provider_settings, db_helper, persistant_history)
+        super().__init__(provider_config, provider_settings, db_helper, persistant_history, default_persona)
     
     async def text_chat(
         self,

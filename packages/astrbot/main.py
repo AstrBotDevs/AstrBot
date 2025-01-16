@@ -1,9 +1,10 @@
 import aiohttp
 import datetime
+import builtins
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.api import personalities, sp
+from astrbot.api import sp
 from astrbot.api.provider import Personality, ProviderRequest
 from astrbot.core.utils.io import download_dashboard
 
@@ -306,47 +307,53 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.command("persona")
     async def persona(self, message: AstrMessageEvent):
         l = message.message_str.split(" ")
+        
+        curr_persona_name = "无"
+        if self.context.get_using_provider().curr_personality:
+            curr_persona_name = self.context.get_using_provider().curr_personality['name']
+        
         if len(l) == 1:
             message.set_result(
                 MessageEventResult().message(f"""[Persona]
 
-- 设置人格: `/persona 人格名`, 如 /persona 编剧
-- 人格列表: `/persona list`
-- 人格详细信息: `/persona view 人格名`
-- 自定义人格: /persona 人格文本
-- 重置 LLM 会话(清除人格): /reset
-- 重置 LLM 会话(保留人格): /reset p
+- 设置人格情景: `/persona 人格名`, 如 /persona 编剧
+- 人格情景列表: `/persona list`
+- 人格情景详细信息: `/persona view 人格名`
 
-【当前人格】: {str(self.context.get_using_provider().curr_personality['prompt'])}
+当前人格情景: {curr_persona_name}
+
+配置人格情景请前往管理面板-配置页
 """).use_t2i(False))
         elif l[1] == "list":
             msg = "人格列表：\n"
-            for key in personalities.keys():
-                msg += f"- {key}\n"
+            for persona in self.context.provider_manager.personas:
+                msg += f"- {persona['name']}\n"
             msg += '\n\n*输入 `/persona view 人格名` 查看人格详细信息'
             message.set_result(MessageEventResult().message(msg))
         elif l[1] == "view":
             if len(l) == 2:
-                message.set_result(MessageEventResult().message("请输入人格名"))
+                message.set_result(MessageEventResult().message("请输入人格情景名"))
+                return
             ps = l[2].strip()
-            if ps in personalities:
+            if persona := next(builtins.filter(
+                lambda persona: persona['name'] == ps, 
+                self.context.provider_manager.personas
+            ), None):
                 msg = f"人格{ps}的详细信息：\n"
-                msg += f"{personalities[ps]}\n"
+                msg += f"{persona['prompt']}\n"
             else:
                 msg = f"人格{ps}不存在"
             message.set_result(MessageEventResult().message(msg))
         else:
             ps = "".join(l[1:]).strip()
-            if ps in personalities:
-                self.context.get_using_provider().curr_personality = Personality(
-                    name=ps, prompt=personalities[ps])
-                message.set_result(
-                    MessageEventResult().message(f"人格已设置。 \n人格信息: {ps}"))
+            if persona := next(builtins.filter(
+                lambda persona: persona['name'] == ps, 
+                self.context.provider_manager.personas
+            ), None):
+                self.context.get_using_provider().curr_personality = persona
+                message.set_result(MessageEventResult().message(f"设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。"))
             else:
-                self.context.get_using_provider().curr_personality = Personality(
-                    name="自定义人格", prompt=ps)
-                message.set_result(
-                    MessageEventResult().message(f"人格已设置。 \n人格信息: {ps}"))
+                message.set_result(MessageEventResult().message(f"不存在该人格情景。使用 /persona list 查看所有。"))
     
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dashboard_update")
@@ -363,12 +370,22 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         if self.identifier:
             user_id = event.message_obj.sender.user_id
             user_nickname = event.message_obj.sender.nickname
-            user_info = f"[User ID: {user_id}, Nickname: {user_nickname}]\n"
+            user_info = f"\n[User ID: {user_id}, Nickname: {user_nickname}]\n"
             req.prompt = user_info + req.prompt
         if self.enable_datetime:
-            req.system_prompt += f"\nCurrent datetime: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        if provider.curr_personality['prompt']:
-            req.system_prompt += f"\n{provider.curr_personality['prompt']}"
+            req.system_prompt += f"\nCurrent datetime: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        
+        if persona := provider.curr_personality:
+            if prompt := persona['prompt']:
+                req.system_prompt += prompt
+            if mood_dialogs := persona['_mood_imitation_dialogs_processed']:
+                req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
+                req.system_prompt += mood_dialogs
+            if begin_dialogs := persona["_begin_dialogs_processed"]:
+                req.contexts[:0] = begin_dialogs
+
+        # if provider.curr_personality['prompt']:
+        #     req.system_prompt += f"\n{provider.curr_personality['prompt']}"
         
     @filter.command("set")
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str):

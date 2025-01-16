@@ -2,7 +2,7 @@ import json
 import os
 from llmtuner.chat import ChatModel
 from typing import List
-from .. import Provider
+from .. import Provider, Personality
 from ..entites import LLMResponse
 from ..func_tool_manager import FuncCall
 from astrbot.core.db import BaseDatabase
@@ -19,9 +19,10 @@ class LLMTunerModelLoader(Provider):
         provider_settings: dict,
         db_helper: BaseDatabase,
         persistant_history=True,
+        default_persona=None,
     ) -> None:
         super().__init__(
-            provider_config, provider_settings, persistant_history, db_helper
+            provider_config, provider_settings, persistant_history, db_helper, default_persona
         )
         if not os.path.exists(provider_config["base_model_path"]) or not os.path.exists(
             provider_config["adapter_model_path"]
@@ -61,20 +62,25 @@ class LLMTunerModelLoader(Provider):
         **kwargs,
     ) -> LLMResponse:
         system_prompt = ""
+        new_record = {"role": "user", "content": prompt}
         if not contexts:
             query_context = [
                 *self.session_memory[session_id],
-                {"role": "user", "content": prompt},
+                new_record,
             ]
             system_prompt = self.curr_personality["prompt"]
         else:
-            query_context = [*contexts, {"role": "user", "content": prompt}]
+            query_context = [*contexts, new_record]
 
         # 提取出系统提示
         system_idxs = []
         for idx, context in enumerate(query_context):
             if context["role"] == "system":
                 system_idxs.append(idx)
+                
+            if '_no_save' in context:
+                del context['_no_save']
+            
         for idx in reversed(system_idxs):
             system_prompt += " " + query_context.pop(idx)["content"]
 
@@ -89,23 +95,31 @@ class LLMTunerModelLoader(Provider):
 
         responses = await self.model.achat(**conf)
 
-        if session_id:
+        llm_response = LLMResponse("assistant", responses[-1].response_text)
+        
+        await self.save_history(contexts, new_record, session_id, llm_response)
+        
+        return llm_response
+   
+    async def save_history(self, contexts: List, new_record: dict, session_id: str, llm_response: LLMResponse):
+        if llm_response.role == "assistant" and session_id:
+            # 文本回复
             if not contexts:
-                self.session_memory[session_id].append(
-                    {"role": "user", "content": prompt}
-                )
-                self.session_memory[session_id].append(
-                    {"role": "assistant", "content": responses[-1].response_text}
-                )
+                # 添加用户 record
+                self.session_memory[session_id].append(new_record)
+                # 添加 assistant record
+                self.session_memory[session_id].append({
+                    "role": "assistant",
+                    "content": llm_response.completion_text
+                })
             else:
-                self.session_memory[session_id] = [
-                    *contexts,
-                    {"role": "user", "content": prompt},
-                    {"role": "assistant", "content": responses[-1].response_text},
-                ]
-            self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.meta().type)
-        return responses[-1].response_text
-
+                contexts_to_save = list(filter(lambda item: '_no_save' not in item, contexts))
+                self.session_memory[session_id] = [*contexts_to_save, new_record, {
+                    "role": "assistant",
+                    "content": llm_response.completion_text
+                }]
+            self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['type'])
+        
     async def forget(self, session_id):
         self.session_memory[session_id] = []
         return True
