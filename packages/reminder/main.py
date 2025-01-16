@@ -78,6 +78,10 @@ class Main(star.Star):
             cron_expression(string): Required when user's reminder is a repeated reminder. The cron expression of the reminder.
             human_readable_cron(string): Optional. The human readable cron expression of the reminder.
         '''
+        if event.get_platform_name() == 'qq_official':
+            yield event.plain_result("reminder 暂不支持 QQ 官方机器人。")
+            return
+        
         if event.unified_msg_origin not in self.reminder_data:
             self.reminder_data[event.unified_msg_origin] = []
         
