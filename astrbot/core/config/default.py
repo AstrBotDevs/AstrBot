@@ -500,7 +500,8 @@ CONFIG_METADATA_2 = {
                     "name": {
                         "description": "人格名称",
                         "type": "string",
-                        "hint": "人格名称，用于在多个人格中区分。",
+                        "hint": "人格名称，用于在多个人格中区分。使用 /persona 指令可切换人格。在 大语言模型设置 处可以设置默认人格。",
+                        "obvious_hint": True
                     },
                     "prompt": {
                         "description": "设定(系统提示词)",
@@ -511,7 +512,7 @@ CONFIG_METADATA_2 = {
                         "description": "预设对话",
                         "type": "list",
                         "items": {},
-                        "hint": "可选。在每个对话前会插入这些预设对话。格式要求：按照用户、助手...的格式。即第一句为用户，第二句为助手，以此类推。",
+                        "hint": "可选。在每个对话前会插入这些预设对话。格式要求：第一句为用户，第二句为助手，以此类推。",
                         "obvious_hint": True
                     },
                     "mood_imitation_dialogs": {
