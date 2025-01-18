@@ -9,6 +9,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 from .gewechat_event import GewechatPlatformEvent
 from .client import SimpleGewechatClient
+from astrbot.core.message.components import Plain
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -28,8 +29,19 @@ class GewechatPlatformAdapter(Platform):
     
     @override
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
-        # from_username = session.session_id.split('$$')[0]
-        # await GewechatPlatformEvent.send_with_client(self.client, message_chain, from_username)
+        to_wxid = session.session_id
+        if "_" in to_wxid:
+            # 群聊，开启了独立会话
+            _, to_wxid = to_wxid.split("_")
+        
+        if not to_wxid:
+            logger.error("无法获取到 to_wxid。")
+            return
+        
+        for comp in message_chain.chain:
+            if isinstance(comp, Plain):
+                await self.client.post_text(to_wxid, comp.text)
+
         await super().send_by_session(session, message_chain)
     
     @override

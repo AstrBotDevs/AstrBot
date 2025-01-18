@@ -21,28 +21,6 @@ class GewechatPlatformEvent(AstrMessageEvent):
         
     @staticmethod
     async def send_with_client(message: MessageChain, user_name: str):
-        # plain = ""
-        # for comp in message.chain:
-        #     if isinstance(comp, Plain):
-        #         if message.is_split_:
-        #             await client.send_msg(comp.text, user_name)
-        #         else:
-        #             plain += comp.text
-        #     elif isinstance(comp, Image):
-        #         if comp.file and comp.file.startswith("file:///"):
-        #             file_path = comp.file.replace("file:///", "")
-        #             with open(file_path, "rb") as f:
-        #                 await client.send_image(user_name, fd=f)
-        #         elif comp.file and comp.file.startswith("http"):
-        #             image_path = await download_image_by_url(comp.file)
-        #             with open(image_path, "rb") as f:
-        #                 await client.send_image(user_name, fd=f)
-        #     else:
-        #         logger.error(f"不支持的 vchat(微信适配器) 消息类型: {comp}")
-        #     await asyncio.sleep(random.uniform(0.5, 1.5)) # 🤓
-        
-        # if plain:
-        #     await client.send_msg(plain, user_name)
         pass
                 
         
