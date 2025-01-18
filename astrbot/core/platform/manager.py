@@ -25,6 +25,8 @@ class PlatformManager():
                     from .sources.qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter # noqa: F401
                 case "vchat":
                     from .sources.vchat.vchat_platform_adapter import VChatPlatformAdapter # noqa: F401
+                case "gewechat":
+                    from .sources.gewechat.gewechat_platform_adapter import GewechatPlatformAdapter # noqa: F401
         
 
     async def initialize(self):

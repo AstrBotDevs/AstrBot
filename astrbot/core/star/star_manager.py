@@ -7,7 +7,6 @@ import yaml
 import logging
 from types import ModuleType
 from typing import List
-from pip import main as pip_main
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core import logger, sp, pip_installer
 from .context import Context
