@@ -36,8 +36,8 @@ DEFAULT_CONFIG = {
         "prompt_prefix": "",
     },
     "provider_stt_settings": {
-      "enable": False,
-      "provider_id": "",  
+        "enable": False,
+        "provider_id": "",
     },
     "content_safety": {
         "internal_keywords": {"enable": True, "extra_keywords": []},
@@ -63,9 +63,9 @@ DEFAULT_CONFIG = {
             "name": "default",
             "prompt": "如果用户寻求帮助或者打招呼，请告诉他可以用 /help 查看 AstrBot 帮助。",
             "begin_dialogs": [],
-            "mood_imitation_dialogs": []
+            "mood_imitation_dialogs": [],
         }
-    ]
+    ],
 }
 
 
@@ -95,6 +95,15 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                     },
                     "vchat(微信)": {"id": "default", "type": "vchat", "enable": False},
+                    "gewechat(微信)": {
+                        "id": "gwchat",
+                        "type": "gewechat",
+                        "enable": False,
+                        "base_url": "http://localhost:2531",
+                        "nickname": "soulter",
+                        "host": "localhost",
+                        "port": 11451,
+                    },
                 },
                 "items": {
                     "id": {
@@ -180,7 +189,7 @@ CONFIG_METADATA_2 = {
                     },
                     "enable_id_white_list": {
                         "description": "启用 ID 白名单",
-                        "type": "bool"
+                        "type": "bool",
                     },
                     "id_whitelist": {
                         "description": "ID 白名单",
@@ -354,14 +363,14 @@ CONFIG_METADATA_2 = {
                         "id": "whisper",
                         "type": "openai_whisper_selfhost",
                         "model": "tiny",
-                    }
+                    },
                 },
                 "items": {
                     "whisper_hint": {
                         "description": "本地部署 Whisper 模型须知",
                         "type": "string",
                         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
-                        "obvious_hint": True
+                        "obvious_hint": True,
                     },
                     "id": {
                         "description": "ID",
@@ -451,7 +460,7 @@ CONFIG_METADATA_2 = {
                         "description": "Dify Workflow 输出变量名",
                         "type": "string",
                         "hint": "Dify Workflow 输出变量名。当应用类型为 workflow 时才使用。默认为 astrbot_wf_output。",
-                    }
+                    },
                 },
             },
             "provider_settings": {
@@ -462,7 +471,7 @@ CONFIG_METADATA_2 = {
                         "description": "启用大语言模型聊天",
                         "type": "bool",
                         "hint": "如需切换大语言模型提供商，请使用 `/provider` 命令。",
-                        "obvious_hint": True
+                        "obvious_hint": True,
                     },
                     "wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀",
@@ -504,7 +513,7 @@ CONFIG_METADATA_2 = {
                         "name": "",
                         "prompt": "",
                         "begin_dialogs": [],
-                        "mood_imitation_dialogs": []
+                        "mood_imitation_dialogs": [],
                     }
                 },
                 "tmpl_display_title": "name",
@@ -513,7 +522,7 @@ CONFIG_METADATA_2 = {
                         "description": "人格名称",
                         "type": "string",
                         "hint": "人格名称，用于在多个人格中区分。使用 /persona 指令可切换人格。在 大语言模型设置 处可以设置默认人格。",
-                        "obvious_hint": True
+                        "obvious_hint": True,
                     },
                     "prompt": {
                         "description": "设定(系统提示词)",
@@ -525,18 +534,17 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {},
                         "hint": "可选。在每个对话前会插入这些预设对话。格式要求：第一句为用户，第二句为助手，以此类推。",
-                        "obvious_hint": True
+                        "obvious_hint": True,
                     },
                     "mood_imitation_dialogs": {
                         "description": "对话风格模仿",
                         "type": "list",
                         "items": {},
                         "hint": "旨在让模型尽可能模仿学习到所填写的对话的语气风格。格式和 `预设对话` 一样。",
-                        "obvious_hint": True
+                        "obvious_hint": True,
                     },
-                }
+                },
             },
-            
             "provider_stt_settings": {
                 "description": "语音转文本(STT)",
                 "type": "object",
@@ -545,7 +553,7 @@ CONFIG_METADATA_2 = {
                         "description": "启用语音转文本(STT)",
                         "type": "bool",
                         "hint": "启用前请在 服务提供商配置 处创建支持 语音转文本任务 的提供商。如 whisper。",
-                        "obvious_hint": True
+                        "obvious_hint": True,
                     },
                     "provider_id": {
                         "description": "提供商 ID，不填则默认第一个STT提供商",
