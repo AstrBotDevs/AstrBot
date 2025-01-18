@@ -22,6 +22,8 @@ DEFAULT_CONFIG = {
         "id_whitelist_log": True,
         "wl_ignore_admin_on_group": True,
         "wl_ignore_admin_on_friend": True,
+        "reply_with_mention": False,
+        "reply_with_quote": False,
     },
     "provider": [],
     "provider_settings": {
@@ -198,6 +200,16 @@ CONFIG_METADATA_2 = {
                     "wl_ignore_admin_on_friend": {
                         "description": "管理员私聊消息无视 ID 白名单",
                         "type": "bool",
+                    },
+                    "reply_with_mention": {
+                        "description": "回复时 @ 发送者",
+                        "type": "bool",
+                        "hint": "启用后，机器人回复消息时会 @ 发送者。实际效果以具体的平台适配器为准。",
+                    },
+                    "reply_with_quote": {
+                        "description": "回复时引用消息",
+                        "type": "bool",
+                        "hint": "启用后，机器人回复消息时会引用原消息。实际效果以具体的平台适配器为准。",
                     },
                 },
             },

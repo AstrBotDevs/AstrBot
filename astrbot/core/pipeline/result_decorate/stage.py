@@ -3,8 +3,9 @@ from typing import Union, AsyncGenerator
 from ..stage import register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core import logger
-from astrbot.core.message.components import Plain, Image
+from astrbot.core.message.components import Plain, Image, At, Reply
 from astrbot.core import html_renderer
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 
@@ -13,6 +14,8 @@ class ResultDecorateStage:
     async def initialize(self, ctx: PipelineContext):
         self.ctx = ctx
         self.reply_prefix = ctx.astrbot_config['platform_settings']['reply_prefix']
+        self.reply_with_mention = ctx.astrbot_config['platform_settings']['reply_with_mention']
+        self.reply_with_quote = ctx.astrbot_config['platform_settings']['reply_with_quote']
         self.t2i = ctx.astrbot_config['t2i']
 
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
@@ -49,3 +52,10 @@ class ResultDecorateStage:
                         logger.warning("文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。")
                     if url:
                         result.chain = [Image.fromURL(url)]
+        
+        if self.reply_with_mention and event.get_message_type() != MessageType.FRIEND_MESSAGE:
+            result.chain.insert(0, Plain("\n"))
+            result.chain.insert(0, At(qq=event.get_sender_id()))
+        
+        if self.reply_with_quote:
+            result.chain.insert(0, Reply(id=event.message_obj.message_id))
