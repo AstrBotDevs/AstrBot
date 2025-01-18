@@ -7,7 +7,6 @@ from astrbot.core.star.register import register_llm_tool as llm_tool
 __all__ = [
     "AstrBotConfig",
     "logger",
-    "personalities",
     "html_renderer",
     "llm_tool",
     "sp"
