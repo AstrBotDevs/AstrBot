@@ -52,9 +52,9 @@ class ResultDecorateStage:
                         logger.warning("文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。")
                     if url:
                         result.chain = [Image.fromURL(url)]
-        
-        if self.reply_with_mention and event.get_message_type() != MessageType.FRIEND_MESSAGE:
-            result.chain.insert(0, At(qq=event.get_sender_id()))
-        
-        if self.reply_with_quote:
-            result.chain.insert(0, Reply(id=event.message_obj.message_id))
+            
+            if self.reply_with_mention and event.get_message_type() != MessageType.FRIEND_MESSAGE:
+                result.chain.insert(0, At(qq=event.get_sender_id()))
+            
+            if self.reply_with_quote:
+                result.chain.insert(0, Reply(id=event.message_obj.message_id))
