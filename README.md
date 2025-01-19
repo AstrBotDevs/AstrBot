@@ -26,48 +26,54 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 
 AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用的插件系统和完善的大语言模型（LLM）接入功能的聊天机器人及开发框架。
 
-## ✨ 多消息平台部署
+## ✨ 主要功能
 
-1. QQ 群、QQ 频道、微信个人号、Telegram。
-2. 内置 Web Chat，即使不部署到消息平台也能聊天。
-3. 支持文本转图片，Markdown 渲染。
-   
-## ✨ 多 LLM 配置
+1. **大语言模型对话**。支持各种大语言模型，包括 OpenAI API、Google Gemini、Llama、Deepseek、ChatGLM 等，支持接入本地部署的大模型，通过 Ollama、LLMTuner。具有多轮对话、人格情境、多模态能力，支持图片理解、语音转文字（Whisper）。
+2. **多消息平台接入**。支持接入 QQ（OneBot）、QQ 频道、微信（Gewechat、VChat）、Telegram。后续将支持钉钉、飞书、Discord、WhatsApp、小爱音响。支持速率限制、白名单、关键词过滤、百度内容审核。
+3. **Agent**。原生支持部分 Agent 能力，如代码执行器、自然语言待办、网页搜索。对接 [Dify 平台](https://astrbot.soulter.top/others/dify.html)，便捷接入 Dify 智能助手、知识库和 Dify 工作流。
+4. **插件扩展**。深度优化的插件机制，支持[开发插件](https://astrbot.soulter.top/dev/plugin.html)扩展功能，极简开发。已支持安装多个插件。
+5. **可视化管理面板**。支持可视化修改配置、插件管理、日志查看等功能，降低配置难度。集成 WebChat，可在面板上与大模型对话。
+6. **高稳定性、高模块化**。基于事件总线和流水线的架构设计，高度模块化，低耦合。
 
-1. 适配 OpenAI API，支持接入 Gemini、GPT、Llama、Claude、DeepSeek、GLM 等各种大语言模型。
-2. 支持 OneAPI 等分发平台。
-3. 支持 LLMTuner 载入微调模型。
-4. 支持 Ollama 载入自部署模型。
-4. 支持网页搜索（Web Search）、自然语言待办提醒。
-5. 支持 Whisper 语音转文字
+## ✨ 使用方式
 
-## ✨ 管理面板
+#### Docker 部署
 
-1. 支持可视化修改配置
-2. 日志实时查看
-3. 简单的信息统计
-4. 插件管理
+请参阅官方文档 [使用 Docker 部署 AstrBot](https://astrbot.soulter.top/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) 。
 
-## ✨ 支持 Dify
+#### Windows 一键安装器部署
 
-1. 对接了 LLMOps 平台 Dify，便捷接入 Dify 智能助手、知识库和 Dify 工作流！[接入 Dify - AstrBot 文档](https://astrbot.lwl.lol/others/dify.html)
+需要电脑上安装有 Python（>3.10）。请参阅官方文档 [使用 Windows 一键安装器部署 AstrBot](https://astrbot.soulter.top/deploy/astrbot/windows.html) 。
 
-## ✨ 代码执行器(Beta)
-
-基于 Docker 的沙箱化代码执行器（Beta 测试中）
-
-> [!NOTE]
-> 文件输入/输出目前仅测试了 Napcat(QQ), Lagrange(QQ)
-
-<div align='center'>
-
-<img src="https://github.com/user-attachments/assets/4ee688d9-467d-45c8-99d6-368f9a8a92d8" width="600">
-
-</div>
-
-## ✨ 云部署
+#### Replit 部署
 
 [![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
+
+#### CasaOS 部署
+
+社区贡献的部署方式。
+
+请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.soulter.top/deploy/astrbot/casaos.html) 。
+
+#### 手动部署
+
+请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.soulter.top/deploy/astrbot/cli.html) 。
+
+
+## ⚡ 消息平台支持情况
+
+
+| 平台    | 支持性 | 详情 | 消息类型 |
+| -------- | ------- | ------- | ------ |
+| QQ      | ✔    | 私聊、群聊 | 文字、图片、语音 |
+| QQ 官方API | ✔    | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片 |
+| 微信    | ✔    | [Gewechat](https://github.com/Devo919/Gewechat)。微信个人号私聊、群聊 | 文字 |
+| [Telegram](https://github.com/Soulter/astrbot_plugin_telegram)   | ✔    | 私聊、群聊 | 文字、图片 |
+| 微信对话开放平台 | 🚧    | 计划内 | - |
+| 飞书   | 🚧    | 计划内 | - |
+| Discord   | 🚧    | 计划内 | - |
+| WhatsApp   | 🚧    | 计划内 | - |
+| 小爱音响   | 🚧    | 计划内 | - |
 
 ## ❤️ 贡献
 
@@ -75,22 +81,22 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 对于新功能的添加，请先通过 Issue 讨论。
 
-## 🔭 展望
-
-1. 更强大的 Agent 系统。
-2. 打造插件工作流平台。
-
-## ✨ Support
+## 🌟 支持
 
 - Star 这个项目！
 - 在[爱发电](https://afdian.com/a/soulter)支持我！
 - 在[微信](https://drive.soulter.top/f/pYfA/d903f4fa49a496fda3f16d2be9e023b5.png)支持我~
 
-
-
 ## ✨ Demo
 
+> [!NOTE]
+> 代码执行器的文件输入/输出目前仅测试了 Napcat(QQ), Lagrange(QQ)
+
 <div align='center'>
+
+<img src="https://github.com/user-attachments/assets/4ee688d9-467d-45c8-99d6-368f9a8a92d8" width="600">
+
+_✨基于 Docker 的沙箱化代码执行器（Beta 测试中）✨_
 
 <img src="https://github.com/user-attachments/assets/0378f407-6079-4f64-ae4c-e97ab20611d2" height=500>
 
