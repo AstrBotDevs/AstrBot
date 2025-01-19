@@ -35,6 +35,11 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 5. **可视化管理面板**。支持可视化修改配置、插件管理、日志查看等功能，降低配置难度。集成 WebChat，可在面板上与大模型对话。
 6. **高稳定性、高模块化**。基于事件总线和流水线的架构设计，高度模块化，低耦合。
 
+> [!TIP]
+> 管理面板在线体验 Demo: [https://astrbot-demo.soulter.top/](https://astrbot-demo.soulter.top/)
+> 
+> 用户名: `astrbot`, 密码: `astrbot`
+
 ## ✨ 使用方式
 
 #### Docker 部署
