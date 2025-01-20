@@ -38,7 +38,7 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 > [!TIP]
 > 管理面板在线体验 Demo: [https://astrbot-demo.soulter.top/](https://astrbot-demo.soulter.top/)
 > 
-> 用户名: `astrbot`, 密码: `astrbot`
+> 用户名: `astrbot`, 密码: `astrbot`。此 Demo 未配置 LLM，因此无法在聊天页使用大模型。
 
 ## ✨ 使用方式
 
