@@ -42,17 +42,17 @@ async def check_dashboard_files():
             with open("data/dist/assets/version", "r") as f:
                 v = f.read().strip()
                 if v != f"v{VERSION}":
-                    logger.warning("检测到管理面板有更新。可以使用 /dashboard update 命令更新。")
+                    logger.warning("检测到管理面板有更新。可以使用 /dashboard_update 命令更新。")
                 else:
                     logger.info("管理面板文件已是最新。")
         return
     
-    logger.info("开始下载管理面板文件...")
+    logger.info("开始下载管理面板文件...高峰期（晚上）可能导致较慢的速度。如多次下载失败，请前往 https://github.com/Soulter/AstrBot/releases/latest 下载 dist.zip，并将其中的 dist 文件夹解压至 data 目录下。")
     
     try:
         await download_dashboard()
     except Exception as e:
-        logger.critical(f"下载管理面板文件失败: {e}")
+        logger.critical(f"下载管理面板文件失败: {e}。")
         return
 
     logger.info("管理面板下载完成。")

@@ -140,7 +140,7 @@ class Main(star.Star):
             docker = aiodocker.Docker()
             await docker.version()
             return True
-        except aiodocker.exceptions.DockerError as e:
+        except BaseException as e:
             logger.info(f"检查 Docker 可用性: {e}")
             return False
         

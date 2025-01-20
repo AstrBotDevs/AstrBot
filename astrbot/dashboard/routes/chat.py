@@ -182,8 +182,7 @@ class ChatRoute(Route):
                     
                     await asyncio.sleep(0.5)
             except BaseException as e:
-                logger.error(e)
-                logger.error(f"与用户 {username} 断开聊天长连接。")
+                logger.debug(f"用户 {username} 断开聊天长连接: {str(e)}。")
                 self.curr_chat_sse.pop(username)
                 return
 
