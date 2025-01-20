@@ -17,6 +17,13 @@ class LLMRequestSubStage(Stage):
     
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
+        self.bot_wake_prefixs = ctx.astrbot_config['wake_prefix'] # list
+        self.provider_wake_prefix = ctx.astrbot_config['provider_settings']['wake_prefix'] # str
+        
+        for bwp in self.bot_wake_prefixs:
+            if self.provider_wake_prefix.startswith(bwp):
+                logger.info(f"识别 LLM 聊天额外唤醒前缀 {self.provider_wake_prefix} 以机器人唤醒前缀 {bwp} 开头，已自动去除。")
+                self.provider_wake_prefix = self.provider_wake_prefix[len(bwp):]
         
     async def process(self, event: AstrMessageEvent, _nested: bool = False) -> Union[None, AsyncGenerator[None, None]]:
         req: ProviderRequest = None
@@ -30,10 +37,10 @@ class LLMRequestSubStage(Stage):
             assert isinstance(req, ProviderRequest), "provider_request 必须是 ProviderRequest 类型。"
         else:
             req = ProviderRequest(prompt="", image_urls=[])
-            if self.ctx.astrbot_config['provider_settings']['wake_prefix']:
-                if not event.message_str.startswith(self.ctx.astrbot_config['provider_settings']['wake_prefix']):
+            if self.provider_wake_prefix:
+                if not event.message_str.startswith(self.provider_wake_prefix):
                     return
-            req.prompt = event.message_str[len(self.ctx.astrbot_config['provider_settings']['wake_prefix']):]
+            req.prompt = event.message_str[len(self.provider_wake_prefix):]
             req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
