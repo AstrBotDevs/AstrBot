@@ -39,7 +39,7 @@ class Main(star.Star):
         '''获取网页内容'''
         header = HEADERS
         header.update({'User-Agent': random.choice(USER_AGENTS)})
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.get(url, headers=header, timeout=6) as response:
                 html = await response.text(encoding="utf-8")
                 doc = Document(html)

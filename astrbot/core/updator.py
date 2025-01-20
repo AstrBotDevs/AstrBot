@@ -11,7 +11,7 @@ class AstrBotUpdator(RepoZipUpdator):
     def __init__(self, repo_mirror: str = "") -> None:
         super().__init__(repo_mirror)
         self.MAIN_PATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../"))
-        self.ASTRBOT_RELEASE_API = "https://api.github.com/repos/Soulter/AstrBot/releases"
+        self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
 
     def terminate_child_processes(self):
         try:

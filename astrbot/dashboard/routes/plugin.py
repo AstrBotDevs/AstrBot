@@ -27,7 +27,7 @@ class PluginRoute(Route):
     async def get_online_plugins(self):
         url = "https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json"
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.get(url) as response:
                     result = await response.json()
             return Response().ok(result).__dict__

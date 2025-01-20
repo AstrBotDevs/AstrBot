@@ -83,7 +83,7 @@ class LocalRenderStrategy(RenderStrategy):
                 try:
                     image_url = re.findall(IMAGE_REGEX, line)[0]
                     print(image_url)
-                    async with aiohttp.ClientSession() as session:
+                    async with aiohttp.ClientSession(trust_env=True) as session:
                         async with session.get(image_url) as resp:
                             image_res = Image.open(BytesIO(await resp.read()))
                     images[i] = image_res

@@ -29,7 +29,7 @@ class RepoZipUpdator():
         返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         '''
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.get(url) as response:
                     result = await response.json()
             if not result: 
@@ -111,7 +111,7 @@ class RepoZipUpdator():
         releases = await self.fetch_release_info(url=release_url)
         if not releases:
             # download from the default branch directly. 
-            logger.warning(f"未在仓库 {author}/{repo} 中找到任何发布版本，正在从默认分支下载。")
+            logger.info(f"未在仓库 {author}/{repo} 中找到任何发布版本，正在从默认分支下载。")
             release_url = f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
         else:
             release_url = releases[0]['zipball_url']

@@ -127,7 +127,7 @@ class Main(star.Star):
         
         s3_file_url = f"{S3_URL}/{uuid.uuid4().hex}{ext}"
 
-        async with aiohttp.ClientSession(headers = {"Accept": "application/json"}) as session:
+        async with aiohttp.ClientSession(headers = {"Accept": "application/json"}, trust_env=True) as session:
             async with session.put(s3_file_url, data=file) as resp:
                 if resp.status != 200:
                     raise Exception(f"Failed to upload image: {resp.status}")
@@ -159,7 +159,7 @@ class Main(star.Star):
     
     async def download_image(self, image_url: str, workplace_path: str, filename: str) -> str:
         '''Download image from url to workplace_path'''
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.get(image_url) as resp:
                 if resp.status != 200:
                     return ""

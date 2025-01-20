@@ -18,7 +18,7 @@ class SimpleGoogleGenAIClient():
             self.api_base = api_base[:-1]
         else:
             self.api_base = api_base
-        self.client = aiohttp.ClientSession()
+        self.client = aiohttp.ClientSession(trust_env=True)
         
     async def models_list(self) -> List[str]:
         request_url = f"{self.api_base}/v1beta/models?key={self.api_key}"

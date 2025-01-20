@@ -30,7 +30,7 @@ class Metric():
             pass
         
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(base_url, json=payload, timeout=3) as response:
                     if response.status != 200:
                         pass

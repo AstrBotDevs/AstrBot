@@ -33,7 +33,7 @@ class NetworkRenderStrategy(RenderStrategy):
             }
         }
         if return_url:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(f"{self.BASE_RENDER_URL}/generate", json=post_data) as resp:
                     ret = await resp.json()
                     return f"{self.BASE_RENDER_URL}/{ret['data']['id']}"

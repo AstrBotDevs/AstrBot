@@ -27,10 +27,10 @@ const sidebarMenu = shallowRef(sidebarItems);
         </v-btn>
       </v-list-item>
       <small style="display: block;" v-if="buildVer">构建: {{ buildVer }}</small>
-      <small style="display: block;" v-else="buildVer">构建: embedded</small>
+      <small style="display: block;" v-else>构建: embedded</small>
       <v-tooltip text="使用 /dashbord_update 指令更新管理面板">
         <template v-slot:activator="{ props }">
-          <small v-bind="props" v-if="buildVer != version" style="display: block; margin-top: 4px;">面板有更新</small>
+          <small v-bind="props" v-if="hasWebUIUpdate" style="display: block; margin-top: 4px;">面板有更新</small>
         </template>
       </v-tooltip>
 
@@ -50,25 +50,28 @@ export default {
   },
   data: () => ({
     version: "",
-    buildVer: ""
+    buildVer: "",
+    hasWebUIUpdate: false,
   }),
   mounted() {
     this.get_version()
-    fetch('/assets/version').then((res) => {
-      return res.text()
-    }).then((res) => {
-      if (res.length > 10) {
-        // 不是版本，不显示 😎
-        return
-      }
-      this.buildVer = res.replace(/\s+/g, '')
-    })
+    this.check_webui_update()
   },
   methods: {
     get_version() {
       axios.get('/api/stat/version')
         .then((res) => {
           this.version = "v" + res.data.data.version;
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+    },
+    check_webui_update() {
+      axios.get('/api/update/check?type=dashboard')
+        .then((res) => {
+          this.hasWebUIUpdate = res.data.data.has_new_version;
+          this.buildVer = res.data.data.current_version;
         })
         .catch((err) => {
           console.log(err);

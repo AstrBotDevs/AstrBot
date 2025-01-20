@@ -136,11 +136,15 @@ commonStore.getStartTime();
       </template>
       <v-card>
         <v-card-title>
-          <span class="text-h5">更新项目</span>
+          <span class="text-h5">更新 AstrBot</span>
         </v-card-title>
         <v-card-text>
           <v-container>
             <h3 class="mb-4">升级到最新版本</h3>
+            
+            <div class="mb-4">
+              <small>会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker 部署，也可以重新拉取镜像或者使用 <a href="https://containrrr.dev/watchtower/usage-overview/">watchtower</a> 来自动监控拉取。</small>
+            </div>
             <p>{{ updateStatus }}</p>
             <v-btn class="mt-4 mb-4" @click="switchVersion('latest')" color="primary" style="border-radius: 10px;"
               :disabled="!hasNewVersion">
@@ -149,6 +153,9 @@ commonStore.getStartTime();
             <v-divider></v-divider>
             <div style="margin-top: 16px;">
               <h3 class="mb-4">切换到指定版本或指定提交</h3>
+              <div class="mb-4">
+              <small>跳到旧版本不会重新下载管理面板文件，这可能会造成部分数据显示错误。您可在 <a href="https://github.com/Soulter/AstrBot/releases">此处</a> 找到对应的面板文件 dist.zip，解压后替换 data/dist 文件夹即可。</small>
+            </div>
               <v-text-field label="输入版本号或 master 分支下的 commit hash。" v-model="version" required
                 variant="outlined"></v-text-field>
               <div class="mb-4">

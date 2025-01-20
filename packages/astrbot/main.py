@@ -24,7 +24,7 @@ class Main(star.Star):
     
     async def _query_astrbot_notice(self):
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.get("https://astrbot.soulter.top/notice.json", timeout=2) as resp:
                     return (await resp.json())["notice"]
         except BaseException:

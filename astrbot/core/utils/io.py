@@ -70,7 +70,7 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
     下载图片, 返回 path
     '''
     try:
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(trust_env=True) as session:
             if post:
                 async with session.post(url, json=post_data) as resp:
                     if not path:
@@ -91,7 +91,7 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()
         ssl_context.set_ciphers('DEFAULT')
-        async with aiohttp.ClientSession(trust_env=False) as session:
+        async with aiohttp.ClientSession() as session:
             if post:
                 async with session.get(url, ssl=ssl_context) as resp:
                     return save_temp_img(await resp.read())
@@ -106,8 +106,8 @@ async def download_file(url: str, path: str, show_progress: bool = False):
     从指定 url 下载文件到指定路径 path
     '''
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=300) as resp:
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.get(url, timeout=120) as resp:
                 if resp.status != 200:
                     raise Exception(f"下载文件失败: {resp.status}")
                 total_size = int(resp.headers.get('content-length', 0))
@@ -130,8 +130,8 @@ async def download_file(url: str, path: str, show_progress: bool = False):
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()
         ssl_context.set_ciphers('DEFAULT')
-        async with aiohttp.ClientSession(trust_env=False) as session:
-            async with session.get(url, ssl=ssl_context, timeout=300) as resp:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 total_size = int(resp.headers.get('content-length', 0))
                 downloaded_size = 0
                 start_time = time.time()
