@@ -20,7 +20,7 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 [<img src="https://api.gitsponsors.com/api/badge/img?id=575865240" height="20">](https://api.gitsponsors.com/api/badge/link?p=XEpbdGxlitw/RbcwiTX93UMzNK/jgDYC8NiSzamIPMoKvG2lBFmyXhSS/b0hFoWlBBMX2L5X5CxTDsUdyvcIEHTOfnkXz47UNOZvMwyt5CzbYpq0SEzsSV1OJF1cCo90qC/ZyYKYOWedal3MhZ3ikw==)
 </a>
 
-<a href="https://astrbot.lwl.lol/">查看文档</a> ｜
+<a href="https://astrbot.app/">查看文档</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
 </div>
 
@@ -30,13 +30,13 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 1. **大语言模型对话**。支持各种大语言模型，包括 OpenAI API、Google Gemini、Llama、Deepseek、ChatGLM 等，支持接入本地部署的大模型，通过 Ollama、LLMTuner。具有多轮对话、人格情境、多模态能力，支持图片理解、语音转文字（Whisper）。
 2. **多消息平台接入**。支持接入 QQ（OneBot）、QQ 频道、微信（Gewechat、VChat）、Telegram。后续将支持钉钉、飞书、Discord、WhatsApp、小爱音响。支持速率限制、白名单、关键词过滤、百度内容审核。
-3. **Agent**。原生支持部分 Agent 能力，如代码执行器、自然语言待办、网页搜索。对接 [Dify 平台](https://astrbot.soulter.top/others/dify.html)，便捷接入 Dify 智能助手、知识库和 Dify 工作流。
-4. **插件扩展**。深度优化的插件机制，支持[开发插件](https://astrbot.soulter.top/dev/plugin.html)扩展功能，极简开发。已支持安装多个插件。
+3. **Agent**。原生支持部分 Agent 能力，如代码执行器、自然语言待办、网页搜索。对接 [Dify 平台](https://astrbot.app/others/dify.html)，便捷接入 Dify 智能助手、知识库和 Dify 工作流。
+4. **插件扩展**。深度优化的插件机制，支持[开发插件](https://astrbot.app/dev/plugin.html)扩展功能，极简开发。已支持安装多个插件。
 5. **可视化管理面板**。支持可视化修改配置、插件管理、日志查看等功能，降低配置难度。集成 WebChat，可在面板上与大模型对话。
 6. **高稳定性、高模块化**。基于事件总线和流水线的架构设计，高度模块化，低耦合。
 
 > [!TIP]
-> 管理面板在线体验 Demo: [https://astrbot-demo.soulter.top/](https://astrbot-demo.soulter.top/)
+> 管理面板在线体验 Demo: [https://demo.astrbot.app/](https://demo.astrbot.app/)
 > 
 > 用户名: `astrbot`, 密码: `astrbot`。此 Demo 未配置 LLM，因此无法在聊天页使用大模型。
 
@@ -44,11 +44,11 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 #### Docker 部署
 
-请参阅官方文档 [使用 Docker 部署 AstrBot](https://astrbot.soulter.top/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) 。
+请参阅官方文档 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) 。
 
 #### Windows 一键安装器部署
 
-需要电脑上安装有 Python（>3.10）。请参阅官方文档 [使用 Windows 一键安装器部署 AstrBot](https://astrbot.soulter.top/deploy/astrbot/windows.html) 。
+需要电脑上安装有 Python（>3.10）。请参阅官方文档 [使用 Windows 一键安装器部署 AstrBot](https://astrbot.app/deploy/astrbot/windows.html) 。
 
 #### Replit 部署
 
@@ -58,11 +58,11 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 社区贡献的部署方式。
 
-请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.soulter.top/deploy/astrbot/casaos.html) 。
+请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/casaos.html) 。
 
 #### 手动部署
 
-请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.soulter.top/deploy/astrbot/cli.html) 。
+请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
 
 ## ⚡ 消息平台支持情况
