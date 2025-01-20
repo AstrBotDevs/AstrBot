@@ -6,7 +6,8 @@ import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
 from astrbot.api.provider import Personality, ProviderRequest
-from astrbot.core.utils.io import download_dashboard
+from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+from astrbot.core.config.default import VERSION
 
 from typing import Union
 
@@ -36,9 +37,12 @@ class Main(star.Star):
             notice = await self._query_astrbot_notice()
         except BaseException:
             pass
+        
+        dashboard_version = await get_dashboard_version()
 
-        msg = "已注册的 AstrBot 内置指令:\n"
-        msg += f"""[System]
+        msg = f"""AstrBot v{VERSION}(WebUI: {dashboard_version})
+已注册的 AstrBot 内置指令:
+[System]
 /plugin: 查看注册的插件、插件帮助
 /t2i: 开启/关闭文本转图片模式
 /sid: 获取当前会话的 ID

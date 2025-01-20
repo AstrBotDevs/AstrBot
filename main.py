@@ -6,7 +6,7 @@ from astrbot.dashboard import AstrBotDashBoardLifecycle
 from astrbot.core import db_helper
 from astrbot.core import logger, LogManager, LogBroker
 from astrbot.core.config.default import VERSION
-from astrbot.core.utils.io import download_dashboard
+from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
 # add parent path to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -37,14 +37,14 @@ def check_env():
     
 async def check_dashboard_files():
     '''下载管理面板文件'''
-    if os.path.exists("data/dist"):
-        if os.path.exists("data/dist/assets/version"):
-            with open("data/dist/assets/version", "r") as f:
-                v = f.read().strip()
-                if v != f"v{VERSION}":
-                    logger.warning("检测到管理面板有更新。可以使用 /dashboard_update 命令更新。")
-                else:
-                    logger.info("管理面板文件已是最新。")
+
+    v = await get_dashboard_version()
+    if v is not None:
+        # has file
+        if v == f"v{VERSION}":
+            logger.info("管理面板文件已是最新。")
+        else:
+            logger.warning("检测到管理面板有更新。可以使用 /dashboard_update 命令更新。")
         return
     
     logger.info("开始下载管理面板文件...高峰期（晚上）可能导致较慢的速度。如多次下载失败，请前往 https://github.com/Soulter/AstrBot/releases/latest 下载 dist.zip，并将其中的 dist 文件夹解压至 data 目录下。")

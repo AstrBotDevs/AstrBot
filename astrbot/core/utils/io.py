@@ -170,6 +170,14 @@ def get_local_ip_addresses():
         s.close()
     return ip
 
+async def get_dashboard_version():
+    if os.path.exists("data/dist"):
+        if os.path.exists("data/dist/assets/version"):
+            with open("data/dist/assets/version", "r") as f:
+                v = f.read().strip()
+                return v
+    return None
+
 async def download_dashboard():
     '''下载管理面板文件'''
     dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
