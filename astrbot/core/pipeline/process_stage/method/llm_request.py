@@ -105,5 +105,5 @@ class LLMRequestSubStage(Stage):
 
         except BaseException as e:
             logger.error(traceback.format_exc())
-            event.set_result(MessageEventResult().message("AstrBot 请求 LLM 资源失败：" + str(e)))
+            event.set_result(MessageEventResult().message(f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}"))
             return

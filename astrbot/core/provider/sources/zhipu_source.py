@@ -60,15 +60,23 @@ class ProviderZhipu(ProviderOpenAIOfficial):
             "messages": context_query,
             **model_cfgs
         }
-        llm_response = None
         try:
             llm_response = await self._query(payloads, func_tool)
+            await self.save_history(contexts, new_record, session_id, llm_response)
+            return llm_response
         except Exception as e:
             if "maximum context length" in str(e):
-                logger.warning(f"请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。")
-                self.pop_record(session_id)
-            logger.warning(traceback.format_exc())
-            
-        await self.save_history(contexts, new_record, session_id, llm_response)
-
-        return llm_response
+                retry_cnt = 10
+                while retry_cnt > 0:
+                    logger.warning(f"请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。")
+                    try:
+                        self.pop_record(session_id)
+                        llm_response = await self._query(payloads, func_tool)
+                        break
+                    except Exception as e:
+                        if "maximum context length" in str(e):
+                            retry_cnt -= 1
+                        else:
+                            raise e
+            else:
+                raise e
