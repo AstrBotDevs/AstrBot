@@ -13,6 +13,7 @@ class UpdateRoute(Route):
         self.routes = {
             '/update/check': ('GET', self.check_update),
             '/update/do': ('POST', self.update_project),
+            '/update/dashboard': ('POST', self.update_dashboard),
             '/update/pip-install': ('POST', self.install_pip_package)
         }
         self.astrbot_updator = astrbot_updator
@@ -22,8 +23,8 @@ class UpdateRoute(Route):
         type_ = request.args.get('type', None)
         
         try:
+            dv = await get_dashboard_version()
             if type_ == 'dashboard':
-                dv = await get_dashboard_version()
                 return Response().ok({
                     "has_new_version": dv != f"v{VERSION}",
                     "current_version": dv
@@ -34,7 +35,10 @@ class UpdateRoute(Route):
                     status="success",
                     message=str(ret) if ret is not None else "已经是最新版本了。",
                     data={
-                        "has_new_version": ret is not None
+                        "version": f"v{VERSION}",
+                        "has_new_version": ret is not None,
+                        "dashboard_version": dv,
+                        "dashboard_has_new_version": dv != f"v{VERSION}"
                     }
                 ).__dict__
         except Exception as e:
@@ -66,6 +70,18 @@ class UpdateRoute(Route):
                 return Response().ok(None, "更新成功，AstrBot 将在下次启动时应用新的代码。").__dict__
         except Exception as e:
             logger.error(f"/api/update_project: {traceback.format_exc()}")
+            return Response().error(e.__str__()).__dict__
+        
+    async def update_dashboard(self):
+        try:
+            try:
+                await download_dashboard()
+            except Exception as e:
+                logger.error(f"下载管理面板文件失败: {e}。")
+                return Response().error(f"下载管理面板文件失败: {e}").__dict__
+            return Response().ok(None, "更新成功。刷新页面即可应用新版本面板。").__dict__
+        except Exception as e:
+            logger.error(f"/api/update_dashboard: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
         
     async def install_pip_package(self):
