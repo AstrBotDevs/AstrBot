@@ -285,7 +285,7 @@ CONFIG_METADATA_2 = {
                         "type": "openai_chat_completion",
                         "enable": True,
                         "key": ["ollama"],  # ollama 的 key 默认是 ollama
-                        "api_base": "http://localhost:11434",
+                        "api_base": "http://localhost:11434/v1",
                         "model_config": {
                             "model": "llama3.1-8b",
                         },
@@ -396,7 +396,8 @@ CONFIG_METADATA_2 = {
                     "api_base": {
                         "description": "API Base URL",
                         "type": "string",
-                        "hint": "API Base URL 请在在模型提供商处获得。支持 Ollama 开放的 API 地址。如果您确认填写正确但是使用时出现了 404 异常，可以尝试在地址末尾加上 `/v1`。",
+                        "hint": "API Base URL 请在在模型提供商处获得。如使用时出现了 404 报错，可以尝试在地址末尾加上 `/v1`。",
+                        "obvious_hint": True,
                     },
                     "base_model_path": {
                         "description": "基座模型路径",
