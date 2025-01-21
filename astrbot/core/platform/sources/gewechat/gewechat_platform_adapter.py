@@ -68,6 +68,9 @@ class GewechatPlatformAdapter(Platform):
         
         return self._run()
     
+    async def logout(self):
+        await self.client.logout()
+    
     async def _run(self):
         await self.client.login()
         

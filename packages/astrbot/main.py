@@ -418,6 +418,16 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             del session_var[key]
             sp.put("session_variables", session_vars)
             yield event.plain_result(f"会话 {session_id} 变量 {key} 移除成功。")
+            
+    @filter.command("gewe_logout")
+    async def gewe_logout(self, event: AstrMessageEvent):
+        platforms = self.context.platform_manager.platform_insts
+        for platform in platforms:
+            if platform.meta().name == "gewechat":
+                yield event.plain_result("正在登出 gewechat")
+                await platform.logout()
+                yield event.plain_result("已登出 gewechat")
+                return
                 
     @filter.command_group("kdb")
     def kdb(self):

@@ -166,6 +166,21 @@ class SimpleGewechatClient():
             ) as resp:
                 json_blob = await resp.json()
                 return json_blob['data']
+            
+    async def logout(self):
+        if self.appid:
+            online = await self.check_online(self.appid)
+            if online:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{self.base_url}/login/logout",
+                        headers=self.headers,
+                        json={
+                            "appId": self.appid
+                        }
+                    ) as resp:
+                        json_blob = await resp.json()
+                        logger.info(f"登出结果: {json_blob}")
         
     async def login(self):
         if self.token is None:
