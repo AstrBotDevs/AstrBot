@@ -8,12 +8,14 @@ class PlatformAdapterType(enum.Flag):
     AIOCQHTTP = enum.auto()
     QQOFFICIAL = enum.auto()
     VCHAT = enum.auto()
-    ALL = AIOCQHTTP | QQOFFICIAL | VCHAT
+    GEWECHAT = enum.auto()
+    ALL = AIOCQHTTP | QQOFFICIAL | VCHAT | GEWECHAT
     
 ADAPTER_NAME_2_TYPE = {
     "aiocqhttp": PlatformAdapterType.AIOCQHTTP,
     "qq_official": PlatformAdapterType.QQOFFICIAL,
-    "vchat": PlatformAdapterType.VCHAT
+    "vchat": PlatformAdapterType.VCHAT,
+    "gewechat": PlatformAdapterType.GEWECHAT
 }
 
 class PlatformAdapterTypeFilter(HandlerFilter):
