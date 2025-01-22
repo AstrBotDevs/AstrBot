@@ -24,7 +24,7 @@ class AstrBotDashboard():
         # token 用于验证请求
         logging.getLogger(self.app.name).removeHandler(default_handler)
         self.context = RouteContext(self.config, self.app)
-        self.ur = UpdateRoute(self.context, core_lifecycle.astrbot_updator)
+        self.ur = UpdateRoute(self.context, core_lifecycle.astrbot_updator, core_lifecycle)
         self.sr = StatRoute(self.context, db, core_lifecycle)
         self.pr = PluginRoute(self.context, core_lifecycle, core_lifecycle.plugin_manager)
         self.cr = ConfigRoute(self.context, core_lifecycle)

@@ -1,14 +1,14 @@
-import threading
 import traceback
 from .route import Route, Response, RouteContext
 from quart import request
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core import logger, pip_installer
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.config.default import VERSION
 
 class UpdateRoute(Route):
-    def __init__(self, context: RouteContext, astrbot_updator: AstrBotUpdator) -> None:
+    def __init__(self, context: RouteContext, astrbot_updator: AstrBotUpdator, core_lifecycle: AstrBotCoreLifecycle) -> None:
         super().__init__(context)
         self.routes = {
             '/update/check': ('GET', self.check_update),
@@ -17,6 +17,7 @@ class UpdateRoute(Route):
             '/update/pip-install': ('POST', self.install_pip_package)
         }
         self.astrbot_updator = astrbot_updator
+        self.core_lifecycle = core_lifecycle
         self.register_routes()
     
     async def check_update(self):
@@ -64,7 +65,8 @@ class UpdateRoute(Route):
                     logger.error(f"下载管理面板文件失败: {e}。")
             
             if reboot:
-                threading.Thread(target=self.astrbot_updator._reboot, args=(2, )).start()
+                # threading.Thread(target=self.astrbot_updator._reboot, args=(2, )).start()
+                self.core_lifecycle.restart()
                 return Response().ok(None, "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。").__dict__
             else:
                 return Response().ok(None, "更新成功，AstrBot 将在下次启动时应用新的代码。").__dict__
