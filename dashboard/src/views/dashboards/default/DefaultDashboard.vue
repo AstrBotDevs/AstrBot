@@ -1,4 +1,13 @@
 <template>
+  <v-row style="margin: 2px;">
+    <v-alert
+      :type="noticeType"
+      :text="noticeContent"
+      :title="noticeTitle"
+      v-if="noticeTitle && noticeContent"
+      closable
+    ></v-alert>
+  </v-row>
   <v-row>
     <v-col cols="12" md="4">
       <TotalMessage :stat="stat" />
@@ -38,13 +47,25 @@ export default {
   },
   data: () => ({
     stat: {},
+    noticeTitle: '',
+    noticeContent: '',
+    noticeType: '',
   }),
 
   mounted() {
     axios.get('/api/stat/get').then((res) => {
       this.stat = res.data.data;
     });
-  }
+
+    axios.get('https://api.soulter.top/astrbot-announcement').then((res) => {
+      let data = res.data.data;
+      // 如果 dashboard-notice 在其中
+      if (data['dashboard-notice']) {
+        this.noticeTitle = data['dashboard-notice'].title;
+        this.noticeContent = data['dashboard-notice'].content;
+      }
+    });
+  },
 };
 
 </script>
