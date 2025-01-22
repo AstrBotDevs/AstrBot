@@ -28,6 +28,8 @@ def register_provider_adapter(
                 default_config_tmpl['type'] = provider_type_name
             if 'enable' not in default_config_tmpl:
                 default_config_tmpl['enable'] = False
+            if 'id' not in default_config_tmpl:
+                default_config_tmpl['id'] = provider_type_name
 
         pm = ProviderMetaData(
             type=provider_type_name,

@@ -27,6 +27,8 @@ def register_platform_adapter(
                 default_config_tmpl['type'] = adapter_name
             if 'enable' not in default_config_tmpl:
                 default_config_tmpl['enable'] = False
+            if 'id' not in default_config_tmpl:
+                default_config_tmpl['id'] = adapter_name
 
         pm = PlatformMetadata(
             name=adapter_name,
