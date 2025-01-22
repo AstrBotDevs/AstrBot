@@ -1,3 +1,4 @@
+import traceback
 import asyncio
 import time
 import threading
@@ -81,12 +82,30 @@ class AstrBotCoreLifecycle:
         for task in self.star_context._register_tasks:
             extra_tasks.append(asyncio.create_task(task, name=task.__name__))
         
-        self.curr_tasks = [event_bus_task, *platform_tasks, *extra_tasks]
+        # self.curr_tasks = [event_bus_task, *platform_tasks, *extra_tasks]
+        
+        tasks_ = [event_bus_task, *platform_tasks, *extra_tasks]
+        for task in tasks_:
+            self.curr_tasks.append(asyncio.create_task(self._task_wrapper(task), name=task.get_name()))
+        
         self.start_time = int(time.time())
+        
+    async def _task_wrapper(self, task: asyncio.Task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            
+            logger.error(f"------- 任务 {task.get_name()} 发生错误: {e}")
+            for line in traceback.format_exc().split("\n"):
+                logger.error(f"|    {line}")
+            logger.error("-------")
     
     async def start(self):
         self._load()
         logger.info("AstrBot 启动完成。")
+        
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
         
     async def stop(self):
