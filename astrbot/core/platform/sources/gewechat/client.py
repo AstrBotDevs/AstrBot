@@ -64,7 +64,7 @@ class SimpleGewechatClient():
                 user_id = "" # 发送人 wxid
                 content = d['Content']['string'] # 消息内容
                 user_real_name = d['PushContent'].split(' : ')[0] # 真实昵称
-                user_real_name.replace('在群聊中@了你', '') # trick
+                user_real_name = user_real_name.replace('在群聊中@了你', '') # trick
                 abm.self_id = data['Wxid'] # 机器人的 wxid
                 at_me = False
                 if "@chatroom" in from_user_name:
@@ -80,7 +80,8 @@ class SimpleGewechatClient():
                     
                     # at
                     msg_source = d['MsgSource']
-                    if f'<atuserlist><![CDATA[,{abm.self_id}]]>' in msg_source:
+                    if f'<atuserlist><![CDATA[,{abm.self_id}]]>' in msg_source \
+                        or f'<atuserlist><![CDATA[{abm.self_id}]]>' in msg_source:
                         at_me = True
                     
                 else:
@@ -135,7 +136,7 @@ class SimpleGewechatClient():
                 logger.info(f"设置回调结果: {json_blob}")
                 if json_blob['ret'] != 200:
                     raise Exception(f"设置回调失败: {json_blob}")
-                logger.info(f"将在 {callback_url} 上接收 gewechat 下发的消息。")
+                logger.info(f"将在 {callback_url} 上接收 gewechat 下发的消息。如果一直没收到消息请先尝试重启 AstrBot。")
         
     async def start_polling(self):
         
@@ -243,7 +244,7 @@ class SimpleGewechatClient():
                         logger.warning(f"未知状态: {status}")
             await asyncio.sleep(5)
             
-        if not self.appid and appid:
+        if appid:
             sp.put(f"gewechat-appid-{nickname}", appid)
             self.appid = appid
             logger.info(f"已保存 APPID: {appid}")
