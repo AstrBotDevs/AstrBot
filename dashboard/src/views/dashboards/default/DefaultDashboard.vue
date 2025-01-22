@@ -63,6 +63,7 @@ export default {
       if (data['dashboard-notice']) {
         this.noticeTitle = data['dashboard-notice'].title;
         this.noticeContent = data['dashboard-notice'].content;
+        this.noticeType = data['dashboard-notice'].type;
       }
     });
   },
