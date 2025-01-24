@@ -1,6 +1,5 @@
 import uuid
 import os
-import io
 import asyncio
 import whisper
 from ..provider import STTProvider
@@ -8,7 +7,7 @@ from ..entites import ProviderType
 from astrbot.core.utils.io import download_file
 from ..register import register_provider_adapter
 from astrbot.core import logger
-
+from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 
 @register_provider_adapter("openai_whisper_selfhost", "OpenAI Whisper 模型部署", provider_type=ProviderType.SPEECH_TO_TEXT)
 class ProviderOpenAIWhisperSelfHost(STTProvider):
@@ -32,34 +31,6 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
         filename = str(uuid.uuid4()) + '.mp3'
         ff = FFmpeg()
         output_path = ff.convert(path, os.path.join('data/temp', filename))
-        return output_path
-    
-    async def _pcm_to_wav(self, input_io: io.BytesIO, output_path: str) -> str:
-        import wave
-        
-        with wave.open(output_path, 'wb') as wav:
-            wav.setnchannels(1)
-            wav.setsampwidth(2)
-            wav.setframerate(24000)
-            wav.writeframes(input_io.read())
-            
-        return output_path
-
-    async def _convert_silk(self, path: str) -> str:
-        import pysilk
-        filename = str(uuid.uuid4()) + '.wav'
-        output_path = os.path.join('data/temp', filename)
-        with open(path, "rb") as f:
-            input_data = f.read()
-            if input_data.startswith(b'\x02'):
-                # tencent 我爱你
-                input_data = input_data[1:]
-            input_io = io.BytesIO(input_data)
-            output_io = io.BytesIO()
-            pysilk.decode(input_io, output_io, 24000)
-            output_io.seek(0)
-            await self._pcm_to_wav(output_io, output_path)
-        
         return output_path
     
     async def _is_silk_file(self, file_path):
@@ -93,7 +64,9 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
             is_silk = await self._is_silk_file(audio_url)
             if is_silk:
                 logger.info("Converting silk file to wav ...")
-                audio_url = await self._convert_silk(audio_url)
-
+                output_path = os.path.join('data/temp', str(uuid.uuid4()) + '.wav')
+                await tencent_silk_to_wav(audio_url, output_path)
+                audio_url = output_path
+                
         result = await loop.run_in_executor(None, self.model.transcribe, audio_url)
         return result['text']

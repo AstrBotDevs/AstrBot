@@ -29,13 +29,8 @@ class PreProcessStage(Stage):
                 message_chain = event.get_messages()
                 for idx, component in enumerate(message_chain):
                     if isinstance(component, Record) and component.url:
-                        
-                        path = component.url
-                        
-                        path.removeprefix("file:///")
-                        
+                        path = component.url.removeprefix("file://")
                         retry = 5
-                        
                         for i in range(retry):
                             try:
                                 result = await stt_provider.get_text(audio_url=path)
@@ -48,7 +43,7 @@ class PreProcessStage(Stage):
                             except FileNotFoundError as e:
                                 # napcat workaround
                                 logger.warning(e)
-                                logger.warning(f"语音文件不存在: {path}, 重试中: {i + 1}/{retry}")
+                                logger.warning(f"重试中: {i + 1}/{retry}")
                                 await asyncio.sleep(0.5)
                                 continue
                             except BaseException as e:
