@@ -24,6 +24,7 @@ DEFAULT_CONFIG = {
         "wl_ignore_admin_on_friend": True,
         "reply_with_mention": False,
         "reply_with_quote": False,
+        "path_mapping": []
     },
     "provider": [],
     "provider_settings": {
@@ -220,6 +221,12 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "启用后，机器人回复消息时会引用原消息。实际效果以具体的平台适配器为准。",
                     },
+                    "path_mapping": {
+                        "description": "路径映射",
+                        "type": "list",
+                        "obvious_hint": True,
+                        "hint": "此功能解决由于文件系统不一致导致路径不存在的问题。格式为 <原路径>:<映射路径>。如 `/app/.config/QQ:/var/lib/docker/volumes/xxxx/_data`。这样，当消息平台下发的事件中图片和语音路径以 `/app/.config/QQ` 开头时，开头被替换为 `/var/lib/docker/volumes/xxxx/_data`。这在 AstrBot 或者平台协议端使用 Docker 部署时特别有用。",
+                    }
                 },
             },
             "content_safety": {

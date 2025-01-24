@@ -5,7 +5,7 @@ from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core import logger
-from astrbot.core.message.components import Plain, Record
+from astrbot.core.message.components import Plain, Record, Image
 
 @register_stage
 class PreProcessStage(Stage):
@@ -16,13 +16,31 @@ class PreProcessStage(Stage):
         self.plugin_manager = ctx.plugin_manager
         
         self.stt_settings: dict = self.config.get('provider_stt_settings', {})
+        self.platform_settings: dict = self.config.get('platform_settings', {})
         
 
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
         '''在处理事件之前的预处理'''
-
+        # 路径映射
+        if mappings := self.platform_settings.get('path_mapping', []):
+            # 支持 Record，Image 消息段的路径映射。
+            message_chain = event.get_messages()
+            
+            for idx, component in enumerate(message_chain):
+                if isinstance(component, (Record, Image)) and component.url:
+                    for mapping in mappings:
+                        from_, to_ = mapping.split(":")
+                        from_ = from_.removesuffix("/")
+                        to_ = to_.removesuffix("/")
+                        
+                        url = component.url.removeprefix("file://")
+                        if url.startswith(from_):
+                            component.url = url.replace(from_, to_, 1)
+                            logger.debug(f"路径映射: {url} -> {component.url}")
+                    message_chain[idx] = component
+        
+        # STT
         if self.stt_settings.get('enable', False):
-            # STT 处理
             # TODO: 独立
             stt_provider = self.plugin_manager.context.provider_manager.curr_stt_provider_inst
             if stt_provider:
