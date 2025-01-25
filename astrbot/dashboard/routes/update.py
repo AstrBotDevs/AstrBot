@@ -63,6 +63,13 @@ class UpdateRoute(Route):
                     await download_dashboard()
                 except Exception as e:
                     logger.error(f"下载管理面板文件失败: {e}。")
+                    
+            # pip 更新依赖
+            logger.info("更新依赖中...")
+            try:
+                pip_installer.install(requirements_path="requirements.txt")
+            except Exception as e:
+                logger.error(f"更新依赖失败: {e}")
             
             if reboot:
                 # threading.Thread(target=self.astrbot_updator._reboot, args=(2, )).start()
