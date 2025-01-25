@@ -32,6 +32,10 @@ class WebChatMessageEvent(AstrMessageEvent):
                             f.write(f2.read())
                 elif comp.file and comp.file.startswith("http"):
                     await download_image_by_url(comp.file, path=path)
+                else:
+                    with open(path, "wb") as f:
+                        with open(comp.file, "rb") as f2:
+                            f.write(f2.read())
                 web_chat_back_queue.put_nowait((f"[IMAGE]{filename}", cid))
         web_chat_back_queue.put_nowait(None)
         await super().send(message)

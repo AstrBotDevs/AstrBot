@@ -123,7 +123,7 @@ class Record(BaseMessageComponent):
     proxy: T.Optional[bool] = True
     timeout: T.Optional[int] = 0
     # 额外
-    path: T.Optional[str] # 用这个
+    path: T.Optional[str]
 
     def __init__(self, file: T.Optional[str], **_):
         for k in _.keys():

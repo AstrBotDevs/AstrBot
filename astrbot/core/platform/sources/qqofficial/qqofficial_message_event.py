@@ -80,4 +80,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 elif i.file and i.file.startswith("http"):
                     image_file_path = await download_image_by_url(i.file)
                     image_base64 = file_to_base64(image_file_path).replace("base64://", "")
+                else:
+                    image_base64 = file_to_base64(i.file).replace("base64://", "")
+                    image_file_path = i.file
         return plain_text, image_base64, image_file_path

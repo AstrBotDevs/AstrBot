@@ -1,6 +1,6 @@
 import traceback
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from .provider import Provider, STTProvider, Personality
+from .provider import Provider, STTProvider, TTSProvider, Personality
 from .entites import ProviderType
 from typing import List
 from astrbot.core.db import BaseDatabase
@@ -64,11 +64,15 @@ class ProviderManager():
         '''加载的 Provider 的实例'''
         self.stt_provider_insts: List[STTProvider] = []
         '''加载的 Speech To Text Provider 的实例'''
+        self.tts_provider_insts: List[TTSProvider] = []
+        '''加载的 Text To Speech Provider 的实例'''
         self.llm_tools = llm_tools
         self.curr_provider_inst: Provider = None
         '''当前使用的 Provider 实例'''
         self.curr_stt_provider_inst: STTProvider = None
         '''当前使用的 Speech To Text Provider 实例'''
+        self.curr_tts_provider_inst: TTSProvider = None
+        '''当前使用的 Text To Speech Provider 实例'''
         self.loaded_ids = defaultdict(bool)
         self.db_helper = db_helper
         
@@ -103,6 +107,8 @@ class ProviderManager():
                         from .sources.whisper_api_source import ProviderOpenAIWhisperAPI # noqa: F401
                     case "openai_whisper_selfhost":
                         from .sources.whisper_selfhosted_source import ProviderOpenAIWhisperSelfHost # noqa: F401
+                    case "openai_tts_api":
+                        from .sources.openai_tts_api_source import ProviderOpenAITTSAPI # noqa: F401
             except (ImportError, ModuleNotFoundError) as e:
                 logger.critical(f"加载 {provider_cfg['type']}({provider_cfg['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。")
                 continue
@@ -119,8 +125,10 @@ class ProviderManager():
                 continue
             selected_provider_id = sp.get("curr_provider")
             selected_stt_provider_id = self.provider_stt_settings.get("provider_id")
+            selected_tts_provider_id = self.provider_settings.get("provider_id")
             provider_enabled = self.provider_settings.get("enable", False)
             stt_enabled = self.provider_stt_settings.get("enable", False)
+            tts_enabled = self.provider_settings.get("enable", False)
             
             provider_metadata = provider_cls_map[provider_config['type']]
             logger.info(f"尝试实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器 ...")
@@ -138,6 +146,18 @@ class ProviderManager():
                     if selected_stt_provider_id == provider_config['id'] and stt_enabled:
                         self.curr_stt_provider_inst = inst
                         logger.info(f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。")
+                        
+                elif provider_metadata.provider_type == ProviderType.TEXT_TO_SPEECH:
+                    # TTS 任务
+                    inst = provider_metadata.cls_type(provider_config, self.provider_settings)
+                    
+                    if getattr(inst, "initialize", None):
+                        await inst.initialize()
+                    
+                    self.tts_provider_insts.append(inst)
+                    if selected_tts_provider_id == provider_config['id'] and tts_enabled:
+                        self.curr_tts_provider_inst = inst
+                        logger.info(f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。")
                     
                 elif provider_metadata.provider_type == ProviderType.CHAT_COMPLETION:
                     # 文本生成任务
@@ -167,11 +187,18 @@ class ProviderManager():
         if len(self.stt_provider_insts) > 0 and not self.curr_stt_provider_inst and stt_enabled:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
             
+        if len(self.tts_provider_insts) > 0 and not self.curr_tts_provider_inst and tts_enabled:
+            self.curr_tts_provider_inst = self.tts_provider_insts[0]
+            
         if not self.curr_provider_inst:
             logger.warning("未启用任何用于 文本生成 的提供商适配器。")
-        if self.provider_stt_settings.get("enable"):
-            if not self.curr_stt_provider_inst:
+            
+        if stt_enabled and not self.curr_stt_provider_inst:
                 logger.warning("未启用任何用于 语音转文本 的提供商适配器。")
+        
+        if tts_enabled and not self.curr_tts_provider_inst:
+                logger.warning("未启用任何用于 文本转语音 的提供商适配器。")
+        
 
     def get_insts(self):
         return self.provider_insts

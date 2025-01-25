@@ -139,7 +139,7 @@ class MessageEventResult(MessageChain):
         '''
         return self.result_type == EventResultType.STOP
     
-    def set_result_content_type(self, typ: EventResultType) -> 'MessageEventResult':
+    def set_result_content_type(self, typ: ResultContentType) -> 'MessageEventResult':
         '''设置事件处理的结果类型。
         
         Args:
@@ -147,6 +147,11 @@ class MessageEventResult(MessageChain):
         '''
         self.result_content_type = typ
         return self
+    
+    def is_llm_result(self) -> bool:
+        '''是否为 LLM 结果。
+        '''
+        return self.result_content_type == ResultContentType.LLM_RESULT
     
     
 CommandResult = MessageEventResult
