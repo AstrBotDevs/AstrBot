@@ -72,7 +72,7 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 | -------- | ------- | ------- | ------ |
 | QQ      | ✔    | 私聊、群聊 | 文字、图片、语音 |
 | QQ 官方API | ✔    | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片 |
-| 微信    | ✔    | [Gewechat](https://github.com/Devo919/Gewechat)。微信个人号私聊、群聊 | 文字 |
+| 微信    | ✔    | [Gewechat](https://github.com/Devo919/Gewechat)。微信个人号私聊、群聊 | 文字、图片、语音 |
 | [Telegram](https://github.com/Soulter/astrbot_plugin_telegram)   | ✔    | 私聊、群聊 | 文字、图片 |
 | 微信对话开放平台 | 🚧    | 计划内 | - |
 | 飞书   | 🚧    | 计划内 | - |
