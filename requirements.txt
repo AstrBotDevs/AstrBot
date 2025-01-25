@@ -17,4 +17,4 @@ pyjwt
 apscheduler
 docstring_parser
 aiodocker
-pilk
+silk-python
