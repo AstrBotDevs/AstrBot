@@ -24,9 +24,32 @@ class ProviderMeta():
     id: str
     model: str
     type: str
+    
+    
+class AbstractProvider(abc.ABC):
+    def __init__(self, provider_config: dict) -> None:
+        super().__init__()
+        self.model_name = ""
+        self.provider_config = provider_config
+
+    def set_model(self, model_name: str):
+        '''设置当前使用的模型名称'''
+        self.model_name = model_name
+    
+    def get_model(self) -> str:
+        '''获得当前使用的模型名称'''
+        return self.model_name
+    
+    def meta(self) -> ProviderMeta:
+        '''获取 Provider 的元数据'''
+        return ProviderMeta(
+            id=self.provider_config['id'],
+            model=self.get_model(),
+            type=self.provider_config['type']
+        )
 
 
-class Provider(abc.ABC):
+class Provider(AbstractProvider):
     def __init__(
         self, 
         provider_config: dict,
@@ -35,13 +58,10 @@ class Provider(abc.ABC):
         db_helper: BaseDatabase = None,
         default_persona: Personality = None
     ) -> None:
-        self.model_name = ""
-        '''当前使用的模型名称'''
+        super().__init__(provider_config)
         
         self.session_memory = defaultdict(list)
         '''维护了 session_id 的上下文，**不包含 system 指令**。'''
-        
-        self.provider_config = provider_config
         
         self.provider_settings = provider_settings
         
@@ -58,14 +78,6 @@ class Provider(abc.ABC):
                     self.session_memory[history.session_id] = json.loads(history.content)
             except BaseException as e:
                 logger.warning(f"读取 LLM 对话历史记录 失败：{e}。仍可正常使用。")
-
-    def set_model(self, model_name: str):
-        '''设置当前使用的模型名称'''
-        self.model_name = model_name
-    
-    def get_model(self) -> str:
-        '''获得当前使用的模型名称'''
-        return self.model_name
     
     @abc.abstractmethod
     def get_current_key(self) -> str:
@@ -133,17 +145,11 @@ class Provider(abc.ABC):
         '''重置某一个 session_id 的上下文'''
         raise NotImplementedError()
 
-    def meta(self) -> ProviderMeta:
-        '''获取 Provider 的元数据'''
-        return ProviderMeta(
-            id=self.provider_config['id'],
-            model=self.get_model(),
-            type=self.provider_config['type']
-        )
+
         
-        
-class STTProvider():
+class STTProvider(AbstractProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        super().__init__(provider_config)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
     
@@ -151,19 +157,15 @@ class STTProvider():
     async def get_text(self, audio_url: str) -> str:
         '''获取音频的文本'''
         raise NotImplementedError()
+
+
+class TTSProvider(AbstractProvider):
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        super().__init__(provider_config)
+        self.provider_config = provider_config
+        self.provider_settings = provider_settings
     
-    def set_model(self, model_name: str):
-        '''设置当前使用的模型名称'''
-        self.model_name = model_name
-    
-    def get_model(self) -> str:
-        '''获取当前使用的模型'''
-        return self.provider_config.get("model", "")
-    
-    def meta(self) -> ProviderMeta:
-        '''获取 Provider 的元数据'''
-        return ProviderMeta(
-            id=self.provider_config['id'],
-            model=self.get_model(),
-            type=self.provider_config['type']
-        )
+    @abc.abstractmethod
+    async def get_audio(self, text: str) -> str:
+        '''获取文本的音频，返回音频文件路径'''
+        raise NotImplementedError()

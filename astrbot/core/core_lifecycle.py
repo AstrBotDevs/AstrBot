@@ -7,7 +7,6 @@ from .event_bus import EventBus
 from . import astrbot_config
 from asyncio import Queue
 from typing import List
-from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.pipeline.scheduler import PipelineScheduler, PipelineContext
 from astrbot.core.star import PluginManager
 from astrbot.core.platform.manager import PlatformManager

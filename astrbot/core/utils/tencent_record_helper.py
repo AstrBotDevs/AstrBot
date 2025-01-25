@@ -2,36 +2,29 @@ import wave
 from io import BytesIO
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
-    import pysilk
+    import pilk
     
     with open(silk_path, "rb") as f:
-        input_data = f.read()
-        if input_data.startswith(b'\x02'):
-            input_data = input_data[1:]
-        input_io = BytesIO(input_data)
-        output_io = BytesIO()
-        pysilk.decode(input_io, output_io, 24000)
-        output_io.seek(0)
-        with wave.open(output_path, 'wb') as wav:
-            wav.setnchannels(1)
-            wav.setsampwidth(2)
-            wav.setframerate(24000)
-            wav.writeframes(output_io.read())
+        pcm_path = f"{output_path}.pcm"
+        pilk.decode(silk_path, pcm_path)
         
+        with open(pcm_path, "rb") as pcm:
+            with wave.open(output_path, 'wb') as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(24000)
+                wav.writeframes(pcm.read())
+            
     return output_path
 
-async def wav_to_tencent_silk(wav_path: str) -> BytesIO:
-    import pysilk
-
+async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
+    '''返回 duration'''
+    import pilk
+    
+    # wav to pcm
     with wave.open(wav_path, 'rb') as wav:
-        wav_data = wav.readframes(wav.getnframes())
-        wav_data = BytesIO(wav_data)
-        output_io = BytesIO()
-        pysilk.encode(wav_data, output_io, 24000)
-        output_io.seek(0)
+        pcm_path = f"{wav_path}.pcm"
+        with open(pcm_path, "wb") as f:
+            f.write(wav.readframes(wav.getnframes()))
         
-        # 在首字节添加 \x02
-        silk_data = output_io.read()
-        silk_data_with_prefix = b'\x02' + silk_data
-        
-        return BytesIO(silk_data_with_prefix)
+        return pilk.encode(pcm_path, output_path, pcm_rate=24000, tencent=True)

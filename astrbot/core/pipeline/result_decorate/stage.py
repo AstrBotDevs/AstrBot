@@ -1,11 +1,12 @@
 import time
+import traceback
 from typing import Union, AsyncGenerator
 from ..stage import register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core import logger
-from astrbot.core.message.components import Plain, Image, At, Reply
+from astrbot.core.message.components import Plain, Image, At, Reply, Record
 from astrbot.core import html_renderer
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 
@@ -16,6 +17,7 @@ class ResultDecorateStage:
         self.reply_prefix = ctx.astrbot_config['platform_settings']['reply_prefix']
         self.reply_with_mention = ctx.astrbot_config['platform_settings']['reply_with_mention']
         self.reply_with_quote = ctx.astrbot_config['platform_settings']['reply_with_quote']
+        self.use_tts = ctx.astrbot_config['provider_tts_settings']['enable']
         self.t2i = ctx.astrbot_config['t2i']
 
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
@@ -32,9 +34,28 @@ class ResultDecorateStage:
             # 回复前缀
             if self.reply_prefix:
                 result.chain.insert(0, Plain(self.reply_prefix))
+                
+            # TTS
+            if self.use_tts and result.is_llm_result():
+                tts_provider = self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
+                plain_str = ""
+                for comp in result.chain:
+                    if isinstance(comp, Plain):
+                        plain_str += " " + comp.text
+                    else:
+                        break
+                if plain_str:
+                    try:
+                        audio_path = await tts_provider.get_audio(plain_str)
+                        logger.info("TTS 结果: " + audio_path)
+                        if audio_path:
+                            result.chain = [Record(file=audio_path, url=audio_path)]
+                    except BaseException:
+                        traceback.print_exc()
+                        logger.error("TTS 失败，使用文本发送。")
             
             # 文本转图片
-            if (result.use_t2i_ is None and self.t2i) or result.use_t2i_:
+            elif (result.use_t2i_ is None and self.t2i) or result.use_t2i_:
                 plain_str = ""
                 for comp in result.chain:
                     if isinstance(comp, Plain):

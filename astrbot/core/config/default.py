@@ -40,6 +40,10 @@ DEFAULT_CONFIG = {
         "enable": False,
         "provider_id": "",
     },
+    "provider_tts_settings": {
+        "enable": False,
+        "provider_id": "",
+    },
     "content_safety": {
         "internal_keywords": {"enable": True, "extra_keywords": []},
         "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
@@ -371,6 +375,14 @@ CONFIG_METADATA_2 = {
                         "type": "openai_whisper_selfhost",
                         "model": "tiny",
                     },
+                    "openai_tts(API)": {
+                        "id": "openai_tts",
+                        "type": "openai_tts_api",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "",
+                        "model": "tts-1",
+                    },
                 },
                 "items": {
                     "whisper_hint": {
@@ -567,6 +579,23 @@ CONFIG_METADATA_2 = {
                         "description": "提供商 ID，不填则默认第一个STT提供商",
                         "type": "string",
                         "hint": "语音转文本提供商 ID。如果不填写将使用载入的第一个提供商。",
+                    },
+                },
+            },
+            "provider_tts_settings": {
+                "description": "文本转语音(TTS)",
+                "type": "object",
+                "items": {
+                    "enable": {
+                        "description": "启用文本转语音(TTS)",
+                        "type": "bool",
+                        "hint": "启用前请在 服务提供商配置 处创建支持 语音转文本任务 的提供商。如 openai_tts。",
+                        "obvious_hint": True,
+                    },
+                    "provider_id": {
+                        "description": "提供商 ID，不填则默认第一个TTS提供商",
+                        "type": "string",
+                        "hint": "文本转语音提供商 ID。如果不填写将使用载入的第一个提供商。",
                     },
                 },
             },

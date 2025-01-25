@@ -163,7 +163,7 @@ class SimpleGewechatClient():
         return quart.jsonify({"r": "AstrBot ACK"})
     
     async def handle_file(self, file_id):
-        file_path = f"data/temp/{file_id}.jpg"
+        file_path = f"data/temp/{file_id}"
         return await quart.send_file(file_path)
         
     async def _set_callback_url(self):
@@ -185,11 +185,7 @@ class SimpleGewechatClient():
                 logger.info(f"将在 {self.callback_url} 上接收 gewechat 下发的消息。如果一直没收到消息请先尝试重启 AstrBot。")
         
     async def start_polling(self):
-        
-        # 设置回调
         threading.Thread(target=asyncio.run, args=(self._set_callback_url(),)).start()
-
-                
         await self.server.run_task(
             host=self.host, 
             port=self.port, 
@@ -328,3 +324,22 @@ class SimpleGewechatClient():
             ) as resp:
                 json_blob = await resp.json()
                 logger.debug(f"发送图片结果: {json_blob}")
+                
+    async def post_voice(self, to_wxid, voice_url: str, voice_duration: int):
+        payload = {
+            "appId": self.appid,
+            "toWxid": to_wxid,
+            "voiceUrl": voice_url,
+            "voiceDuration": voice_duration
+        }
+        
+        logger.debug(f"发送语音: {payload}")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.base_url}/message/postVoice",
+                headers=self.headers,
+                json=payload
+            ) as resp:
+                json_blob = await resp.json()
+                logger.debug(f"发送语音结果: {json_blob}")

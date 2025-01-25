@@ -1,4 +1,3 @@
-import traceback
 import base64
 import json
 
@@ -110,7 +109,7 @@ class ProviderOpenAIOfficial(Provider):
         )
         
         assert isinstance(completion, ChatCompletion)
-        logger.debug(f"completion: {completion.usage}")
+        logger.debug(f"completion: {completion}")
 
         if len(completion.choices) == 0:
             raise Exception("API 返回的 completion 为空。")
