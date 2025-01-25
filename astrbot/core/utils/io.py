@@ -6,6 +6,8 @@ import time
 import aiohttp
 import base64
 import zipfile
+import uuid
+from typing import Union
 
 from PIL import Image
 
@@ -41,21 +43,21 @@ def port_checker(port: int, host: str = "localhost"):
         return False
     
 
-def save_temp_img(img: Image) -> str:
+def save_temp_img(img: Union[Image.Image, str]) -> str:
     os.makedirs("data/temp", exist_ok=True)
-    # 获得文件创建时间，清除超过1小时的
+    # 获得文件创建时间，清除超过 12 小时的
     try:
         for f in os.listdir("data/temp"):
             path = os.path.join("data/temp", f)
             if os.path.isfile(path):
                 ctime = os.path.getctime(path)
-                if time.time() - ctime > 3600:
+                if time.time() - ctime > 3600*12:
                     os.remove(path)
     except Exception as e:
         print(f"清除临时文件失败: {e}")
 
     # 获得时间戳
-    timestamp = int(time.time())
+    timestamp = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
     p = f"data/temp/{timestamp}.jpg"
 
     if isinstance(img, Image.Image):

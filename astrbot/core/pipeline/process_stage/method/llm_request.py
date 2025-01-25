@@ -51,7 +51,7 @@ class LLMRequestSubStage(Stage):
             session_provider_context = provider.session_memory.get(event.session_id)
             req.contexts = session_provider_context if session_provider_context else []
             
-        if not req.prompt:
+        if not req.prompt and not req.image_urls:
             return
             
         # 执行请求 LLM 前事件。
