@@ -13,12 +13,10 @@ class MessageChain():
     Attributes:
         `chain` (list): 用于顺序存储各个组件。
         `use_t2i_` (bool): 用于标记是否使用文本转图片服务。默认为 None，即跟随用户的设置。当设置为 True 时，将会使用文本转图片服务。
-        `is_split_` (bool): 用于标记是否分条发送消息。默认为 False。启用后，将会依次发送 chain 中的每个 component。
     '''
     
     chain: List[BaseMessageComponent] = field(default_factory=list)
     use_t2i_: Optional[bool] = None # None 为跟随用户设置
-    is_split_: Optional[bool] = False # 是否将消息分条发送。默认为 False。启用后，将会依次发送 chain 中的每个 component。
     
     def message(self, message: str):
         '''添加一条文本消息到消息链 `chain` 中。
@@ -77,16 +75,6 @@ class MessageChain():
         '''
         self.use_t2i_ = use_t2i
         return self
-    
-    def is_split(self, is_split: bool):
-        '''设置是否分条发送消息。默认为 False。启用后，将会依次发送 chain 中的每个 component。
-        
-        Note:
-            具体的效果以各适配器实现为准。
-            
-        '''
-        self.is_split_ = is_split
-        return self
 
 class EventResultType(enum.Enum):
     '''用于描述事件处理的结果类型。
@@ -113,7 +101,6 @@ class MessageEventResult(MessageChain):
     Attributes:
         `chain` (list): 用于顺序存储各个组件。
         `use_t2i_` (bool): 用于标记是否使用文本转图片服务。默认为 None，即跟随用户的设置。当设置为 True 时，将会使用文本转图片服务。
-        `is_split_` (bool): 用于标记是否分条发送消息。默认为 False。启用后，将会依次发送 chain 中的每个 component。
         `result_type` (EventResultType): 事件处理的结果类型。
     '''
     

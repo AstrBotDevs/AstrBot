@@ -1,4 +1,5 @@
 import time
+import re
 import traceback
 from typing import Union, AsyncGenerator
 from ..stage import register_stage
@@ -19,6 +20,11 @@ class ResultDecorateStage:
         self.reply_with_quote = ctx.astrbot_config['platform_settings']['reply_with_quote']
         self.use_tts = ctx.astrbot_config['provider_tts_settings']['enable']
         self.t2i = ctx.astrbot_config['t2i']
+        
+        # 分段回复
+        self.enable_segmented_reply = ctx.astrbot_config['platform_settings']['segmented_reply']['enable']
+        self.only_llm_result = ctx.astrbot_config['platform_settings']['segmented_reply']['only_llm_result']
+        self.regex = ctx.astrbot_config['platform_settings']['segmented_reply']['regex']
 
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
         result = event.get_result()
@@ -33,26 +39,50 @@ class ResultDecorateStage:
         if len(result.chain) > 0:
             # 回复前缀
             if self.reply_prefix:
-                result.chain.insert(0, Plain(self.reply_prefix))
+                for comp in result.chain:
+                    if isinstance(comp, Plain):
+                        comp.text = self.reply_prefix + comp.text
+                        break
+            
+             # 分段回复 
+            if self.enable_segmented_reply:
+                if (self.only_llm_result and result.is_llm_result()) or not self.only_llm_result:
+                    new_chain = []
+                    for comp in result.chain:
+                        if isinstance(comp, Plain):
+                            split_response = re.findall(r".*?[。？！~…]+|.+$", comp.text)
+                            if not split_response:
+                                new_chain.append(comp)
+                                continue
+                            for seg in split_response:
+                                new_chain.append(Plain(seg))
+                        else:
+                            # 非 Plain 类型的消息段不分段
+                            new_chain.append(comp)
+                    result.chain = new_chain
                 
             # TTS
             if self.use_tts and result.is_llm_result():
                 tts_provider = self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
-                plain_str = ""
+                new_chain = []
                 for comp in result.chain:
-                    if isinstance(comp, Plain):
-                        plain_str += " " + comp.text
+                    if isinstance(comp, Plain) and len(comp.text) > 1:
+                        try:
+                            logger.info("TTS 请求: " + plain_str)
+                            audio_path = await tts_provider.get_audio(plain_str)
+                            logger.info("TTS 结果: " + audio_path)
+                            if audio_path:
+                                new_chain.append(Record(file=audio_path, url=audio_path))
+                            else:
+                                logger.error(f"由于 TTS 音频文件没找到，消息段转语音失败: {comp.text}")
+                                new_chain.append(comp)
+                        except BaseException:
+                            traceback.print_exc()
+                            logger.error("TTS 失败，使用文本发送。")
+                            new_chain.append(comp)
                     else:
-                        break
-                if plain_str:
-                    try:
-                        audio_path = await tts_provider.get_audio(plain_str)
-                        logger.info("TTS 结果: " + audio_path)
-                        if audio_path:
-                            result.chain = [Record(file=audio_path, url=audio_path)]
-                    except BaseException:
-                        traceback.print_exc()
-                        logger.error("TTS 失败，使用文本发送。")
+                        new_chain.append(comp)
+                result.chain = new_chain
             
             # 文本转图片
             elif (result.use_t2i_ is None and self.t2i) or result.use_t2i_:

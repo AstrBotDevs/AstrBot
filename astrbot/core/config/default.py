@@ -24,7 +24,13 @@ DEFAULT_CONFIG = {
         "wl_ignore_admin_on_friend": True,
         "reply_with_mention": False,
         "reply_with_quote": False,
-        "path_mapping": []
+        "path_mapping": [],
+        "segmented_reply": {
+            "enable": False,
+            "only_llm_result": True,
+            "interval": "1.5,3.5",
+            "regex": ".*?[。？！~…]+|.+$"
+        }
     },
     "provider": [],
     "provider_settings": {
@@ -179,6 +185,31 @@ CONFIG_METADATA_2 = {
                                 "type": "string",
                                 "options": ["stall", "discard"],
                                 "hint": "当消息速率超过限制时的处理策略。stall 为等待，discard 为丢弃。",
+                            },
+                        },
+                    },
+                    "segmented_reply": {
+                        "description": "分段回复",
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "description": "启用分段回复",
+                                "type": "bool",
+                            },
+                            "only_llm_result": {
+                                "description": "仅对 LLM 结果分段",
+                                "type": "bool",
+                            },
+                            "interval": {
+                                "description": "随机间隔时间(秒)",
+                                "type": "string",
+                                "hint": "每一段回复的间隔时间，格式为 `最小时间,最大时间`。如 `0.75,2.5`",
+                            },
+                            "regex": {
+                                "description": "正则表达式",
+                                "type": "string",
+                                "obvious_hint": True,
+                                "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。re.findall(r'<regex>', text)",
                             },
                         },
                     },

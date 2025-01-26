@@ -14,12 +14,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     def __init__(self, message_str: str, message_obj: AstrBotMessage, platform_meta: PlatformMetadata, session_id: str, bot: Client):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+        self.send_buffer = None
         
     async def send(self, message: MessageChain):
+        if not self.send_buffer:
+            self.send_buffer = message
+        else:
+            self.send_buffer.chain.extend(message.chain)
+
+    async def _post_send(self):
+        '''QQ 官方 API 仅支持回复一次'''
         source = self.message_obj.raw_message
         assert isinstance(source, (botpy.message.Message, botpy.message.GroupMessage, botpy.message.DirectMessage, botpy.message.C2CMessage))
         
-        plain_text, image_base64, image_path = await QQOfficialMessageEvent._parse_to_qqofficial(message)
+        plain_text, image_base64, image_path = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
         
         payload = {
             'content': plain_text,
@@ -48,7 +56,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     payload['file_image'] = image_path
                 await self.bot.api.post_dms(guild_id=source.guild_id, **payload)
 
-        await super().send(message)
+        await super().send(self.send_buffer)
+        
+        self.send_buffer = None
             
     async def upload_group_and_c2c_image(self, image_base64: str, file_type: int, **kwargs) -> botpy.types.message.Media:
         payload = {

@@ -40,11 +40,5 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         ret = await AiocqhttpMessageEvent._parse_onebot_json(message)
         if os.environ.get('TEST_MODE', 'off') == 'on':
             return
-        
-        if message.is_split_: # 分条发送
-            for m in ret:
-                await self.bot.send(self.message_obj.raw_message, [m])
-                await asyncio.sleep(random.uniform(0.75, 2.5))
-        else:
-            await self.bot.send(self.message_obj.raw_message, ret)
+        await self.bot.send(self.message_obj.raw_message, ret)
         await super().send(message)
