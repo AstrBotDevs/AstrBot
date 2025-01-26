@@ -1,13 +1,11 @@
-
 <p align="center">
+    
+![](https://github.com/user-attachments/assets/04f22f63-4dcf-4a6c-981e-b33f45c23f3e)
 
-<img src="https://github.com/user-attachments/assets/de10f24d-cd64-433a-90b8-16c0a60de24a" width=500>
 
 </p>
 
 <div align="center">
-
-<h1>AstrBot</h1>
 
 _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 
