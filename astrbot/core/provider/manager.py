@@ -117,19 +117,21 @@ class ProviderManager():
                 continue
             
     async def initialize(self):
+        
+        selected_provider_id = sp.get("curr_provider")
+        selected_stt_provider_id = self.provider_stt_settings.get("provider_id")
+        selected_tts_provider_id = self.provider_settings.get("provider_id")
+        provider_enabled = self.provider_settings.get("enable", False)
+        stt_enabled = self.provider_stt_settings.get("enable", False)
+        tts_enabled = self.provider_settings.get("enable", False)
+            
         for provider_config in self.providers_config:
             if not provider_config['enable']:
                 continue
             if provider_config['type'] not in provider_cls_map:
                 logger.error(f"未找到适用于 {provider_config['type']}({provider_config['id']}) 的提供商适配器，请检查是否已经安装或者名称填写错误。已跳过。")
                 continue
-            selected_provider_id = sp.get("curr_provider")
-            selected_stt_provider_id = self.provider_stt_settings.get("provider_id")
-            selected_tts_provider_id = self.provider_settings.get("provider_id")
-            provider_enabled = self.provider_settings.get("enable", False)
-            stt_enabled = self.provider_stt_settings.get("enable", False)
-            tts_enabled = self.provider_settings.get("enable", False)
-            
+
             provider_metadata = provider_cls_map[provider_config['type']]
             logger.info(f"尝试实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器 ...")
             try:
