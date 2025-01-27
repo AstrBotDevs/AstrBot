@@ -66,6 +66,7 @@ class SimpleGewechatClient():
         if type_name == "Offline":
             logger.critical("收到 gewechat 下线通知。")
             return
+        
         abm = AstrBotMessage()
         d = data['Data']
     
@@ -102,7 +103,7 @@ class SimpleGewechatClient():
         if at_me:
             abm.message.insert(0, At(qq=abm.self_id))
         
-        user_real_name = d['PushContent'].split(' : ')[0] \
+        user_real_name = d.get('PushContent', 'unknown : ').split(' : ')[0] \
             .replace('在群聊中@了你', '') \
             .replace('在群聊中发了一段语音', '') # 真实昵称
         abm.sender = MessageMember(user_id, user_real_name)
@@ -153,13 +154,17 @@ class SimpleGewechatClient():
         if data.get('testMsg', None):
             return quart.jsonify({"r": "AstrBot ACK"})
         
-        abm = await self._convert(data)
-        
+        abm = None
+        try:
+            abm = await self._convert(data)
+        except BaseException as e:
+            logger.warning(f"尝试解析 GeweChat 下发的消息时遇到问题: {e}。下发消息内容: {data}。")
+            
         if abm:
             coro = getattr(self, "on_event_received")
             if coro:
                 await coro(abm)
-            
+        
         return quart.jsonify({"r": "AstrBot ACK"})
     
     async def handle_file(self, file_id):
