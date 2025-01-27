@@ -15,7 +15,11 @@ class LongTermMemory:
         self.context = context
         self.session_chats = defaultdict(list)
         """记录群成员的群聊记录"""
-        self.max_cnt = self.config["group_message_max_cnt"]
+        try:
+            self.max_cnt = int(self.config["group_message_max_cnt"])
+        except BaseException as e:
+            logger.error(e)
+            self.max_cnt = 300
         self.image_caption = self.config["image_caption"]
         self.image_caption_prompt = self.config["image_caption_prompt"]
         
