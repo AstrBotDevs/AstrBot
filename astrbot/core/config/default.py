@@ -639,7 +639,8 @@ CONFIG_METADATA_2 = {
                 "description": "机器人唤醒前缀",
                 "type": "list",
                 "items": {"type": "string"},
-                "hint": "在不 @ 机器人的情况下，可以通过外加消息前缀来唤醒机器人。",
+                "obvious_hint": True,
+                "hint": "在不 @ 机器人的情况下，可以通过外加消息前缀来唤醒机器人。更改此配置将影响整个 Bot 的功能唤醒，包括所有指令。如果您不保留 `/`，则内置指令（help等）将需要通过您的唤醒前缀来触发。",
             },
             "t2i": {
                 "description": "文本转图像",
