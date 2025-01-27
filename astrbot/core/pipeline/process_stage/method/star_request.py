@@ -39,8 +39,11 @@ class StarRequestSubStage(Stage):
             except Exception as e:
                 logger.error(traceback.format_exc())
                 logger.error(f"Star {handler.handler_full_name} handle error: {e}")
-                ret = f":(\n\n在调用插件 {star_map.get(handler.handler_module_path).name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
-                event.set_result(MessageEventResult().message(ret))
-                yield
-                event.clear_result()
+                
+                if event.is_at_or_wake_command:
+                    ret = f":(\n\n在调用插件 {star_map.get(handler.handler_module_path).name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
+                    event.set_result(MessageEventResult().message(ret))
+                    yield
+                    event.clear_result()
+                
                 event.stop_event()

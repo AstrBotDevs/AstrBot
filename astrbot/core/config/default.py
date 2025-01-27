@@ -50,6 +50,12 @@ DEFAULT_CONFIG = {
         "enable": False,
         "provider_id": "",
     },
+    "provider_ltm_settings": {
+        "group_icl_enable": False,
+        "group_message_max_cnt": 300,
+        "image_caption": False,
+        "image_caption_prompt": "Please describe the image using Chinese.",
+    },
     "content_safety": {
         "internal_keywords": {"enable": True, "extra_keywords": []},
         "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
@@ -627,6 +633,34 @@ CONFIG_METADATA_2 = {
                         "description": "提供商 ID，不填则默认第一个TTS提供商",
                         "type": "string",
                         "hint": "文本转语音提供商 ID。如果不填写将使用载入的第一个提供商。",
+                    },
+                },
+            },
+            "provider_ltm_settings": {
+                "description": "聊天记忆增强(Beta)",
+                "type": "object",
+                "items": {
+                    "group_icl_enable": {
+                        "description": "群聊内记录各群员对话",
+                        "type": "bool",
+                        "obvious-hint": True,
+                        "hint": "启用后，会记录群聊内各群员的对话。使用 /reset 命令清除记录。推荐使用 gpt-4o-mini 模型。",
+                    },
+                    "group_message_max_cnt": {
+                        "description": "群聊消息最大数量",
+                        "type": "int",
+                        "obvious-hint": True,
+                        "hint": "群聊消息最大数量。超过此数量后，会自动清除旧消息。",
+                    },
+                    "image_caption": {
+                        "description": "启用图像转述(需要模型支持)",
+                        "type": "bool",
+                        "obvious-hint": True,
+                        "hint": "启用后，当接收到图片消息时，会使用模型先将图片转述为文字再进行后续处理。推荐使用 gpt-4o-mini 模型。",
+                    },
+                    "image_caption_prompt": {
+                        "description": "图像转述提示词",
+                        "type": "string"
                     },
                 },
             },

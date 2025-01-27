@@ -6,12 +6,15 @@ import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
 from astrbot.api.provider import Personality, ProviderRequest
+from astrbot.api.platform import MessageType
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.config.default import VERSION
+from collections import defaultdict
+from .long_term_memory import LongTermMemory
 
 from typing import Union
 
-@star.register(name="astrbot", desc="AstrBot 基础指令集合", author="Soulter", version="4.0.0")
+@star.register(name="astrbot", desc="AstrBot 基础指令结合 + 拓展功能", author="Soulter", version="4.0.0")
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
@@ -20,7 +23,9 @@ class Main(star.Star):
         self.identifier = cfg['provider_settings']['identifier']
         self.enable_datetime = cfg['provider_settings']["datetime_system_prompt"]
         
-        self.kdb_enabled = False
+        self.ltm = None
+        if self.context.get_config()['provider_ltm_settings']['group_icl_enable']:
+            self.ltm = LongTermMemory(self.context.get_config()['provider_ltm_settings'], self.context)
     
     async def _query_astrbot_notice(self):
         try:
@@ -219,7 +224,12 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent):
         await self.context.get_using_provider().forget(message.session_id)
-        message.set_result(MessageEventResult().message("重置成功"))
+        ret = "清除会话 LLM 聊天历史成功。"
+        if self.ltm:
+            cnt = await self.ltm.remove_session(event=message)
+            ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
+        
+        message.set_result(MessageEventResult().message(ret))
 
     @filter.command("model")
     async def model_ls(self, message: AstrMessageEvent, idx_or_name: Union[int, str] = None):
@@ -355,9 +365,9 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                 self.context.provider_manager.personas
             ), None):
                 self.context.get_using_provider().curr_personality = persona
-                message.set_result(MessageEventResult().message(f"设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。"))
+                message.set_result(MessageEventResult().message("设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。"))
             else:
-                message.set_result(MessageEventResult().message(f"不存在该人格情景。使用 /persona list 查看所有。"))
+                message.set_result(MessageEventResult().message("不存在该人格情景。使用 /persona list 查看所有。"))
     
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dashboard_update")
@@ -366,31 +376,6 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         await download_dashboard()
         yield event.plain_result("管理面板更新完成。")
 
-    @filter.on_llm_request()
-    async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
-        provider = self.context.get_using_provider()
-        if self.prompt_prefix:
-            req.prompt = self.prompt_prefix + req.prompt
-        if self.identifier:
-            user_id = event.message_obj.sender.user_id
-            user_nickname = event.message_obj.sender.nickname
-            user_info = f"\n[User ID: {user_id}, Nickname: {user_nickname}]\n"
-            req.prompt = user_info + req.prompt
-        if self.enable_datetime:
-            req.system_prompt += f"\nCurrent datetime: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-        
-        if persona := provider.curr_personality:
-            if prompt := persona['prompt']:
-                req.system_prompt += prompt
-            if mood_dialogs := persona['_mood_imitation_dialogs_processed']:
-                req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
-                req.system_prompt += mood_dialogs
-            if begin_dialogs := persona["_begin_dialogs_processed"]:
-                req.contexts[:0] = begin_dialogs
-
-        # if provider.curr_personality['prompt']:
-        #     req.system_prompt += f"\n{provider.curr_personality['prompt']}"
-        
     @filter.command("set")
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str):
         session_id = event.get_session_id()
@@ -428,32 +413,75 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                 await platform.logout()
                 yield event.plain_result("已登出 gewechat")
                 return
-                
-    @filter.command_group("kdb")
-    def kdb(self):
-        pass
-        
-    @kdb.command("on")
-    async def on_kdb(self, event: AstrMessageEvent):
-        self.kdb_enabled = True
-        curr_kdb_name = self.context.provider_manager.curr_kdb_name
-        if not curr_kdb_name:
-            yield event.plain_result("未载入任何知识库")
-        else:
-            yield event.plain_result(f"知识库已打开。当前载入的知识库: {curr_kdb_name}")
-        
-    @kdb.command("off")
-    async def off_kdb(self, event: AstrMessageEvent):
-        self.kdb_enabled = False
-        yield event.plain_result("知识库已关闭")
-        
+            
+            
+    @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
+    async def on_message(self, event: AstrMessageEvent):
+        '''长期记忆'''
+        if self.ltm:
+            await self.ltm.handle_message(event)
+    
+    
     @filter.on_llm_request()
-    async def on_llm_response(self, event: AstrMessageEvent, req: ProviderRequest):
-        curr_kdb_name = self.context.provider_manager.curr_kdb_name
-        if self.kdb_enabled and curr_kdb_name:
-            mgr = self.context.knowledge_db_manager
-            results = await mgr.retrive_records(curr_kdb_name, req.prompt)
-            if results:
-                req.system_prompt += "\nHere are documents that related to user's query: \n"
-                for result in results:
-                    req.system_prompt += f"- {result}\n"
+    async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
+        '''在请求 LLM 前注入人格信息、Identifier、时间等 System Prompt'''
+        provider = self.context.get_using_provider()
+        if self.prompt_prefix:
+            req.prompt = self.prompt_prefix + req.prompt
+            
+        if self.identifier:
+            user_id = event.message_obj.sender.user_id
+            user_nickname = event.message_obj.sender.nickname
+            user_info = f"\n[User ID: {user_id}, Nickname: {user_nickname}]\n"
+            req.prompt = user_info + req.prompt
+            
+        if self.enable_datetime:
+            req.system_prompt += f"\nCurrent datetime: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        
+        if persona := provider.curr_personality:
+            if prompt := persona['prompt']:
+                req.system_prompt += prompt
+            if mood_dialogs := persona['_mood_imitation_dialogs_processed']:
+                req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
+                req.system_prompt += mood_dialogs
+            if begin_dialogs := persona["_begin_dialogs_processed"]:
+                req.contexts[:0] = begin_dialogs
+                
+        if self.ltm:
+            await self.ltm.on_req_llm(event, req)
+
+    
+    @filter.after_message_sent()
+    async def after_llm_req(self, event: AstrMessageEvent):
+        '''在 LLM 请求后记录对话'''
+        if self.ltm:
+            await self.ltm.after_req_llm(event)
+
+    # @filter.command_group("kdb")
+    # def kdb(self):
+    #     pass
+        
+    # @kdb.command("on")
+    # async def on_kdb(self, event: AstrMessageEvent):
+    #     self.kdb_enabled = True
+    #     curr_kdb_name = self.context.provider_manager.curr_kdb_name
+    #     if not curr_kdb_name:
+    #         yield event.plain_result("未载入任何知识库")
+    #     else:
+    #         yield event.plain_result(f"知识库已打开。当前载入的知识库: {curr_kdb_name}")
+        
+    # @kdb.command("off")
+    # async def off_kdb(self, event: AstrMessageEvent):
+    #     self.kdb_enabled = False
+    #     yield event.plain_result("知识库已关闭")
+        
+    # @filter.on_llm_request()
+    # async def on_llm_response(self, event: AstrMessageEvent, req: ProviderRequest):
+    #     curr_kdb_name = self.context.provider_manager.curr_kdb_name
+    #     if self.kdb_enabled and curr_kdb_name:
+    #         mgr = self.context.knowledge_db_manager
+    #         results = await mgr.retrive_records(curr_kdb_name, req.prompt)
+    #         if results:
+    #             req.system_prompt += "\nHere are documents that related to user's query: \n"
+    #             for result in results:
+    #                 req.system_prompt += f"- {result}\n"

@@ -140,5 +140,10 @@ class MessageEventResult(MessageChain):
         '''
         return self.result_content_type == ResultContentType.LLM_RESULT
     
+    def get_plain_text(self) -> str:
+        '''获取纯文本消息。这个方法将获取所有 Plain 组件的文本并拼接成一条消息。空格分隔。
+        '''
+        return " ".join([comp.text for comp in self.chain if isinstance(comp, Plain)])
+    
     
 CommandResult = MessageEventResult
