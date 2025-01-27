@@ -63,10 +63,10 @@ class LongTermMemory:
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest):
         if event.unified_msg_origin not in self.session_chats:
             return
-
-        req.system_prompt += f"""You are now in a chatroom. The chat history is as follows.:
-        {'\n---\n'.join(self.session_chats[event.unified_msg_origin])}
-"""
+        
+        chats_str = '\n---\n'.join(self.session_chats[event.unified_msg_origin])
+        req.system_prompt += "You are now in a chatroom. The chat history is as follows: \n"
+        req.system_prompt += chats_str
         if self.image_caption:
             req.system_prompt += (
                 "The images sent by the members are displayed in text form above."

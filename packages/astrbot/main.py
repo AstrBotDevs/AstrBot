@@ -11,6 +11,7 @@ from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.config.default import VERSION
 from collections import defaultdict
 from .long_term_memory import LongTermMemory
+from astrbot.core import logger
 
 from typing import Union
 
@@ -25,7 +26,10 @@ class Main(star.Star):
         
         self.ltm = None
         if self.context.get_config()['provider_ltm_settings']['group_icl_enable']:
-            self.ltm = LongTermMemory(self.context.get_config()['provider_ltm_settings'], self.context)
+            try:
+                self.ltm = LongTermMemory(self.context.get_config()['provider_ltm_settings'], self.context)
+            except BaseException as e:
+                logger.error(f"聊天增强 err: {e}")
     
     async def _query_astrbot_notice(self):
         try:
