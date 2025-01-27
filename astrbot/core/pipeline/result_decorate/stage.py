@@ -19,7 +19,6 @@ class ResultDecorateStage:
         self.reply_with_mention = ctx.astrbot_config['platform_settings']['reply_with_mention']
         self.reply_with_quote = ctx.astrbot_config['platform_settings']['reply_with_quote']
         self.use_tts = ctx.astrbot_config['provider_tts_settings']['enable']
-        self.t2i = ctx.astrbot_config['t2i']
         
         # 分段回复
         self.enable_segmented_reply = ctx.astrbot_config['platform_settings']['segmented_reply']['enable']
@@ -85,7 +84,7 @@ class ResultDecorateStage:
                 result.chain = new_chain
             
             # 文本转图片
-            elif (result.use_t2i_ is None and self.t2i) or result.use_t2i_:
+            elif (result.use_t2i_ is None and self.ctx.astrbot_config['t2i']) or result.use_t2i_:
                 plain_str = ""
                 for comp in result.chain:
                     if isinstance(comp, Plain):
