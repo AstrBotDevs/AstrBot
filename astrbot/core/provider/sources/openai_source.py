@@ -163,7 +163,8 @@ class ProviderOpenAIOfficial(Provider):
 
         try:
             llm_response = await self._query(payloads, func_tool)
-            await self.save_history(contexts, new_record, session_id, llm_response)
+            if kwargs.get("persist", True):
+                await self.save_history(contexts, new_record, session_id, llm_response)
             return llm_response
         except Exception as e:
             if "maximum context length" in str(e):
