@@ -423,7 +423,10 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     async def on_message(self, event: AstrMessageEvent):
         '''长期记忆'''
         if self.ltm:
-            await self.ltm.handle_message(event)
+            try:
+                await self.ltm.handle_message(event)
+            except BaseException as e:
+                logger.error(e)
     
     
     @filter.on_llm_request()
@@ -452,14 +455,20 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                 req.contexts[:0] = begin_dialogs
                 
         if self.ltm:
-            await self.ltm.on_req_llm(event, req)
+            try:
+                await self.ltm.on_req_llm(event, req)
+            except BaseException as e:
+                logger.error(f"ltm: {e}")
 
     
     @filter.after_message_sent()
     async def after_llm_req(self, event: AstrMessageEvent):
         '''在 LLM 请求后记录对话'''
         if self.ltm:
-            await self.ltm.after_req_llm(event)
+            try:
+                await self.ltm.after_req_llm(event)
+            except BaseException as e:
+                logger.error(f"ltm: {e}")
 
     # @filter.command_group("kdb")
     # def kdb(self):
