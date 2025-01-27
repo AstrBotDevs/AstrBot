@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 
 from openai import AsyncOpenAI, NOT_GIVEN
 from openai.types.chat.chat_completion import ChatCompletion
@@ -128,6 +129,12 @@ class ProviderOpenAIOfficial(Provider):
         if choice.message.content:
             # text completion
             completion_text = str(choice.message.content).strip()
+            
+            # 适配 deepseek-r1 模型
+            if r'<think>' in completion_text:
+                completion_text = re.sub(r'<think>.*?<think/>', '', completion_text).strip()
+                completion_text = completion_text.replace(r'<think>', '').replace(r'</think>', '').strip()
+            
             return LLMResponse("assistant", completion_text)
         elif choice.message.tool_calls:
             # tools call (function calling)
