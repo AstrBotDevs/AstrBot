@@ -103,10 +103,20 @@ class ProviderOpenAIOfficial(Provider):
             if tool_list:
                 payloads['tools'] = tool_list
         
-        completion = await self.client.chat.completions.create(
-            **payloads,
-            stream=False
-        )
+        try:
+            completion = await self.client.chat.completions.create(
+                **payloads,
+                stream=False
+            )
+        except BaseException as e:
+            if 'does not support Function Calling' \
+                or 'does not support tools' in e: # ollama 
+                    del payloads['tools']
+                    logger.debug(f"模型 {self.model_name} 不支持 tools，已自动移除")
+                    completion = await self.client.chat.completions.create(
+                        **payloads,
+                        stream=False
+                    )
         
         assert isinstance(completion, ChatCompletion)
         logger.debug(f"completion: {completion}")
