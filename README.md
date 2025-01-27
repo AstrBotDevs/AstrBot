@@ -1,6 +1,6 @@
 <p align="center">
     
-![](https://github.com/user-attachments/assets/04f22f63-4dcf-4a6c-981e-b33f45c23f3e)
+![logo](https://github.com/user-attachments/assets/07649e07-3b8e-4feb-9aa9-bf13af4f3476)
 
 
 </p>
