@@ -15,6 +15,7 @@ class RespondStage(Stage):
         
         # 分段回复
         self.enable_seg: bool = ctx.astrbot_config['platform_settings']['segmented_reply']['enable']
+        self.only_llm_result = ctx.astrbot_config['platform_settings']['segmented_reply']['only_llm_result']
         interval_str: str = ctx.astrbot_config['platform_settings']['segmented_reply']['interval']
         interval_str_ls = interval_str.replace(" ", "").split(",")
         try:
@@ -32,7 +33,8 @@ class RespondStage(Stage):
 
         if len(result.chain) > 0:
             await event._pre_send()
-            if self.enable_seg:
+            
+            if self.enable_seg and ((self.only_llm_result and result.is_llm_result()) or not self.only_llm_result):
                 # 分段回复
                 for comp in result.chain:
                     await event.send(MessageChain([comp]))
