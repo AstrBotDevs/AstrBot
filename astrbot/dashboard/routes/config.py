@@ -9,6 +9,7 @@ from astrbot.core.star.config import update_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_registry
 from astrbot.core.provider.register import provider_registry
+from astrbot.core import logger
 
 def try_cast(value: str, type_: str):
     if type_ == "int" and value.isdigit():
@@ -56,13 +57,23 @@ def validate_config(data, config: AstrBotConfig):
             elif meta["type"] == "object" and not isinstance(value, dict):
                 errors.append(f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}")
                 validate(value, meta["items"], path=f"{path}{key}.")
-    validate(data)
+
+    for key, group in CONFIG_METADATA_2.items():
+        group_meta = group.get("metadata")
+        if not group_meta:
+            continue
+        logger.info(f"验证配置: 组 {key} ...")
+        validate(data, group_meta, path=f"{key}.")
     
     return errors
 
 def save_astrbot_config(post_config: dict, config: AstrBotConfig):
     '''验证并保存配置'''
-    errors = validate_config(post_config, config)
+    errors = None
+    try:
+        errors = validate_config(post_config, config)
+    except BaseException as e:
+        logger.warning(f"验证配置时出现异常: {e}")
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
     config.save_config(post_config)
@@ -110,7 +121,7 @@ class ConfigRoute(Route):
             await self._save_astrbot_configs(post_configs)
             return Response().ok(None, "保存成功~ 机器人正在重载配置。").__dict__
         except Exception as e:
-            traceback.print_exc()
+            logger.error(e)
             return Response().error(str(e)).__dict__
     
     async def post_extension_configs(self):

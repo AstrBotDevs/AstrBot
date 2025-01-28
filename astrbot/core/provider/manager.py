@@ -13,6 +13,7 @@ class ProviderManager():
         self.providers_config: List = config['provider']
         self.provider_settings: dict = config['provider_settings']
         self.provider_stt_settings: dict = config.get('provider_stt_settings', {})
+        self.provider_tts_settings: dict = config.get('provider_tts_settings', {})
         self.persona_configs: list = config.get('persona', [])
         
         self.default_persona_name = self.provider_settings.get('default_personality', 'default')
@@ -64,7 +65,7 @@ class ProviderManager():
         '''加载的 Provider 的实例'''
         self.stt_provider_insts: List[STTProvider] = []
         '''加载的 Speech To Text Provider 的实例'''
-        self.tts_provider_insts: List[TTSProvider] = []
+        self.tts_provider_insts: Lieist[TTSProvider] = []
         '''加载的 Text To Speech Provider 的实例'''
         self.llm_tools = llm_tools
         self.curr_provider_inst: Provider = None
@@ -123,7 +124,7 @@ class ProviderManager():
         selected_tts_provider_id = self.provider_settings.get("provider_id")
         provider_enabled = self.provider_settings.get("enable", False)
         stt_enabled = self.provider_stt_settings.get("enable", False)
-        tts_enabled = self.provider_settings.get("enable", False)
+        tts_enabled = self.provider_tts_settings.get("enable", False)
             
         for provider_config in self.providers_config:
             if not provider_config['enable']:
