@@ -132,7 +132,8 @@ class ProviderOpenAIOfficial(Provider):
             
             # 适配 deepseek-r1 模型
             if r'<think>' in completion_text:
-                completion_text = re.sub(r'<think>.*?<think/>', '', completion_text).strip()
+                completion_text = re.sub(r'<think>.*?</think>', '', completion_text, flags=re.DOTALL).strip()
+                # 可能有单标签情况
                 completion_text = completion_text.replace(r'<think>', '').replace(r'</think>', '').strip()
             
             return LLMResponse("assistant", completion_text)

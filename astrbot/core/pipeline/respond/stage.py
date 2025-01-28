@@ -22,6 +22,7 @@ class RespondStage(Stage):
         except BaseException as e:
             logger.error(f'解析分段回复的间隔时间失败。{e}')
             self.interval = [1.5, 3.5]
+        logger.info(f"分段回复间隔时间：{self.interval}")
 
 
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
@@ -35,7 +36,7 @@ class RespondStage(Stage):
                 # 分段回复
                 for comp in result.chain:
                     await event.send(MessageChain([comp]))
-                await asyncio.sleep(random.uniform(self.interval[0], self.interval[1]))
+                    await asyncio.sleep(random.uniform(self.interval[0], self.interval[1]))
             else:
                 await event.send(result)
             await event._post_send()
