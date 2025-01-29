@@ -18,6 +18,11 @@ class WhitelistCheckStage(Stage):
         
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
         if not self.enable_whitelist_check:
+            # 白名单检查未启用
+            return
+        
+        if len(self.whitelist) == 0:
+            # 白名单为空，不检查
             return
         
         if event.get_platform_name() == 'webchat':

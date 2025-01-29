@@ -236,8 +236,8 @@ CONFIG_METADATA_2 = {
                     "id_whitelist": {
                         "description": "ID 白名单",
                         "type": "list",
-                        "items": {"type": "int"},
-                        "hint": "填写后，将只处理所填写的 ID 发来的消息事件。为空时表示不启用白名单过滤。可以使用 /myid 指令获取在某个平台上的会话 ID。也可在 AstrBot 日志内获取会话 ID，当一条消息没通过白名单时，会输出 INFO 级别的日志。会话 ID 类似 aiocqhttp:GroupMessage:547540978",
+                        "items": {"type": "string"},
+                        "hint": "AstrBot 只处理所填写的 ID 发来的消息事件。为空时不启用白名单过滤。可以使用 /myid 指令获取在某个平台上的会话 ID。也可在 AstrBot 日志内获取会话 ID，当一条消息没通过白名单时，会输出 INFO 级别的日志。会话 ID 类似 aiocqhttp:GroupMessage:547540978",
                     },
                     "id_whitelist_log": {
                         "description": "打印白名单日志",
@@ -590,14 +590,14 @@ CONFIG_METADATA_2 = {
                     "begin_dialogs": {
                         "description": "预设对话",
                         "type": "list",
-                        "items": {},
+                        "items": {"type": "string"},
                         "hint": "可选。在每个对话前会插入这些预设对话。格式要求：第一句为用户，第二句为助手，以此类推。",
                         "obvious_hint": True,
                     },
                     "mood_imitation_dialogs": {
                         "description": "对话风格模仿",
                         "type": "list",
-                        "items": {},
+                        "items": {"type": "string"},
                         "hint": "旨在让模型尽可能模仿学习到所填写的对话的语气风格。格式和 `预设对话` 一样。",
                         "obvious_hint": True,
                     },
@@ -685,7 +685,7 @@ CONFIG_METADATA_2 = {
             "admins_id": {
                 "description": "管理员 ID",
                 "type": "list",
-                "items": {"type": "int"},
+                "items": {"type": "string"},
                 "hint": "管理员 ID 列表，管理员可以使用一些特权命令，如 `update`, `plugin` 等。ID 可以通过 `/myid` 指令获得。回车添加，可添加多个。",
             },
             "http_proxy": {
