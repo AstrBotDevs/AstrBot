@@ -306,7 +306,7 @@ class Image(BaseMessageComponent):
 
 class Reply(BaseMessageComponent):
     type: ComponentType = "Reply"
-    id: int
+    id: T.Union[str, int]
     text: T.Optional[str] = ""
     qq: T.Optional[int] = 0
     time: T.Optional[int] = 0

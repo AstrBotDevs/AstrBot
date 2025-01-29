@@ -104,7 +104,7 @@ class ResultDecorateStage:
                         result.chain = [Image.fromURL(url)]
             
             if self.reply_with_mention and event.get_message_type() != MessageType.FRIEND_MESSAGE:
-                result.chain.insert(0, At(qq=event.get_sender_id()))
+                result.chain.insert(0, At(qq=event.get_sender_id(), name=event.get_sender_name()))
             
             if self.reply_with_quote:
                 result.chain.insert(0, Reply(id=event.message_obj.message_id))

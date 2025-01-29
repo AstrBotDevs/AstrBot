@@ -5,7 +5,7 @@ import botpy.types.message
 from astrbot.core.utils.io import file_to_base64, download_image_by_url
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.api.message_components import Plain, Image
+from astrbot.api.message_components import Plain, Image, Reply
 from botpy import Client
 from botpy.http import Route
 
@@ -29,6 +29,19 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         
         plain_text, image_base64, image_path = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
         
+        ref = None
+        for i in self.send_buffer.chain:
+            if isinstance(i, Reply):
+                try:
+                    ref = self.message_obj.raw_message.message_reference
+                    ref = botpy.types.message.Reference(
+                        message_id=ref.message_id,
+                        ignore_get_message_error=False
+                    )
+                except BaseException as _:
+                    pass
+                break
+        
         payload = {
             'content': plain_text,
             'msg_id': self.message_obj.message_id,
@@ -36,22 +49,30 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         
         match type(source):
             case botpy.message.GroupMessage:
+                if ref:
+                    payload['message_reference'] = ref
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(image_base64, 1, group_openid=source.group_openid)
                     payload['media'] = media
                     payload['msg_type'] = 7
                 await self.bot.api.post_group_message(group_openid=source.group_openid, **payload)
             case botpy.message.C2CMessage:
+                if ref:
+                    payload['message_reference'] = ref
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(image_base64, 1, openid=source.author.user_openid)
                     payload['media'] = media
                     payload['msg_type'] = 7
                 await self.bot.api.post_c2c_message(openid=source.author.user_openid, **payload)
             case botpy.message.Message:
+                if ref:
+                    payload['message_reference'] = ref
                 if image_path:
                     payload['file_image'] = image_path
                 await self.bot.api.post_message(channel_id=source.channel_id, **payload)
             case botpy.message.DirectMessage:
+                if ref:
+                    payload['message_reference'] = ref
                 if image_path:
                     payload['file_image'] = image_path
                 await self.bot.api.post_dms(guild_id=source.guild_id, **payload)
