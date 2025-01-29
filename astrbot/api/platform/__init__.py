@@ -3,3 +3,4 @@ from astrbot.core.platform import (
 )
 
 from astrbot.core.platform.register import register_platform_adapter
+from astrbot.core.message.components import *
