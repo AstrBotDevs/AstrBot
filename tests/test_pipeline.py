@@ -5,6 +5,7 @@ import asyncio
 from astrbot.core.pipeline.scheduler import PipelineScheduler, PipelineContext
 from astrbot.core.star import PluginManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.default import CONFIG_METADATA_2
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType

@@ -54,45 +54,18 @@ class Context:
         self.knowledge_db_manager = knowledge_db_manager
 
     def get_registered_star(self, star_name: str) -> StarMetadata:
+        '''根据插件名获取插件的 Metadata'''
         for star in star_registry:
             if star.name == star_name:
                 return star
 
     def get_all_stars(self) -> List[StarMetadata]:
+        '''获取当前载入的所有插件 Metadata 的列表'''
         return star_registry
     
     def get_llm_tool_manager(self) -> FuncCall:
-        '''
-        获取 LLM Tool Manager
-        '''
+        '''获取 LLM Tool Manager，其用于管理注册的所有的 Function-calling tools'''
         return self.provider_manager.llm_tools
-        
-    def register_llm_tool(self, name: str, func_args: list, desc: str, func_obj: Awaitable) -> None:
-        '''
-        为函数调用（function-calling / tools-use）添加工具。
-        
-        @param name: 函数名
-        @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
-        @param desc: 函数描述
-        @param func_obj: 异步处理函数。
-        
-        异步处理函数会接收到额外的的关键词参数：event: AstrMessageEvent, context: Context。
-        '''
-        md = StarHandlerMetadata(
-            event_type=EventType.OnLLMRequestEvent,
-            handler_full_name=func_obj.__module__ + "_" + func_obj.__name__,
-            handler_name=func_obj.__name__,
-            handler_module_path=func_obj.__module__,
-            handler=func_obj,
-            event_filters=[],
-            desc=desc
-        )
-        star_handlers_registry.append(md)
-        self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj, func_obj)
-    
-    def unregister_llm_tool(self, name: str) -> None:
-        '''删除一个函数调用工具。如果再要启用，需要重新注册。'''
-        self.provider_manager.llm_tools.remove_func(name)
         
     def activate_llm_tool(self, name: str) -> bool:
         '''激活一个已经注册的函数调用工具。注册的工具默认是激活状态。
@@ -129,6 +102,104 @@ class Context:
             return True
         return False
     
+    def register_provider(self, provider: Provider):
+        '''
+        注册一个 LLM Provider(Chat_Completion 类型)。
+        '''
+        self.provider_manager.provider_insts.append(provider)
+        
+    def get_provider_by_id(self, provider_id: str) -> Provider:
+        '''通过 ID 获取用于文本生成任务的 LLM Provider(Chat_Completion 类型)。'''
+        for provider in self.provider_manager.provider_insts:
+            if provider.meta().id == provider_id:
+                return provider
+        return None
+    
+    def get_all_providers(self) -> List[Provider]:
+        '''获取所有用于文本生成任务的 LLM Provider(Chat_Completion 类型)。'''
+        return self.provider_manager.provider_insts
+    
+    def get_using_provider(self) -> Provider:
+        '''
+        获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。
+        
+        通过 /provider 指令切换。
+        '''
+        return self.provider_manager.curr_provider_inst
+    
+    def get_config(self) -> AstrBotConfig:
+        '''获取 AstrBot 的配置。'''
+        return self._config
+    
+    def get_db(self) -> BaseDatabase:
+        '''获取 AstrBot 数据库。'''
+        return self._db
+    
+    def get_event_queue(self) -> Queue:
+        '''
+        获取事件队列。
+        '''
+        return self._event_queue
+    
+    async def send_message(self, session: Union[str, MessageSesion], message_chain: MessageChain) -> bool:
+        '''
+        根据 session(unified_msg_origin) 发送消息。
+        
+        @param session: 消息会话。通过 event.session 或者 event.unified_msg_origin 获取。
+        @param message_chain: 消息链。
+        
+        @return: 是否找到匹配的平台。
+        
+        当 session 为字符串时，会尝试解析为 MessageSesion 对象，如果解析失败，会抛出 ValueError 异常。
+        '''
+        
+        if isinstance(session, str):
+            try:
+                session = MessageSesion.from_str(session)
+            except BaseException as e:
+                raise ValueError("不合法的 session 字符串: " + str(e))
+
+        for platform in self.platform_manager.platform_insts:
+            if platform.meta().name == session.platform_name:
+                await platform.send_by_session(session, message_chain)
+                return True
+        return False
+
+    async def sync_plugin_config(self, config_path: str, default_config: dict):
+        pass
+
+    '''
+    以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。
+    '''
+    
+    def register_llm_tool(self, name: str, func_args: list, desc: str, func_obj: Awaitable) -> None:
+        '''
+        为函数调用（function-calling / tools-use）添加工具。
+        
+        @param name: 函数名
+        @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
+        @param desc: 函数描述
+        @param func_obj: 异步处理函数。
+        
+        异步处理函数会接收到额外的的关键词参数：event: AstrMessageEvent, context: Context。
+        '''
+        md = StarHandlerMetadata(
+            event_type=EventType.OnLLMRequestEvent,
+            handler_full_name=func_obj.__module__ + "_" + func_obj.__name__,
+            handler_name=func_obj.__name__,
+            handler_module_path=func_obj.__module__,
+            handler=func_obj,
+            event_filters=[],
+            desc=desc
+        )
+        star_handlers_registry.append(md)
+        self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj, func_obj)
+    
+    def unregister_llm_tool(self, name: str) -> None:
+        '''删除一个函数调用工具。如果再要启用，需要重新注册。'''
+        self.provider_manager.llm_tools.remove_func(name)
+        
+
     def register_commands(self, star_name: str, command_name: str, desc: str, priority: int, awaitable: Awaitable, use_regex=False, ignore_prefix=False):
         '''
         注册一个命令。
@@ -162,77 +233,6 @@ class Context:
             ))
         star_handlers_registry.append(md)
     
-    def register_provider(self, provider: Provider):
-        '''
-        注册一个 LLM Provider(Chat_Completion 类型)。
-        '''
-        self.provider_manager.provider_insts.append(provider)
-        
-    def get_provider_by_id(self, provider_id: str) -> Provider:
-        '''
-        通过 ID 获取 LLM Provider(Chat_Completion 类型)。
-        '''
-        for provider in self.provider_manager.provider_insts:
-            if provider.meta().id == provider_id:
-                return provider
-        return None
-    
-    def get_all_providers(self) -> List[Provider]:
-        '''
-        获取所有 LLM Provider(Chat_Completion 类型)。
-        '''
-        return self.provider_manager.provider_insts
-    
-    def get_using_provider(self) -> Provider:
-        '''
-        获取当前使用的 LLM Provider(Chat_Completion 类型)。
-        
-        通过 /provider 指令切换。
-        '''
-        return self.provider_manager.curr_provider_inst
-    
-    def get_config(self) -> AstrBotConfig:
-        '''
-        获取 AstrBot 配置信息。
-        '''
-        return self._config
-    
-    def get_db(self) -> BaseDatabase:
-        '''
-        获取 AstrBot 数据库。
-        '''
-        return self._db
-    
-    def get_event_queue(self) -> Queue:
-        '''
-        获取事件队列。
-        '''
-        return self._event_queue
-    
-    async def send_message(self, session: Union[str, MessageSesion], message_chain: MessageChain) -> bool:
-        '''
-        根据 session(unified_msg_origin) 发送消息。
-        
-        @param session: 消息会话。通过 event.session 或者 event.unified_msg_origin 获取。
-        @param message_chain: 消息链。
-        
-        @return: 是否找到匹配的平台。
-        
-        当 session 为字符串时，会尝试解析为 MessageSesion 对象，如果解析失败，会抛出 ValueError 异常。
-        '''
-        
-        if isinstance(session, str):
-            try:
-                session = MessageSesion.from_str(session)
-            except BaseException as e:
-                raise ValueError("不合法的 session 字符串: " + str(e))
-
-        for platform in self.platform_manager.platform_insts:
-            if platform.meta().name == session.platform_name:
-                await platform.send_by_session(session, message_chain)
-                return True
-        return False
-
     def register_task(self, task: Awaitable, desc: str):
         '''
         注册一个异步任务。

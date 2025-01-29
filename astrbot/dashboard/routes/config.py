@@ -1,14 +1,11 @@
-import os
-import json
-import traceback
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.star.config import update_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_registry
 from astrbot.core.provider.register import provider_registry
+from astrbot.core.star.star import star_registry
 from astrbot.core import logger
 
 def try_cast(value: str, type_: str):
@@ -20,9 +17,9 @@ def try_cast(value: str, type_: str):
     elif type_ == "float" and isinstance(value, int):
         return float(value)
 
-def validate_config(data, config: AstrBotConfig):
+def validate_config(data, schema: dict, is_core: bool):
     errors = []
-    def validate(data, metadata=CONFIG_METADATA_2, path=""):
+    def validate(data, metadata=schema, path=""):
         for key, meta in metadata.items():
             if key not in data:
                 continue
@@ -58,44 +55,32 @@ def validate_config(data, config: AstrBotConfig):
                 errors.append(f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}")
                 validate(value, meta["items"], path=f"{path}{key}.")
 
-    for key, group in CONFIG_METADATA_2.items():
-        group_meta = group.get("metadata")
-        if not group_meta:
-            continue
-        logger.info(f"验证配置: 组 {key} ...")
-        validate(data, group_meta, path=f"{key}.")
+    if is_core:
+        for key, group in schema.items():
+            group_meta = group.get("metadata")
+            if not group_meta:
+                continue
+            logger.info(f"验证配置: 组 {key} ...")
+            validate(data, group_meta, path=f"{key}.")
+    else:
+        validate(data, schema)
     
     return errors
 
-def save_astrbot_config(post_config: dict, config: AstrBotConfig):
+def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False):
     '''验证并保存配置'''
     errors = None
     try:
-        errors = validate_config(post_config, config)
+        if is_core:
+            errors = validate_config(post_config, CONFIG_METADATA_2, is_core)
+        else:
+            errors = validate_config(post_config, config.schema, is_core)
     except BaseException as e:
         logger.warning(f"验证配置时出现异常: {e}")
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
     config.save_config(post_config)
     
-def save_extension_config(post_config: dict):
-    if 'namespace' not in post_config:
-        raise ValueError("Missing key: namespace")
-    if 'config' not in post_config:
-        raise ValueError("Missing key: config")
-
-    namespace = post_config['namespace']
-    config: list = post_config['config'][0]['body']
-    for item in config:
-        key = item['path']
-        value = item['value']
-        typ = item['val_type']
-        if typ == 'int':
-            if not value.isdigit():
-                raise ValueError(f"错误的类型 {namespace}.{key}: 期望是 int, 得到了 {type(value).__name__}")
-            value = int(value)
-        update_config(namespace, key, value)
-
 class ConfigRoute(Route):
     def __init__(self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle) -> None:
         super().__init__(context)
@@ -103,17 +88,17 @@ class ConfigRoute(Route):
         self.routes = {
             '/config/get': ('GET', self.get_configs),
             '/config/astrbot/update': ('POST', self.post_astrbot_configs),
-            '/config/plugin/update': ('POST', self.post_extension_configs),
+            '/config/plugin/update': ('POST', self.post_plugin_configs),
         }
         self.register_routes()
 
     async def get_configs(self):
-        # namespace 为空时返回 AstrBot 配置
-        # 否则返回指定 namespace 的插件配置
-        namespace = "" if "namespace" not in request.args else request.args["namespace"]
-        if not namespace:
+        # plugin_name 为空时返回 AstrBot 配置
+        # 否则返回指定 plugin_name 的插件配置
+        plugin_name = request.args.get("plugin_name", None)
+        if not plugin_name:
             return Response().ok(await self._get_astrbot_config()).__dict__
-        return Response().ok(await self._get_extension_config(namespace)).__dict__
+        return Response().ok(await self._get_plugin_config(plugin_name)).__dict__
 
     async def post_astrbot_configs(self):
         post_configs = await request.json
@@ -124,11 +109,12 @@ class ConfigRoute(Route):
             logger.error(e)
             return Response().error(str(e)).__dict__
     
-    async def post_extension_configs(self):
+    async def post_plugin_configs(self):
         post_configs = await request.json
+        plugin_name = request.args.get("plugin_name", "unknown")
         try:
-            await self._save_extension_configs(post_configs)
-            return Response().ok(None, "保存成功~ 机器人正在重载配置。").__dict__
+            await self._save_plugin_configs(post_configs, plugin_name)
+            return Response().ok(None, f"保存插件 {plugin_name} 成功~ 机器人正在重载配置。").__dict__
         except Exception as e:
             return Response().error(str(e)).__dict__
             
@@ -152,28 +138,48 @@ class ConfigRoute(Route):
             "config": config
         }
 
-    async def _get_extension_config(self, namespace: str):
-        path = f"data/config/{namespace}.json"
-        if not os.path.exists(path):
-            return []
-        with open(path, "r", encoding="utf-8-sig") as f:
-            return [{
-                "config_type": "group",
-                "name": namespace + " 插件配置",
-                "description": "",
-                "body": list(json.load(f).values())
-            },]
-
+    async def _get_plugin_config(self, plugin_name: str):
+        ret = {
+            "metadata": None,
+            "config": None
+        }
+        
+        for plugin_md in star_registry:
+            if plugin_md.name == plugin_name:
+                if not plugin_md.config:
+                    break
+                ret['config'] = plugin_md.config # 这是自定义的 Dict 类（AstrBotConfig）
+                ret['metadata'] = {
+                    plugin_name: {
+                        "description": f"{plugin_name} 配置",
+                        "type": "object",
+                        "items": plugin_md.config.schema # 初始化时通过 __setattr__ 存入了 schema
+                    }
+                }
+                break
+            
+        return ret
+        
     async def _save_astrbot_configs(self, post_configs: dict):
         try:
-            save_astrbot_config(post_configs, self.config)
+            save_config(post_configs, self.config, is_core=True)
             self.core_lifecycle.restart()
         except Exception as e:
             raise e
-    
-    async def _save_extension_configs(self, post_configs: dict):
+        
+    async def _save_plugin_configs(self, post_configs: dict, plugin_name: str):
+        md = None
+        for plugin_md in star_registry:
+            if plugin_md.name == plugin_name:
+                md = plugin_md
+        
+        if not md:
+            raise ValueError(f"插件 {plugin_name} 不存在")
+        if not md.config:
+            raise ValueError(f"插件 {plugin_name} 没有注册配置")
+        
         try:
-            save_extension_config(post_configs)
+            save_config(post_configs, md.config)
             self.core_lifecycle.restart()
         except Exception as e:
             raise e

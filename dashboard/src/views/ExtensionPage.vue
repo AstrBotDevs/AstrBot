@@ -1,7 +1,7 @@
 <script setup>
 import ExtensionCard from '@/components/shared/ExtensionCard.vue';
-import ConfigDetailCard from '@/components/shared/ConfigDetailCard.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
+import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import axios from 'axios';
 
@@ -56,7 +56,7 @@ import axios from 'axios';
 
   </v-row>
 
-  <v-dialog v-model="configDialog" width="750">
+  <v-dialog v-model="configDialog" width="1000">
     <template v-slot:activator="{ props }">
     </template>
     <v-card>
@@ -65,7 +65,8 @@ import axios from 'axios';
       </v-card-title>
       <v-card-text>
         <v-container>
-          <ConfigDetailCard :config="extension_config"></ConfigDetailCard>
+          <AstrBotConfig v-if="extension_config.metadata" :metadata="extension_config.metadata" :iterable="extension_config.config" :metadataKey=curr_namespace></AstrBotConfig>
+          <p v-else>这个插件没有配置</p>
         </v-container>
       </v-card-text>
       <v-card-actions>
@@ -172,9 +173,9 @@ export default {
   name: 'ExtensionPage',
   components: {
     ExtensionCard,
-    ConfigDetailCard,
     WaitingForRestart,
-    ConsoleDisplayer
+    ConsoleDisplayer,
+    AstrBotConfig
   },
   data() {
     return {
@@ -189,7 +190,10 @@ export default {
       snack_success: "success",
       loading_: false,
       configDialog: false,
-      extension_config: {},
+      extension_config: {
+        "metadata": {},
+        "config": {}
+      },
       upload_file: null,
       pluginMarketData: {},
       loadingDialog: {
@@ -364,7 +368,7 @@ export default {
     openExtensionConfig(extension_name) {
       this.curr_namespace = extension_name;
       this.configDialog = true;
-      axios.get('/api/config/get?namespace=' + extension_name).then((res) => {
+      axios.get('/api/config/get?plugin_name=' + extension_name).then((res) => {
         this.extension_config = res.data.data;
         console.log(this.extension_config);
       }).catch((err) => {
@@ -372,10 +376,7 @@ export default {
       });
     },
     updateConfig() {
-      axios.post('/api/config/plugin/update', {
-        "config": this.extension_config,
-        "namespace": this.curr_namespace
-      }).then((res) => {
+      axios.post('/api/config/plugin/update?plugin_name='+this.curr_namespace, this.extension_config.config).then((res) => {
         if (res.data.status === "ok") {
           this.toast(res.data.message, "success");
           this.$refs.wfr.check();

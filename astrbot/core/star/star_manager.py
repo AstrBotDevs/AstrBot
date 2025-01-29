@@ -2,12 +2,14 @@ import inspect
 import functools
 import os
 import sys
+import json
 import traceback
 import yaml
 import logging
 from types import ModuleType
 from typing import List
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.default import DEFAULT_VALUE_MAP
 from astrbot.core import logger, sp, pip_installer
 from .context import Context
 from . import StarMetadata
@@ -26,13 +28,20 @@ class PluginManager:
         self.updator = PluginUpdator(config['plugin_repo_mirror'])
         
         self.context = context
-        self.context._star_manager = self # 就这样吧，不想改了
+        self.context._star_manager = self
                 
         self.config = config
         self.plugin_store_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../data/plugins"))
+        '''存储插件的路径。即 data/plugins'''
+        self.plugin_config_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../data/config"))
+        '''存储插件配置的路径。data/config'''
         self.reserved_plugin_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../packages"))
+        '''保留插件的路径。在 packages 目录下'''
+        self.conf_schema_fname = "_conf_schema.json"
+        '''插件配置 Schema 文件名'''
 
     def _get_classes(self, arg: ModuleType):
+        '''获取指定模块（可以理解为一个 python 文件）下所有的类'''
         classes = []
         clsmembers = inspect.getmembers(arg, inspect.isclass)
         for (name, _) in clsmembers:
@@ -128,7 +137,7 @@ class PluginManager:
         return metadata
     
     async def reload(self):
-        '''扫描并加载所有的 Star'''
+        '''扫描并加载所有的插件'''
         for smd in star_registry:
             logger.debug(f"尝试终止插件 {smd.name} ...")
             if hasattr(smd.star_cls, "__del__"):
@@ -150,13 +159,13 @@ class PluginManager:
         inactivated_plugins: list = sp.get("inactivated_plugins", [])
         inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
         
-        # 导入 Star 模块，并尝试实例化 Star 类
+        # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
             try:
                 module_str = plugin_module['module']
                 # module_path = plugin_module['module_path']
-                root_dir_name = plugin_module['pname']
-                reserved = plugin_module.get('reserved', False)
+                root_dir_name = plugin_module['pname'] # 插件的目录名
+                reserved = plugin_module.get('reserved', False) # 是否是保留插件。目前在 packages/ 目录下的都是保留插件。保留插件不可以卸载。
                 
                 logger.info(f"正在载入插件 {root_dir_name} ...")
                 
@@ -173,11 +182,33 @@ class PluginManager:
                     logger.error(traceback.format_exc())
                     logger.error(f"插件 {root_dir_name} 导入失败。原因：{str(e)}")
                     continue
+                
+                # 检查 _conf_schema.json
+                plugin_config = None
+                plugin_dir_path = os.path.join(self.plugin_store_path, root_dir_name) \
+                    if not reserved else os.path.join(self.reserved_plugin_path, root_dir_name)
+                plugin_schema_path = os.path.join(plugin_dir_path, self.conf_schema_fname)
+                if os.path.exists(plugin_schema_path):
+                    # 加载插件配置
+                    with open(plugin_schema_path, 'r', encoding='utf-8') as f:
+                        plugin_config = AstrBotConfig(
+                            config_path=os.path.join(self.plugin_config_path, f"{root_dir_name}_config.json"), 
+                            schema=json.loads(f.read())
+                        )
 
                 if path in star_map:
                     # 通过装饰器的方式注册插件
                     metadata = star_map[path]
-                    metadata.star_cls = metadata.star_cls_type(context=self.context)
+                    
+                    if plugin_config:
+                        metadata.config = plugin_config
+                        try:
+                            metadata.star_cls = metadata.star_cls_type(context=self.context, config=plugin_config)
+                        except TypeError as _:
+                            metadata.star_cls = metadata.star_cls_type(context=self.context)
+                    else:
+                        metadata.star_cls = metadata.star_cls_type(context=self.context)
+                            
                     metadata.module = module
                     metadata.root_dir_name = root_dir_name
                     metadata.reserved = reserved
@@ -199,16 +230,20 @@ class PluginManager:
                     # v3.4.0 以前的方式注册插件
                     logger.debug(f"插件 {path} 未通过装饰器注册。尝试通过旧版本方式载入。")
                     classes = self._get_classes(module)
-                    try:
-                        obj = getattr(module, classes[0])(context=self.context)
-                    except BaseException as e:
-                        logger.error(f"插件 {root_dir_name} 实例化失败。")
-                        raise e
                     
+                    if plugin_config:
+                        try:
+                            obj = getattr(module, classes[0])(context=self.context, config=plugin_config) # 实例化插件类
+                        except TypeError as _:
+                            obj = getattr(module, classes[0])(context=self.context) # 实例化插件类
+                    else:
+                        obj = getattr(module, classes[0])(context=self.context) # 实例化插件类
+
                     metadata = None
                     plugin_path = os.path.join(self.plugin_store_path, root_dir_name) if not reserved else os.path.join(self.reserved_plugin_path, root_dir_name)
                     metadata = self._load_plugin_metadata(plugin_path=plugin_path, plugin_obj=obj)
                     metadata.star_cls = obj
+                    metadata.config = plugin_config
                     metadata.module = module
                     metadata.root_dir_name = root_dir_name
                     metadata.reserved = reserved
@@ -221,7 +256,7 @@ class PluginManager:
                 if metadata.module_path in inactivated_plugins:
                     metadata.activated = False
                     
-                # 执行 initialize 函数
+                # 执行 initialize() 方法
                 if hasattr(metadata.star_cls, "initialize"):
                     await metadata.star_cls.initialize()
                     
