@@ -1,4 +1,5 @@
 import traceback
+import aiohttp
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle

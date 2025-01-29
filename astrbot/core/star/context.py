@@ -165,9 +165,6 @@ class Context:
                 return True
         return False
 
-    async def sync_plugin_config(self, config_path: str, default_config: dict):
-        pass
-
     '''
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。
     '''

@@ -52,6 +52,12 @@ import axios from 'axios';
           <v-btn v-else variant="plain" disabled>已安装</v-btn>
         </div>
       </ExtensionCard>
+      
+    </v-col>
+
+    <v-col style="margin-bottom: 16px;" cols="12" md="12">
+      <small ><a href="https://astrbot.app/dev/plugin.html">插件开发文档</a></small> |
+      <small> <a href="https://github.com/Soulter/AstrBot_Plugins_Collection">提交插件仓库</a></small>
     </v-col>
 
   </v-row>
