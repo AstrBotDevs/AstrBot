@@ -10,7 +10,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.platform.manager import PlatformManager
-from .star import star_registry, StarMetadata
+from .star import star_registry, StarMetadata, star_map
 from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
@@ -75,6 +75,11 @@ class Context:
         '''
         func_tool = self.provider_manager.llm_tools.get_func(name)
         if func_tool is not None:
+            
+            if func_tool.handler_module_path in star_map:
+                if not star_map[func_tool.handler_module_path].activated:
+                    raise ValueError(f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用，请先在管理面板启用再激活此工具。")
+            
             func_tool.active = True
             
             inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])

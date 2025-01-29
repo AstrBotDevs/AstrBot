@@ -1,3 +1,7 @@
+'''
+此功能已过时，参考 https://astrbot.app/dev/plugin.html#%E6%B3%A8%E5%86%8C%E6%8F%92%E4%BB%B6%E9%85%8D%E7%BD%AE-beta
+'''
+
 from typing import Union
 import os
 import json

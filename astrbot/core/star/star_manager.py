@@ -327,13 +327,14 @@ class PluginManager:
         if plugin.module_path not in inactivated_plugins:
             inactivated_plugins.append(plugin.module_path)
             
-        inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
+        inactivated_llm_tools: list = list(set(sp.get("inactivated_llm_tools", []))) # 后向兼容
         
         # 禁用插件启用的 llm_tool
         for func_tool in llm_tools.func_list:
             if func_tool.handler_module_path == plugin.module_path:
                 func_tool.active = False
-                inactivated_llm_tools.append(func_tool.name)
+                if func_tool.name not in inactivated_llm_tools:
+                    inactivated_llm_tools.append(func_tool.name)
     
         sp.put("inactivated_plugins", inactivated_plugins)
         sp.put("inactivated_llm_tools", inactivated_llm_tools)
