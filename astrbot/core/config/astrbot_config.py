@@ -13,23 +13,35 @@ class RateLimitStrategy(enum.Enum):
     DISCARD = "discard"
 
 class AstrBotConfig(dict):
-    '''从配置文件中加载的配置，支持直接通过点号操作符访问配置项'''
+    '''从配置文件中加载的配置，支持直接通过点号操作符访问根配置项。
     
-    def __init__(self):
+    - 初始化时会将传入的 default_config 与配置文件进行比对，如果配置文件中缺少配置项则会自动插入默认值并进行一次写入操作。会递归检查配置项。
+    - 如果配置文件路径对应的文件不存在，则会自动创建并写入默认配置。
+    '''
+    
+    def __init__(
+        self, 
+        config_path: str = ASTRBOT_CONFIG_PATH, 
+        default_config: dict = DEFAULT_CONFIG
+    ):
         super().__init__()
+        
+        self.config_path = config_path
+        self.default_config = default_config
+        
         if not self.check_exist():
             '''不存在时载入默认配置'''
-            with open(ASTRBOT_CONFIG_PATH, "w", encoding="utf-8-sig") as f:
-                json.dump(DEFAULT_CONFIG, f, indent=4, ensure_ascii=False)
+            with open(config_path, "w", encoding="utf-8-sig") as f:
+                json.dump(default_config, f, indent=4, ensure_ascii=False)
 
-        with open(ASTRBOT_CONFIG_PATH, "r", encoding="utf-8-sig") as f:
+        with open(config_path, "r", encoding="utf-8-sig") as f:
             conf_str = f.read()
             if conf_str.startswith(u'/ufeff'): # remove BOM
                 conf_str = conf_str.encode('utf8')[3:].decode('utf8')
             conf = json.loads(conf_str)
         
         # 检查配置完整性，并插入
-        has_new = self.check_config_integrity(DEFAULT_CONFIG, conf)
+        has_new = self.check_config_integrity(default_config, conf)
         self.update(conf)
         if has_new:
             self.save_config()
@@ -61,7 +73,7 @@ class AstrBotConfig(dict):
         '''
         if replace_config:
             self.update(replace_config)
-        with open(ASTRBOT_CONFIG_PATH, "w", encoding="utf-8-sig") as f:
+        with open(self.config_path, "w", encoding="utf-8-sig") as f:
             json.dump(self, f, indent=2, ensure_ascii=False)
             
     def __getattr__(self, item):
@@ -81,4 +93,4 @@ class AstrBotConfig(dict):
         self[key] = value
 
     def check_exist(self) -> bool:
-        return os.path.exists(ASTRBOT_CONFIG_PATH)
+        return os.path.exists(self.config_path)
