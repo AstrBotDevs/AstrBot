@@ -294,7 +294,7 @@ class SimpleGewechatClient():
             await asyncio.sleep(5)
             
         if appid:
-            sp.put(f"gewechat-appid-{nickname}", appid)
+            sp.put(f"gewechat-appid-{self.nickname}", appid)
             self.appid = appid
             logger.info(f"已保存 APPID: {appid}")
     
