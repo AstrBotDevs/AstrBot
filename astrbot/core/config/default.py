@@ -118,7 +118,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "base_url": "http://localhost:2531",
                         "nickname": "soulter",
-                        "host": "localhost",
+                        "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
                 },
