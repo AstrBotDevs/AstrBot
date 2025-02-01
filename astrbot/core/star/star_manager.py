@@ -359,8 +359,9 @@ class PluginManager:
         plugin.activated = True
         
         
-    def install_plugin_from_file(self, zip_file_path: str):
-        desti_dir = os.path.join(self.plugin_store_path, os.path.basename(zip_file_path))
+    async def install_plugin_from_file(self, zip_file_path: str):
+        dir_name = os.path.basename(zip_file_path).replace(".zip", "")
+        desti_dir = os.path.join(self.plugin_store_path, dir_name)
         self.updator.unzip_file(zip_file_path, desti_dir)
 
         # remove the zip
@@ -368,6 +369,4 @@ class PluginManager:
             os.remove(zip_file_path)
         except BaseException as e:
             logger.warning(f"删除插件压缩包失败: {str(e)}")
-        
-        self._check_plugin_dept_update()
-
+        await self.reload()

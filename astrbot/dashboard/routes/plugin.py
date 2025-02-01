@@ -67,9 +67,9 @@ class PluginRoute(Route):
             file = await request.files
             file = file['file']
             logger.info(f"正在安装用户上传的插件 {file.filename}")
-            file_path = f"data/temp/{uuid.uuid4()}.zip"
+            file_path = f"data/temp/{file.filename}"
             await file.save(file_path)
-            self.plugin_manager.install_plugin_from_file(file_path)
+            await self.plugin_manager.install_plugin_from_file(file_path)
             logger.info(f"安装插件 {file.filename} 成功")
             return Response().ok(None, "安装成功。").__dict__
         except Exception as e:
