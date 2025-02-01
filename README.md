@@ -64,13 +64,13 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 ## ⚡ 消息平台支持情况
 
-
 | 平台    | 支持性 | 详情 | 消息类型 |
 | -------- | ------- | ------- | ------ |
-| QQ      | ✔    | 私聊、群聊 | 文字、图片、语音 |
-| QQ 官方API | ✔    | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片 |
-| 微信    | ✔    | [Gewechat](https://github.com/Devo919/Gewechat)。微信个人号私聊、群聊 | 文字、图片、语音 |
+| QQ(官方机器人接口) | ✔    | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片 |
+| QQ(OneBot)      | ✔    | 私聊、群聊 | 文字、图片、语音 |
+| 微信(个人号)    | ✔    | 微信个人号私聊、群聊 | 文字、图片、语音 |
 | [Telegram](https://github.com/Soulter/astrbot_plugin_telegram)   | ✔    | 私聊、群聊 | 文字、图片 |
+| 微信(企业微信)    | 🚧    | 计划内 | - |
 | 微信对话开放平台 | 🚧    | 计划内 | - |
 | 飞书   | 🚧    | 计划内 | - |
 | Discord   | 🚧    | 计划内 | - |
@@ -150,6 +150,11 @@ _✨ 内置 Web Chat，在线与机器人交互 ✨_
 
 [<img src="https://api.gitsponsors.com/api/badge/img?id=575865240" height="20">](https://api.gitsponsors.com/api/badge/link?p=XEpbdGxlitw/RbcwiTX93UMzNK/jgDYC8NiSzamIPMoKvG2lBFmyXhSS/b0hFoWlBBMX2L5X5CxTDsUdyvcIEHTOfnkXz47UNOZvMwyt5CzbYpq0SEzsSV1OJF1cCo90qC/ZyYKYOWedal3MhZ3ikw==)
 
+## Disclaimer
+
+1. The project is protected under the `AGPL-v3` opensource license.
+2. The deployment of WeChat (personal account) utilizes [Gewechat](https://github.com/Devo919/Gewechat) service. AstrBot only guarantees connectivity with Gewechat and recommends using a WeChat account that is not frequently used. In the event of account risk control, the author of this project shall not bear any responsibility.
+3. Please ensure compliance with local laws and regulations when using this project.
 
 <!-- ## ✨ ATRI [Beta 测试]
 
@@ -160,6 +165,7 @@ _✨ 内置 Web Chat，在线与机器人交互 ✨_
 3. 表情包理解与回复
 4. TTS
     -->
+
 
 _私は、高性能ですから!_
 
