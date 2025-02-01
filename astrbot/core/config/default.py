@@ -237,7 +237,8 @@ CONFIG_METADATA_2 = {
                         "description": "ID 白名单",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "AstrBot 只处理所填写的 ID 发来的消息事件。为空时不启用白名单过滤。可以使用 /myid 指令获取在某个平台上的会话 ID。也可在 AstrBot 日志内获取会话 ID，当一条消息没通过白名单时，会输出 INFO 级别的日志。会话 ID 类似 aiocqhttp:GroupMessage:547540978",
+                        "obvious_hint": True,
+                        "hint": "AstrBot 只处理所填写的 ID 发来的消息事件。为空时不启用白名单过滤。可以使用 /sid 指令获取在某个平台上的会话 ID。也可在 AstrBot 日志内获取会话 ID，当一条消息没通过白名单时，会输出 INFO 级别的日志。会话 ID 类似 aiocqhttp:GroupMessage:547540978",
                     },
                     "id_whitelist_log": {
                         "description": "打印白名单日志",
