@@ -1,4 +1,5 @@
 import traceback
+import uuid
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from .provider import Provider, STTProvider, TTSProvider, Personality
 from .entites import ProviderType
@@ -65,7 +66,7 @@ class ProviderManager():
         '''加载的 Provider 的实例'''
         self.stt_provider_insts: List[STTProvider] = []
         '''加载的 Speech To Text Provider 的实例'''
-        self.tts_provider_insts: Lieist[TTSProvider] = []
+        self.tts_provider_insts: List[TTSProvider] = []
         '''加载的 Text To Speech Provider 的实例'''
         self.llm_tools = llm_tools
         self.curr_provider_inst: Provider = None
@@ -83,12 +84,16 @@ class ProviderManager():
         if kdb_cfg and len(kdb_cfg):
             self.curr_kdb_name = list(kdb_cfg.keys())[0]
         
+        changed = False
         for provider_cfg in self.providers_config:
             if not provider_cfg['enable']:
                 continue
             
             if provider_cfg['id'] in self.loaded_ids:
-                raise ValueError(f"Provider ID 重复：{provider_cfg['id']}。")
+                new_id = f"{provider_cfg['id']}_{str(uuid.uuid4())[:8]}"
+                logger.info(f"Provider ID 重复：{provider_cfg['id']}。已自动更改为 {new_id}。")
+                provider_cfg['id'] = new_id
+                changed = True
             self.loaded_ids[provider_cfg['id']] = True
             
             try:
@@ -116,7 +121,13 @@ class ProviderManager():
             except Exception as e:
                 logger.critical(f"加载 {provider_cfg['type']}({provider_cfg['id']}) 提供商适配器失败：{e}。未知原因")
                 continue
-            
+        
+        if changed:
+            try:
+                config.save_config()
+            except Exception as e:
+                logger.warning(f"保存配置文件失败：{e}")
+
     async def initialize(self):
         
         selected_provider_id = sp.get("curr_provider")
