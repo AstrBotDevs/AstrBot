@@ -39,7 +39,6 @@ class RepoZipUpdator():
             else:
                 ret = self.github_api_release_parser(result)
         except BaseException:
-            logger.error("解析版本信息失败")
             raise Exception("解析版本信息失败")
         return ret
     

@@ -44,7 +44,7 @@ class UpdateRoute(Route):
                     }
                 ).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.warning(f"检查更新失败: {str(e)} (不影响除项目更新外的正常使用)")
             return Response().error(e.__str__()).__dict__
     
     async def update_project(self):
