@@ -37,6 +37,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "wake_prefix": "",
         "web_search": False,
+        "web_search_link": False,
         "identifier": False,
         "datetime_system_prompt": True,
         "default_personality": "default",
@@ -539,16 +540,25 @@ CONFIG_METADATA_2 = {
                     "web_search": {
                         "description": "启用网页搜索",
                         "type": "bool",
-                        "hint": "能访问 Google 时效果最佳。如果 Google 访问失败，程序会依次访问 Bing, Sogo 搜索引擎。",
+                        "obvious_hint": True,
+                        "hint": "能访问 Google 时效果最佳（国内需要在 `其他配置` 开启 HTTP 代理）。如果 Google 访问失败，程序会依次访问 Bing, Sogo 搜索引擎。",
+                    },
+                    "web_search_link": {
+                        "description": "网页搜索引用链接",
+                        "type": "bool",
+                        "obvious_hint": True,
+                        "hint": "开启后，将会传入网页搜索结果的链接给模型，并引导模型输出引用链接。",
                     },
                     "identifier": {
                         "description": "启动识别群员",
                         "type": "bool",
+                        "obvious_hint": True,
                         "hint": "在 Prompt 前加上群成员的名字以让模型更好地了解群聊状态。启用将略微增加 token 开销。",
                     },
                     "datetime_system_prompt": {
                         "description": "启用日期时间系统提示",
                         "type": "bool",
+                        "obvious_hint": True,
                         "hint": "启用后，会在系统提示词中加上当前机器的日期时间。",
                     },
                     "default_personality": {
