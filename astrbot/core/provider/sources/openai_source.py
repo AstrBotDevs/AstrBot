@@ -102,17 +102,28 @@ class ProviderOpenAIOfficial(Provider):
             )
         except BaseException as e:
             # 处理不支持 Function Calling 的模型
-            if 'does not support Function Calling' in str(e) \
-                or 'does not support tools' in str(e)  \
-                or 'Function call is not supported' in str(e): # siliconcloud
-                    del payloads['tools']
-                    logger.debug(f"模型 {self.model_name} 不支持 tools，已自动移除")
-                    completion = await self.client.chat.completions.create(
-                        **payloads,
-                        stream=False
-                    )
+            # issue #305
+            # if 'does not support Function Calling' in str(e) \
+            #     or 'does not support tools' in str(e)  \
+            #     or 'Function call is not supported' in str(e): # siliconcloud
+            #         del payloads['tools']
+            #         logger.debug(f"模型 {self.model_name} 不支持 tools，已自动移除")
+            #         completion = await self.client.chat.completions.create(
+            #             **payloads,
+            #             stream=False
+            #         )
+            # else:
+            #     raise e
+            if 'tools' in payloads:
+                del payloads['tools']
+                logger.debug(f"模型 {self.model_name} 不支持 tools，已自动移除")
+                completion = await self.client.chat.completions.create(
+                    **payloads,
+                    stream=False
+                )
             else:
                 raise e
+
         
         assert isinstance(completion, ChatCompletion)
         logger.debug(f"completion: {completion}")
