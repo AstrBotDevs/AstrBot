@@ -78,7 +78,7 @@ DEFAULT_CONFIG = {
     "persona": [
         {
             "name": "default",
-            "prompt": "如果用户寻求帮助或者打招呼，请告诉他可以用 /help 查看 AstrBot 帮助。",
+            "prompt": "",
             "begin_dialogs": [],
             "mood_imitation_dialogs": [],
         }
@@ -111,7 +111,6 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_host": "",
                         "ws_reverse_port": 6199,
                     },
-                    "vchat(微信)": {"id": "default", "type": "vchat", "enable": False},
                     "gewechat(微信)": {
                         "id": "gwchat",
                         "type": "gewechat",
