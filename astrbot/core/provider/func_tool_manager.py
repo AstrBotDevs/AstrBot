@@ -108,13 +108,19 @@ class FuncCall:
         for f in self.func_list:
             if not f.active:
                 continue
-            tools.append(
-                {
-                    "name": f.name,
-                    "parameters": f.parameters,
-                    "description": f.description,
-                }
-            )
+
+            func_declaration = {
+                "name": f.name,
+                "description": f.description
+            }
+
+            # 检查并添加非空的properties参数
+            params = f.parameters if isinstance(f.parameters, dict) else {}
+            if params.get("properties", {}):
+                func_declaration["parameters"] = params
+
+            tools.append(func_declaration)
+
         declarations["function_declarations"] = tools
         return declarations
         
