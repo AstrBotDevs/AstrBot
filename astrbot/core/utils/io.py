@@ -109,7 +109,7 @@ async def download_file(url: str, path: str, show_progress: bool = False):
     '''
     try:
         async with aiohttp.ClientSession(trust_env=True) as session:
-            async with session.get(url, timeout=120) as resp:
+            async with session.get(url, timeout=1800) as resp:
                 if resp.status != 200:
                     raise Exception(f"下载文件失败: {resp.status}")
                 total_size = int(resp.headers.get('content-length', 0))

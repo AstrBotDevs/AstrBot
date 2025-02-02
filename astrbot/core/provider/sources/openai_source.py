@@ -191,7 +191,7 @@ class ProviderOpenAIOfficial(Provider):
             else:
                 logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
                 raise e
-
+        
     
     async def save_history(self, contexts: List, new_record: dict, session_id: str, llm_response: LLMResponse):
         if llm_response.role == "assistant" and session_id:
