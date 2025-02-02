@@ -47,6 +47,7 @@ class EventType(enum.Enum):
     '''
     AdapterMessageEvent = enum.auto() # 收到适配器发来的消息
     OnLLMRequestEvent = enum.auto() # 收到 LLM 请求（可以是用户也可以是插件）
+    OnLLMResponseEvent = enum.auto() # LLM 响应后
     OnDecoratingResultEvent = enum.auto() # 发送消息前
     OnCallingFuncToolEvent = enum.auto() # 调用函数工具
     OnAfterMessageSentEvent = enum.auto() # 发送消息后

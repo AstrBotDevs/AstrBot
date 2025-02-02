@@ -68,6 +68,15 @@ class LLMRequestSubStage(Stage):
             if _nested:
                 req.func_tool = None # 暂时不支持递归工具调用
             llm_response = await provider.text_chat(**req.__dict__) # 请求 LLM
+            
+            # 执行 LLM 响应后的事件。
+            handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMResponseEvent)
+            for handler in handlers:
+                try:
+                    await handler.handler(event, llm_response)
+                except BaseException:
+                    logger.error(traceback.format_exc())
+            
             await Metric.upload(llm_tick=1, model_name=provider.get_model(), provider_type=provider.meta().type)
 
             if llm_response.role == 'assistant':

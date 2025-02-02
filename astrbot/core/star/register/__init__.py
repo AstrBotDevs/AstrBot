@@ -7,6 +7,7 @@ from .star_handler import (
     register_regex,
     register_permission_type,
     register_on_llm_request,
+    register_on_llm_response,
     register_llm_tool,
     register_on_decorating_result,
     register_after_message_sent
@@ -21,6 +22,7 @@ __all__ = [
     'register_regex',
     'register_permission_type',
     'register_on_llm_request',
+    'register_on_llm_response',
     'register_llm_tool',
     'register_on_decorating_result',
     'register_after_message_sent'

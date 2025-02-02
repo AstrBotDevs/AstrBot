@@ -139,6 +139,8 @@ def register_on_llm_request():
     
     Examples:
     ```py
+    from astrbot.api.provider import ProviderRequest
+    
     @on_llm_request()
     async def test(self, event: AstrMessageEvent, request: ProviderRequest) -> None:
         request.system_prompt += "你是一个猫娘..."
@@ -151,6 +153,27 @@ def register_on_llm_request():
         return awaitable
     
     return decorator
+
+def register_on_llm_response():
+    '''当有 LLM 请求后的事件
+    
+    Examples:
+    ```py
+    from astrbot.api.provider import LLMResponse
+    
+    @on_llm_response()
+    async def test(self, event: AstrMessageEvent, response: LLMResponse) -> None:
+        ...
+    ```
+    
+    请务必接收两个参数：event, request
+    '''
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnLLMResponseEvent)
+        return awaitable
+    
+    return decorator
+
 
 def register_llm_tool(name: str = None):
     '''为函数调用（function-calling / tools-use）添加工具。

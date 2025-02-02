@@ -2,6 +2,7 @@ import enum
 from dataclasses import dataclass, field
 from typing import List, Dict, Type
 from .func_tool_manager import FuncCall
+from openai.types.chat.chat_completion import ChatCompletion
 
 
 class ProviderType(enum.Enum):
@@ -52,3 +53,5 @@ class LLMResponse:
     '''工具调用参数'''
     tools_call_name: List[str] = field(default_factory=list)
     '''工具调用名称'''
+    
+    raw_completion: ChatCompletion = None

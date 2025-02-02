@@ -101,17 +101,16 @@ class ProviderOpenAIOfficial(Provider):
                 stream=False
             )
         except BaseException as e:
-            if 'does not support Function Calling' in e \
-                or 'does not support tools' in e: # ollama 
+            if 'does not support Function Calling' in str(e) \
+                or 'does not support tools' in str(e): # ollama 
                     del payloads['tools']
                     logger.debug(f"模型 {self.model_name} 不支持 tools，已自动移除")
                     completion = await self.client.chat.completions.create(
                         **payloads,
                         stream=False
                     )
-        
-        if not completion:
-            raise Exception("API 返回的 completion 为空。")
+            else:
+                raise e
         
         assert isinstance(completion, ChatCompletion)
         logger.debug(f"completion: {completion}")
@@ -123,14 +122,8 @@ class ProviderOpenAIOfficial(Provider):
         if choice.message.content:
             # text completion
             completion_text = str(choice.message.content).strip()
-            
-            # 适配 deepseek-r1 模型
-            if r'<think>' in completion_text or r'</think>' in completion_text:
-                completion_text = re.sub(r'<think>.*?</think>', '', completion_text, flags=re.DOTALL).strip()
-                # 可能有单标签情况
-                completion_text = completion_text.replace(r'<think>', '').replace(r'</think>', '').strip()
-            
-            return LLMResponse("assistant", completion_text)
+
+            return LLMResponse("assistant", completion_text, raw_completion=completion)
         elif choice.message.tool_calls:
             # tools call (function calling)
             args_ls = []
@@ -141,8 +134,9 @@ class ProviderOpenAIOfficial(Provider):
                         args = json.loads(tool_call.function.arguments)
                         args_ls.append(args)
                         func_name_ls.append(tool_call.function.name)
-            return LLMResponse(role="tool", tools_call_args=args_ls, tools_call_name=func_name_ls)
+            return LLMResponse(role="tool", tools_call_args=args_ls, tools_call_name=func_name_ls, raw_completion=completion)
         else:
+            logger.error(f"API 返回的 completion 无法解析：{completion}。")
             raise Exception("Internal Error")
 
     async def text_chat(
@@ -195,6 +189,7 @@ class ProviderOpenAIOfficial(Provider):
                         else:
                             raise e
             else:
+                logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
                 raise e
 
     

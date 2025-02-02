@@ -6,6 +6,7 @@ from astrbot.core.star.register import (
     register_platform_adapter_type as platform_adapter_type,
     register_permission_type as permission_type,
     register_on_llm_request as on_llm_request,
+    register_on_llm_response as on_llm_response,
     register_llm_tool as llm_tool,
     register_on_decorating_result as on_decorating_result,
     register_after_message_sent as after_message_sent
@@ -31,5 +32,6 @@ __all__ = [
     'on_llm_request',
     'llm_tool',
     'on_decorating_result',
-    'after_message_sent'
+    'after_message_sent',
+    'on_llm_response'
 ]
