@@ -24,7 +24,10 @@ class PlatformManager():
                 case "qq_official":
                     from .sources.qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter # noqa: F401
                 case "vchat":
-                    from .sources.vchat.vchat_platform_adapter import VChatPlatformAdapter # noqa: F401
+                    try:
+                        from .sources.vchat.vchat_platform_adapter import VChatPlatformAdapter # noqa: F401
+                    except BaseException:
+                        logger.warning("当前 astrbot 已不维护 vchat 的接入，如有需要请 pip 安装 vchat 然后重启")
                 case "gewechat":
                     from .sources.gewechat.gewechat_platform_adapter import GewechatPlatformAdapter # noqa: F401
         
