@@ -49,6 +49,11 @@ class ProcessStage(Stage):
         if not event._has_send_oper and event.is_at_or_wake_command:
             if (event.get_result() and not event.get_result().is_stopped()) or not event.get_result():
                 provider = self.ctx.plugin_manager.context.get_using_provider()
+                
+                if not provider:
+                    logger.info("未找到可用的 LLM 提供商，请先前往配置服务提供商。")
+                    return
+                
                 match provider.meta().type:
                     case "dify":
                         async for _ in self.dify_request_sub_stage.process(event):

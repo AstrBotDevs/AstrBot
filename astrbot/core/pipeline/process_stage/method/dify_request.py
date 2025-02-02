@@ -21,6 +21,10 @@ class DifyRequestSubStage(Stage):
         req: ProviderRequest = None
         
         provider = self.ctx.plugin_manager.context.get_using_provider()
+        
+        if not provider:
+            return
+        
         if provider.meta().type != "dify":
             return
         

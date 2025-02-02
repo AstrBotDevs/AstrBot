@@ -203,6 +203,10 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     async def provider(self, event: AstrMessageEvent, idx: int = None):
         '''查看或者切换 LLM Provider'''
         
+        if not self.context.get_using_provider():
+            event.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
+            return
+        
         if idx is None:
             ret = "## 当前载入的 LLM 提供商\n"
             for idx, llm in enumerate(self.context.get_all_providers()):
@@ -227,6 +231,11 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent):
+        
+        if not self.context.get_using_provider():
+            message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
+            return
+        
         await self.context.get_using_provider().forget(message.session_id)
         ret = "清除会话 LLM 聊天历史成功。"
         if self.ltm:
@@ -237,6 +246,12 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.command("model")
     async def model_ls(self, message: AstrMessageEvent, idx_or_name: Union[int, str] = None):
+                
+        if not self.context.get_using_provider():
+            message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
+            return
+        
+        
         if idx_or_name is None:
             models = []
             try:
@@ -277,6 +292,12 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.command("history")
     async def his(self, message: AstrMessageEvent, page: int = 1):
+        
+                
+        if not self.context.get_using_provider():
+            message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
+            return
+        
         size_per_page = 3
         contexts, total_pages = await self.context.get_using_provider().get_human_readable_context(message.session_id, page, size_per_page)
 
@@ -296,6 +317,10 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("key")
     async def key(self, message: AstrMessageEvent, index: int=None):
+                
+        if not self.context.get_using_provider():
+            message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
+            return
         
         if index is None:
             keys_data = self.context.get_using_provider().get_keys()
@@ -324,6 +349,12 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.command("persona")
     async def persona(self, message: AstrMessageEvent):
+                
+        if not self.context.get_using_provider():
+            message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
+            return
+        
+        
         l = message.message_str.split(" ")
         
         curr_persona_name = "无"
