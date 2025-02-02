@@ -94,13 +94,14 @@ class ProviderOpenAIOfficial(Provider):
             if tool_list:
                 payloads['tools'] = tool_list
         
+        completion = None
         try:
             completion = await self.client.chat.completions.create(
                 **payloads,
                 stream=False
             )
         except BaseException as e:
-            if 'does not support Function Calling' \
+            if 'does not support Function Calling' in e \
                 or 'does not support tools' in e: # ollama 
                     del payloads['tools']
                     logger.debug(f"模型 {self.model_name} 不支持 tools，已自动移除")
@@ -108,6 +109,9 @@ class ProviderOpenAIOfficial(Provider):
                         **payloads,
                         stream=False
                     )
+        
+        if not completion:
+            raise Exception("API 返回的 completion 为空。")
         
         assert isinstance(completion, ChatCompletion)
         logger.debug(f"completion: {completion}")
@@ -121,7 +125,7 @@ class ProviderOpenAIOfficial(Provider):
             completion_text = str(choice.message.content).strip()
             
             # 适配 deepseek-r1 模型
-            if r'<think>' in completion_text:
+            if r'<think>' in completion_text or r'</think>' in completion_text:
                 completion_text = re.sub(r'<think>.*?</think>', '', completion_text, flags=re.DOTALL).strip()
                 # 可能有单标签情况
                 completion_text = completion_text.replace(r'<think>', '').replace(r'</think>', '').strip()
