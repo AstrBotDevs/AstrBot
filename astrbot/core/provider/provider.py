@@ -74,7 +74,7 @@ class Provider(AbstractProvider):
         if persistant_history:
             # 读取历史记录
             try:
-                for history in db_helper.get_llm_history(provider_type=provider_config['type']):
+                for history in db_helper.get_llm_history(provider_type=provider_config['id']):
                     self.session_memory[history.session_id] = json.loads(history.content)
             except BaseException as e:
                 logger.warning(f"读取 LLM 对话历史记录 失败：{e}。仍可正常使用。")

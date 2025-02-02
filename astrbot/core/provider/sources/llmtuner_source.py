@@ -118,7 +118,7 @@ class LLMTunerModelLoader(Provider):
                     "role": "assistant",
                     "content": llm_response.completion_text
                 }]
-            self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['type'])
+            self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['id'])
         
     async def forget(self, session_id):
         self.session_memory[session_id] = []
