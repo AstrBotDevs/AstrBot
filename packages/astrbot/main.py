@@ -368,6 +368,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 - 设置人格情景: `/persona 人格名`, 如 /persona 编剧
 - 人格情景列表: `/persona list`
 - 人格情景详细信息: `/persona view 人格名`
+- 取消人格: `/persona unset`
 
 当前人格情景: {curr_persona_name}
 
@@ -393,6 +394,9 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             else:
                 msg = f"人格{ps}不存在"
             message.set_result(MessageEventResult().message(msg))
+        elif l[1] == "unset":
+            self.context.get_using_provider().curr_personality = None
+            message.set_result(MessageEventResult().message("取消人格成功。"))
         else:
             ps = "".join(l[1:]).strip()
             if persona := next(builtins.filter(

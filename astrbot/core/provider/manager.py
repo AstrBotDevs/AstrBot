@@ -63,6 +63,10 @@ class ProviderManager():
             except Exception as e:
                 logger.error(f"解析 Persona 配置失败：{e}")
         
+        if not self.selected_default_persona and len(self.personas) > 0:
+            # 默认选择第一个
+            self.selected_default_persona = self.personas[0]
+        
         
         self.provider_insts: List[Provider] = []
         '''加载的 Provider 的实例'''
