@@ -62,7 +62,9 @@ class LongTermMemory:
 
         match self.ar_method:
             case "possibility_reply":
-                return random.random() < self.ar_possibility
+                trig = random.random() < self.ar_possibility
+                logger.debug("主动回复触发。")
+                return trig
             
         return False
 

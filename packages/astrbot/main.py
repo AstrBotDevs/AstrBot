@@ -455,9 +455,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         '''群聊记忆增强'''
         if self.ltm:
             need_active = await self.ltm.need_active_reply(event)
-            
-            print(need_active)
-            
+                        
             group_icl_enable = self.context.get_config()['provider_ltm_settings']['group_icl_enable']
             if group_icl_enable:
                 '''记录对话'''
