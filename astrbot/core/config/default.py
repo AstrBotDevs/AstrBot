@@ -56,6 +56,13 @@ DEFAULT_CONFIG = {
         "group_message_max_cnt": 300,
         "image_caption": False,
         "image_caption_prompt": "Please describe the image using Chinese.",
+        "active_reply": {
+            "enable": False,
+            "method": "possibility_reply",
+            "possibility_reply": 0.1,
+            "prompt": "",
+        },
+        "put_history_to_prompt": True,
     },
     "content_safety": {
         "internal_keywords": {"enable": True, "extra_keywords": []},
@@ -654,25 +661,61 @@ CONFIG_METADATA_2 = {
                     "group_icl_enable": {
                         "description": "群聊内记录各群员对话",
                         "type": "bool",
-                        "obvious-hint": True,
+                        "obvious_hint": True,
                         "hint": "启用后，会记录群聊内各群员的对话。使用 /reset 命令清除记录。推荐使用 gpt-4o-mini 模型。",
                     },
                     "group_message_max_cnt": {
                         "description": "群聊消息最大数量",
                         "type": "int",
-                        "obvious-hint": True,
+                        "obvious_hint": True,
                         "hint": "群聊消息最大数量。超过此数量后，会自动清除旧消息。",
                     },
                     "image_caption": {
                         "description": "启用图像转述(需要模型支持)",
                         "type": "bool",
-                        "obvious-hint": True,
+                        "obvious_hint": True,
                         "hint": "启用后，当接收到图片消息时，会使用模型先将图片转述为文字再进行后续处理。推荐使用 gpt-4o-mini 模型。",
                     },
                     "image_caption_prompt": {
                         "description": "图像转述提示词",
                         "type": "string"
                     },
+                    "active_reply": {
+                        "description": "主动回复",
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "description": "启用主动回复",
+                                "type": "bool",
+                                "obvious_hint": True,
+                                "hint": "启用后，会根据触发概率主动回复群聊内的对话。",
+                            },
+                            "method": {
+                                "description": "回复方法",
+                                "type": "string",
+                                "options": ["possibility_reply"],
+                                "hint": "回复方法。possibility_reply 为根据概率回复",
+                            },
+                            "possibility_reply": {
+                                "description": "回复概率",
+                                "type": "float",
+                                "obvious_hint": True,
+                                "hint": "回复概率。当回复方法为 possibility_reply 时有效。当概率 >= 1 时，每条消息都会回复。",
+                            },
+                            "prompt": {
+                                "description": "提示词",
+                                "type": "string",
+                                "obvious_hint": True,
+                                "hint": "提示词。当提示词为空时，如果触发回复，prompt是触发的消息的内容；否则是提示词。此项可以和定时回复（暂未实现）配合使用。",
+                            },
+                        },
+                    },
+                    "put_history_to_prompt": {
+                        "description": "将群聊历史记录作为 prompt",
+                        "type": "bool",
+                        "obvious_hint": True,
+                        "hint": "需要先启用 group_icl_enable。此功能会将群聊历史记录放到 prompt 再请求。如果关闭，则是放在 system_prompt。如果开启了主动回复，建议启用，模型能够更好地完成回复任务。",
+                    }
                 },
             },
         },

@@ -55,3 +55,4 @@ class LLMResponse:
     '''工具调用名称'''
     
     raw_completion: ChatCompletion = None
+    _new_record: Dict[str, any] = None

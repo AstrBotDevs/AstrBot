@@ -5,7 +5,7 @@ import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
-from astrbot.api.provider import Personality, ProviderRequest
+from astrbot.api.provider import Personality, ProviderRequest, LLMResponse
 from astrbot.api.platform import MessageType
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.config.default import VERSION
@@ -25,7 +25,7 @@ class Main(star.Star):
         self.enable_datetime = cfg['provider_settings']["datetime_system_prompt"]
         
         self.ltm = None
-        if self.context.get_config()['provider_ltm_settings']['group_icl_enable']:
+        if self.context.get_config()['provider_ltm_settings']['group_icl_enable'] or self.context.get_config()['provider_ltm_settings']['active_reply']['enable']:
             try:
                 self.ltm = LongTermMemory(self.context.get_config()['provider_ltm_settings'], self.context)
             except BaseException as e:
@@ -452,12 +452,41 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
-        '''长期记忆'''
+        '''群聊记忆增强'''
         if self.ltm:
-            try:
-                await self.ltm.handle_message(event)
-            except BaseException as e:
-                logger.error(e)
+            need_active = await self.ltm.need_active_reply(event)
+            
+            print(need_active)
+            
+            group_icl_enable = self.context.get_config()['provider_ltm_settings']['group_icl_enable']
+            if group_icl_enable:
+                '''记录对话'''
+                try:
+                    await self.ltm.handle_message(event)
+                except BaseException as e:
+                    logger.error(e)
+                
+            if need_active:
+                '''主动回复'''
+                provider = self.context.get_using_provider()
+                if not provider:
+                    logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
+                    return
+                try:
+                    session_provider_context = provider.session_memory.get(event.session_id)
+                    
+                    prompt = self.ltm.ar_prompt
+                    if not prompt:
+                        prompt = event.message_str
+                    
+                    yield event.request_llm(
+                        prompt=prompt,
+                        func_tool_manager=self.context.get_llm_tool_manager(),
+                        session_id=event.session_id,
+                        contexts=session_provider_context if session_provider_context else []
+                    )
+                except BaseException as e:
+                    logger.error(f"主动回复失败: {e}")
     
     
     @filter.on_llm_request()

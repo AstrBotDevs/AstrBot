@@ -296,6 +296,7 @@ class AstrMessageEvent(abc.ABC):
     def request_llm(
         self,
         prompt: str,
+        func_tool_manager = None,
         session_id: str = None,
         image_urls: List[str] = None,
         contexts: List = None,
@@ -311,11 +312,13 @@ class AstrMessageEvent(abc.ABC):
         
         image_urls: 可以是 base64:// 或者 http:// 开头的图片链接，也可以是本地图片路径。
         contexts: 当指定 contexts 时，将会**只**使用 contexts 作为上下文。
+        func_tool_manager: 函数工具管理器，用于调用函数工具。用 self.context.get_llm_tool_manager() 获取。
         '''
         return ProviderRequest(
             prompt = prompt,
             session_id = session_id,
             image_urls = image_urls,
+            func_tool = func_tool_manager,
             contexts = contexts,
             system_prompt = system_prompt
         )

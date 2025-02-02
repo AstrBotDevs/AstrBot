@@ -37,7 +37,11 @@ class ProcessStage(Stage):
                     # Handler 的 LLM 请求
                     logger.debug(f"llm request -> {resp.prompt}")
                     event.set_extra("provider_request", resp)
+                    _t = False
                     async for _ in self.llm_request_sub_stage.process(event):
+                        _t = True
+                        yield
+                    if not _t:
                         yield
                 else:
                     yield

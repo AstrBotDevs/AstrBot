@@ -122,6 +122,7 @@ class LLMTunerModelLoader(Provider):
         
     async def forget(self, session_id):
         self.session_memory[session_id] = []
+        self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['id'])
         return True
 
     async def get_current_key(self):
