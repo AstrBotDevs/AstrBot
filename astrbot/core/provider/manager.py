@@ -17,6 +17,8 @@ class ProviderManager():
         self.provider_tts_settings: dict = config.get('provider_tts_settings', {})
         self.persona_configs: list = config.get('persona', [])
         
+        # 人格情景管理
+        # 目前没有拆成独立的模块
         self.default_persona_name = self.provider_settings.get('default_personality', 'default')
         self.personas: List[Personality] = []
         self.selected_default_persona = None
@@ -28,7 +30,7 @@ class ProviderManager():
             if begin_dialogs:
                 if len(begin_dialogs) % 2 != 0:
                     logger.error(f"{persona['name']} 人格情景预设对话格式不对，条数应该为偶数。")
-                    continue
+                    begin_dialogs = []
                 user_turn = True
                 for dialog in begin_dialogs:
                     bd_processed.append({
@@ -40,9 +42,9 @@ class ProviderManager():
             if mood_imitation_dialogs:
                 if len(mood_imitation_dialogs) % 2 != 0:
                     logger.error(f"{persona['name']} 对话风格对话格式不对，条数应该为偶数。")
-                    continue
+                    mood_imitation_dialogs = []
                 user_turn = True
-                for dialog in begin_dialogs:
+                for dialog in mood_imitation_dialogs:
                     role = "A" if user_turn else "B"
                     mid_processed += f"{role}: {dialog}\n"
                     if not user_turn:
