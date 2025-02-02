@@ -428,9 +428,17 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "api_base": "",
                         "model": "tts-1",
+                        "openai-tts-voice": "alloy",
+                        "timeout": "20",
                     },
                 },
                 "items": {
+                    "openai-tts-voice": {
+                        "description": "voice",
+                        "type": "string",
+                        "obvious_hint": True,
+                        "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
+                    },
                     "whisper_hint": {
                         "description": "本地部署 Whisper 模型须知",
                         "type": "string",

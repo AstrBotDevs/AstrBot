@@ -15,7 +15,7 @@ class ProviderOpenAITTSAPI(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = provider_config.get("api_key", "")
-        self.voice = provider_config.get("voice", "alloy")
+        self.voice = provider_config.get("openai-tts-voice", "alloy")
 
         self.client = AsyncOpenAI(
             api_key=self.chosen_api_key,
