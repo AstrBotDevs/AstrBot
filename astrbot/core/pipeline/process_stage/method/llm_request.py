@@ -83,6 +83,8 @@ class LLMRequestSubStage(Stage):
                 # text completion
                 event.set_result(MessageEventResult().message(llm_response.completion_text)
                                  .set_result_content_type(ResultContentType.LLM_RESULT))
+            elif llm_response.role == 'err':
+                event.set_result(MessageEventResult().message(f"AstrBot 请求失败。\n错误信息: {llm_response.completion_text}"))
             elif llm_response.role == 'tool':
                 # function calling
                 function_calling_result = {}

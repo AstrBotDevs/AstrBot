@@ -56,6 +56,7 @@ class PluginRoute(Route):
         try:
             logger.info(f"正在安装插件 {repo_url}")
             await self.plugin_manager.install_plugin(repo_url)
+            self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")
             return Response().ok(None, "安装成功。").__dict__
         except Exception as e:
@@ -70,6 +71,7 @@ class PluginRoute(Route):
             file_path = f"data/temp/{file.filename}"
             await file.save(file_path)
             await self.plugin_manager.install_plugin_from_file(file_path)
+            self.core_lifecycle.restart()
             logger.info(f"安装插件 {file.filename} 成功")
             return Response().ok(None, "安装成功。").__dict__
         except Exception as e:
@@ -94,6 +96,7 @@ class PluginRoute(Route):
         try:
             logger.info(f"正在更新插件 {plugin_name}")
             await self.plugin_manager.update_plugin(plugin_name)
+            self.core_lifecycle.restart()
             logger.info(f"更新插件 {plugin_name} 成功。")
             return Response().ok(None, "更新成功。").__dict__
         except Exception as e:

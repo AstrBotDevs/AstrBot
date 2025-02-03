@@ -91,7 +91,7 @@ class Main(star.Star):
             active = " (启用)" if tool.active else "(停用)"
             msg += f"- {tool.name}: {tool.description} {active}\n"
             
-        msg += "\n使用 /tool on/off <工具名> 激活或者停用工具。"
+        msg += "\n使用 /tool on/off <工具名> 激活或者停用函数工具。/tool off_all 停用所有函数工具。"
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
         
     @tool.command("on")
@@ -107,6 +107,13 @@ class Main(star.Star):
             event.set_result(MessageEventResult().message(f"停用工具 {tool_name} 成功。"))
         else:
             event.set_result(MessageEventResult().message(f"停用工具 {tool_name} 失败，未找到此工具。"))
+            
+    @tool.command("off_all")
+    async def tool_all_off(self, event: AstrMessageEvent):
+        tm = self.context.get_llm_tool_manager()
+        for tool in tm.func_list:
+            self.context.deactivate_llm_tool(tool.name)
+        event.set_result(MessageEventResult().message(f"停用所有工具成功。"))
 
     @filter.command("plugin")
     async def plugin(self, event: AstrMessageEvent, oper1: str = None, oper2: str = None):

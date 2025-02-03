@@ -94,37 +94,11 @@ class ProviderOpenAIOfficial(Provider):
             if tool_list:
                 payloads['tools'] = tool_list
         
-        completion = None
-        try:
-            completion = await self.client.chat.completions.create(
-                **payloads,
-                stream=False
-            )
-        except BaseException as e:
-            # 处理不支持 Function Calling 的模型
-            # issue #305
-            # if 'does not support Function Calling' in str(e) \
-            #     or 'does not support tools' in str(e)  \
-            #     or 'Function call is not supported' in str(e): # siliconcloud
-            #         del payloads['tools']
-            #         logger.debug(f"模型 {self.model_name} 不支持 tools，已自动移除")
-            #         completion = await self.client.chat.completions.create(
-            #             **payloads,
-            #             stream=False
-            #         )
-            # else:
-            #     raise e
-            if 'tools' in payloads:
-                del payloads['tools']
-                logger.debug(f"模型 {self.model_name} 不支持 tools，已自动移除")
-                completion = await self.client.chat.completions.create(
-                    **payloads,
-                    stream=False
-                )
-            else:
-                raise e
+        completion = await self.client.chat.completions.create(
+            **payloads,
+            stream=False
+        )
 
-        
         assert isinstance(completion, ChatCompletion)
         logger.debug(f"completion: {completion}")
 
@@ -179,32 +153,81 @@ class ProviderOpenAIOfficial(Provider):
             "messages": context_query,
             **self.provider_config.get("model_config", {})
         }
-
+        llm_response = None
         try:
             llm_response = await self._query(payloads, func_tool)
-            if kwargs.get("persist", True):
-                await self.save_history(contexts, new_record, session_id, llm_response)
-            return llm_response
         except Exception as e:
             if "maximum context length" in str(e):
+                # 重试 10 次
                 retry_cnt = 10
                 while retry_cnt > 0:
                     logger.warning("上下文长度超过限制。尝试弹出最早的记录然后重试。")
                     try:
                         await self.pop_record(session_id)
                         llm_response = await self._query(payloads, func_tool)
-                        if kwargs.get("persist", True):
-                            await self.save_history(contexts, new_record, session_id, llm_response)
-                        return llm_response
+                        break
                     except Exception as e:
                         if "maximum context length" in str(e):
                             retry_cnt -= 1
                         else:
                             raise e
+                if retry_cnt == 0:
+                    llm_response = LLMResponse("err", "err: 请尝试 /reset 清除会话记录。")
+            elif "The model is not a VLM" in str(e): # siliconcloud
+                # 尝试删除所有 image
+                print(context_query)
+                new_contexts = await self._remove_image_from_context(context_query)
+                print(new_contexts)
+                payloads['messages'] = new_contexts
+                llm_response = await self._query(payloads, func_tool)
+
+            elif 'does not support Function Calling' in str(e) \
+                or 'does not support tools' in str(e)  \
+                or 'Function call is not supported' in str(e) \
+                or 'Tool calling is not supported' in str(e): # siliconcloud 
+                    logger.info(f"{self.get_model()} 不支持函数调用工具调用，已经自动去除")
+                    if 'tools' in payloads:
+                        del payloads['tools']
+                    llm_response = await self._query(payloads, None)
             else:
                 logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
+                
+                if 'tool' in str(e).lower() and 'support' in str(e).lower():
+                    logger.error(f"疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
+                
                 raise e
         
+        if kwargs.get("persist", True) and llm_response:
+            await self.save_history(contexts, new_record, session_id, llm_response)
+        
+        return llm_response
+    
+    async def _remove_image_from_context(self, contexts: List):
+        '''
+        从上下文中删除所有带有 image 的记录
+        '''
+        new_contexts = []
+        
+        flag = False
+        for context in contexts:
+            if flag:
+                flag = False # 删除 image 后，下一条（LLM 响应）也要删除
+                continue
+            if isinstance(context['content'], list):
+                flag = True
+                # continue
+                new_content = []
+                for item in context['content']:
+                    if isinstance(item, dict) and 'image_url' in item:
+                        continue
+                    new_content.append(item)
+                if not new_content:
+                    # 用户只发了图片
+                    new_content = [{"type": "text", "text": "[图片]"}]
+                context['content'] = new_content
+            new_contexts.append(context)
+        return new_contexts
+
     
     async def save_history(self, contexts: List, new_record: dict, session_id: str, llm_response: LLMResponse):
         if llm_response.role == "assistant" and session_id:
