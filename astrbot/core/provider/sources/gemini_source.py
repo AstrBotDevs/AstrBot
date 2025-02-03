@@ -181,6 +181,9 @@ class ProviderGoogleGenAI(Provider):
         )
         logger.debug(f"result: {result}")
         
+        if "candidates" not in result:
+            raise Exception("Gemini 返回异常结果: " + str(result))
+        
         candidates = result["candidates"][0]['content']['parts']
         llm_response = LLMResponse("assistant")
         for candidate in candidates:
@@ -222,11 +225,9 @@ class ProviderGoogleGenAI(Provider):
             "messages": context_query,
             **self.provider_config.get("model_config", {})
         }
-
+        llm_response = None
         try:
             llm_response = await self._query(payloads, func_tool)
-            await self.save_history(contexts, new_record, session_id, llm_response)
-            return llm_response
         except Exception as e:
             if "maximum context length" in str(e):
                 retry_cnt = 10
@@ -241,8 +242,22 @@ class ProviderGoogleGenAI(Provider):
                             retry_cnt -= 1
                         else:
                             raise e
+                if retry_cnt == 0:
+                    llm_response = LLMResponse("err", "err: 请尝试  /reset 重置会话")
+            elif "Function calling is not enabled" in str(e):
+                logger.info(f"{self.get_model()} 不支持函数调用工具调用，已经自动去除")
+                if 'tools' in payloads:
+                    del payloads['tools']
+                llm_response = await self._query(payloads, None)
             else:
+                logger.error(f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}")
+                
                 raise e
+
+        if kwargs.get("persist", True) and llm_response:
+            await self.save_history(contexts, new_record, session_id, llm_response)
+            
+        return llm_response
     
     async def save_history(self, contexts: List, new_record: dict, session_id: str, llm_response: LLMResponse):
         if llm_response.role == "assistant" and session_id:

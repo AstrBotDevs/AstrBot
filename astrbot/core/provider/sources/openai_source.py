@@ -187,15 +187,15 @@ class ProviderOpenAIOfficial(Provider):
                     llm_response = LLMResponse("err", "err: 请尝试 /reset 清除会话记录。")
             elif "The model is not a VLM" in str(e): # siliconcloud
                 # 尝试删除所有 image
-                print(context_query)
                 new_contexts = await self._remove_image_from_context(context_query)
-                print(new_contexts)
                 payloads['messages'] = new_contexts
                 llm_response = await self._query(payloads, func_tool)
 
+            # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一，只能通过字符串匹配
             elif 'does not support Function Calling' in str(e) \
                 or 'does not support tools' in str(e)  \
                 or 'Function call is not supported' in str(e) \
+                or 'Function calling is not enabled' in str(e) \
                 or 'Tool calling is not supported' in str(e): # siliconcloud 
                     logger.info(f"{self.get_model()} 不支持函数调用工具调用，已经自动去除")
                     if 'tools' in payloads:

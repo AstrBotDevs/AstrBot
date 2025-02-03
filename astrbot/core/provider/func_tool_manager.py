@@ -121,7 +121,8 @@ class FuncCall:
 
             tools.append(func_declaration)
 
-        declarations["function_declarations"] = tools
+        if tools:
+            declarations["function_declarations"] = tools
         return declarations
         
 
