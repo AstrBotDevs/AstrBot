@@ -1,6 +1,6 @@
 import base64
 import json
-import re
+import os
 
 from openai import AsyncOpenAI, NOT_GIVEN
 from openai.types.chat.chat_completion import ChatCompletion
@@ -194,6 +194,11 @@ class ProviderOpenAIOfficial(Provider):
                 
                 if 'tool' in str(e).lower() and 'support' in str(e).lower():
                     logger.error(f"疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
+                
+                if 'Connection error.' in str(e):
+                    proxy = os.environ.get("http_proxy", None)
+                    if proxy:
+                        logger.error(f"可能为代理原因，请检查代理是否正常。当前代理: {proxy}")
                 
                 raise e
         

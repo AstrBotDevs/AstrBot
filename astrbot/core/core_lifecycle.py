@@ -25,9 +25,8 @@ class AstrBotCoreLifecycle:
         self.astrbot_config = astrbot_config
         self.db = db
         
-        if self.astrbot_config['http_proxy']:
-            os.environ['https_proxy'] = self.astrbot_config['http_proxy']
-            os.environ['http_proxy'] = self.astrbot_config['http_proxy']
+        os.environ['https_proxy'] = self.astrbot_config['http_proxy']
+        os.environ['http_proxy'] = self.astrbot_config['http_proxy']
     
     async def initialize(self):
         logger.info("AstrBot v"+ VERSION)
