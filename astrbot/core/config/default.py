@@ -387,6 +387,16 @@ CONFIG_METADATA_2 = {
                             "model": "glm-4-flash",
                         },
                     },
+                    "硅基流动": {
+                        "id": "siliconflow",
+                        "type": "openai_chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.siliconflow.cn/v1",
+                        "model_config": {
+                            "model": "deepseek-ai/DeepSeek-V3",
+                        },
+                    },
                     "llmtuner": {
                         "id": "llmtuner_default",
                         "type": "llm_tuner",
