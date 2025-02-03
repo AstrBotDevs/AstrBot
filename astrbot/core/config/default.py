@@ -696,7 +696,7 @@ CONFIG_METADATA_2 = {
                                 "description": "启用主动回复",
                                 "type": "bool",
                                 "obvious_hint": True,
-                                "hint": "启用后，会根据触发概率主动回复群聊内的对话。",
+                                "hint": "启用后，会根据触发概率主动回复群聊内的对话。QQ官方API(qq_official)不可用",
                             },
                             "method": {
                                 "description": "回复方法",
