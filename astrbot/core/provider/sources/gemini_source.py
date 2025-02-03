@@ -190,7 +190,8 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.role = "tool"
                 llm_response.tools_call_args.append(candidate['functionCall']['args'])
                 llm_response.tools_call_name.append(candidate['functionCall']['name'])
-            
+        
+        llm_response.completion_text = llm_response.completion_text.strip()
         return llm_response
 
 
