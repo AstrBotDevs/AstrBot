@@ -27,6 +27,7 @@ class LongTermMemory:
         self.image_caption_prompt = self.config["image_caption_prompt"]
         
         self.active_reply = self.config["active_reply"]
+        self.enable_active_reply = self.active_reply.get("enable", False)
         self.ar_method = self.active_reply["method"]
         self.ar_possibility = self.active_reply["possibility_reply"]
         self.ar_prompt = self.active_reply.get("prompt", "")
@@ -51,7 +52,7 @@ class LongTermMemory:
         return response.completion_text
     
     async def need_active_reply(self, event: AstrMessageEvent) -> bool:
-        if not self.active_reply:
+        if not self.enable_active_reply:
             return False
         if event.get_message_type() != MessageType.GROUP_MESSAGE:
             return False
