@@ -194,7 +194,7 @@ class SimpleGewechatClient():
     async def start_polling(self):
         threading.Thread(target=asyncio.run, args=(self._set_callback_url(),)).start()
         await self.server.run_task(
-            host=self.host, 
+            host='0.0.0.0', 
             port=self.port, 
             shutdown_trigger=self.shutdown_trigger_placeholder
         )
