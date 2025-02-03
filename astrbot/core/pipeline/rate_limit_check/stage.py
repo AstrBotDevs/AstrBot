@@ -61,11 +61,12 @@ class RateLimitStage(Stage):
                 stall_duration = (next_window_time - now).total_seconds()
                 
                 match self.rl_strategy:
-                    case RateLimitStrategy.STALL:
+                    case RateLimitStrategy.STALL.value:
                         logger.info(f"会话 {session_id} 被限流。根据限流策略，此会话处理将被暂停 {stall_duration:.2f} 秒。")
                         await asyncio.sleep(stall_duration)
-                    case RateLimitStrategy.DISCARD:
-                        event.set_result(MessageEventResult().message(f"会话 {session_id} 被限流。根据限流策略，此请求已被丢弃，直到您的限额于 {stall_duration:.2f} 秒后重置。"))
+                    case RateLimitStrategy.DISCARD.value:
+                        # event.set_result(MessageEventResult().message(f"会话 {session_id} 被限流。根据限流策略，此请求已被丢弃，直到您的限额于 {stall_duration:.2f} 秒后重置。"))
+                        logger.info(f"会话 {session_id} 被限流。根据限流策略，此请求已被丢弃，直到限额于 {stall_duration:.2f} 秒后重置。")
                         return event.stop_event()
                 
                 self._remove_expired_timestamps(timestamps, now + timedelta(seconds=stall_duration))
