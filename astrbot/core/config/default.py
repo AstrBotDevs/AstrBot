@@ -83,14 +83,7 @@ DEFAULT_CONFIG = {
     "pip_install_arg": "",
     "plugin_repo_mirror": "",
     "knowledge_db": {},
-    "persona": [
-        {
-            "name": "default",
-            "prompt": "",
-            "begin_dialogs": [],
-            "mood_imitation_dialogs": [],
-        }
-    ],
+    "persona": [],
 }
 
 
@@ -626,14 +619,14 @@ CONFIG_METADATA_2 = {
                         "description": "预设对话",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "可选。在每个对话前会插入这些预设对话。对话需要成对(用户和助手)，输入完一个角色之后按回车",
+                        "hint": "可选。在每个对话前会插入这些预设对话。对话需要成对(用户和助手)，输入完一个角色的内容之后按【回车】。需要偶数个对话",
                         "obvious_hint": True,
                     },
                     "mood_imitation_dialogs": {
                         "description": "对话风格模仿",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "旨在让模型尽可能模仿学习到所填写的对话的语气风格。格式和 `预设对话` 一样。对话需要成对(用户和助手)，输入完一个角色之后按回车",
+                        "hint": "旨在让模型尽可能模仿学习到所填写的对话的语气风格。格式和 `预设对话` 一致。对话需要成对(用户和助手)，输入完一个角色的内容之后按【回车】。需要偶数个对话",
                         "obvious_hint": True,
                     },
                 },
