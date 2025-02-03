@@ -95,6 +95,8 @@ class SimpleGewechatClient():
             if f'<atuserlist><![CDATA[,{abm.self_id}]]>' in msg_source \
                 or f'<atuserlist><![CDATA[{abm.self_id}]]>' in msg_source:
                 at_me = True
+            if '在群聊中@了你' in d.get('PushContent', ''):
+                at_me = True
         else:
             abm.type = MessageType.FRIEND_MESSAGE
             user_id = from_user_name
