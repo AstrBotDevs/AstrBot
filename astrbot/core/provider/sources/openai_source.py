@@ -2,7 +2,7 @@ import base64
 import json
 import os
 
-from openai import AsyncOpenAI, NOT_GIVEN
+from openai import AsyncOpenAI, AsyncAzureOpenAI, NOT_GIVEN
 from openai.types.chat.chat_completion import ChatCompletion
 from openai._exceptions import NotFoundError
 from astrbot.core.utils.io import download_image_by_url
@@ -29,12 +29,24 @@ class ProviderOpenAIOfficial(Provider):
         self.chosen_api_key = None
         self.api_keys: List = provider_config.get("key", [])
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
-
-        self.client = AsyncOpenAI(
-            api_key=self.chosen_api_key,
-            base_url=provider_config.get("api_base", None),
-            timeout=provider_config.get("timeout", NOT_GIVEN),
-        )
+        
+        # 适配 azure openai #332
+        if "api_version" in provider_config:
+            # 使用 azure api
+            self.client = AsyncAzureOpenAI(
+                api_key=self.chosen_api_key,
+                api_version=provider_config.get("api_version", None),
+                base_url=provider_config.get("api_base", None),
+                timeout=provider_config.get("timeout", NOT_GIVEN),
+            )
+        else:
+            # 使用 openai api
+            self.client = AsyncOpenAI(
+                api_key=self.chosen_api_key,
+                base_url=provider_config.get("api_base", None),
+                timeout=provider_config.get("timeout", NOT_GIVEN),
+            )
+            
         self.set_model(provider_config['model_config']['model'])
     
     async def get_human_readable_context(self, session_id, page, page_size):

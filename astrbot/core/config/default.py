@@ -321,11 +321,22 @@ CONFIG_METADATA_2 = {
                 "type": "list",
                 "config_template": {
                     "openai": {
-                        "id": "default",
+                        "id": "openai",
                         "type": "openai_chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.openai.com/v1",
+                        "model_config": {
+                            "model": "gpt-4o-mini",
+                        },
+                    },
+                    "azure_openai": {
+                        "id": "azure",
+                        "type": "openai_chat_completion",
+                        "enable": True,
+                        "api_version": "2024-05-01-preview",
+                        "key": [],
+                        "api_base": "",
                         "model_config": {
                             "model": "gpt-4o-mini",
                         },
