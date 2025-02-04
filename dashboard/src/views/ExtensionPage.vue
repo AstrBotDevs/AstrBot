@@ -18,20 +18,26 @@ import axios from 'axios';
       </div>
     </v-col>
     <v-col cols="12" md="6" lg="3" v-for="extension in extension_data.data">
-      <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" :logo="extension?.logo" style="margin-bottom: 4px;">
+      <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" :logo="extension?.logo"
+        style="margin-bottom: 4px;">
         <p style="min-height: 130px; max-height: 130px; overflow: none;">{{ extension.desc }}</p>
         <div class="d-flex align-center gap-2">
           <v-icon>mdi-account</v-icon>
           <span>{{ extension.author }}</span>
           <v-spacer></v-spacer>
           <div v-if="!extension.reserved">
-            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border @click="openExtensionConfig(extension.name)">配置</v-btn>
-            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border @click="updateExtension(extension.name)">更新</v-btn>
-            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border @click="uninstallExtension(extension.name)">卸载</v-btn>
+            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
+              @click="openExtensionConfig(extension.name)">配置</v-btn>
+            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
+              @click="updateExtension(extension.name)">更新</v-btn>
+            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
+              @click="uninstallExtension(extension.name)">卸载</v-btn>
           </div>
           <!-- <span v-else>保留插件</span> -->
-          <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border  v-if="extension.activated" @click="pluginOff(extension)">禁用</v-btn>
-          <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border  v-else @click="pluginOn(extension)">启用</v-btn>
+          <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border v-if="extension.activated"
+            @click="pluginOff(extension)">禁用</v-btn>
+          <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border v-else
+            @click="pluginOn(extension)">启用</v-btn>
         </div>
       </ExtensionCard>
     </v-col>
@@ -45,6 +51,11 @@ import axios from 'axios';
         </div>
 
       </div>
+    </v-col>
+
+    <v-col cols="12" md="12" v-if="announcement">
+      <v-banner color="success" lines="one" :text="announcement" :stacked="false" >
+      </v-banner>
     </v-col>
     <v-col cols="12" md="6" lg="3" v-for="plugin in pluginMarketData">
       <ExtensionCard :key="plugin.name" :title="plugin.name" :link="plugin.repo" style="margin-bottom: 4px;">
@@ -214,12 +225,19 @@ export default {
         title: "加载中...",
         statusCode: 0, // 0: loading, 1: success, 2: error,
         result: ""
-      }
+      },
+
+      announcement: ""
     }
   },
   mounted() {
     this.getExtensions();
     this.fetchPluginCollection();
+
+    axios.get('https://api.soulter.top/astrbot-announcement-plugin-market').then((res) => {
+      let data = res.data.data;
+      this.announcement = data.text;
+    });
   },
   methods: {
     toast(message, success) {
