@@ -25,15 +25,29 @@ class PluginRoute(Route):
         self.register_routes()
     
     async def get_online_plugins(self):
-        url = "https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json"
-        try:
-            async with aiohttp.ClientSession(trust_env=True) as session:
-                async with session.get(url) as response:
-                    result = await response.json()
-            return Response().ok(result).__dict__
-        except Exception as e:
-            logger.error(f"获取插件列表失败：{e}")
-            return Response().error(str(e)).__dict__
+        custom = request.args.get("custom_registry")
+        
+        if custom:
+            urls = [custom]
+        else:
+            urls = [
+                "https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json",
+                "https://api.soulter.top/astrbot/plugins"
+            ]
+            
+        for url in urls:
+            try:
+                async with aiohttp.ClientSession(trust_env=True) as session:
+                    async with session.get(url) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            return Response().ok(result).__dict__
+                        else:
+                            logger.error(f"请求 {url} 失败，状态码：{response.status}")
+            except Exception as e:
+                logger.error(f"请求 {url} 失败，错误：{e}")
+        
+        return Response().error("获取插件列表失败").__dict__
     
     async def get_plugins(self):
         _plugin_resp = []

@@ -4,7 +4,7 @@
     </h3>
     <v-card-text>
         <div v-for="(index, key) in iterable" :key="key" style="margin-bottom: 0.5px;" v-if="metadata[metadataKey]?.type === 'object' || metadata[metadataKey]?.config_template">
-            <v-alert v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint && metadata[metadataKey].items[key]?.type !== 'object'" style="margin-bottom: 16px"
+            <v-alert v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint" style="margin-bottom: 16px"
                 :text="metadata[metadataKey].items[key]?.hint" :title="'💡 关于' + metadata[metadataKey].items[key]?.description"
                 type="info" variant="tonal">
             </v-alert>
@@ -52,7 +52,7 @@
                 </div>
 
                 <div
-                    v-if="!metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint && metadata[metadataKey].items[key]?.type !== 'object' && !metadata[metadataKey].items[key]?.invisible">
+                    v-if="!metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint && !metadata[metadataKey].items[key]?.invisible">
                     <v-btn icon size="x-small" style="margin-bottom: 22px;">
                         <v-icon size="x-small">mdi-help</v-icon>
                         <v-tooltip activator="parent" location="start">{{ metadata[metadataKey].items[key]?.hint
@@ -63,7 +63,7 @@
         
         </div>
         <div v-else>
-            <v-alert v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint && metadata[metadataKey]?.type !== 'object'" style="margin-bottom: 16px"
+            <v-alert v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" style="margin-bottom: 16px"
                 :text="metadata[metadataKey]?.hint" :title="'💡 关于' + metadata[metadataKey]?.description"
                 type="info" variant="tonal">
             </v-alert>
@@ -106,7 +106,7 @@
                 </div>
 
                 <div
-                    v-if="!metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint && metadata[metadataKey]?.type !== 'object' && !metadata[metadataKey]?.invisible">
+                    v-if="!metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint && !metadata[metadataKey]?.invisible">
                     <v-btn icon size="x-small" style="margin-bottom: 22px;">
                         <v-icon size="x-small">mdi-help</v-icon>
                         <v-tooltip activator="parent" location="start">{{ metadata[metadataKey]?.hint

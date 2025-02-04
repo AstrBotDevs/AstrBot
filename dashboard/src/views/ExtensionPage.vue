@@ -37,7 +37,11 @@ import axios from 'axios';
     </v-col>
     <v-col cols="12" md="12">
       <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
-        <h3>🧩 插件市场</h3>
+        <div style="display: flex; align-items: center;">
+          <h3>🧩 插件市场</h3>
+          <small style="margin-left: 16px;">如无法显示，请打开 <a href="https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json">链接</a> 复制想安装插件对应的 `repo` 链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。</small>
+        </div>
+        
       </div>
     </v-col>
     <v-col cols="12" md="6" lg="4" v-for="plugin in pluginMarketData">
