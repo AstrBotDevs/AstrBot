@@ -9,29 +9,29 @@ import axios from 'axios';
 
 <template>
   <v-row>
-    <v-alert style="margin: 16px" text="1. 如果因为网络问题安装失败，可以自行前往仓库下载压缩包，然后从本地上传。2. 如需插件帮助请点击 `仓库` 查看 README"
-      title="💡提示" type="info" variant="tonal">
+    <v-alert style="margin: 16px" text="1. 如果因为网络问题安装失败，可以自行前往仓库下载压缩包，然后从本地上传。2. 如需插件帮助请点击 `仓库` 查看 README" title="💡提示"
+      type="info" variant="tonal">
     </v-alert>
     <v-col cols="12" md="12">
       <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
         <h3>🧩 已安装的插件</h3>
       </div>
     </v-col>
-    <v-col cols="12" md="6" lg="4" v-for="extension in extension_data.data">
-      <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" style="margin-bottom: 4px;">
+    <v-col cols="12" md="6" lg="3" v-for="extension in extension_data.data">
+      <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" :logo="extension?.logo" style="margin-bottom: 4px;">
         <p style="min-height: 130px; max-height: 130px; overflow: none;">{{ extension.desc }}</p>
         <div class="d-flex align-center gap-2">
           <v-icon>mdi-account</v-icon>
           <span>{{ extension.author }}</span>
           <v-spacer></v-spacer>
           <div v-if="!extension.reserved">
-            <v-btn variant="plain" @click="openExtensionConfig(extension.name)">配置</v-btn>
-            <v-btn variant="plain" @click="updateExtension(extension.name)">更新</v-btn>
-            <v-btn variant="plain" @click="uninstallExtension(extension.name)">卸载</v-btn>
+            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border @click="openExtensionConfig(extension.name)">配置</v-btn>
+            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border @click="updateExtension(extension.name)">更新</v-btn>
+            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border @click="uninstallExtension(extension.name)">卸载</v-btn>
           </div>
           <!-- <span v-else>保留插件</span> -->
-          <v-btn variant="plain" v-if="extension.activated" @click="pluginOff(extension)">禁用</v-btn>
-          <v-btn variant="plain" v-else @click="pluginOn(extension)">启用</v-btn>
+          <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border  v-if="extension.activated" @click="pluginOff(extension)">禁用</v-btn>
+          <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border  v-else @click="pluginOn(extension)">启用</v-btn>
         </div>
       </ExtensionCard>
     </v-col>
@@ -39,28 +39,30 @@ import axios from 'axios';
       <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
         <div style="display: flex; align-items: center;">
           <h3>🧩 插件市场</h3>
-          <small style="margin-left: 16px;">如无法显示，请打开 <a href="https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json">链接</a> 复制想安装插件对应的 `repo` 链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。</small>
+          <small style="margin-left: 16px;">如无法显示，请打开 <a
+              href="https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json">链接</a> 复制想安装插件对应的 `repo`
+            链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。</small>
         </div>
-        
+
       </div>
     </v-col>
-    <v-col cols="12" md="6" lg="4" v-for="plugin in pluginMarketData">
+    <v-col cols="12" md="6" lg="3" v-for="plugin in pluginMarketData">
       <ExtensionCard :key="plugin.name" :title="plugin.name" :link="plugin.repo" style="margin-bottom: 4px;">
         <p style="min-height: 130px; max-height: 130px; overflow: hidden;">{{ plugin.desc }}</p>
         <div class="d-flex align-center gap-2">
           <v-icon>mdi-account</v-icon>
           <span>{{ plugin.author }}</span>
           <v-spacer></v-spacer>
-          <v-btn v-if="!plugin.installed" variant="plain"
+          <v-btn v-if="!plugin.installed" class="text-none mr-2" size="small" text="Read" variant="flat" border
             @click="extension_url = plugin.repo; newExtension()">安装</v-btn>
-          <v-btn v-else variant="plain" disabled>已安装</v-btn>
+          <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border disabled>已安装</v-btn>
         </div>
       </ExtensionCard>
-      
+
     </v-col>
 
     <v-col style="margin-bottom: 16px;" cols="12" md="12">
-      <small ><a href="https://astrbot.app/dev/plugin.html">插件开发文档</a></small> |
+      <small><a href="https://astrbot.app/dev/plugin.html">插件开发文档</a></small> |
       <small> <a href="https://github.com/Soulter/AstrBot_Plugins_Collection">提交插件仓库</a></small>
     </v-col>
 
@@ -75,7 +77,8 @@ import axios from 'axios';
       </v-card-title>
       <v-card-text>
         <v-container>
-          <AstrBotConfig v-if="extension_config.metadata" :metadata="extension_config.metadata" :iterable="extension_config.config" :metadataKey=curr_namespace></AstrBotConfig>
+          <AstrBotConfig v-if="extension_config.metadata" :metadata="extension_config.metadata"
+            :iterable="extension_config.config" :metadataKey=curr_namespace></AstrBotConfig>
           <p v-else>这个插件没有配置</p>
         </v-container>
       </v-card-text>
@@ -386,7 +389,7 @@ export default {
       });
     },
     updateConfig() {
-      axios.post('/api/config/plugin/update?plugin_name='+this.curr_namespace, this.extension_config.config).then((res) => {
+      axios.post('/api/config/plugin/update?plugin_name=' + this.curr_namespace, this.extension_config.config).then((res) => {
         if (res.data.status === "ok") {
           this.toast(res.data.message, "success");
           this.$refs.wfr.check();
@@ -422,11 +425,23 @@ export default {
       }
       for (let i = 0; i < this.pluginMarketData.length; i++) {
         for (let j = 0; j < this.extension_data.data.length; j++) {
-          if (this.pluginMarketData[i].repo === this.extension_data.data[j].repo) {
+          if (this.pluginMarketData[i].repo === this.extension_data.data[j].repo || this.pluginMarketData[i].name === this.extension_data.data[j].name) {
             this.pluginMarketData[i].installed = true;
           }
         }
       }
+
+      // 将已安装的插件移动到最后面
+      let installed = [];
+      let notInstalled = [];
+      for (let i = 0; i < this.pluginMarketData.length; i++) {
+        if (this.pluginMarketData[i].installed) {
+          installed.push(this.pluginMarketData[i]);
+        } else {
+          notInstalled.push(this.pluginMarketData[i]);
+        }
+      }
+      this.pluginMarketData = notInstalled.concat(installed);
     }
   },
 }
