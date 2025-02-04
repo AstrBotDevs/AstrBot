@@ -17,7 +17,7 @@ def get_handler_full_name(awaitable: Awaitable) -> str:
     '''获取 Handler 的全名'''
     return f"{awaitable.__module__}_{awaitable.__name__}"
 
-def get_handler_or_create(handler: Awaitable, event_type: EventType, dont_add = False) -> StarHandlerMetadata:
+def get_handler_or_create(handler: Awaitable, event_type: EventType, dont_add = False, **kwargs) -> StarHandlerMetadata:
     '''获取 Handler 或者创建一个新的 Handler'''
     handler_full_name = get_handler_full_name(handler)
     md = star_handlers_registry.get_handler_by_full_name(handler_full_name)
@@ -30,14 +30,17 @@ def get_handler_or_create(handler: Awaitable, event_type: EventType, dont_add = 
             handler_name=handler.__name__,
             handler_module_path=handler.__module__,
             handler=handler,
-            event_filters=[]
+            event_filters=[],
         )
+        if handler.__doc__:
+            md.desc = handler.__doc__.strip()
         if not dont_add:
             star_handlers_registry.append(md)
         return md
 
 def register_command(command_name: str = None, *args):
-    '''注册一个 Command'''
+    '''注册一个 Command.
+    '''
     
     new_command = None
     add_to_event_filters = False
@@ -61,8 +64,9 @@ def register_command(command_name: str = None, *args):
 
     return decorator
 
-def register_command_group(command_group_name: str = None, *args):
-    '''注册一个 CommandGroup'''
+def register_command_group(command_group_name: str = None, desc: str = "", *args):
+    '''注册一个 CommandGroup
+    '''
     
     new_group = None
     add_to_event_filters = False
@@ -111,10 +115,10 @@ def register_platform_adapter_type(platform_adapter_type: PlatformAdapterType):
 
     return decorator
 
-def register_regex(regex: str):
+def register_regex(regex: str, desc: str = ""):
     '''注册一个 Regex'''
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, desc=desc)
         handler_md.event_filters.append(RegexFilter(regex))
         return awaitable
 

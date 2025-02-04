@@ -19,6 +19,8 @@ from .star import star_registry, star_map
 from .star_handler import star_handlers_registry
 from astrbot.core.provider.register import llm_tools
 
+from .filter.permission import PermissionTypeFilter, PermissionType
+
 class PluginManager:
     def __init__(
         self, 
@@ -159,6 +161,8 @@ class PluginManager:
         inactivated_plugins: list = sp.get("inactivated_plugins", [])
         inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
         
+        alter_cmd = sp.get("alter_cmd", {})
+        
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
             try:
@@ -213,12 +217,12 @@ class PluginManager:
                     metadata.root_dir_name = root_dir_name
                     metadata.reserved = reserved
                     
+                    # 绑定 handler
                     related_handlers = star_handlers_registry.get_handlers_by_module_name(metadata.module_path)
                     for handler in related_handlers:
                         logger.debug(f"bind handler {handler.handler_name} to {metadata.name}")
-                        # handler.handler.__self__ = star_metadata.star_cls # 绑定 handler 的 self
                         handler.handler = functools.partial(handler.handler, metadata.star_cls)
-                    # llm_tool
+                    # 绑定 llm_tool handler
                     for func_tool in llm_tools.func_list:
                         if func_tool.handler.__module__ == metadata.module_path:
                             func_tool.handler_module_path = metadata.module_path
@@ -253,8 +257,28 @@ class PluginManager:
                     star_registry.append(metadata)
                     logger.debug(f"插件 {root_dir_name} 载入成功。")
                 
+                # 禁用/启用插件
                 if metadata.module_path in inactivated_plugins:
                     metadata.activated = False
+                    
+                # 检查并且植入自定义的权限过滤器（alter_cmd）
+                for handler in star_handlers_registry.get_handlers_by_module_name(metadata.module_path):
+                    if metadata.name in alter_cmd and handler.handler_name in alter_cmd[metadata.name]:
+                        # 注入权限过滤器
+                        cmd_type = alter_cmd[metadata.name][handler.handler_name].get("permission", "member")
+                        found_permission_filter = False
+                        for filter_ in handler.event_filters:
+                            if isinstance(filter_, PermissionTypeFilter):
+                                if cmd_type == "admin":
+                                    filter_.permission_type = PermissionType.ADMIN
+                                else:
+                                    filter_.permission_type = PermissionType.MEMBER
+                                found_permission_filter = True
+                                break
+                        if not found_permission_filter:
+                            handler.event_filters.append(PermissionTypeFilter(PermissionType.ADMIN if cmd_type == "admin" else PermissionType.MEMBER))
+
+                        logger.debug(f"插入权限过滤器 {cmd_type} 到 {metadata.name} 的 {handler.handler_name} 方法。")
                     
                 # 执行 initialize() 方法
                 if hasattr(metadata.star_cls, "initialize"):
