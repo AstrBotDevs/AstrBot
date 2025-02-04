@@ -2,7 +2,7 @@
 如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
 """
 
-VERSION = "3.4.18"
+VERSION = "3.4.19"
 DB_PATH = "data/data_v3.db"
 
 # 默认配置
