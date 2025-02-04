@@ -236,6 +236,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
             event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent):
         
@@ -354,6 +355,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                         MessageEventResult().message("切换 Key 未知错误: "+str(e)))
                 message.set_result(MessageEventResult().message("切换 Key 成功。"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("persona")
     async def persona(self, message: AstrMessageEvent):
                 
