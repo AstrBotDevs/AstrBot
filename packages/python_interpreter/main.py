@@ -358,7 +358,7 @@ class Main(star.Star):
                     
             if not ok:
                 if traceback:
-                    obs = f"## Observation \n When execute the code: ```python\n{code_clean}\n```\n\n Error occured:\n\n{traceback}\n Need to improve/fix the code."
+                    obs = f"## Observation \n When execute the code: ```python\n{code_clean}\n```\n\n Error occurred:\n\n{traceback}\n Need to improve/fix the code."
                 else:
                     logger.warning(f"未从沙箱输出中捕获到合法的输出。沙箱输出日志: {logs}")
                     break
