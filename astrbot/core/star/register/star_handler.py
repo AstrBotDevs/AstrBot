@@ -115,10 +115,10 @@ def register_platform_adapter_type(platform_adapter_type: PlatformAdapterType):
 
     return decorator
 
-def register_regex(regex: str, desc: str = ""):
+def register_regex(regex: str):
     '''注册一个 Regex'''
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, desc=desc)
+        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
         handler_md.event_filters.append(RegexFilter(regex))
         return awaitable
 
