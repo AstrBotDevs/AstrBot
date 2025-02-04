@@ -2,10 +2,11 @@ from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from typing import Union, AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
 from astrbot.core.message.components import At
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.permission import PermissionTypeFilter
 
 
 @register_stage
@@ -77,6 +78,8 @@ class WakingCheckStage(Stage):
             # filter 需要满足 AND 的逻辑关系
             passed = True
             child_command_handler_md = None
+            
+            permission_not_pass = False
 
             if len(handler.event_filters) == 0:
                 # 不可能有这种情况, 也不允许有这种情况
@@ -94,6 +97,10 @@ class WakingCheckStage(Stage):
                         else:
                             handler = child_command_handler_md  # handler 覆盖
                             break
+                    elif isinstance(filter, PermissionTypeFilter):
+                        if not filter.filter(event, self.ctx.astrbot_config):
+                            print("permission not pass")
+                            permission_not_pass = True
                     else:
                         if not filter.filter(event, self.ctx.astrbot_config):
                             passed = False
@@ -111,6 +118,12 @@ class WakingCheckStage(Stage):
                     break
 
             if passed:
+                
+                if permission_not_pass:
+                    await event.send(MessageChain().message(f"ID {event.get_sender_id()} 权限不足"))
+                    event.stop_event()
+                    return
+                
                 is_wake = True
                 event.is_wake = True
 

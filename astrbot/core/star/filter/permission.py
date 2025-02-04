@@ -19,7 +19,8 @@ class PermissionTypeFilter(HandlerFilter):
         '''
         if self.permission_type == PermissionType.ADMIN:
             if not event.is_admin():
-                event.stop_event()
-                raise ValueError(f"您 (ID: {event.get_sender_id()}) 没有权限操作管理员指令。")
+                # event.stop_event()
+                # raise ValueError(f"您 (ID: {event.get_sender_id()}) 没有权限操作管理员指令。")
+                return False
 
         return True
