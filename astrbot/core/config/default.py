@@ -109,7 +109,7 @@ CONFIG_METADATA_2 = {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
-                        "ws_reverse_host": "",
+                        "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
                     },
                     "gewechat(微信)": {

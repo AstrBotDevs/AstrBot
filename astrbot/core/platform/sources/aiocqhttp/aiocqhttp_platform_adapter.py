@@ -122,7 +122,10 @@ class AiocqhttpAdapter(Platform):
     
     def run(self) -> Awaitable[Any]:
         if not self.host or not self.port:
-            return
+            logger.warning("aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://0.0.0.0:6199")
+            self.host = "0.0.0.0"
+            self.port = 6199
+            
         self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp', api_timeout_sec=180)
         @self.bot.on_message('group')
         async def group(event: Event):
