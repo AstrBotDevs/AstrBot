@@ -16,6 +16,7 @@ from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
 from typing import Awaitable
 from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
+from astrbot.core.conversation_mgr import ConversationManager
 
 class Context:
     '''
@@ -44,6 +45,7 @@ class Context:
         db: BaseDatabase, 
         provider_manager: ProviderManager = None, 
         platform_manager: PlatformManager = None,
+        conversation_manager: ConversationManager = None,
         knowledge_db_manager: KnowledgeDBManager = None
     ):
         self._event_queue = event_queue
@@ -52,6 +54,7 @@ class Context:
         self.provider_manager = provider_manager
         self.platform_manager = platform_manager
         self.knowledge_db_manager = knowledge_db_manager
+        self.conversation_manager = conversation_manager
 
     def get_registered_star(self, star_name: str) -> StarMetadata:
         '''根据插件名获取插件的 Metadata'''

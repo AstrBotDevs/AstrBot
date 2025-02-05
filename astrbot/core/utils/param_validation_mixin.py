@@ -25,6 +25,10 @@ class ParameterValidationMixin:
                     elif isinstance(param_type_or_default_val, str):
                         # 如果 param_type_or_default_val 是字符串，直接赋值
                         result[param_name] = params[i]
+                    elif isinstance(param_type_or_default_val, int):
+                        result[param_name] = int(params[i])
+                    elif isinstance(param_type_or_default_val, float):
+                        result[param_name] = float(params[i])
                     else:
                         result[param_name] = param_type_or_default_val(params[i])
                 except ValueError:

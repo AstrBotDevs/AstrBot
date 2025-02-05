@@ -1,6 +1,7 @@
 import aiohttp
 import datetime
 import builtins
+import json
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -59,24 +60,28 @@ AstrBot 指令:
 /plugin: 查看插件、插件帮助
 /t2i: 开关文本转图片
 /sid: 获取会话 ID
-/op <admin_id>: 授权管理员
-/deop <admin_id>: 取消管理员
-/wl <sid>: 添加白名单
-/dwl <sid>: 删除白名单
-/dashboard_update: 更新管理面板
-/alter_cmd: 设置指令权限
+/op <admin_id>: 授权管理员(op)
+/deop <admin_id>: 取消管理员(op)
+/wl <sid>: 添加白名单(op)
+/dwl <sid>: 删除白名单(op)
+/dashboard_update: 更新管理面板(op)
+/alter_cmd: 设置指令权限(op)
 
 [大模型]
 /provider: 大模型提供商
 /model: 模型列表
-/key: API Key
-/reset: 重置 LLM 会话
-/history: 对话记录
-/persona: 人格情景
+/ls: 对话列表
+/new: 创建新对话
+/switch: 切换对话
+/del: 删除当前会话对话(op)
+/reset: 重置 LLM 会话(op)
+/history: 当前对话的对话记录
+/persona: 人格情景(op)
 /tool ls: 函数工具
+/key: API Key(op)
 
 [其他]
-/set <变量名> <值>: 为会话定义一个变量。适用于 Dify 工作流输入。
+/set <变量名> <值>: 为会话定义变量。适用于 Dify 工作流输入。
 /unset <变量名>: 删除会话的变量。
 
 提示：如要查看插件指令，请输入 /plugin 查看具体信息。
@@ -273,7 +278,10 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
             return
         
-        await self.context.get_using_provider().forget(message.session_id)
+        await self.context.conversation_manager.update_conversation(
+            message.unified_msg_origin, message.session_id, []
+        )
+        
         ret = "清除会话 LLM 聊天历史成功。"
         if self.ltm:
             cnt = await self.ltm.remove_session(event=message)
@@ -329,20 +337,22 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.command("history")
     async def his(self, message: AstrMessageEvent, page: int = 1):
-        
-                
+        '''查看对话记录'''
         if not self.context.get_using_provider():
             message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
             return
         
-        size_per_page = 3
-        contexts, total_pages = await self.context.get_using_provider().get_human_readable_context(message.session_id, page, size_per_page)
+        size_per_page = 6
+        session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
+        contexts, total_pages = await self.context.conversation_manager.get_human_readable_context(
+            message.unified_msg_origin, session_curr_cid, page, size_per_page
+        )
 
         history = ""
         for context in contexts:
             history += f"{context}\n"
             
-        ret = f"""历史记录：
+        ret = f"""当前对话历史记录：
 {history}
 第 {page} 页 | 共 {total_pages} 页
 
@@ -350,6 +360,64 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 """
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
+
+    @filter.command("ls")
+    async def convs(self, message: AstrMessageEvent, page: int = 1):
+        '''查看对话列表'''
+        size_per_page = 6
+        conversations = await self.context.conversation_manager.get_conversations(message.unified_msg_origin)
+        total_pages = len(conversations) // size_per_page
+        if len(conversations) % size_per_page != 0:
+            total_pages += 1
+        conversations = conversations[(page-1)*size_per_page:page*size_per_page]
+        
+        ret = "\n对话列表：\n"
+        global_index = (page - 1) * size_per_page + 1
+        
+        for conv in conversations:
+            
+            persona_id = conv.persona_id
+            if not persona_id and not persona_id == "[%None]":
+                persona_id = self.context.provider_manager.selected_default_persona['name']
+            
+            ret += f"{global_index}. 新对话{conv.cid[:4]}\n  人格情景: {persona_id}\n上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+            global_index += 1
+        
+        curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
+        if curr_cid:
+            ret += f"\n当前对话: {curr_cid[:4]}"
+        else:
+            ret += "\n当前对话: 无"
+        ret += f"\n第 {page} 页 | 共 {total_pages} 页"
+        ret += "\n*输入 /ls 2 跳转到第 2 页"
+        
+        message.set_result(MessageEventResult().message(ret).use_t2i(False))
+        
+    @filter.command("new")
+    async def new_conv(self, message: AstrMessageEvent):
+        '''创建新对话'''
+        cid = await self.context.conversation_manager.new_conversation(message.unified_msg_origin)
+        message.set_result(MessageEventResult().message(f"切换到新对话: {cid[:4]}。"))
+            
+    @filter.command("switch")
+    async def switch_conv(self, message: AstrMessageEvent, index: int):
+        '''切换对话'''
+        conversations = await self.context.conversation_manager.get_conversations(message.unified_msg_origin)
+        if index > len(conversations) or index < 1:
+            message.set_result(MessageEventResult().message("对话序号错误。"))
+        else:
+            conversation = conversations[index-1]
+            await self.context.conversation_manager.switch_conversation(message.unified_msg_origin, conversation.cid)
+            message.set_result(MessageEventResult().message(f"切换到对话: {conversation.cid[:4]}。"))
+    
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("del")
+    async def del_conv(self, message: AstrMessageEvent):
+        '''删除当前对话'''
+        session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
+        await self.context.conversation_manager.delete_conversation(message.unified_msg_origin, session_curr_cid)
+        message.set_result(MessageEventResult().message("删除当前对话成功。"))
+        
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("key")
@@ -387,28 +455,28 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("persona")
     async def persona(self, message: AstrMessageEvent):
-                
-        if not self.context.get_using_provider():
-            message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
-            return
-        
-        
         l = message.message_str.split(" ")
         
         curr_persona_name = "无"
-        if self.context.get_using_provider().curr_personality:
-            curr_persona_name = self.context.get_using_provider().curr_personality['name']
+        cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
+        if cid:
+            conversation = await self.context.conversation_manager.get_conversation(message.unified_msg_origin, cid)
+            if not conversation.persona_id and not conversation.persona_id == "[%None]":
+                curr_persona_name = self.context.provider_manager.selected_default_persona['name']
+            else:
+                curr_persona_name = conversation.persona_id
         
         if len(l) == 1:
             message.set_result(
                 MessageEventResult().message(f"""[Persona]
 
-- 设置人格情景: `/persona 人格名`, 如 /persona 编剧
 - 人格情景列表: `/persona list`
-- 人格情景详细信息: `/persona view 人格名`
+- 设置人格情景: `/persona 人格`
+- 人格情景详细信息: `/persona view 人格`
 - 取消人格: `/persona unset`
 
-当前人格情景: {curr_persona_name}
+默认人格情景: {self.context.provider_manager.selected_default_persona['name']}
+当前对话 {cid[:4]} 的人格情景: {curr_persona_name}
 
 配置人格情景请前往管理面板-配置页
 """).use_t2i(False))
@@ -433,7 +501,10 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                 msg = f"人格{ps}不存在"
             message.set_result(MessageEventResult().message(msg))
         elif l[1] == "unset":
-            self.context.get_using_provider().curr_personality = None
+            if not cid:
+                message.set_result(MessageEventResult().message("当前没有对话，无法取消人格。"))
+                return
+            await self.context.conversation_manager.update_conversation_persona_id(message.unified_msg_origin, "[%None]")
             message.set_result(MessageEventResult().message("取消人格成功。"))
         else:
             ps = "".join(l[1:]).strip()
@@ -441,7 +512,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                 lambda persona: persona['name'] == ps, 
                 self.context.provider_manager.personas
             ), None):
-                self.context.get_using_provider().curr_personality = persona
+                await self.context.conversation_manager.update_conversation_persona_id(message.unified_msg_origin, ps)
                 message.set_result(MessageEventResult().message("设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。"))
             else:
                 message.set_result(MessageEventResult().message("不存在该人格情景。使用 /persona list 查看所有。"))
@@ -513,7 +584,12 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                     logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
                     return
                 try:
-                    session_provider_context = provider.session_memory.get(event.session_id)
+                    session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(event.unified_msg_origin)
+                    conv = await self.context.conversation_manager.get_conversation(
+                        event.unified_msg_origin, 
+                        session_curr_cid
+                    )
+                    history = json.loads(conv.history)
                     
                     prompt = self.ltm.ar_prompt
                     if not prompt:
@@ -523,7 +599,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                         prompt=prompt,
                         func_tool_manager=self.context.get_llm_tool_manager(),
                         session_id=event.session_id,
-                        contexts=session_provider_context if session_provider_context else []
+                        contexts=history if history else []
                     )
                 except BaseException as e:
                     logger.error(f"主动回复失败: {e}")
@@ -545,14 +621,22 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         if self.enable_datetime:
             req.system_prompt += f"\nCurrent datetime: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
         
-        if persona := provider.curr_personality:
-            if prompt := persona['prompt']:
-                req.system_prompt += prompt
-            if mood_dialogs := persona['_mood_imitation_dialogs_processed']:
-                req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
-                req.system_prompt += mood_dialogs
-            if begin_dialogs := persona["_begin_dialogs_processed"]:
-                req.contexts[:0] = begin_dialogs
+        if req.conversation:
+            persona_id = req.conversation.persona_id
+            if not persona_id and persona_id != "[%None]": # [%None] 为用户取消人格
+                persona_id = self.context.provider_manager.selected_default_persona['name']
+            persona = next(builtins.filter(
+                lambda persona: persona['name'] == persona_id, 
+                self.context.provider_manager.personas
+            ), None)
+            if persona:
+                if prompt := persona['prompt']:
+                    req.system_prompt += prompt
+                if mood_dialogs := persona['_mood_imitation_dialogs_processed']:
+                    req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
+                    req.system_prompt += mood_dialogs
+                if begin_dialogs := persona["_begin_dialogs_processed"]:
+                    req.contexts[:0] = begin_dialogs
                 
         if self.ltm:
             try:
