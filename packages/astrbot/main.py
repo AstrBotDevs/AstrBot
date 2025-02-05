@@ -351,6 +351,8 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
         history = ""
         for context in contexts:
+            if len(context) > 150:
+                context = context[:150] + "..."
             history += f"{context}\n"
             
         ret = f"""当前对话历史记录：
@@ -372,7 +374,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             total_pages += 1
         conversations = conversations[(page-1)*size_per_page:page*size_per_page]
         
-        ret = "\n对话列表：\n"
+        ret = "对话列表：\n===\n"
         global_index = (page - 1) * size_per_page + 1
         
         for conv in conversations:
@@ -381,14 +383,22 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             if not persona_id and not persona_id == "[%None]":
                 persona_id = self.context.provider_manager.selected_default_persona['name']
             
-            ret += f"{global_index}. 新对话{conv.cid[:4]}\n  人格情景: {persona_id}\n上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+            ret += f"{global_index}. 新对话{conv.cid[:4]}\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
             global_index += 1
         
+        ret += "===\n"
         curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
         if curr_cid:
             ret += f"\n当前对话: {curr_cid[:4]}"
         else:
             ret += "\n当前对话: 无"
+        
+        unique_session = self.context.get_config()['platform_settings']['unique_session']
+        if unique_session:
+            ret += "\n会话隔离粒度: 个人"
+        else:
+            ret += "\n会话隔离粒度: 群聊"
+            
         ret += f"\n第 {page} 页 | 共 {total_pages} 页"
         ret += "\n*输入 /ls 2 跳转到第 2 页"
         
