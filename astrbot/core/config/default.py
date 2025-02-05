@@ -773,7 +773,7 @@ CONFIG_METADATA_2 = {
                 "description": "管理员 ID",
                 "type": "list",
                 "items": {"type": "string"},
-                "hint": "管理员 ID 列表，管理员可以使用一些特权命令，如 `update`, `plugin` 等。ID 可以通过 `/myid` 指令获得。回车添加，可添加多个。",
+                "hint": "管理员 ID 列表，管理员可以使用一些特权命令，如 `update`, `plugin` 等。ID 可以通过 `/sid` 指令获得。回车添加，可添加多个。",
             },
             "http_proxy": {
                 "description": "HTTP 代理",
