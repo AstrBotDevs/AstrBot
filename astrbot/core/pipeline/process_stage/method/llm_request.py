@@ -77,7 +77,7 @@ class LLMRequestSubStage(Stage):
             req.contexts = json.loads(req.contexts)
         
         try:
-            logger.debug(f"提供商请求 Payload: {req.__dict__}")
+            logger.debug(f"提供商请求 Payload: {req}")
             if _nested:
                 req.func_tool = None # 暂时不支持递归工具调用
             llm_response = await provider.text_chat(**req.__dict__) # 请求 LLM

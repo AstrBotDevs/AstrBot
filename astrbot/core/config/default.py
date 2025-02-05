@@ -29,6 +29,7 @@ DEFAULT_CONFIG = {
             "enable": False,
             "only_llm_result": True,
             "interval": "1.5,3.5",
+            "seg_prompt": "",
             "regex": ".*?[。？！~…]+|.+$"
         },
         "no_permission_reply": True,
@@ -216,6 +217,11 @@ CONFIG_METADATA_2 = {
                                 "description": "随机间隔时间(秒)",
                                 "type": "string",
                                 "hint": "每一段回复的间隔时间，格式为 `最小时间,最大时间`。如 `0.75,2.5`",
+                            },
+                            "seg_prompt": {
+                                "description": "分段提示词辅助",
+                                "type": "string",
+                                "hint": "此项为空时表达不启用这个方法。此方法会调用一次LLM请求。让 LLM 在某一句话中插入一个可以用正则表达式分隔的标记，来实现LLM基于情感分段。如: `请基于情感对以下文本进行分段, 并在两段之间添加`<seg>`以便我用正则匹配。`    然后将下面的正则表达式更换为`.+?<seg>`。",
                             },
                             "regex": {
                                 "description": "正则表达式",
