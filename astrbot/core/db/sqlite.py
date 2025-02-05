@@ -6,7 +6,7 @@ from astrbot.core.db.po import (
     Stats,
     LLMHistory,
     ATRIVision,
-    WebChatConversation
+    Conversation
 )
 from . import BaseDatabase
 from typing import Tuple
@@ -25,6 +25,37 @@ class SQLiteDatabase(BaseDatabase):
         c = self.conn.cursor()
         c.executescript(sql)
         self.conn.commit()
+        
+        # 检查 webchat_conversation 的 title 字段是否存在
+        c.execute(
+            '''
+            PRAGMA table_info(webchat_conversation)
+            '''
+        )
+        res = c.fetchall()
+        has_title = False
+        has_persona_id = False
+        for row in res:
+            if row[1] == "title":
+                has_title = True
+            if row[1] == "persona_id":
+                has_persona_id = True
+        if not has_title:
+            c.execute(
+                '''
+                ALTER TABLE webchat_conversation ADD COLUMN title TEXT;
+                '''
+            )
+            self.conn.commit()
+        if not has_persona_id:
+            c.execute(
+                '''
+                ALTER TABLE webchat_conversation ADD COLUMN persona_id TEXT;
+                '''
+            )
+            self.conn.commit()
+            
+        c.close()
     
     def _get_conn(self, db_path: str) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -202,7 +233,7 @@ class SQLiteDatabase(BaseDatabase):
         return Stats(platform, [], [])
     
     
-    def get_webchat_conversation_by_user_id(self, user_id: str, cid: str) -> WebChatConversation:
+    def get_conversation_by_user_id(self, user_id: str, cid: str) -> Conversation:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -216,9 +247,9 @@ class SQLiteDatabase(BaseDatabase):
         
         res = c.fetchone()
         c.close()
-        return WebChatConversation(*res)
+        return Conversation(*res)
     
-    def webchat_new_conversation(self, user_id: str, cid: str):
+    def new_conversation(self, user_id: str, cid: str):
         history = "[]"
         updated_at = int(time.time())
         created_at = updated_at
@@ -228,7 +259,7 @@ class SQLiteDatabase(BaseDatabase):
             ''', (user_id, cid, history, updated_at, created_at)
         )
         
-    def get_webchat_conversations(self, user_id: str) -> Tuple:
+    def get_conversations(self, user_id: str) -> Tuple:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -236,7 +267,7 @@ class SQLiteDatabase(BaseDatabase):
             
         c.execute(
             '''
-            SELECT cid, created_at, updated_at FROM webchat_conversation WHERE user_id = ? ORDER BY updated_at DESC
+            SELECT cid, created_at, updated_at, title, persona_id FROM webchat_conversation WHERE user_id = ? ORDER BY updated_at DESC
             ''', (user_id,)
         )
         
@@ -247,23 +278,41 @@ class SQLiteDatabase(BaseDatabase):
             cid = row[0]
             created_at = row[1]
             updated_at = row[2]
-            conversations.append(WebChatConversation("", cid, '[]', created_at, updated_at))
+            title = row[3]
+            persona_id = row[4]
+            conversations.append(Conversation("", cid, '[]', created_at, updated_at, title, persona_id))
         return conversations
     
-    def update_webchat_conversation(self, user_id: str, cid: str, history: str):
+    def update_conversation(self, user_id: str, cid: str, history: str):
+        '''更新对话，并且同时更新时间'''
+        updated_at = int(time.time())
         self._exec_sql(
             '''
-            UPDATE webchat_conversation SET history = ? WHERE user_id = ? AND cid = ?
-            ''', (history, user_id, cid)
+            UPDATE webchat_conversation SET history = ?, updated_at = ? WHERE user_id = ? AND cid = ?
+            ''', (history, updated_at, user_id, cid)
+        )
+        
+        
+    def update_conversation_title(self, user_id: str, cid: str, title: str):
+        self._exec_sql(
+            '''
+            UPDATE webchat_conversation SET title = ? WHERE user_id = ? AND cid = ?
+            ''', (title, user_id, cid)
+        )
+        
+    def update_conversation_persona_id(self, user_id: str, cid: str, persona_id: str):
+        self._exec_sql(
+            '''
+            UPDATE webchat_conversation SET persona_id = ? WHERE user_id = ? AND cid = ?
+            ''', (persona_id, user_id, cid)
         )
     
-    def delete_webchat_conversation(self, user_id: str, cid: str):
+    def delete_conversation(self, user_id: str, cid: str):
         self._exec_sql(
             '''
             DELETE FROM webchat_conversation WHERE user_id = ? AND cid = ?
             ''', (user_id, cid)
         )
-
 
     def insert_atri_vision_data(self, vision: ATRIVision):
         ts = int(time.time())

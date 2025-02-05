@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Type
 from .func_tool_manager import FuncCall
 from openai.types.chat.chat_completion import ChatCompletion
+from astrbot.core.db.po import Conversation
 
 
 class ProviderType(enum.Enum):
@@ -38,9 +39,9 @@ class ProviderRequest():
     '''上下文。格式与 openai 的上下文格式一致：
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages
     '''
-    
     system_prompt: str = ""
     '''系统提示词'''
+    conversation: Conversation = None
     
     
 @dataclass

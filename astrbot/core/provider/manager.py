@@ -66,7 +66,14 @@ class ProviderManager():
         if not self.selected_default_persona and len(self.personas) > 0:
             # 默认选择第一个
             self.selected_default_persona = self.personas[0]
-        
+            
+        if not self.selected_default_persona:
+            self.selected_default_persona = Personality(
+                prompt="You are a helpful and friendly assistant.",
+                name="default",
+            )
+            self.personas.append(self.selected_default_persona)
+                
         
         self.provider_insts: List[Provider] = []
         '''加载的 Provider 的实例'''

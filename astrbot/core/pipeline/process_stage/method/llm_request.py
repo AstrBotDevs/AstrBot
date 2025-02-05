@@ -2,6 +2,7 @@
 本地 Agent 模式的 LLM 调用 Stage
 '''
 import traceback
+import json
 from typing import Union, AsyncGenerator
 from ...context import PipelineContext
 from ..stage import Stage
@@ -10,7 +11,7 @@ from astrbot.core.message.message_event_result import MessageEventResult, Result
 from astrbot.core.message.components import Image
 from astrbot.core import logger
 from astrbot.core.utils.metrics import Metric
-from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.provider.entites import ProviderRequest, LLMResponse
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 
 class LLMRequestSubStage(Stage):
@@ -24,6 +25,8 @@ class LLMRequestSubStage(Stage):
             if self.provider_wake_prefix.startswith(bwp):
                 logger.info(f"识别 LLM 聊天额外唤醒前缀 {self.provider_wake_prefix} 以机器人唤醒前缀 {bwp} 开头，已自动去除。")
                 self.provider_wake_prefix = self.provider_wake_prefix[len(bwp):]
+                
+        self.conv_manager = ctx.plugin_manager.context.conversation_manager
         
     async def process(self, event: AstrMessageEvent, _nested: bool = False) -> Union[None, AsyncGenerator[None, None]]:
         req: ProviderRequest = None
@@ -46,10 +49,17 @@ class LLMRequestSubStage(Stage):
                 if isinstance(comp, Image):
                     image_url = comp.url if comp.url else comp.file
                     req.image_urls.append(image_url)
-            req.session_id = event.session_id
+            
+            # 获取对话上下文
+            conversation_id = await self.conv_manager.get_curr_conversation_id(event.unified_msg_origin)
+            if not conversation_id:
+                conversation_id = await self.conv_manager.new_conversation(event.unified_msg_origin)
+            req.session_id = conversation_id
+            conversation = await self.conv_manager.get_conversation(event.unified_msg_origin, conversation_id)
+            req.conversation = conversation
+            req.contexts = json.loads(conversation.history)
+
             event.set_extra("provider_request", req)
-            session_provider_context = provider.session_memory.get(event.session_id)
-            req.contexts = session_provider_context if session_provider_context else []
             
         if not req.prompt and not req.image_urls:
             return
@@ -62,6 +72,9 @@ class LLMRequestSubStage(Stage):
                 await handler.handler(event, req)
             except BaseException:
                 logger.error(traceback.format_exc())
+                
+        if isinstance(req.contexts, str):
+            req.contexts = json.loads(req.contexts)
         
         try:
             logger.debug(f"提供商请求 Payload: {req.__dict__}")
@@ -76,6 +89,9 @@ class LLMRequestSubStage(Stage):
                     await handler.handler(event, llm_response)
                 except BaseException:
                     logger.error(traceback.format_exc())
+            
+            # 保存到历史记录
+            await self._save_to_history(event, req, llm_response)
             
             await Metric.upload(llm_tick=1, model_name=provider.get_model(), provider_type=provider.meta().type)
 
@@ -118,3 +134,23 @@ class LLMRequestSubStage(Stage):
             logger.error(traceback.format_exc())
             event.set_result(MessageEventResult().message(f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}"))
             return
+        
+    async def _save_to_history(self, event: AstrMessageEvent, req: ProviderRequest, llm_response: LLMResponse):
+        if llm_response.role == "assistant":
+            # 文本回复
+            contexts = req.contexts
+            new_record = {
+                "role": "user",
+                "content": req.prompt
+            }
+            contexts.append(new_record)
+            contexts.append({
+                "role": "assistant",
+                "content": llm_response.completion_text
+            })
+            contexts_to_save = list(filter(lambda item: '_no_save' not in item, contexts))
+            await self.conv_manager.update_conversation(
+                event.unified_msg_origin, 
+                req.session_id, 
+                history=contexts_to_save
+            )

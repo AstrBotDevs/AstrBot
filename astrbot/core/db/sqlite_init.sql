@@ -42,5 +42,7 @@ CREATE TABLE IF NOT EXISTS webchat_conversation(
     cid TEXT,
     history TEXT,
     created_at INTEGER,
-    updated_at INTEGER
+    updated_at INTEGER,
+    title TEXT,
+    persona_id TEXT
 );

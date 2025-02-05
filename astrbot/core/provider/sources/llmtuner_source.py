@@ -63,14 +63,7 @@ class LLMTunerModelLoader(Provider):
     ) -> LLMResponse:
         system_prompt = ""
         new_record = {"role": "user", "content": prompt}
-        if not contexts:
-            query_context = [
-                *self.session_memory[session_id],
-                new_record,
-            ]
-            system_prompt = self.curr_personality["prompt"]
-        else:
-            query_context = [*contexts, new_record]
+        query_context = [*contexts, new_record]
 
         # 提取出系统提示
         system_idxs = []
@@ -96,34 +89,8 @@ class LLMTunerModelLoader(Provider):
         responses = await self.model.achat(**conf)
 
         llm_response = LLMResponse("assistant", responses[-1].response_text)
-        
-        await self.save_history(contexts, new_record, session_id, llm_response)
-        
+                
         return llm_response
-   
-    async def save_history(self, contexts: List, new_record: dict, session_id: str, llm_response: LLMResponse):
-        if llm_response.role == "assistant" and session_id:
-            # 文本回复
-            if not contexts:
-                # 添加用户 record
-                self.session_memory[session_id].append(new_record)
-                # 添加 assistant record
-                self.session_memory[session_id].append({
-                    "role": "assistant",
-                    "content": llm_response.completion_text
-                })
-            else:
-                contexts_to_save = list(filter(lambda item: '_no_save' not in item, contexts))
-                self.session_memory[session_id] = [*contexts_to_save, new_record, {
-                    "role": "assistant",
-                    "content": llm_response.completion_text
-                }]
-            self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['id'])
-        
-    async def forget(self, session_id):
-        self.session_memory[session_id] = []
-        self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['id'])
-        return True
 
     async def get_current_key(self):
         return "none"
@@ -133,27 +100,3 @@ class LLMTunerModelLoader(Provider):
 
     async def get_models(self):
         return [self.get_model()]
-
-    async def get_human_readable_context(self, session_id, page, page_size):
-        if session_id not in self.session_memory:
-            raise Exception("会话 ID 不存在")
-        contexts = []
-        temp_contexts = []
-        for record in self.session_memory[session_id]:
-            if record["role"] == "user":
-                temp_contexts.append(f"User: {record['content']}")
-            elif record["role"] == "assistant":
-                temp_contexts.append(f"Assistant: {record['content']}")
-                contexts.insert(0, temp_contexts)
-                temp_contexts = []
-
-        # 展平 contexts 列表
-        contexts = [item for sublist in contexts for item in sublist]
-
-        # 计算分页
-        paged_contexts = contexts[(page - 1) * page_size : page * page_size]
-        total_pages = len(contexts) // page_size
-        if len(contexts) % page_size != 0:
-            total_pages += 1
-
-        return paged_contexts, total_pages

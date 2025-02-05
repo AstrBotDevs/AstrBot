@@ -1,7 +1,7 @@
 import abc
 from dataclasses import dataclass
 from typing import List
-from astrbot.core.db.po import Stats, LLMHistory, ATRIVision, WebChatConversation
+from astrbot.core.db.po import Stats, LLMHistory, ATRIVision, Conversation
 
 @dataclass
 class BaseDatabase(abc.ABC):
@@ -79,25 +79,35 @@ class BaseDatabase(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    def get_webchat_conversation_by_user_id(self, user_id: str, cid: str) -> WebChatConversation:
-        '''通过 user_id 和 cid 获取 WebChatConversation'''
+    def get_conversation_by_user_id(self, user_id: str, cid: str) -> Conversation:
+        '''通过 user_id 和 cid 获取 Conversation'''
         raise NotImplementedError
     
     @abc.abstractmethod
-    def webchat_new_conversation(self, user_id: str, cid: str):
-        '''新建 WebChatConversation'''
+    def new_conversation(self, user_id: str, cid: str):
+        '''新建 Conversation'''
         raise NotImplementedError
     
     @abc.abstractmethod
-    def get_webchat_conversations(self, user_id: str) -> List[WebChatConversation]:
+    def get_conversations(self, user_id: str) -> List[Conversation]:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def update_webchat_conversation(self, user_id: str, cid: str, history: str):
-        '''更新 WebChatConversation'''
+    def update_conversation(self, user_id: str, cid: str, history: str):
+        '''更新 Conversation'''
         raise NotImplementedError
     
     @abc.abstractmethod
-    def delete_webchat_conversation(self, user_id: str, cid: str):
-        '''删除 WebChatConversation'''
+    def delete_conversation(self, user_id: str, cid: str):
+        '''删除 Conversation'''
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    def update_conversation_title(self, user_id: str, cid: str, title: str):
+        '''更新 Conversation 标题'''
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    def update_conversation_persona_id(self, user_id: str, cid: str, persona_id: str):
+        '''更新 Conversation Persona ID'''
         raise NotImplementedError

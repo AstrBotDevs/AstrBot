@@ -48,30 +48,6 @@ class ProviderOpenAIOfficial(Provider):
             )
             
         self.set_model(provider_config['model_config']['model'])
-    
-    async def get_human_readable_context(self, session_id, page, page_size):
-        if session_id not in self.session_memory:
-            raise Exception("会话 ID 不存在")
-        contexts = []
-        temp_contexts = []
-        for record in self.session_memory[session_id]:
-            if record['role'] == "user":
-                temp_contexts.append(f"User: {record['content']}")
-            elif record['role'] == "assistant":
-                temp_contexts.append(f"Assistant: {record['content']}")
-                contexts.insert(0, temp_contexts)
-                temp_contexts = []
-
-        # 展平 contexts 列表
-        contexts = [item for sublist in contexts for item in sublist]
-
-        # 计算分页
-        paged_contexts = contexts[(page-1)*page_size:page*page_size]
-        total_pages = len(contexts) // page_size
-        if len(contexts) % page_size != 0:
-            total_pages += 1
-        
-        return paged_contexts, total_pages
 
     async def get_models(self):
         try:
@@ -83,22 +59,6 @@ class ProviderOpenAIOfficial(Provider):
             return models_str
         except NotFoundError as e:
             raise Exception(f"获取模型列表失败：{e}")
-    
-    async def pop_record(self, session_id: str):
-        '''
-        弹出最早的一个对话
-        '''
-        if session_id not in self.session_memory:
-            raise Exception("会话 ID 不存在")
-
-        if len(self.session_memory[session_id]) < 2:
-            return
-        
-        try:
-            self.session_memory[session_id].pop(0)
-            self.session_memory[session_id].pop(0)
-        except IndexError:
-            pass
     
     async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
         if tools:
@@ -141,7 +101,7 @@ class ProviderOpenAIOfficial(Provider):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str,
+        session_id: str=None,
         image_urls: List[str]=None,
         func_tool: FuncCall=None,
         contexts=None,
@@ -149,11 +109,7 @@ class ProviderOpenAIOfficial(Provider):
         **kwargs
     ) -> LLMResponse: 
         new_record = await self.assemble_context(prompt, image_urls)
-        context_query = []
-        if not contexts:
-            context_query = [*self.session_memory[session_id], new_record]
-        else:
-            context_query = [*contexts, new_record]
+        context_query = [*contexts, new_record]
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 
@@ -214,9 +170,6 @@ class ProviderOpenAIOfficial(Provider):
                 
                 raise e
         
-        if kwargs.get("persist", True) and llm_response:
-            await self.save_history(contexts, new_record, session_id, llm_response)
-        
         return llm_response
     
     async def _remove_image_from_context(self, contexts: List):
@@ -244,32 +197,7 @@ class ProviderOpenAIOfficial(Provider):
                 context['content'] = new_content
             new_contexts.append(context)
         return new_contexts
-
     
-    async def save_history(self, contexts: List, new_record: dict, session_id: str, llm_response: LLMResponse):
-        if llm_response.role == "assistant" and session_id:
-            # 文本回复
-            if not contexts:
-                # 添加用户 record
-                self.session_memory[session_id].append(new_record)
-                # 添加 assistant record
-                self.session_memory[session_id].append({
-                    "role": "assistant",
-                    "content": llm_response.completion_text
-                })
-            else:
-                contexts_to_save = list(filter(lambda item: '_no_save' not in item, contexts))
-                self.session_memory[session_id] = [*contexts_to_save, new_record, {
-                    "role": "assistant",
-                    "content": llm_response.completion_text
-                }]
-            self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['id'])
-        
-    async def forget(self, session_id: str) -> bool:
-        self.session_memory[session_id] = []
-        self.db_helper.update_llm_history(session_id, json.dumps(self.session_memory[session_id]), self.provider_config['id'])
-        return True
-
     def get_current_key(self) -> str:
         return self.client.api_key
 

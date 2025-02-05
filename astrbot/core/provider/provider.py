@@ -8,6 +8,8 @@ from typing import TypedDict
 from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.provider.entites import LLMResponse
 from dataclasses import dataclass
+
+
 class Personality(TypedDict):
     prompt: str = ""
     name: str = ""
@@ -60,25 +62,11 @@ class Provider(AbstractProvider):
     ) -> None:
         super().__init__(provider_config)
         
-        self.session_memory = defaultdict(list)
-        '''维护了 session_id 的上下文，**不包含 system 指令**。'''
-        
         self.provider_settings = provider_settings
         
         self.curr_personality: Personality = default_persona
         '''维护了当前的使用的 persona，即人格。可能为 None'''
-        
-        self.db_helper = db_helper
-        '''用于持久化的数据库操作对象。'''
 
-        if persistant_history:
-            # 读取历史记录
-            try:
-                for history in db_helper.get_llm_history(provider_type=provider_config['id']):
-                    self.session_memory[history.session_id] = json.loads(history.content)
-            except BaseException as e:
-                logger.warning(f"读取 LLM 对话历史记录 失败：{e}。仍可正常使用。")
-    
     @abc.abstractmethod
     def get_current_key(self) -> str:
         raise NotImplementedError()
@@ -97,22 +85,6 @@ class Provider(AbstractProvider):
         raise NotImplementedError()
     
     @abc.abstractmethod
-    async def get_human_readable_context(self, session_id: str, page: int, page_size: int):
-        '''获取人类可读的上下文
-        
-        page 从 1 开始
-
-        Example:
-            
-            ["User: 你好", "Assistant: 你好！"]
-            
-        Return:
-            contexts: List[str]: 上下文列表
-            total_pages: int: 总页数
-        '''
-        raise NotImplementedError()
-    
-    @abc.abstractmethod
     async def text_chat(self,
                         prompt: str,
                         session_id: str=None,
@@ -125,26 +97,35 @@ class Provider(AbstractProvider):
         
         Args:
             prompt: 提示词
-            session_id: 会话 ID
+            session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
             tools: Function-calling 工具
             contexts: 上下文
             kwargs: 其他参数
             
         Notes:
-            - 如果传入了 contexts，将会提前加上上下文。否则使用 session_memory 中的上下文。
-            - 可以选择性地传入 session_id，如果传入了 session_id，将会使用 session_id 对应的上下文进行对话，
-            并且也会记录相应的对话上下文，实现多轮对话。如果不传入则不会记录上下文。
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
         '''
         raise NotImplementedError()
-    
-    @abc.abstractmethod
-    async def forget(self, session_id: str) -> bool:
-        '''重置某一个 session_id 的上下文'''
-        raise NotImplementedError()
 
+    async def pop_record(self, context: List):
+        '''
+        弹出 context 第一条非系统提示词对话记录
+        '''
+        poped = 0
+        indexs_to_pop = []
+        for idx, record in enumerate(context):
+            if record["role"] == "system":
+                continue
+            else:
+                indexs_to_pop.append(idx)
+                poped += 1
+                if poped == 2:
+                    break
+                
+        for idx in reversed(indexs_to_pop):
+            context.pop(idx)
 
         
 class STTProvider(AbstractProvider):
