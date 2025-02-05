@@ -46,7 +46,11 @@ class CommandFilter(HandlerFilter, ParameterValidationMixin):
         if not event.is_wake_up():
             return False
         
-        message_str = event.get_message_str().strip()
+        if event.get_extra("parsing_command"):
+            message_str = event.get_extra("parsing_command").strip()
+        else:
+            message_str = event.get_message_str().strip()
+            
         # 分割为列表（每个参数之间可能会有多个空格）
         ls = re.split(r"\s+", message_str)
         if self.command_name != ls[0]:

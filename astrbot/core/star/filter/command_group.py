@@ -40,17 +40,24 @@ class CommandGroupFilter(HandlerFilter):
         if not event.is_wake_up():
             return False, None
         
-        message_str = event.get_message_str().strip()
+        if event.get_extra("parsing_command"):
+            message_str = event.get_extra("parsing_command").strip()
+        else:
+            message_str = event.get_message_str().strip()
+        
         ls = re.split(r"\s+", message_str)
         
         if ls[0] != self.group_name:
             return False, None
         # 改写 message_str
         ls = ls[1:]
-        event.message_str = " ".join(ls)
-        event.message_str = event.message_str.strip()
+        # event.message_str = " ".join(ls)
+        # event.message_str = event.message_str.strip()
+        parsing_command = " ".join(ls)
+        parsing_command = parsing_command.strip()
+        event.set_extra("parsing_command", parsing_command)
         
-        if event.message_str == "":
+        if parsing_command == "":
             # 当前还是指令组
             tree = self.group_name + "\n" + self.print_cmd_tree(self.sub_command_filters)
             raise ValueError(f"指令组 {self.group_name} 未填写完全。这个指令组下有如下指令：\n"+tree)

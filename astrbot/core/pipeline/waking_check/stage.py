@@ -7,6 +7,7 @@ from astrbot.core.message.components import At
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.filter.command import CommandFilter
 
 
 @register_stage
@@ -80,6 +81,8 @@ class WakingCheckStage(Stage):
             child_command_handler_md = None
             
             permission_not_pass = False
+            
+            has_command_pass = False
 
             if len(handler.event_filters) == 0:
                 # 不可能有这种情况, 也不允许有这种情况
@@ -99,7 +102,6 @@ class WakingCheckStage(Stage):
                             break
                     elif isinstance(filter, PermissionTypeFilter):
                         if not filter.filter(event, self.ctx.astrbot_config):
-                            print("permission not pass")
                             permission_not_pass = True
                     else:
                         if not filter.filter(event, self.ctx.astrbot_config):
