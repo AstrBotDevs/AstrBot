@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+import uuid
 import astrbot.api.star as star
 from astrbot.api.event import filter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -28,11 +29,18 @@ class Main(star.Star):
         '''Initialize the scheduler.'''
         for group in self.reminder_data:
             for reminder in self.reminder_data[group]:
+                if 'id' not in reminder:
+                    id_ = str(uuid.uuid4())
+                    reminder['id'] = id_
+                else:
+                    id_ = reminder['id']
+                
                 if "datetime" in reminder:
                     if self.check_is_outdated(reminder):
                         continue
                     self.scheduler.add_job(
                         self._reminder_callback, 
+                        id=id_,
                         trigger='date', 
                         args=[group, reminder], 
                         run_date=datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M"),
@@ -42,6 +50,7 @@ class Main(star.Star):
                     self.scheduler.add_job(
                         self._reminder_callback, 
                         trigger='cron', 
+                        id=id_,
                         args=[group, reminder], 
                         misfire_grace_time=60,
                         **self._parse_cron_expr(reminder["cron"])
@@ -69,11 +78,11 @@ class Main(star.Star):
         }
             
     @llm_tool("reminder")
-    async def reminder_tool(self, event: AstrMessageEvent, text: str, datetime_str: str = None, cron_expression: str = None, human_readable_cron: str = None):
+    async def reminder_tool(self, event: AstrMessageEvent, text: str=None, datetime_str: str = None, cron_expression: str = None, human_readable_cron: str = None):
         '''Call this function when user ask for setting a reminder. 
         
         Args:
-            text(string): The content of the reminder.
+            text(string): Must Required. The content of the reminder.
             datetime_str(string): Required when user's reminder is a single reminder. The datetime string of the reminder, Must format with %Y-%m-%d %H:%M
             cron_expression(string): Required when user's reminder is a repeated reminder. The cron expression of the reminder.
             human_readable_cron(string): Optional. The human readable cron expression of the reminder.
@@ -88,24 +97,30 @@ class Main(star.Star):
         if not cron_expression and not datetime_str:
             raise ValueError("The cron_expression and datetime_str cannot be both None.")
         reminder_time = ""
+        
+        if not text:
+            text = "未命名待办事项"
+        
         if cron_expression:
-            d = { "text": text, "cron": cron_expression, "cron_h": human_readable_cron }
+            d = { "text": text, "cron": cron_expression, "cron_h": human_readable_cron, "id": str(uuid.uuid4()) }
             self.reminder_data[event.unified_msg_origin].append(d)
             self.scheduler.add_job(
                 self._reminder_callback, 
                 'cron', 
+                id=d["id"],
                 misfire_grace_time=60,
                 **self._parse_cron_expr(cron_expression), args=[event.unified_msg_origin, d]
             )
             if human_readable_cron:
                 reminder_time = f"{human_readable_cron}(Cron: {cron_expression})"
         else:
-            d = { "text": text, "datetime": datetime_str }
+            d = { "text": text, "datetime": datetime_str, "id": str(uuid.uuid4()) }
             self.reminder_data[event.unified_msg_origin].append(d)
             datetime_scheduled = datetime.datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
             self.scheduler.add_job(
                 self._reminder_callback, 
                 'date', 
+                id=d["id"],
                 args=[event.unified_msg_origin, d], 
                 run_date=datetime_scheduled,
                 misfire_grace_time=60
@@ -119,34 +134,51 @@ class Main(star.Star):
         '''The command group of the reminder.'''
         pass
     
+    async def get_upcoming_reminders(self, unified_msg_origin: str):
+        '''Get upcoming reminders.'''
+        reminders = self.reminder_data.get(unified_msg_origin, [])
+        if not reminders:
+            return []
+        now = datetime.datetime.now()
+        upcoming_reminders = [
+            reminder for reminder in reminders 
+            if "datetime" not in reminder or datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M") >= now
+        ]
+        return upcoming_reminders
+    
     @reminder.command("ls")
     async def reminder_ls(self, event: AstrMessageEvent):
-        '''List all reminders.'''
-        reminders = self.reminder_data.get(event.unified_msg_origin, [])
+        '''List upcoming reminders.'''
+        reminders = await self.get_upcoming_reminders(event.unified_msg_origin)
         if not reminders:
-            yield event.plain_result("没有待办事项。")
+            yield event.plain_result("没有正在进行的待办事项。")
         else:
-            reminder_str = "待办事项：\n"
+            reminder_str = "正在进行的待办事项：\n"
             for i, reminder in enumerate(reminders):
                 time_ = reminder.get("datetime", "")
                 if not time_:
                     cron_expr = reminder.get("cron", "")
                     time_ = reminder.get("cron_h", "") + f"(Cron: {cron_expr})"
                 reminder_str += f"{i + 1}. {reminder['text']} - {time_}\n"
-            reminder_str += "\n使用 /reminder rm <index> 删除待办事项。"
+            reminder_str += "\n使用 /reminder rm <id> 删除待办事项。\n"
             yield event.plain_result(reminder_str)
-            
+    
     @reminder.command("rm")
     async def reminder_rm(self, event: AstrMessageEvent, index: int):
         '''Remove a reminder by index.'''
-        reminders = self.reminder_data.get(event.unified_msg_origin, [])
+        reminders = await self.get_upcoming_reminders(event.unified_msg_origin)
+        
         if not reminders:
             yield event.plain_result("没有待办事项。")
         elif index < 1 or index > len(reminders):
             yield event.plain_result("索引越界。")
         else:
             reminder = reminders.pop(index - 1)
-            self.scheduler.remove_job(event.unified_msg_origin)
+            job_id = reminder.get("id")
+            try:
+                self.scheduler.remove_job(job_id)
+            except Exception as e:
+                logger.error(f"Remove job error: {e}")
             await self._save_data()
             yield event.plain_result("成功删除待办事项：\n" + reminder["text"])
     
