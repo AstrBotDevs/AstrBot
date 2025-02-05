@@ -280,6 +280,11 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             return
         
         cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
+        
+        if not cid:
+            message.set_result(MessageEventResult().message("当前未处于对话状态，请 /switch 切换或者 /new 创建。"))
+            return
+        
         await self.context.conversation_manager.update_conversation(
             message.unified_msg_origin, cid, []
         )
@@ -346,6 +351,11 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         
         size_per_page = 6
         session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
+        
+        if not session_curr_cid:
+            message.set_result(MessageEventResult().message("当前未处于对话状态，请 /switch 切换或者 /new 创建。"))
+            return
+        
         contexts, total_pages = await self.context.conversation_manager.get_human_readable_context(
             message.unified_msg_origin, session_curr_cid, page, size_per_page
         )
@@ -438,6 +448,11 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     async def del_conv(self, message: AstrMessageEvent):
         '''删除当前对话'''
         session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
+        
+        if not session_curr_cid:
+            message.set_result(MessageEventResult().message("当前未处于对话状态，请 /switch 切换或者 /new 创建。"))
+            return
+        
         await self.context.conversation_manager.delete_conversation(message.unified_msg_origin, session_curr_cid)
         message.set_result(MessageEventResult().message("删除当前对话成功。"))
         
@@ -612,6 +627,11 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                     return
                 try:
                     session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(event.unified_msg_origin)
+                    
+                    if not session_curr_cid:
+                        logger.error("当前未处于对话状态，无法主动回复，请使用 /switch 切换或者 /new 创建。")
+                        return
+                    
                     conv = await self.context.conversation_manager.get_conversation(
                         event.unified_msg_origin, 
                         session_curr_cid
