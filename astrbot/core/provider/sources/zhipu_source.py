@@ -35,8 +35,8 @@ class ProviderZhipu(ProviderOpenAIOfficial):
         context_query = [*contexts, new_record]
         
         model_cfgs: dict = self.provider_config.get("model_config", {})
+        model = self.get_model()
         # glm-4v-flash 只支持一张图片
-        model: str = model_cfgs.get("model", "")
         if model.lower() == 'glm-4v-flash' and image_urls and len(context_query) > 1:
             logger.debug("glm-4v-flash 只支持一张图片，将只保留最后一张图片")
             logger.debug(context_query)

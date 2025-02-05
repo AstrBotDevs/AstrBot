@@ -116,10 +116,14 @@ class ProviderOpenAIOfficial(Provider):
         for part in context_query:
             if '_no_save' in part:
                 del part['_no_save']
+                
+                
+        model_config = self.provider_config.get("model_config", {})
+        model_config['model'] = self.get_model()
 
         payloads = {
             "messages": context_query,
-            **self.provider_config.get("model_config", {})
+            **model_config
         }
         llm_response = None
         try:
