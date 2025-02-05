@@ -4,7 +4,7 @@ import os
 
 from openai import AsyncOpenAI, AsyncAzureOpenAI, NOT_GIVEN
 from openai.types.chat.chat_completion import ChatCompletion
-from openai._exceptions import NotFoundError
+from openai._exceptions import NotFoundError, UnprocessableEntityError
 from astrbot.core.utils.io import download_image_by_url
 
 from astrbot.core.db import BaseDatabase
@@ -127,6 +127,12 @@ class ProviderOpenAIOfficial(Provider):
         }
         llm_response = None
         try:
+            llm_response = await self._query(payloads, func_tool)
+        except UnprocessableEntityError as e:
+            logger.warning(f"不可处理的实体错误：{e}，尝试删除图片。")
+            # 尝试删除所有 image
+            new_contexts = await self._remove_image_from_context(context_query)
+            payloads['messages'] = new_contexts
             llm_response = await self._query(payloads, func_tool)
         except Exception as e:
             if "maximum context length" in str(e):
