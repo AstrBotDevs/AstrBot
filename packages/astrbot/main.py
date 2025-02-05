@@ -278,8 +278,9 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
             return
         
+        cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
         await self.context.conversation_manager.update_conversation(
-            message.unified_msg_origin, message.session_id, []
+            message.unified_msg_origin, cid, []
         )
         
         ret = "清除会话 LLM 聊天历史成功。"
