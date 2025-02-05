@@ -30,7 +30,8 @@ DEFAULT_CONFIG = {
             "only_llm_result": True,
             "interval": "1.5,3.5",
             "regex": ".*?[。？！~…]+|.+$"
-        }
+        },
+        "no_permission_reply": True,
     },
     "provider": [],
     "provider_settings": {
@@ -193,6 +194,11 @@ CONFIG_METADATA_2 = {
                                 "hint": "当消息速率超过限制时的处理策略。stall 为等待，discard 为丢弃。",
                             },
                         },
+                    },
+                    "no_permission_reply": {
+                        "description": "无权限回复",
+                        "type": "bool",
+                        "hint": "启用后，当用户没有权限执行某个操作时，机器人会回复一条消息。",
                     },
                     "segmented_reply": {
                         "description": "分段回复",

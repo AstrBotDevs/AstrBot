@@ -7,8 +7,6 @@ from astrbot.core.message.components import At
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
-from astrbot.core.star.filter.command import CommandFilter
-
 
 @register_stage
 class WakingCheckStage(Stage):
@@ -23,6 +21,9 @@ class WakingCheckStage(Stage):
 
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
+        self.no_permission_reply = self.ctx.astrbot_config["platform_settings"].get(
+            "no_permission_reply", True
+        )
 
     async def process(
         self, event: AstrMessageEvent
@@ -82,8 +83,6 @@ class WakingCheckStage(Stage):
             
             permission_not_pass = False
             
-            has_command_pass = False
-
             if len(handler.event_filters) == 0:
                 # 不可能有这种情况, 也不允许有这种情况
                 continue
@@ -122,7 +121,8 @@ class WakingCheckStage(Stage):
             if passed:
                 
                 if permission_not_pass:
-                    await event.send(MessageChain().message(f"ID {event.get_sender_id()} 权限不足"))
+                    if self.no_permission_reply:
+                        await event.send(MessageChain().message(f"ID {event.get_sender_id()} 权限不足"))
                     event.stop_event()
                     return
                 
