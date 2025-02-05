@@ -64,7 +64,7 @@ def register_command(command_name: str = None, *args):
 
     return decorator
 
-def register_command_group(command_group_name: str = None, desc: str = "", *args):
+def register_command_group(command_group_name: str = None, *args):
     '''注册一个 CommandGroup
     '''
     
