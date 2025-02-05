@@ -73,6 +73,7 @@ AstrBot 指令:
 /ls: 对话列表
 /new: 创建新对话
 /switch: 切换对话
+/rename: 重命名对话
 /del: 删除当前会话对话(op)
 /reset: 重置 LLM 会话(op)
 /history: 当前对话的对话记录
@@ -374,22 +375,26 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             total_pages += 1
         conversations = conversations[(page-1)*size_per_page:page*size_per_page]
         
-        ret = "对话列表：\n===\n"
+        ret = "对话列表：\n---\n"
         global_index = (page - 1) * size_per_page + 1
         
+        _titles = {}
         for conv in conversations:
             
             persona_id = conv.persona_id
             if not persona_id and not persona_id == "[%None]":
                 persona_id = self.context.provider_manager.selected_default_persona['name']
             
-            ret += f"{global_index}. 新对话{conv.cid[:4]}\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+            title = conv.title if conv.title else "新对话"
+            _titles[conv.cid] = title
+            
+            ret += f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
             global_index += 1
         
-        ret += "===\n"
+        ret += "---\n"
         curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
         if curr_cid:
-            ret += f"\n当前对话: {curr_cid[:4]}"
+            ret += f"\n当前对话: {_titles[curr_cid]}({curr_cid[:4]})"
         else:
             ret += "\n当前对话: 无"
         
@@ -408,18 +413,25 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     async def new_conv(self, message: AstrMessageEvent):
         '''创建新对话'''
         cid = await self.context.conversation_manager.new_conversation(message.unified_msg_origin)
-        message.set_result(MessageEventResult().message(f"切换到新对话: {cid[:4]}。"))
+        message.set_result(MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})。"))
             
     @filter.command("switch")
     async def switch_conv(self, message: AstrMessageEvent, index: int):
-        '''切换对话'''
+        '''通过 /ls 前面的序号切换对话'''
         conversations = await self.context.conversation_manager.get_conversations(message.unified_msg_origin)
         if index > len(conversations) or index < 1:
-            message.set_result(MessageEventResult().message("对话序号错误。"))
+            message.set_result(MessageEventResult().message("对话序号错误，请使用 /ls 查看"))
         else:
             conversation = conversations[index-1]
+            title = conversation.title if conversation.title else "新对话"
             await self.context.conversation_manager.switch_conversation(message.unified_msg_origin, conversation.cid)
-            message.set_result(MessageEventResult().message(f"切换到对话: {conversation.cid[:4]}。"))
+            message.set_result(MessageEventResult().message(f"切换到对话: {title}({conversation.cid[:4]})。"))
+            
+    @filter.command("rename")
+    async def rename_conv(self, message: AstrMessageEvent, new_name: str):
+        '''重命名对话'''
+        await self.context.conversation_manager.update_conversation_title(message.unified_msg_origin, new_name)
+        message.set_result(MessageEventResult().message("重命名对话成功。"))
     
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("del")
@@ -470,12 +482,16 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         
         curr_persona_name = "无"
         cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
+        curr_cid_title = "无"
         if cid:
             conversation = await self.context.conversation_manager.get_conversation(message.unified_msg_origin, cid)
             if not conversation.persona_id and not conversation.persona_id == "[%None]":
                 curr_persona_name = self.context.provider_manager.selected_default_persona['name']
             else:
                 curr_persona_name = conversation.persona_id
+            
+            curr_cid_title = conversation.title if conversation.title else "新对话"
+            curr_cid_title += f"({cid[:4]})"
         
         if len(l) == 1:
             message.set_result(
@@ -487,7 +503,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 - 取消人格: `/persona unset`
 
 默认人格情景: {self.context.provider_manager.selected_default_persona['name']}
-当前对话 {cid[:4]} 的人格情景: {curr_persona_name}
+当前对话 {curr_cid_title} 的人格情景: {curr_persona_name}
 
 配置人格情景请前往管理面板-配置页
 """).use_t2i(False))
