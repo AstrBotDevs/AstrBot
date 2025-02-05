@@ -17,8 +17,8 @@ class Personality(TypedDict):
     mood_imitation_dialogs: List[str] = []
     
     # cache
-    _begin_dialogs_processed: List[dict]
-    _mood_imitation_dialogs_processed: str
+    _begin_dialogs_processed: List[dict] = []
+    _mood_imitation_dialogs_processed: str = ""
     
     
 @dataclass
