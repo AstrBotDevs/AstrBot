@@ -31,12 +31,19 @@ class AstrMessageEvent(abc.ABC):
                 platform_meta: PlatformMetadata,
                 session_id: str,):
         self.message_str = message_str
+        '''纯文本的消息'''
         self.message_obj = message_obj
+        '''消息对象，AstrBotMessage。带有完整的消息结构。'''
         self.platform_meta = platform_meta
+        '''消息平台的信息, 其中 name 是平台的类型，如 aiocqhttp'''
         self.session_id = session_id
+        '''用户的会话 ID。可以直接使用下面的 unified_msg_origin'''
         self.role = "member"
+        '''用户是否是管理员。如果是管理员，这里是 admin'''
         self.is_wake = False # 是否通过 WakingStage
-        self.is_at_or_wake_command = False # 是否是 At 机器人或者带有唤醒词或者是私聊（事件监听器会让 is_wake 设为 True）
+        '''是否唤醒'''
+        self.is_at_or_wake_command = False
+        '''是否是 At 机器人或者带有唤醒词或者是私聊（事件监听器会让 is_wake 设为 True，但是不会让这个属性置为 True）'''
         self._extras = {}
         self.session = MessageSesion(
             platform_name=platform_meta.name,
@@ -44,7 +51,7 @@ class AstrMessageEvent(abc.ABC):
             session_id=session_id
         )
         self.unified_msg_origin = str(self.session)
-        
+        '''统一的消息来源字符串。格式为 platform_name:message_type:session_id'''
         self._result: MessageEventResult = None
         '''消息事件的结果'''
         
