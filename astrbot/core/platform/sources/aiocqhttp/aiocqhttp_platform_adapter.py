@@ -102,7 +102,7 @@ class AiocqhttpAdapter(Platform):
                         if not ret.get('file', None):
                             raise ValueError(f"无法解析文件响应: {ret}")
                         if not os.path.exists(ret['file']):
-                            raise FileNotFoundError(f"文件不存在: {ret['file']}。如果您使用 Docker 部署了 AstrBot 或者消息协议端(Napcat等),暂时无法获取用户上传的文件。")
+                            raise FileNotFoundError(f"文件不存在或者权限问题: {ret['file']}。如果您使用 Docker 部署了 AstrBot 或者消息协议端(Napcat等),请先映射路径。如果路径在 /root 目录下，请用 sudo 打开 AstrBot")
                         
                         m['data'] = {
                             "file": ret['file'],

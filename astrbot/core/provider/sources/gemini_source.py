@@ -153,7 +153,7 @@ class ProviderGoogleGenAI(Provider):
         session_id: str = None,
         image_urls: List[str]=None,
         func_tool: FuncCall=None,
-        contexts=None,
+        contexts=[],
         system_prompt=None,
         **kwargs
     ) -> LLMResponse: 

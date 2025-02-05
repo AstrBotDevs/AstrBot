@@ -43,6 +43,11 @@ class ProviderRequest():
     '''系统提示词'''
     conversation: Conversation = None
     
+    def __repr__(self):
+        return f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, image_urls={self.image_urls}, func_tool={self.func_tool}, contexts={self.contexts}, system_prompt={self.system_prompt})"
+    
+    def __str__(self):
+        return self.__repr__()
     
 @dataclass
 class LLMResponse:

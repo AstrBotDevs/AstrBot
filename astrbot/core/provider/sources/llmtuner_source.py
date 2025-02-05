@@ -57,7 +57,7 @@ class LLMTunerModelLoader(Provider):
         session_id: str = None,
         image_urls: List[str] = None,
         func_tool: FuncCall = None,
-        contexts: List = None,
+        contexts: List = [],
         system_prompt: str = None,
         **kwargs,
     ) -> LLMResponse:
