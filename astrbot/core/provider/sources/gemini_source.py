@@ -1,6 +1,4 @@
-import traceback
 import base64
-import json
 import aiohttp
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.db import BaseDatabase
@@ -12,17 +10,18 @@ from ..register import register_provider_adapter
 from astrbot.core.provider.entites import LLMResponse
 
 class SimpleGoogleGenAIClient():
-    def __init__(self, api_key: str, api_base: str):
+    def __init__(self, api_key: str, api_base: str, timeout: int=120) -> None:
         self.api_key = api_key
         if api_base.endswith("/"):
             self.api_base = api_base[:-1]
         else:
             self.api_base = api_base
         self.client = aiohttp.ClientSession(trust_env=True)
+        self.timeout = timeout
         
     async def models_list(self) -> List[str]:
         request_url = f"{self.api_base}/v1beta/models?key={self.api_key}"
-        async with self.client.get(request_url, timeout=10) as resp:
+        async with self.client.get(request_url, timeout=self.timeout) as resp:
             response = await resp.json()
             
             models = []
@@ -48,7 +47,7 @@ class SimpleGoogleGenAIClient():
         payload["contents"] = contents
         logger.debug(f"payload: {payload}")
         request_url = f"{self.api_base}/v1beta/models/{model}:generateContent?key={self.api_key}"
-        async with self.client.post(request_url, json=payload, timeout=10) as resp:
+        async with self.client.post(request_url, json=payload, timeout=self.timeout) as resp:
             response = await resp.json()
             return response
 
@@ -67,10 +66,13 @@ class ProviderGoogleGenAI(Provider):
         self.chosen_api_key = None
         self.api_keys: List = provider_config.get("key", [])
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
-        
+        self.timeout = provider_config.get("timeout", 180)
+        if isinstance(self.timeout, str):
+            self.timeout = int(self.timeout)
         self.client = SimpleGoogleGenAIClient(
             api_key=self.chosen_api_key,
-            api_base=provider_config.get("api_base", None)
+            api_base=provider_config.get("api_base", None),
+            timeout=self.timeout
         )
         self.set_model(provider_config['model_config']['model'])
 
@@ -223,6 +225,9 @@ class ProviderGoogleGenAI(Provider):
             for image_url in image_urls:
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)
+                    image_data = await self.encode_image_bs64(image_path)
+                elif image_url.startswith("file:///"):
+                    image_path = image_url.replace("file:///", "")
                     image_data = await self.encode_image_bs64(image_path)
                 else:
                     image_data = await self.encode_image_bs64(image_url)

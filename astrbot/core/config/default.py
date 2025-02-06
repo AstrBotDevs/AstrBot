@@ -338,6 +338,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.openai.com/v1",
+                        "timeout": 120,
                         "model_config": {
                             "model": "gpt-4o-mini",
                         },
@@ -349,6 +350,7 @@ CONFIG_METADATA_2 = {
                         "api_version": "2024-05-01-preview",
                         "key": [],
                         "api_base": "",
+                        "timeout": 120,
                         "model_config": {
                             "model": "gpt-4o-mini",
                         },
@@ -369,6 +371,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": [],
                         "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
+                        "timeout": 120,
                         "model_config": {
                             "model": "gemini-1.5-flash",
                         },
@@ -379,6 +382,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": [],
                         "api_base": "https://generativelanguage.googleapis.com/",
+                        "timeout": 120,
                         "model_config": {
                             "model": "gemini-1.5-flash",
                         },
@@ -389,6 +393,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.deepseek.com/v1",
+                        "timeout": 120,
                         "model_config": {
                             "model": "deepseek-chat",
                         },
@@ -398,6 +403,7 @@ CONFIG_METADATA_2 = {
                         "type": "zhipu_chat_completion",
                         "enable": True,
                         "key": [],
+                        "timeout": 120,
                         "api_base": "https://open.bigmodel.cn/api/paas/v4/",
                         "model_config": {
                             "model": "glm-4-flash",
@@ -408,6 +414,7 @@ CONFIG_METADATA_2 = {
                         "type": "openai_chat_completion",
                         "enable": True,
                         "key": [],
+                        "timeout": 120,
                         "api_base": "https://api.siliconflow.cn/v1",
                         "model_config": {
                             "model": "deepseek-ai/DeepSeek-V3",
@@ -459,6 +466,11 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "timeout": {
+                        "description": "超时时间",
+                        "type": "int",
+                        "hint": "超时时间，单位为秒。",
+                    },
                     "openai-tts-voice": {
                         "description": "voice",
                         "type": "string",

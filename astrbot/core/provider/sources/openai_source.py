@@ -29,7 +29,9 @@ class ProviderOpenAIOfficial(Provider):
         self.chosen_api_key = None
         self.api_keys: List = provider_config.get("key", [])
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
-        
+        self.timeout = provider_config.get("timeout", 120)
+        if isinstance(self.timeout, str):
+            self.timeout = int(self.timeout)
         # 适配 azure openai #332
         if "api_version" in provider_config:
             # 使用 azure api
@@ -37,14 +39,14 @@ class ProviderOpenAIOfficial(Provider):
                 api_key=self.chosen_api_key,
                 api_version=provider_config.get("api_version", None),
                 base_url=provider_config.get("api_base", None),
-                timeout=provider_config.get("timeout", NOT_GIVEN),
+                timeout=self.timeout
             )
         else:
             # 使用 openai api
             self.client = AsyncOpenAI(
                 api_key=self.chosen_api_key,
                 base_url=provider_config.get("api_base", None),
-                timeout=provider_config.get("timeout", NOT_GIVEN),
+                timeout=self.timeout
             )
             
         self.set_model(provider_config['model_config']['model'])
@@ -227,9 +229,10 @@ class ProviderOpenAIOfficial(Provider):
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)
                     image_data = await self.encode_image_bs64(image_path)
+                elif image_url.startswith("file:///"):
+                    image_path = image_url.replace("file:///", "")
+                    image_data = await self.encode_image_bs64(image_path)
                 else:
-                    if image_url.startswith("file:///"):
-                        image_url = image_url.replace("file:///", "")
                     image_data = await self.encode_image_bs64(image_url)
                 user_content["content"].append({"type": "image_url", "image_url": {"url": image_data}})
             return user_content
