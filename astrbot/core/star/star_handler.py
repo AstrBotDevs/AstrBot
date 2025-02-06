@@ -57,7 +57,10 @@ class StarHandlerRegistry(Generic[T]):
             if h[1] == handler:
                 self._handlers.pop(i)
                 break
-        del self.star_handlers_map[handler.handler_full_name]
+        try:
+            del self.star_handlers_map[handler.handler_full_name]
+        except KeyError:
+            pass
     
     def __iter__(self):
         '''使 StarHandlerRegistry 支持迭代'''

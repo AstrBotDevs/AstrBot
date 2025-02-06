@@ -40,6 +40,8 @@ class PluginManager:
         '''保留插件的路径。在 packages 目录下'''
         self.conf_schema_fname = "_conf_schema.json"
         '''插件配置 Schema 文件名'''
+        
+        self.failed_plugin_info = ""
 
     def _get_classes(self, arg: ModuleType):
         '''获取指定模块（可以理解为一个 python 文件）下所有的类'''
@@ -263,7 +265,6 @@ class PluginManager:
                     metadata.module_path = path
                     star_map[path] = metadata
                     star_registry.append(metadata)
-                    logger.debug(f"插件 {root_dir_name} 载入成功。")
                 
                 # 禁用/启用插件
                 if metadata.module_path in inactivated_plugins:
@@ -297,8 +298,12 @@ class PluginManager:
                     await metadata.star_cls.initialize()
                     
             except BaseException as e:
-                traceback.print_exc()
-                fail_rec += f"加载 {path} 插件时出现问题，原因 {str(e)}\n"
+                logger.error(f"----- 插件 {root_dir_name} 载入失败 -----")
+                errors = traceback.format_exc()
+                for line in errors.split('\n'):
+                    logger.error(f"| {line}")
+                logger.error("----------------------------------")
+                fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {str(e)}。\n"
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
@@ -307,6 +312,7 @@ class PluginManager:
         if not fail_rec:
             return True, None
         else:
+            self.failed_plugin_info = fail_rec
             return False, fail_rec
         
     async def install_plugin(self, repo_url: str):

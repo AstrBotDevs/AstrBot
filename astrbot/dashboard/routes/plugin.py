@@ -75,10 +75,10 @@ class PluginRoute(Route):
                 "version": plugin.version,
                 "reserved": plugin.reserved,
                 "activated": plugin.activated,
-                "handlers": await self.get_plugin_handlers_info(plugin.star_handler_full_names)
+                "handlers": await self.get_plugin_handlers_info(plugin.star_handler_full_names),
             }
             _plugin_resp.append(_t)
-        return Response().ok(_plugin_resp).__dict__
+        return Response().ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info).__dict__
     
     async def get_plugin_handlers_info(self, handler_full_names: list[str]):
         '''解析插件行为'''

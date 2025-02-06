@@ -15,7 +15,30 @@ import { max } from 'date-fns';
     </v-alert>
     <v-col cols="12" md="12">
       <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
-        <h3>🧩 已安装的插件</h3>
+        <div style="display: flex; align-items: center;">
+          <h3>🧩 已安装的插件</h3>
+
+          <v-dialog max-width="500px">
+            <template v-slot:activator="{ props }">
+              <v-btn v-bind="props" v-if="extension_data.message" icon  size="small" color="error"
+                style="margin-left: auto;" variant="plain">
+                <v-icon>mdi-alert-circle</v-icon>
+              </v-btn>
+            </template>
+            <v-card>
+              <v-card-title class="headline">错误信息</v-card-title>
+              <v-card-text>{{ extension_data.message }}
+                <br>
+                <small>详情请检查控制台</small> 
+              </v-card-text>
+              
+              <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn color="primary" text>关闭</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+        </div>
       </div>
     </v-col>
     <v-col cols="12" md="6" lg="3" v-for="extension in extension_data.data">
@@ -47,50 +70,50 @@ import { max } from 'date-fns';
       </ExtensionCard>
     </v-col>
     <v-col cols="12" md="12">
-    <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
-      <div style="display: flex; align-items: center;">
-        <h3>🧩 插件市场</h3>
-        <small style="margin-left: 16px;">如无法显示，请打开 <a
-            href="https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json">链接</a> 复制想安装插件对应的 `repo`
-          链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。</small>
-        <v-btn icon @click="isListView = !isListView" size="small" style="margin-left: auto;" variant="plain">
-          <v-icon>{{ isListView ? 'mdi-view-grid' : 'mdi-view-list' }}</v-icon>
-        </v-btn>  
+      <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
+        <div style="display: flex; align-items: center;">
+          <h3>🧩 插件市场</h3>
+          <small style="margin-left: 16px;">如无法显示，请打开 <a
+              href="https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json">链接</a> 复制想安装插件对应的 `repo`
+            链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。</small>
+          <v-btn icon @click="isListView = !isListView" size="small" style="margin-left: auto;" variant="plain">
+            <v-icon>{{ isListView ? 'mdi-view-grid' : 'mdi-view-list' }}</v-icon>
+          </v-btn>
+        </div>
       </div>
-    </div>
-  </v-col>
-
-  <v-col cols="12" md="12" v-if="announcement">
-    <v-banner color="success" lines="one" :text="announcement" :stacked="false">
-    </v-banner>
-  </v-col>
-
-  <template v-if="isListView">
-    <v-col cols="12" md="12">
-      <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name">
-        <template v-slot:item.actions="{ item }">
-          <v-btn v-if="!item.installed" class="text-none mr-2" size="small" text="Read" variant="flat" border
-            @click="extension_url = item.repo; newExtension()">安装</v-btn>
-          <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border disabled>已安装</v-btn>
-        </template>
-      </v-data-table>
     </v-col>
-  </template>
-  <template v-else>
-    <v-col cols="12" md="6" lg="3" v-for="plugin in pluginMarketData">
-      <ExtensionCard :key="plugin.name" :title="plugin.name" :link="plugin.repo" style="margin-bottom: 4px;">
-        <div style="min-height: 130px; max-height: 130px; overflow: hidden;">
-          <p style="font-weight: bold;">By @{{ plugin.author }}</p>
-          {{ plugin.desc }}
-        </div>
-        <div class="d-flex align-center gap-2">
-          <v-btn v-if="!plugin.installed" class="text-none mr-2" size="small" text="Read" variant="flat" border
-            @click="extension_url = plugin.repo; newExtension()">安装</v-btn>
-          <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border disabled>已安装</v-btn>
-        </div>
-      </ExtensionCard>
+
+    <v-col cols="12" md="12" v-if="announcement">
+      <v-banner color="success" lines="one" :text="announcement" :stacked="false">
+      </v-banner>
     </v-col>
-  </template>
+
+    <template v-if="isListView">
+      <v-col cols="12" md="12">
+        <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name">
+          <template v-slot:item.actions="{ item }">
+            <v-btn v-if="!item.installed" class="text-none mr-2" size="small" text="Read" variant="flat" border
+              @click="extension_url = item.repo; newExtension()">安装</v-btn>
+            <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border disabled>已安装</v-btn>
+          </template>
+        </v-data-table>
+      </v-col>
+    </template>
+    <template v-else>
+      <v-col cols="12" md="6" lg="3" v-for="plugin in pluginMarketData">
+        <ExtensionCard :key="plugin.name" :title="plugin.name" :link="plugin.repo" style="margin-bottom: 4px;">
+          <div style="min-height: 130px; max-height: 130px; overflow: hidden;">
+            <p style="font-weight: bold;">By @{{ plugin.author }}</p>
+            {{ plugin.desc }}
+          </div>
+          <div class="d-flex align-center gap-2">
+            <v-btn v-if="!plugin.installed" class="text-none mr-2" size="small" text="Read" variant="flat" border
+              @click="extension_url = plugin.repo; newExtension()">安装</v-btn>
+            <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border disabled>已安装</v-btn>
+          </div>
+        </ExtensionCard>
+      </v-col>
+    </template>
 
     <v-col style="margin-bottom: 16px;" cols="12" md="12">
       <small><a href="https://astrbot.app/dev/plugin.html">插件开发文档</a></small> |
@@ -209,11 +232,11 @@ import { max } from 'date-fns';
     </template>
     <v-card>
       <v-card-title>
-        <span class="text-h5">{{selectedPlugin.name}} 插件行为</span>
+        <span class="text-h5">{{ selectedPlugin.name }} 插件行为</span>
       </v-card-title>
       <v-card-text>
         <v-data-table style="font-size: 17px;" :headers="plugin_handler_info_headers" :items="selectedPlugin.handlers"
-          item-key="name" >
+          item-key="name">
           <template v-slot:header.id="{ column }">
             <p style="font-weight: bold;">{{ column.title }}</p>
           </template>
@@ -262,7 +285,8 @@ export default {
   data() {
     return {
       extension_data: {
-        "data": []
+        "data": [],
+        "message": ""
       },
       extension_url: "",
       status: "",
@@ -338,7 +362,8 @@ export default {
     },
     getExtensions() {
       axios.get('/api/plugin/get').then((res) => {
-        this.extension_data.data = res.data.data;
+        this.extension_data = res.data;
+
         this.checkAlreadyInstalled();
       });
     },
@@ -368,7 +393,7 @@ export default {
             this.onLoadingDialogResult(2, res.data.message, -1);
             return;
           }
-          this.extension_data.data = res.data.data;
+          this.extension_data = res.data;
           this.upload_file = "";
           this.onLoadingDialogResult(1, res.data.message);
           this.dialog = false;
@@ -389,8 +414,7 @@ export default {
               this.onLoadingDialogResult(2, res.data.message, -1);
               return;
             }
-            this.extension_data.data = res.data.data;
-            console.log(this.extension_data);
+            this.extension_data = res.data;
             this.extension_url = "";
             this.onLoadingDialogResult(1, res.data.message);
             this.dialog = false;
@@ -412,7 +436,7 @@ export default {
             this.toast(res.data.message, "error");
             return;
           }
-          this.extension_data.data = res.data.data;
+          this.extension_data = res.data;
           this.toast(res.data.message, "success");
           this.dialog = false;
           this.getExtensions();
@@ -430,7 +454,7 @@ export default {
             this.onLoadingDialogResult(2, res.data.message, -1);
             return;
           }
-          this.extension_data.data = res.data.data;
+          this.extension_data = res.data;
           console.log(this.extension_data);
           this.onLoadingDialogResult(1, res.data.message);
           this.dialog = false;
