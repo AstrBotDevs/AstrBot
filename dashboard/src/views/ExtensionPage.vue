@@ -47,32 +47,50 @@ import { max } from 'date-fns';
       </ExtensionCard>
     </v-col>
     <v-col cols="12" md="12">
-      <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
-        <div style="display: flex; align-items: center;">
-          <h3>🧩 插件市场</h3>
-          <small style="margin-left: 16px;">如无法显示，请打开 <a
-              href="https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json">链接</a> 复制想安装插件对应的 `repo`
-            链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。</small>
-        </div>
-
+    <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
+      <div style="display: flex; align-items: center;">
+        <h3>🧩 插件市场</h3>
+        <small style="margin-left: 16px;">如无法显示，请打开 <a
+            href="https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json">链接</a> 复制想安装插件对应的 `repo`
+          链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。</small>
+        <v-btn icon @click="isListView = !isListView" size="small" style="margin-left: auto;" variant="plain">
+          <v-icon>{{ isListView ? 'mdi-view-grid' : 'mdi-view-list' }}</v-icon>
+        </v-btn>  
       </div>
-    </v-col>
+    </div>
+  </v-col>
 
-    <v-col cols="12" md="12" v-if="announcement">
-      <v-banner color="success" lines="one" :text="announcement" :stacked="false">
-      </v-banner>
+  <v-col cols="12" md="12" v-if="announcement">
+    <v-banner color="success" lines="one" :text="announcement" :stacked="false">
+    </v-banner>
+  </v-col>
+
+  <template v-if="isListView">
+    <v-col cols="12" md="12">
+      <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name">
+        <template v-slot:item.actions="{ item }">
+          <v-btn v-if="!item.installed" class="text-none mr-2" size="small" text="Read" variant="flat" border
+            @click="extension_url = item.repo; newExtension()">安装</v-btn>
+          <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border disabled>已安装</v-btn>
+        </template>
+      </v-data-table>
     </v-col>
+  </template>
+  <template v-else>
     <v-col cols="12" md="6" lg="3" v-for="plugin in pluginMarketData">
       <ExtensionCard :key="plugin.name" :title="plugin.name" :link="plugin.repo" style="margin-bottom: 4px;">
-        <p style="min-height: 130px; max-height: 130px; overflow: hidden;">{{ plugin.desc }}</p>
+        <div style="min-height: 130px; max-height: 130px; overflow: hidden;">
+          <p style="font-weight: bold;">By @{{ plugin.author }}</p>
+          {{ plugin.desc }}
+        </div>
         <div class="d-flex align-center gap-2">
           <v-btn v-if="!plugin.installed" class="text-none mr-2" size="small" text="Read" variant="flat" border
             @click="extension_url = plugin.repo; newExtension()">安装</v-btn>
           <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border disabled>已安装</v-btn>
         </div>
       </ExtensionCard>
-
     </v-col>
+  </template>
 
     <v-col style="margin-bottom: 16px;" cols="12" md="12">
       <small><a href="https://astrbot.app/dev/plugin.html">插件开发文档</a></small> |
@@ -275,7 +293,14 @@ export default {
         { title: '描述', key: 'desc', maxWidth: '250px' },
         { title: '具体类型', key: 'type' },
         { title: '触发方式', key: 'cmd' },
-      ]
+      ],
+      isListView: false,
+      pluginMarketHeaders: [
+        { title: '名称', value: 'name' },
+        { title: '描述', value: 'desc' },
+        { title: '作者', value: 'author' },
+        { title: '操作', value: 'actions', sortable: false }
+      ],
     }
   },
   mounted() {
