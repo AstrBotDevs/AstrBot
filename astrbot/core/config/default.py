@@ -30,7 +30,8 @@ DEFAULT_CONFIG = {
             "only_llm_result": True,
             "interval": "1.5,3.5",
             "seg_prompt": "",
-            "regex": ".*?[。？！~…]+|.+$"
+            "regex": ".*?[。？！~…]+|.+$",
+            "filter_regex_content": False
         },
         "no_permission_reply": True,
     },
@@ -228,6 +229,11 @@ CONFIG_METADATA_2 = {
                                 "type": "string",
                                 "obvious_hint": True,
                                 "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。re.findall(r'<regex>', text)",
+                            },
+                            "filter_regex_content": {
+                                "description": "过滤正则表达式内容",
+                                "type": "bool",
+                                "hint": "启用后，分段回复时会过滤掉正则表达式匹配的内容。",
                             },
                         },
                     },

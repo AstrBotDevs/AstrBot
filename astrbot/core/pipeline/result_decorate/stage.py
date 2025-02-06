@@ -25,6 +25,7 @@ class ResultDecorateStage:
         self.only_llm_result = ctx.astrbot_config['platform_settings']['segmented_reply']['only_llm_result']
         self.seg_prompt = ctx.astrbot_config['platform_settings']['segmented_reply']['seg_prompt']
         self.regex = ctx.astrbot_config['platform_settings']['segmented_reply']['regex']
+        self.filter_regex_content = ctx.astrbot_config['platform_settings']['segmented_reply'].get('filter_regex_content', False)
 
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
         result = event.get_result()
@@ -69,6 +70,8 @@ class ResultDecorateStage:
                                 continue
                             for seg in split_response:
                                 if seg:
+                                    if self.filter_regex_content:
+                                        seg = re.sub(self.regex, '', seg)
                                     new_chain.append(Plain(seg))
                         else:
                             # 非 Plain 类型的消息段不分段
