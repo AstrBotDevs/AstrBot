@@ -2,7 +2,7 @@
 如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
 """
 
-VERSION = "3.4.20"
+VERSION = "3.4.21"
 DB_PATH = "data/data_v3.db"
 
 # 默认配置
@@ -72,6 +72,7 @@ DEFAULT_CONFIG = {
     },
     "admins_id": [],
     "t2i": False,
+    "t2i_word_threshold": 150,
     "http_proxy": "",
     "dashboard": {
         "enable": True,
@@ -752,7 +753,7 @@ CONFIG_METADATA_2 = {
                                 "description": "提示词",
                                 "type": "string",
                                 "obvious_hint": True,
-                                "hint": "提示词。当提示词为空时，如果触发回复，prompt是触发的消息的内容；否则是提示词。此项可以和定时回复（暂未实现）配合使用。",
+                                "hint": "提示词。当提示词为空时，如果触发回复，则向 LLM 请求的是触发的消息的内容；否则是提示词。此项可以和定时回复（暂未实现）配合使用。",
                             },
                         },
                     },
@@ -780,6 +781,11 @@ CONFIG_METADATA_2 = {
                 "description": "文本转图像",
                 "type": "bool",
                 "hint": "启用后，超出一定长度的文本将会通过 AstrBot API 渲染成 Markdown 图片发送。可以缓解审核和消息过长刷屏的问题，并提高 Markdown 文本的可读性。",
+            },
+            "t2i_word_threshold": {
+                "description": "文本转图像字数阈值",
+                "type": "int",
+                "hint": "超出此字符长度的文本将会被转换成图片。字数不能低于 50。",
             },
             "admins_id": {
                 "description": "管理员 ID",

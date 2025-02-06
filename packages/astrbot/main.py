@@ -339,7 +339,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             else:
                 self.context.get_using_provider().set_model(idx_or_name)
                 message.set_result(
-                    MessageEventResult().message(f"切换模型成功。 \n模型信息: {idx_or_name}"))
+                    MessageEventResult().message(f"切换模型到 {self.context.get_using_provider().get_model()}。"))
                 
 
     @filter.command("history")

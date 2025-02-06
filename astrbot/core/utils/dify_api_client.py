@@ -27,9 +27,14 @@ class DifyAPIClient:
         payload = locals()
         payload.pop("self")
         payload.pop("timeout")
+        logger.info(f"chat_messages payload: {payload}")
         async with self.session.post(
             url, json=payload, headers=self.headers, timeout=timeout
         ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise Exception(f"chat_messages 请求失败：{resp.status}. {text}")
+            
             while True:
                 data = await resp.content.read(8192) # 防止数据过大导致高水位报错
                 if not data:
@@ -55,9 +60,13 @@ class DifyAPIClient:
         payload = locals()
         payload.pop("self")
         payload.pop("timeout")
+        logger.info(f"workflow_run payload: {payload}")
         async with self.session.post(
             url, json=payload, headers=self.headers, timeout=timeout
         ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise Exception(f"chat_messages 请求失败：{resp.status}. {text}")
             while True:
                 data = await resp.content.read(8192) # 防止数据过大导致高水位报错
                 if not data:

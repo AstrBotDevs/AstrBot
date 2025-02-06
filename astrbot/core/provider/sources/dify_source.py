@@ -39,7 +39,7 @@ class ProviderDify(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = None,
+        image_urls: List[str] = [],
         func_tool: FuncCall = None,
         contexts: List = None,
         system_prompt: str = None,
@@ -64,8 +64,6 @@ class ProviderDify(Provider):
             else:
                 # TODO: 处理更多情况
                 logger.warning(f"未知的图片链接：{image_url}，图片将忽略。")
-            
-        logger.debug(files_payload)
         
         # 获得会话变量
         session_vars = sp.get("session_variables", {})
@@ -115,7 +113,6 @@ class ProviderDify(Provider):
                             result = chunk['data']['outputs'][self.workflow_output_key]
             case _:
                 raise Exception(f"未知的 Dify API 类型：{self.api_type}")
-
         return LLMResponse(role="assistant", completion_text=result)
 
     async def forget(self, session_id):

@@ -19,6 +19,13 @@ class ResultDecorateStage:
         self.reply_with_mention = ctx.astrbot_config['platform_settings']['reply_with_mention']
         self.reply_with_quote = ctx.astrbot_config['platform_settings']['reply_with_quote']
         self.use_tts = ctx.astrbot_config['provider_tts_settings']['enable']
+        self.t2i_word_threshold = ctx.astrbot_config['t2i_word_threshold']
+        try:
+            self.t2i_word_threshold = int(self.t2i_word_threshold)
+            if self.t2i_word_threshold < 50:
+                self.t2i_word_threshold = 50
+        except BaseException:
+            self.t2i_word_threshold = 150
         
         # 分段回复
         self.enable_segmented_reply = ctx.astrbot_config['platform_settings']['segmented_reply']['enable']
@@ -59,7 +66,7 @@ class ResultDecorateStage:
                                     comp.text = llm_resp.completion_text
                                 except BaseException as e:
                                     traceback.print_exc()
-                                    logger.error("使用 LLM 分段回复失败： " + str(e))
+                                    logger.warning("使用 LLM 分段回复失败。将不分段回复。： " + str(e))
                                     new_chain.append(comp)
                                     continue
                             
@@ -106,7 +113,7 @@ class ResultDecorateStage:
                         plain_str += "\n\n" + comp.text
                     else:
                         break
-                if plain_str and len(plain_str) > 150:
+                if plain_str and len(plain_str) > self.t2i_word_threshold:
                     render_start = time.time()
                     try:
                         url = await html_renderer.render_t2i(plain_str, return_url=True)
