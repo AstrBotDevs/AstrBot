@@ -164,7 +164,8 @@ class ProviderOpenAIOfficial(Provider):
                 or 'does not support tools' in str(e)  \
                 or 'Function call is not supported' in str(e) \
                 or 'Function calling is not enabled' in str(e) \
-                or 'Tool calling is not supported' in str(e): # siliconcloud 
+                or 'Tool calling is not supported' in str(e) \
+                or 'No endpoints found that support tool use' in str(e): # siliconcloud
                     logger.info(f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。")
                     if 'tools' in payloads:
                         del payloads['tools']
