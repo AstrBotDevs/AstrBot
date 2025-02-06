@@ -39,13 +39,13 @@ def get_handler_or_create(
         )
         
         # 插件handler的附加额外信息
+        if handler.__doc__:
+            md.desc = handler.__doc__.strip()
         if 'desc' in kwargs:
             md.desc = kwargs['desc']
             del kwargs['desc']
         md.extras_configs = kwargs
         
-        if handler.__doc__:
-            md.desc = handler.__doc__.strip()
         if not dont_add:
             star_handlers_registry.append(md)
         return md

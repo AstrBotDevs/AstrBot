@@ -39,6 +39,9 @@ class StarMetadata:
     
     config: AstrBotConfig = None
     '''插件配置'''
+    
+    star_handler_full_names: List[str] = None
+    '''注册的 Handler 的全名列表'''
 
     def __str__(self) -> str:
         return f"StarMetadata({self.name}, {self.desc}, {self.version}, {self.repo})"

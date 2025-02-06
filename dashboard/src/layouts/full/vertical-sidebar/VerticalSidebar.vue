@@ -9,7 +9,7 @@ const sidebarMenu = shallowRef(sidebarItems);
 </script>
 
 <template>
-  <v-navigation-drawer left v-model="customizer.Sidebar_drawer" elevation="0" rail-width="80" mobile-breakpoint="960"
+  <v-navigation-drawer left v-model="customizer.Sidebar_drawer" elevation="0" rail-width="80"
     app class="leftSidebar" :rail="customizer.mini_sidebar">
     <v-list class="pa-4 listitem" style="height: auto">
       <template v-for="(item, i) in sidebarMenu" :key="i">

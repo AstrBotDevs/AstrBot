@@ -4,6 +4,7 @@ import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import axios from 'axios';
+import { max } from 'date-fns';
 
 </script>
 
@@ -20,11 +21,12 @@ import axios from 'axios';
     <v-col cols="12" md="6" lg="3" v-for="extension in extension_data.data">
       <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" :logo="extension?.logo"
         style="margin-bottom: 4px;">
-        <p style="min-height: 130px; max-height: 130px; overflow: none;">{{ extension.desc }}</p>
+        <div style="min-height: 130px; max-height: 130px; overflow: none;">
+          <span style="font-weight: bold;">By @{{ extension.author }}</span>
+          <span> | 插件有 {{ extension.handlers.length }} 个行为</span>
+          <p>{{ extension.desc }}</p>
+        </div>
         <div class="d-flex align-center gap-2">
-          <v-icon>mdi-account</v-icon>
-          <span>{{ extension.author }}</span>
-          <v-spacer></v-spacer>
           <div v-if="!extension.reserved">
             <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
               @click="openExtensionConfig(extension.name)">配置</v-btn>
@@ -38,6 +40,9 @@ import axios from 'axios';
             @click="pluginOff(extension)">禁用</v-btn>
           <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border v-else
             @click="pluginOn(extension)">启用</v-btn>
+
+          <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
+            @click="showPluginInfo(extension)">行为</v-btn>
         </div>
       </ExtensionCard>
     </v-col>
@@ -54,16 +59,13 @@ import axios from 'axios';
     </v-col>
 
     <v-col cols="12" md="12" v-if="announcement">
-      <v-banner color="success" lines="one" :text="announcement" :stacked="false" >
+      <v-banner color="success" lines="one" :text="announcement" :stacked="false">
       </v-banner>
     </v-col>
     <v-col cols="12" md="6" lg="3" v-for="plugin in pluginMarketData">
       <ExtensionCard :key="plugin.name" :title="plugin.name" :link="plugin.repo" style="margin-bottom: 4px;">
         <p style="min-height: 130px; max-height: 130px; overflow: hidden;">{{ plugin.desc }}</p>
         <div class="d-flex align-center gap-2">
-          <v-icon>mdi-account</v-icon>
-          <span>{{ plugin.author }}</span>
-          <v-spacer></v-spacer>
           <v-btn v-if="!plugin.installed" class="text-none mr-2" size="small" text="Read" variant="flat" border
             @click="extension_url = plugin.repo; newExtension()">安装</v-btn>
           <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border disabled>已安装</v-btn>
@@ -184,6 +186,44 @@ import axios from 'axios';
     </v-card>
   </v-dialog>
 
+  <v-dialog v-model="showPluginInfoDialog" width="1200">
+    <template v-slot:activator="{ props }">
+    </template>
+    <v-card>
+      <v-card-title>
+        <span class="text-h5">{{selectedPlugin.name}} 插件行为</span>
+      </v-card-title>
+      <v-card-text>
+        <v-data-table style="font-size: 17px;" :headers="plugin_handler_info_headers" :items="selectedPlugin.handlers"
+          item-key="name" >
+          <template v-slot:header.id="{ column }">
+            <p style="font-weight: bold;">{{ column.title }}</p>
+          </template>
+          <template v-slot:item.event_type="{ item }">
+            {{ item.event_type }}
+          </template>
+          <template v-slot:item.desc="{ item }">
+            {{ item.desc }}
+          </template>
+          <template v-slot:item.type="{ item }">
+            <v-chip color="success">
+              {{ item.type }}
+            </v-chip>
+          </template>
+          <template v-slot:item.cmd="{ item }">
+            <span style="font-weight: bold;">{{ item.cmd }}</span>
+          </template>
+        </v-data-table>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="blue-darken-1" variant="text" @click="showPluginInfoDialog = false">
+          关闭
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <v-snackbar :timeout="2000" elevation="24" :color="snack_success" v-model="snack_show">
     {{ snack_message }}
   </v-snackbar>
@@ -227,7 +267,15 @@ export default {
         result: ""
       },
 
-      announcement: ""
+      announcement: "",
+      showPluginInfoDialog: false,
+      selectedPlugin: {},
+      plugin_handler_info_headers: [
+        { title: '行为类型', key: 'event_type_h' },
+        { title: '描述', key: 'desc', maxWidth: '250px' },
+        { title: '具体类型', key: 'type' },
+        { title: '触发方式', key: 'cmd' },
+      ]
     }
   },
   mounted() {
@@ -460,7 +508,11 @@ export default {
         }
       }
       this.pluginMarketData = notInstalled.concat(installed);
-    }
+    },
+    showPluginInfo(plugin) {
+      this.selectedPlugin = plugin;
+      this.showPluginInfoDialog = true;
+    },
   },
 }
 

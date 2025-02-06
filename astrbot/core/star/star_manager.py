@@ -9,7 +9,6 @@ import logging
 from types import ModuleType
 from typing import List
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.config.default import DEFAULT_VALUE_MAP
 from astrbot.core import logger, sp, pip_installer
 from .context import Context
 from . import StarMetadata
@@ -127,7 +126,7 @@ class PluginManager:
         
         if isinstance(metadata, dict):
             if 'name' not in metadata or 'desc' not in metadata or 'version' not in metadata or 'author' not in metadata:
-                raise Exception("插件元数据信息不完整。")
+                raise Exception("插件元数据信息不完整。name, desc, version, author 是必须的字段。")
             metadata = StarMetadata(
                 name=metadata['name'],
                 author=metadata['author'],
@@ -203,6 +202,18 @@ class PluginManager:
                     # 通过装饰器的方式注册插件
                     metadata = star_map[path]
                     
+                    try:
+                        # yaml 文件的元数据优先
+                        metadata_yaml = self._load_plugin_metadata(plugin_path=plugin_dir_path)
+                        if metadata_yaml:
+                            metadata.name = metadata_yaml.name
+                            metadata.author = metadata_yaml.author
+                            metadata.desc = metadata_yaml.desc
+                            metadata.version = metadata_yaml.version
+                            metadata.repo = metadata_yaml.repo
+                    except Exception:
+                        pass
+                    
                     if plugin_config:
                         metadata.config = plugin_config
                         try:
@@ -219,7 +230,6 @@ class PluginManager:
                     # 绑定 handler
                     related_handlers = star_handlers_registry.get_handlers_by_module_name(metadata.module_path)
                     for handler in related_handlers:
-                        logger.debug(f"bind handler {handler.handler_name} to {metadata.name}")
                         handler.handler = functools.partial(handler.handler, metadata.star_cls)
                     # 绑定 llm_tool handler
                     for func_tool in llm_tools.func_list:
@@ -243,8 +253,7 @@ class PluginManager:
                         obj = getattr(module, classes[0])(context=self.context) # 实例化插件类
 
                     metadata = None
-                    plugin_path = os.path.join(self.plugin_store_path, root_dir_name) if not reserved else os.path.join(self.reserved_plugin_path, root_dir_name)
-                    metadata = self._load_plugin_metadata(plugin_path=plugin_path, plugin_obj=obj)
+                    metadata = self._load_plugin_metadata(plugin_path=plugin_dir_path, plugin_obj=obj)
                     metadata.star_cls = obj
                     metadata.config = plugin_config
                     metadata.module = module
@@ -260,10 +269,12 @@ class PluginManager:
                 if metadata.module_path in inactivated_plugins:
                     metadata.activated = False
                     
-                # 检查并且植入自定义的权限过滤器（alter_cmd）
+                full_names = []
                 for handler in star_handlers_registry.get_handlers_by_module_name(metadata.module_path):
+                    full_names.append(handler.handler_full_name)
+                    
+                    # 检查并且植入自定义的权限过滤器（alter_cmd）
                     if metadata.name in alter_cmd and handler.handler_name in alter_cmd[metadata.name]:
-                        # 注入权限过滤器
                         cmd_type = alter_cmd[metadata.name][handler.handler_name].get("permission", "member")
                         found_permission_filter = False
                         for filter_ in handler.event_filters:
@@ -279,6 +290,8 @@ class PluginManager:
 
                         logger.debug(f"插入权限过滤器 {cmd_type} 到 {metadata.name} 的 {handler.handler_name} 方法。")
                     
+                metadata.star_handler_full_names = full_names
+
                 # 执行 initialize() 方法
                 if hasattr(metadata.star_cls, "initialize"):
                     await metadata.star_cls.initialize()
@@ -290,7 +303,7 @@ class PluginManager:
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
-        
+
         if not fail_rec:
             return True, None
         else:

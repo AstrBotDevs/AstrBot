@@ -165,7 +165,7 @@ class ProviderOpenAIOfficial(Provider):
                 or 'Function call is not supported' in str(e) \
                 or 'Function calling is not enabled' in str(e) \
                 or 'Tool calling is not supported' in str(e): # siliconcloud 
-                    logger.info(f"{self.get_model()} 不支持函数调用工具调用，已经自动去除")
+                    logger.info(f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。")
                     if 'tools' in payloads:
                         del payloads['tools']
                     llm_response = await self._query(payloads, None)
@@ -173,7 +173,7 @@ class ProviderOpenAIOfficial(Provider):
                 logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
                 
                 if 'tool' in str(e).lower() and 'support' in str(e).lower():
-                    logger.error(f"疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
+                    logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
                 
                 if 'Connection error.' in str(e):
                     proxy = os.environ.get("http_proxy", None)

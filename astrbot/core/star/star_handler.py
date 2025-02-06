@@ -52,7 +52,11 @@ class StarHandlerRegistry(Generic[T]):
         
     def remove(self, handler: StarHandlerMetadata):
         '''删除一个 Handler'''
-        self._handlers.remove(handler)
+        # self._handlers.remove(handler)
+        for i, h in enumerate(self._handlers):
+            if h[1] == handler:
+                self._handlers.pop(i)
+                break
         del self.star_handlers_map[handler.handler_full_name]
     
     def __iter__(self):

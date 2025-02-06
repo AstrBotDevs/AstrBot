@@ -6,6 +6,12 @@ from astrbot.core import logger
 from quart import request
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.star.filter.command import CommandFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.filter.regex import RegexFilter
+from astrbot.core.star.star_handler import EventType
 
 class PluginRoute(Route):
     def __init__(self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle, plugin_manager: PluginManager) -> None:
@@ -23,6 +29,15 @@ class PluginRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
         self.register_routes()
+        
+        self.translated_event_type = {
+            EventType.AdapterMessageEvent: "平台消息下发时",
+            EventType.OnLLMRequestEvent: "LLM 请求时",
+            EventType.OnLLMResponseEvent: "LLM 响应后",
+            EventType.OnDecoratingResultEvent: "回复消息前",
+            EventType.OnCallingFuncToolEvent: "函数工具",
+            EventType.OnAfterMessageSentEvent: "发送消息后"
+        }
     
     async def get_online_plugins(self):
         custom = request.args.get("custom_registry")
@@ -59,10 +74,58 @@ class PluginRoute(Route):
                 "desc": plugin.desc,
                 "version": plugin.version,
                 "reserved": plugin.reserved,
-                "activated": plugin.activated
+                "activated": plugin.activated,
+                "handlers": await self.get_plugin_handlers_info(plugin.star_handler_full_names)
             }
             _plugin_resp.append(_t)
         return Response().ok(_plugin_resp).__dict__
+    
+    async def get_plugin_handlers_info(self, handler_full_names: list[str]):
+        '''解析插件行为'''
+        handlers = []
+        
+        for handler_full_name in handler_full_names:
+            info = {}
+            handler = star_handlers_registry.star_handlers_map.get(handler_full_name, None)
+            if handler is None:
+                continue
+            info["event_type"] = handler.event_type.name
+            info["event_type_h"] = self.translated_event_type.get(handler.event_type, handler.event_type.name)
+            info["handler_full_name"] = handler.handler_full_name
+            info["desc"] = handler.desc
+            info["handler_name"] = handler.handler_name
+            
+            if handler.event_type == EventType.AdapterMessageEvent:
+                # 处理平台适配器消息事件
+                has_admin = False
+                for filter in handler.event_filters: # 正常handler就只有 1~2 个 filter，因此这里时间复杂度不会太高
+                    if isinstance(filter, CommandFilter):
+                        info["type"] = "指令"
+                        info["cmd"] = filter.command_name
+                    elif isinstance(filter, CommandGroupFilter):
+                        info["type"] = "指令组"
+                        info["cmd"] = filter.group_name
+                        info["sub_command"] = filter.print_cmd_tree(filter.sub_command_filters)
+                    elif isinstance(filter, RegexFilter):
+                        info["type"] = "正则匹配"
+                        info["cmd"] = filter.regex_str
+                    elif isinstance(filter, PermissionTypeFilter):
+                        has_admin = True
+                info["has_admin"] = has_admin
+                if "cmd" not in info:
+                    info["cmd"] = "未知"
+                if "type" not in info:
+                    info["type"] = "事件监听器"
+            else:
+                info["cmd"] = "自动触发"
+                info["type"] = "无"
+                
+            if not info["desc"]:
+                info["desc"] = "无描述"
+                
+            handlers.append(info)
+                    
+        return handlers
         
     async def install_plugin(self):
         post_data = await request.json

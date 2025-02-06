@@ -32,7 +32,7 @@
     "vue-router": "4.2.4",
     "vue3-apexcharts": "1.4.4",
     "vue3-print-nb": "0.1.4",
-    "vuetify": "3.3.14",
+    "vuetify": "3.7.11",
     "yup": "1.2.0"
   },
   "devDependencies": {

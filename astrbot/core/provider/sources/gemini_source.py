@@ -196,7 +196,7 @@ class ProviderGoogleGenAI(Provider):
                 if retry_cnt == 0:
                     llm_response = LLMResponse("err", "err: 请尝试  /reset 重置会话")
             elif "Function calling is not enabled" in str(e):
-                logger.info(f"{self.get_model()} 不支持函数调用工具调用，已经自动去除")
+                logger.info(f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。")
                 if 'tools' in payloads:
                     del payloads['tools']
                 llm_response = await self._query(payloads, None)
