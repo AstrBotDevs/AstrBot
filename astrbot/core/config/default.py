@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
         "group_icl_enable": False,
         "group_message_max_cnt": 300,
         "image_caption": False,
+        "image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "active_reply": {
             "enable": False,
@@ -722,6 +723,12 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "obvious_hint": True,
                         "hint": "启用后，当接收到图片消息时，会使用模型先将图片转述为文字再进行后续处理。推荐使用 gpt-4o-mini 模型。",
+                    },
+                    "image_caption_provider_id": {
+                        "description": "图像转述提供商 ID",
+                        "type": "string",
+                        "obvious_hint": True,
+                        "hint": "可选。图像转述提供商 ID。如为空将选择聊天使用的提供商。",
                     },
                     "image_caption_prompt": {
                         "description": "图像转述提示词",

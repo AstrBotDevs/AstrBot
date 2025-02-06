@@ -25,6 +25,7 @@ class LongTermMemory:
             self.max_cnt = 300
         self.image_caption = self.config["image_caption"]
         self.image_caption_prompt = self.config["image_caption_prompt"]
+        self.image_caption_provider_id = self.config["image_caption_provider_id"]
         
         self.active_reply = self.config["active_reply"]
         self.enable_active_reply = self.active_reply.get("enable", False)
@@ -42,7 +43,13 @@ class LongTermMemory:
         return cnt
 
     async def get_image_caption(self, image_url: str) -> str:
-        provider = self.context.get_using_provider()
+        
+        if not self.image_caption_provider_id:
+            provider = self.context.get_using_provider()
+        else:
+            provider = self.context.get_provider_by_id(self.image_caption_provider_id)
+            if not provider:
+                raise Exception(f"没有找到 ID 为 {self.image_caption_provider_id} 的提供商")
         response = await provider.text_chat(
             prompt=self.image_caption_prompt,
             session_id=uuid.uuid4().hex,
