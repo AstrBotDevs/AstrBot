@@ -122,7 +122,7 @@ class WakingCheckStage(Stage):
                 
                 if permission_not_pass:
                     if self.no_permission_reply:
-                        await event.send(MessageChain().message(f"ID {event.get_sender_id()} 权限不足"))
+                        await event.send(MessageChain().message(f"ID {event.get_sender_id()} 权限不足。通过 /sid 获取 ID 并请管理员添加。"))
                     event.stop_event()
                     return
                 
