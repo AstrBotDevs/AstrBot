@@ -15,7 +15,7 @@
       </v-list>
       <v-text-field
         v-model="newItem"
-        label="添加新项"
+        label="添加新项，按回车确认添加"
         @keyup.enter="addItem"
         clearable
         dense
