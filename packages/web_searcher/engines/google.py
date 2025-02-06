@@ -9,7 +9,6 @@ class Google(SearchEngine):
     def __init__(self) -> None:
         super().__init__()
         self.proxy = os.environ.get("https_proxy")
-        print(f"Google Search using proxy: {self.proxy}")
     
     async def search(self, query: str, num_results: int) -> List[SearchResult]:
         results = []
