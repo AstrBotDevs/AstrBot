@@ -655,7 +655,6 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
         '''在请求 LLM 前注入人格信息、Identifier、时间等 System Prompt'''
-        provider = self.context.get_using_provider()
         if self.prompt_prefix:
             req.prompt = self.prompt_prefix + req.prompt
             
@@ -666,8 +665,11 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             req.prompt = user_info + req.prompt
             
         if self.enable_datetime:
-            req.system_prompt += f"\nCurrent datetime: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-        
+            tz_offset = datetime.timedelta(hours=8)
+            tz = datetime.timezone(tz_offset)
+            current_time = datetime.datetime.now(tz).strftime('%Y-%m-%d %H:%M')
+            req.system_prompt += f"\nCurrent datetime: {current_time}\n"
+            
         if req.conversation:
             persona_id = req.conversation.persona_id
             if not persona_id and persona_id != "[%None]": # [%None] 为用户取消人格

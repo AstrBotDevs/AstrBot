@@ -127,7 +127,7 @@ class Main(star.Star):
             )
             reminder_time = datetime_str
         await self._save_data()
-        yield event.plain_result("成功设置待办事项。\n内容: " + text + "\n时间: " + reminder_time + "\n\n使用 /reminder ls 查看所有待办事项。")
+        yield event.plain_result("成功设置待办事项。\n内容: " + text + "\n时间: " + reminder_time + "\n\n使用 /reminder ls 查看所有待办事项。\n使用 /tool off reminder 关闭此功能。")
     
     @filter.command_group("reminder")
     def reminder(self):
