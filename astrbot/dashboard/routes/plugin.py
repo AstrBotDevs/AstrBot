@@ -24,7 +24,8 @@ class PluginRoute(Route):
             '/plugin/uninstall': ('POST', self.uninstall_plugin),
             '/plugin/market_list': ('GET', self.get_online_plugins),
             '/plugin/off': ('POST', self.off_plugin),
-            '/plugin/on': ('POST', self.on_plugin)
+            '/plugin/on': ('POST', self.on_plugin),
+            '/plugin/reload': ('POST', self.reload_plugins),
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
@@ -38,6 +39,18 @@ class PluginRoute(Route):
             EventType.OnCallingFuncToolEvent: "函数工具",
             EventType.OnAfterMessageSentEvent: "发送消息后"
         }
+        
+    async def reload_plugins(self):
+        data = await request.json
+        plugin_name = data.get("name", None)
+        try:
+            success, message = await self.plugin_manager.reload(plugin_name)
+            if not success:
+                return Response().error(message).__dict__
+            return Response().ok(None, "重载成功。").__dict__
+        except Exception as e:
+            logger.error(f"/api/extensions/reload: {traceback.format_exc()}")
+            return Response().error(str(e)).__dict__
     
     async def get_online_plugins(self):
         custom = request.args.get("custom_registry")

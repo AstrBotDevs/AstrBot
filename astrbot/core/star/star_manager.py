@@ -138,24 +138,45 @@ class PluginManager:
             )
             
         return metadata
-    
-    async def reload(self):
-        '''扫描并加载所有的插件'''
-        for smd in star_registry:
-            logger.debug(f"尝试终止插件 {smd.name} ...")
-            if hasattr(smd.star_cls, "__del__"):
-                smd.star_cls.__del__()
-            
-        star_handlers_registry.clear()
-        star_map.clear()
-        star_registry.clear()
-        for key in list(sys.modules.keys()):
-            if key.startswith("data.plugins") or key.startswith("packages"):
-                del sys.modules[key]
+        
+    async def reload(self, specified_plugin_name=None):
+        '''扫描并加载所有的插件 当 specified_module_path 指定时，重载指定插件'''
+        
+        specified_module_path = None
+        if specified_plugin_name:
+            for smd in star_registry:
+                if smd.name == specified_plugin_name:
+                    specified_module_path = smd.module_path
+                    break
+        
+        # 终止插件
+        if not specified_module_path:
+            for smd in star_registry:
+                logger.debug(f"尝试终止插件 {smd.name} ...")
+                if hasattr(smd.star_cls, "__del__"):
+                    smd.star_cls.__del__()
+                
+            star_handlers_registry.clear()
+            star_map.clear()
+            star_registry.clear()
+            for key in list(sys.modules.keys()):
+                if key.startswith("data.plugins") or key.startswith("packages"):
+                    del sys.modules[key]
+        else:
+            # 只重载指定插件
+            smd = star_map.get(specified_module_path)
+            if smd:
+                await self._unbind_plugin(smd.name, specified_module_path)
+                try:
+                    del sys.modules[specified_module_path]
+                except KeyError:
+                    logger.warning(f"模块 {specified_module_path} 未载入")
+
         
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
             return False, "未找到任何插件模块"
+        
         fail_rec = ""
         
         inactivated_plugins: list = sp.get("inactivated_plugins", [])
@@ -171,11 +192,15 @@ class PluginManager:
                 root_dir_name = plugin_module['pname'] # 插件的目录名
                 reserved = plugin_module.get('reserved', False) # 是否是保留插件。目前在 packages/ 目录下的都是保留插件。保留插件不可以卸载。
                 
+                path = "data.plugins." if not reserved else "packages."
+                path += root_dir_name + "." + module_str
+                
+                if specified_module_path and path != specified_module_path:
+                    continue
+                
                 logger.info(f"正在载入插件 {root_dir_name} ...")
                 
                 # 尝试导入模块
-                path = "data.plugins." if not reserved else "packages."
-                path += root_dir_name + "." + module_str
                 try:
                     module = __import__(path, fromlist=[module_str])
                 except (ModuleNotFoundError, ImportError):

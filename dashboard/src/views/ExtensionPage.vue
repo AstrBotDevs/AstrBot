@@ -20,7 +20,7 @@ import { max } from 'date-fns';
 
           <v-dialog max-width="500px">
             <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" v-if="extension_data.message" icon  size="small" color="error"
+              <v-btn v-bind="props" v-if="extension_data.message" icon size="small" color="error"
                 style="margin-left: auto;" variant="plain">
                 <v-icon>mdi-alert-circle</v-icon>
               </v-btn>
@@ -29,9 +29,9 @@ import { max } from 'date-fns';
               <v-card-title class="headline">错误信息</v-card-title>
               <v-card-text>{{ extension_data.message }}
                 <br>
-                <small>详情请检查控制台</small> 
+                <small>详情请检查控制台</small>
               </v-card-text>
-              
+
               <v-card-actions>
                 <v-spacer></v-spacer>
                 <v-btn color="primary" text>关闭</v-btn>
@@ -44,20 +44,19 @@ import { max } from 'date-fns';
     <v-col cols="12" md="6" lg="3" v-for="extension in extension_data.data">
       <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" :logo="extension?.logo"
         style="margin-bottom: 4px;">
-        <div style="min-height: 130px; max-height: 130px; overflow: none;">
+        <div style="min-height: 135px; max-height: 135px; overflow: none;">
           <span style="font-weight: bold;">By @{{ extension.author }}</span>
           <span> | 插件有 {{ extension.handlers.length }} 个行为</span>
-          <p>{{ extension.desc }}</p>
+          <p style="margin-top: 8px;">{{ extension.desc }}</p>
+          <a style="font-size: 12px; cursor: pointer; text-decoration: underline; color: #555;" @click="reloadPlugin(extension.name)">重载插件</a>
         </div>
-        <div class="d-flex align-center gap-2">
-          <div v-if="!extension.reserved">
-            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
-              @click="openExtensionConfig(extension.name)">配置</v-btn>
-            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
-              @click="updateExtension(extension.name)">更新</v-btn>
-            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
-              @click="uninstallExtension(extension.name)">卸载</v-btn>
-          </div>
+        <div class="d-flex align-center gap-2 " style="overflow-x: auto;">
+          <v-btn v-if="!extension.reserved" class="text-none mr-2" size="small" text="Read" variant="flat" border
+            @click="openExtensionConfig(extension.name)">配置</v-btn>
+          <v-btn v-if="!extension.reserved" class="text-none mr-2" size="small" text="Read" variant="flat" border
+            @click="updateExtension(extension.name)">更新</v-btn>
+          <v-btn v-if="!extension.reserved" class="text-none mr-2" size="small" text="Read" variant="flat" border
+            @click="uninstallExtension(extension.name)">卸载</v-btn>
           <!-- <span v-else>保留插件</span> -->
           <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border v-if="extension.activated"
             @click="pluginOff(extension)">禁用</v-btn>
@@ -562,6 +561,21 @@ export default {
       this.selectedPlugin = plugin;
       this.showPluginInfoDialog = true;
     },
+    reloadPlugin(plugin_name) {
+      axios.post('/api/plugin/reload',
+        {
+          name: plugin_name
+        }).then((res) => {
+          if (res.data.status === "error") {
+            this.onLoadingDialogResult(2, res.data.message, -1);
+            return;
+          }
+          this.toast("重载成功", "success");
+          this.getExtensions();
+        }).catch((err) => {
+          this.toast(err, "error");
+        });
+    }
   },
 }
 
