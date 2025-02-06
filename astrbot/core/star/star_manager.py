@@ -146,7 +146,6 @@ class PluginManager:
                 smd.star_cls.__del__()
             
         star_handlers_registry.clear()
-        star_handlers_registry.star_handlers_map.clear()
         star_map.clear()
         star_registry.clear()
         for key in list(sys.modules.keys()):

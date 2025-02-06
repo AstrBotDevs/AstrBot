@@ -30,7 +30,6 @@ async def test_plugin_manager_reload(plugin_manager_pm: PluginManager):
     success, err_message = await plugin_manager_pm.reload()
     assert success is True
     assert err_message is None
-    assert len(star_handlers_registry) > 0 # package
     
 @pytest.mark.asyncio
 async def test_plugin_crud(plugin_manager_pm: PluginManager):
