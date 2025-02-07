@@ -30,7 +30,6 @@ class ResultDecorateStage:
         # 分段回复
         self.enable_segmented_reply = ctx.astrbot_config['platform_settings']['segmented_reply']['enable']
         self.only_llm_result = ctx.astrbot_config['platform_settings']['segmented_reply']['only_llm_result']
-        self.seg_prompt = ctx.astrbot_config['platform_settings']['segmented_reply']['seg_prompt']
         self.regex = ctx.astrbot_config['platform_settings']['segmented_reply']['regex']
 
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
@@ -57,19 +56,6 @@ class ResultDecorateStage:
                     new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
-                            
-                            if self.seg_prompt:
-                                try:
-                                    llm_resp = await self.ctx.plugin_manager.context.get_using_provider().text_chat(
-                                        prompt=f"{self.seg_prompt}\n{comp.text}",
-                                    )
-                                    comp.text = llm_resp.completion_text
-                                except BaseException as e:
-                                    traceback.print_exc()
-                                    logger.warning("使用 LLM 分段回复失败。将不分段回复。： " + str(e))
-                                    new_chain.append(comp)
-                                    continue
-                            
                             split_response = re.findall(self.regex, comp.text)
                             if not split_response:
                                 new_chain.append(comp)
