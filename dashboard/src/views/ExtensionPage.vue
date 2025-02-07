@@ -381,7 +381,7 @@ export default {
       if (this.upload_file !== null) {
         this.toast("正在从文件安装插件", "primary");
         const formData = new FormData();
-        formData.append('file', this.upload_file[0]);
+        formData.append('file', this.upload_file);
         axios.post('/api/plugin/install-upload', formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
