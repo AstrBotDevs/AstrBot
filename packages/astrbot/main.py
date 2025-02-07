@@ -227,6 +227,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("wl")
     async def wl(self, event: AstrMessageEvent, sid: str):
+        '''添加白名单。wl <sid>'''
         self.context.get_config()['platform_settings']['id_whitelist'].append(sid)
         self.context.get_config().save_config()
         event.set_result(MessageEventResult().message("添加白名单成功。"))
@@ -234,6 +235,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dwl")
     async def dwl(self, event: AstrMessageEvent, sid: str):
+        '''删除白名单。dwl <sid>'''
         try:
             self.context.get_config()['platform_settings']['id_whitelist'].remove(sid)
             self.context.get_config().save_config()
@@ -274,7 +276,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent):
-        
+        '''重置 LLM 会话'''
         if not self.context.get_using_provider():
             message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
             return
@@ -298,7 +300,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.command("model")
     async def model_ls(self, message: AstrMessageEvent, idx_or_name: Union[int, str] = None):
-                
+        '''查看或者切换模型'''
         if not self.context.get_using_provider():
             message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
             return

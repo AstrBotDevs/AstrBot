@@ -14,11 +14,22 @@ class NetworkRenderStrategy(RenderStrategy):
             base_url = ASTRBOT_T2I_DEFAULT_ENDPOINT
         self.BASE_RENDER_URL = base_url
         self.TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template")
+        
+        if self.BASE_RENDER_URL.endswith("/"):
+            self.BASE_RENDER_URL = self.BASE_RENDER_URL[:-1]
+        if not self.BASE_RENDER_URL.endswith("text2img"):
+            self.BASE_RENDER_URL += "/text2img"
 
     def set_endpoint(self, base_url: str):
         if not base_url:
             base_url = ASTRBOT_T2I_DEFAULT_ENDPOINT
         self.BASE_RENDER_URL = base_url
+        
+        if self.BASE_RENDER_URL.endswith("/"):
+            self.BASE_RENDER_URL = self.BASE_RENDER_URL[:-1]
+        if not self.BASE_RENDER_URL.endswith("text2img"):
+            self.BASE_RENDER_URL += "/text2img"
+
 
     async def render_custom_template(self, tmpl_str: str, tmpl_data: dict, return_url: bool=True) -> str:
         '''使用自定义文转图模板'''
