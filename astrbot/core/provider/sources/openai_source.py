@@ -243,6 +243,9 @@ class ProviderOpenAIOfficial(Provider):
                     image_data = await self.encode_image_bs64(image_path)
                 else:
                     image_data = await self.encode_image_bs64(image_url)
+                if not image_data:
+                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                    continue
                 user_content["content"].append({"type": "image_url", "image_url": {"url": image_data}})
             return user_content
         else:
