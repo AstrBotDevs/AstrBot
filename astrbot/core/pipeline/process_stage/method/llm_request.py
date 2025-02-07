@@ -129,6 +129,9 @@ class LLMRequestSubStage(Stage):
                     req.prompt += extra_prompt
                     async for _ in self.process(event, _nested=True):
                         yield
+                else:
+                    if llm_response.completion_text:
+                        event.set_result(MessageEventResult().message(llm_response.completion_text))
 
         except BaseException as e:
             logger.error(traceback.format_exc())

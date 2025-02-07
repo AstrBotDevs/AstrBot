@@ -80,12 +80,14 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception("API 返回的 completion 为空。")
         choice = completion.choices[0]
         
+        llm_response = LLMResponse("assistant")
+                
         if choice.message.content:
             # text completion
             completion_text = str(choice.message.content).strip()
-
-            return LLMResponse("assistant", completion_text, raw_completion=completion)
-        elif choice.message.tool_calls:
+            llm_response.completion_text = completion_text
+        
+        if choice.message.tool_calls:
             # tools call (function calling)
             args_ls = []
             func_name_ls = []
@@ -95,10 +97,15 @@ class ProviderOpenAIOfficial(Provider):
                         args = json.loads(tool_call.function.arguments)
                         args_ls.append(args)
                         func_name_ls.append(tool_call.function.name)
-            return LLMResponse(role="tool", tools_call_args=args_ls, tools_call_name=func_name_ls, raw_completion=completion)
-        else:
+            llm_response.role = "tool"
+            llm_response.tools_call_args = args_ls
+            llm_response.tools_call_name = func_name_ls
+
+        if not llm_response.completion_text and not llm_response.tools_call_args:
             logger.error(f"API 返回的 completion 无法解析：{completion}。")
-            raise Exception("Internal Error")
+            raise Exception(f"API 返回的 completion 无法解析：{completion}。")
+        
+        return llm_response
 
     async def text_chat(
         self,
