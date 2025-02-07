@@ -25,18 +25,22 @@ import { max } from 'date-fns';
                 <v-icon>mdi-alert-circle</v-icon>
               </v-btn>
             </template>
-            <v-card>
-              <v-card-title class="headline">错误信息</v-card-title>
-              <v-card-text>{{ extension_data.message }}
-                <br>
-                <small>详情请检查控制台</small>
-              </v-card-text>
 
-              <v-card-actions>
-                <v-spacer></v-spacer>
-                <v-btn color="primary" text>关闭</v-btn>
-              </v-card-actions>
-            </v-card>
+            <template v-slot:default="{ isActive }">
+              <v-card>
+                <v-card-title class="headline">错误信息</v-card-title>
+                <v-card-text>{{ extension_data.message }}
+                  <br>
+                  <small>详情请检查控制台</small>
+                </v-card-text>
+
+                <v-card-actions>
+                  <v-spacer></v-spacer>
+                  <v-btn color="primary" text @click="isActive.value = false">关闭</v-btn>
+                </v-card-actions>
+              </v-card>
+            </template>
+
           </v-dialog>
         </div>
       </div>
@@ -48,7 +52,8 @@ import { max } from 'date-fns';
           <span style="font-weight: bold;">By @{{ extension.author }}</span>
           <span> | 插件有 {{ extension.handlers.length }} 个行为</span>
           <p style="margin-top: 8px;">{{ extension.desc }}</p>
-          <a style="font-size: 12px; cursor: pointer; text-decoration: underline; color: #555;" @click="reloadPlugin(extension.name)">重载插件</a>
+          <a style="font-size: 12px; cursor: pointer; text-decoration: underline; color: #555;"
+            @click="reloadPlugin(extension.name)">重载插件</a>
         </div>
         <div class="d-flex align-center gap-2 " style="overflow-x: auto;">
           <v-btn v-if="!extension.reserved" class="text-none mr-2" size="small" text="Read" variant="flat" border
