@@ -80,6 +80,7 @@ AstrBot 指令:
 /persona: 人格情景(op)
 /tool ls: 函数工具
 /key: API Key(op)
+/websearch: 网页搜索
 
 [其他]
 /set <变量名> <值>: 为会话定义变量。适用于 Dify 工作流输入。

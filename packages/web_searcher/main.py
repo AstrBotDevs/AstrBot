@@ -9,7 +9,7 @@ from .engines.sogo import Sogo
 from .engines.google import Google
 from readability import Document
 from bs4 import BeautifulSoup
-from .engines.config import HEADERS, USER_AGENTS
+from .engines import HEADERS, USER_AGENTS
 
 
 @star.register(name="astrbot-web-searcher", desc="让 LLM 具有网页检索能力", author="Soulter", version="1.14.514")
@@ -85,19 +85,19 @@ class Main(star.Star):
         RESULT_NUM = 5
         try:
             results = await self.google.search(query, RESULT_NUM)
-        except BaseException as e:
+        except Exception as e:
             logger.error(f"google search error: {e}, try the next one...")
         if len(results) == 0:
             logger.debug("search google failed")
             try:
                 results = await self.bing_search.search(query, RESULT_NUM)
-            except BaseException as e:
+            except Exception as e:
                 logger.error(f"bing search error: {e}, try the next one...")
         if len(results) == 0:
             logger.debug("search bing failed")
             try:
                 results = await self.sogo_search.search(query, RESULT_NUM)
-            except BaseException as e:
+            except Exception as e:
                 logger.error(f"sogo search error: {e}")
         if len(results) == 0:
             logger.debug("search sogo failed")

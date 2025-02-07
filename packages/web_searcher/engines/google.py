@@ -1,7 +1,7 @@
 import os
 from googlesearch import search
 
-from .engine import SearchEngine, SearchResult
+from . import SearchEngine, SearchResult
 
 from typing import List
 
