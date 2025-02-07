@@ -64,8 +64,7 @@ DEFAULT_CONFIG = {
             "method": "possibility_reply",
             "possibility_reply": 0.1,
             "prompt": "",
-        },
-        "put_history_to_prompt": True,
+        }
     },
     "content_safety": {
         "internal_keywords": {"enable": True, "extra_keywords": []},
@@ -763,12 +762,6 @@ CONFIG_METADATA_2 = {
                                 "hint": "提示词。当提示词为空时，如果触发回复，则向 LLM 请求的是触发的消息的内容；否则是提示词。此项可以和定时回复（暂未实现）配合使用。",
                             },
                         },
-                    },
-                    "put_history_to_prompt": {
-                        "description": "将群聊历史记录作为 prompt",
-                        "type": "bool",
-                        "obvious_hint": True,
-                        "hint": "需要先启用 group_icl_enable。此功能会将群聊历史记录放到 prompt 再请求。如果关闭，则是放在 system_prompt。如果开启了主动回复，建议启用，模型能够更好地完成回复任务。",
                     }
                 },
             },

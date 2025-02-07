@@ -33,7 +33,7 @@ class LongTermMemory:
         self.ar_possibility = self.active_reply["possibility_reply"]
         self.ar_prompt = self.active_reply.get("prompt", "")
         
-        self.put_history_to_prompt = self.config["put_history_to_prompt"]
+        # self.put_history_to_prompt = self.config["put_history_to_prompt"]
         
     async def remove_session(self, event: AstrMessageEvent) -> int:
         cnt = 0
@@ -110,11 +110,11 @@ class LongTermMemory:
         
         chats_str = '\n---\n'.join(self.session_chats[event.unified_msg_origin])
         
-        if self.put_history_to_prompt:
+        if self.enable_active_reply:
             prompt = req.prompt
             req.prompt = f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
             req.prompt += f"\nNow, a new message is coming: `{prompt}`. Please react to it. Only output your response and do not output any other information."
-            req.contexts = [] # 清空上下文，当使用了群聊增强，所有聊天记录都在一个prompt中。
+            req.contexts = [] # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
         else:
             req.system_prompt += "You are now in a chatroom. The chat history is as follows: \n"
             req.system_prompt += chats_str
