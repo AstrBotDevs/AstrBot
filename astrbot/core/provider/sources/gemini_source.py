@@ -181,9 +181,9 @@ class ProviderGoogleGenAI(Provider):
             llm_response = await self._query(payloads, func_tool)
         except Exception as e:
             if "maximum context length" in str(e):
-                retry_cnt = 10
+                retry_cnt = 20
                 while retry_cnt > 0:
-                    logger.warning(f"请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。")
+                    logger.warning(f"请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}")
                     try:
                         await self.pop_record(context_query)
                         llm_response = await self._query(payloads, func_tool)

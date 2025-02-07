@@ -142,15 +142,16 @@ class ProviderOpenAIOfficial(Provider):
             # 尝试删除所有 image
             new_contexts = await self._remove_image_from_context(context_query)
             payloads['messages'] = new_contexts
+            context_query = new_contexts
             llm_response = await self._query(payloads, func_tool)
         except Exception as e:
             if "maximum context length" in str(e):
                 # 重试 10 次
-                retry_cnt = 10
+                retry_cnt = 20
                 while retry_cnt > 0:
-                    logger.warning("上下文长度超过限制。尝试弹出最早的记录然后重试。")
+                    logger.warning(f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}")
                     try:
-                        await self.pop_record(session_id)
+                        await self.pop_record(context_query)
                         llm_response = await self._query(payloads, func_tool)
                         break
                     except Exception as e:
