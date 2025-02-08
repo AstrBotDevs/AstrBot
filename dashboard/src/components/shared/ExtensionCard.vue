@@ -2,7 +2,8 @@
 const props = defineProps({
   title: String,
   link: String,
-  logo: String
+  logo: String,
+  has_update: Boolean,
 });
 
 const open = (link: string | undefined) => {
@@ -17,6 +18,7 @@ const open = (link: string | undefined) => {
         <img v-if="logo" :src="logo" alt="logo" style="width: 40px; height: 40px; margin-right: 8px;">
         <v-card-title style="font-size: 16px;">{{ props.title }}</v-card-title>
         <v-spacer></v-spacer>
+        <v-icon color="success" v-if="has_update">mdi-arrow-up-bold</v-icon>
         <v-btn size="small" text="Read" variant="flat" border  @click="open(props.link)">帮助</v-btn>
       </div>
     </v-card-item>

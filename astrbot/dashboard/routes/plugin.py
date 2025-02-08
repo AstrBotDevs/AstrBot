@@ -1,6 +1,5 @@
 import traceback
 import aiohttp
-import uuid
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
 from quart import request
@@ -49,7 +48,7 @@ class PluginRoute(Route):
                 return Response().error(message).__dict__
             return Response().ok(None, "重载成功。").__dict__
         except Exception as e:
-            logger.error(f"/api/extensions/reload: {traceback.format_exc()}")
+            logger.error(f"/api/plugin/reload: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
     
     async def get_online_plugins(self):
@@ -59,7 +58,6 @@ class PluginRoute(Route):
             urls = [custom]
         else:
             urls = [
-                "https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json",
                 "https://api.soulter.top/astrbot/plugins"
             ]
             
@@ -88,6 +86,7 @@ class PluginRoute(Route):
                 "version": plugin.version,
                 "reserved": plugin.reserved,
                 "activated": plugin.activated,
+                "online_vesion": "",
                 "handlers": await self.get_plugin_handlers_info(plugin.star_handler_full_names),
             }
             _plugin_resp.append(_t)
@@ -190,7 +189,7 @@ class PluginRoute(Route):
             logger.info(f"更新插件 {plugin_name} 成功。")
             return Response().ok(None, "更新成功。").__dict__
         except Exception as e:
-            logger.error(f"/api/extensions/update: {traceback.format_exc()}")
+            logger.error(f"/api/plugin/update: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
         
     async def off_plugin(self):
@@ -201,7 +200,7 @@ class PluginRoute(Route):
             logger.info(f"停用插件 {plugin_name} 。")
             return Response().ok(None, "停用成功。").__dict__
         except Exception as e:
-            logger.error(f"/api/extensions/off: {traceback.format_exc()}")
+            logger.error(f"/api/plugin/off: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
     async def on_plugin(self):
@@ -212,5 +211,5 @@ class PluginRoute(Route):
             logger.info(f"启用插件 {plugin_name} 。")
             return Response().ok(None, "启用成功。").__dict__
         except Exception as e:
-            logger.error(f"/api/extensions/on: {traceback.format_exc()}")
+            logger.error(f"/api/plugin/on: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__

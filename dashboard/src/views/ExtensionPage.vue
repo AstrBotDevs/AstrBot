@@ -46,11 +46,20 @@ import { max } from 'date-fns';
       </div>
     </v-col>
     <v-col cols="12" md="6" lg="3" v-for="extension in extension_data.data">
-      <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" :logo="extension?.logo"
+      <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" :logo="extension?.logo" :has_update="extension.has_update"
         style="margin-bottom: 4px;">
-        <div style="min-height: 135px; max-height: 135px; overflow: none;">
-          <span style="font-weight: bold;">By @{{ extension.author }}</span>
-          <span> | 插件有 {{ extension.handlers.length }} 个行为</span>
+        <div style="min-height: 140px; max-height: 140px; overflow: none;">
+          <div>
+            <span style="font-weight: bold;">By @{{ extension.author }}</span>
+            <span> | 插件有 {{ extension.handlers.length }} 个行为</span>
+          </div>
+          <span> 当前: <v-chip size="small" color="primary">{{ extension.version }}</v-chip>
+            <span v-if="extension.online_version">
+              | 最新: <v-chip size="small" color="primary">{{ extension.online_version }}</v-chip>
+            </span>
+            <span v-if="extension.has_update" style="font-weight: bold;">有更新
+            </span>
+          </span>
           <p style="margin-top: 8px;">{{ extension.desc }}</p>
           <a style="font-size: 12px; cursor: pointer; text-decoration: underline; color: #555;"
             @click="reloadPlugin(extension.name)">重载插件</a>
@@ -329,6 +338,8 @@ export default {
         { title: '作者', value: 'author' },
         { title: '操作', value: 'actions', sortable: false }
       ],
+
+      alreadyCheckUpdate: false
     }
   },
   mounted() {
@@ -367,10 +378,29 @@ export default {
     getExtensions() {
       axios.get('/api/plugin/get').then((res) => {
         this.extension_data = res.data;
-
         this.checkAlreadyInstalled();
+        this.checkUpdate()
       });
     },
+
+    checkUpdate() {
+      // 遍历 extension_data 和 pluginMarketData，检查是否有更新\
+      for (let i = 0; i < this.extension_data.data.length; i++) {
+        for (let j = 0; j < this.pluginMarketData.length; j++) {
+          console.log(this.extension_data.data[i].repo, this.pluginMarketData[j].repo);
+          if (this.extension_data.data[i].repo === this.pluginMarketData[j].repo ||
+            this.extension_data.data[i].name === this.pluginMarketData[j].name) {
+            this.extension_data.data[i].online_version = this.pluginMarketData[j].version;
+            if (this.extension_data.data[i].version !== this.pluginMarketData[j].version && this.pluginMarketData[j].version !== "未知") {
+              this.extension_data.data[i].has_update = true;
+            } else {
+              this.extension_data.data[i].has_update = false;
+            }
+          }
+        }
+      }
+    },
+
     newExtension() {
       if (this.extension_url === "" && this.upload_file === null) {
         this.toast("请填写插件链接或上传插件文件", "error");
@@ -529,11 +559,13 @@ export default {
             "desc": res.data.data[key].desc,
             "author": res.data.data[key].author,
             "repo": res.data.data[key].repo,
-            "installed": false
+            "installed": false,
+            "version": res.data.data[key]?.version ? res.data.data[key].version : "未知",
           })
         }
         this.pluginMarketData = data;
         this.checkAlreadyInstalled();
+        this.checkUpdate();
       }).catch((err) => {
         this.toast("获取插件市场数据失败: " + err, "error");
       });
