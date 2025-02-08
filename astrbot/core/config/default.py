@@ -435,6 +435,7 @@ CONFIG_METADATA_2 = {
                         "dify_api_key": "",
                         "dify_api_base": "https://api.dify.ai/v1",
                         "dify_workflow_output_key": "",
+                        "timeout": 60,
                     },
                     "whisper(API)": {
                         "id": "whisper",

@@ -31,7 +31,9 @@ class ProviderDify(Provider):
             raise Exception("Dify API 类型不能为空。")
         self.model_name = "dify"
         self.workflow_output_key = provider_config.get("dify_workflow_output_key", "astrbot_wf_output")
-        
+        self.timeout = provider_config.get("timeout", 120)
+        if isinstance(self.timeout, str):
+            self.timeout = int(self.timeout)
         self.conversation_ids = {}
 
 
@@ -78,7 +80,8 @@ class ProviderDify(Provider):
                     query=prompt,
                     user=session_id,
                     conversation_id=conversation_id,
-                    files=files_payload
+                    files=files_payload,
+                    timeout=self.timeout
                 ):
                     logger.debug(f"dify resp chunk: {chunk}")
                     if chunk['event'] == "message" or \
@@ -96,7 +99,8 @@ class ProviderDify(Provider):
                         **session_var
                     },
                     user=session_id,
-                    files=files_payload
+                    files=files_payload,
+                    timeout=self.timeout
                 ):
                     match chunk['event']:
                         case "workflow_started":
