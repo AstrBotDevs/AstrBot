@@ -1,9 +1,7 @@
 import os
-import random
-import asyncio
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Plain, Image, Record
+from astrbot.api.message_components import Plain, Image, Record, At
 from aiocqhttp import CQHttp
 from astrbot.core.utils.io import file_to_base64, download_image_by_url
 
@@ -32,6 +30,10 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     bs64_data = file_to_base64(segment.file)
                 d['data'] = {
                     'file': bs64_data,
+                }
+            if isinstance(segment, At):
+                d['data'] = {
+                    'qq': str(segment.qq) # 转换为字符串
                 }
             ret.append(d)
         return ret

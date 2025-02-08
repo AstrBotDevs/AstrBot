@@ -3,7 +3,7 @@ from ..context import PipelineContext
 from typing import Union, AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
-from astrbot.core.message.components import At
+from astrbot.core.message.components import At, Reply
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
@@ -43,7 +43,7 @@ class WakingCheckStage(Stage):
             if event.message_str.startswith(wake_prefix):
                 if (
                     not event.is_private_chat()
-                    and isinstance(messages[0], At)
+                    and (isinstance(messages[0], At) or isinstance(messages[0], Reply))
                     and str(messages[0].qq) != str(event.get_self_id())
                     and str(messages[0].qq) != "all"
                 ):
