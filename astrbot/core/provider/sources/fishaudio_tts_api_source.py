@@ -96,7 +96,10 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             headers=self.headers,
             content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
         ) as response:
-            with open(path, "wb") as f:
-                async for chunk in response.aiter_bytes():
-                    f.write(chunk)
-        return path
+            if response.headers["content-type"] == "audio/wav":
+                with open(path, "wb") as f:
+                    async for chunk in response.aiter_bytes():
+                        f.write(chunk)
+                return path
+            text = await response.aread()
+            raise Exception(f"Fish Audio API请求失败: {text}")
