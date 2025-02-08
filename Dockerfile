@@ -12,7 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python -m pip install -r requirements.txt
+RUN python -m pip install -r requirements.txt --no-cache-dir
+
+RUN python -m pip install socksio wechatpy cryptography --no-cache-dir
 
 EXPOSE 6185 
 EXPOSE 6186
