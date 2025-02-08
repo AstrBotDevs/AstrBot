@@ -3,6 +3,8 @@ import asyncio
 import aiohttp
 import quart
 import base64
+import datetime
+import tzdata
 
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.api.message_components import Plain, Image, At, Record
@@ -66,6 +68,17 @@ class SimpleGewechatClient():
         if type_name == "Offline":
             logger.critical("收到 gewechat 下线通知。")
             return
+        
+        if 'Data' in data and 'CreateTime' in data['Data']:
+            # 得到系统 UTF+8 的 ts
+            tz_offset = datetime.timedelta(hours=8)
+            tz = datetime.timezone(tz_offset)
+            ts = datetime.datetime.now(tz).timestamp()
+            create_time = data['Data']['CreateTime']
+            if create_time < ts - 30:
+                logger.warning(f"消息时间戳过旧: {create_time}，当前时间戳: {ts}")
+                return
+
         
         abm = AstrBotMessage()
         d = data['Data']
@@ -143,7 +156,7 @@ class SimpleGewechatClient():
                     abm.message.append(Record(file=file_path, url=file_path))
                 
             case _:
-                logger.error(f"未实现的消息类型: {d['MsgType']}")
+                logger.info(f"未实现的消息类型: {d['MsgType']}")
                 return
         
         logger.info(f"abm: {abm}")
