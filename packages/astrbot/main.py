@@ -6,6 +6,7 @@ import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
+from astrbot.api.platform import MessageType
 from astrbot.api.provider import Personality, ProviderRequest, LLMResponse
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
@@ -632,7 +633,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                     session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(event.unified_msg_origin)
                     
                     if not session_curr_cid:
-                        logger.error("当前未处于对话状态，无法主动回复，请使用 /switch 切换或者 /new 创建。")
+                        logger.error("当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 切换或者 /new 创建一个会话。")
                         return
                     
                     conv = await self.context.conversation_manager.get_conversation(
