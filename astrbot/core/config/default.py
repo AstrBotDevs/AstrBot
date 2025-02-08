@@ -278,7 +278,7 @@ CONFIG_METADATA_2 = {
                         "items": {"type": "string"},
                         "obvious_hint": True,
                         "hint": "此功能解决由于文件系统不一致导致路径不存在的问题。格式为 <原路径>:<映射路径>。如 `/app/.config/QQ:/var/lib/docker/volumes/xxxx/_data`。这样，当消息平台下发的事件中图片和语音路径以 `/app/.config/QQ` 开头时，开头被替换为 `/var/lib/docker/volumes/xxxx/_data`。这在 AstrBot 或者平台协议端使用 Docker 部署时特别有用。",
-                    }
+                    },
                 },
             },
             "content_safety": {
@@ -462,6 +462,15 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                     },
+                    "fishaudio_tts(API)": {
+                        "id": "fishaudio_tts",
+                        "type": "fishaudio_tts_api",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.fish-audio.cn/v1",
+                        "fishaudio-tts-character": "可莉",
+                        "timeout": "20",
+                    },
                 },
                 "items": {
                     "timeout": {
@@ -474,6 +483,12 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "obvious_hint": True,
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
+                    },
+                    "fishaudio-tts-character": {
+                        "description": "character",
+                        "type": "string",
+                        "obvious_hint": True,
+                        "hint": "fishaudio TTS 的角色。默认为可莉。更多角色请访问：https://fish.audio/zh-CN/discovery",
                     },
                     "whisper_hint": {
                         "description": "本地部署 Whisper 模型须知",
@@ -728,7 +743,7 @@ CONFIG_METADATA_2 = {
                     },
                     "image_caption_prompt": {
                         "description": "图像转述提示词",
-                        "type": "string"
+                        "type": "string",
                     },
                     "active_reply": {
                         "description": "主动回复",
@@ -759,7 +774,7 @@ CONFIG_METADATA_2 = {
                                 "hint": "提示词。当提示词为空时，如果触发回复，则向 LLM 请求的是触发的消息的内容；否则是提示词。此项可以和定时回复（暂未实现）配合使用。",
                             },
                         },
-                    }
+                    },
                 },
             },
         },
