@@ -118,7 +118,7 @@ class RegisteringCommandable():
 def register_event_message_type(event_message_type: EventMessageType, **kwargs):
     '''注册一个 EventMessageType'''
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, kwargs)
+        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, **kwargs)
         handler_md.event_filters.append(EventMessageTypeFilter(event_message_type))
         return awaitable
 
