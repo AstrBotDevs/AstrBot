@@ -649,7 +649,8 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                         prompt=prompt,
                         func_tool_manager=self.context.get_llm_tool_manager(),
                         session_id=event.session_id,
-                        contexts=history if history else []
+                        contexts=history if history else [],
+                        conversation=conv,
                     )
                 except BaseException as e:
                     logger.error(f"主动回复失败: {e}")

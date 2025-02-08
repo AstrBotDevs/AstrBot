@@ -111,7 +111,7 @@ class ProviderOpenAIOfficial(Provider):
         self,
         prompt: str,
         session_id: str=None,
-        image_urls: List[str]=None,
+        image_urls: List[str]=[],
         func_tool: FuncCall=None,
         contexts=[],
         system_prompt=None,

@@ -39,9 +39,8 @@ class ResultDecorateStage:
         
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnDecoratingResultEvent)
         for handler in handlers:
-            # TODO: 如何让这里的 handler 也能使用 LLM 能力。也许需要将 LLMRequestSubStage 提取出来。
             await handler.handler(event)
-        
+            
         if len(result.chain) > 0:
             # 回复前缀
             if self.reply_prefix:

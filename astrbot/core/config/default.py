@@ -69,7 +69,9 @@ DEFAULT_CONFIG = {
         "internal_keywords": {"enable": True, "extra_keywords": []},
         "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
     },
-    "admins_id": [],
+    "admins_id": [
+        "astrbot"
+    ],
     "t2i": False,
     "t2i_word_threshold": 150,
     "http_proxy": "",
