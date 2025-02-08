@@ -4,7 +4,6 @@ import aiohttp
 import quart
 import base64
 import datetime
-import tzdata
 
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.api.message_components import Plain, Image, At, Record

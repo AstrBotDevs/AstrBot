@@ -68,12 +68,14 @@ def register_command(command_name: str = None, *args, **kwargs):
         add_to_event_filters = True
     
     def decorator(awaitable):
+        if not add_to_event_filters:
+            kwargs['sub_command'] = True # 打一个标记，表示这是一个子指令，再 wakingstage 阶段这个 handler 将会直接被跳过（其父指令会接管）
         handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, **kwargs)
         new_command.init_handler_md(handler_md)
         if add_to_event_filters:
             # 裸指令
             handler_md.event_filters.append(new_command)
-        
+             
         return awaitable
 
     return decorator
