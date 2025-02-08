@@ -71,8 +71,6 @@ class ProviderFishAudioTTSAPI(TTSProvider):
                 response = await client.get(
                     "/model", params=params, headers=self.headers
                 )
-                with open("data.txt", "w") as f:
-                    f.write(response.text)
                 resp_data = response.json()
                 if resp_data["total"] == 0:
                     continue
