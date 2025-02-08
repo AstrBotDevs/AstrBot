@@ -83,7 +83,7 @@ class ResultDecorateStage:
                                 logger.error(f"由于 TTS 音频文件没找到，消息段转语音失败: {comp.text}")
                                 new_chain.append(comp)
                         except BaseException:
-                            traceback.print_exc()
+                            logger.error(traceback.format_exc())
                             logger.error("TTS 失败，使用文本发送。")
                             new_chain.append(comp)
                     else:
