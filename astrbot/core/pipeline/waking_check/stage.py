@@ -86,6 +86,10 @@ class WakingCheckStage(Stage):
             if len(handler.event_filters) == 0:
                 # 不可能有这种情况, 也不允许有这种情况
                 continue
+            
+            if 'sub_command' in handler.extras_configs:
+                # 如果是子指令
+                continue
 
             for filter in handler.event_filters:
                 try:
