@@ -325,11 +325,13 @@ class RedBag(BaseMessageComponent):
 
 
 class Poke(BaseMessageComponent):
-    type: ComponentType = "Poke"
-    qq: int
+    type: str = ""
+    id: T.Optional[int] = 0
+    qq: T.Optional[int] = 0
 
-    def __init__(self, **_):
-        super().__init__(**_)
+    def __init__(self, type: str, **_):
+        type = f"Poke:{type}"
+        super().__init__(type=type, **_)
 
 
 class Forward(BaseMessageComponent):
