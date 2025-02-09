@@ -428,6 +428,7 @@ class PluginManager:
         
     async def install_plugin_from_file(self, zip_file_path: str):
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")
+        dir_name = dir_name.removesuffix("-master").removesuffix("-main").lower()
         desti_dir = os.path.join(self.plugin_store_path, dir_name)
         self.updator.unzip_file(zip_file_path, desti_dir)
 
