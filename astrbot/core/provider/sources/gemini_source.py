@@ -48,13 +48,18 @@ class SimpleGoogleGenAIClient():
         logger.debug(f"payload: {payload}")
         request_url = f"{self.api_base}/v1beta/models/{model}:generateContent?key={self.api_key}"
         async with self.client.post(request_url, json=payload, timeout=self.timeout) as resp:
-            try:
-                response = await resp.json()
-            except Exception as e:
+            if "application/json" in resp.headers.get("Content-Type"):
+                try:
+                    response = await resp.json()
+                except Exception as e:
+                    text = await resp.text()
+                    logger.error(f"Gemini 返回了非 json 数据: {text}")
+                    raise e
+                return response
+            else:
                 text = await resp.text()
-                logger.error(f"gemini 返回了非 json 数据: {text}")
-                raise e
-            return response
+                logger.error(f"Gemini 返回了非 json 数据: {text}")
+                raise Exception("Gemini 返回了非 json 数据： ")
 
 
 @register_provider_adapter("googlegenai_chat_completion", "Google Gemini Chat Completion 提供商适配器")
