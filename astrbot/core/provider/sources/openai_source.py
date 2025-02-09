@@ -105,6 +105,8 @@ class ProviderOpenAIOfficial(Provider):
             logger.error(f"API 返回的 completion 无法解析：{completion}。")
             raise Exception(f"API 返回的 completion 无法解析：{completion}。")
         
+        llm_response.raw_completion = completion
+        
         return llm_response
 
     async def text_chat(
