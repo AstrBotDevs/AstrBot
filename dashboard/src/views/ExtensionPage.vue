@@ -10,8 +10,8 @@ import { max } from 'date-fns';
 
 <template>
   <v-row>
-    <v-alert style="margin: 16px" text="1. 如果因为网络问题安装失败，可以自行前往仓库下载压缩包，然后从本地上传。2. 如需插件帮助请点击 `仓库` 查看 README" title="💡提示"
-      type="info" variant="tonal">
+    <v-alert style="margin: 16px" text="1. 如果因为网络问题安装失败，点击设置页选择 GitHub 加速地址。或前往仓库下载压缩包然后本地上传。" title="💡提示"
+      type="info" color="primary" variant="tonal">
     </v-alert>
     <v-col cols="12" md="12">
       <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
@@ -44,13 +44,13 @@ import { max } from 'date-fns';
           </v-dialog>
         </div>
       </div>
-    </v-col>
+    </v-col>  
     <v-col cols="12" md="6" lg="3" v-for="extension in extension_data.data">
-      <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" :logo="extension?.logo" :has_update="extension.has_update"
-        style="margin-bottom: 4px;">
-        <div style="min-height: 140px; max-height: 140px; overflow: none;">
+      <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" :logo="extension?.logo"
+        :has_update="extension.has_update" style="margin-bottom: 4px;">
+        <div style="min-height: 140px; max-height: 140px; overflow: auto;">
           <div>
-            <span style="font-weight: bold;">By @{{ extension.author }}</span>
+            <span style="font-weight: bold  ;">By @{{ extension.author }}</span>
             <span> | 插件有 {{ extension.handlers.length }} 个行为</span>
           </div>
           <span> 当前: <v-chip size="small" color="primary">{{ extension.version }}</v-chip>
@@ -338,7 +338,6 @@ export default {
         { title: '作者', value: 'author' },
         { title: '操作', value: 'actions', sortable: false }
       ],
-
       alreadyCheckUpdate: false
     }
   },
@@ -441,7 +440,8 @@ export default {
         this.toast("正在从链接 " + this.extension_url + " 安装插件...", "primary");
         axios.post('/api/plugin/install',
           {
-            url: this.extension_url
+            url: this.extension_url,
+            proxy: localStorage.getItem('selectedGitHubProxy') || ""
           }).then((res) => {
             this.loading_ = false;
             if (res.data.status === "error") {
@@ -482,7 +482,8 @@ export default {
       this.loadingDialog.show = true;
       axios.post('/api/plugin/update',
         {
-          name: extension_name
+          name: extension_name,
+          proxy: localStorage.getItem('selectedGitHubProxy') || ""
         }).then((res) => {
           if (res.data.status === "error") {
             this.onLoadingDialogResult(2, res.data.message, -1);

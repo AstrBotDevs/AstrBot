@@ -376,14 +376,14 @@ class PluginManager:
             logger.debug(f"unbind handler {v.handler_name} from {plugin_name} (map)")
             del star_handlers_registry.star_handlers_map[k]
 
-    async def update_plugin(self, plugin_name: str):
+    async def update_plugin(self, plugin_name: str, proxy = ""):
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
             raise Exception("插件不存在。")
         if plugin.reserved:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
         
-        await self.updator.update(plugin)
+        await self.updator.update(plugin, proxy=proxy)
         await self.reload()
     
     async def turn_off_plugin(self, plugin_name: str):

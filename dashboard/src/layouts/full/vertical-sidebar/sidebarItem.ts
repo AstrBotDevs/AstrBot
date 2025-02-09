@@ -16,12 +16,12 @@ export interface menu {
 
 const sidebarItem: menu[] = [
   {
-    title: '面板',
+    title: '统计',
     icon: 'mdi-view-dashboard',
     to: '/dashboard/default'
   },
   {
-    title: '配置',
+    title: '配置文件',
     icon: 'mdi-cog',
     to: '/config',
   },
@@ -39,6 +39,11 @@ const sidebarItem: menu[] = [
     title: '控制台',
     icon: 'mdi-console',
     to: '/console'
+  },
+  {
+    title: '设置',
+    icon: 'mdi-wrench',
+    to: '/settings'
   },
   {
     title: '关于',
