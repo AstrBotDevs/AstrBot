@@ -1,5 +1,5 @@
 from asyncio import Queue
-from typing import List, TypedDict, Union
+from typing import List, Union
 
 from astrbot.core import sp
 from astrbot.core.provider.provider import Provider, TTSProvider, STTProvider

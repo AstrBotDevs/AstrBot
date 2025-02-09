@@ -18,7 +18,6 @@ class ResultDecorateStage:
         self.reply_prefix = ctx.astrbot_config['platform_settings']['reply_prefix']
         self.reply_with_mention = ctx.astrbot_config['platform_settings']['reply_with_mention']
         self.reply_with_quote = ctx.astrbot_config['platform_settings']['reply_with_quote']
-        self.use_tts = ctx.astrbot_config['provider_tts_settings']['enable']
         self.t2i_word_threshold = ctx.astrbot_config['t2i_word_threshold']
         try:
             self.t2i_word_threshold = int(self.t2i_word_threshold)
@@ -68,7 +67,7 @@ class ResultDecorateStage:
                     result.chain = new_chain
                 
             # TTS
-            if self.use_tts and result.is_llm_result():
+            if self.ctx.astrbot_config['provider_tts_settings']['enable'] and result.is_llm_result():
                 tts_provider = self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
                 new_chain = []
                 for comp in result.chain:
