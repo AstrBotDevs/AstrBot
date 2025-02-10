@@ -74,8 +74,8 @@ AstrBot 指令:
 /model: 模型列表
 /ls: 对话列表
 /new: 创建新对话
-/switch: 切换对话
-/rename: 重命名对话
+/switch 序号: 切换对话
+/rename 新名字: 重命名当前对话
 /del: 删除当前会话对话(op)
 /reset: 重置 LLM 会话(op)
 /history: 当前对话的对话记录
@@ -495,8 +495,11 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         message.set_result(MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})。"))
             
     @filter.command("switch")
-    async def switch_conv(self, message: AstrMessageEvent, index: int):
+    async def switch_conv(self, message: AstrMessageEvent, index: int = None):
         '''通过 /ls 前面的序号切换对话'''
+        if index is None:
+            message.set_result(MessageEventResult().message("请输入对话序号。/switch 对话序号。/ls 查看对话 /new 新建对话"))
+            return
         conversations = await self.context.conversation_manager.get_conversations(message.unified_msg_origin)
         if index > len(conversations) or index < 1:
             message.set_result(MessageEventResult().message("对话序号错误，请使用 /ls 查看"))
@@ -860,4 +863,4 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     #         if results:
     #             req.system_prompt += "\nHere are documents that related to user's query: \n"
     #             for result in results:
-    #                 req.system_prompt += f"- {result}\n"
+    #                 req.system_prompt += f"- {result}\n"7
