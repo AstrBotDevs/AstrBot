@@ -6,7 +6,7 @@ from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.api.message_components import Plain, Image, Record, At, File, Reply
+from astrbot.api.message_components import Plain, Image, Record, At, File
 from .client import SimpleGewechatClient
 
 def get_wav_duration(file_path):
@@ -104,23 +104,10 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     record_path = record_url
                     
                 silk_path = f"data/temp/{uuid.uuid4()}.silk"
-                logger.info("开始转换语音文件: " + record_path)
                 duration = await wav_to_tencent_silk(record_path, silk_path)
-                
-                print(f"duration: {duration}, {silk_path}")
-                
-                # 检查 record_path 是否在 data/temp 目录中, record_path 可能是绝对路径
-                # temp_directory = os.path.abspath('data/temp')
-                # record_path = os.path.abspath(record_path)
-                # if os.path.commonpath([temp_directory, record_path]) != temp_directory:
-                #     with open(record_path, "rb") as f:
-                #         record_path = f"data/temp/{uuid.uuid4()}.wav"
-                #         with open(record_path, "wb") as f2:
-                #             f2.write(f.read())
-                
+                logger.info("Silk 语音文件格式转换至: " + record_path)
                 if duration == 0:
                     duration = get_wav_duration(record_path)
-                
                 file_id = os.path.basename(silk_path)
                 record_url = f"{self.client.file_server_url}/{file_id}"
                 logger.debug(f"gewe callback record url: {record_url}")
@@ -138,6 +125,8 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 file_id = os.path.basename(file_path)
                 file_url = f"{self.client.file_server_url}/{file_id}"
                 logger.debug(f"gewe callback file url: {file_url}")
-                await self.client.post_file(to_wxid, file_url, file_id)    
+                await self.client.post_file(to_wxid, file_url, file_id) 
+            else:
+                logger.error(f"gewechat 暂不支持发送消息类型: {comp.type}")   
         
         await super().send(message)

@@ -1,8 +1,9 @@
 import os
 import uuid
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image
-from astrbot.core.utils.io import file_to_base64, download_image_by_url
+from astrbot.core.utils.io import download_image_by_url
 from astrbot.core import web_chat_back_queue
 
 class WebChatMessageEvent(AstrMessageEvent):
@@ -37,5 +38,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         with open(comp.file, "rb") as f2:
                             f.write(f2.read())
                 web_chat_back_queue.put_nowait((f"[IMAGE]{filename}", cid))
+            else:
+                logger.error(f"webchat 暂不支持发送消息类型: {comp.type}")
         web_chat_back_queue.put_nowait(None)
         await super().send(message)

@@ -2,7 +2,7 @@ import base64
 import json
 import os
 
-from openai import AsyncOpenAI, AsyncAzureOpenAI, NOT_GIVEN
+from openai import AsyncOpenAI, AsyncAzureOpenAI
 from openai.types.chat.chat_completion import ChatCompletion
 from openai._exceptions import NotFoundError, UnprocessableEntityError
 from astrbot.core.utils.io import download_image_by_url

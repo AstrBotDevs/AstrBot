@@ -8,6 +8,7 @@ from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image, Reply
 from botpy import Client
 from botpy.http import Route
+from astrbot.api import logger
 
 
 class QQOfficialMessageEvent(AstrMessageEvent):
@@ -114,4 +115,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 else:
                     image_base64 = file_to_base64(i.file).replace("base64://", "")
                     image_file_path = i.file
+            else:
+                logger.error(f"qq_official 暂不支持发送消息类型 {i.type}")
         return plain_text, image_base64, image_file_path
