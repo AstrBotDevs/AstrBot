@@ -60,6 +60,8 @@ class LarkMessageEvent(AstrMessageEvent):
                     "image_key": image_key
                 }])
                 _stage.clear()
+            else:
+                logger.warning(f"飞书 暂时不支持消息段: {comp.type}")
 
         if _stage:
             ret.append(_stage)            
