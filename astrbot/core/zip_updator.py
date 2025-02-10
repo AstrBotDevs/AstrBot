@@ -100,7 +100,7 @@ class RepoZipUpdator():
             body=update_data[0]['body']
         )
         
-    async def download_from_repo_url(self, target_path: str, repo_url: str):
+    async def download_from_repo_url(self, target_path: str, repo_url: str, proxy=""):
         repo_namespace = repo_url.split("/")[-2:]
         author = repo_namespace[0]
         repo = repo_namespace[1]
@@ -116,13 +116,17 @@ class RepoZipUpdator():
             release_url = releases[0]['zipball_url']
             
         # 镜像站点
-        match self.repo_mirror:
-            case 'https://github-mirror.us.kg/':
-                release_url = self.repo_mirror + release_url
-            case "https://ghp.ci/":
-                release_url = self.repo_mirror + release_url
-            case _:
-                pass
+        # match self.repo_mirror:
+        #     case 'https://github-mirror.us.kg/':
+        #         release_url = self.repo_mirror + release_url
+        #     case "https://ghp.ci/":
+        #         release_url = self.repo_mirror + release_url
+        #     case _:
+        #         pass
+        
+        if proxy:
+            release_url = f"{proxy}/{release_url}"
+            logger.info(f"使用代理下载: {release_url}")
 
         await download_file(release_url, target_path + ".zip")
         

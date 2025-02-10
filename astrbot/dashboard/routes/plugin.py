@@ -146,11 +146,10 @@ class PluginRoute(Route):
         proxy: str = post_data.get("proxy", None)
         if proxy:
             proxy = proxy.removesuffix("/")
-            repo_url = f"{proxy}/{repo_url}"    
         
         try:
             logger.info(f"正在安装插件 {repo_url}")
-            await self.plugin_manager.install_plugin(repo_url)
+            await self.plugin_manager.install_plugin(repo_url, proxy)
             self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")
             return Response().ok(None, "安装成功。").__dict__

@@ -15,10 +15,10 @@ class PluginUpdator(RepoZipUpdator):
     def get_plugin_store_path(self) -> str:
         return self.plugin_store_path
     
-    async def install(self, repo_url: str) -> str:
+    async def install(self, repo_url: str, proxy="") -> str:
         repo_name = self.format_repo_name(repo_url)
         plugin_path = os.path.join(self.plugin_store_path, repo_name)
-        await self.download_from_repo_url(plugin_path, repo_url)
+        await self.download_from_repo_url(plugin_path, repo_url, proxy)
         self.unzip_file(plugin_path + ".zip", plugin_path)
         
         return plugin_path

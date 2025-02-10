@@ -855,7 +855,8 @@ CONFIG_METADATA_2 = {
             "plugin_repo_mirror": {
                 "description": "插件仓库镜像",
                 "type": "string",
-                "hint": "插件仓库的镜像地址，用于加速插件的下载。",
+                "hint": "已废弃，请使用管理面板->设置页的代理地址选择",
+                "obvious_hint": True,
                 "options": [
                     "default",
                     "https://ghp.ci/",

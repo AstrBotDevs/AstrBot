@@ -340,8 +340,8 @@ class PluginManager:
             self.failed_plugin_info = fail_rec
             return False, fail_rec
         
-    async def install_plugin(self, repo_url: str):
-        plugin_path = await self.updator.install(repo_url)
+    async def install_plugin(self, repo_url: str, proxy=""):
+        plugin_path = await self.updator.install(repo_url, proxy)
         # reload the plugin
         await self.reload()
         return plugin_path
