@@ -41,7 +41,7 @@ class PlatformManager():
                 logger.error(f"未找到适用于 {platform['type']}({platform['id']}) 平台适配器，请检查是否已经安装或者名称填写错误。已跳过。")
                 continue
             cls_type = platform_cls_map[platform['type']]
-            logger.info(f"尝试实例化 {platform['type']}({platform['id']}) 平台适配器 ...")
+            logger.debug(f"尝试实例化 {platform['type']}({platform['id']}) 平台适配器 ...")
             inst = cls_type(platform, self.settings, self.event_queue)
             self.platform_insts.append(inst)
         

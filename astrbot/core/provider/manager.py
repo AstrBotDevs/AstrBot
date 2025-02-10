@@ -162,7 +162,7 @@ class ProviderManager():
                 continue
 
             provider_metadata = provider_cls_map[provider_config['type']]
-            logger.info(f"尝试实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器 ...")
+            logger.debug(f"尝试实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器 ...")
             try:
                 # 按任务实例化提供商
                 
