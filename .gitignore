@@ -22,3 +22,4 @@ node_modules/
 package-lock.json
 package.json
 venv/*
+packages/python_interpreter/workplace

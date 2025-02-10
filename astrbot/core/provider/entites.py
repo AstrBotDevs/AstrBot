@@ -52,7 +52,7 @@ class ProviderRequest():
 @dataclass
 class LLMResponse:
     role: str
-    '''角色'''
+    '''角色, assistant, tool, err'''
     completion_text: str = ""
     '''LLM 返回的文本'''
     tools_call_args: List[Dict[str, any]] = field(default_factory=list)

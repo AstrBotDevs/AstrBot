@@ -6,7 +6,7 @@ from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.api.message_components import Plain, Image, Record
+from astrbot.api.message_components import Plain, Image, Record, At, File, Reply
 from .client import SimpleGewechatClient
 
 def get_wav_duration(file_path):
@@ -14,6 +14,8 @@ def get_wav_duration(file_path):
         file_size = os.path.getsize(file_path)
         n_channels, sampwidth, framerate, n_frames = wav_file.getparams()[:4]
         if n_frames == 2147483647:
+            duration = (file_size - 44) / (n_channels * sampwidth * framerate)
+        elif n_frames == 0:
             duration = (file_size - 44) / (n_channels * sampwidth * framerate)
         else:
             duration = n_frames / float(framerate)
@@ -43,9 +45,31 @@ class GewechatPlatformEvent(AstrMessageEvent):
             logger.error("无法获取到 to_wxid。")
             return
         
+        #  检查@
+        ats = []
+        ats_names = []
+        for comp in message.chain:
+            if isinstance(comp, At):
+                ats.append(comp.qq)
+                ats_names.append(comp.name)
+        has_at = False
+        
         for comp in message.chain:
             if isinstance(comp, Plain):
-                await self.client.post_text(to_wxid, comp.text)
+                text = comp.text
+                payload = {
+                    "to_wxid": to_wxid,
+                    "content": text,
+                }
+                if not has_at and ats:
+                    ats = f"{','.join(ats)}"
+                    ats_names = f"@{' @'.join(ats_names)}"
+                    text = f"{ats_names} {text}"
+                    payload["content"] = text
+                    payload["ats"] = ats
+                    has_at = True
+                await self.client.post_text(**payload)
+                
             elif isinstance(comp, Image):
                 img_url = comp.file
                 img_path = ""
@@ -80,6 +104,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     record_path = record_url
                     
                 silk_path = f"data/temp/{uuid.uuid4()}.silk"
+                logger.info("开始转换语音文件: " + record_path)
                 duration = await wav_to_tencent_silk(record_path, silk_path)
                 
                 print(f"duration: {duration}, {silk_path}")
