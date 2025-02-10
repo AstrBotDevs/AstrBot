@@ -406,7 +406,7 @@ CONFIG_METADATA_2 = {
                             "model": "glm-4-flash",
                         },
                     },
-                    "硅基流动": {
+                    "siliconflow": {
                         "id": "siliconflow",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -415,6 +415,17 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.siliconflow.cn/v1",
                         "model_config": {
                             "model": "deepseek-ai/DeepSeek-V3",
+                        },
+                    },
+                    "moonshot(kimi)": {
+                        "id": "moonshot",
+                        "type": "openai_chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://api.moonshot.cn/v1",
+                        "model_config": {
+                            "model": "moonshot-v1-8k",
                         },
                     },
                     "llmtuner": {
