@@ -125,12 +125,21 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
+                    "lark(飞书)": {
+                        "id": "lark",
+                        "type": "lark",
+                        "enable": False,
+                        "lark_bot_name": "",
+                        "app_id": "",
+                        "app_secret": "",
+                        "domain": "https://open.feishu.cn"
+                    },
                 },
                 "items": {
                     "id": {
                         "description": "ID",
                         "type": "string",
-                        "hint": "提供商 ID 名，用于在多实例下方便管理和识别。自定义，ID 不能重复。",
+                        "hint": "用于在多实例下方便管理和识别。自定义，ID 不能重复。",
                     },
                     "type": {
                         "description": "适配器类型",
@@ -172,6 +181,12 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "aiocqhttp 适配器的反向 Websocket 端口。",
                     },
+                    "lark_bot_name": {
+                        "description": "飞书机器人的名字",
+                        "type": "string",
+                        "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
+                        "obvious_hint": True
+                    }
                 },
             },
             "platform_settings": {

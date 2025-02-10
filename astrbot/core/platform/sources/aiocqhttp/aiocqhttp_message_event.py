@@ -26,6 +26,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 elif segment.file and segment.file.startswith("http"):
                     image_file_path = await download_image_by_url(segment.file)
                     bs64_data = file_to_base64(image_file_path)
+                elif segment.file and segment.file.startswith("base64://"):
+                    bs64_data = segment.file
                 else:
                     bs64_data = file_to_base64(segment.file)
                 d['data'] = {
