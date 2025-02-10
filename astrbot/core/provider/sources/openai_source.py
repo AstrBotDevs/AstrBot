@@ -100,6 +100,9 @@ class ProviderOpenAIOfficial(Provider):
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
+            
+        if choice.finish_reason == 'content_filter':
+            raise Exception("API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。")
 
         if not llm_response.completion_text and not llm_response.tools_call_args:
             logger.error(f"API 返回的 completion 无法解析：{completion}。")

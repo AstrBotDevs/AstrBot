@@ -123,5 +123,21 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 
                 file_id = os.path.basename(silk_path)
                 record_url = f"{self.client.file_server_url}/{file_id}"
+                logger.debug(f"gewe callback record url: {record_url}")
                 await self.client.post_voice(to_wxid, record_url, duration*1000)
+            elif isinstance(comp, File):
+                file_path = comp.file
+                file_name = comp.name
+                if file_path.startswith("file:///"):
+                    file_path = file_path[8:]
+                elif file_path.startswith("http"):
+                    await download_file(file_path, f"data/temp/{file_name}")
+                else:
+                    file_path = file_path
+                    
+                file_id = os.path.basename(file_path)
+                file_url = f"{self.client.file_server_url}/{file_id}"
+                logger.debug(f"gewe callback file url: {file_url}")
+                await self.client.post_file(to_wxid, file_url, file_id)    
+        
         await super().send(message)

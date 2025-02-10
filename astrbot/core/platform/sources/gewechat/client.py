@@ -153,12 +153,11 @@ class SimpleGewechatClient():
                     with open(file_path, "wb") as f:
                         f.write(voice_data)
                     abm.message.append(Record(file=file_path, url=file_path))
-                
             case _:
                 logger.info(f"未实现的消息类型: {d['MsgType']}")
                 return
         
-        logger.info(f"abm: {abm}")
+        logger.debug(f"abm: {abm}")
         return abm
 
     async def callback(self):
@@ -364,3 +363,20 @@ class SimpleGewechatClient():
             ) as resp:
                 json_blob = await resp.json()
                 logger.debug(f"发送语音结果: {json_blob}")
+                
+    async def post_file(self, to_wxid, file_url: str, file_name: str):
+        payload = {
+            "appId": self.appid,
+            "toWxid": to_wxid,
+            "fileUrl": file_url,
+            "fileName": file_name
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.base_url}/message/postFile",
+                headers=self.headers,
+                json=payload
+            ) as resp:
+                json_blob = await resp.json()
+                logger.debug(f"发送文件结果: {json_blob}")
