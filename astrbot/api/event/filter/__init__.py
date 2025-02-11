@@ -29,7 +29,7 @@ __all__ = [
     'PlatformAdapterTypeFilter',
     'PlatformAdapterType',
     'PermissionTypeFilter',
-    'register_custom_permission_type',
+    'custom_permission_type',
     'PermissionType',
     'on_llm_request',
     'llm_tool',
