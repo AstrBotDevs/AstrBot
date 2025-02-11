@@ -66,6 +66,7 @@ DEFAULT_CONFIG = {
         }
     },
     "content_safety": {
+        "also_use_in_response": False,
         "internal_keywords": {"enable": True, "extra_keywords": []},
         "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
     },
@@ -310,6 +311,11 @@ CONFIG_METADATA_2 = {
                 "description": "内容安全",
                 "type": "object",
                 "items": {
+                    "also_use_in_response": {
+                        "description": "对大模型响应安全审核",
+                        "type": "bool",
+                        "hint": "启用后，大模型的响应也会通过内容安全审核。",
+                    },
                     "baidu_aip": {
                         "description": "百度内容审核配置",
                         "type": "object",

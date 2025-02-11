@@ -2,7 +2,7 @@ import time
 import re
 import traceback
 from typing import Union, AsyncGenerator
-from ..stage import register_stage
+from ..stage import Stage, register_stage, registered_stages
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
@@ -12,7 +12,7 @@ from astrbot.core import html_renderer
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 
 @register_stage
-class ResultDecorateStage:
+class ResultDecorateStage(Stage):
     async def initialize(self, ctx: PipelineContext):
         self.ctx = ctx
         self.reply_prefix = ctx.astrbot_config['platform_settings']['reply_prefix']
@@ -30,11 +30,29 @@ class ResultDecorateStage:
         self.enable_segmented_reply = ctx.astrbot_config['platform_settings']['segmented_reply']['enable']
         self.only_llm_result = ctx.astrbot_config['platform_settings']['segmented_reply']['only_llm_result']
         self.regex = ctx.astrbot_config['platform_settings']['segmented_reply']['regex']
-
+        
+        # exception
+        self.content_safe_check_reply = ctx.astrbot_config['content_safety']['also_use_in_response']
+        self.content_safe_check_stage = None
+        if self.content_safe_check_reply:
+            for stage in registered_stages:
+                if stage.__class__.__name__ == "ContentSafetyCheckStage":
+                    self.content_safe_check_stage = stage
+                    
+            
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
         result = event.get_result()
         if result is None:
             return
+        
+        # 回复时检查内容安全
+        if self.content_safe_check_reply and self.content_safe_check_stage and result.is_llm_result():
+            text = ""
+            for comp in result.chain:
+                if isinstance(comp, Plain):
+                    text += comp.text
+            async for _ in self.content_safe_check_stage.process(event, check_text=text):
+                yield
         
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnDecoratingResultEvent)
         for handler in handlers:
