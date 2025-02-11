@@ -28,7 +28,7 @@ const sidebarMenu = shallowRef(sidebarItems);
       </v-list-item>
       <small style="display: block;" v-if="buildVer">构建: {{ buildVer }}</small>
       <small style="display: block;" v-else>构建: embedded</small>
-      <v-tooltip text="使用 /dashbord_update 指令更新管理面板">
+      <v-tooltip text="使用 /dashboard_update 指令更新管理面板">
         <template v-slot:activator="{ props }">
           <small v-bind="props" v-if="hasWebUIUpdate" style="display: block; margin-top: 4px;">面板有更新</small>
         </template>
