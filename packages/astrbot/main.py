@@ -8,6 +8,7 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Personality, ProviderRequest, LLMResponse
+from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
 from astrbot.core.star.star import star_map
@@ -347,6 +348,12 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         if not self.context.get_using_provider():
             message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
             return
+        
+        provider = self.context.get_using_provider()
+        if provider.meta().type == 'dify':
+            assert isinstance(provider, ProviderDify)
+            await provider.forget()
+            message.set_result(MessageEventResult().message("已重置当前 Dify 会话，新聊天将更换到新的会话。"))
         
         cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
         

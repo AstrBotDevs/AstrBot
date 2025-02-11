@@ -35,6 +35,7 @@ class ProviderDify(Provider):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
         self.conversation_ids = {}
+        '''记录当前 session id 的对话 ID'''
 
 
     async def text_chat(
