@@ -6,7 +6,7 @@ from ..filter.command import CommandFilter
 from ..filter.command_group import CommandGroupFilter
 from ..filter.event_message_type import EventMessageTypeFilter, EventMessageType
 from ..filter.platform_adapter_type import PlatformAdapterTypeFilter, PlatformAdapterType
-from ..filter.permission import PermissionTypeFilter, PermissionType
+from ..filter.permission import PermissionTypeFilter, BasePermissionTypeFilter, PermissionType
 from ..filter.regex import RegexFilter
 from typing import Awaitable
 from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
@@ -152,6 +152,21 @@ def register_permission_type(permission_type: PermissionType, raise_error: bool 
     def decorator(awaitable):
         handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
         handler_md.event_filters.append(PermissionTypeFilter(permission_type, raise_error))
+        return awaitable
+
+    return decorator
+
+def register_custom_permission_type(cunstom_permission_type_filter: BasePermissionTypeFilter, raise_error: bool = True):
+    '''注册一个自定义的 PermissionFilter
+
+    Args:
+        cunstom_permission_type_filter: 一个继承自HandlerFilter
+        raise_error: 如果没有权限，是否抛出错误到消息平台，并且停止事件传播。默认为 True
+    '''
+
+    def decorator(awaitable):
+        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        handler_md.event_filters.append(cunstom_permission_type_filter())
         return awaitable
 
     return decorator

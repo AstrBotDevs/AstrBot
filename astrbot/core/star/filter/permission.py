@@ -9,7 +9,15 @@ class PermissionType(enum.Flag):
     ADMIN = enum.auto()
     MEMBER = enum.auto()
 
-class PermissionTypeFilter(HandlerFilter):
+class BasePermissionTypeFilter(HandlerFilter):
+    def __init__(self,  raise_error: bool = True):
+        self.raise_error = raise_error
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        ''' 一个用于重写的自定义Filter '''
+        raise NotImplementedError
+
+class PermissionTypeFilter(BasePermissionTypeFilter):
     def __init__(self, permission_type: PermissionType, raise_error: bool = True):
         self.permission_type = permission_type
         self.raise_error = raise_error
