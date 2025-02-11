@@ -350,10 +350,12 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             return
         
         provider = self.context.get_using_provider()
-        if provider.meta().type == 'dify':
+        print(provider.meta())
+        if provider and provider.meta().type == 'dify':
             assert isinstance(provider, ProviderDify)
-            await provider.forget()
+            await provider.forget(message.unified_msg_origin)
             message.set_result(MessageEventResult().message("已重置当前 Dify 会话，新聊天将更换到新的会话。"))
+            return
         
         cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
         
@@ -454,6 +456,24 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.command("ls")
     async def convs(self, message: AstrMessageEvent, page: int = 1):
         '''查看对话列表'''
+        
+        provider = self.context.get_using_provider()
+        if provider and provider.meta().type == 'dify':
+            ret = "Dify 对话列表:\n"
+            assert isinstance(provider, ProviderDify)
+            data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
+            idx = 1
+            for conv in data['data']:
+                ts_h = datetime.datetime.fromtimestamp(conv['updated_at']).strftime('%m-%d %H:%M')
+                ret += f"{idx}. {conv['name']}({conv['id'][:4]})\n  上次更新:{ts_h}\n"
+                idx += 1
+            if idx == 1:
+                ret += "没有找到任何对话。"
+            dify_cid = provider.conversation_ids.get(message.unified_msg_origin, None)
+            ret += f"\n\n用户: {message.unified_msg_origin}\n当前对话: {dify_cid}\n使用 /switch <序号> 切换对话。"
+            message.set_result(MessageEventResult().message(ret))
+            return
+
         size_per_page = 6
         conversations = await self.context.conversation_manager.get_conversations(message.unified_msg_origin)
         total_pages = len(conversations) // size_per_page
@@ -498,12 +518,41 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.command("new")
     async def new_conv(self, message: AstrMessageEvent):
         '''创建新对话'''
+        provider = self.context.get_using_provider()
+        if provider and provider.meta().type == 'dify':
+            assert isinstance(provider, ProviderDify)
+            await provider.forget(message.unified_msg_origin)
+            message.set_result(MessageEventResult().message("成功，下次聊天将是新对话。"))
+            return
+
         cid = await self.context.conversation_manager.new_conversation(message.unified_msg_origin)
         message.set_result(MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})。"))
             
     @filter.command("switch")
     async def switch_conv(self, message: AstrMessageEvent, index: int = None):
         '''通过 /ls 前面的序号切换对话'''
+        
+        provider = self.context.get_using_provider()
+        if provider and provider.meta().type == 'dify':
+            assert isinstance(provider, ProviderDify)
+            data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
+            if not data['data']:
+                message.set_result(MessageEventResult().message("未找到任何对话。"))
+                return
+            selected_conv = None
+            if index is not None:
+                try:
+                    selected_conv = data['data'][index-1]
+                except IndexError:
+                    message.set_result(MessageEventResult().message("对话序号错误，请使用 /ls 查看"))
+                    return
+            else:
+                selected_conv = data['data'][0]
+            ret = f"Dify 切换到对话: {selected_conv['name']}({selected_conv['id'][:4]})。"
+            provider.conversation_ids[message.unified_msg_origin] = selected_conv['id']
+            message.set_result(MessageEventResult().message(ret))
+            return
+        
         if index is None:
             message.set_result(MessageEventResult().message("请输入对话序号。/switch 对话序号。/ls 查看对话 /new 新建对话"))
             return
@@ -519,6 +568,18 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.command("rename")
     async def rename_conv(self, message: AstrMessageEvent, new_name: str):
         '''重命名对话'''
+        provider = self.context.get_using_provider()
+        
+        if provider and provider.meta().type == 'dify':
+            assert isinstance(provider, ProviderDify)
+            cid = provider.conversation_ids.get(message.unified_msg_origin, None)
+            if not cid:
+                message.set_result(MessageEventResult().message("未找到当前对话。"))
+                return
+            await provider.api_client.rename(cid, new_name, message.unified_msg_origin)
+            message.set_result(MessageEventResult().message("重命名对话成功。"))
+            return
+        
         await self.context.conversation_manager.update_conversation_title(message.unified_msg_origin, new_name)
         message.set_result(MessageEventResult().message("重命名对话成功。"))
     
@@ -526,6 +587,15 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.command("del")
     async def del_conv(self, message: AstrMessageEvent):
         '''删除当前对话'''
+        
+        provider = self.context.get_using_provider()
+        if provider and provider.meta().type == 'dify':
+            assert isinstance(provider, ProviderDify)
+            await provider.api_client.delete_chat_conv(message.unified_msg_origin)
+            provider.conversation_ids.pop(message.unified_msg_origin, None)
+            message.set_result(MessageEventResult().message("删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"))
+            return
+        
         session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
         
         if not session_curr_cid:
