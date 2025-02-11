@@ -1,13 +1,20 @@
 import aiohttp
 import quart
 import json
+import logging
 import asyncio
 import typing
 from botpy import BotAPI, BotHttp, Client, Token, BotWebSocket, ConnectionSession
 from astrbot.api import logger
+import traceback
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
+# remove logger handler
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
 
 class QQOfficialWebhook():
-    def __init__(self, config: dict, event_queue: asyncio.Queue):
+    def __init__(self, config: dict, event_queue: asyncio.Queue, botpy_client: Client):
         self.appid = config['appid']
         self.secret = config['secret']
         self.port = config.get("port", 6194)
@@ -17,17 +24,20 @@ class QQOfficialWebhook():
         
         self.http: BotHttp = BotHttp(timeout=300)
         self.api: BotAPI = BotAPI(http=self.http)
-        
         self.token = Token(self.appid, self.secret)
         
         self.server = quart.Quart(__name__)
         self.server.add_url_rule('/astrbot-qo-webhook/callback', view_func=self.callback, methods=['POST'])
-        
+        self.client = botpy_client
         self.event_queue = event_queue
         
     async def initialize(self):
+        logger.info(f"正在登录到 QQ 官方机器人...")
         self.user = await self.http.login(self.token)
         logger.info(f"已登录 QQ 官方机器人账号: {self.user}")
+        # 直接注入到 botpy 的 Client，移花接木！
+        self.client.api = self.api
+        self.client.http = self.http
         
         async def bot_connect():
             pass
@@ -35,34 +45,43 @@ class QQOfficialWebhook():
         self._connection = ConnectionSession(
             max_async=1,
             connect=bot_connect,
-            dispatch=self.dispatch,
+            dispatch=self.client.ws_dispatch,
             loop=asyncio.get_event_loop(),
             api=self.api,
         )
-    
-    async def dispatch(self, event: str, *args: typing.Any, **kwargs: typing.Any):
-        print("dispatch:", locals())
+
+    async def repeat_seed(self, bot_secret: str, target_size: int = 32) -> bytes:
+        seed = bot_secret
+        while len(seed) < target_size:
+            seed *= 2
+        return seed[:target_size].encode('utf-8')
+
+        
+    async def webhook_validation(self, validation_payload: dict):
+        seed = await self.repeat_seed(self.secret)
+        private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
+        msg = validation_payload.get("event_ts", "") + validation_payload.get("plain_token", "")
+        # sign
+        signature = private_key.sign(msg.encode()).hex()
+        response = {
+            "plain_token": validation_payload.get("plain_token"),
+            "signature": signature
+        }
+        return response
         
     async def callback(self):
         msg: dict = await quart.request.json
         logger.debug(f"收到 qq_official_webhook 回调: {msg}")
 
-        # if await self._is_system_event(msg, ws):
-        #     return
-
         event = msg.get("t")
         opcode = msg.get("op")
-        event_seq = msg["s"]
-        # if event_seq > 0:
-        #     self._session["last_seq"] = event_seq
-
-        if event == "READY":
-            # 心跳检查
-            pass
-
-        if event == "RESUMED":
-            # 心跳检查
-            pass
+        data = msg.get("d")
+        
+        if opcode == 13:
+            # validation
+            signed = await self.webhook_validation(data)
+            print(signed)
+            return signed
 
         if event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
             event = msg["t"].lower()
@@ -73,6 +92,7 @@ class QQOfficialWebhook():
             else:
                 func(msg)
                 
+        return {"opcode": 12}
     
     async def start_polling(self):
         await self.server.run_task(

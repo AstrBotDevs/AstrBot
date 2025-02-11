@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import botpy
 import logging
 import time
@@ -28,25 +30,25 @@ class botClient(Client):
         
     # 收到群消息
     async def on_group_at_message_create(self, message: botpy.message.GroupMessage):
-        abm = self.platform._parse_from_qqofficial(message, MessageType.GROUP_MESSAGE)
+        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(message, MessageType.GROUP_MESSAGE)
         abm.session_id = abm.sender.user_id if self.platform.unique_session else message.group_openid
         self._commit(abm)
 
     # 收到频道消息
     async def on_at_message_create(self, message: botpy.message.Message):
-        abm = self.platform._parse_from_qqofficial(message, MessageType.GROUP_MESSAGE)
+        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(message, MessageType.GROUP_MESSAGE)
         abm.session_id = abm.sender.user_id if self.platform.unique_session else message.channel_id
         self._commit(abm)
         
     # 收到私聊消息
     async def on_direct_message_create(self, message: botpy.message.DirectMessage):
-        abm = self.platform._parse_from_qqofficial(message, MessageType.FRIEND_MESSAGE)
+        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(message, MessageType.FRIEND_MESSAGE)
         abm.session_id = abm.sender.user_id
         self._commit(abm)
         
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage):
-        abm = self.platform._parse_from_qqofficial(message, MessageType.FRIEND_MESSAGE)
+        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(message, MessageType.FRIEND_MESSAGE)
         abm.session_id = abm.sender.user_id
         self._commit(abm)
         
@@ -102,7 +104,8 @@ class QQOfficialPlatformAdapter(Platform):
             "QQ 机器人官方 API 适配器",
         )
 
-    def _parse_from_qqofficial(self, message: Union[botpy.message.Message, botpy.message.GroupMessage],
+    @staticmethod
+    def _parse_from_qqofficial(message: Union[botpy.message.Message, botpy.message.GroupMessage],
                                   message_type: MessageType):
         abm = AstrBotMessage()
         abm.type = message_type
