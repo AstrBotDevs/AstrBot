@@ -80,6 +80,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "username": "astrbot",
         "password": "77b90590a8945a7d36c963981a307dc9",
+        "port": 6185
     },
     "platform": [],
     "wake_prefix": ["/"],

@@ -7,6 +7,7 @@ import aiohttp
 import base64
 import zipfile
 import uuid
+import psutil
 from typing import Union
 
 from PIL import Image
@@ -160,17 +161,17 @@ def file_to_base64(file_path: str) -> str:
         base64_str = base64.b64encode(data_bytes).decode()
     return "base64://" + base64_str
 
+
 def get_local_ip_addresses():
-    ip = ''
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-    except BaseException:
-        pass
-    finally:
-        s.close()
-    return ip
+    net_interfaces = psutil.net_if_addrs()
+    network_ips = []
+    
+    for interface, addrs in net_interfaces.items():
+        for addr in addrs:
+            if addr.family == socket.AF_INET:  # 使用 socket.AF_INET 代替 psutil.AF_INET
+                network_ips.append(addr.address)
+    
+    return network_ips
 
 async def get_dashboard_version():
     if os.path.exists("data/dist"):
