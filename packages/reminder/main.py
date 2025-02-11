@@ -79,7 +79,7 @@ class Main(star.Star):
             
     @llm_tool("reminder")
     async def reminder_tool(self, event: AstrMessageEvent, text: str=None, datetime_str: str = None, cron_expression: str = None, human_readable_cron: str = None):
-        '''Call this function when user ask for setting a reminder. 
+        '''Call this function when user is asking for setting a reminder.
         
         Args:
             text(string): Must Required. The content of the reminder.

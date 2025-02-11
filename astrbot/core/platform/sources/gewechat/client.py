@@ -156,7 +156,7 @@ class SimpleGewechatClient():
                     abm.message.append(Record(file=file_path, url=file_path))
             case _:
                 logger.info(f"未实现的消息类型: {d['MsgType']}")
-                return
+                abm.raw_message = d
         
         logger.debug(f"abm: {abm}")
         return abm

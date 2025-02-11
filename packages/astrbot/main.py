@@ -422,7 +422,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
         
         if not session_curr_cid:
-            message.set_result(MessageEventResult().message("当前未处于对话状态，请 /switch 切换或者 /new 创建。"))
+            message.set_result(MessageEventResult().message("当前未处于对话状态，请 /switch 序号 切换或者 /new 创建。"))
             return
         
         contexts, total_pages = await self.context.conversation_manager.get_human_readable_context(
@@ -522,11 +522,11 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
         
         if not session_curr_cid:
-            message.set_result(MessageEventResult().message("当前未处于对话状态，请 /switch 切换或者 /new 创建。"))
+            message.set_result(MessageEventResult().message("当前未处于对话状态，请 /switch 序号 切换或 /new 创建。"))
             return
         
         await self.context.conversation_manager.delete_conversation(message.unified_msg_origin, session_curr_cid)
-        message.set_result(MessageEventResult().message("删除当前对话成功。"))
+        message.set_result(MessageEventResult().message("删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"))
         
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -673,9 +673,8 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             if platform.meta().name == "gewechat":
                 yield event.plain_result("正在登出 gewechat")
                 await platform.logout()
-                yield event.plain_result("已登出 gewechat")
+                yield event.plain_result("已登出 gewechat，请重启 AstrBot")
                 return
-            
             
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
@@ -701,7 +700,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                     session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(event.unified_msg_origin)
                     
                     if not session_curr_cid:
-                        logger.error("当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 切换或者 /new 创建一个会话。")
+                        logger.error("当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。")
                         return
                     
                     conv = await self.context.conversation_manager.get_conversation(
