@@ -57,7 +57,12 @@ class ResultDecorateStage(Stage):
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnDecoratingResultEvent)
         for handler in handlers:
             await handler.handler(event)
-            
+        
+        # 需要再获取一次。插件可能直接对 chain 进行了替换。
+        result = event.get_result()
+        if result is None:
+            return
+        
         if len(result.chain) > 0:
             # 回复前缀
             if self.reply_prefix:
