@@ -2,7 +2,7 @@
 如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
 """
 
-VERSION = "3.4.25"
+VERSION = "3.4.26"
 DB_PATH = "data/data_v3.db"
 
 # 默认配置
@@ -28,7 +28,10 @@ DEFAULT_CONFIG = {
         "segmented_reply": {
             "enable": False,
             "only_llm_result": True,
+            "interval_method": "random",
             "interval": "1.5,3.5",
+            "log_base": 2.6,
+            "words_count_threshold": 150,
             "regex": ".*?[。？！~…]+|.+$"
         },
         "no_permission_reply": True,
@@ -242,10 +245,26 @@ CONFIG_METADATA_2 = {
                                 "description": "仅对 LLM 结果分段",
                                 "type": "bool",
                             },
+                            "interval_method": {
+                                "description": "间隔时间计算方法",
+                                "type": "string",
+                                "options": ["random", "log"],
+                                "hint": "分段回复的间隔时间计算方法。random 为随机时间，log 为根据消息长度计算，$y=log_{log\_base}(x)$，x为字数，y的单位为秒。",
+                            },
                             "interval": {
                                 "description": "随机间隔时间(秒)",
                                 "type": "string",
-                                "hint": "每一段回复的间隔时间，格式为 `最小时间,最大时间`。如 `0.75,2.5`",
+                                "hint": "`random` 方法用。每一段回复的间隔时间，格式为 `最小时间,最大时间`。如 `0.75,2.5`",
+                            },
+                            "log_base": {
+                                "description": "对数函数底数",
+                                "type": "float",
+                                "hint": "`log` 方法用。对数函数的底数。默认为 2.6",
+                            },
+                            "words_count_threshold": {
+                                "description": "字数阈值",
+                                "type": "int",
+                                "hint": "超过这个字数的消息不会被分段回复。默认为 150",
                             },
                             "regex": {
                                 "description": "正则表达式",

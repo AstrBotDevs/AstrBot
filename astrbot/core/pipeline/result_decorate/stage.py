@@ -27,6 +27,7 @@ class ResultDecorateStage(Stage):
             self.t2i_word_threshold = 150
         
         # 分段回复
+        self.words_count_threshold = int(ctx.astrbot_config['platform_settings']['segmented_reply']['words_count_threshold'])
         self.enable_segmented_reply = ctx.astrbot_config['platform_settings']['segmented_reply']['enable']
         self.only_llm_result = ctx.astrbot_config['platform_settings']['segmented_reply']['only_llm_result']
         self.regex = ctx.astrbot_config['platform_settings']['segmented_reply']['regex']
@@ -77,6 +78,10 @@ class ResultDecorateStage(Stage):
                     new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
+                            if len(comp.text) > self.words_count_threshold:
+                                # 不分段回复
+                                new_chain.append(comp)
+                                continue
                             split_response = re.findall(self.regex, comp.text)
                             if not split_response:
                                 new_chain.append(comp)
