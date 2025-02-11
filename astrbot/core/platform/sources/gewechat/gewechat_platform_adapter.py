@@ -30,10 +30,6 @@ class GewechatPlatformAdapter(Platform):
     @override
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
         to_wxid = session.session_id
-        if "_" in to_wxid:
-            # 群聊，开启了独立会话
-            _, to_wxid = to_wxid.split("_")
-        
         if not to_wxid:
             logger.error("无法获取到 to_wxid。")
             return

@@ -1,5 +1,6 @@
 import wave
 import uuid
+import traceback
 import os
 from astrbot.core.utils.io import save_temp_img, download_image_by_url, download_file
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
@@ -104,7 +105,11 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     record_path = record_url
                     
                 silk_path = f"data/temp/{uuid.uuid4()}.silk"
-                duration = await wav_to_tencent_silk(record_path, silk_path)
+                try:
+                    duration = await wav_to_tencent_silk(record_path, silk_path)
+                except Exception as e:
+                    logger.error(traceback.format_exc())
+                    await self.send(MessageChain().message(f"语音文件转换失败。{str(e)}"))
                 logger.info("Silk 语音文件格式转换至: " + record_path)
                 if duration == 0:
                     duration = get_wav_duration(record_path)
@@ -126,6 +131,8 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 file_url = f"{self.client.file_server_url}/{file_id}"
                 logger.debug(f"gewe callback file url: {file_url}")
                 await self.client.post_file(to_wxid, file_url, file_id) 
+            elif isinstance(comp, At):
+                pass
             else:
                 logger.error(f"gewechat 暂不支持发送消息类型: {comp.type}")   
         

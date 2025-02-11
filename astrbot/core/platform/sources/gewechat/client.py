@@ -119,7 +119,8 @@ class SimpleGewechatClient():
         
         user_real_name = d.get('PushContent', 'unknown : ').split(' : ')[0] \
             .replace('在群聊中@了你', '') \
-            .replace('在群聊中发了一段语音', '') # 真实昵称
+            .replace('在群聊中发了一段语音', '') \
+            .replace('在群聊中发了一张图片', '') # 真实昵称
         abm.sender = MessageMember(user_id, user_real_name)
         abm.raw_message = d
         abm.message_str = ""
@@ -200,7 +201,7 @@ class SimpleGewechatClient():
                 logger.info(f"设置回调结果: {json_blob}")
                 if json_blob['ret'] != 200:
                     raise Exception(f"设置回调失败: {json_blob}")
-                logger.info(f"将在 {self.callback_url} 上接收 gewechat 下发的消息。如果一直没收到消息请先尝试重启 AstrBot。")
+                logger.info(f"将在 {self.callback_url} 上接收 gewechat 下发的消息。如果一直没收到消息请先尝试重启 AstrBot。如果仍没收到请到管理面板聊天页输入 /gewe_logout 重新登录。")
         
     async def start_polling(self):
         threading.Thread(target=asyncio.run, args=(self._set_callback_url(),)).start()
