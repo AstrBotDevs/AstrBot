@@ -109,6 +109,16 @@ CONFIG_METADATA_2 = {
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
                     },
+                    "qq_official_webhook(QQ)": {
+                        "id": "default",
+                        "type": "qq_official_webhook",
+                        "enable": False,
+                        "appid": "",
+                        "secret": "",
+                        "port": 6196,
+                        "enable_group_c2c": True,
+                        "enable_guild_direct_message": True,
+                    },
                     "aiocqhtp(QQ)": {
                         "id": "default",
                         "type": "aiocqhttp",

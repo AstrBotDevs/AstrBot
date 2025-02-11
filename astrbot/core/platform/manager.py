@@ -24,6 +24,8 @@ class PlatformManager():
                         from .sources.aiocqhttp.aiocqhttp_platform_adapter import AiocqhttpAdapter  # noqa: F401
                     case "qq_official":
                         from .sources.qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter # noqa: F401
+                    case "qq_official_webhook":
+                        from .sources.qqofficial_webhook.qo_webhook_adapter import QQOfficialWebhookPlatformAdapter # noqa: F401
                     case "gewechat":
                         from .sources.gewechat.gewechat_platform_adapter import GewechatPlatformAdapter # noqa: F401
                     case "lark":
