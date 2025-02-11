@@ -17,7 +17,7 @@ class QQOfficialWebhook():
     def __init__(self, config: dict, event_queue: asyncio.Queue, botpy_client: Client):
         self.appid = config['appid']
         self.secret = config['secret']
-        self.port = config.get("port", 6194)
+        self.port = config.get("port", 6196)
         
         if isinstance(self.port, str):
             self.port = int(self.port)
