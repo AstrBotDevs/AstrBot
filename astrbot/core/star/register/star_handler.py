@@ -219,7 +219,7 @@ def register_llm_tool(name: str = None):
     
     ```
     @llm_tool(name="get_weather") # 如果 name 不填，将使用函数名
-    async def get_weather(event: AstrMessageEvent, location: str) -> MessageEventResult:
+    async def get_weather(event: AstrMessageEvent, location: str):
         \'\'\'获取天气信息。
         
         Args:
@@ -229,7 +229,22 @@ def register_llm_tool(name: str = None):
     ```
     
     可接受的参数类型有：string, number, object, array, boolean。
+    
+    返回值：
+        - 返回 str：结果会被加入下一次 LLM 请求的 prompt 中，用于让 LLM 总结工具返回的结果
+        - 返回 None：结果不会被加入下一次 LLM 请求的 prompt 中。
+        
+    可以使用 yield 发送消息、终止事件。
+    
+    发送消息：请参考文档。
+    
+    终止事件：
+    ```
+    event.stop_event()
+    yield
+    ```
     '''
+    
     name_ = name
     
     def decorator(awaitable: Awaitable):

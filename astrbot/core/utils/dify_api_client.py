@@ -120,3 +120,54 @@ class DifyAPIClient:
                 
     async def close(self):
         await self.session.close()
+        
+    async def get_chat_convs(
+        self,
+        user: str,
+        limit: int = 20
+    ):
+        # conversations. GET
+        url = f"{self.api_base}/conversations"
+        payload = {
+            "user": user,
+            "limit": limit,
+        }
+        async with self.session.get(
+            url, params=payload, headers=self.headers
+        ) as resp:
+            return await resp.json()
+        
+    async def delete_chat_conv(
+        self,
+        user: str,
+        conversation_id: str
+    ):
+        # conversation. DELETE
+        url = f"{self.api_base}/conversations/{conversation_id}"
+        payload = {
+            "user": user,
+        }
+        async with self.session.delete(
+            url, json=payload, headers=self.headers
+        ) as resp:
+            return await resp.json()
+        
+    async def rename(
+        self,
+        conversation_id: str,
+        name: str,
+        user: str,
+        auto_generate: bool = False
+    ):
+        # /conversations/:conversation_id/name
+        url = f"{self.api_base}/conversations/{conversation_id}/name"
+        payload = {
+            "user": user,
+            "name": name,
+            "auto_generate": auto_generate,
+        }
+        async with self.session.post(
+            url, json=payload, headers=self.headers
+        ) as resp:
+            return await resp.json()
+        
