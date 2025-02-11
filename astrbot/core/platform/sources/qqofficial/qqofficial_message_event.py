@@ -30,6 +30,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         
         plain_text, image_base64, image_path = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
         
+        if not plain_text and not image_base64 and not image_path:
+            return
+        
         ref = None
         for i in self.send_buffer.chain:
             if isinstance(i, Reply):
