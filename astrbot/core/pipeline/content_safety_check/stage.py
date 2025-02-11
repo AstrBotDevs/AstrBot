@@ -22,7 +22,7 @@ class ContentSafetyCheckStage(Stage):
         text = check_text if check_text else event.get_message_str()
         ok, info = self.strategy_selector.check(text)
         if not ok:
-            event.set_result(MessageEventResult().message("你的消息中包含不适当的内容，已被屏蔽。"))
+            event.set_result(MessageEventResult().message("你的消息或者大模型的响应中包含不适当的内容，已被屏蔽。"))
             yield 
             event.stop_event()
             logger.info(f"内容安全检查不通过，原因：{info}")
