@@ -120,9 +120,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "appid": "",
                         "secret": "",
-                        "port": 6196,
-                        "enable_group_c2c": True,
-                        "enable_guild_direct_message": True,
+                        "port": 6196
                     },
                     "aiocqhtp(QQ)": {
                         "id": "default",
