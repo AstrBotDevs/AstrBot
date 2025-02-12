@@ -106,6 +106,9 @@ class ProviderGoogleGenAI(Provider):
         for message in payloads["messages"]:
             if message["role"] == "user":
                 if isinstance(message["content"], str):
+                    if not message['content']:
+                        message['content'] = "<empty_content>"
+                    
                     google_genai_conversation.append({
                         "role": "user",
                         "parts": [{"text": message["content"]}]
@@ -115,6 +118,8 @@ class ProviderGoogleGenAI(Provider):
                     parts = []
                     for part in message["content"]:
                         if part["type"] == "text":
+                            if not part["text"]:
+                                part["text"] = "<empty_content>"
                             parts.append({"text": part["text"]})
                         elif part["type"] == "image_url":
                             parts.append({"inline_data": {
@@ -127,6 +132,8 @@ class ProviderGoogleGenAI(Provider):
                     })
                         
             elif message["role"] == "assistant":
+                if not message["content"]:
+                    message["content"] = "<empty_content>"
                 google_genai_conversation.append({
                     "role": "model",
                     "parts": [{"text": message["content"]}]
