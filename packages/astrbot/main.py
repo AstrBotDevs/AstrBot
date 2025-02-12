@@ -717,31 +717,32 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.command("set")
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str):
-        session_id = event.get_session_id()
+        # session_id = event.get_session_id()
+        uid = event.unified_msg_origin
         session_vars = sp.get("session_variables", {})
         
-        session_var = session_vars.get(session_id, {})
+        session_var = session_vars.get(uid, {})
         session_var[key] = value
         
-        session_vars[session_id] = session_var
+        session_vars[uid] = session_var
         
         sp.put("session_variables", session_vars)
         
-        yield event.plain_result(f"会话 {session_id} 变量 {key} 存储成功。使用 /unset 移除。")
+        yield event.plain_result(f"会话 {uid} 变量 {key} 存储成功。使用 /unset 移除。")
         
     @filter.command("unset")
     async def unset_variable(self, event: AstrMessageEvent, key: str):
-        session_id = event.get_session_id()
+        uid = event.unified_msg_origin
         session_vars = sp.get("session_variables", {})
         
-        session_var = session_vars.get(session_id, {})
+        session_var = session_vars.get(uid, {})
         
         if key not in session_var:
             yield event.plain_result("没有那个变量名。格式 /unset 变量名。")
         else:
             del session_var[key]
             sp.put("session_variables", session_vars)
-            yield event.plain_result(f"会话 {session_id} 变量 {key} 移除成功。")
+            yield event.plain_result(f"会话 {uid} 变量 {key} 移除成功。")
             
     @filter.command("gewe_logout")
     async def gewe_logout(self, event: AstrMessageEvent):
@@ -915,16 +916,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     # @filter.command_group("kdb")
     # def kdb(self):
     #     pass
-        
-    # @kdb.command("on")
-    # async def on_kdb(self, event: AstrMessageEvent):
-    #     self.kdb_enabled = True
-    #     curr_kdb_name = self.context.provider_manager.curr_kdb_name
-    #     if not curr_kdb_name:
-    #         yield event.plain_result("未载入任何知识库")
-    #     else:
-    #         yield event.plain_result(f"知识库已打开。当前载入的知识库: {curr_kdb_name}")
-        
+
     # @kdb.command("off")
     # async def off_kdb(self, event: AstrMessageEvent):
     #     self.kdb_enabled = False
