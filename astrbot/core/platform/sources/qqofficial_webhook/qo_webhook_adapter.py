@@ -43,7 +43,7 @@ class botClient(Client):
         
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage):
-        abm = self.platform._parse_from_qqofficial(message, MessageType.FRIEND_MESSAGE)
+        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(message, MessageType.FRIEND_MESSAGE)
         abm.session_id = abm.sender.user_id
         self._commit(abm)
         
