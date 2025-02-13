@@ -72,6 +72,11 @@ export default {
         type: 'datetime',
         title: {
           text: '时间'
+        },
+        labels: {
+          formatter: function (value) {
+            return new Date(value).toLocaleString();
+          }
         }
       },
       yaxis: {
