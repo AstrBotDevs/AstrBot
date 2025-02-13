@@ -4,7 +4,7 @@ import aiohttp
 import quart
 import base64
 import datetime
-
+import re
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.api.message_components import Plain, Image, At, Record
 from astrbot.api import logger, sp
@@ -100,7 +100,8 @@ class SimpleGewechatClient():
             content = _t[1]
             if '\u2005' in content: 
                 # at
-                content = content.split('\u2005')[1]
+                # content = content.split('\u2005')[1]
+                content = re.sub(r'@[^\u2005]*\u2005', '', content)
             abm.group_id = from_user_name
             # at
             msg_source = d['MsgSource']
