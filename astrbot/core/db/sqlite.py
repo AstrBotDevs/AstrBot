@@ -247,6 +247,10 @@ class SQLiteDatabase(BaseDatabase):
         
         res = c.fetchone()
         c.close()
+        
+        if not res:
+            return
+        
         return Conversation(*res)
     
     def new_conversation(self, user_id: str, cid: str):

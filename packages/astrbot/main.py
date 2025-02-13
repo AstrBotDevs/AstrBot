@@ -785,7 +785,9 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                         event.unified_msg_origin, 
                         session_curr_cid
                     )
-                    history = json.loads(conv.history)
+                    history = []
+                    if conv:
+                        history = json.loads(conv.history)
                     
                     prompt = self.ltm.ar_prompt
                     if not prompt:

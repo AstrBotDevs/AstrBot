@@ -66,6 +66,7 @@ DEFAULT_CONFIG = {
             "method": "possibility_reply",
             "possibility_reply": 0.1,
             "prompt": "",
+            "whitelist": []
         }
     },
     "content_safety": {
@@ -814,6 +815,13 @@ CONFIG_METADATA_2 = {
                                 "type": "bool",
                                 "obvious_hint": True,
                                 "hint": "启用后，会根据触发概率主动回复群聊内的对话。QQ官方API(qq_official)不可用",
+                            },
+                            "whitelist": {
+                                "description": "主动回复白名单",
+                                "type": "list",
+                                "items": {"type": "string"},
+                                "obvious_hint": True,
+                                "hint": "启用后，只有在白名单内的群聊会被主动回复。为空时不启用白名单过滤。需要通过 /sid 获取 SID 添加到这里。",
                             },
                             "method": {
                                 "description": "回复方法",

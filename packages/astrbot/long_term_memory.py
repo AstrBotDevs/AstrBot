@@ -32,6 +32,7 @@ class LongTermMemory:
         self.ar_method = self.active_reply["method"]
         self.ar_possibility = self.active_reply["possibility_reply"]
         self.ar_prompt = self.active_reply.get("prompt", "")
+        self.ar_whitelist = self.active_reply.get("whitelist", [])
         
         # self.put_history_to_prompt = self.config["put_history_to_prompt"]
         
@@ -66,6 +67,12 @@ class LongTermMemory:
         
         if event.is_at_or_wake_command:
             # if the message is a command, let it pass
+            return False
+        
+        if self.ar_whitelist and (
+            event.unified_msg_origin not in self.ar_whitelist
+            and (event.get_group_id() and event.get_group_id() not in self.ar_whitelist)
+        ):
             return False
 
         match self.ar_method:
