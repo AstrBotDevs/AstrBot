@@ -7,7 +7,7 @@ from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core import logger
-from astrbot.core.message.components import Plain, Image, At, Reply, Record
+from astrbot.core.message.components import Plain, Image, At, Reply, Record, File
 from astrbot.core import html_renderer
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 
@@ -145,4 +145,5 @@ class ResultDecorateStage(Stage):
             
             # 引用回复
             if self.reply_with_quote:
-                result.chain.insert(0, Reply(id=event.message_obj.message_id))
+                if not any(isinstance(item, File) for item in result.chain):
+                    result.chain.insert(0, Reply(id=event.message_obj.message_id))
