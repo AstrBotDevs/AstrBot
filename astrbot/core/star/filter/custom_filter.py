@@ -1,5 +1,4 @@
 from abc import abstractmethod, ABCMeta
-from typing import Union
 
 from . import HandlerFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent

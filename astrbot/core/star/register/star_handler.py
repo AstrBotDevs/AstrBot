@@ -7,7 +7,7 @@ from ..filter.command_group import CommandGroupFilter
 from ..filter.event_message_type import EventMessageTypeFilter, EventMessageType
 from ..filter.platform_adapter_type import PlatformAdapterTypeFilter, PlatformAdapterType
 from ..filter.permission import PermissionTypeFilter, PermissionType
-from ..filter.custom_filter import CustomFilter, CustomFilterAnd, CustomFilterOr
+from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
 from ..filter.regex import RegexFilter
 from typing import Awaitable
 from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
@@ -108,6 +108,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
 
     if not isinstance(custom_filter, (CustomFilterAnd, CustomFilterOr)):
         custom_filter = custom_filter(raise_error)
+
     def decorator(awaitable):
         # 裸指令，子指令与指令组的区分，指令组会因为标记跳过wake。
         if not add_to_event_filters and isinstance(awaitable, RegisteringCommandable):
