@@ -111,8 +111,9 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
 
     def decorator(awaitable):
         # 裸指令，子指令与指令组的区分，指令组会因为标记跳过wake。
-        if not add_to_event_filters and isinstance(awaitable, RegisteringCommandable):
-            # 指令组，添加到本层的grouphandle中一起判断
+        if not add_to_event_filters and isinstance(awaitable, RegisteringCommandable) or \
+            (add_to_event_filters and isinstance(awaitable, RegisteringCommandable)):
+            # 指令组 与 根指令组，添加到本层的grouphandle中一起判断
             awaitable.parent_group.add_custom_filter(custom_filter)
         else:
             handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, **kwargs)
