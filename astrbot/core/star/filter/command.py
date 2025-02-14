@@ -8,7 +8,6 @@ from astrbot.core.config import AstrBotConfig
 from astrbot.core.utils.param_validation_mixin import ParameterValidationMixin
 from .custom_filter import CustomFilter
 from ..star_handler import StarHandlerMetadata
-from ... import logger
 
 # 标准指令受到 wake_prefix 的制约。
 class CommandFilter(HandlerFilter, ParameterValidationMixin):

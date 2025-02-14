@@ -1,6 +1,5 @@
 from __future__ import annotations
 import docstring_parser
-import traceback
 
 from ..star_handler import star_handlers_registry, StarHandlerMetadata, EventType
 from ..filter.command import CommandFilter
@@ -10,7 +9,7 @@ from ..filter.platform_adapter_type import PlatformAdapterTypeFilter, PlatformAd
 from ..filter.permission import PermissionTypeFilter, PermissionType
 from ..filter.custom_filter import CustomFilter
 from ..filter.regex import RegexFilter
-from typing import Awaitable, Union
+from typing import Awaitable
 from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
 from astrbot.core import logger
@@ -118,7 +117,6 @@ def register_custom_filter(custom_type_filter: CustomFilter, *args, **kwargs):
             if not add_to_event_filters and not isinstance(awaitable, RegisteringCommandable):
                 # 底层子指令
                 handle_full_name = get_handler_full_name(awaitable)
-                command_handle = None
                 for sub_handle in parent_rigister_commandable.parent_group.sub_command_filters:
                     # 所有符合fullname一致的子指令handle添加自定义过滤器。
                     # 不确定是否会有多个子指令有一样的fullname，比如一个方法添加多个command装饰器？

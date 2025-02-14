@@ -8,7 +8,6 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.config import AstrBotConfig
 from .custom_filter import CustomFilter
 from ..star_handler import StarHandlerMetadata
-from ... import logger
 
 # 指令组受到 wake_prefix 的制约。
 class CommandGroupFilter(HandlerFilter):
