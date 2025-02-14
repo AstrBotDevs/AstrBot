@@ -79,7 +79,7 @@ class CommandGroupFilter(HandlerFilter):
             message_str = event.get_message_str().strip()
         
         ls = re.split(r"\s+", message_str)
-        
+
         if ls[0] != self.group_name:
             return False, None
         # 改写 message_str
@@ -89,15 +89,15 @@ class CommandGroupFilter(HandlerFilter):
         parsing_command = " ".join(ls)
         parsing_command = parsing_command.strip()
         event.set_extra("parsing_command", parsing_command)
-        
-        if parsing_command == "":
-            # 当前还是指令组
-            tree = self.group_name + "\n" + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
-            raise ValueError(f"指令组 {self.group_name} 未填写完全。这个指令组下有如下指令：\n"+tree)
 
         # 判断当前指令组的自定义过滤器
         if not self.custom_filter_ok(event, cfg):
             return False, None
+
+        if parsing_command == "":
+            # 当前还是指令组
+            tree = self.group_name + "\n" + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
+            raise ValueError(f"指令组 {self.group_name} 未填写完全。这个指令组下有如下指令：\n"+tree)
 
         child_command_handler_md = None
         for sub_filter in self.sub_command_filters:

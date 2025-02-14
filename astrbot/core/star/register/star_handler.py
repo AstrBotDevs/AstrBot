@@ -7,7 +7,7 @@ from ..filter.command_group import CommandGroupFilter
 from ..filter.event_message_type import EventMessageTypeFilter, EventMessageType
 from ..filter.platform_adapter_type import PlatformAdapterTypeFilter, PlatformAdapterType
 from ..filter.permission import PermissionTypeFilter, PermissionType
-from ..filter.custom_filter import CustomFilter
+from ..filter.custom_filter import CustomFilter, CustomFilterAnd, CustomFilterOr
 from ..filter.regex import RegexFilter
 from typing import Awaitable
 from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
@@ -81,7 +81,7 @@ def register_command(command_name: str = None, *args, **kwargs):
 
     return decorator
 
-def register_custom_filter(custom_type_filter: CustomFilter, *args, **kwargs):
+def register_custom_filter(custom_type_filter, *args, **kwargs):
     '''注册一个自定义的 CustomFilter
 
     Args:
@@ -106,11 +106,13 @@ def register_custom_filter(custom_type_filter: CustomFilter, *args, **kwargs):
         if args:
             raise_error = args[0]
 
+    if not isinstance(custom_filter, (CustomFilterAnd, CustomFilterOr)):
+        custom_filter = custom_filter(raise_error)
     def decorator(awaitable):
         # 裸指令，子指令与指令组的区分，指令组会因为标记跳过wake。
         if not add_to_event_filters and isinstance(awaitable, RegisteringCommandable):
             # 指令组，添加到本层的grouphandle中一起判断
-            awaitable.parent_group.add_custom_filter(custom_filter(raise_error))
+            awaitable.parent_group.add_custom_filter(custom_filter)
         else:
             handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, **kwargs)
 
@@ -122,12 +124,12 @@ def register_custom_filter(custom_type_filter: CustomFilter, *args, **kwargs):
                     # 不确定是否会有多个子指令有一样的fullname，比如一个方法添加多个command装饰器？
                     sub_handle_md = sub_handle.get_handler_md()
                     if sub_handle_md and sub_handle_md.handler_full_name == handle_full_name:
-                        sub_handle.add_custom_filter(custom_filter(raise_error))
+                        sub_handle.add_custom_filter(custom_filter)
 
             else:
                 # 裸指令
                 handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, **kwargs)
-                handler_md.event_filters.append(custom_filter(raise_error))
+                handler_md.event_filters.append(custom_filter)
 
         return awaitable
     return decorator
