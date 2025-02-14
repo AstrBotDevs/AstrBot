@@ -8,6 +8,7 @@ from astrbot.core.config import AstrBotConfig
 from astrbot.core.utils.param_validation_mixin import ParameterValidationMixin
 from .custom_filter import CustomFilter
 from ..star_handler import StarHandlerMetadata
+from ... import logger
 
 # 标准指令受到 wake_prefix 的制约。
 class CommandFilter(HandlerFilter, ParameterValidationMixin):
@@ -48,13 +49,18 @@ class CommandFilter(HandlerFilter, ParameterValidationMixin):
     def add_custom_filter(self, custom_filter: CustomFilter):
         self.custom_filter_list.append(custom_filter)
 
+    def custom_filter_ok(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        for custom_filter in self.custom_filter_list:
+            if not custom_filter.filter(event, cfg):
+                return False
+        return True
+
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         if not event.is_at_or_wake_command:
             return False
 
-        for custom_filter in self.custom_filter_list:
-            if not custom_filter.filter(event, cfg):
-                raise ValueError(f"没有执行该指令(组)的权限\n")
+        if not self.custom_filter_ok(event, cfg):
+            return False
 
         if event.get_extra("parsing_command"):
             message_str = event.get_extra("parsing_command").strip()
