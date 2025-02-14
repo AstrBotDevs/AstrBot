@@ -31,6 +31,9 @@ class ProviderDify(Provider):
             raise Exception("Dify API 类型不能为空。")
         self.model_name = "dify"
         self.workflow_output_key = provider_config.get("dify_workflow_output_key", "astrbot_wf_output")
+        self.dify_query_input_key = provider_config.get("dify_query_input_key", "astrbot_text_query")
+        if not self.dify_query_input_key:
+            self.dify_query_input_key = "astrbot_text_query"
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
@@ -95,7 +98,7 @@ class ProviderDify(Provider):
             case "workflow":
                 async for chunk in self.api_client.workflow_run(
                     inputs={
-                        "astrbot_text_query": prompt,
+                        self.dify_query_input_key: prompt,
                         "astrbot_session_id": session_id,
                         **session_var
                     },

@@ -496,6 +496,7 @@ CONFIG_METADATA_2 = {
                         "dify_api_key": "",
                         "dify_api_base": "https://api.dify.ai/v1",
                         "dify_workflow_output_key": "",
+                        "dify_query_input_key": "astrbot_text_query",
                         "timeout": 60,
                     },
                     "whisper(API)": {
@@ -647,6 +648,12 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "Dify Workflow 输出变量名。当应用类型为 workflow 时才使用。默认为 astrbot_wf_output。",
                     },
+                    "dify_query_input_key": {
+                        "description": "Prompt 输入变量名",
+                        "type": "string",   
+                        "hint": "发送的消息文本内容对应的输入变量名。默认为 astrbot_text_query。",
+                        "obvious": True,
+                    }
                 },
             },
             "provider_settings": {
