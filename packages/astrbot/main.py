@@ -6,8 +6,7 @@ import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
-from astrbot.api.platform import MessageType
-from astrbot.api.provider import Personality, ProviderRequest, LLMResponse
+from astrbot.api.provider import ProviderRequest
 from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
@@ -40,7 +39,7 @@ class Main(star.Star):
     async def _query_astrbot_notice(self):
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
-                async with session.get("https://astrbot.soulter.top/notice.json", timeout=2) as resp:
+                async with session.get("https://astrbot.app/notice.json", timeout=2) as resp:
                     return (await resp.json())["notice"]
         except BaseException:
             return ""

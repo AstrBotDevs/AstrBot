@@ -21,7 +21,7 @@ const sidebarMenu = shallowRef(sidebarItems);
     </div>
 
     <div style="position: absolute; bottom: 32px; width: 100%" class="text-center">
-      <v-list-item v-if="!customizer.mini_sidebar" href="https://astrbot.soulter.top/">
+      <v-list-item v-if="!customizer.mini_sidebar" href="https://astrbot.app/">
         <v-btn variant="plain" size="small">
           🤔 初次使用？点击查看文档！
         </v-btn>

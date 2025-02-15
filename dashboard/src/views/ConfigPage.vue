@@ -91,7 +91,7 @@ import config from '@/config';
 
       <div style="margin-left: 16px; padding-bottom: 16px">
         <small>不了解配置？请见 <a
-            href="https://astrbot.soulter.top/">官方文档</a>
+            href="https://astrbot.app/">官方文档</a>
           或 <a
             href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft">加群询问</a>。</small>
       </div>
