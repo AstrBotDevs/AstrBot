@@ -7,13 +7,16 @@ from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core import logger
-from astrbot.core.message.message_event_result import BaseMessageComponent, Plain
+from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
-
+from astrbot.core.message.components import Plain, Reply, At
 @register_stage
 class RespondStage(Stage):
     async def initialize(self, ctx: PipelineContext):
         self.ctx = ctx
+        
+        self.reply_with_mention = ctx.astrbot_config['platform_settings']['reply_with_mention']
+        self.reply_with_quote = ctx.astrbot_config['platform_settings']['reply_with_quote']
         
         # 分段回复
         self.enable_seg: bool = ctx.astrbot_config['platform_settings']['segmented_reply']['enable']
@@ -60,11 +63,24 @@ class RespondStage(Stage):
             await event._pre_send()
             
             if self.enable_seg and ((self.only_llm_result and result.is_llm_result()) or not self.only_llm_result):
+                decorated_comps = []
+                if self.reply_with_mention:
+                    for comp in result.chain:
+                        if isinstance(comp, At):
+                            decorated_comps.append(comp)
+                            result.chain.remove(comp)
+                            break
+                if self.reply_with_quote:
+                    for comp in result.chain:
+                        if isinstance(comp, Reply):
+                            decorated_comps.append(comp)
+                            result.chain.remove(comp)
+                            break
                 # 分段回复
                 for comp in result.chain:
                     i = await self._calc_comp_interval(comp)
                     await asyncio.sleep(i)
-                    await event.send(MessageChain([comp]))
+                    await event.send(MessageChain([*decorated_comps, comp]))
             else:
                 await event.send(result)
             await event._post_send()

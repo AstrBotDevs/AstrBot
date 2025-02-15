@@ -75,10 +75,10 @@ class Main(star.Star):
             
     @llm_tool("web_search")
     async def search_from_search_engine(self, event: AstrMessageEvent, query: str) -> str:
-        '''Search the web for answers to the user's query
+        '''搜索网络以回答用户的问题。当用户需要搜索网络以获取即时性的信息时调用此工具。
         
         Args:
-            query(string): A search query which will be used to fetch the most relevant snippets regarding the user's query
+            query(string): 和用户的问题最相关的搜索关键词，用于在 Google 上搜索。
         '''
         logger.info("web_searcher - search_from_search_engine: " + query)
         results = []

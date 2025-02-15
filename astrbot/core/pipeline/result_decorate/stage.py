@@ -89,7 +89,7 @@ class ResultDecorateStage(Stage):
                                 new_chain.append(comp)
                                 continue
                             for seg in split_response:
-                                if seg:
+                                if seg.strip():
                                     new_chain.append(Plain(seg))
                         else:
                             # 非 Plain 类型的消息段不分段
