@@ -16,7 +16,7 @@ class CustomFilterMeta(ABCMeta):
         return CustomFilterOr(cls(), other())
 
 class CustomFilter(HandlerFilter, metaclass=CustomFilterMeta):
-    def __init__(self,  raise_error: bool = True):
+    def __init__(self,  raise_error: bool = True, **kwargs):
         self.raise_error = raise_error
 
     @abstractmethod
