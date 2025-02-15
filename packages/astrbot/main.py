@@ -775,20 +775,30 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                     logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
                     return
                 try:
-                    session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(event.unified_msg_origin)
-                    
-                    if not session_curr_cid:
-                        logger.error("当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。")
-                        return
-                    
-                    conv = await self.context.conversation_manager.get_conversation(
-                        event.unified_msg_origin, 
-                        session_curr_cid
-                    )
+                    conv = None
                     history = []
-                    if conv:
-                        history = json.loads(conv.history)
-                    
+                    if provider.meta().type != 'dify':
+                        # Dify 自己有维护对话，不需要 bot 端维护。
+                        session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(event.unified_msg_origin)
+                        
+                        if not session_curr_cid:
+                            logger.error("当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。")
+                            return
+                        
+                        conv = await self.context.conversation_manager.get_conversation(
+                            event.unified_msg_origin, 
+                            session_curr_cid
+                        )
+                        history = []
+                        if conv:
+                            history = json.loads(conv.history)
+                    else:
+                        assert isinstance(provider, ProviderDify)
+                        cid = provider.conversation_ids.get(event.unified_msg_origin, None)
+                        if cid is None:
+                            logger.error("[Dify] 当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。")
+                            return
+                        
                     prompt = self.ltm.ar_prompt
                     if not prompt:
                         prompt = event.message_str

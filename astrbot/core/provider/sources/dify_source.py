@@ -124,7 +124,7 @@ class ProviderDify(Provider):
         return LLMResponse(role="assistant", completion_text=result)
 
     async def forget(self, session_id):
-        self.conversation_ids.pop(session_id, None)
+        self.conversation_ids[session_id] = ""
         return True
 
     async def get_current_key(self):
