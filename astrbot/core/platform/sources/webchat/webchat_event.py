@@ -39,6 +39,6 @@ class WebChatMessageEvent(AstrMessageEvent):
                             f.write(f2.read())
                 web_chat_back_queue.put_nowait((f"[IMAGE]{filename}", cid))
             else:
-                logger.error(f"webchat 暂不支持发送消息类型: {comp.type}")
+                logger.debug(f"webchat 忽略: {comp.type}")
         web_chat_back_queue.put_nowait(None)
         await super().send(message)

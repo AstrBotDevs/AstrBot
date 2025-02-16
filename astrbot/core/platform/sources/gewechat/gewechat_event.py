@@ -134,6 +134,6 @@ class GewechatPlatformEvent(AstrMessageEvent):
             elif isinstance(comp, At):
                 pass
             else:
-                logger.error(f"gewechat 暂不支持发送消息类型: {comp.type}")   
+                logger.debug(f"gewechat 忽略: {comp.type}")   
         
         await super().send(message)

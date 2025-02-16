@@ -98,5 +98,5 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     image_base64 = file_to_base64(i.file).replace("base64://", "")
                     image_file_path = i.file
             else:
-                logger.error(f"qq_official 暂不支持发送消息类型 {i.type}")
+                logger.debug(f"qq_official 忽略 {i.type}")
         return plain_text, image_base64, image_file_path
