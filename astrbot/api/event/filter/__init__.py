@@ -16,6 +16,7 @@ from astrbot.core.star.register import (
 from astrbot.core.star.filter.event_message_type import EventMessageTypeFilter, EventMessageType
 from astrbot.core.star.filter.platform_adapter_type import PlatformAdapterTypeFilter, PlatformAdapterType
 from astrbot.core.star.filter.permission import PermissionTypeFilter, PermissionType
+from astrbot.core.star.filter.custom_filter import CustomFilter
 
 __all__ = [
     'command',
@@ -29,6 +30,7 @@ __all__ = [
     'PlatformAdapterTypeFilter',
     'PlatformAdapterType',
     'PermissionTypeFilter',
+    'CustomFilter',
     'custom_filter',
     'PermissionType',
     'on_llm_request',

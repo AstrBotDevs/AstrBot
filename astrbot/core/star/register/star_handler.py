@@ -85,7 +85,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
     '''注册一个自定义的 CustomFilter
 
     Args:
-        cunstom_permission_type_filter: 在裸指令时为CustomFilter对象
+        custom_type_filter: 在裸指令时为CustomFilter对象
                                         在指令组时为父指令的RegisteringCommandable对象，即self或者command_group的返回
         raise_error: 如果没有权限，是否抛出错误到消息平台，并且停止事件传播。默认为 True
     '''
@@ -95,7 +95,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
     # 判断是否是指令组，指令组则添加到指令组的CommandGroupFilter对象中在waking_check的时候一起判断
     if isinstance(custom_type_filter, RegisteringCommandable):
         # 子指令, 此时函数为RegisteringCommandable对象的方法，首位参数为RegisteringCommandable对象的self。
-        parent_rigister_commandable = custom_type_filter
+        parent_register_commandable = custom_type_filter
         custom_filter = args[0]
         if len(args) > 1:
             raise_error = args[1]
@@ -121,7 +121,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
             if not add_to_event_filters and not isinstance(awaitable, RegisteringCommandable):
                 # 底层子指令
                 handle_full_name = get_handler_full_name(awaitable)
-                for sub_handle in parent_rigister_commandable.parent_group.sub_command_filters:
+                for sub_handle in parent_register_commandable.parent_group.sub_command_filters:
                     # 所有符合fullname一致的子指令handle添加自定义过滤器。
                     # 不确定是否会有多个子指令有一样的fullname，比如一个方法添加多个command装饰器？
                     sub_handle_md = sub_handle.get_handler_md()

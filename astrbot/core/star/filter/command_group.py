@@ -24,23 +24,18 @@ class CommandGroupFilter(HandlerFilter):
 
     # 以树的形式打印出来
     def print_cmd_tree(self,
-                       sub_command_filters: List[Union[CommandFilter,
-                       CommandGroupFilter]],
-                       prefix: str = "",
-                       event: AstrMessageEvent = None,
-                       cfg: AstrBotConfig = None,
-                        ) -> str:
+        sub_command_filters: List[Union[CommandFilter, CommandGroupFilter]],
+        prefix: str = "",
+        event: AstrMessageEvent = None,
+        cfg: AstrBotConfig = None,
+    ) -> str:
         result = ""
         for sub_filter in sub_command_filters:
             if isinstance(sub_filter, CommandFilter):
+                custom_filter_pass = True
                 if event and cfg:
-                    if sub_filter.custom_filter_ok(event, cfg):
-                        permission_pass = True
-                    else:
-                        permission_pass = False
-                else:
-                    permission_pass = True
-                if permission_pass:
+                    custom_filter_pass = sub_filter.custom_filter_ok(event, cfg)
+                if custom_filter_pass:
                     cmd_th = sub_filter.print_types()
                     result += f"{prefix}├── {sub_filter.command_name}"
                     if cmd_th:
@@ -49,14 +44,10 @@ class CommandGroupFilter(HandlerFilter):
                         result += " (无参数指令)"
                     result += "\n"
             elif isinstance(sub_filter, CommandGroupFilter):
+                custom_filter_pass = True
                 if event and cfg:
-                    if sub_filter.custom_filter_ok(event, cfg):
-                        permission_pass = True
-                    else:
-                        permission_pass = False
-                else:
-                    permission_pass = True
-                if permission_pass:
+                    custom_filter_pass = sub_filter.custom_filter_ok(event, cfg)
+                if custom_filter_pass:
                     result += f"{prefix}├── {sub_filter.group_name}"
                     result += "\n"
                     result += sub_filter.print_cmd_tree(sub_filter.sub_command_filters, prefix+"│   ", event=event, cfg=cfg)
