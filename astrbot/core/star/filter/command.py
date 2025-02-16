@@ -1,19 +1,23 @@
 
 import re
 import inspect
+from typing import List
 from . import HandlerFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.utils.param_validation_mixin import ParameterValidationMixin
+from .custom_filter import CustomFilter
 from ..star_handler import StarHandlerMetadata
 
 # 标准指令受到 wake_prefix 的制约。
 class CommandFilter(HandlerFilter, ParameterValidationMixin):
     '''标准指令过滤器'''
-    def __init__(self, command_name: str, handler_md: StarHandlerMetadata = None):
+    def __init__(self, command_name: str, alias: set = None, handler_md: StarHandlerMetadata = None):
         self.command_name = command_name
+        self.alias = alias if alias else set()
         if handler_md:
             self.init_handler_md(handler_md)
+        self.custom_filter_list: List[CustomFilter] = []
             
     def print_types(self):
         result = ""
@@ -42,10 +46,22 @@ class CommandFilter(HandlerFilter, ParameterValidationMixin):
     def get_handler_md(self) -> StarHandlerMetadata:
         return self.handler_md
 
+    def add_custom_filter(self, custom_filter: CustomFilter):
+        self.custom_filter_list.append(custom_filter)
+
+    def custom_filter_ok(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        for custom_filter in self.custom_filter_list:
+            if not custom_filter.filter(event, cfg):
+                return False
+        return True
+
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         if not event.is_at_or_wake_command:
             return False
-        
+
+        if not self.custom_filter_ok(event, cfg):
+            return False
+
         if event.get_extra("parsing_command"):
             message_str = event.get_extra("parsing_command").strip()
         else:
@@ -53,7 +69,7 @@ class CommandFilter(HandlerFilter, ParameterValidationMixin):
             
         # 分割为列表（每个参数之间可能会有多个空格）
         ls = re.split(r"\s+", message_str)
-        if self.command_name != ls[0]:
+        if self.command_name != ls[0] and ls[0] not in self.alias:
             return False
         # if len(self.handler_params) == 0 and len(ls) > 1:
         #     # 一定程度避免 LLM 聊天时误判为指令

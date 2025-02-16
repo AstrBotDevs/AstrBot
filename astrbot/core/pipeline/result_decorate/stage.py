@@ -32,6 +32,7 @@ class ResultDecorateStage(Stage):
         self.only_llm_result = ctx.astrbot_config['platform_settings']['segmented_reply']['only_llm_result']
         self.regex = ctx.astrbot_config['platform_settings']['segmented_reply']['regex']
         self.content_cleanup_rule = ctx.astrbot_config['platform_settings']['segmented_reply']['content_cleanup_rule']
+
         
         # exception
         self.content_safe_check_reply = ctx.astrbot_config['content_safety']['also_use_in_response']
