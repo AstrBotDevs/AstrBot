@@ -7,7 +7,7 @@ from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core import logger
-from astrbot.core.message.components import Plain, Image, At, Reply, Record, File
+from astrbot.core.message.components import Plain, Image, At, Reply, Record, File, Node
 from astrbot.core import html_renderer
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 
@@ -25,6 +25,8 @@ class ResultDecorateStage(Stage):
                 self.t2i_word_threshold = 50
         except BaseException:
             self.t2i_word_threshold = 150
+            
+        self.forward_threshold = ctx.astrbot_config['platform_settings']['forward_threshold']
         
         # 分段回复
         self.words_count_threshold = int(ctx.astrbot_config['platform_settings']['segmented_reply']['words_count_threshold'])
@@ -143,13 +145,32 @@ class ResultDecorateStage(Stage):
                     if url:
                         result.chain = [Image.fromURL(url)]
             
-            # at 回复
-            if self.reply_with_mention and event.get_message_type() != MessageType.FRIEND_MESSAGE:
-                result.chain.insert(0, At(qq=event.get_sender_id(), name=event.get_sender_name()))
-                if len(result.chain) > 1 and isinstance(result.chain[1], Plain):
-                    result.chain[1].text = "\n" + result.chain[1].text
+            # 触发转发消息
+            has_forwarded = False
+            if event.get_platform_name() == 'aiocqhttp':
+                word_cnt = 0
+                for comp in result.chain:
+                    if isinstance(comp, Plain):
+                        word_cnt += len(comp.text)
+                if word_cnt > self.forward_threshold:
+                    node = Node(
+                        uin=event.get_self_id(),
+                        name="AstrBot",
+                        content=[
+                            *result.chain
+                        ]
+                    )
+                    result.chain = [node]
+                    has_forwarded = True
             
-            # 引用回复
-            if self.reply_with_quote:
-                if not any(isinstance(item, File) for item in result.chain):
-                    result.chain.insert(0, Reply(id=event.message_obj.message_id))
+            if not has_forwarded:
+                # at 回复
+                if self.reply_with_mention and event.get_message_type() != MessageType.FRIEND_MESSAGE:
+                    result.chain.insert(0, At(qq=event.get_sender_id(), name=event.get_sender_name()))
+                    if len(result.chain) > 1 and isinstance(result.chain[1], Plain):
+                        result.chain[1].text = "\n" + result.chain[1].text
+                
+                # 引用回复
+                if self.reply_with_quote:
+                    if not any(isinstance(item, File) for item in result.chain):
+                        result.chain.insert(0, Reply(id=event.message_obj.message_id))
