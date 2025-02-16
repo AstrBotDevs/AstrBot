@@ -11,7 +11,7 @@ from ..star_handler import StarHandlerMetadata
 
 # 指令组受到 wake_prefix 的制约。
 class CommandGroupFilter(HandlerFilter):
-    def __init__(self, group_name: str, alias: set):
+    def __init__(self, group_name: str, alias: set = None):
         self.group_name = group_name
         self.alias = alias if alias else set()
         self.sub_command_filters: List[Union[CommandFilter, CommandGroupFilter]] = []

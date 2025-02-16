@@ -12,7 +12,7 @@ from ..star_handler import StarHandlerMetadata
 # 标准指令受到 wake_prefix 的制约。
 class CommandFilter(HandlerFilter, ParameterValidationMixin):
     '''标准指令过滤器'''
-    def __init__(self, command_name: str, alias: set, handler_md: StarHandlerMetadata = None):
+    def __init__(self, command_name: str, alias: set = None, handler_md: StarHandlerMetadata = None):
         self.command_name = command_name
         self.alias = alias if alias else set()
         if handler_md:
