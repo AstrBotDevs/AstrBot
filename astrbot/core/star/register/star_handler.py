@@ -51,7 +51,7 @@ def get_handler_or_create(
             star_handlers_registry.append(md)
         return md
 
-def register_command(command_name: str = None, *args, **kwargs):
+def register_command(command_name: str = None, sub_command: str = None, alias: set = None, **kwargs):
     '''注册一个 Command.
     '''
     
@@ -61,11 +61,11 @@ def register_command(command_name: str = None, *args, **kwargs):
     add_to_event_filters = False
     if isinstance(command_name, RegisteringCommandable):
         # 子指令
-        new_command = CommandFilter(args[0], None)
+        new_command = CommandFilter(sub_command, alias, None)
         command_name.parent_group.add_sub_command_filter(new_command)
     else:
         # 裸指令
-        new_command = CommandFilter(command_name, None)
+        new_command = CommandFilter(command_name, alias, None)
         add_to_event_filters = True
     
     def decorator(awaitable):
@@ -136,7 +136,9 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
         return awaitable
     return decorator
 
-def register_command_group(command_group_name: str = None, *args, **kwargs):
+def register_command_group(
+    command_group_name: str = None, sub_command: str = None, alias: set = None, **kwargs
+):
     '''注册一个 CommandGroup
     '''
     
@@ -146,11 +148,11 @@ def register_command_group(command_group_name: str = None, *args, **kwargs):
     add_to_event_filters = False
     if isinstance(command_group_name, RegisteringCommandable):
         # 子指令组
-        new_group = CommandGroupFilter(args[0])
+        new_group = CommandGroupFilter(sub_command, alias)
         command_group_name.parent_group.add_sub_command_filter(new_group)
     else:
         # 根指令组
-        new_group = CommandGroupFilter(command_group_name)
+        new_group = CommandGroupFilter(command_group_name, alias)
         add_to_event_filters = True
     
     def decorator(obj):
