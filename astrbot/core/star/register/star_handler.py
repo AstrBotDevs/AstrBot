@@ -81,6 +81,7 @@ def register_command(command_name: str = None, sub_command: str = None, alias: s
 
     return decorator
 
+
 def register_custom_filter(custom_type_filter, *args, **kwargs):
     '''注册一个自定义的 CustomFilter
 

@@ -31,6 +31,8 @@ class ResultDecorateStage(Stage):
         self.enable_segmented_reply = ctx.astrbot_config['platform_settings']['segmented_reply']['enable']
         self.only_llm_result = ctx.astrbot_config['platform_settings']['segmented_reply']['only_llm_result']
         self.regex = ctx.astrbot_config['platform_settings']['segmented_reply']['regex']
+        self.content_cleanup_rule = ctx.astrbot_config['platform_settings']['segmented_reply']['content_cleanup_rule']
+
         
         # exception
         self.content_safe_check_reply = ctx.astrbot_config['content_safety']['also_use_in_response']
@@ -89,6 +91,8 @@ class ResultDecorateStage(Stage):
                                 new_chain.append(comp)
                                 continue
                             for seg in split_response:
+                                if self.content_cleanup_rule:
+                                    seg = re.sub(self.content_cleanup_rule, "", seg)
                                 if seg.strip():
                                     new_chain.append(Plain(seg))
                         else:

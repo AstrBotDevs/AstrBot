@@ -32,7 +32,8 @@ DEFAULT_CONFIG = {
             "interval": "1.5,3.5",
             "log_base": 2.6,
             "words_count_threshold": 150,
-            "regex": ".*?[。？！~…]+|.+$"
+            "regex": ".*?[。？！~…]+|.+$",
+            "content_cleanup_rule": "",
         },
         "no_permission_reply": True,
     },
@@ -270,6 +271,12 @@ CONFIG_METADATA_2 = {
                                 "type": "string",
                                 "obvious_hint": True,
                                 "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。re.findall(r'<regex>', text)",
+                            },
+                            "content_cleanup_rule": {
+                                "description": "过滤分段后的内容",
+                                "type": "string",
+                                "obvious_hint": True,
+                                "hint": "移除分段后的内容中的指定的内容。支持正则表达式。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.sub(r'<regex>', '', text)",
                             },
                         },
                     },
