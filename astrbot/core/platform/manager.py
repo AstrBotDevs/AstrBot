@@ -15,22 +15,25 @@ class PlatformManager():
         self.settings = config['platform_settings']
         self.event_queue = event_queue
         
-        for platform in self.platforms_config:
-            if not platform['enable']:
-                continue
-            match platform['type']:
-                case "aiocqhttp":
-                    from .sources.aiocqhttp.aiocqhttp_platform_adapter import AiocqhttpAdapter  # noqa: F401
-                case "qq_official":
-                    from .sources.qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter # noqa: F401
-                case "vchat":
-                    try:
-                        from .sources.vchat.vchat_platform_adapter import VChatPlatformAdapter # noqa: F401
-                    except BaseException:
-                        logger.warning("当前 astrbot 已不维护 vchat 的接入，如有需要请 pip 安装 vchat 然后重启")
-                case "gewechat":
-                    from .sources.gewechat.gewechat_platform_adapter import GewechatPlatformAdapter # noqa: F401
-        
+        try:
+            for platform in self.platforms_config:
+                if not platform['enable']:
+                    continue
+                match platform['type']:
+                    case "aiocqhttp":
+                        from .sources.aiocqhttp.aiocqhttp_platform_adapter import AiocqhttpAdapter  # noqa: F401
+                    case "qq_official":
+                        from .sources.qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter # noqa: F401
+                    case "qq_official_webhook":
+                        from .sources.qqofficial_webhook.qo_webhook_adapter import QQOfficialWebhookPlatformAdapter # noqa: F401
+                    case "gewechat":
+                        from .sources.gewechat.gewechat_platform_adapter import GewechatPlatformAdapter # noqa: F401
+                    case "lark":
+                        from .sources.lark.lark_adapter import LarkPlatformAdapter # noqa: F401
+        except (ImportError, ModuleNotFoundError) as e:
+            logger.error(f"加载平台适配器 {platform['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->控制台->安装Pip库 中安装依赖库。")
+        except Exception as e:
+            logger.error(f"加载平台适配器 {platform['type']} 失败，原因：{e}。")
 
     async def initialize(self):
         for platform in self.platforms_config:
@@ -40,7 +43,7 @@ class PlatformManager():
                 logger.error(f"未找到适用于 {platform['type']}({platform['id']}) 平台适配器，请检查是否已经安装或者名称填写错误。已跳过。")
                 continue
             cls_type = platform_cls_map[platform['type']]
-            logger.info(f"尝试实例化 {platform['type']}({platform['id']}) 平台适配器 ...")
+            logger.debug(f"尝试实例化 {platform['type']}({platform['id']}) 平台适配器 ...")
             inst = cls_type(platform, self.settings, self.event_queue)
             self.platform_insts.append(inst)
         

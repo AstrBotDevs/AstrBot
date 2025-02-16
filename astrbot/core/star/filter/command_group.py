@@ -37,7 +37,7 @@ class CommandGroupFilter(HandlerFilter):
         return result
         
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> Tuple[bool, StarHandlerMetadata]:
-        if not event.is_wake_up():
+        if not event.is_at_or_wake_command:
             return False, None
         
         if event.get_extra("parsing_command"):

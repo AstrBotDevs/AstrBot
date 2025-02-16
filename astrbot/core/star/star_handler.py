@@ -1,34 +1,41 @@
 from __future__ import annotations
 import enum
-from dataclasses import dataclass
+import heapq
+from dataclasses import dataclass, field
 from typing import Awaitable, List, Dict, TypeVar, Generic
 from .filter import HandlerFilter
 from .star import star_map
 
 T = TypeVar('T', bound='StarHandlerMetadata')
-class StarHandlerRegistry(Generic[T], List[T]):
+class StarHandlerRegistry(Generic[T]):
     '''用于存储所有的 Star Handler'''
     
     star_handlers_map: Dict[str, StarHandlerMetadata] = {}
     '''用于快速查找。key 是 handler_full_name'''
+    _handlers = []
     
     def append(self, handler: StarHandlerMetadata):
         '''添加一个 Handler'''
-        super().append(handler)
+        if 'priority' not in handler.extras_configs:
+            handler.extras_configs['priority'] = 0
+        
+        heapq.heappush(self._handlers, (-handler.extras_configs['priority'], handler))
         self.star_handlers_map[handler.handler_full_name] = handler
         
-    def get_handlers_by_event_type(self, event_type: EventType, only_activated = True) -> List[StarHandlerMetadata]:
+    def _print_handlers(self):
+        '''打印所有的 Handler'''
+        for _, handler in self._handlers:
+            print(handler.handler_full_name)
+        
+    def get_handlers_by_event_type(self, event_type: EventType, only_activated=True) -> List[StarHandlerMetadata]:
         '''通过事件类型获取 Handler'''
-        if only_activated:
-            return [
-                handler 
-                for handler in self 
-                if handler.event_type == event_type and 
-                star_map[handler.handler_module_path] and 
-                star_map[handler.handler_module_path].activated
-            ]
-        else:
-            return [handler for handler in self if handler.event_type == event_type]
+        handlers = [
+            handler 
+            for _, handler in self._handlers 
+            if handler.event_type == event_type and 
+            (not only_activated or (star_map[handler.handler_module_path] and star_map[handler.handler_module_path].activated))
+        ]
+        return handlers
     
     def get_handler_by_full_name(self, full_name: str) -> StarHandlerMetadata:
         '''通过 Handler 的全名获取 Handler'''
@@ -36,7 +43,32 @@ class StarHandlerRegistry(Generic[T], List[T]):
     
     def get_handlers_by_module_name(self, module_name: str) -> List[StarHandlerMetadata]:
         '''通过模块名获取 Handler'''
-        return [handler for handler in self if handler.handler_module_path == module_name]
+        return [handler for _, handler in self._handlers if handler.handler_module_path == module_name]
+    
+    def clear(self):
+        '''清空所有的 Handler'''
+        self.star_handlers_map.clear()
+        self._handlers.clear()
+        
+    def remove(self, handler: StarHandlerMetadata):
+        '''删除一个 Handler'''
+        # self._handlers.remove(handler)
+        for i, h in enumerate(self._handlers):
+            if h[1] == handler:
+                self._handlers.pop(i)
+                break
+        try:
+            del self.star_handlers_map[handler.handler_full_name]
+        except KeyError:
+            pass
+    
+    def __iter__(self):
+        '''使 StarHandlerRegistry 支持迭代'''
+        return (handler for _, handler in self._handlers)
+    
+    def __len__(self):
+        '''返回 Handler 的数量'''
+        return len(self._handlers)
     
 star_handlers_registry = StarHandlerRegistry()
 
@@ -76,3 +108,10 @@ class StarHandlerMetadata():
     
     desc: str = ""
     '''Handler 的描述信息'''
+
+    extras_configs: dict = field(default_factory=dict)
+    '''插件注册的一些其他的信息, 如 priority 等'''
+
+    def __lt__(self, other: StarHandlerMetadata):
+        '''定义小于运算符以支持优先队列'''
+        return self.extras_configs.get('priority', 0) < other.extras_configs.get('priority', 0)

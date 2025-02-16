@@ -9,7 +9,7 @@ const sidebarMenu = shallowRef(sidebarItems);
 </script>
 
 <template>
-  <v-navigation-drawer left v-model="customizer.Sidebar_drawer" elevation="0" rail-width="80" mobile-breakpoint="960"
+  <v-navigation-drawer left v-model="customizer.Sidebar_drawer" elevation="0" rail-width="80"
     app class="leftSidebar" :rail="customizer.mini_sidebar">
     <v-list class="pa-4 listitem" style="height: auto">
       <template v-for="(item, i) in sidebarMenu" :key="i">
@@ -21,14 +21,14 @@ const sidebarMenu = shallowRef(sidebarItems);
     </div>
 
     <div style="position: absolute; bottom: 32px; width: 100%" class="text-center">
-      <v-list-item v-if="!customizer.mini_sidebar" href="https://astrbot.soulter.top/">
+      <v-list-item v-if="!customizer.mini_sidebar" href="https://astrbot.app/">
         <v-btn variant="plain" size="small">
           🤔 初次使用？点击查看文档！
         </v-btn>
       </v-list-item>
       <small style="display: block;" v-if="buildVer">构建: {{ buildVer }}</small>
       <small style="display: block;" v-else>构建: embedded</small>
-      <v-tooltip text="使用 /dashbord_update 指令更新管理面板">
+      <v-tooltip text="使用 /dashboard_update 指令更新管理面板">
         <template v-slot:activator="{ props }">
           <small v-bind="props" v-if="hasWebUIUpdate" style="display: block; margin-top: 4px;">面板有更新</small>
         </template>

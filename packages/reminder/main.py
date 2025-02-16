@@ -79,7 +79,7 @@ class Main(star.Star):
             
     @llm_tool("reminder")
     async def reminder_tool(self, event: AstrMessageEvent, text: str=None, datetime_str: str = None, cron_expression: str = None, human_readable_cron: str = None):
-        '''Call this function when user ask for setting a reminder. 
+        '''Call this function when user is asking for setting a reminder.
         
         Args:
             text(string): Must Required. The content of the reminder.
@@ -127,7 +127,7 @@ class Main(star.Star):
             )
             reminder_time = datetime_str
         await self._save_data()
-        yield event.plain_result("成功设置待办事项。\n内容: " + text + "\n时间: " + reminder_time + "\n\n使用 /reminder ls 查看所有待办事项。")
+        yield event.plain_result("成功设置待办事项。\n内容: " + text + "\n时间: " + reminder_time + "\n\n使用 /reminder ls 查看所有待办事项。\n使用 /tool off reminder 关闭此功能。")
     
     @filter.command_group("reminder")
     def reminder(self):

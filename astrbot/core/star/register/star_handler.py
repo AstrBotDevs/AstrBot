@@ -17,7 +17,12 @@ def get_handler_full_name(awaitable: Awaitable) -> str:
     '''获取 Handler 的全名'''
     return f"{awaitable.__module__}_{awaitable.__name__}"
 
-def get_handler_or_create(handler: Awaitable, event_type: EventType, dont_add = False, **kwargs) -> StarHandlerMetadata:
+def get_handler_or_create(
+        handler: Awaitable, 
+        event_type: EventType, 
+        dont_add = False, 
+        **kwargs
+) -> StarHandlerMetadata:
     '''获取 Handler 或者创建一个新的 Handler'''
     handler_full_name = get_handler_full_name(handler)
     md = star_handlers_registry.get_handler_by_full_name(handler_full_name)
@@ -30,17 +35,26 @@ def get_handler_or_create(handler: Awaitable, event_type: EventType, dont_add = 
             handler_name=handler.__name__,
             handler_module_path=handler.__module__,
             handler=handler,
-            event_filters=[],
+            event_filters=[]
         )
+        
+        # 插件handler的附加额外信息
         if handler.__doc__:
             md.desc = handler.__doc__.strip()
+        if 'desc' in kwargs:
+            md.desc = kwargs['desc']
+            del kwargs['desc']
+        md.extras_configs = kwargs
+        
         if not dont_add:
             star_handlers_registry.append(md)
         return md
 
-def register_command(command_name: str = None, *args):
+def register_command(command_name: str = None, *args, **kwargs):
     '''注册一个 Command.
     '''
+    
+    # print("command: ", command_name, args, kwargs)
     
     new_command = None
     add_to_event_filters = False
@@ -54,19 +68,23 @@ def register_command(command_name: str = None, *args):
         add_to_event_filters = True
     
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        if not add_to_event_filters:
+            kwargs['sub_command'] = True # 打一个标记，表示这是一个子指令，再 wakingstage 阶段这个 handler 将会直接被跳过（其父指令会接管）
+        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, **kwargs)
         new_command.init_handler_md(handler_md)
         if add_to_event_filters:
             # 裸指令
             handler_md.event_filters.append(new_command)
-        
+             
         return awaitable
 
     return decorator
 
-def register_command_group(command_group_name: str = None, *args):
+def register_command_group(command_group_name: str = None, *args, **kwargs):
     '''注册一个 CommandGroup
     '''
+    
+    # print("commandgroup: ", command_group_name,args,  kwargs)
     
     new_group = None
     add_to_event_filters = False
@@ -82,7 +100,7 @@ def register_command_group(command_group_name: str = None, *args):
     def decorator(obj):
         if add_to_event_filters:
             # 根指令组
-            handler_md = get_handler_or_create(obj, EventType.AdapterMessageEvent)
+            handler_md = get_handler_or_create(obj, EventType.AdapterMessageEvent, **kwargs)
             handler_md.event_filters.append(new_group)
         
         return RegisteringCommandable(new_group)
@@ -97,16 +115,16 @@ class RegisteringCommandable():
     def __init__(self, parent_group: CommandGroupFilter):
         self.parent_group = parent_group
 
-def register_event_message_type(event_message_type: EventMessageType):
+def register_event_message_type(event_message_type: EventMessageType, **kwargs):
     '''注册一个 EventMessageType'''
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, **kwargs)
         handler_md.event_filters.append(EventMessageTypeFilter(event_message_type))
         return awaitable
 
     return decorator
 
-def register_platform_adapter_type(platform_adapter_type: PlatformAdapterType):
+def register_platform_adapter_type(platform_adapter_type: PlatformAdapterType, **kwargs):
     '''注册一个 PlatformAdapterType'''
     def decorator(awaitable):
         handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
@@ -115,10 +133,10 @@ def register_platform_adapter_type(platform_adapter_type: PlatformAdapterType):
 
     return decorator
 
-def register_regex(regex: str):
+def register_regex(regex: str, **kwargs):
     '''注册一个 Regex'''
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, **kwargs)
         handler_md.event_filters.append(RegexFilter(regex))
         return awaitable
 
@@ -138,7 +156,7 @@ def register_permission_type(permission_type: PermissionType, raise_error: bool 
 
     return decorator
 
-def register_on_llm_request():
+def register_on_llm_request(**kwargs):
     '''当有 LLM 请求时的事件
     
     Examples:
@@ -153,12 +171,12 @@ def register_on_llm_request():
     请务必接收两个参数：event, request
     '''
     def decorator(awaitable):
-        _ = get_handler_or_create(awaitable, EventType.OnLLMRequestEvent)
+        _ = get_handler_or_create(awaitable, EventType.OnLLMRequestEvent, **kwargs)
         return awaitable
     
     return decorator
 
-def register_on_llm_response():
+def register_on_llm_response(**kwargs):
     '''当有 LLM 请求后的事件
     
     Examples:
@@ -173,7 +191,7 @@ def register_on_llm_response():
     请务必接收两个参数：event, request
     '''
     def decorator(awaitable):
-        _ = get_handler_or_create(awaitable, EventType.OnLLMResponseEvent)
+        _ = get_handler_or_create(awaitable, EventType.OnLLMResponseEvent, **kwargs)
         return awaitable
     
     return decorator
@@ -186,7 +204,7 @@ def register_llm_tool(name: str = None):
     
     ```
     @llm_tool(name="get_weather") # 如果 name 不填，将使用函数名
-    async def get_weather(event: AstrMessageEvent, location: str) -> MessageEventResult:
+    async def get_weather(event: AstrMessageEvent, location: str):
         \'\'\'获取天气信息。
         
         Args:
@@ -196,7 +214,22 @@ def register_llm_tool(name: str = None):
     ```
     
     可接受的参数类型有：string, number, object, array, boolean。
+    
+    返回值：
+        - 返回 str：结果会被加入下一次 LLM 请求的 prompt 中，用于让 LLM 总结工具返回的结果
+        - 返回 None：结果不会被加入下一次 LLM 请求的 prompt 中。
+        
+    可以使用 yield 发送消息、终止事件。
+    
+    发送消息：请参考文档。
+    
+    终止事件：
+    ```
+    event.stop_event()
+    yield
+    ```
     '''
+    
     name_ = name
     
     def decorator(awaitable: Awaitable):
@@ -219,18 +252,18 @@ def register_llm_tool(name: str = None):
     
     return decorator
 
-def register_on_decorating_result():
+def register_on_decorating_result(**kwargs):
     '''在发送消息前的事件'''
     def decorator(awaitable):
-        _ = get_handler_or_create(awaitable, EventType.OnDecoratingResultEvent)
+        _ = get_handler_or_create(awaitable, EventType.OnDecoratingResultEvent, **kwargs)
         return awaitable
     
     return decorator
 
-def register_after_message_sent():
+def register_after_message_sent(**kwargs):
     '''在消息发送后的事件'''
     def decorator(awaitable):
-        _ = get_handler_or_create(awaitable, EventType.OnAfterMessageSentEvent)
+        _ = get_handler_or_create(awaitable, EventType.OnAfterMessageSentEvent, **kwargs)
         return awaitable
     
     return decorator

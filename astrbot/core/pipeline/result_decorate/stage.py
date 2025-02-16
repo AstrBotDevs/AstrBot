@@ -2,40 +2,68 @@ import time
 import re
 import traceback
 from typing import Union, AsyncGenerator
-from ..stage import register_stage
+from ..stage import Stage, register_stage, registered_stages
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core import logger
-from astrbot.core.message.components import Plain, Image, At, Reply, Record
+from astrbot.core.message.components import Plain, Image, At, Reply, Record, File
 from astrbot.core import html_renderer
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 
 @register_stage
-class ResultDecorateStage:
+class ResultDecorateStage(Stage):
     async def initialize(self, ctx: PipelineContext):
         self.ctx = ctx
         self.reply_prefix = ctx.astrbot_config['platform_settings']['reply_prefix']
         self.reply_with_mention = ctx.astrbot_config['platform_settings']['reply_with_mention']
         self.reply_with_quote = ctx.astrbot_config['platform_settings']['reply_with_quote']
-        self.use_tts = ctx.astrbot_config['provider_tts_settings']['enable']
+        self.t2i_word_threshold = ctx.astrbot_config['t2i_word_threshold']
+        try:
+            self.t2i_word_threshold = int(self.t2i_word_threshold)
+            if self.t2i_word_threshold < 50:
+                self.t2i_word_threshold = 50
+        except BaseException:
+            self.t2i_word_threshold = 150
         
         # 分段回复
+        self.words_count_threshold = int(ctx.astrbot_config['platform_settings']['segmented_reply']['words_count_threshold'])
         self.enable_segmented_reply = ctx.astrbot_config['platform_settings']['segmented_reply']['enable']
         self.only_llm_result = ctx.astrbot_config['platform_settings']['segmented_reply']['only_llm_result']
-        self.seg_prompt = ctx.astrbot_config['platform_settings']['segmented_reply']['seg_prompt']
         self.regex = ctx.astrbot_config['platform_settings']['segmented_reply']['regex']
-        self.filter_regex_content = ctx.astrbot_config['platform_settings']['segmented_reply'].get('filter_regex_content', False)
-
+        self.content_cleanup_rule = ctx.astrbot_config['platform_settings']['segmented_reply']['content_cleanup_rule']
+        
+        # exception
+        self.content_safe_check_reply = ctx.astrbot_config['content_safety']['also_use_in_response']
+        self.content_safe_check_stage = None
+        if self.content_safe_check_reply:
+            for stage in registered_stages:
+                if stage.__class__.__name__ == "ContentSafetyCheckStage":
+                    self.content_safe_check_stage = stage
+                    
+            
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
         result = event.get_result()
         if result is None:
             return
         
+        # 回复时检查内容安全
+        if self.content_safe_check_reply and self.content_safe_check_stage and result.is_llm_result():
+            text = ""
+            for comp in result.chain:
+                if isinstance(comp, Plain):
+                    text += comp.text
+            async for _ in self.content_safe_check_stage.process(event, check_text=text):
+                yield
+        
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnDecoratingResultEvent)
         for handler in handlers:
-            # TODO: 如何让这里的 handler 也能使用 LLM 能力。也许需要将 LLMRequestSubStage 提取出来。
             await handler.handler(event)
+        
+        # 需要再获取一次。插件可能直接对 chain 进行了替换。
+        result = event.get_result()
+        if result is None:
+            return
         
         if len(result.chain) > 0:
             # 回复前缀
@@ -51,27 +79,20 @@ class ResultDecorateStage:
                     new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
-                            
-                            if self.seg_prompt:
-                                try:
-                                    llm_resp = await self.ctx.plugin_manager.context.get_using_provider().text_chat(
-                                        prompt=f"{self.seg_prompt}\n{comp.text}",
-                                    )
-                                    comp.text = llm_resp.completion_text
-                                except BaseException as e:
-                                    traceback.print_exc()
-                                    logger.error("使用 LLM 分段回复失败： " + str(e))
-                                    new_chain.append(comp)
-                                    continue
-                            
-                            split_response = re.findall(self.regex, comp.text)
+                            if len(comp.text) > self.words_count_threshold:
+                                # 不分段回复
+                                new_chain.append(comp)
+                                continue
+                            split_response = []
+                            for line in comp.text.split("\n"):
+                                split_response.extend(re.findall(self.regex, line))
                             if not split_response:
                                 new_chain.append(comp)
                                 continue
                             for seg in split_response:
-                                if seg:
-                                    if self.filter_regex_content:
-                                        seg = re.sub(self.regex, '', seg)
+                                if self.content_cleanup_rule:
+                                    seg = re.sub(self.content_cleanup_rule, "", seg)
+                                if seg.strip():
                                     new_chain.append(Plain(seg))
                         else:
                             # 非 Plain 类型的消息段不分段
@@ -79,7 +100,7 @@ class ResultDecorateStage:
                     result.chain = new_chain
                 
             # TTS
-            if self.use_tts and result.is_llm_result():
+            if self.ctx.astrbot_config['provider_tts_settings']['enable'] and result.is_llm_result():
                 tts_provider = self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
                 new_chain = []
                 for comp in result.chain:
@@ -94,7 +115,7 @@ class ResultDecorateStage:
                                 logger.error(f"由于 TTS 音频文件没找到，消息段转语音失败: {comp.text}")
                                 new_chain.append(comp)
                         except BaseException:
-                            traceback.print_exc()
+                            logger.error(traceback.format_exc())
                             logger.error("TTS 失败，使用文本发送。")
                             new_chain.append(comp)
                     else:
@@ -109,7 +130,7 @@ class ResultDecorateStage:
                         plain_str += "\n\n" + comp.text
                     else:
                         break
-                if plain_str and len(plain_str) > 150:
+                if plain_str and len(plain_str) > self.t2i_word_threshold:
                     render_start = time.time()
                     try:
                         url = await html_renderer.render_t2i(plain_str, return_url=True)
@@ -129,4 +150,5 @@ class ResultDecorateStage:
             
             # 引用回复
             if self.reply_with_quote:
-                result.chain.insert(0, Reply(id=event.message_obj.message_id))
+                if not any(isinstance(item, File) for item in result.chain):
+                    result.chain.insert(0, Reply(id=event.message_obj.message_id))

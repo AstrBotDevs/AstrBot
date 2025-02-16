@@ -325,11 +325,13 @@ class RedBag(BaseMessageComponent):
 
 
 class Poke(BaseMessageComponent):
-    type: ComponentType = "Poke"
-    qq: int
+    type: str = ""
+    id: T.Optional[int] = 0
+    qq: T.Optional[int] = 0
 
-    def __init__(self, **_):
-        super().__init__(**_)
+    def __init__(self, type: str, **_):
+        type = f"Poke:{type}"
+        super().__init__(type=type, **_)
 
 
 class Forward(BaseMessageComponent):
@@ -339,14 +341,14 @@ class Forward(BaseMessageComponent):
     def __init__(self, **_):
         super().__init__(**_)
 
-
-class Node(BaseMessageComponent):  # 该 component 仅支持使用 sendGroupForwardMessage 发送
+class Node(BaseMessageComponent):
+    '''群合并转发消息'''
     type: ComponentType = "Node"
-    id: T.Optional[int] = 0
-    name: T.Optional[str] = ""
-    uin: T.Optional[int] = 0
-    content: T.Optional[T.Union[str, list]] = ""
-    seq: T.Optional[T.Union[str, list]] = ""  # 不清楚是什么
+    id: T.Optional[int] = 0 # 忽略
+    name: T.Optional[str] = "" # qq昵称
+    uin: T.Optional[int] = 0 # qq号
+    content: T.Optional[T.Union[str, list]] = "" # 子消息段列表
+    seq: T.Optional[T.Union[str, list]] = "" # 忽略
     time: T.Optional[int] = 0
 
     def __init__(self, content: T.Union[str, list], **_):

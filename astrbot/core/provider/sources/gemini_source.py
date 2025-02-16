@@ -48,8 +48,18 @@ class SimpleGoogleGenAIClient():
         logger.debug(f"payload: {payload}")
         request_url = f"{self.api_base}/v1beta/models/{model}:generateContent?key={self.api_key}"
         async with self.client.post(request_url, json=payload, timeout=self.timeout) as resp:
-            response = await resp.json()
-            return response
+            if "application/json" in resp.headers.get("Content-Type"):
+                try:
+                    response = await resp.json()
+                except Exception as e:
+                    text = await resp.text()
+                    logger.error(f"Gemini 返回了非 json 数据: {text}")
+                    raise e
+                return response
+            else:
+                text = await resp.text()
+                logger.error(f"Gemini 返回了非 json 数据: {text}")
+                raise Exception("Gemini 返回了非 json 数据： ")
 
 
 @register_provider_adapter("googlegenai_chat_completion", "Google Gemini Chat Completion 提供商适配器")
@@ -96,6 +106,9 @@ class ProviderGoogleGenAI(Provider):
         for message in payloads["messages"]:
             if message["role"] == "user":
                 if isinstance(message["content"], str):
+                    if not message['content']:
+                        message['content'] = "<empty_content>"
+                    
                     google_genai_conversation.append({
                         "role": "user",
                         "parts": [{"text": message["content"]}]
@@ -105,6 +118,8 @@ class ProviderGoogleGenAI(Provider):
                     parts = []
                     for part in message["content"]:
                         if part["type"] == "text":
+                            if not part["text"]:
+                                part["text"] = "<empty_content>"
                             parts.append({"text": part["text"]})
                         elif part["type"] == "image_url":
                             parts.append({"inline_data": {
@@ -117,6 +132,8 @@ class ProviderGoogleGenAI(Provider):
                     })
                         
             elif message["role"] == "assistant":
+                if not message["content"]:
+                    message["content"] = "<empty_content>"
                 google_genai_conversation.append({
                     "role": "model",
                     "parts": [{"text": message["content"]}]
@@ -181,9 +198,9 @@ class ProviderGoogleGenAI(Provider):
             llm_response = await self._query(payloads, func_tool)
         except Exception as e:
             if "maximum context length" in str(e):
-                retry_cnt = 10
+                retry_cnt = 20
                 while retry_cnt > 0:
-                    logger.warning(f"请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。")
+                    logger.warning(f"请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}")
                     try:
                         await self.pop_record(context_query)
                         llm_response = await self._query(payloads, func_tool)
@@ -196,7 +213,7 @@ class ProviderGoogleGenAI(Provider):
                 if retry_cnt == 0:
                     llm_response = LLMResponse("err", "err: 请尝试  /reset 重置会话")
             elif "Function calling is not enabled" in str(e):
-                logger.info(f"{self.get_model()} 不支持函数调用工具调用，已经自动去除")
+                logger.info(f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。")
                 if 'tools' in payloads:
                     del payloads['tools']
                 llm_response = await self._query(payloads, None)
@@ -231,6 +248,9 @@ class ProviderGoogleGenAI(Provider):
                     image_data = await self.encode_image_bs64(image_path)
                 else:
                     image_data = await self.encode_image_bs64(image_url)
+                if not image_data:
+                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                    continue
                 user_content["content"].append({"type": "image_url", "image_url": {"url": image_data}})
             return user_content
         else:

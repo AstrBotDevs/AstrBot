@@ -11,7 +11,8 @@ from astrbot.core.config import AstrBotConfig
 os.makedirs("data", exist_ok=True)
 
 astrbot_config = AstrBotConfig()
-html_renderer = HtmlRenderer()
+t2i_base_url = astrbot_config.get('t2i_endpoint', 'https://t2i.soulter.top/text2img')
+html_renderer = HtmlRenderer(t2i_base_url)
 logger = LogManager.GetLogger(log_name='astrbot')
 
 if os.environ.get('TESTING', ""):

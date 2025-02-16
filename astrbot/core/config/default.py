@@ -2,7 +2,7 @@
 如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
 """
 
-VERSION = "3.4.24"
+VERSION = "3.4.27"
 DB_PATH = "data/data_v3.db"
 
 # 默认配置
@@ -28,10 +28,12 @@ DEFAULT_CONFIG = {
         "segmented_reply": {
             "enable": False,
             "only_llm_result": True,
+            "interval_method": "random",
             "interval": "1.5,3.5",
-            "seg_prompt": "",
+            "log_base": 2.6,
+            "words_count_threshold": 150,
             "regex": ".*?[。？！~…]+|.+$",
-            "filter_regex_content": False
+            "content_cleanup_rule": "",
         },
         "no_permission_reply": True,
     },
@@ -58,26 +60,32 @@ DEFAULT_CONFIG = {
         "group_icl_enable": False,
         "group_message_max_cnt": 300,
         "image_caption": False,
+        "image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
             "possibility_reply": 0.1,
             "prompt": "",
-        },
-        "put_history_to_prompt": True,
+            "whitelist": []
+        }
     },
     "content_safety": {
+        "also_use_in_response": False,
         "internal_keywords": {"enable": True, "extra_keywords": []},
         "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
     },
-    "admins_id": [],
+    "admins_id": [
+        "astrbot"
+    ],
     "t2i": False,
+    "t2i_word_threshold": 150,
     "http_proxy": "",
     "dashboard": {
         "enable": True,
         "username": "astrbot",
         "password": "77b90590a8945a7d36c963981a307dc9",
+        "port": 6185
     },
     "platform": [],
     "wake_prefix": ["/"],
@@ -108,6 +116,14 @@ CONFIG_METADATA_2 = {
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
                     },
+                    "qq_official_webhook(QQ)": {
+                        "id": "default",
+                        "type": "qq_official_webhook",
+                        "enable": False,
+                        "appid": "",
+                        "secret": "",
+                        "port": 6196
+                    },
                     "aiocqhtp(QQ)": {
                         "id": "default",
                         "type": "aiocqhttp",
@@ -124,12 +140,21 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
+                    "lark(飞书)": {
+                        "id": "lark",
+                        "type": "lark",
+                        "enable": False,
+                        "lark_bot_name": "",
+                        "app_id": "",
+                        "app_secret": "",
+                        "domain": "https://open.feishu.cn"
+                    },
                 },
                 "items": {
                     "id": {
                         "description": "ID",
                         "type": "string",
-                        "hint": "提供商 ID 名，用于在多实例下方便管理和识别。自定义，ID 不能重复。",
+                        "hint": "用于在多实例下方便管理和识别。自定义，ID 不能重复。",
                     },
                     "type": {
                         "description": "适配器类型",
@@ -171,6 +196,12 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "aiocqhttp 适配器的反向 Websocket 端口。",
                     },
+                    "lark_bot_name": {
+                        "description": "飞书机器人的名字",
+                        "type": "string",
+                        "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
+                        "obvious_hint": True
+                    }
                 },
             },
             "platform_settings": {
@@ -214,15 +245,26 @@ CONFIG_METADATA_2 = {
                                 "description": "仅对 LLM 结果分段",
                                 "type": "bool",
                             },
+                            "interval_method": {
+                                "description": "间隔时间计算方法",
+                                "type": "string",
+                                "options": ["random", "log"],
+                                "hint": "分段回复的间隔时间计算方法。random 为随机时间，log 为根据消息长度计算，$y=log_{log\_base}(x)$，x为字数，y的单位为秒。",
+                            },
                             "interval": {
                                 "description": "随机间隔时间(秒)",
                                 "type": "string",
-                                "hint": "每一段回复的间隔时间，格式为 `最小时间,最大时间`。如 `0.75,2.5`",
+                                "hint": "`random` 方法用。每一段回复的间隔时间，格式为 `最小时间,最大时间`。如 `0.75,2.5`",
                             },
-                            "seg_prompt": {
-                                "description": "分段提示词辅助",
-                                "type": "string",
-                                "hint": "此项为空时表达不启用这个方法。此方法会调用一次LLM请求。让 LLM 在某一句话中插入一个可以用正则表达式分隔的标记，来实现LLM基于情感分段。如: `请基于情感对以下文本进行分段, 并在两段之间添加`<seg>`以便我用正则匹配。`    然后将下面的正则表达式更换为`.+?<seg>`。",
+                            "log_base": {
+                                "description": "对数函数底数",
+                                "type": "float",
+                                "hint": "`log` 方法用。对数函数的底数。默认为 2.6",
+                            },
+                            "words_count_threshold": {
+                                "description": "字数阈值",
+                                "type": "int",
+                                "hint": "超过这个字数的消息不会被分段回复。默认为 150",
                             },
                             "regex": {
                                 "description": "正则表达式",
@@ -230,10 +272,11 @@ CONFIG_METADATA_2 = {
                                 "obvious_hint": True,
                                 "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。re.findall(r'<regex>', text)",
                             },
-                            "filter_regex_content": {
-                                "description": "过滤正则表达式内容",
-                                "type": "bool",
-                                "hint": "启用后，分段回复时会过滤掉正则表达式匹配的内容。",
+                            "content_cleanup_rule": {
+                                "description": "过滤分段后的内容",
+                                "type": "string",
+                                "obvious_hint": True,
+                                "hint": "移除分段后的内容中的指定的内容。支持正则表达式。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.sub(r'<regex>', '', text)",
                             },
                         },
                     },
@@ -256,7 +299,7 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                         "obvious_hint": True,
-                        "hint": "AstrBot 只处理所填写的 ID 发来的消息事件。为空时不启用白名单过滤。可以使用 /sid 指令获取在某个平台上的会话 ID。也可在 AstrBot 日志内获取会话 ID，当一条消息没通过白名单时，会输出 INFO 级别的日志。会话 ID 类似 aiocqhttp:GroupMessage:547540978",
+                        "hint": "AstrBot 只处理所填写的 ID 发来的消息事件。为空时不启用白名单过滤。可以使用 /sid 指令获取在某个平台上的会话 ID。也可在 AstrBot 日志内获取会话 ID，当一条消息没通过白名单时，会输出 INFO 级别的日志。会话 ID 类似 aiocqhttp:GroupMessage:547540978。管理员可使用 /wl 添加白名单",
                     },
                     "id_whitelist_log": {
                         "description": "打印白名单日志",
@@ -287,13 +330,18 @@ CONFIG_METADATA_2 = {
                         "items": {"type": "string"},
                         "obvious_hint": True,
                         "hint": "此功能解决由于文件系统不一致导致路径不存在的问题。格式为 <原路径>:<映射路径>。如 `/app/.config/QQ:/var/lib/docker/volumes/xxxx/_data`。这样，当消息平台下发的事件中图片和语音路径以 `/app/.config/QQ` 开头时，开头被替换为 `/var/lib/docker/volumes/xxxx/_data`。这在 AstrBot 或者平台协议端使用 Docker 部署时特别有用。",
-                    }
+                    },
                 },
             },
             "content_safety": {
                 "description": "内容安全",
                 "type": "object",
                 "items": {
+                    "also_use_in_response": {
+                        "description": "对大模型响应安全审核",
+                        "type": "bool",
+                        "hint": "启用后，大模型的响应也会通过内容安全审核。",
+                    },
                     "baidu_aip": {
                         "description": "百度内容审核配置",
                         "type": "object",
@@ -415,7 +463,7 @@ CONFIG_METADATA_2 = {
                             "model": "glm-4-flash",
                         },
                     },
-                    "硅基流动": {
+                    "siliconflow": {
                         "id": "siliconflow",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -424,6 +472,17 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.siliconflow.cn/v1",
                         "model_config": {
                             "model": "deepseek-ai/DeepSeek-V3",
+                        },
+                    },
+                    "moonshot(kimi)": {
+                        "id": "moonshot",
+                        "type": "openai_chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://api.moonshot.cn/v1",
+                        "model_config": {
+                            "model": "moonshot-v1-8k",
                         },
                     },
                     "llmtuner": {
@@ -444,6 +503,8 @@ CONFIG_METADATA_2 = {
                         "dify_api_key": "",
                         "dify_api_base": "https://api.dify.ai/v1",
                         "dify_workflow_output_key": "",
+                        "dify_query_input_key": "astrbot_text_query",
+                        "timeout": 60,
                     },
                     "whisper(API)": {
                         "id": "whisper",
@@ -470,6 +531,15 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                     },
+                    "fishaudio_tts(API)": {
+                        "id": "fishaudio_tts",
+                        "type": "fishaudio_tts_api",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.fish-audio.cn/v1",
+                        "fishaudio-tts-character": "可莉",
+                        "timeout": "20",
+                    },
                 },
                 "items": {
                     "timeout": {
@@ -482,6 +552,12 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "obvious_hint": True,
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
+                    },
+                    "fishaudio-tts-character": {
+                        "description": "character",
+                        "type": "string",
+                        "obvious_hint": True,
+                        "hint": "fishaudio TTS 的角色。默认为可莉。更多角色请访问：https://fish.audio/zh-CN/discovery",
                     },
                     "whisper_hint": {
                         "description": "本地部署 Whisper 模型须知",
@@ -579,6 +655,12 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "Dify Workflow 输出变量名。当应用类型为 workflow 时才使用。默认为 astrbot_wf_output。",
                     },
+                    "dify_query_input_key": {
+                        "description": "Prompt 输入变量名",
+                        "type": "string",   
+                        "hint": "发送的消息文本内容对应的输入变量名。默认为 astrbot_text_query。",
+                        "obvious": True,
+                    }
                 },
             },
             "provider_settings": {
@@ -728,9 +810,15 @@ CONFIG_METADATA_2 = {
                         "obvious_hint": True,
                         "hint": "启用后，当接收到图片消息时，会使用模型先将图片转述为文字再进行后续处理。推荐使用 gpt-4o-mini 模型。",
                     },
+                    "image_caption_provider_id": {
+                        "description": "图像转述提供商 ID",
+                        "type": "string",
+                        "obvious_hint": True,
+                        "hint": "可选。图像转述提供商 ID。如为空将选择聊天使用的提供商。",
+                    },
                     "image_caption_prompt": {
                         "description": "图像转述提示词",
-                        "type": "string"
+                        "type": "string",
                     },
                     "active_reply": {
                         "description": "主动回复",
@@ -741,6 +829,13 @@ CONFIG_METADATA_2 = {
                                 "type": "bool",
                                 "obvious_hint": True,
                                 "hint": "启用后，会根据触发概率主动回复群聊内的对话。QQ官方API(qq_official)不可用",
+                            },
+                            "whitelist": {
+                                "description": "主动回复白名单",
+                                "type": "list",
+                                "items": {"type": "string"},
+                                "obvious_hint": True,
+                                "hint": "启用后，只有在白名单内的群聊会被主动回复。为空时不启用白名单过滤。需要通过 /sid 获取 SID 添加到这里。",
                             },
                             "method": {
                                 "description": "回复方法",
@@ -758,16 +853,10 @@ CONFIG_METADATA_2 = {
                                 "description": "提示词",
                                 "type": "string",
                                 "obvious_hint": True,
-                                "hint": "提示词。当提示词为空时，如果触发回复，prompt是触发的消息的内容；否则是提示词。此项可以和定时回复（暂未实现）配合使用。",
+                                "hint": "提示词。当提示词为空时，如果触发回复，则向 LLM 请求的是触发的消息的内容；否则是提示词。此项可以和定时回复（暂未实现）配合使用。",
                             },
                         },
                     },
-                    "put_history_to_prompt": {
-                        "description": "将群聊历史记录作为 prompt",
-                        "type": "bool",
-                        "obvious_hint": True,
-                        "hint": "需要先启用 group_icl_enable。此功能会将群聊历史记录放到 prompt 再请求。如果关闭，则是放在 system_prompt。如果开启了主动回复，建议启用，模型能够更好地完成回复任务。",
-                    }
                 },
             },
         },
@@ -786,6 +875,11 @@ CONFIG_METADATA_2 = {
                 "description": "文本转图像",
                 "type": "bool",
                 "hint": "启用后，超出一定长度的文本将会通过 AstrBot API 渲染成 Markdown 图片发送。可以缓解审核和消息过长刷屏的问题，并提高 Markdown 文本的可读性。",
+            },
+            "t2i_word_threshold": {
+                "description": "文本转图像字数阈值",
+                "type": "int",
+                "hint": "超出此字符长度的文本将会被转换成图片。字数不能低于 50。",
             },
             "admins_id": {
                 "description": "管理员 ID",
@@ -817,7 +911,8 @@ CONFIG_METADATA_2 = {
             "plugin_repo_mirror": {
                 "description": "插件仓库镜像",
                 "type": "string",
-                "hint": "插件仓库的镜像地址，用于加速插件的下载。",
+                "hint": "已废弃，请使用管理面板->设置页的代理地址选择",
+                "obvious_hint": True,
                 "options": [
                     "default",
                     "https://ghp.ci/",

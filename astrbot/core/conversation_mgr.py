@@ -50,6 +50,7 @@ class ConversationManager():
                 cid=conversation_id
             )
             del self.session_conversations[unified_msg_origin]
+            sp.put("session_conversation", self.session_conversations)
             
     async def get_curr_conversation_id(self, unified_msg_origin: str) -> str:
         '''获取会话当前的对话 ID'''

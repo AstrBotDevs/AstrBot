@@ -1,8 +1,8 @@
 import random
 import re
 from bs4 import BeautifulSoup
-from .engine import SearchEngine, SearchResult
-from .config import USER_AGENTS
+from . import SearchEngine, SearchResult
+from . import USER_AGENTS
 
 from typing import List
 

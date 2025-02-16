@@ -12,14 +12,14 @@ class PipelineScheduler():
         
     async def initialize(self):
         for stage in registered_stages:
-            logger.debug(f"初始化阶段 {stage.__class__ .__name__}")
+            # logger.debug(f"初始化阶段 {stage.__class__ .__name__}")
             
             await stage.initialize(self.ctx)
             
     async def _process_stages(self, event: AstrMessageEvent, from_stage=0):
         for i in range(from_stage, len(registered_stages)):
             stage = registered_stages[i]
-            logger.debug(f"执行阶段 {stage.__class__ .__name__}")
+            # logger.debug(f"执行阶段 {stage.__class__ .__name__}")
             coro = stage.process(event)
             if isinstance(coro, AsyncGenerator):
                 async for _ in coro:

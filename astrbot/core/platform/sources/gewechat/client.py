@@ -3,7 +3,8 @@ import asyncio
 import aiohttp
 import quart
 import base64
-
+import datetime
+import re
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.api.message_components import Plain, Image, At, Record
 from astrbot.api import logger, sp
@@ -67,6 +68,17 @@ class SimpleGewechatClient():
             logger.critical("收到 gewechat 下线通知。")
             return
         
+        if 'Data' in data and 'CreateTime' in data['Data']:
+            # 得到系统 UTF+8 的 ts
+            tz_offset = datetime.timedelta(hours=8)
+            tz = datetime.timezone(tz_offset)
+            ts = datetime.datetime.now(tz).timestamp()
+            create_time = data['Data']['CreateTime']
+            if create_time < ts - 30:
+                logger.warning(f"消息时间戳过旧: {create_time}，当前时间戳: {ts}")
+                return
+
+        
         abm = AstrBotMessage()
         d = data['Data']
     
@@ -88,7 +100,8 @@ class SimpleGewechatClient():
             content = _t[1]
             if '\u2005' in content: 
                 # at
-                content = content.split('\u2005')[1]
+                # content = content.split('\u2005')[1]
+                content = re.sub(r'@[^\u2005]*\u2005', '', content)
             abm.group_id = from_user_name
             # at
             msg_source = d['MsgSource']
@@ -107,7 +120,8 @@ class SimpleGewechatClient():
         
         user_real_name = d.get('PushContent', 'unknown : ').split(' : ')[0] \
             .replace('在群聊中@了你', '') \
-            .replace('在群聊中发了一段语音', '') # 真实昵称
+            .replace('在群聊中发了一段语音', '') \
+            .replace('在群聊中发了一张图片', '') # 真实昵称
         abm.sender = MessageMember(user_id, user_real_name)
         abm.raw_message = d
         abm.message_str = ""
@@ -141,12 +155,11 @@ class SimpleGewechatClient():
                     with open(file_path, "wb") as f:
                         f.write(voice_data)
                     abm.message.append(Record(file=file_path, url=file_path))
-                
             case _:
-                logger.error(f"未实现的消息类型: {d['MsgType']}")
-                return
+                logger.info(f"未实现的消息类型: {d['MsgType']}")
+                abm.raw_message = d
         
-        logger.info(f"abm: {abm}")
+        logger.debug(f"abm: {abm}")
         return abm
 
     async def callback(self):
@@ -189,7 +202,7 @@ class SimpleGewechatClient():
                 logger.info(f"设置回调结果: {json_blob}")
                 if json_blob['ret'] != 200:
                     raise Exception(f"设置回调失败: {json_blob}")
-                logger.info(f"将在 {self.callback_url} 上接收 gewechat 下发的消息。如果一直没收到消息请先尝试重启 AstrBot。")
+                logger.info(f"将在 {self.callback_url} 上接收 gewechat 下发的消息。如果一直没收到消息请先尝试重启 AstrBot。如果仍没收到请到管理面板聊天页输入 /gewe_logout 重新登录。")
         
     async def start_polling(self):
         threading.Thread(target=asyncio.run, args=(self._set_callback_url(),)).start()
@@ -300,12 +313,14 @@ class SimpleGewechatClient():
             self.appid = appid
             logger.info(f"已保存 APPID: {appid}")
     
-    async def post_text(self, to_wxid, content: str):
+    async def post_text(self, to_wxid, content: str, ats: str = ""):
         payload = {
             "appId": self.appid,
             "toWxid": to_wxid,
             "content": content,
         }
+        if ats:
+            payload['ats'] = ats
         
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -350,3 +365,20 @@ class SimpleGewechatClient():
             ) as resp:
                 json_blob = await resp.json()
                 logger.debug(f"发送语音结果: {json_blob}")
+                
+    async def post_file(self, to_wxid, file_url: str, file_name: str):
+        payload = {
+            "appId": self.appid,
+            "toWxid": to_wxid,
+            "fileUrl": file_url,
+            "fileName": file_name
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.base_url}/message/postFile",
+                headers=self.headers,
+                json=payload
+            ) as resp:
+                json_blob = await resp.json()
+                logger.debug(f"发送文件结果: {json_blob}")

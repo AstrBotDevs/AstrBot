@@ -111,10 +111,10 @@ class LLMRequestSubStage(Stage):
                         # 尝试调用工具函数
                         wrapper = self._call_handler(self.ctx, event, func_tool.handler, **func_tool_args)
                         async for resp in wrapper:
-                            if resp is not None:
+                            if resp is not None: # 有 return 返回
                                 function_calling_result[func_tool_name] = resp
                             else:
-                                yield
+                                yield # 有生成器返回
                         event.clear_result() # 清除上一个 handler 的结果
                     except BaseException as e:
                         logger.warning(traceback.format_exc())
@@ -129,6 +129,9 @@ class LLMRequestSubStage(Stage):
                     req.prompt += extra_prompt
                     async for _ in self.process(event, _nested=True):
                         yield
+                else:
+                    if llm_response.completion_text:
+                        event.set_result(MessageEventResult().message(llm_response.completion_text))
 
         except BaseException as e:
             logger.error(traceback.format_exc())

@@ -2,6 +2,7 @@ import os
 import time
 import asyncio
 import logging
+import uuid
 from typing import Awaitable, Any
 from aiocqhttp import CQHttp, Event
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
@@ -46,19 +47,82 @@ class AiocqhttpAdapter(Platform):
         await super().send_by_session(session, message_chain)
         
     async def convert_message(self, event: Event) -> AstrBotMessage:
+        logger.debug(f"[aiocqhttp] RawMessage {event}")
+        
+        if event['post_type'] == 'message':
+            abm = await self._convert_handle_message_event(event)
+        elif event['post_type'] == 'notice':
+            abm = await self._convert_handle_notice_event(event)
+        elif event['post_type'] == 'request':
+            abm = await self._convert_handle_request_event(event)
+        
+        return abm
+    
+    async def _convert_handle_request_event(self, event: Event) -> AstrBotMessage:
+        '''OneBot V11 请求类事件'''
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        abm.tag = "aiocqhttp"
+        abm.sender = MessageMember(
+            user_id=event.user_id,
+            nickname=event.user_id
+        )
+        abm.type = MessageType.OTHER_MESSAGE
+        if 'group_id' in event and event['group_id']:
+            abm.type = MessageType.GROUP_MESSAGE
+            abm.group_id = str(event.group_id)
+        else:
+            abm.type = MessageType.FRIEND_MESSAGE
+        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
+            abm.session_id = abm.sender.user_id + "_" + str(event.group_id)
+        abm.message_str = ''
+        abm.message = []
+        abm.timestamp = int(time.time())
+        abm.message_id = uuid.uuid4().hex
+        abm.raw_message = event
+        return abm
+    
+    async def _convert_handle_notice_event(self, event: Event) -> AstrBotMessage:
+        '''OneBot V11 通知类事件'''
+        abm = AstrBotMessage()
+        abm.self_id = str(event.self_id)
+        abm.sender = MessageMember(
+            user_id=event.user_id,
+            nickname=event.user_id
+        )
+        abm.type = MessageType.OTHER_MESSAGE
+        if 'group_id' in event and event['group_id']:
+            abm.group_id = str(event.group_id)
+            abm.type = MessageType.GROUP_MESSAGE
+        else:
+            abm.type = MessageType.FRIEND_MESSAGE    
+        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
+            abm.session_id = abm.sender.user_id + "_" + str(event.group_id) # 也保留群组 id
+        else:
+            abm.session_id = str(event.group_id) if abm.type == MessageType.GROUP_MESSAGE else abm.sender.user_id
+        abm.message_str = ""
+        abm.message = []
+        abm.raw_message = event
+        abm.timestamp = int(time.time())
+        abm.message_id = uuid.uuid4().hex
         
-        abm.sender = MessageMember(str(event.sender['user_id']), event.sender['nickname'])        
-
+        if 'sub_type' in event:
+            if event['sub_type'] == 'poke' and 'target_id' in event:
+                abm.message.append(Poke(qq=str(event['target_id']), type='poke')) # noqa: F405
+                
+        return abm
+    
+    
+    async def _convert_handle_message_event(self, event: Event) -> AstrBotMessage:
+        '''OneBot V11 消息类事件'''
+        abm = AstrBotMessage()
+        abm.self_id = str(event.self_id)
+        abm.sender = MessageMember(str(event.sender['user_id']), event.sender['nickname'])      
         if event['message_type'] == 'group':
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
         elif event['message_type'] == 'private':
             abm.type = MessageType.FRIEND_MESSAGE
-        
-        if self.unique_session:
+        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
             abm.session_id = abm.sender.user_id + "_" + str(event.group_id) # 也保留群组 id
         else:
             abm.session_id = str(event.group_id) if abm.type == MessageType.GROUP_MESSAGE else abm.sender.user_id
@@ -75,7 +139,8 @@ class AiocqhttpAdapter(Platform):
             except BaseException as e:
                 logger.error(f"回复消息失败: {e}")
             return
-        logger.debug(f"aiocqhttp: 收到消息: {event.message}")
+        
+        # 按消息段类型类型适配
         for m in event.message:
             t = m['type']
             a = None
@@ -118,6 +183,7 @@ class AiocqhttpAdapter(Platform):
         abm.timestamp = int(time.time())
         abm.message_str = message_str
         abm.raw_message = event
+        
         return abm
     
     def run(self) -> Awaitable[Any]:
@@ -127,6 +193,19 @@ class AiocqhttpAdapter(Platform):
             self.port = 6199
             
         self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp', api_timeout_sec=180)
+        
+        @self.bot.on_request()
+        async def request(event: Event):
+            abm = await self.convert_message(event)
+            if abm:
+                await self.handle_msg(abm)
+        
+        @self.bot.on_notice()
+        async def notice(event: Event):
+            abm = await self.convert_message(event)
+            if abm:
+                await self.handle_msg(abm)
+        
         @self.bot.on_message('group')
         async def group(event: Event):
             abm = await self.convert_message(event)

@@ -35,7 +35,6 @@ class ProcessStage(Stage):
                 # 生成器返回值处理
                 if isinstance(resp, ProviderRequest):
                     # Handler 的 LLM 请求
-                    logger.debug(f"llm request -> {resp.prompt}")
                     event.set_extra("provider_request", resp)
                     _t = False
                     async for _ in self.llm_request_sub_stage.process(event):

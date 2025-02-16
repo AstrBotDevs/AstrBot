@@ -22,7 +22,7 @@ class HtmlRenderer:
 
         @return: 图片 URL 或者文件路径，取决于 return_url 参数。
 
-        @example: 参见 https://astrbot.soulter.top 插件开发部分。
+        @example: 参见 https://astrbot.app 插件开发部分。
         '''
         local = locals()
         local.pop('self')

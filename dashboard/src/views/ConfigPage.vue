@@ -68,7 +68,7 @@ import config from '@/config';
                   <v-tabs-window-item v-for="(config_item, index) in config_data[key2]" v-show="config_template_tab === index"
                     :key="index" :value="index">
                     <v-container>
-                      <v-btn variant="tonal" rounded="xl" color="error" @click="config_data[key2].splice(index, 1)">
+                      <v-btn variant="tonal" rounded="xl" color="error" @click="deleteItem(key2, index)">
                         删除这项
                       </v-btn>
 
@@ -91,7 +91,7 @@ import config from '@/config';
 
       <div style="margin-left: 16px; padding-bottom: 16px">
         <small>不了解配置？请见 <a
-            href="https://astrbot.soulter.top/">官方文档</a>
+            href="https://astrbot.app/">官方文档</a>
           或 <a
             href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft">加群询问</a>。</small>
       </div>
@@ -215,6 +215,20 @@ export default {
       // new_tmpl_cfg.id = "new_" + val + "_" + this.config_data[config_item_name].length;
       this.config_data[config_item_name].push(new_tmpl_cfg);
       this.config_template_tab = this.config_data[config_item_name].length - 1;
+    },
+    deleteItem(config_item_name, index) {
+      console.log(config_item_name, index);
+      let new_list = [];
+      for (let i = 0; i < this.config_data[config_item_name].length; i++) {
+        if (i !== index) {
+          new_list.push(this.config_data[config_item_name][i]);
+        }
+      }
+      this.config_data[config_item_name] = new_list;
+
+      if (this.config_template_tab > 0) {
+        this.config_template_tab -= 1;
+      }
     }
   },
 }

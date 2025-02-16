@@ -3,7 +3,7 @@ from ..context import PipelineContext
 from typing import Union, AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
-from astrbot.core.message.components import At
+from astrbot.core.message.components import At, Reply
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
@@ -86,6 +86,10 @@ class WakingCheckStage(Stage):
             if len(handler.event_filters) == 0:
                 # 不可能有这种情况, 也不允许有这种情况
                 continue
+            
+            if 'sub_command' in handler.extras_configs:
+                # 如果是子指令
+                continue
 
             for filter in handler.event_filters:
                 try:
@@ -122,7 +126,7 @@ class WakingCheckStage(Stage):
                 
                 if permission_not_pass:
                     if self.no_permission_reply:
-                        await event.send(MessageChain().message(f"ID {event.get_sender_id()} 权限不足"))
+                        await event.send(MessageChain().message(f"ID {event.get_sender_id()} 权限不足。通过 /sid 获取 ID 并请管理员添加。"))
                     event.stop_event()
                     return
                 

@@ -15,19 +15,23 @@ class PluginUpdator(RepoZipUpdator):
     def get_plugin_store_path(self) -> str:
         return self.plugin_store_path
     
-    async def install(self, repo_url: str) -> str:
+    async def install(self, repo_url: str, proxy="") -> str:
         repo_name = self.format_repo_name(repo_url)
         plugin_path = os.path.join(self.plugin_store_path, repo_name)
-        await self.download_from_repo_url(plugin_path, repo_url)
+        await self.download_from_repo_url(plugin_path, repo_url, proxy)
         self.unzip_file(plugin_path + ".zip", plugin_path)
         
         return plugin_path
 
-    async def update(self, plugin: StarMetadata) -> str:
+    async def update(self, plugin: StarMetadata, proxy="") -> str:
         repo_url = plugin.repo
         
         if not repo_url:
             raise Exception(f"插件 {plugin.name} 没有指定仓库地址。")
+        
+        if proxy:
+            proxy = proxy.removesuffix("/")
+            repo_url = f"{proxy}/{repo_url}"
         
         plugin_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
             

@@ -31,15 +31,21 @@ class ProviderDify(Provider):
             raise Exception("Dify API 类型不能为空。")
         self.model_name = "dify"
         self.workflow_output_key = provider_config.get("dify_workflow_output_key", "astrbot_wf_output")
-        
+        self.dify_query_input_key = provider_config.get("dify_query_input_key", "astrbot_text_query")
+        if not self.dify_query_input_key:
+            self.dify_query_input_key = "astrbot_text_query"
+        self.timeout = provider_config.get("timeout", 120)
+        if isinstance(self.timeout, str):
+            self.timeout = int(self.timeout)
         self.conversation_ids = {}
+        '''记录当前 session id 的对话 ID'''
 
 
     async def text_chat(
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = None,
+        image_urls: List[str] = [],
         func_tool: FuncCall = None,
         contexts: List = None,
         system_prompt: str = None,
@@ -64,8 +70,6 @@ class ProviderDify(Provider):
             else:
                 # TODO: 处理更多情况
                 logger.warning(f"未知的图片链接：{image_url}，图片将忽略。")
-            
-        logger.debug(files_payload)
         
         # 获得会话变量
         session_vars = sp.get("session_variables", {})
@@ -80,7 +84,8 @@ class ProviderDify(Provider):
                     query=prompt,
                     user=session_id,
                     conversation_id=conversation_id,
-                    files=files_payload
+                    files=files_payload,
+                    timeout=self.timeout
                 ):
                     logger.debug(f"dify resp chunk: {chunk}")
                     if chunk['event'] == "message" or \
@@ -93,12 +98,13 @@ class ProviderDify(Provider):
             case "workflow":
                 async for chunk in self.api_client.workflow_run(
                     inputs={
-                        "astrbot_text_query": prompt,
+                        self.dify_query_input_key: prompt,
                         "astrbot_session_id": session_id,
                         **session_var
                     },
                     user=session_id,
-                    files=files_payload
+                    files=files_payload,
+                    timeout=self.timeout
                 ):
                     match chunk['event']:
                         case "workflow_started":
@@ -115,11 +121,10 @@ class ProviderDify(Provider):
                             result = chunk['data']['outputs'][self.workflow_output_key]
             case _:
                 raise Exception(f"未知的 Dify API 类型：{self.api_type}")
-
         return LLMResponse(role="assistant", completion_text=result)
 
     async def forget(self, session_id):
-        self.conversation_ids.pop(session_id, None)
+        self.conversation_ids[session_id] = ""
         return True
 
     async def get_current_key(self):

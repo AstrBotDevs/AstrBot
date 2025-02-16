@@ -17,3 +17,7 @@ apscheduler
 docstring_parser
 aiodocker
 silk-python
+
+lark-oapi
+ormsgpack
+cryptography

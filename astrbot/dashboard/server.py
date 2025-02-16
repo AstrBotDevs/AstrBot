@@ -2,6 +2,7 @@ import logging
 import jwt
 import asyncio
 import os
+from astrbot.core.config.default import VERSION
 from quart import Quart, request, jsonify, g
 from quart.logging import default_handler
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -67,15 +68,21 @@ class AstrBotDashboard():
         logger.info("管理面板已关闭。")
         
     def run(self):
-        ip_addr = get_local_ip_addresses()
-        logger.info(f"""
-✨✨✨
-AstrBot 管理面板已启动，可访问
+        try:
+            ip_addr = get_local_ip_addresses()
+        except Exception as e:
+            ip_addr = []
+            
+        port = self.core_lifecycle.astrbot_config['dashboard'].get("port", 6185)
+        if isinstance(port, str):
+            port = int(port)
+    
+        display = f"\n ✨✨✨\n  AstrBot v{VERSION} 管理面板已启动，可访问\n\n"
+        display += f"   ➜  本地: http://localhost:{port}\n"
+        for ip in ip_addr:
+            display += f"   ➜  网络: http://{ip}:{port}\n"
+        display += "   ➜  默认用户名和密码: astrbot\n ✨✨✨\n"
+        logger.info(display)
+        
 
-1. http://{ip_addr}:6185
-2. http://localhost:6185
-
-默认用户名和密码是 astrbot。
-✨✨✨
-""")
-        return self.app.run_task(host="0.0.0.0", port=6185, shutdown_trigger=self.shutdown_trigger_placeholder)
+        return self.app.run_task(host="0.0.0.0", port=port, shutdown_trigger=self.shutdown_trigger_placeholder)

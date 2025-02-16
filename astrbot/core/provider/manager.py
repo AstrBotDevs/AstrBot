@@ -114,22 +114,24 @@ class ProviderManager():
             try:
                 match provider_cfg['type']:
                     case "openai_chat_completion":
-                        from .sources.openai_source import ProviderOpenAIOfficial # noqa: F401
+                        from .sources.openai_source import ProviderOpenAIOfficial as ProviderOpenAIOfficial
                     case "zhipu_chat_completion":
-                        from .sources.zhipu_source import ProviderZhipu # noqa: F401
+                        from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
                     case "llm_tuner":
                         logger.info("加载 LLM Tuner 工具 ...")
-                        from .sources.llmtuner_source import LLMTunerModelLoader # noqa: F401
+                        from .sources.llmtuner_source import LLMTunerModelLoader as LLMTunerModelLoader
                     case "dify":
-                        from .sources.dify_source import ProviderDify # noqa: F401
+                        from .sources.dify_source import ProviderDify as ProviderDify
                     case "googlegenai_chat_completion":
-                        from .sources.gemini_source import ProviderGoogleGenAI # noqa: F401
+                        from .sources.gemini_source import ProviderGoogleGenAI as ProviderGoogleGenAI
                     case "openai_whisper_api":
-                        from .sources.whisper_api_source import ProviderOpenAIWhisperAPI # noqa: F401
+                        from .sources.whisper_api_source import ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI
                     case "openai_whisper_selfhost":
-                        from .sources.whisper_selfhosted_source import ProviderOpenAIWhisperSelfHost # noqa: F401
+                        from .sources.whisper_selfhosted_source import ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost
                     case "openai_tts_api":
-                        from .sources.openai_tts_api_source import ProviderOpenAITTSAPI # noqa: F401
+                        from .sources.openai_tts_api_source import ProviderOpenAITTSAPI as ProviderOpenAITTSAPI
+                    case "fishaudio_tts_api":
+                        from .sources.fishaudio_tts_api_source import ProviderFishAudioTTSAPI as ProviderFishAudioTTSAPI
             except (ImportError, ModuleNotFoundError) as e:
                 logger.critical(f"加载 {provider_cfg['type']}({provider_cfg['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。")
                 continue
@@ -160,7 +162,7 @@ class ProviderManager():
                 continue
 
             provider_metadata = provider_cls_map[provider_config['type']]
-            logger.info(f"尝试实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器 ...")
+            logger.debug(f"尝试实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器 ...")
             try:
                 # 按任务实例化提供商
                 

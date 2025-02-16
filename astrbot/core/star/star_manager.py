@@ -9,7 +9,6 @@ import logging
 from types import ModuleType
 from typing import List
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.config.default import DEFAULT_VALUE_MAP
 from astrbot.core import logger, sp, pip_installer
 from .context import Context
 from . import StarMetadata
@@ -41,6 +40,8 @@ class PluginManager:
         '''保留插件的路径。在 packages 目录下'''
         self.conf_schema_fname = "_conf_schema.json"
         '''插件配置 Schema 文件名'''
+        
+        self.failed_plugin_info = ""
 
     def _get_classes(self, arg: ModuleType):
         '''获取指定模块（可以理解为一个 python 文件）下所有的类'''
@@ -127,7 +128,7 @@ class PluginManager:
         
         if isinstance(metadata, dict):
             if 'name' not in metadata or 'desc' not in metadata or 'version' not in metadata or 'author' not in metadata:
-                raise Exception("插件元数据信息不完整。")
+                raise Exception("插件元数据信息不完整。name, desc, version, author 是必须的字段。")
             metadata = StarMetadata(
                 name=metadata['name'],
                 author=metadata['author'],
@@ -137,25 +138,45 @@ class PluginManager:
             )
             
         return metadata
-    
-    async def reload(self):
-        '''扫描并加载所有的插件'''
-        for smd in star_registry:
-            logger.debug(f"尝试终止插件 {smd.name} ...")
-            if hasattr(smd.star_cls, "__del__"):
-                smd.star_cls.__del__()
-            
-        star_handlers_registry.clear()
-        star_handlers_registry.star_handlers_map.clear()
-        star_map.clear()
-        star_registry.clear()
-        for key in list(sys.modules.keys()):
-            if key.startswith("data.plugins") or key.startswith("packages"):
-                del sys.modules[key]
+        
+    async def reload(self, specified_plugin_name=None):
+        '''扫描并加载所有的插件 当 specified_module_path 指定时，重载指定插件'''
+        
+        specified_module_path = None
+        if specified_plugin_name:
+            for smd in star_registry:
+                if smd.name == specified_plugin_name:
+                    specified_module_path = smd.module_path
+                    break
+        
+        # 终止插件
+        if not specified_module_path:
+            for smd in star_registry:
+                logger.debug(f"尝试终止插件 {smd.name} ...")
+                if hasattr(smd.star_cls, "__del__"):
+                    smd.star_cls.__del__()
+                
+            star_handlers_registry.clear()
+            star_map.clear()
+            star_registry.clear()
+            for key in list(sys.modules.keys()):
+                if key.startswith("data.plugins") or key.startswith("packages"):
+                    del sys.modules[key]
+        else:
+            # 只重载指定插件
+            smd = star_map.get(specified_module_path)
+            if smd:
+                await self._unbind_plugin(smd.name, specified_module_path)
+                try:
+                    del sys.modules[specified_module_path]
+                except KeyError:
+                    logger.warning(f"模块 {specified_module_path} 未载入")
+
         
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
             return False, "未找到任何插件模块"
+        
         fail_rec = ""
         
         inactivated_plugins: list = sp.get("inactivated_plugins", [])
@@ -171,11 +192,15 @@ class PluginManager:
                 root_dir_name = plugin_module['pname'] # 插件的目录名
                 reserved = plugin_module.get('reserved', False) # 是否是保留插件。目前在 packages/ 目录下的都是保留插件。保留插件不可以卸载。
                 
+                path = "data.plugins." if not reserved else "packages."
+                path += root_dir_name + "." + module_str
+                
+                if specified_module_path and path != specified_module_path:
+                    continue
+                
                 logger.info(f"正在载入插件 {root_dir_name} ...")
                 
                 # 尝试导入模块
-                path = "data.plugins." if not reserved else "packages."
-                path += root_dir_name + "." + module_str
                 try:
                     module = __import__(path, fromlist=[module_str])
                 except (ModuleNotFoundError, ImportError):
@@ -204,6 +229,18 @@ class PluginManager:
                     # 通过装饰器的方式注册插件
                     metadata = star_map[path]
                     
+                    try:
+                        # yaml 文件的元数据优先
+                        metadata_yaml = self._load_plugin_metadata(plugin_path=plugin_dir_path)
+                        if metadata_yaml:
+                            metadata.name = metadata_yaml.name
+                            metadata.author = metadata_yaml.author
+                            metadata.desc = metadata_yaml.desc
+                            metadata.version = metadata_yaml.version
+                            metadata.repo = metadata_yaml.repo
+                    except Exception:
+                        pass
+                    
                     if plugin_config:
                         metadata.config = plugin_config
                         try:
@@ -220,7 +257,6 @@ class PluginManager:
                     # 绑定 handler
                     related_handlers = star_handlers_registry.get_handlers_by_module_name(metadata.module_path)
                     for handler in related_handlers:
-                        logger.debug(f"bind handler {handler.handler_name} to {metadata.name}")
                         handler.handler = functools.partial(handler.handler, metadata.star_cls)
                     # 绑定 llm_tool handler
                     for func_tool in llm_tools.func_list:
@@ -244,8 +280,7 @@ class PluginManager:
                         obj = getattr(module, classes[0])(context=self.context) # 实例化插件类
 
                     metadata = None
-                    plugin_path = os.path.join(self.plugin_store_path, root_dir_name) if not reserved else os.path.join(self.reserved_plugin_path, root_dir_name)
-                    metadata = self._load_plugin_metadata(plugin_path=plugin_path, plugin_obj=obj)
+                    metadata = self._load_plugin_metadata(plugin_path=plugin_dir_path, plugin_obj=obj)
                     metadata.star_cls = obj
                     metadata.config = plugin_config
                     metadata.module = module
@@ -255,16 +290,17 @@ class PluginManager:
                     metadata.module_path = path
                     star_map[path] = metadata
                     star_registry.append(metadata)
-                    logger.debug(f"插件 {root_dir_name} 载入成功。")
                 
                 # 禁用/启用插件
                 if metadata.module_path in inactivated_plugins:
                     metadata.activated = False
                     
-                # 检查并且植入自定义的权限过滤器（alter_cmd）
+                full_names = []
                 for handler in star_handlers_registry.get_handlers_by_module_name(metadata.module_path):
+                    full_names.append(handler.handler_full_name)
+                    
+                    # 检查并且植入自定义的权限过滤器（alter_cmd）
                     if metadata.name in alter_cmd and handler.handler_name in alter_cmd[metadata.name]:
-                        # 注入权限过滤器
                         cmd_type = alter_cmd[metadata.name][handler.handler_name].get("permission", "member")
                         found_permission_filter = False
                         for filter_ in handler.event_filters:
@@ -280,25 +316,32 @@ class PluginManager:
 
                         logger.debug(f"插入权限过滤器 {cmd_type} 到 {metadata.name} 的 {handler.handler_name} 方法。")
                     
+                metadata.star_handler_full_names = full_names
+
                 # 执行 initialize() 方法
                 if hasattr(metadata.star_cls, "initialize"):
                     await metadata.star_cls.initialize()
                     
             except BaseException as e:
-                traceback.print_exc()
-                fail_rec += f"加载 {path} 插件时出现问题，原因 {str(e)}\n"
+                logger.error(f"----- 插件 {root_dir_name} 载入失败 -----")
+                errors = traceback.format_exc()
+                for line in errors.split('\n'):
+                    logger.error(f"| {line}")
+                logger.error("----------------------------------")
+                fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {str(e)}。\n"
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
-        
+
         if not fail_rec:
             return True, None
         else:
+            self.failed_plugin_info = fail_rec
             return False, fail_rec
         
-    async def install_plugin(self, repo_url: str):
-        plugin_path = await self.updator.install(repo_url)
+    async def install_plugin(self, repo_url: str, proxy=""):
+        plugin_path = await self.updator.install(repo_url, proxy)
         # reload the plugin
         await self.reload()
         return plugin_path
@@ -333,14 +376,14 @@ class PluginManager:
             logger.debug(f"unbind handler {v.handler_name} from {plugin_name} (map)")
             del star_handlers_registry.star_handlers_map[k]
 
-    async def update_plugin(self, plugin_name: str):
+    async def update_plugin(self, plugin_name: str, proxy = ""):
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
             raise Exception("插件不存在。")
         if plugin.reserved:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
         
-        await self.updator.update(plugin)
+        await self.updator.update(plugin, proxy=proxy)
         await self.reload()
     
     async def turn_off_plugin(self, plugin_name: str):
@@ -385,6 +428,7 @@ class PluginManager:
         
     async def install_plugin_from_file(self, zip_file_path: str):
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")
+        dir_name = dir_name.removesuffix("-master").removesuffix("-main").lower()
         desti_dir = os.path.join(self.plugin_store_path, dir_name)
         self.updator.unzip_file(zip_file_path, desti_dir)
 

@@ -2,7 +2,7 @@ import base64
 import json
 import os
 
-from openai import AsyncOpenAI, AsyncAzureOpenAI, NOT_GIVEN
+from openai import AsyncOpenAI, AsyncAzureOpenAI
 from openai.types.chat.chat_completion import ChatCompletion
 from openai._exceptions import NotFoundError, UnprocessableEntityError
 from astrbot.core.utils.io import download_image_by_url
@@ -55,7 +55,7 @@ class ProviderOpenAIOfficial(Provider):
         try:
             models_str = []
             models = await self.client.models.list()
-            models = models.data
+            models = sorted(models.data, key=lambda x: x.id)
             for model in models:
                 models_str.append(model.id)
             return models_str
@@ -80,12 +80,14 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception("API 返回的 completion 为空。")
         choice = completion.choices[0]
         
+        llm_response = LLMResponse("assistant")
+                
         if choice.message.content:
             # text completion
             completion_text = str(choice.message.content).strip()
-
-            return LLMResponse("assistant", completion_text, raw_completion=completion)
-        elif choice.message.tool_calls:
+            llm_response.completion_text = completion_text
+        
+        if choice.message.tool_calls:
             # tools call (function calling)
             args_ls = []
             func_name_ls = []
@@ -95,16 +97,26 @@ class ProviderOpenAIOfficial(Provider):
                         args = json.loads(tool_call.function.arguments)
                         args_ls.append(args)
                         func_name_ls.append(tool_call.function.name)
-            return LLMResponse(role="tool", tools_call_args=args_ls, tools_call_name=func_name_ls, raw_completion=completion)
-        else:
+            llm_response.role = "tool"
+            llm_response.tools_call_args = args_ls
+            llm_response.tools_call_name = func_name_ls
+            
+        if choice.finish_reason == 'content_filter':
+            raise Exception("API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。")
+
+        if not llm_response.completion_text and not llm_response.tools_call_args:
             logger.error(f"API 返回的 completion 无法解析：{completion}。")
-            raise Exception("Internal Error")
+            raise Exception(f"API 返回的 completion 无法解析：{completion}。")
+        
+        llm_response.raw_completion = completion
+        
+        return llm_response
 
     async def text_chat(
         self,
         prompt: str,
         session_id: str=None,
-        image_urls: List[str]=None,
+        image_urls: List[str]=[],
         func_tool: FuncCall=None,
         contexts=[],
         system_prompt=None,
@@ -135,15 +147,16 @@ class ProviderOpenAIOfficial(Provider):
             # 尝试删除所有 image
             new_contexts = await self._remove_image_from_context(context_query)
             payloads['messages'] = new_contexts
+            context_query = new_contexts
             llm_response = await self._query(payloads, func_tool)
         except Exception as e:
             if "maximum context length" in str(e):
                 # 重试 10 次
-                retry_cnt = 10
+                retry_cnt = 20
                 while retry_cnt > 0:
-                    logger.warning("上下文长度超过限制。尝试弹出最早的记录然后重试。")
+                    logger.warning(f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}")
                     try:
-                        await self.pop_record(session_id)
+                        await self.pop_record(context_query)
                         llm_response = await self._query(payloads, func_tool)
                         break
                     except Exception as e:
@@ -164,8 +177,12 @@ class ProviderOpenAIOfficial(Provider):
                 or 'does not support tools' in str(e)  \
                 or 'Function call is not supported' in str(e) \
                 or 'Function calling is not enabled' in str(e) \
-                or 'Tool calling is not supported' in str(e): # siliconcloud 
-                    logger.info(f"{self.get_model()} 不支持函数调用工具调用，已经自动去除")
+                or 'Tool calling is not supported' in str(e) \
+                or 'No endpoints found that support tool use' in str(e) \
+                or 'model does not support function calling' in str(e) \
+                or ('tool' in str(e) and 'support' in str(e).lower()) \
+                or ('function' in str(e) and 'support' in str(e).lower()):
+                    logger.info(f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。")
                     if 'tools' in payloads:
                         del payloads['tools']
                     llm_response = await self._query(payloads, None)
@@ -173,7 +190,7 @@ class ProviderOpenAIOfficial(Provider):
                 logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
                 
                 if 'tool' in str(e).lower() and 'support' in str(e).lower():
-                    logger.error(f"疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
+                    logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
                 
                 if 'Connection error.' in str(e):
                     proxy = os.environ.get("http_proxy", None)
@@ -234,6 +251,9 @@ class ProviderOpenAIOfficial(Provider):
                     image_data = await self.encode_image_bs64(image_path)
                 else:
                     image_data = await self.encode_image_bs64(image_url)
+                if not image_data:
+                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                    continue
                 user_content["content"].append({"type": "image_url", "image_url": {"url": image_data}})
             return user_content
         else:

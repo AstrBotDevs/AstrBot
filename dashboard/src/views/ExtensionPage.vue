@@ -4,73 +4,166 @@ import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import axios from 'axios';
+import { max } from 'date-fns';
 
 </script>
 
 <template>
   <v-row>
-    <v-alert style="margin: 16px" text="1. 如果因为网络问题安装失败，可以自行前往仓库下载压缩包，然后从本地上传。2. 如需插件帮助请点击 `仓库` 查看 README" title="💡提示"
-      type="info" variant="tonal">
+    <v-alert style="margin: 16px" text="1. 如果因为网络问题安装失败，点击设置页选择 GitHub 加速地址。或前往仓库下载压缩包然后本地上传。" title="💡提示" type="info"
+      color="primary" variant="tonal">
     </v-alert>
     <v-col cols="12" md="12">
       <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
-        <h3>🧩 已安装的插件</h3>
+        <div style="display: flex; align-items: center;">
+          <h3>🧩 已安装的插件</h3>
+
+          <v-dialog max-width="500px">
+            <template v-slot:activator="{ props }">
+              <v-btn v-bind="props" v-if="extension_data.message" icon size="small" color="error"
+                style="margin-left: auto;" variant="plain">
+                <v-icon>mdi-alert-circle</v-icon>
+              </v-btn>
+            </template>
+
+            <template v-slot:default="{ isActive }">
+              <v-card>
+                <v-card-title class="headline">错误信息</v-card-title>
+                <v-card-text>{{ extension_data.message }}
+                  <br>
+                  <small>详情请检查控制台</small>
+                </v-card-text>
+
+                <v-card-actions>
+                  <v-spacer></v-spacer>
+                  <v-btn color="primary" text @click="isActive.value = false">关闭</v-btn>
+                </v-card-actions>
+              </v-card>
+            </template>
+
+          </v-dialog>
+        </div>
       </div>
     </v-col>
     <v-col cols="12" md="6" lg="3" v-for="extension in extension_data.data">
       <ExtensionCard :key="extension.name" :title="extension.name" :link="extension.repo" :logo="extension?.logo"
-        style="margin-bottom: 4px;">
-        <p style="min-height: 130px; max-height: 130px; overflow: none;">{{ extension.desc }}</p>
-        <div class="d-flex align-center gap-2">
-          <v-icon>mdi-account</v-icon>
-          <span>{{ extension.author }}</span>
-          <v-spacer></v-spacer>
-          <div v-if="!extension.reserved">
-            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
-              @click="openExtensionConfig(extension.name)">配置</v-btn>
-            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
-              @click="updateExtension(extension.name)">更新</v-btn>
-            <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
-              @click="uninstallExtension(extension.name)">卸载</v-btn>
+        :has_update="extension.has_update" style="margin-bottom: 4px;" :activated="extension.activated">
+        <div style="min-height: 140px; max-height: 140px; overflow: auto;">
+          <div>
+            <span style="font-weight: bold  ;">By @{{ extension.author }}</span>
+            <span> | {{ extension.handlers.length }} 个行为</span>
           </div>
+          <span> 当前: <v-chip size="small" color="primary">{{ extension.version }}</v-chip>
+            <span v-if="extension.online_version">
+              | 最新: <v-chip size="small" color="primary">{{ extension.online_version }}</v-chip>
+            </span>
+            <span v-if="extension.has_update" style="font-weight: bold;">有更新
+            </span>
+          </span>
+          <p style="margin-top: 8px;">{{ extension.desc }}</p>
+          <a style="font-size: 12px; cursor: pointer; text-decoration: underline; color: #555;"
+            @click="reloadPlugin(extension.name)">重载插件</a>
+        </div>
+        <div class="d-flex align-center gap-2 " style="overflow-x: auto;">
+          <v-btn v-if="!extension.reserved" class="text-none mr-2" size="small" text="Read" variant="flat" border
+            @click="openExtensionConfig(extension.name)">配置</v-btn>
+          <v-btn v-if="!extension.reserved" class="text-none mr-2" size="small" text="Read" variant="flat" border
+            @click="updateExtension(extension.name)">更新</v-btn>
+          <v-btn v-if="!extension.reserved" class="text-none mr-2" size="small" text="Read" variant="flat" border
+            @click="uninstallExtension(extension.name)">卸载</v-btn>
           <!-- <span v-else>保留插件</span> -->
           <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border v-if="extension.activated"
             @click="pluginOff(extension)">禁用</v-btn>
           <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border v-else
             @click="pluginOn(extension)">启用</v-btn>
+
+          <v-btn class="text-none mr-2" size="small" text="Read" variant="flat" border
+            @click="showPluginInfo(extension)">行为</v-btn>
         </div>
       </ExtensionCard>
-    </v-col>
-    <v-col cols="12" md="12">
-      <div style="background-color: white; width: 100%; padding: 16px; border-radius: 10px;">
-        <div style="display: flex; align-items: center;">
-          <h3>🧩 插件市场</h3>
-          <small style="margin-left: 16px;">如无法显示，请打开 <a
-              href="https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json">链接</a> 复制想安装插件对应的 `repo`
-            链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。</small>
-        </div>
-
-      </div>
     </v-col>
 
     <v-col cols="12" md="12" v-if="announcement">
-      <v-banner color="success" lines="one" :text="announcement" :stacked="false" >
+      <v-banner color="success" lines="one" :text="announcement" :stacked="false">
       </v-banner>
     </v-col>
-    <v-col cols="12" md="6" lg="3" v-for="plugin in pluginMarketData">
-      <ExtensionCard :key="plugin.name" :title="plugin.name" :link="plugin.repo" style="margin-bottom: 4px;">
-        <p style="min-height: 130px; max-height: 130px; overflow: hidden;">{{ plugin.desc }}</p>
-        <div class="d-flex align-center gap-2">
-          <v-icon>mdi-account</v-icon>
-          <span>{{ plugin.author }}</span>
+
+    <v-col cols="12" md="12">
+      <v-card>
+        <v-card-title class="d-flex align-center pe-2">
+
+          🧩 插件市场
+
+          <v-btn icon size="small" style="margin-left: 8px" variant="plain">
+            <v-icon size="small">mdi-help</v-icon>
+            <v-tooltip activator="parent" location="start">
+              如无法显示，请打开 <a href="https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json">链接</a> 复制想安装插件对应的
+              `repo`
+              链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。
+            </v-tooltip>
+          </v-btn>
+
+          <v-btn icon @click="isListView = !isListView" size="small" style="margin-left: auto;" variant="plain">
+            <v-icon>{{ isListView ? 'mdi-view-grid' : 'mdi-view-list' }}</v-icon>
+          </v-btn>
+
           <v-spacer></v-spacer>
-          <v-btn v-if="!plugin.installed" class="text-none mr-2" size="small" text="Read" variant="flat" border
-            @click="extension_url = plugin.repo; newExtension()">安装</v-btn>
-          <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border disabled>已安装</v-btn>
-        </div>
-      </ExtensionCard>
+
+          <v-text-field v-model="marketSearch" density="compact" label="Search" prepend-inner-icon="mdi-magnify"
+            variant="solo-filled" flat hide-details single-line></v-text-field>
+        </v-card-title>
+
+        <v-divider></v-divider>
+
+        <template v-if="isListView">
+          <v-col cols="12" md="12">
+            <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
+              v-model:search="marketSearch" :filter-keys="['name']">
+              <template v-slot:item.name="{ item }">
+                <span v-if="item?.repo"><a :href="item?.repo" style="color: #000; text-decoration:none">{{ item.name }}</a></span>
+                <span v-else>{{ item.name}}</span>
+              </template>
+              <template v-slot:item.author="{ item }">
+                <span v-if="item?.social_link"><a :href="item?.social_link">{{ item.author}}</a></span>
+                <span v-else>{{ item.author}}</span>
+              </template>
+              <template v-slot:item.tags="{ item }">
+                <span v-if="item.tags.length === 0">无</span>
+                <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="small">{{ tag }}</v-chip>
+              </template>
+              <template v-slot:item.actions="{ item }">
+                <v-btn v-if="!item.installed" class="text-none mr-2" size="small" text="Read" variant="flat" border
+                  @click="extension_url = item.repo; newExtension()">安装</v-btn>
+                <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border disabled>已安装</v-btn>
+              </template>
+            </v-data-table>
+          </v-col>
+        </template>
+        <template v-else>
+          <v-row style="margin: 8px;">
+            <v-col cols="12" md="6" lg="3" v-for="plugin in pluginMarketData">
+              <ExtensionCard :key="plugin.name" :title="plugin.name" :link="plugin.repo" style="margin-bottom: 4px;">
+                <div style="min-height: 130px; max-height: 130px; overflow: hidden;">
+                  <p style="font-weight: bold;">By @{{ plugin.author }}</p>
+                  {{ plugin.desc }}
+                </div>
+
+                <div class="d-flex align-center gap-2">
+                  <v-btn v-if="!plugin.installed" class="text-none mr-2" size="small" text="Read" variant="flat"
+                    border @click="extension_url = plugin.repo; newExtension()">安装</v-btn>
+                  <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border
+                    disabled>已安装</v-btn>
+                </div>
+              </ExtensionCard>
+            </v-col>
+          </v-row>
+
+        </template>
+
+      </v-card>
 
     </v-col>
+
 
     <v-col style="margin-bottom: 16px;" cols="12" md="12">
       <small><a href="https://astrbot.app/dev/plugin.html">插件开发文档</a></small> |
@@ -184,6 +277,44 @@ import axios from 'axios';
     </v-card>
   </v-dialog>
 
+  <v-dialog v-model="showPluginInfoDialog" width="1200">
+    <template v-slot:activator="{ props }">
+    </template>
+    <v-card>
+      <v-card-title>
+        <span class="text-h5">{{ selectedPlugin.name }} 插件行为</span>
+      </v-card-title>
+      <v-card-text>
+        <v-data-table style="font-size: 17px;" :headers="plugin_handler_info_headers" :items="selectedPlugin.handlers"
+          item-key="name">
+          <template v-slot:header.id="{ column }">
+            <p style="font-weight: bold;">{{ column.title }}</p>
+          </template>
+          <template v-slot:item.event_type="{ item }">
+            {{ item.event_type }}
+          </template>
+          <template v-slot:item.desc="{ item }">
+            {{ item.desc }}
+          </template>
+          <template v-slot:item.type="{ item }">
+            <v-chip color="success">
+              {{ item.type }}
+            </v-chip>
+          </template>
+          <template v-slot:item.cmd="{ item }">
+            <span style="font-weight: bold;">{{ item.cmd }}</span>
+          </template>
+        </v-data-table>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="blue-darken-1" variant="text" @click="showPluginInfoDialog = false">
+          关闭
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <v-snackbar :timeout="2000" elevation="24" :color="snack_success" v-model="snack_show">
     {{ snack_message }}
   </v-snackbar>
@@ -204,7 +335,8 @@ export default {
   data() {
     return {
       extension_data: {
-        "data": []
+        "data": [],
+        "message": ""
       },
       extension_url: "",
       status: "",
@@ -219,7 +351,7 @@ export default {
         "config": {}
       },
       upload_file: null,
-      pluginMarketData: {},
+      pluginMarketData: [],
       loadingDialog: {
         show: false,
         title: "加载中...",
@@ -227,7 +359,25 @@ export default {
         result: ""
       },
 
-      announcement: ""
+      announcement: "",
+      showPluginInfoDialog: false,
+      selectedPlugin: {},
+      plugin_handler_info_headers: [
+        { title: '行为类型', key: 'event_type_h' },
+        { title: '描述', key: 'desc', maxWidth: '250px' },
+        { title: '具体类型', key: 'type' },
+        { title: '触发方式', key: 'cmd' },
+      ],
+      isListView: true,
+      pluginMarketHeaders: [
+        { title: '名称', key: 'name', maxWidth: '150px' },
+        { title: '描述', key: 'desc', maxWidth: '250px' },
+        { title: '作者', key: 'author', maxWidth: '60px' },
+        { title: '标签', key: 'tags', maxWidth: '60px' },
+        { title: '操作', key: 'actions', sortable: false }
+      ],
+      marketSearch: "",
+      alreadyCheckUpdate: false
     }
   },
   mounted() {
@@ -265,10 +415,30 @@ export default {
     },
     getExtensions() {
       axios.get('/api/plugin/get').then((res) => {
-        this.extension_data.data = res.data.data;
+        this.extension_data = res.data;
         this.checkAlreadyInstalled();
+        this.checkUpdate()
       });
     },
+
+    checkUpdate() {
+      // 遍历 extension_data 和 pluginMarketData，检查是否有更新\
+      for (let i = 0; i < this.extension_data.data.length; i++) {
+        for (let j = 0; j < this.pluginMarketData.length; j++) {
+          console.log(this.extension_data.data[i].repo, this.pluginMarketData[j].repo);
+          if (this.extension_data.data[i].repo === this.pluginMarketData[j].repo ||
+            this.extension_data.data[i].name === this.pluginMarketData[j].name) {
+            this.extension_data.data[i].online_version = this.pluginMarketData[j].version;
+            if (this.extension_data.data[i].version !== this.pluginMarketData[j].version && this.pluginMarketData[j].version !== "未知") {
+              this.extension_data.data[i].has_update = true;
+            } else {
+              this.extension_data.data[i].has_update = false;
+            }
+          }
+        }
+      }
+    },
+
     newExtension() {
       if (this.extension_url === "" && this.upload_file === null) {
         this.toast("请填写插件链接或上传插件文件", "error");
@@ -284,7 +454,7 @@ export default {
       if (this.upload_file !== null) {
         this.toast("正在从文件安装插件", "primary");
         const formData = new FormData();
-        formData.append('file', this.upload_file[0]);
+        formData.append('file', this.upload_file);
         axios.post('/api/plugin/install-upload', formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
@@ -295,7 +465,7 @@ export default {
             this.onLoadingDialogResult(2, res.data.message, -1);
             return;
           }
-          this.extension_data.data = res.data.data;
+          this.extension_data = res.data;
           this.upload_file = "";
           this.onLoadingDialogResult(1, res.data.message);
           this.dialog = false;
@@ -309,15 +479,15 @@ export default {
         this.toast("正在从链接 " + this.extension_url + " 安装插件...", "primary");
         axios.post('/api/plugin/install',
           {
-            url: this.extension_url
+            url: this.extension_url,
+            proxy: localStorage.getItem('selectedGitHubProxy') || ""
           }).then((res) => {
             this.loading_ = false;
             if (res.data.status === "error") {
               this.onLoadingDialogResult(2, res.data.message, -1);
               return;
             }
-            this.extension_data.data = res.data.data;
-            console.log(this.extension_data);
+            this.extension_data = res.data;
             this.extension_url = "";
             this.onLoadingDialogResult(1, res.data.message);
             this.dialog = false;
@@ -339,7 +509,7 @@ export default {
             this.toast(res.data.message, "error");
             return;
           }
-          this.extension_data.data = res.data.data;
+          this.extension_data = res.data;
           this.toast(res.data.message, "success");
           this.dialog = false;
           this.getExtensions();
@@ -351,13 +521,14 @@ export default {
       this.loadingDialog.show = true;
       axios.post('/api/plugin/update',
         {
-          name: extension_name
+          name: extension_name,
+          proxy: localStorage.getItem('selectedGitHubProxy') || ""
         }).then((res) => {
           if (res.data.status === "error") {
             this.onLoadingDialogResult(2, res.data.message, -1);
             return;
           }
-          this.extension_data.data = res.data.data;
+          this.extension_data = res.data;
           console.log(this.extension_data);
           this.onLoadingDialogResult(1, res.data.message);
           this.dialog = false;
@@ -428,11 +599,15 @@ export default {
             "desc": res.data.data[key].desc,
             "author": res.data.data[key].author,
             "repo": res.data.data[key].repo,
-            "installed": false
+            "installed": false,
+            "version": res.data.data[key]?.version ? res.data.data[key].version : "未知",
+            "social_link": res.data.data[key]?.social_link,
+            "tags": res.data.data[key]?.tags ? res.data.data[key].tags : []
           })
         }
         this.pluginMarketData = data;
         this.checkAlreadyInstalled();
+        this.checkUpdate();
       }).catch((err) => {
         this.toast("获取插件市场数据失败: " + err, "error");
       });
@@ -460,6 +635,25 @@ export default {
         }
       }
       this.pluginMarketData = notInstalled.concat(installed);
+    },
+    showPluginInfo(plugin) {
+      this.selectedPlugin = plugin;
+      this.showPluginInfoDialog = true;
+    },
+    reloadPlugin(plugin_name) {
+      axios.post('/api/plugin/reload',
+        {
+          name: plugin_name
+        }).then((res) => {
+          if (res.data.status === "error") {
+            this.onLoadingDialogResult(2, res.data.message, -1);
+            return;
+          }
+          this.toast("重载成功", "success");
+          this.getExtensions();
+        }).catch((err) => {
+          this.toast(err, "error");
+        });
     }
   },
 }

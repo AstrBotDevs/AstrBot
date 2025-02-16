@@ -43,6 +43,11 @@ const MainRoutes = {
       component: () => import('@/views/ChatPage.vue')
     },
     {
+      name: 'Settings',
+      path: '/settings',
+      component: () => import('@/views/Settings.vue')
+    },
+    {
       name: 'About',
       path: '/about',
       component: () => import('@/views/AboutPage.vue')

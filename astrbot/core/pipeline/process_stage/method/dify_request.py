@@ -46,6 +46,8 @@ class DifyRequestSubStage(Stage):
             
         if not req.prompt:
             return
+        
+        req.session_id = event.unified_msg_origin
             
         try:
             logger.debug(f"Dify 请求 Payload: {req.__dict__}")

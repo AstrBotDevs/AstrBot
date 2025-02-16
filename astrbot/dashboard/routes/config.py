@@ -1,3 +1,4 @@
+import typing
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
@@ -17,7 +18,7 @@ def try_cast(value: str, type_: str):
     elif type_ == "float" and isinstance(value, int):
         return float(value)
 
-def validate_config(data, schema: dict, is_core: bool):
+def validate_config(data, schema: dict, is_core: bool) -> typing.Tuple[typing.List[str], typing.Dict]:
     errors = []
     def validate(data, metadata=schema, path=""):
         for key, meta in metadata.items():
@@ -65,16 +66,16 @@ def validate_config(data, schema: dict, is_core: bool):
     else:
         validate(data, schema)
     
-    return errors
+    return errors, data
 
 def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False):
     '''验证并保存配置'''
     errors = None
     try:
         if is_core:
-            errors = validate_config(post_config, CONFIG_METADATA_2, is_core)
+            errors, post_config = validate_config(post_config, CONFIG_METADATA_2, is_core)
         else:
-            errors = validate_config(post_config, config.schema, is_core)
+            errors, post_config = validate_config(post_config, config.schema, is_core)
     except BaseException as e:
         logger.warning(f"验证配置时出现异常: {e}")
     if errors:

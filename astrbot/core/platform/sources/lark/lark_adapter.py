@@ -1,0 +1,175 @@
+import base64
+import time
+import asyncio
+import json
+import re
+
+from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
+from astrbot.api.event import MessageChain
+from typing import Union, List
+from astrbot.api.message_components import Image, Plain, At
+from astrbot.core.platform.astr_message_event import MessageSesion
+from .lark_event import LarkMessageEvent
+from ...register import register_platform_adapter
+from astrbot.core.message.components import BaseMessageComponent
+from astrbot import logger
+import lark_oapi as lark
+from lark_oapi.api.im.v1 import *
+
+@register_platform_adapter("lark", "飞书机器人官方 API 适配器")
+class LarkPlatformAdapter(Platform):
+
+    def __init__(self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue) -> None:
+        super().__init__(event_queue)
+        
+        self.config = platform_config
+        
+        self.unique_session = platform_settings['unique_session']
+
+        self.appid = platform_config['app_id']
+        self.appsecret = platform_config['app_secret']
+        self.domain = platform_config.get('domain', lark.FEISHU_DOMAIN)
+        self.bot_name = platform_config.get('lark_bot_name', "astrbot")
+        
+        if not self.bot_name:
+            logger.warning("未设置飞书机器人名称，@ 机器人可能得不到回复。")
+        
+        async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1):
+            await self.convert_msg(event)
+        
+        def do_v2_msg_event(event: lark.im.v1.P2ImMessageReceiveV1):
+            asyncio.create_task(on_msg_event_recv(event))
+        
+        self.event_handler = lark.EventDispatcherHandler.builder("", "") \
+            .register_p2_im_message_receive_v1(do_v2_msg_event) \
+            .build()
+             
+        self.client = lark.ws.Client(
+            app_id=self.appid,
+            app_secret=self.appsecret,
+            log_level=lark.LogLevel.ERROR,
+            domain=self.domain,
+            event_handler=self.event_handler
+        )
+        
+        self.lark_api = (
+            lark.Client.builder()
+            .app_id(self.appid)
+            .app_secret(self.appsecret)
+            .build()
+        )
+        
+    async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
+        raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
+        
+    def meta(self) -> PlatformMetadata:
+        return PlatformMetadata(
+            "lark",
+            "飞书机器人官方 API 适配器",
+        )
+        
+    async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1):
+        message = event.event.message
+        abm = AstrBotMessage()
+        abm.timestamp = int(message.create_time) / 1000
+        abm.message = []
+        abm.type = MessageType.GROUP_MESSAGE if message.chat_type == 'group' else MessageType.FRIEND_MESSAGE
+        if message.chat_type == 'group':
+            abm.group_id = message.chat_id
+        abm.self_id = self.bot_name
+        abm.message_str = ""
+        
+        at_list = {}
+        if message.mentions:
+            for m in message.mentions:
+                at_list[m.key] = At(qq=m.id.open_id, name=m.name)
+                if m.name == self.bot_name:
+                    abm.self_id = m.id.open_id
+                    
+        content_json_b = json.loads(message.content)
+        
+        if message.message_type == 'text':
+            message_str_raw = content_json_b['text'] # 带有 @ 的消息
+            at_pattern = r"(@_user_\d+)"  # 可以根据需求修改正则
+            at_users = re.findall(at_pattern, message_str_raw)
+            # 拆分文本，去掉AT符号部分
+            parts = re.split(at_pattern, message_str_raw)
+            for i in range(len(parts)):
+                s = parts[i].strip()
+                if not s:
+                    continue
+                if s in at_list:
+                    abm.message.append(at_list[s])
+                else:
+                    abm.message.append(Plain(parts[i].strip()))
+        elif message.message_type == 'post':
+            _ls = []
+            
+            content_ls = content_json_b.get('content', [])
+            for comp in content_ls:
+                if isinstance(comp, list):
+                    _ls.extend(comp)
+                elif isinstance(comp, dict):
+                    _ls.append(comp)
+            content_json_b = _ls
+        elif message.message_type == 'image':
+            content_json_b = [
+                {"tag": "img", "image_key": content_json_b["image_key"], "style": []}
+            ]
+            
+        if message.message_type in ('post', 'image'):    
+            for comp in content_json_b:
+                if comp['tag'] == 'at':
+                    abm.message.append(at_list[comp['user_id']])
+                elif comp['tag'] == 'text' and comp['text'].strip():
+                    abm.message.append(Plain(comp['text'].strip()))
+                elif comp['tag'] == 'img':
+                    image_key = comp['image_key']
+                    request = GetMessageResourceRequest.builder() \
+                        .message_id(message.message_id) \
+                        .file_key(image_key) \
+                        .type("image") \
+                        .build()
+                    response = await self.lark_api.im.v1.message_resource.aget(request)
+                    if not response.success():
+                        logger.error(f"无法下载飞书图片: {image_key}")
+                    image_bytes = response.file.read()
+                    image_base64 = base64.b64encode(image_bytes).decode()
+                    abm.message.append(Image.fromBase64(image_base64))
+        
+        for comp in abm.message:
+            if isinstance(comp, Plain):
+                abm.message_str += comp.text
+        abm.message_id = message.message_id
+        abm.raw_message = message
+        abm.sender = MessageMember(
+            user_id=event.event.sender.sender_id.open_id,
+            nickname=event.event.sender.sender_id.open_id[:8]
+        )
+        # 独立会话
+        if not self.unique_session:
+            if abm.type == MessageType.GROUP_MESSAGE:
+                abm.session_id = abm.group_id
+            else:
+                abm.session_id = abm.sender.user_id
+        else:
+            abm.session_id = abm.sender.user_id
+            
+        logger.debug(abm)
+        await self.handle_msg(abm)
+        
+    async def handle_msg(self, abm: AstrBotMessage):
+        event = LarkMessageEvent(
+            message_str=abm.message_str,
+            message_obj=abm,
+            platform_meta=self.meta(),
+            session_id=abm.session_id,
+            bot=self.lark_api
+        )
+        
+        self._event_queue.put_nowait(event)
+        
+    async def run(self):
+        # self.client.start()
+        await self.client._connect()
+        

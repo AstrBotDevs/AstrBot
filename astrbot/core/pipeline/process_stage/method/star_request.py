@@ -31,7 +31,7 @@ class StarRequestSubStage(Stage):
                     # 孤立无援的 star handler 
                     continue
                 
-                logger.debug(f"执行 Star Handler {handler.handler_full_name}")
+                logger.debug(f"执行插件 handler {handler.handler_full_name}")
                 wrapper = self._call_handler(self.ctx, event, handler.handler, **params)
                 async for ret in wrapper:
                     yield ret

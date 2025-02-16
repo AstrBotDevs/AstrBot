@@ -25,14 +25,16 @@ class LongTermMemory:
             self.max_cnt = 300
         self.image_caption = self.config["image_caption"]
         self.image_caption_prompt = self.config["image_caption_prompt"]
+        self.image_caption_provider_id = self.config["image_caption_provider_id"]
         
         self.active_reply = self.config["active_reply"]
         self.enable_active_reply = self.active_reply.get("enable", False)
         self.ar_method = self.active_reply["method"]
         self.ar_possibility = self.active_reply["possibility_reply"]
         self.ar_prompt = self.active_reply.get("prompt", "")
+        self.ar_whitelist = self.active_reply.get("whitelist", [])
         
-        self.put_history_to_prompt = self.config["put_history_to_prompt"]
+        # self.put_history_to_prompt = self.config["put_history_to_prompt"]
         
     async def remove_session(self, event: AstrMessageEvent) -> int:
         cnt = 0
@@ -42,7 +44,13 @@ class LongTermMemory:
         return cnt
 
     async def get_image_caption(self, image_url: str) -> str:
-        provider = self.context.get_using_provider()
+        
+        if not self.image_caption_provider_id:
+            provider = self.context.get_using_provider()
+        else:
+            provider = self.context.get_provider_by_id(self.image_caption_provider_id)
+            if not provider:
+                raise Exception(f"没有找到 ID 为 {self.image_caption_provider_id} 的提供商")
         response = await provider.text_chat(
             prompt=self.image_caption_prompt,
             session_id=uuid.uuid4().hex,
@@ -59,6 +67,12 @@ class LongTermMemory:
         
         if event.is_at_or_wake_command:
             # if the message is a command, let it pass
+            return False
+        
+        if self.ar_whitelist and (
+            event.unified_msg_origin not in self.ar_whitelist
+            and (event.get_group_id() and event.get_group_id() not in self.ar_whitelist)
+        ):
             return False
 
         match self.ar_method:
@@ -103,11 +117,11 @@ class LongTermMemory:
         
         chats_str = '\n---\n'.join(self.session_chats[event.unified_msg_origin])
         
-        if self.put_history_to_prompt:
+        if self.enable_active_reply:
             prompt = req.prompt
             req.prompt = f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
             req.prompt += f"\nNow, a new message is coming: `{prompt}`. Please react to it. Only output your response and do not output any other information."
-            req.contexts = [] # 清空上下文，当使用了群聊增强，所有聊天记录都在一个prompt中。
+            req.contexts = [] # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
         else:
             req.system_prompt += "You are now in a chatroom. The chat history is as follows: \n"
             req.system_prompt += chats_str
