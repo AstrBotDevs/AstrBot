@@ -5,6 +5,7 @@ from astrbot.core.star.register import (
     register_regex as regex,
     register_platform_adapter_type as platform_adapter_type,
     register_permission_type as permission_type,
+    register_custom_filter as custom_filter,
     register_on_llm_request as on_llm_request,
     register_on_llm_response as on_llm_response,
     register_llm_tool as llm_tool,
@@ -15,6 +16,7 @@ from astrbot.core.star.register import (
 from astrbot.core.star.filter.event_message_type import EventMessageTypeFilter, EventMessageType
 from astrbot.core.star.filter.platform_adapter_type import PlatformAdapterTypeFilter, PlatformAdapterType
 from astrbot.core.star.filter.permission import PermissionTypeFilter, PermissionType
+from astrbot.core.star.filter.custom_filter import CustomFilter
 
 __all__ = [
     'command',
@@ -28,6 +30,8 @@ __all__ = [
     'PlatformAdapterTypeFilter',
     'PlatformAdapterType',
     'PermissionTypeFilter',
+    'CustomFilter',
+    'custom_filter',
     'PermissionType',
     'on_llm_request',
     'llm_tool',
