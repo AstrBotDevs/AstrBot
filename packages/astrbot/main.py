@@ -458,6 +458,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         
         provider = self.context.get_using_provider()
         if provider and provider.meta().type == 'dify':
+            """原有的Dify处理逻辑保持不变"""
             ret = "Dify 对话列表:\n"
             assert isinstance(provider, ProviderDify)
             data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
@@ -474,32 +475,45 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             return
 
         size_per_page = 6
-        conversations = await self.context.conversation_manager.get_conversations(message.unified_msg_origin)
-        total_pages = len(conversations) // size_per_page
-        if len(conversations) % size_per_page != 0:
-            total_pages += 1
-        conversations = conversations[(page-1)*size_per_page:page*size_per_page]
+        """获取所有对话列表"""
+        conversations_all = await self.context.conversation_manager.get_conversations(message.unified_msg_origin)
+        """计算总页数"""
+        total_pages = (len(conversations_all) + size_per_page - 1) // size_per_page
+        """确保页码有效"""
+        page = max(1, min(page, total_pages))
+        """分页处理"""
+        start_idx = (page - 1) * size_per_page
+        end_idx = start_idx + size_per_page
+        conversations_paged = conversations_all[start_idx:end_idx]
         
         ret = "对话列表：\n---\n"
-        global_index = (page - 1) * size_per_page + 1
+        """全局序号从当前页的第一个开始"""
+        global_index = start_idx + 1  
         
+        """生成所有对话的标题字典"""
         _titles = {}
-        for conv in conversations:
-            
+        for conv in conversations_all:
             persona_id = conv.persona_id
-            if not persona_id and not persona_id == "[%None]":
+            if not persona_id or persona_id == "[%None]":
                 persona_id = self.context.provider_manager.selected_default_persona['name']
-            
             title = conv.title if conv.title else "新对话"
             _titles[conv.cid] = title
-            
+        
+        """遍历分页后的对话生成列表显示"""
+        for conv in conversations_paged:
+            persona_id = conv.persona_id
+            if not persona_id or persona_id == "[%None]":
+                persona_id = self.context.provider_manager.selected_default_persona['name']
+            title = _titles.get(conv.cid, "新对话")
             ret += f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
             global_index += 1
         
         ret += "---\n"
         curr_cid = await self.context.conversation_manager.get_curr_conversation_id(message.unified_msg_origin)
         if curr_cid:
-            ret += f"\n当前对话: {_titles[curr_cid]}({curr_cid[:4]})"
+            """从所有对话的标题字典中获取标题"""
+            title = _titles.get(curr_cid, "新对话")
+            ret += f"\n当前对话: {title}({curr_cid[:4]})"
         else:
             ret += "\n当前对话: 无"
         
@@ -508,11 +522,12 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             ret += "\n会话隔离粒度: 个人"
         else:
             ret += "\n会话隔离粒度: 群聊"
-            
+        
         ret += f"\n第 {page} 页 | 共 {total_pages} 页"
         ret += "\n*输入 /ls 2 跳转到第 2 页"
         
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
+        return
         
     @filter.command("new")
     async def new_conv(self, message: AstrMessageEvent):
