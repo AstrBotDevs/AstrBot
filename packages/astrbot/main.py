@@ -393,6 +393,10 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             for model in models:
                 ret += f"\n{i}. {model}"
                 i += 1
+            
+            curr_model = self.context.get_using_provider().get_model() or "无"
+            ret += f"\n当前模型: [{curr_model}]"
+                
             ret += "\nTips: 使用 /model <模型名/编号>，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
             message.set_result(MessageEventResult().message(ret).use_t2i(False))
         else:
