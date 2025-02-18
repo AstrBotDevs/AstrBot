@@ -13,7 +13,7 @@ class Main(star.Star):
     '''使用 LLM 待办提醒。只需对 LLM 说想要提醒的事情和时间即可。比如：`之后每天这个时候都提醒我做多邻国`'''
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        self.scheduler = AsyncIOScheduler()
+        self.scheduler = AsyncIOScheduler(timezone='Asia/Shanghai')
         
         # set and load config
         if not os.path.exists("data/astrbot-reminder.json"):
