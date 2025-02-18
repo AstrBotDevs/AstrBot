@@ -175,10 +175,18 @@ class Main(star.Star):
         else:
             reminder = reminders.pop(index - 1)
             job_id = reminder.get("id")
+            
+            # self.reminder_data[event.unified_msg_origin] = reminder
+            users_reminders = self.reminder_data.get(event.unified_msg_origin, [])
+            for i, r in enumerate(users_reminders):
+                if r.get("id") == job_id:
+                    users_reminders.pop(i)
+            
             try:
                 self.scheduler.remove_job(job_id)
             except Exception as e:
                 logger.error(f"Remove job error: {e}")
+                yield event.plain_result(f"成功移除对应的待办事项。删除定时任务失败: {str(e)} 可能需要重启 AstrBot 以取消该提醒任务。")
             await self._save_data()
             yield event.plain_result("成功删除待办事项：\n" + reminder["text"])
     
