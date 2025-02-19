@@ -64,12 +64,14 @@ class LLMRequestSubStage(Stage):
         if not req.prompt and not req.image_urls:
             return
             
-        # 执行请求 LLM 前事件。
+        # 执行请求 LLM 前事件钩子。
         # 装饰 system_prompt 等功能
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMRequestEvent)
         for handler in handlers:
             try:
-                await handler.handler(event, req)
+                wrapper = self._call_handler(self.ctx, event, handler.handler, req)
+                async for ret in wrapper:
+                    yield ret
             except BaseException:
                 logger.error(traceback.format_exc())
                 
@@ -86,7 +88,9 @@ class LLMRequestSubStage(Stage):
             handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMResponseEvent)
             for handler in handlers:
                 try:
-                    await handler.handler(event, llm_response)
+                    wrapper = self._call_handler(self.ctx, event, handler.handler, llm_response)
+                    async for ret in wrapper:
+                        yield ret
                 except BaseException:
                     logger.error(traceback.format_exc())
             

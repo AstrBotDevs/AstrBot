@@ -59,9 +59,16 @@ class ResultDecorateStage(Stage):
             async for _ in self.content_safe_check_stage.process(event, check_text=text):
                 yield
         
+        # 发送消息前事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnDecoratingResultEvent)
         for handler in handlers:
-            await handler.handler(event)
+            try:
+                wrapper = self._call_handler(self.ctx, event, handler.handler)
+                async for ret in wrapper:
+                    yield ret
+            except BaseException:
+                logger.error(traceback.format_exc())
+            
         
         # 需要再获取一次。插件可能直接对 chain 进行了替换。
         result = event.get_result()

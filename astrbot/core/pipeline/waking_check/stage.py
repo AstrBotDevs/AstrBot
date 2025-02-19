@@ -77,15 +77,11 @@ class WakingCheckStage(Stage):
         # 检查插件的 handler filter
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
+        
         for handler in star_handlers_registry.get_handlers_by_event_type(EventType.AdapterMessageEvent):
             # filter 需满足 AND 逻辑关系
             passed = True            
             permission_not_pass = False
-            
-            # 在输入指令组正确但是子指令错误的情况下提醒用户
-            command_group_passed = False
-            command_group_tree = None
-            
             if len(handler.event_filters) == 0:
                 continue
 
@@ -94,12 +90,6 @@ class WakingCheckStage(Stage):
                     if isinstance(filter, PermissionTypeFilter):
                         if not filter.filter(event, self.ctx.astrbot_config):
                             permission_not_pass = True
-                    elif isinstance(filter, CommandGroupFilter):
-                        if filter.filter(event, self.ctx.astrbot_config):
-                            command_group_passed = True
-                            command_group_tree = filter.print_cmd_tree(filter.sub_command_filters)
-                        passed = False
-                        break
                     else:
                         if not filter.filter(event, self.ctx.astrbot_config):
                             passed = False
@@ -128,14 +118,6 @@ class WakingCheckStage(Stage):
                     handlers_parsed_params[handler.handler_full_name] = event.get_extra(
                         "parsed_params"
                     )
-            if not passed and command_group_passed:
-                await event.send(
-                    MessageEventResult().message(
-                        f"插件 {star_map[handler.handler_module_path].name} 没有该指令。指令树：\n{command_group_tree}"
-                    )
-                )
-                event.stop_event()
-                return
                     
             event.clear_extra()
 

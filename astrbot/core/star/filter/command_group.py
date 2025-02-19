@@ -97,5 +97,6 @@ class CommandGroupFilter(HandlerFilter):
             tree = self.group_name + "\n" + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
             raise ValueError(f"指令组 {self.group_name} 未填写完全。这个指令组下有如下指令：\n"+tree)
         
-        complete_command_names = [name + " " for name in complete_command_names]
-        return event.message_str.startswith(tuple(complete_command_names))
+        # complete_command_names = [name + " " for name in complete_command_names]
+        # return event.message_str.startswith(tuple(complete_command_names))
+        return False
