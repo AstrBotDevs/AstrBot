@@ -128,6 +128,7 @@ class SimpleGewechatClient():
                 if abm.group_id not in self.userrealnames:
                     self.userrealnames[abm.group_id] = {}
                 member_list = await self.get_chatroom_member_list(abm.group_id)
+                logger.debug(f"获取到 {abm.group_id} 的群成员列表。")
                 if member_list and 'memberList' in member_list:
                     for member in member_list['memberList']:
                         self.userrealnames[abm.group_id][member['wxid']] = member['nickName']

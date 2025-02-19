@@ -102,11 +102,17 @@ class CommandFilter(HandlerFilter):
         ok = False
         for candidate in candidates:
             for parent_command_name in self.parent_command_names:
-                _full = f"{parent_command_name} {candidate}"
-                if message_str.startswith(f"{_full} ") or message_str == _full.strip():
+                if parent_command_name:
+                    _full = f"{parent_command_name} {candidate}"
+                else:
+                    _full = candidate
+                if message_str.startswith(f"{_full} ") or message_str == _full:
                     message_str = message_str[len(_full):].strip()
                     ok = True
                     break
+        
+        print(message_str, self.command_name, self.alias, self.parent_command_names, ok)
+                
         if not ok:
             return False
 
