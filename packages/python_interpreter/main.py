@@ -85,7 +85,8 @@ DEFAULT_CONFIG = {
     "sandbox": {
         "image": "soulter/astrbot-code-interpreter-sandbox",
         "docker_mirror": "", # cjie.eu.org
-    }
+    },
+    "docker_host_astrbot_abs_path": ""
 }
 PATH = "data/config/python_interpreter.json"
 
@@ -95,8 +96,14 @@ class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
-        self.workplace_path = os.path.join(self.curr_dir, "workplace")
-        self.shared_path = os.path.join(self.curr_dir, "shared")
+        
+        self.shared_path = os.path.join("data", "py_interpreter_shared")
+        if not os.path.exists(self.shared_path):
+            # 复制 api.py 到 shared 目录
+            os.makedirs(self.shared_path, exist_ok=True)
+            shared_api_file = os.path.join(self.curr_dir, "shared", "api.py")
+            shutil.copy(shared_api_file, self.shared_path)
+        self.workplace_path = os.path.join("data", "py_interpreter_workplace")
         os.makedirs(self.workplace_path, exist_ok=True)
         
         self.user_file_msg_buffer = defaultdict(list)
@@ -195,7 +202,16 @@ class Main(star.Star):
     @filter.command_group("pi")
     def pi(self):
         pass
-
+    
+    @pi.command("absdir")
+    async def pi_absdir(self, event: AstrMessageEvent, path: str = ""):
+        '''设置 Docker 宿主机绝对路径'''
+        if not path:
+            yield event.plain_result(f"当前 Docker 宿主机绝对路径: {self.config.get('docker_host_astrbot_abs_path', '')}")
+        else:
+            self.config["docker_host_astrbot_abs_path"] = path
+            self._save_config()
+            yield event.plain_result(f"设置 Docker 宿主机绝对路径成功: {path}")
 
     @pi.command("mirror")
     async def pi_mirror(self, event: AstrMessageEvent, url: str = ""):
@@ -305,6 +321,20 @@ class Main(star.Star):
                 
             yield event.plain_result(f"使用沙箱执行代码中，请稍等...(尝试次数: {i+1}/{n})")
             
+            
+            self.docker_host_astrbot_abs_path = self.config.get("docker_host_astrbot_abs_path", "")
+            if self.docker_host_astrbot_abs_path:
+                host_shared = os.path.join(self.docker_host_astrbot_abs_path, self.shared_path)
+                host_output = os.path.join(self.docker_host_astrbot_abs_path, output_path)
+                host_workplace = os.path.join(self.docker_host_astrbot_abs_path, workplace_path)
+                
+            else:
+                host_shared = os.path.abspath(self.shared_path)
+                host_output = os.path.abspath(output_path)
+                host_workplace = os.path.abspath(workplace_path)
+            
+            logger.debug(f"host_shared: {host_shared}, host_output: {host_output}, host_workplace: {host_workplace}")
+            
             container = await docker.containers.run({
                 "Image": image_name,
                 "Cmd": ["python", "exec.py"],
@@ -312,9 +342,9 @@ class Main(star.Star):
                 "NanoCPUs": 1000000000,
                 "HostConfig": {
                     "Binds": [
-                        f"{self.shared_path}:/astrbot_sandbox/shared:ro",
-                        f"{output_path}:/astrbot_sandbox/output:rw",
-                        f"{workplace_path}:/astrbot_sandbox:rw",
+                        f"{host_shared}:/astrbot_sandbox/shared:ro",
+                        f"{host_output}:/astrbot_sandbox/output:rw",
+                        f"{host_workplace}:/astrbot_sandbox:rw",
                     ]
                 },
                 "Env": [
