@@ -52,7 +52,7 @@ class SimpleGewechatClient():
         
         self.multimedia_downloader = None
         
-        self.userrealnames = {} # wxid: user real name
+        self.userrealnames = {}
     
     async def get_token_id(self):
         async with aiohttp.ClientSession() as session:
@@ -120,16 +120,24 @@ class SimpleGewechatClient():
         if at_me:
             abm.message.insert(0, At(qq=abm.self_id))
         
-        if user_id in self.userrealnames:
-            user_real_name = self.userrealnames[user_id]
+        # 解析用户真实名字
+        user_real_name = "unknown"
+        if abm.group_id:
+            if abm.group_id not in self.userrealnames or user_id not in self.userrealnames[abm.group_id]:
+                # 获取群成员列表，并且缓存
+                if abm.group_id not in self.userrealnames:
+                    self.userrealnames[abm.group_id] = {}
+                member_list = await self.get_chatroom_member_list(abm.group_id)
+                if member_list and 'memberList' in member_list:
+                    for member in member_list['memberList']:
+                        self.userrealnames[abm.group_id][member['wxid']] = member['nickName']
+                if user_id in self.userrealnames[abm.group_id]:
+                    user_real_name = self.userrealnames[abm.group_id][user_id]
+            else:
+                user_real_name = self.userrealnames[abm.group_id][user_id]
         else:
-            user_real_name = d.get('PushContent', 'unknown : ').split(' : ')[0] \
-                .replace('在群聊中@了你', '') \
-                .replace('在群聊中发了一段语音', '') \
-                .replace('在群聊中发了一张图片', '') # 真实昵称
-            if user_real_name != 'unknown':
-                self.userrealnames[user_id] = user_real_name
-            
+            user_real_name = d.get('PushContent', 'unknown : ').split(' : ')[0]
+
         abm.sender = MessageMember(user_id, user_real_name)
         abm.raw_message = d
         abm.message_str = ""
@@ -320,6 +328,23 @@ class SimpleGewechatClient():
             sp.put(f"gewechat-appid-{self.nickname}", appid)
             self.appid = appid
             logger.info(f"已保存 APPID: {appid}")
+    
+    '''API'''
+    
+    async def get_chatroom_member_list(self, chatroom_wxid: str):
+        payload = {
+            "appId": self.appid,
+            "chatroomId": chatroom_wxid
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.base_url}/group/getChatroomMemberList",
+                headers=self.headers,
+                json=payload
+            ) as resp:
+                json_blob = await resp.json()
+                return json_blob['data']
     
     async def post_text(self, to_wxid, content: str, ats: str = ""):
         payload = {
