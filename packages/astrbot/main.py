@@ -96,6 +96,7 @@ AstrBot 指令:
     
     @tool.command("ls")
     async def tool_ls(self, event: AstrMessageEvent):
+        '''查看函数工具列表'''
         tm = self.context.get_llm_tool_manager()
         msg = "函数工具：\n"
         for tool in tm.func_list:
@@ -107,6 +108,7 @@ AstrBot 指令:
         
     @tool.command("on")
     async def tool_on(self, event: AstrMessageEvent, tool_name: str):
+        '''启用一个函数工具'''
         if self.context.activate_llm_tool(tool_name):
             event.set_result(MessageEventResult().message(f"激活工具 {tool_name} 成功。"))
         else:
@@ -114,6 +116,7 @@ AstrBot 指令:
             
     @tool.command("off")
     async def tool_off(self, event: AstrMessageEvent, tool_name: str):
+        '''停用一个函数工具'''
         if self.context.deactivate_llm_tool(tool_name):
             event.set_result(MessageEventResult().message(f"停用工具 {tool_name} 成功。"))
         else:
@@ -121,6 +124,7 @@ AstrBot 指令:
             
     @tool.command("off_all")
     async def tool_all_off(self, event: AstrMessageEvent):
+        '''停用所有函数工具'''
         tm = self.context.get_llm_tool_manager()
         for tool in tm.func_list:
             self.context.deactivate_llm_tool(tool.name)
@@ -128,6 +132,7 @@ AstrBot 指令:
 
     @filter.command("plugin")
     async def plugin(self, event: AstrMessageEvent, oper1: str = None, oper2: str = None):
+        '''插件管理'''
         if oper1 is None:
             plugin_list_info = "已加载的插件：\n"
             for plugin in self.context.get_all_stars():
@@ -189,6 +194,7 @@ AstrBot 指令:
 
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent):
+        '''开关文本转图片'''
         config = self.context.get_config()
         if config['t2i']:
             config['t2i'] = False
@@ -201,6 +207,7 @@ AstrBot 指令:
 
     @filter.command("tts")
     async def tts(self, event: AstrMessageEvent):
+        '''开关文本转语音'''
         config = self.context.get_config()
         if config['provider_tts_settings']['enable']:
             config['provider_tts_settings']['enable'] = False
@@ -213,6 +220,7 @@ AstrBot 指令:
     
     @filter.command("sid")
     async def sid(self, event: AstrMessageEvent):
+        '''获取会话 ID 和 管理员 ID'''
         sid = event.unified_msg_origin
         user_id = str(event.get_sender_id())
         ret = f"""SID: {sid} 此 ID 可用于设置会话白名单。/wl <SID> 添加白名单, /dwl <SID> 删除白名单。
@@ -222,6 +230,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("op")
     async def op(self, event: AstrMessageEvent, admin_id: str):
+        '''授权管理员。op <admin_id>'''
         self.context.get_config()['admins_id'].append(admin_id)
         self.context.get_config().save_config()
         event.set_result(MessageEventResult().message("授权成功。"))
@@ -229,6 +238,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("deop")
     async def deop(self, event: AstrMessageEvent, admin_id: str):
+        '''取消授权管理员。deop <admin_id>'''
         try:
             self.context.get_config()['admins_id'].remove(admin_id)
             self.context.get_config().save_config()

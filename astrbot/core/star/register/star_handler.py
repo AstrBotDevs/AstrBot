@@ -54,14 +54,13 @@ def get_handler_or_create(
 def register_command(command_name: str = None, sub_command: str = None, alias: set = None, **kwargs):
     '''注册一个 Command.
     '''
-    
-    # print("command: ", command_name, args, kwargs)
-    
     new_command = None
     add_to_event_filters = False
     if isinstance(command_name, RegisteringCommandable):
         # 子指令
-        new_command = CommandFilter(sub_command, alias, None)
+        parent_command_names = command_name.parent_group.get_complete_command_names()
+        logger.debug(f"parent_command_names: {parent_command_names}")
+        new_command = CommandFilter(sub_command, alias, None, parent_command_names=parent_command_names)
         command_name.parent_group.add_sub_command_filter(new_command)
     else:
         # 裸指令
@@ -73,10 +72,7 @@ def register_command(command_name: str = None, sub_command: str = None, alias: s
             kwargs['sub_command'] = True # 打一个标记，表示这是一个子指令，再 wakingstage 阶段这个 handler 将会直接被跳过（其父指令会接管）
         handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent, **kwargs)
         new_command.init_handler_md(handler_md)
-        if add_to_event_filters:
-            # 裸指令
-            handler_md.event_filters.append(new_command)
-             
+        handler_md.event_filters.append(new_command)
         return awaitable
 
     return decorator
@@ -142,14 +138,11 @@ def register_command_group(
 ):
     '''注册一个 CommandGroup
     '''
-    
-    # print("commandgroup: ", command_group_name,args,  kwargs)
-    
     new_group = None
     add_to_event_filters = False
     if isinstance(command_group_name, RegisteringCommandable):
         # 子指令组
-        new_group = CommandGroupFilter(sub_command, alias)
+        new_group = CommandGroupFilter(sub_command, alias, parent_group=command_group_name.parent_group)
         command_group_name.parent_group.add_sub_command_filter(new_group)
     else:
         # 根指令组
@@ -168,8 +161,8 @@ def register_command_group(
 
 class RegisteringCommandable():
     '''用于指令组级联注册'''
-    group = register_command_group
-    command = register_command
+    group: CommandGroupFilter = register_command_group
+    command: CommandFilter = register_command
     custom_filter = register_custom_filter
 
     def __init__(self, parent_group: CommandGroupFilter):

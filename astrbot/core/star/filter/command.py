@@ -1,20 +1,20 @@
 
 import re
 import inspect
-from typing import List
+from typing import List, Any, Type, Dict
 from . import HandlerFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.config import AstrBotConfig
-from astrbot.core.utils.param_validation_mixin import ParameterValidationMixin
 from .custom_filter import CustomFilter
 from ..star_handler import StarHandlerMetadata
 
 # 标准指令受到 wake_prefix 的制约。
-class CommandFilter(HandlerFilter, ParameterValidationMixin):
+class CommandFilter(HandlerFilter):
     '''标准指令过滤器'''
-    def __init__(self, command_name: str, alias: set = None, handler_md: StarHandlerMetadata = None):
+    def __init__(self, command_name: str, alias: set = None, handler_md: StarHandlerMetadata = None, parent_command_names: List[str] = [""]):
         self.command_name = command_name
         self.alias = alias if alias else set()
+        self.parent_command_names = parent_command_names
         if handler_md:
             self.init_handler_md(handler_md)
         self.custom_filter_list: List[CustomFilter] = []
@@ -26,6 +26,7 @@ class CommandFilter(HandlerFilter, ParameterValidationMixin):
                 result += f"{k}({v.__name__}),"
             else:
                 result += f"{k}({type(v).__name__})={v},"
+        result = result.rstrip(",")
         return result
                 
     def init_handler_md(self, handle_md: StarHandlerMetadata):
@@ -54,6 +55,39 @@ class CommandFilter(HandlerFilter, ParameterValidationMixin):
             if not custom_filter.filter(event, cfg):
                 return False
         return True
+    
+    def validate_and_convert_params(self, params: List[Any], param_type: Dict[str, Type]) -> Dict[str, Any]:
+        '''将参数列表 params 根据 param_type 转换为参数字典。
+        '''
+        result = {}
+        for i, (param_name, param_type_or_default_val) in enumerate(param_type.items()):
+            if i >= len(params):
+                if isinstance(param_type_or_default_val, Type) or param_type_or_default_val is inspect.Parameter.empty:
+                    # 是类型
+                    raise ValueError(f"必要参数缺失。该指令完整参数: {self.print_types()}")
+                else:
+                    # 是默认值
+                    result[param_name] = param_type_or_default_val
+            else:
+                # 尝试强制转换
+                try:
+                    if param_type_or_default_val is None:
+                        if params[i].isdigit():
+                            result[param_name] = int(params[i])
+                        else:
+                            result[param_name] = params[i]
+                    elif isinstance(param_type_or_default_val, str):
+                        # 如果 param_type_or_default_val 是字符串，直接赋值
+                        result[param_name] = params[i]
+                    elif isinstance(param_type_or_default_val, int):
+                        result[param_name] = int(params[i])
+                    elif isinstance(param_type_or_default_val, float):
+                        result[param_name] = float(params[i])
+                    else:
+                        result[param_name] = param_type_or_default_val(params[i])
+                except ValueError:
+                    raise ValueError(f"参数 {param_name} 类型错误。完整参数: {self.print_types()}")
+        return result
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         if not event.is_at_or_wake_command:
@@ -61,27 +95,28 @@ class CommandFilter(HandlerFilter, ParameterValidationMixin):
 
         if not self.custom_filter_ok(event, cfg):
             return False
-
-        if event.get_extra("parsing_command"):
-            message_str = event.get_extra("parsing_command").strip()
-        else:
-            message_str = event.get_message_str().strip()
-            
-        # 分割为列表（每个参数之间可能会有多个空格）
-        ls = re.split(r"\s+", message_str)
-        if self.command_name != ls[0] and ls[0] not in self.alias:
+        
+        # 检查是否以指令开头
+        message_str = re.sub(r"\s+", " ", event.get_message_str().strip())
+        candidates = [self.command_name] + list(self.alias)
+        ok = False
+        for candidate in candidates:
+            for parent_command_name in self.parent_command_names:
+                _full = f"{parent_command_name} {candidate}"
+                if message_str.startswith(f"{_full} ") or message_str == _full.strip():
+                    message_str = message_str[len(_full):].strip()
+                    ok = True
+                    break
+        if not ok:
             return False
-        # if len(self.handler_params) == 0 and len(ls) > 1:
-        #     # 一定程度避免 LLM 聊天时误判为指令
-        #     return False
-        # params_str = message_str[len(self.command_name):].strip()
-        ls = ls[1:]
+
+        # 分割为列表
+        ls = message_str.split(" ")
         # 去除空字符串
         ls = [param for param in ls if param]
         params = {}
         try:
             params = self.validate_and_convert_params(ls, self.handler_params)
-            
         except ValueError as e:
             raise e
         

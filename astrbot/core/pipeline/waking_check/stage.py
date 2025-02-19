@@ -5,6 +5,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
 from astrbot.core.message.components import At, Reply
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
+from astrbot.core.star.star import star_map
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 
@@ -77,53 +78,42 @@ class WakingCheckStage(Stage):
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
         for handler in star_handlers_registry.get_handlers_by_event_type(EventType.AdapterMessageEvent):
-            # filter 需要满足 AND 的逻辑关系
-            passed = True
-            child_command_handler_md = None
-            
+            # filter 需满足 AND 逻辑关系
+            passed = True            
             permission_not_pass = False
             
-            if len(handler.event_filters) == 0:
-                # 不可能有这种情况, 也不允许有这种情况
-                continue
+            # 在输入指令组正确但是子指令错误的情况下提醒用户
+            command_group_passed = False
+            command_group_tree = None
             
-            if 'sub_command' in handler.extras_configs:
-                # 如果是子指令
+            if len(handler.event_filters) == 0:
                 continue
 
             for filter in handler.event_filters:
                 try:
-                    if isinstance(filter, CommandGroupFilter):
-                        """如果指令组过滤成功, 会返回叶子指令的 StarHandlerMetadata"""
-                        ok, child_command_handler_md = filter.filter(
-                            event, self.ctx.astrbot_config
-                        )
-                        if not ok:
-                            passed = False
-                        else:
-                            handler = child_command_handler_md  # handler 覆盖
-                            break
-                    elif isinstance(filter, PermissionTypeFilter):
+                    if isinstance(filter, PermissionTypeFilter):
                         if not filter.filter(event, self.ctx.astrbot_config):
                             permission_not_pass = True
+                    elif isinstance(filter, CommandGroupFilter):
+                        if filter.filter(event, self.ctx.astrbot_config):
+                            command_group_passed = True
+                            command_group_tree = filter.print_cmd_tree(filter.sub_command_filters)
+                        passed = False
+                        break
                     else:
                         if not filter.filter(event, self.ctx.astrbot_config):
                             passed = False
                             break
                 except Exception as e:
-                    # event.set_result(MessageEventResult().message(f"插件 {handler.handler_full_name} 报错：{e}"))
-                    # yield
                     await event.send(
                         MessageEventResult().message(
-                            f"插件 {handler.handler_full_name} 报错：{e}"
+                            f"插件 {star_map[handler.handler_module_path].name}: {e}"
                         )
                     )
                     event.stop_event()
                     passed = False
                     break
-
             if passed:
-                
                 if permission_not_pass:
                     if self.no_permission_reply:
                         await event.send(MessageChain().message(f"ID {event.get_sender_id()} 权限不足。通过 /sid 获取 ID 并请管理员添加。"))
@@ -138,6 +128,15 @@ class WakingCheckStage(Stage):
                     handlers_parsed_params[handler.handler_full_name] = event.get_extra(
                         "parsed_params"
                     )
+            if not passed and command_group_passed:
+                await event.send(
+                    MessageEventResult().message(
+                        f"插件 {star_map[handler.handler_module_path].name} 没有该指令。指令树：\n{command_group_tree}"
+                    )
+                )
+                event.stop_event()
+                return
+                    
             event.clear_extra()
 
         event.set_extra("activated_handlers", activated_handlers)

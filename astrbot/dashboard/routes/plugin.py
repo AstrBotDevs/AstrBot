@@ -113,11 +113,17 @@ class PluginRoute(Route):
                 for filter in handler.event_filters: # 正常handler就只有 1~2 个 filter，因此这里时间复杂度不会太高
                     if isinstance(filter, CommandFilter):
                         info["type"] = "指令"
-                        info["cmd"] = filter.command_name
+                        info["cmd"] = f"{filter.parent_command_names[0]} {filter.command_name}"
+                        info["cmd"] = info["cmd"].strip()
+                        if self.core_lifecycle.astrbot_config['wake_prefix'] and len(self.core_lifecycle.astrbot_config['wake_prefix']) > 0:
+                            info["cmd"] = f"{self.core_lifecycle.astrbot_config['wake_prefix'][0]}{info['cmd']}"
                     elif isinstance(filter, CommandGroupFilter):
                         info["type"] = "指令组"
                         info["cmd"] = filter.group_name
+                        info["cmd"] = info["cmd"].strip()
                         info["sub_command"] = filter.print_cmd_tree(filter.sub_command_filters)
+                        if self.core_lifecycle.astrbot_config['wake_prefix'] and len(self.core_lifecycle.astrbot_config['wake_prefix']) > 0:
+                            info["cmd"] = f"{self.core_lifecycle.astrbot_config['wake_prefix'][0]}{info['cmd']}"
                     elif isinstance(filter, RegexFilter):
                         info["type"] = "正则匹配"
                         info["cmd"] = filter.regex_str
