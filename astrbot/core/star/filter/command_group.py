@@ -11,17 +11,36 @@ from ..star_handler import StarHandlerMetadata
 
 # 指令组受到 wake_prefix 的制约。
 class CommandGroupFilter(HandlerFilter):
-    def __init__(self, group_name: str, alias: set = None):
+    def __init__(self, group_name: str, alias: set = None, parent_group: CommandGroupFilter = None):
         self.group_name = group_name
         self.alias = alias if alias else set()
         self.sub_command_filters: List[Union[CommandFilter, CommandGroupFilter]] = []
         self.custom_filter_list: List[CustomFilter] = []
+        self.parent_group = parent_group
     
     def add_sub_command_filter(self, sub_command_filter: Union[CommandFilter, CommandGroupFilter]):
         self.sub_command_filters.append(sub_command_filter)
 
     def add_custom_filter(self, custom_filter: CustomFilter):
         self.custom_filter_list.append(custom_filter)
+
+    def get_complete_command_names(self) -> List[str]:
+        '''遍历父节点获取完整的指令名。
+        
+        新版本 v3.4.29 采用预编译指令，不再从指令组递归遍历子指令，因此这个方法是返回包括别名在内的整个指令名列表。'''
+        parent_cmd_names = self.parent_group.get_complete_command_names() if self.parent_group else []
+        
+        if not parent_cmd_names:
+            # 根节点
+            return [self.group_name] + list(self.alias)
+        
+        result = []
+        candidates = [self.group_name] + list(self.alias)
+        for parent_cmd_name in parent_cmd_names:
+            for candidate in candidates:
+                result.append(parent_cmd_name + " " + candidate)
+        return result
+        
 
     # 以树的形式打印出来
     def print_cmd_tree(self,
@@ -43,6 +62,10 @@ class CommandGroupFilter(HandlerFilter):
                         result += f" ({cmd_th})"
                     else:
                         result += " (无参数指令)"
+                    
+                    if sub_filter.handler_md and sub_filter.handler_md.desc:
+                        result += f": {sub_filter.handler_md.desc}"
+
                     result += "\n"
             elif isinstance(sub_filter, CommandGroupFilter):
                 custom_filter_pass = True
@@ -61,46 +84,19 @@ class CommandGroupFilter(HandlerFilter):
                 return False
         return True
 
-    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> Tuple[bool, StarHandlerMetadata]:
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         if not event.is_at_or_wake_command:
-            return False, None
-        
-        if event.get_extra("parsing_command"):
-            message_str = event.get_extra("parsing_command").strip()
-        else:
-            message_str = event.get_message_str().strip()
-        
-        ls = re.split(r"\s+", message_str)
-
-        if ls[0] != self.group_name and ls[0] not in self.alias:
-            return False, None
-        # 改写 message_str
-        ls = ls[1:]
-        # event.message_str = " ".join(ls)
-        # event.message_str = event.message_str.strip()
-        parsing_command = " ".join(ls)
-        parsing_command = parsing_command.strip()
-        event.set_extra("parsing_command", parsing_command)
+            return False
 
         # 判断当前指令组的自定义过滤器
         if not self.custom_filter_ok(event, cfg):
-            return False, None
+            return False
 
-        if parsing_command == "":
-            # 当前还是指令组
+        complete_command_names = self.get_complete_command_names()
+        if event.message_str.strip() in complete_command_names:
             tree = self.group_name + "\n" + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
             raise ValueError(f"指令组 {self.group_name} 未填写完全。这个指令组下有如下指令：\n"+tree)
-
-        child_command_handler_md = None
-        for sub_filter in self.sub_command_filters:
-            if isinstance(sub_filter, CommandFilter):
-                if sub_filter.filter(event, cfg):
-                    child_command_handler_md = sub_filter.get_handler_md()
-                    return True, child_command_handler_md
-            elif isinstance(sub_filter, CommandGroupFilter):
-                ok, handler = sub_filter.filter(event, cfg)
-                if ok:
-                    child_command_handler_md = handler
-                    return True, child_command_handler_md
-        tree = self.group_name + "\n" + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
-        raise ValueError(f"指令组 {self.group_name} 下没有找到对应的指令。这个指令组下有如下指令：\n"+tree)
+        
+        # complete_command_names = [name + " " for name in complete_command_names]
+        # return event.message_str.startswith(tuple(complete_command_names))
+        return False

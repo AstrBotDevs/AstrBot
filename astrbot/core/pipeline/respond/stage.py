@@ -1,6 +1,7 @@
 import random
 import asyncio
 import math
+import traceback
 from typing import Union, AsyncGenerator
 from ..stage import register_stage, Stage
 from ..context import PipelineContext
@@ -88,7 +89,11 @@ class RespondStage(Stage):
         
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnAfterMessageSentEvent)
         for handler in handlers:
-            # TODO: 如何让这里的 handler 也能使用 LLM 能力。也许需要将 LLMRequestSubStage 提取出来。
-            await handler.handler(event)
+            try:
+                wrapper = self._call_handler(self.ctx, event, handler.handler)
+                async for ret in wrapper:
+                    yield ret
+            except BaseException:
+                logger.error(traceback.format_exc())
             
         event.clear_result()
