@@ -139,7 +139,6 @@ def register_command_group(
     '''注册一个 CommandGroup
     '''
     new_group = None
-    add_to_event_filters = False
     if isinstance(command_group_name, RegisteringCommandable):
         # 子指令组
         new_group = CommandGroupFilter(sub_command, alias, parent_group=command_group_name.parent_group)
@@ -147,13 +146,11 @@ def register_command_group(
     else:
         # 根指令组
         new_group = CommandGroupFilter(command_group_name, alias)
-        add_to_event_filters = True
     
     def decorator(obj):
-        if add_to_event_filters:
-            # 根指令组
-            handler_md = get_handler_or_create(obj, EventType.AdapterMessageEvent, **kwargs)
-            handler_md.event_filters.append(new_group)
+        # 根指令组
+        handler_md = get_handler_or_create(obj, EventType.AdapterMessageEvent, **kwargs)
+        handler_md.event_filters.append(new_group)
             
         return RegisteringCommandable(new_group)
 

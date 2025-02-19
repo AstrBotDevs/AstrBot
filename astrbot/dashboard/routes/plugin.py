@@ -119,7 +119,7 @@ class PluginRoute(Route):
                             info["cmd"] = f"{self.core_lifecycle.astrbot_config['wake_prefix'][0]}{info['cmd']}"
                     elif isinstance(filter, CommandGroupFilter):
                         info["type"] = "指令组"
-                        info["cmd"] = filter.group_name
+                        info["cmd"] = filter.get_complete_command_names()[0]
                         info["cmd"] = info["cmd"].strip()
                         info["sub_command"] = filter.print_cmd_tree(filter.sub_command_filters)
                         if self.core_lifecycle.astrbot_config['wake_prefix'] and len(self.core_lifecycle.astrbot_config['wake_prefix']) > 0:
