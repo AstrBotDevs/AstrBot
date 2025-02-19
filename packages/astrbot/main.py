@@ -350,16 +350,20 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             else:
                 event.set_result(MessageEventResult().message("无效的参数。"))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent):
         '''重置 LLM 会话'''
+        is_unique_session = self.context.get_config()['platform_settings']['unique_session']
+        if message.get_group_id() and not is_unique_session and message.role != "admin":
+            # 群聊，没开独立会话，发送人不是管理员
+            message.set_result(MessageEventResult().message(f"会话处于群聊，并且未开启独立会话，并且您 (ID {message.get_sender_id()}) 不是管理员，因此没有权限重置当前对话。"))    
+            return
+        
         if not self.context.get_using_provider():
             message.set_result(MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"))
             return
         
         provider = self.context.get_using_provider()
-        print(provider.meta())
         if provider and provider.meta().type == 'dify':
             assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
@@ -432,7 +436,6 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                 message.set_result(
                     MessageEventResult().message(f"切换模型到 {self.context.get_using_provider().get_model()}。"))
                 
-
     @filter.command("history")
     async def his(self, message: AstrMessageEvent, page: int = 1):
         '''查看对话记录'''
@@ -611,10 +614,14 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         await self.context.conversation_manager.update_conversation_title(message.unified_msg_origin, new_name)
         message.set_result(MessageEventResult().message("重命名对话成功。"))
     
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("del")
     async def del_conv(self, message: AstrMessageEvent):
         '''删除当前对话'''
+        is_unique_session = self.context.get_config()['platform_settings']['unique_session']
+        if message.get_group_id() and not is_unique_session and message.role != "admin":
+            # 群聊，没开独立会话，发送人不是管理员
+            message.set_result(MessageEventResult().message(f"会话处于群聊，并且未开启独立会话，并且您 (ID {message.get_sender_id()}) 不是管理员，因此没有权限删除当前对话。"))    
+            return
         
         provider = self.context.get_using_provider()
         if provider and provider.meta().type == 'dify':
@@ -633,7 +640,6 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
         await self.context.conversation_manager.delete_conversation(message.unified_msg_origin, session_curr_cid)
         message.set_result(MessageEventResult().message("删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"))
         
-
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("key")
     async def key(self, message: AstrMessageEvent, index: int=None):
