@@ -51,6 +51,8 @@ class SimpleGewechatClient():
         self.event_queue = event_queue
         
         self.multimedia_downloader = None
+        
+        self.userrealnames = {} # wxid: user real name
     
     async def get_token_id(self):
         async with aiohttp.ClientSession() as session:
@@ -118,10 +120,16 @@ class SimpleGewechatClient():
         if at_me:
             abm.message.insert(0, At(qq=abm.self_id))
         
-        user_real_name = d.get('PushContent', 'unknown : ').split(' : ')[0] \
-            .replace('在群聊中@了你', '') \
-            .replace('在群聊中发了一段语音', '') \
-            .replace('在群聊中发了一张图片', '') # 真实昵称
+        if user_id in self.userrealnames:
+            user_real_name = self.userrealnames[user_id]
+        else:
+            user_real_name = d.get('PushContent', 'unknown : ').split(' : ')[0] \
+                .replace('在群聊中@了你', '') \
+                .replace('在群聊中发了一段语音', '') \
+                .replace('在群聊中发了一张图片', '') # 真实昵称
+            if user_real_name != 'unknown':
+                self.userrealnames[user_id] = user_real_name
+            
         abm.sender = MessageMember(user_id, user_real_name)
         abm.raw_message = d
         abm.message_str = ""
