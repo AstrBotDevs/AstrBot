@@ -1,5 +1,6 @@
 import base64
 import aiohttp
+import random
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.db import BaseDatabase
 from astrbot.api.provider import Provider, Personality
@@ -138,8 +139,7 @@ class ProviderGoogleGenAI(Provider):
                     "role": "model",
                     "parts": [{"text": message["content"]}]
                 })
-                
-        
+
         logger.debug(f"google_genai_conversation: {google_genai_conversation}")
         
         result = await self.client.generate_content(
@@ -194,33 +194,49 @@ class ProviderGoogleGenAI(Provider):
             **model_config
         }
         llm_response = None
-        try:
-            llm_response = await self._query(payloads, func_tool)
-        except Exception as e:
-            if "maximum context length" in str(e):
-                retry_cnt = 20
-                while retry_cnt > 0:
-                    logger.warning(f"请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}")
-                    try:
-                        await self.pop_record(context_query)
-                        llm_response = await self._query(payloads, func_tool)
-                        break
-                    except Exception as e:
-                        if "maximum context length" in str(e):
-                            retry_cnt -= 1
-                        else:
-                            raise e
-                if retry_cnt == 0:
-                    llm_response = LLMResponse("err", "err: 请尝试  /reset 重置会话")
-            elif "Function calling is not enabled" in str(e):
-                logger.info(f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。")
-                if 'tools' in payloads:
-                    del payloads['tools']
-                llm_response = await self._query(payloads, None)
-            else:
-                logger.error(f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}")
-                
-                raise e
+        
+        retry = 10
+        keys = self.api_keys.copy()
+        chosen_key = random.choice(keys)
+        
+        for i in range(retry):
+            try:
+                self.client.api_key = chosen_key 
+                llm_response = await self._query(payloads, func_tool)
+                break
+            except Exception as e:
+                if "maximum context length" in str(e):
+                    retry_cnt = 20
+                    while retry_cnt > 0:
+                        logger.warning(f"请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}")
+                        try:
+                            await self.pop_record(context_query)
+                            llm_response = await self._query(payloads, func_tool)
+                            break
+                        except Exception as e:
+                            if "maximum context length" in str(e):
+                                retry_cnt -= 1
+                            else:
+                                raise e
+                    if retry_cnt == 0:
+                        llm_response = LLMResponse("err", "err: 请尝试  /reset 重置会话")
+                elif "Function calling is not enabled" in str(e):
+                    logger.info(f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。")
+                    if 'tools' in payloads:
+                        del payloads['tools']
+                    llm_response = await self._query(payloads, None)
+                elif "429" in str(e) or "API key not valid" in str(e):
+                    keys.remove(chosen_key)
+                    if len(keys) > 0:
+                        chosen_key = random.choice(keys)
+                        logger.info(f"检测到 Key 异常({str(e)})，正在尝试更换 API Key 重试... 当前 Key: {chosen_key[:12]}...")
+                        continue
+                    else:
+                        logger.error(f"A检测到 Key 异常({str(e)})，且已没有可用的 Key。 当前 Key: {chosen_key[:12]}...")
+                        raise Exception("API 资源已耗尽，且没有可用的 Key 重试...")
+                else:
+                    logger.error(f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}")
+                    raise e
 
         return llm_response
 
