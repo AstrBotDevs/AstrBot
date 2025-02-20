@@ -110,9 +110,6 @@ class CommandFilter(HandlerFilter):
                     message_str = message_str[len(_full):].strip()
                     ok = True
                     break
-        
-        print(message_str, self.command_name, self.alias, self.parent_command_names, ok)
-                
         if not ok:
             return False
 

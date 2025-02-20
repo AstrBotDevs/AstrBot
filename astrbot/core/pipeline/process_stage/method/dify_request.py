@@ -11,6 +11,7 @@ from astrbot.core.message.components import Image
 from astrbot.core import logger
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.star.star_handler import star_handlers_registry, EventType
 
 class DifyRequestSubStage(Stage):
     
@@ -48,17 +49,40 @@ class DifyRequestSubStage(Stage):
             return
         
         req.session_id = event.unified_msg_origin
+        
+        # 执行请求 LLM 前事件钩子。
+        # 装饰 system_prompt 等功能
+        handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMRequestEvent)
+        for handler in handlers:
+            try:
+                await handler.handler(event, req)
+            except BaseException:
+                logger.error(traceback.format_exc())
             
         try:
             logger.debug(f"Dify 请求 Payload: {req.__dict__}")
             llm_response = await provider.text_chat(**req.__dict__) # 请求 LLM
             await Metric.upload(llm_tick=1, model_name=provider.get_model(), provider_type=provider.meta().type)
+            
+            # 执行 LLM 响应后的事件。
+            handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMResponseEvent)
+            for handler in handlers:
+                try:
+                    await handler.handler(event, llm_response)
+                except BaseException:
+                    logger.error(traceback.format_exc())
 
             if llm_response.role == 'assistant':
                 # text completion
                 event.set_result(MessageEventResult().message(llm_response.completion_text)
                                  .set_result_content_type(ResultContentType.LLM_RESULT))
-                yield # rick roll
+                return
+            elif llm_response.role == 'err':
+                event.set_result(MessageEventResult().message(f"AstrBot 请求失败。\n错误信息: {llm_response.completion_text}"))
+                return
+            elif llm_response.role == 'tool':
+                event.set_result(MessageEventResult().message(f"Dify 暂不支持工具调用。"))
+                yield
 
         except BaseException as e:
             logger.error(traceback.format_exc())
