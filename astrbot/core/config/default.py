@@ -409,6 +409,17 @@ CONFIG_METADATA_2 = {
                             "model": "gpt-4o-mini",
                         },
                     },
+                    "xAI": {
+                        "id": "xai",
+                        "type": "openai_chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.x.ai/v1",
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "grok-2-latest",
+                        },
+                    },
                     "ollama": {
                         "id": "ollama_default",
                         "type": "openai_chat_completion",
