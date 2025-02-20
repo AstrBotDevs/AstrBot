@@ -90,9 +90,7 @@ class RespondStage(Stage):
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnAfterMessageSentEvent)
         for handler in handlers:
             try:
-                wrapper = self._call_handler(self.ctx, event, handler.handler)
-                async for ret in wrapper:
-                    yield ret
+                await handler.handler(event)
             except BaseException:
                 logger.error(traceback.format_exc())
             

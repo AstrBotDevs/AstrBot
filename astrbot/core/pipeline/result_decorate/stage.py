@@ -63,13 +63,10 @@ class ResultDecorateStage(Stage):
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnDecoratingResultEvent)
         for handler in handlers:
             try:
-                wrapper = self._call_handler(self.ctx, event, handler.handler)
-                async for ret in wrapper:
-                    yield ret
+                await handler.handler(event)
             except BaseException:
                 logger.error(traceback.format_exc())
             
-        
         # 需要再获取一次。插件可能直接对 chain 进行了替换。
         result = event.get_result()
         if result is None:

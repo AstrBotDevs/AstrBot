@@ -1,6 +1,7 @@
 from __future__ import annotations
 import abc
 import inspect
+from astrbot.api import logger
 from typing import List, AsyncGenerator, Union, Awaitable
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from .context import PipelineContext
@@ -46,6 +47,7 @@ class Stage(abc.ABC):
             ready_to_call = handler(event, *args, **kwargs)
         except TypeError as e:
             # 向下兼容
+            logger.debug(str(e))
             ready_to_call = handler(event, ctx.plugin_manager.context, *args, **kwargs)
         
         if isinstance(ready_to_call, AsyncGenerator):

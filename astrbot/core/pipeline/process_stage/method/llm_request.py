@@ -69,9 +69,7 @@ class LLMRequestSubStage(Stage):
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMRequestEvent)
         for handler in handlers:
             try:
-                wrapper = self._call_handler(self.ctx, event, handler.handler, req)
-                async for ret in wrapper:
-                    yield ret
+                await handler.handler(event, req)
             except BaseException:
                 logger.error(traceback.format_exc())
                 
@@ -88,9 +86,7 @@ class LLMRequestSubStage(Stage):
             handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMResponseEvent)
             for handler in handlers:
                 try:
-                    wrapper = self._call_handler(self.ctx, event, handler.handler, llm_response)
-                    async for ret in wrapper:
-                        yield ret
+                    await handler.handler(event, llm_response)
                 except BaseException:
                     logger.error(traceback.format_exc())
             
