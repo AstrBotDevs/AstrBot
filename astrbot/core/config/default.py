@@ -420,7 +420,7 @@ CONFIG_METADATA_2 = {
                             "model": "grok-2-latest",
                         },
                     },
-                    "claude": {
+                    "anthropic(claude)": {
                         "id": "claude",
                         "type": "anthropic_chat_completion",
                         "enable": True,

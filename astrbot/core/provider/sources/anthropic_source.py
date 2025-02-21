@@ -29,13 +29,15 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         self.chosen_api_key = None
         self.api_keys: List = provider_config.get("key", [])
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
+        self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
         self.client = AsyncAnthropic(
             api_key=self.chosen_api_key,
-            timeout=self.timeout
+            timeout=self.timeout,
+            base_url=self.base_url
         )
         
         self.set_model(provider_config['model_config']['model'])
@@ -114,7 +116,6 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
             payloads['system'] = system_prompt
         llm_response = None
         try:
-            print(payloads)
             llm_response = await self._query(payloads, func_tool)
 
         except Exception as e:
