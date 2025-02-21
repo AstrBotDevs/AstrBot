@@ -98,6 +98,10 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         system_prompt=None,
         **kwargs
     ) -> LLMResponse:
+        
+        if not prompt:
+            prompt = "<image>"
+    
         new_record = await self.assemble_context(prompt, image_urls)
         context_query = [*contexts, new_record]
 
@@ -114,6 +118,7 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         # Anthropic has a different way of handling system prompts
         if system_prompt:
             payloads['system'] = system_prompt
+
         llm_response = None
         try:
             llm_response = await self._query(payloads, func_tool)
