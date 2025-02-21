@@ -25,7 +25,7 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
     ) -> None:
         # Skip OpenAI's __init__ and call Provider's __init__ directly
         Provider.__init__(self, provider_config, provider_settings, persistant_history, db_helper, default_persona)
-        
+
         self.chosen_api_key = None
         self.api_keys: List = provider_config.get("key", [])
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
