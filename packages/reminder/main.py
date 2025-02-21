@@ -17,9 +17,9 @@ class Main(star.Star):
         
         # set and load config
         if not os.path.exists("data/astrbot-reminder.json"):
-            with open("data/astrbot-reminder.json", "w") as f:
+            with open("data/astrbot-reminder.json", "w", encoding='utf-8') as f:
                 f.write("{}")
-        with open("data/astrbot-reminder.json", "r") as f:
+        with open("data/astrbot-reminder.json", "r", encoding='utf-8') as f:
             self.reminder_data = json.load(f)
         
         self._init_scheduler()
@@ -64,7 +64,7 @@ class Main(star.Star):
     
     async def _save_data(self):
         '''Save the reminder data.'''
-        with open("data/astrbot-reminder.json", "w") as f:
+        with open("data/astrbot-reminder.json", "w", encoding='utf-8') as f:
             json.dump(self.reminder_data, f, ensure_ascii=False)
 
     def _parse_cron_expr(self, cron_expr: str):

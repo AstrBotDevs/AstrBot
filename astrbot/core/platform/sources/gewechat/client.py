@@ -302,8 +302,21 @@ class SimpleGewechatClient():
             "uuid": qr_uuid,
             "appId": appid
         })
+        verify_flag = False
         while retry_cnt > 0:
             retry_cnt -= 1
+
+            # 需要验证码
+            if verify_flag:
+                with open("data/temp/gewe_code", "r") as f:
+                    code = f.read().strip()
+                    if not code:
+                        logger.warning("未找到验证码，请在管理面板聊天页输入 /gewe_code 验证码 来验证，如 /gewe_code 123456")
+                        await asyncio.sleep(5)
+                        continue
+                    payload['captchCode'] = code
+                    logger.info(f"使用验证码: {code}")
+
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     f"{self.base_url}/login/checkLogin",
@@ -312,17 +325,26 @@ class SimpleGewechatClient():
                 ) as resp:
                     json_blob = await resp.json()
                     logger.info(f"检查登录状态: {json_blob}")
-                    status = json_blob['data']['status']
-                    nickname = json_blob['data'].get('nickName', '')
-                    if status == 1:
-                        logger.info(f"等待确认...{nickname}")
-                    elif status == 2:
-                        logger.info(f"绿泡泡平台登录成功: {nickname}")
-                        break
-                    elif status == 0:
-                        logger.info("等待扫码...")
+
+                    ret = json_blob['ret']
+                    msg = ''
+                    if json_blob['data'] and 'msg' in json_blob['data']:
+                        msg = json_blob['data']['msg']
+                    if ret == 500 and '安全验证码' in msg:
+                        logger.warning("此次登录需要安全验证码，请在管理面板聊天页输入 /gewe_code 验证码 来验证，如 /gewe_code 123456")
+                        verify_flag = True
                     else:
-                        logger.warning(f"未知状态: {status}")
+                        status = json_blob['data']['status']
+                        nickname = json_blob['data'].get('nickName', '')
+                        if status == 1: 
+                            logger.info(f"等待确认...{nickname}")
+                        elif status == 2:
+                            logger.info(f"绿泡泡平台登录成功: {nickname}")
+                            break
+                        elif status == 0:
+                            logger.info("等待扫码...")
+                        else:
+                            logger.warning(f"未知状态: {status}")
             await asyncio.sleep(5)
             
         if appid:

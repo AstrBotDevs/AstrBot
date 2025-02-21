@@ -788,6 +788,14 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                 yield event.plain_result("已登出 gewechat，请重启 AstrBot")
                 return
             
+                
+    @filter.command("gewe_code")
+    async def gewe_code(self, event: AstrMessageEvent, code: str):
+        '''保存 gewechat 验证码'''
+        with open("data/temp/gewe_code", "w", encoding='utf-8') as f:
+            f.write(code)
+        yield event.plain_result("验证码已保存。")
+            
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         '''群聊记忆增强'''
