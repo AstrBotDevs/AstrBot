@@ -1,6 +1,3 @@
-import json
-import os
-import base64
 from typing import List
 from mimetypes import guess_type
 
@@ -19,10 +16,10 @@ from .openai_source import ProviderOpenAIOfficial
 @register_provider_adapter("anthropic_chat_completion", "Anthropic Claude API 提供商适配器")
 class ProviderAnthropic(ProviderOpenAIOfficial):
     def __init__(
-        self, 
-        provider_config: dict, 
+        self,
+        provider_config: dict,
         provider_settings: dict,
-        db_helper: BaseDatabase, 
+        db_helper: BaseDatabase,
         persistant_history = True,
         default_persona: Personality = None
     ) -> None:
@@ -92,9 +89,9 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str=None,
-        image_urls: List[str]=[],
-        func_tool: FuncCall=None,
+        session_id: str = None,
+        image_urls: List[str] = [],
+        func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
         **kwargs
