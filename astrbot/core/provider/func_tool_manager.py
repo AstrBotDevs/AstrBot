@@ -102,6 +102,29 @@ class FuncCall:
             )
         return _l
     
+    def get_func_desc_anthropic_style(self) -> list:
+        """
+        获得 Anthropic API 风格的**已经激活**的工具描述
+        """
+        tools = []
+        for f in self.func_list:
+            if not f.active:
+                continue
+
+            # Convert internal format to Anthropic style
+            tool = {
+                "name": f.name,
+                "description": f.description,
+                "input_schema": {
+                    "type": "object",
+                    "properties": f.parameters.get("properties", {}),
+                    # Keep the required field from the original parameters if it exists
+                    "required": f.parameters.get("required", [])
+                }
+            }
+            tools.append(tool)
+        return tools
+    
     def get_func_desc_google_genai_style(self) -> Dict:
         declarations = {}
         tools = []

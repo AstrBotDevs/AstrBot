@@ -117,6 +117,8 @@ class ProviderManager():
                         from .sources.openai_source import ProviderOpenAIOfficial as ProviderOpenAIOfficial
                     case "zhipu_chat_completion":
                         from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
+                    case "anthropic_chat_completion":
+                        from .sources.anthropic_source import ProviderAnthropic as ProviderAnthropic
                     case "llm_tuner":
                         logger.info("加载 LLM Tuner 工具 ...")
                         from .sources.llmtuner_source import LLMTunerModelLoader as LLMTunerModelLoader
