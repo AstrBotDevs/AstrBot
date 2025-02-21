@@ -420,6 +420,18 @@ CONFIG_METADATA_2 = {
                             "model": "grok-2-latest",
                         },
                     },
+                    "anthropic(claude)": {
+                        "id": "claude",
+                        "type": "anthropic_chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.anthropic.com/v1",
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "claude-3-5-sonnet-latest",
+                            "max_tokens": 4096,
+                        },
+                    },
                     "ollama": {
                         "id": "ollama_default",
                         "type": "openai_chat_completion",
