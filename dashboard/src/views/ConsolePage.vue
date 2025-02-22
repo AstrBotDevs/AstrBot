@@ -9,34 +9,42 @@ import axios from 'axios';
     <div
       style="background-color: white; padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; justify-content: space-between;">
       <h4>控制台</h4>
-      <v-dialog v-model="pipDialog" width="400">
-        <template v-slot:activator="{ props }">
-          <v-btn variant="plain" v-bind="props">安装 pip 库</v-btn>
-        </template>
-        <v-card>
-          <v-card-title>
-            <span class="text-h5">安装 Pip 库</span>
-          </v-card-title>
-          <v-card-text>
-            <v-text-field v-model="pipInstallPayload.package" label="*库名，如 llmtuner" variant="outlined"></v-text-field>
-            <v-text-field v-model="pipInstallPayload.mirror" label="镜像站链接（可选）" variant="outlined"></v-text-field>
-            <small>如果不填镜像站链接，默认使用阿里云镜像：https://mirrors.aliyun.com/pypi/simple/</small>
-            <div>
-              <small>{{ status }}</small>
-            </div>
-            
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer></v-spacer>
-            <v-btn color="blue-darken-1" variant="text" @click="pipInstall" :loading="loading">
-              安装
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
-
+      <div class="d-flex align-center">
+        <v-switch
+          v-model="autoScrollDisabled"
+          :label="autoScrollDisabled ? '自动滚动已关闭' : '自动滚动已开启'"
+          hide-details
+          density="compact"
+          style="margin-right: 16px;"
+        ></v-switch>
+        <v-dialog v-model="pipDialog" width="400">
+          <template v-slot:activator="{ props }">
+            <v-btn variant="plain" v-bind="props">安装 pip 库</v-btn>
+          </template>
+          <v-card>
+            <v-card-title>
+              <span class="text-h5">安装 Pip 库</span>
+            </v-card-title>
+            <v-card-text>
+              <v-text-field v-model="pipInstallPayload.package" label="*库名，如 llmtuner" variant="outlined"></v-text-field>
+              <v-text-field v-model="pipInstallPayload.mirror" label="镜像站链接（可选）" variant="outlined"></v-text-field>
+              <small>如果不填镜像站链接，默认使用阿里云镜像：https://mirrors.aliyun.com/pypi/simple/</small>
+              <div>
+                <small>{{ status }}</small>
+              </div>
+              
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer></v-spacer>
+              <v-btn color="blue-darken-1" variant="text" @click="pipInstall" :loading="loading">
+                安装
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+      </div>
     </div>
-    <ConsoleDisplayer style="height: calc(100vh - 160px); " />
+    <ConsoleDisplayer ref="consoleDisplayer" style="height: calc(100vh - 160px); " />
   </div>
 </template>
 <script>
@@ -47,6 +55,7 @@ export default {
   },
   data() {
     return {
+      autoScrollDisabled: false,
       pipDialog: false,
       pipInstallPayload: {
         package: '',
@@ -56,7 +65,13 @@ export default {
       status: ''
     }
   },
-
+  watch: {
+    autoScrollDisabled(val) {
+      if (this.$refs.consoleDisplayer) {
+        this.$refs.consoleDisplayer.autoScroll = !val;
+      }
+    }
+  },
   methods: {
     pipInstall() {
       this.loading = true;
