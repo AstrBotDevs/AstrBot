@@ -584,12 +584,12 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
-                    "variables": {
-                        "description": "工作流固定输入变量",
-                        "type": "object",
-                        "obvious_hint": True,
-                        "hint": "可选。工作流固定输入变量，将会作为工作流的输入。也可以在对话时使用 /set 指令动态设置变量。如果变量名冲突，优先使用动态设置的变量。",
-                    },
+                    # "variables": {
+                    #     "description": "工作流固定输入变量",
+                    #     "type": "object",
+                    #     "obvious_hint": True,
+                    #     "hint": "可选。工作流固定输入变量，将会作为工作流的输入。也可以在对话时使用 /set 指令动态设置变量。如果变量名冲突，优先使用动态设置的变量。",
+                    # },
                     # "fastgpt_app_type": {
                     #     "description": "应用类型",
                     #     "type": "string",
