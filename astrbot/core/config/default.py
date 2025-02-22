@@ -529,6 +529,15 @@ CONFIG_METADATA_2 = {
                         "dify_query_input_key": "astrbot_text_query",
                         "timeout": 60,
                     },
+                    "dashscope": {
+                        "id": "dashscope",
+                        "type": "dashscope",
+                        "enable": True,
+                        "dashscope_app_type": "agent",
+                        "dashscope_api_key": "",
+                        "dashscope_app_id": "",
+                        "timeout": 60,
+                    },
                     "whisper(API)": {
                         "id": "whisper",
                         "type": "openai_whisper_api",
@@ -565,6 +574,13 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "dashscope_app_type": {
+                        "description": "应用类型",
+                        "type": "string",
+                        "hint": "阿里云百炼应用的应用类型。",
+                        "options": ["agent", "agent-arrange", "dialog-workflow", "task-workflow"],
+                        "obvious_hint": True,
+                    },
                     "timeout": {
                         "description": "超时时间",
                         "type": "int",

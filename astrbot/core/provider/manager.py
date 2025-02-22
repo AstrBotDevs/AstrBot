@@ -124,6 +124,8 @@ class ProviderManager():
                         from .sources.llmtuner_source import LLMTunerModelLoader as LLMTunerModelLoader
                     case "dify":
                         from .sources.dify_source import ProviderDify as ProviderDify
+                    case "dashscope":
+                        from .sources.dashscope_source import ProviderDashscope as ProviderDashscope
                     case "googlegenai_chat_completion":
                         from .sources.gemini_source import ProviderGoogleGenAI as ProviderGoogleGenAI
                     case "openai_whisper_api":
