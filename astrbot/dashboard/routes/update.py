@@ -56,8 +56,13 @@ class UpdateRoute(Route):
             version = ''
         else:
             latest = False
+
+        proxy: str = data.get("proxy", None)
+        if proxy:
+            proxy = proxy.removesuffix("/")
+
         try:
-            await self.astrbot_updator.update(latest=latest, version=version)
+            await self.astrbot_updator.update(latest=latest, version=version, proxy=proxy)
             
             if latest:
                 try:

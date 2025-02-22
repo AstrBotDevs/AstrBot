@@ -86,7 +86,8 @@ function checkUpdate() {
 function switchVersion(version: string) {
   updateStatus.value = '正在切换版本...';
   axios.post('/api/update/do', {
-    version: version
+    version: version,
+    proxy: localStorage.getItem('selectedGitHubProxy') || ''
   })
     .then((res) => {
       updateStatus.value = res.data.message;

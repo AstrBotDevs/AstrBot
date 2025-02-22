@@ -17,7 +17,8 @@ addons/plugins
 
 tests/astrbot_plugin_openai
 chroma
-node_modules/
+dashboard/node_modules/
+dashboard/dist/
 .DS_Store
 package-lock.json
 package.json
