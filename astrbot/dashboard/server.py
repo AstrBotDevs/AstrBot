@@ -2,6 +2,8 @@ import logging
 import jwt
 import asyncio
 import os
+import socket
+import sys
 from astrbot.core.config.default import VERSION
 from quart import Quart, request, jsonify, g
 from quart.logging import default_handler
@@ -67,6 +69,25 @@ class AstrBotDashboard():
             await asyncio.sleep(1)
         logger.info("管理面板已关闭。")
         
+    def check_port_in_use(self, port: int) -> bool:
+        """
+        跨平台检测端口是否被占用
+        """
+        try:
+            # 创建 IPv4 TCP Socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # 设置超时时间
+            sock.settimeout(2)
+            result = sock.connect_ex(('127.0.0.1', port))
+            sock.close()
+            # result 为 0 表示端口被占用
+            return result == 0
+        except Exception as e:
+            logger.warning(f"检查端口 {port} 时发生错误: {str(e)}")
+            # 如果出现异常，保守起见认为端口可能被占用
+            return True
+    
     def run(self):
         try:
             ip_addr = get_local_ip_addresses()
@@ -76,6 +97,14 @@ class AstrBotDashboard():
         port = self.core_lifecycle.astrbot_config['dashboard'].get("port", 6185)
         if isinstance(port, str):
             port = int(port)
+
+        if self.check_port_in_use(port):
+            logger.error(f"错误：端口 {port} 已被占用，请确保：\n"
+                        f"1. 没有其他 AstrBot 实例正在运行\n"
+                        f"2. 端口 {port} 没有被其他程序占用\n"
+                        f"3. 如需使用其他端口，请修改配置文件")
+            
+            raise Exception(f"端口 {port} 已被占用")
     
         display = f"\n ✨✨✨\n  AstrBot v{VERSION} 管理面板已启动，可访问\n\n"
         display += f"   ➜  本地: http://localhost:{port}\n"
