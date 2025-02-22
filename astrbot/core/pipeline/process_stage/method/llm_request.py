@@ -54,7 +54,7 @@ class LLMRequestSubStage(Stage):
             conversation_id = await self.conv_manager.get_curr_conversation_id(event.unified_msg_origin)
             if not conversation_id:
                 conversation_id = await self.conv_manager.new_conversation(event.unified_msg_origin)
-            req.session_id = conversation_id
+            req.session_id = event.unified_msg_origin
             conversation = await self.conv_manager.get_conversation(event.unified_msg_origin, conversation_id)
             req.conversation = conversation
             req.contexts = json.loads(conversation.history)
@@ -154,6 +154,6 @@ class LLMRequestSubStage(Stage):
             contexts_to_save = list(filter(lambda item: '_no_save' not in item, contexts))
             await self.conv_manager.update_conversation(
                 event.unified_msg_origin, 
-                req.session_id, 
+                req.conversation.cid, 
                 history=contexts_to_save
             )

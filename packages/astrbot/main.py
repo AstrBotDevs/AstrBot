@@ -83,9 +83,6 @@ AstrBot 指令:
 /tool ls: 函数工具
 /key: API Key(op)
 /websearch: 网页搜索
-
-[其他]
-/set 变量名 值: 为会话定义变量(Dify 工作流输入)
 {notice}"""
 
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
