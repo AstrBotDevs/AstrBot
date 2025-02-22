@@ -32,6 +32,7 @@ class ProviderDify(Provider):
         self.model_name = "dify"
         self.workflow_output_key = provider_config.get("dify_workflow_output_key", "astrbot_wf_output")
         self.dify_query_input_key = provider_config.get("dify_query_input_key", "astrbot_text_query")
+        self.variables: dict = provider_config.get("variables", {})
         if not self.dify_query_input_key:
             self.dify_query_input_key = "astrbot_text_query"
         self.timeout = provider_config.get("timeout", 120)
@@ -72,15 +73,18 @@ class ProviderDify(Provider):
                 logger.warning(f"未知的图片链接：{image_url}，图片将忽略。")
         
         # 获得会话变量
+        payload_vars = self.variables.copy()
+        # 动态变量
         session_vars = sp.get("session_variables", {})
         session_var = session_vars.get(session_id, {})
+        payload_vars.update(session_var)
         
         try:
             match self.api_type:
                 case "chat" | "agent":
                     async for chunk in self.api_client.chat_messages(
                         inputs={
-                            **session_var
+                            **payload_vars,
                         },
                         query=prompt,
                         user=session_id,
@@ -101,7 +105,7 @@ class ProviderDify(Provider):
                         inputs={
                             self.dify_query_input_key: prompt,
                             "astrbot_session_id": session_id,
-                            **session_var
+                            **payload_vars,
                         },
                         user=session_id,
                         files=files_payload,

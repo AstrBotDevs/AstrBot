@@ -527,6 +527,7 @@ CONFIG_METADATA_2 = {
                         "dify_api_base": "https://api.dify.ai/v1",
                         "dify_workflow_output_key": "",
                         "dify_query_input_key": "astrbot_text_query",
+                        "variables": {},
                         "timeout": 60,
                     },
                     "dashscope": {
@@ -536,6 +537,7 @@ CONFIG_METADATA_2 = {
                         "dashscope_app_type": "agent",
                         "dashscope_api_key": "",
                         "dashscope_app_id": "",
+                        "variables": {},
                         "timeout": 60,
                     },
                     "whisper(API)": {
@@ -574,6 +576,12 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "variables": {
+                        "description": "工作流固定输入变量",
+                        "type": "object",
+                        "obvious_hint": True,
+                        "hint": "可选。工作流固定输入变量，将会作为工作流的输入。也可以在对话时使用 /set 指令动态设置变量。如果变量名冲突，优先使用动态设置的变量。",
+                    },
                     "dashscope_app_type": {
                         "description": "应用类型",
                         "type": "string",

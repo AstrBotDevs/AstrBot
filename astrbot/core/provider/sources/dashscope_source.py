@@ -10,6 +10,7 @@ from .openai_source import ProviderOpenAIOfficial
 from astrbot.core import logger, sp
 from dashscope import Application
 
+
 @register_provider_adapter("dashscope", "Dashscope APP 适配器。")
 class ProviderDashscope(ProviderOpenAIOfficial):
     def __init__(
@@ -18,10 +19,15 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         provider_settings: dict,
         db_helper: BaseDatabase,
         persistant_history=False,
-        default_persona: Personality=None
+        default_persona: Personality = None,
     ) -> None:
         Provider.__init__(
-            self, provider_config, provider_settings, persistant_history, db_helper, default_persona
+            self,
+            provider_config,
+            provider_settings,
+            persistant_history,
+            db_helper,
+            default_persona,
         )
         self.api_key = provider_config.get("dashscope_api_key", "")
         if not self.api_key:
@@ -33,7 +39,8 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         if not self.dashscope_app_type:
             raise Exception("阿里云百炼 APP 类型不能为空。")
         self.model_name = "dashscope"
-        
+        self.variables: dict = provider_config.get("variables", {})
+
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
@@ -48,13 +55,15 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         system_prompt: str = None,
         **kwargs,
     ) -> LLMResponse:
-        
         # 获得会话变量
+        payload_vars = self.variables.copy()
+        # 动态变量
         session_vars = sp.get("session_variables", {})
         session_var = session_vars.get(session_id, {})
-        
+        payload_vars.update(session_var)
+
         if self.dashscope_app_type in ["agent", "dialog-workflow"]:
-            # 支持多轮对话的        
+            # 支持多轮对话的
             new_record = {"role": "user", "content": prompt}
             if image_urls:
                 logger.warning("阿里云百炼暂不支持图片输入，将自动忽略图片内容。")
@@ -63,43 +72,42 @@ class ProviderDashscope(ProviderOpenAIOfficial):
             if system_prompt:
                 context_query.insert(0, {"role": "system", "content": system_prompt})
             for part in context_query:
-                if '_no_save' in part:
-                    del part['_no_save']
+                if "_no_save" in part:
+                    del part["_no_save"]
             # 调用阿里云百炼 API
             partial = functools.partial(
-                Application.call, 
-                app_id = self.app_id,
-                api_key = self.api_key,
-                messages = context_query,
-                biz_params = session_var or None,
+                Application.call,
+                app_id=self.app_id,
+                api_key=self.api_key,
+                messages=context_query,
+                biz_params=payload_vars or None,
             )
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, 
-                partial
-            )
+            response = await asyncio.get_event_loop().run_in_executor(None, partial)
         else:
             # 不支持多轮对话的
             # 调用阿里云百炼 API
             partial = functools.partial(
-                Application.call, 
-                app_id = self.app_id,
-                promtp = prompt,
-                api_key = self.api_key,
-                biz_params=session_var or None,
+                Application.call,
+                app_id=self.app_id,
+                promtp=prompt,
+                api_key=self.api_key,
+                biz_params=payload_vars or None,
             )
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, 
-                partial
-            )
-        
+            response = await asyncio.get_event_loop().run_in_executor(None, partial)
+
         logger.debug(f"dashscope resp: {response}")
 
         if response.status_code != 200:
-            logger.error(f"阿里云百炼请求失败: request_id={response.request_id}, code={response.status_code}, message={response.message}, 请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code")
-            return LLMResponse(role="err", completion_text=f"阿里云百炼请求失败: message={response.message} code={response.status_code}")
-        
+            logger.error(
+                f"阿里云百炼请求失败: request_id={response.request_id}, code={response.status_code}, message={response.message}, 请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code"
+            )
+            return LLMResponse(
+                role="err",
+                completion_text=f"阿里云百炼请求失败: message={response.message} code={response.status_code}",
+            )
+
         output_text = response.output.get("text", "")
-        return LLMResponse(role="assistant", completion_text=output_text)        
+        return LLMResponse(role="assistant", completion_text=output_text)
 
     async def forget(self, session_id):
         return True
