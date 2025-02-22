@@ -5,6 +5,7 @@ import quart
 import base64
 import datetime
 import re
+import os
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.api.message_components import Plain, Image, At, Record
 from astrbot.api import logger, sp
@@ -307,7 +308,7 @@ class SimpleGewechatClient():
             retry_cnt -= 1
 
             # 需要验证码
-            if verify_flag:
+            if verify_flag or os.path.exists("data/temp/gewe_code"):
                 with open("data/temp/gewe_code", "r") as f:
                     code = f.read().strip()
                     if not code:
@@ -316,6 +317,10 @@ class SimpleGewechatClient():
                         continue
                     payload['captchCode'] = code
                     logger.info(f"使用验证码: {code}")
+                    try:
+                        os.remove("data/temp/gewe_code")
+                    except:
+                        logger.warning("删除验证码文件 data/temp/gewe_code 失败。")
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
