@@ -148,10 +148,6 @@ _✨ 内置 Web Chat，在线与机器人交互 ✨_
 
 </div>
 
-## Sponsors
-
-[<img src="https://api.gitsponsors.com/api/badge/img?id=575865240" height="20">](https://api.gitsponsors.com/api/badge/link?p=XEpbdGxlitw/RbcwiTX93UMzNK/jgDYC8NiSzamIPMoKvG2lBFmyXhSS/b0hFoWlBBMX2L5X5CxTDsUdyvcIEHTOfnkXz47UNOZvMwyt5CzbYpq0SEzsSV1OJF1cCo90qC/ZyYKYOWedal3MhZ3ikw==)
-
 ## Disclaimer
 
 1. The project is protected under the `AGPL-v3` opensource license.
