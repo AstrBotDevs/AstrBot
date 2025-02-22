@@ -4,6 +4,7 @@ import asyncio
 import os
 import socket
 import sys
+import psutil
 from astrbot.core.config.default import VERSION
 from quart import Quart, request, jsonify, g
 from quart.logging import default_handler
@@ -88,6 +89,28 @@ class AstrBotDashboard():
             # 如果出现异常，保守起见认为端口可能被占用
             return True
     
+    def get_process_using_port(self, port: int) -> str:
+        """获取占用端口的进程详细信息"""
+        try:
+            for conn in psutil.net_connections(kind='inet'):
+                if conn.laddr.port == port:
+                    try:
+                        process = psutil.Process(conn.pid)
+                        # 获取详细信息
+                        proc_info = [
+                            f"进程名: {process.name()}",
+                            f"PID: {process.pid}",
+                            f"执行路径: {process.exe()}",
+                            f"工作目录: {process.cwd()}",
+                            f"启动命令: {' '.join(process.cmdline())}"
+                        ]
+                        return "\n           ".join(proc_info)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                        return f"无法获取进程详细信息(可能需要管理员权限): {str(e)}"
+            return "未找到占用进程"
+        except Exception as e:
+            return f"获取进程信息失败: {str(e)}"
+    
     def run(self):
         try:
             ip_addr = get_local_ip_addresses()
@@ -99,7 +122,10 @@ class AstrBotDashboard():
             port = int(port)
 
         if self.check_port_in_use(port):
-            logger.error(f"错误：端口 {port} 已被占用，请确保：\n"
+            process_info = self.get_process_using_port(port)
+            logger.error(f"错误：端口 {port} 已被占用\n"
+                        f"占用信息: \n           {process_info}\n"
+                        f"请确保：\n"
                         f"1. 没有其他 AstrBot 实例正在运行\n"
                         f"2. 端口 {port} 没有被其他程序占用\n"
                         f"3. 如需使用其他端口，请修改配置文件")
