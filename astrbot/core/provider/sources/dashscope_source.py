@@ -1,4 +1,5 @@
 import asyncio
+import functools
 from typing import List
 from .. import Provider, Personality
 from ..entites import LLMResponse
@@ -47,6 +48,11 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         system_prompt: str = None,
         **kwargs,
     ) -> LLMResponse:
+        
+        # 获得会话变量
+        session_vars = sp.get("session_variables", {})
+        session_var = session_vars.get(session_id, {})
+        
         if self.dashscope_app_type in ["agent", "dialog-workflow"]:
             # 支持多轮对话的        
             new_record = {"role": "user", "content": prompt}
@@ -60,27 +66,30 @@ class ProviderDashscope(ProviderOpenAIOfficial):
                 if '_no_save' in part:
                     del part['_no_save']
             # 调用阿里云百炼 API
+            partial = functools.partial(
+                Application.call, 
+                app_id = self.app_id,
+                api_key = self.api_key,
+                messages = context_query,
+                biz_params = session_var or None,
+            )
             response = await asyncio.get_event_loop().run_in_executor(
                 None, 
-                Application.call, 
-                self.app_id,
-                None,
-                None,
-                None,
-                self.api_key,
-                context_query
+                partial
             )
         else:
             # 不支持多轮对话的
             # 调用阿里云百炼 API
+            partial = functools.partial(
+                Application.call, 
+                app_id = self.app_id,
+                promtp = prompt,
+                api_key = self.api_key,
+                biz_params=session_var or None,
+            )
             response = await asyncio.get_event_loop().run_in_executor(
                 None, 
-                Application.call, 
-                self.app_id,
-                prompt,
-                None,
-                None,
-                self.api_key
+                partial
             )
         
         logger.debug(f"dashscope resp: {response}")
