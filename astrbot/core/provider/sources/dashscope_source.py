@@ -125,4 +125,4 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         raise Exception("暂不支持获得 阿里云百炼 的历史消息记录。")
 
     async def terminate(self):
-        await self.api_client.close()
+        pass

@@ -48,8 +48,10 @@ class ProviderOpenAIOfficial(Provider):
                 base_url=provider_config.get("api_base", None),
                 timeout=self.timeout
             )
-            
-        self.set_model(provider_config['model_config']['model'])
+        
+        model_config = provider_config.get("model_config", {})
+        model = model_config.get("model", "unknown")
+        self.set_model(model)
 
     async def get_models(self):
         try:

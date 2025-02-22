@@ -540,6 +540,14 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                     },
+                    "fastgpt": {
+                        "id": "fastgpt",
+                        "type": "openai_chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.fastgpt.in/api/v1",
+                        "timeout": 60,
+                    },
                     "whisper(API)": {
                         "id": "whisper",
                         "type": "openai_whisper_api",
@@ -582,6 +590,13 @@ CONFIG_METADATA_2 = {
                         "obvious_hint": True,
                         "hint": "可选。工作流固定输入变量，将会作为工作流的输入。也可以在对话时使用 /set 指令动态设置变量。如果变量名冲突，优先使用动态设置的变量。",
                     },
+                    # "fastgpt_app_type": {
+                    #     "description": "应用类型",
+                    #     "type": "string",
+                    #     "hint": "FastGPT 应用的应用类型。",
+                    #     "options": ["agent", "workflow", "plugin"],
+                    #     "obvious_hint": True,
+                    # },
                     "dashscope_app_type": {
                         "description": "应用类型",
                         "type": "string",
