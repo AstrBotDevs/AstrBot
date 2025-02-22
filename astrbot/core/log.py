@@ -58,7 +58,7 @@ class LogManager:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG)
         console_formatter = colorlog.ColoredFormatter(
-            fmt='%(log_color)s [%(asctime)s| %(levelname)s] [%(filename)s:%(lineno)d]: %(message)s %(reset)s',
+            fmt='%(log_color)s [%(asctime)s] [%(levelname)-5s] [%(filename)s:%(lineno)d]: %(message)s %(reset)s',
             datefmt='%H:%M:%S',
             log_colors=log_color_config
         )

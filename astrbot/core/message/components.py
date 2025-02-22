@@ -30,11 +30,19 @@ from enum import Enum
 from pydantic.v1 import BaseModel
 
 class ComponentType(Enum):
-    Plain = "Plain"
-    Face = "Face"
-    Record = "Record"
-    Video = "Video"
-    At = "At"
+    Plain = "Plain" # 纯文本消息
+    Face = "Face" # QQ表情
+    Record = "Record" # 语音
+    Video = "Video" # 视频
+    At = "At" # At
+    Node = "Node" # 转发消息的一个节点
+    Nodes = "Nodes" # 转发消息的多个节点
+    Poke = "Poke" # QQ 戳一戳
+    Image = "Image" # 图片
+    Reply = "Reply" # 回复
+    Forward = "Forward" # 转发消息
+    File = "File" # 文件
+    
     RPS = "RPS"  # TODO
     Dice = "Dice"  # TODO
     Shake = "Shake"  # TODO
@@ -43,18 +51,12 @@ class ComponentType(Enum):
     Contact = "Contact"  # TODO
     Location = "Location"  # TODO
     Music = "Music"
-    Image = "Image"
-    Reply = "Reply"
     RedBag = "RedBag"
-    Poke = "Poke"
-    Forward = "Forward"
-    Node = "Node"
     Xml = "Xml"
     Json = "Json"
     CardImage = "CardImage"
     TTS = "TTS"
     Unknown = "Unknown"
-    File = "File"
 
 
 class BaseMessageComponent(BaseModel):
@@ -362,6 +364,18 @@ class Node(BaseMessageComponent):
     def toString(self):
         # logger.warn("Protocol: node doesn't support stringify")
         return ""
+    
+class Nodes(BaseMessageComponent):
+    type: ComponentType = "Nodes"
+    nodes: T.List[Node]
+    
+    def __init__(self, nodes: T.List[Node], **_):
+        super().__init__(nodes=nodes, **_)
+        
+    def toDict(self):
+        return {
+            "messages": [node.toDict() for node in self.nodes]
+        }
 
 
 class Xml(BaseMessageComponent):
@@ -451,6 +465,7 @@ ComponentTypes = {
     "poke": Poke,
     "forward": Forward,
     "node": Node,
+    "nodes": Nodes,
     "xml": Xml,
     "json": Json,
     "cardimage": CardImage,

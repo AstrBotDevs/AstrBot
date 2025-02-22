@@ -28,4 +28,3 @@ class ContentSafetyCheckStage(Stage):
             event.stop_event()
             logger.info(f"内容安全检查不通过，原因：{info}")
             return
-        event.continue_event()

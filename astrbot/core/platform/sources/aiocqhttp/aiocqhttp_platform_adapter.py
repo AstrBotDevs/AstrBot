@@ -16,7 +16,7 @@ from ...register import register_platform_adapter
 from aiocqhttp.exceptions import ActionFailed
 from astrbot.core.utils.io import download_file
 
-@register_platform_adapter("aiocqhttp", "适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。")
+@register_platform_adapter("aiocqhttp", "适用于 OneBot V11 标准的消息平台适配器，支持反向 WebSockets。")
 class AiocqhttpAdapter(Platform):
     def __init__(self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue) -> None:
         super().__init__(event_queue)

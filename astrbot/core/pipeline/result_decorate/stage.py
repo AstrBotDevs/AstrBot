@@ -10,6 +10,7 @@ from astrbot.core import logger
 from astrbot.core.message.components import Plain, Image, At, Reply, Record, File, Node
 from astrbot.core import html_renderer
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
+from astrbot.core.star.star import star_map
 
 @register_stage
 class ResultDecorateStage(Stage):
@@ -47,7 +48,7 @@ class ResultDecorateStage(Stage):
             
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
         result = event.get_result()
-        if result is None:
+        if result is None or not result.chain:
             return
         
         # 回复时检查内容安全
@@ -63,7 +64,10 @@ class ResultDecorateStage(Stage):
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnDecoratingResultEvent)
         for handler in handlers:
             try:
+                logger.debug(f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}")
                 await handler.handler(event)
+                if event.get_result() is None or not event.get_result().chain:
+                    logger.debug(f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name} 将消息结果清空。")
             except BaseException:
                 logger.error(traceback.format_exc())
             

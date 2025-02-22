@@ -1,7 +1,7 @@
 import asyncio
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Plain, Image, Record, At, Node, Music, Video
+from astrbot.api.message_components import Plain, Image, Record, At, Node, Nodes
 from aiocqhttp import CQHttp
 from astrbot.core.utils.io import file_to_base64, download_image_by_url
 
@@ -45,15 +45,25 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         
         send_one_by_one = False
         for seg in message.chain:
-            if isinstance(seg, (Node, Music)):
+            if isinstance(seg, (Node, Nodes)):
                 # 转发消息不能和普通消息混在一起发送
                 send_one_by_one = True
                 break
         
         if send_one_by_one:
             for seg in message.chain:
-                await self.bot.send(self.message_obj.raw_message, await AiocqhttpMessageEvent._parse_onebot_json(MessageChain([seg])))
-                await asyncio.sleep(0.5)
+                if isinstance(seg, Nodes):
+                    # 带有多个节点的合并转发消息
+                    payload = seg.toDict()
+                    if self.get_group_id():
+                        payload['group_id'] = self.get_group_id()
+                        await self.bot.call_action('send_group_forward_msg', **payload)
+                    else:
+                        payload['user_id'] = self.get_sender_id()
+                        await self.bot.call_action('send_private_forward_msg', **payload)
+                else:
+                    await self.bot.send(self.message_obj.raw_message, await AiocqhttpMessageEvent._parse_onebot_json(MessageChain([seg])))
+                    await asyncio.sleep(0.5)
         else:
             await self.bot.send(self.message_obj.raw_message, ret)
         

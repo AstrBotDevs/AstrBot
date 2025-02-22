@@ -10,6 +10,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
+from astrbot.core.star.star import star_map
 from astrbot.core.message.components import Plain, Reply, At
 @register_stage
 class RespondStage(Stage):
@@ -90,6 +91,7 @@ class RespondStage(Stage):
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnAfterMessageSentEvent)
         for handler in handlers:
             try:
+                logger.debug(f"hook(on_after_message_sent) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}")
                 await handler.handler(event)
             except BaseException:
                 logger.error(traceback.format_exc())

@@ -73,8 +73,6 @@ class RateLimitStage(Stage):
 
             timestamps.append(now)
 
-        return event.continue_event()
-
     def _remove_expired_timestamps(self, timestamps: Deque[datetime], now: datetime) -> None:
         """
         移除时间窗口外的时间戳。

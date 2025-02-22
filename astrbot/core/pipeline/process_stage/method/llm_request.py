@@ -13,6 +13,7 @@ from astrbot.core import logger
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.provider.entites import ProviderRequest, LLMResponse
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
+from astrbot.core.star.star import star_map
 
 class LLMRequestSubStage(Stage):
     
@@ -69,6 +70,7 @@ class LLMRequestSubStage(Stage):
         handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMRequestEvent)
         for handler in handlers:
             try:
+                logger.debug(f"hook(on_llm_request) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}")
                 await handler.handler(event, req)
             except BaseException:
                 logger.error(traceback.format_exc())
@@ -82,10 +84,11 @@ class LLMRequestSubStage(Stage):
                 req.func_tool = None # 暂时不支持递归工具调用
             llm_response = await provider.text_chat(**req.__dict__) # 请求 LLM
             
-            # 执行 LLM 响应后的事件。
+            # 执行 LLM 响应后的事件钩子。
             handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMResponseEvent)
             for handler in handlers:
                 try:
+                    logger.debug(f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}")
                     await handler.handler(event, llm_response)
                 except BaseException:
                     logger.error(traceback.format_exc())

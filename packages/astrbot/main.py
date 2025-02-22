@@ -968,10 +968,6 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     # def kdb(self):
     #     pass
 
-    # @kdb.command("off")
-    # async def off_kdb(self, event: AstrMessageEvent):
-    #     self.kdb_enabled = False
-    #     yield event.plain_result("知识库已关闭")
         
     # @filter.on_llm_request()
     # async def on_llm_response(self, event: AstrMessageEvent, req: ProviderRequest):

@@ -28,10 +28,8 @@ class StarRequestSubStage(Stage):
             params = handlers_parsed_params.get(handler.handler_full_name, {})
             try:
                 if handler.handler_module_path not in star_map:
-                    # 孤立无援的 star handler 
                     continue
-                
-                logger.debug(f"执行插件 handler {handler.handler_full_name}")
+                logger.debug(f"plugin -> {star_map.get(handler.handler_module_path).name} - {handler.handler_name}")
                 wrapper = self._call_handler(self.ctx, event, handler.handler, **params)
                 async for ret in wrapper:
                     yield ret

@@ -59,7 +59,6 @@ def register_command(command_name: str = None, sub_command: str = None, alias: s
     if isinstance(command_name, RegisteringCommandable):
         # 子指令
         parent_command_names = command_name.parent_group.get_complete_command_names()
-        logger.debug(f"parent_command_names: {parent_command_names}")
         new_command = CommandFilter(sub_command, alias, None, parent_command_names=parent_command_names)
         command_name.parent_group.add_sub_command_filter(new_command)
     else:
