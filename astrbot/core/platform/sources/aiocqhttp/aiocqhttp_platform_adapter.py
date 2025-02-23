@@ -148,8 +148,11 @@ class AiocqhttpAdapter(Platform):
             a = None
             if t == 'text':
                 message_str += m['data']['text'].strip()
+                a = ComponentTypes[t](**m['data'])  # noqa: F405
+                abm.message.append(a)
+
             elif t == 'file':
-                if m['data']['url'] and m['data']['url'].startswith("http"):
+                if m['data'].get('url') and m['data'].get('url').startswith("http"):
                     # Lagrange
                     logger.info("guessing lagrange")
                     
@@ -161,6 +164,8 @@ class AiocqhttpAdapter(Platform):
                         "file": path,
                         "name": file_name
                     }
+                    a = ComponentTypes[t](**m['data'])  # noqa: F405
+                    abm.message.append(a)
                 
                 else:
                     try:
@@ -175,13 +180,17 @@ class AiocqhttpAdapter(Platform):
                             "file": ret['file'],
                             "name": ret['file_name']
                         }
+                        a = ComponentTypes[t](**m['data'])  # noqa: F405
+                        abm.message.append(a)
                     except ActionFailed as e:
                         logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
                     except BaseException as e:
                         logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
-                    
-            a = ComponentTypes[t](**m['data'])  # noqa: F405
-            abm.message.append(a)
+                        
+            else:        
+                a = ComponentTypes[t](**m['data'])  # noqa: F405
+                abm.message.append(a)
+
         abm.timestamp = int(time.time())
         abm.message_str = message_str
         abm.raw_message = event
