@@ -225,6 +225,7 @@ class ProviderGoogleGenAI(Provider):
                     if 'tools' in payloads:
                         del payloads['tools']
                     llm_response = await self._query(payloads, None)
+                    break
                 elif "429" in str(e) or "API key not valid" in str(e):
                     keys.remove(chosen_key)
                     if len(keys) > 0:
@@ -232,7 +233,7 @@ class ProviderGoogleGenAI(Provider):
                         logger.info(f"检测到 Key 异常({str(e)})，正在尝试更换 API Key 重试... 当前 Key: {chosen_key[:12]}...")
                         continue
                     else:
-                        logger.error(f"A检测到 Key 异常({str(e)})，且已没有可用的 Key。 当前 Key: {chosen_key[:12]}...")
+                        logger.error(f"检测到 Key 异常({str(e)})，且已没有可用的 Key。 当前 Key: {chosen_key[:12]}...")
                         raise Exception("API 资源已耗尽，且没有可用的 Key 重试...")
                 else:
                     logger.error(f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}")
@@ -282,3 +283,7 @@ class ProviderGoogleGenAI(Provider):
             image_bs64 = base64.b64encode(f.read()).decode('utf-8')
             return "data:image/jpeg;base64," + image_bs64
         return ''
+    
+    async def terminate(self):
+        await self.client.client.close()
+        logger.info("Google GenAI 适配器已终止。")
