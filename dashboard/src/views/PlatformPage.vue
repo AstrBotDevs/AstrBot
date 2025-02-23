@@ -32,7 +32,7 @@
                         <v-card-text>
                             <div>
                                 <span style="font-size:12px">适配器类型: </span>
-                                <v-chip color="primary" text>{{ platform.type }}</v-chip>
+                                <v-chip size="small" color="primary" text>{{ platform.type }}</v-chip>
                             </div>
                         </v-card-text>
                         <v-card-actions class="d-flex justify-end">
