@@ -62,7 +62,7 @@ def validate_config(data, schema: dict, is_core: bool) -> typing.Tuple[typing.Li
             group_meta = group.get("metadata")
             if not group_meta:
                 continue
-            logger.info(f"验证配置: 组 {key} ...")
+            # logger.info(f"验证配置: 组 {key} ...")
             validate(data, group_meta, path=f"{key}.")
     else:
         validate(data, schema)

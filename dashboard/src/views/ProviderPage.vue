@@ -63,6 +63,18 @@
                 </v-card>
             </v-dialog>
 
+            <v-btn style="margin-top: 16px" class="flex-grow-1" variant="tonal"  size="large" rounded="lg" color="gray" @click="showConsole = !showConsole">
+                <template v-slot:default>
+                    <v-icon>mdi-console-line</v-icon>
+                    {{ showConsole ? '隐藏' : '显示' }}日志
+                </template>
+            </v-btn>
+
+            <div v-if="showConsole" style="margin-top: 32px; ">
+                <ConsoleDisplayer style="background-color: #fff; height: 300px"></ConsoleDisplayer>
+            </div>
+
+
 
         </v-card-text>
     </v-card>
@@ -77,12 +89,14 @@
 import axios from 'axios';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
+import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 
 export default {
     name: 'ProviderPage',
     components: {
         AstrBotConfig,
-        WaitingForRestart
+        WaitingForRestart,
+        ConsoleDisplayer
     },
     data() {
         return {
@@ -100,6 +114,8 @@ export default {
             save_message_snack: false,
             save_message: "",
             save_message_success: "",
+
+            showConsole: false,
         }
     },
 

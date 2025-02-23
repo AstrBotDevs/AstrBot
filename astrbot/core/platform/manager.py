@@ -34,6 +34,8 @@ class PlatformManager():
         if not platform_config['enable']:
             return
         
+        logger.info(f"载入 {platform_config['type']}({platform_config['id']}) 平台适配器 ...")
+        
         # 动态导入
         try:
             match platform_config['type']:
@@ -57,7 +59,6 @@ class PlatformManager():
             logger.error(f"未找到适用于 {platform_config['type']}({platform_config['id']}) 平台适配器，请检查是否已经安装或者名称填写错误。")
             return
         cls_type = platform_cls_map[platform_config['type']]
-        logger.debug(f"尝试实例化 {platform_config['type']}({platform_config['id']}) 平台适配器 ...")
         inst = cls_type(platform_config, self.settings, self.event_queue)
         self._inst_map[platform_config['id']] = inst
         self.platform_insts.append(inst)

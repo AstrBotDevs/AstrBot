@@ -122,6 +122,8 @@ class ProviderManager():
         if not provider_config['enable']:
             return
         
+        logger.info(f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商适配器 ...")
+        
         # 动态导入
         try:
             match provider_config['type']:
@@ -160,7 +162,6 @@ class ProviderManager():
             return
 
         provider_metadata = provider_cls_map[provider_config['type']]
-        logger.debug(f"尝试实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器 ...")
         try:
             # 按任务实例化提供商
             
@@ -241,6 +242,8 @@ class ProviderManager():
     async def terminate_provider(self, provider_id: str):
         if provider_id in self.inst_map:
             
+            logger.info(f"终止 {provider_id} 提供商适配器 ...")
+            
             if self.inst_map[provider_id] in self.provider_insts:
                 self.provider_insts.remove(self.inst_map[provider_id])
             if self.inst_map[provider_id] in self.stt_provider_insts:
@@ -249,7 +252,6 @@ class ProviderManager():
                 self.tts_provider_insts.remove(self.inst_map[provider_id])
                 
             if getattr(self.inst_map[provider_id], 'terminate', None):
-                logger.info(f"正在尝试终止 {provider_id} 提供商适配器 ...")
                 await self.inst_map[provider_id].terminate()
                 logger.info(f"{provider_id} 提供商适配器已终止。")
                 del self.inst_map[provider_id]

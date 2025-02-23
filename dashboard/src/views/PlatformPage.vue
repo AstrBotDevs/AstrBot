@@ -22,7 +22,8 @@
             </v-menu>
             <v-row style="margin-top: 16px;">
                 <v-col v-for="(platform, index) in config_data['platform']" :key="index" cols="12" md="6" lg="3">
-                    <v-card class="fade-in" style="margin-bottom: 16px; min-height: 200px; display: flex; justify-content: space-between; flex-direction: column;">
+                    <v-card class="fade-in"
+                        style="margin-bottom: 16px; min-height: 200px; display: flex; justify-content: space-between; flex-direction: column;">
                         <v-card-title class="d-flex justify-space-between align-center">
                             <span class="text-h4">{{ platform.id }}</span>
                             <v-switch color="primary" hide-details density="compact" v-model="platform['enable']"
@@ -30,7 +31,7 @@
                         </v-card-title>
                         <v-card-text>
                             <div>
-                                <span style="font-size:12px">适配器类型: </span> 
+                                <span style="font-size:12px">适配器类型: </span>
                                 <v-chip color="primary" text>{{ platform.type }}</v-chip>
                             </div>
                         </v-card-text>
@@ -65,6 +66,17 @@
             </v-dialog>
 
 
+            <v-btn style="margin-top: 16px" class="flex-grow-1" variant="tonal"  size="large" rounded="lg" color="gray" @click="showConsole = !showConsole">
+                <template v-slot:default>
+                    <v-icon>mdi-console-line</v-icon>
+                    {{ showConsole ? '隐藏' : '显示' }}日志
+                </template>
+            </v-btn>
+
+            <div v-if="showConsole" style="margin-top: 32px; ">
+                <ConsoleDisplayer style="background-color: #fff; height: 300px"></ConsoleDisplayer>
+            </div>
+
         </v-card-text>
     </v-card>
 
@@ -78,12 +90,14 @@
 import axios from 'axios';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
+import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 
 export default {
     name: 'PlatformPage',
     components: {
         AstrBotConfig,
-        WaitingForRestart
+        WaitingForRestart,
+        ConsoleDisplayer
     },
     data() {
         return {
@@ -101,6 +115,8 @@ export default {
             save_message_snack: false,
             save_message: "",
             save_message_success: "",
+
+            showConsole: false,
         }
     },
 
