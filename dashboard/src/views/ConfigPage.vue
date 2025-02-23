@@ -44,6 +44,11 @@ import config from '@/config';
               </v-expansion-panel-title>
               <v-expansion-panel-text v-if="metadata[key]['metadata'][key2]?.config_template">
                 <!-- 带有 config_template 的配置项 -->
+
+                <v-alert style="margin-top: 16px; margin-bottom: 16px" color="primary" variant="tonal">
+                  消息平台适配器和服务提供商的配置已经迁移至更方便的独立页面！推荐前往左栏配置哦～
+                </v-alert>
+
                 <v-tabs style="margin-top: 16px;" align-tabs="left" color="deep-purple-accent-4" v-model="config_template_tab">
                   <v-tab v-if="metadata[key]['metadata'][key2]?.tmpl_display_title" v-for="(item, index) in config_data[key2]" :key="index" :value="index">
                     {{ item[metadata[key]['metadata'][key2]?.tmpl_display_title] }}

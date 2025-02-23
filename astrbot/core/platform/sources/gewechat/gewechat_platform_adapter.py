@@ -47,6 +47,10 @@ class GewechatPlatformAdapter(Platform):
             "基于 gewechat 的 Wechat 适配器",
         )
 
+    async def terminate(self):
+        self.client.stop = True
+        await asyncio.sleep(1)
+
     @override
     def run(self):
         self.client = SimpleGewechatClient(

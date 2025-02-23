@@ -32,6 +32,8 @@ class AiocqhttpAdapter(Platform):
             "适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
         )
         
+        self.stop = False
+        
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
         ret = await AiocqhttpMessageEvent._parse_onebot_json(message_chain)
         match session.message_type.value:
@@ -230,11 +232,15 @@ class AiocqhttpAdapter(Platform):
         
         return bot
     
+    async def terminate(self):
+        self.stop = True
+        await asyncio.sleep(1)
+    
     def meta(self) -> PlatformMetadata:
         return self.metadata
     
     async def shutdown_trigger_placeholder(self):
-        while not self._event_queue.closed:
+        while not self._event_queue.closed and not self.stop:
             await asyncio.sleep(1)
         logger.info("aiocqhttp 适配器已关闭。")
 

@@ -1,4 +1,5 @@
 import typing
+import traceback
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
@@ -77,6 +78,7 @@ def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False)
         else:
             errors, post_config = validate_config(post_config, config.schema, is_core)
     except BaseException as e:
+        logger.error(traceback.format_exc())
         logger.warning(f"验证配置时出现异常: {e}")
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
@@ -90,6 +92,14 @@ class ConfigRoute(Route):
             '/config/get': ('GET', self.get_configs),
             '/config/astrbot/update': ('POST', self.post_astrbot_configs),
             '/config/plugin/update': ('POST', self.post_plugin_configs),
+            
+            '/config/platform/new': ('POST', self.post_new_platform),
+            '/config/platform/update': ('POST', self.post_update_platform),
+            '/config/platform/delete': ('POST', self.post_delete_platform),
+            
+            '/config/provider/new': ('POST', self.post_new_provider),
+            '/config/provider/update': ('POST', self.post_update_provider),
+            '/config/provider/delete': ('POST', self.post_delete_provider)
         }
         self.register_routes()
 
@@ -118,7 +128,99 @@ class ConfigRoute(Route):
             return Response().ok(None, f"保存插件 {plugin_name} 成功~ 机器人正在重载配置。").__dict__
         except Exception as e:
             return Response().error(str(e)).__dict__
-            
+    
+    async def post_new_platform(self):
+        new_platform_config = await request.json
+        self.config['platform'].append(new_platform_config)
+        try:
+            save_config(self.config, self.config, is_core=True)
+            await self.core_lifecycle.platform_manager.load_platform(new_platform_config)
+        except Exception as e:
+            return Response().error(str(e)).__dict__
+        return Response().ok(None, "新增平台配置成功~").__dict__
+    
+    async def post_new_provider(self):
+        new_provider_config = await request.json
+        self.config['provider'].append(new_provider_config)
+        try:
+            save_config(self.config, self.config, is_core=True)
+            await self.core_lifecycle.provider_manager.load_provider(new_provider_config)
+        except Exception as e:
+            return Response().error(str(e)).__dict__
+        return Response().ok(None, "新增服务提供商配置成功~").__dict__
+    
+    async def post_update_platform(self):
+        update_platform_config = await request.json
+        platform_id = update_platform_config.get("id", None)
+        new_config = update_platform_config.get("config", None)
+        if not platform_id or not new_config:
+            return Response().error("参数错误").__dict__
+        
+        for i, platform in enumerate(self.config['platform']):
+            if platform['id'] == platform_id:
+                self.config['platform'][i] = new_config
+                break
+        else:
+            return Response().error("未找到对应平台").__dict__
+        
+        try:
+            await self._save_astrbot_configs(self.config)
+        except Exception as e:
+            return Response().error(str(e)).__dict__
+        return Response().ok(None, "更新平台配置成功~").__dict__
+    
+    async def post_update_provider(self):
+        update_provider_config = await request.json
+        provider_id = update_provider_config.get("id", None)
+        new_config = update_provider_config.get("config", None)
+        if not provider_id or not new_config:
+            return Response().error("参数错误").__dict__
+        
+        for i, provider in enumerate(self.config['provider']):
+            if provider['id'] == provider_id:
+                self.config['provider'][i] = new_config
+                break
+        else:
+            return Response().error("未找到对应服务提供商").__dict__
+        
+        try:
+            save_config(self.config, self.config, is_core=True)
+            await self.core_lifecycle.provider_manager.reload(new_config)
+        except Exception as e:
+            return Response().error(str(e)).__dict__
+        return Response().ok(None, "更新成功，已经实时生效~").__dict__
+    
+    async def post_delete_platform(self):
+        platform_id = await request.json
+        platform_id = platform_id.get("id")
+        for i, platform in enumerate(self.config['platform']):
+            if platform['id'] == platform_id:
+                del self.config['platform'][i]
+                break
+        else:
+            return Response().error("未找到对应平台").__dict__
+        try:
+            await self._save_astrbot_configs(self.config)
+        except Exception as e:
+            return Response().error(str(e)).__dict__
+        return Response().ok(None, "删除平台配置成功~").__dict__
+    
+    async def post_delete_provider(self):
+        provider_id = await request.json
+        provider_id = provider_id.get("id")
+        for i, provider in enumerate(self.config['provider']):
+            if provider['id'] == provider_id:
+                del self.config['provider'][i]
+                break
+        else:
+            return Response().error("未找到对应服务提供商").__dict__
+        try:
+            save_config(self.config, self.config, is_core=True)
+            await self.core_lifecycle.provider_manager.terminate_provider(provider_id)
+        except Exception as e:
+            return Response().error(str(e)).__dict__
+        return Response().ok(None, "删除成功，已经实时生效~").__dict__
+
     async def _get_astrbot_config(self):
         config = self.config
         
