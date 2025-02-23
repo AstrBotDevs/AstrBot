@@ -187,7 +187,7 @@ class AiocqhttpAdapter(Platform):
                     except BaseException as e:
                         logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
                         
-            else:        
+            else:
                 a = ComponentTypes[t](**m['data'])  # noqa: F405
                 abm.message.append(a)
 
