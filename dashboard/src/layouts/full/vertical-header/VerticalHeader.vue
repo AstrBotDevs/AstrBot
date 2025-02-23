@@ -236,14 +236,14 @@ commonStore.getStartTime();
                 </div>
 
                 <v-data-table :headers="releasesHeader" :items="releases" item-key="name">
-                  <template v-slot:item.body="{ item }">
+                  <template v-slot:item.body="{ item }: { item: { body: string } }">
                     <v-tooltip :text="item.body">
                       <template v-slot:activator="{ props }">
                         <v-btn v-bind="props" rounded="xl" variant="tonal" color="primary" size="small">查看</v-btn>
                       </template>
                     </v-tooltip>
                   </template>
-                  <template v-slot:item.switch="{ item }">
+                  <template v-slot:item.switch="{ item }: { item: { tag_name: string } }">
                     <v-btn @click="switchVersion(item.tag_name)" rounded="xl" variant="plain" color="primary">
                       切换
                     </v-btn>
@@ -257,7 +257,7 @@ commonStore.getStartTime();
                   <v-data-table
                     :headers="[{ title: 'SHA', key: 'sha' }, { title: '日期', key: 'date' }, { title: '信息', key: 'message' }, { title: '操作', key: 'switch' }]"
                     :items="devCommits" item-key="sha">
-                    <template v-slot:item.switch="{ item }">
+                    <template v-slot:item.switch="{ item }: { item: { sha: string } }">
                       <v-btn @click="switchVersion(item.sha)" rounded="xl" variant="plain" color="primary">
                         切换
                       </v-btn>
