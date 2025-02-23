@@ -57,7 +57,8 @@ class AstrMessageEvent(abc.ABC):
         
         self._has_send_oper = False 
         '''是否有过至少一次发送操作'''
-        
+        self.call_llm = False
+        '''是否在此消息事件中禁止默认的 LLM 请求'''
         
         # back_compability
         self.platform = platform_meta
@@ -242,7 +243,15 @@ class AstrMessageEvent(abc.ABC):
         '''
         if self._result is None:
             return False # 默认是继续传播
-        return self._result.is_stopped()        
+        return self._result.is_stopped()     
+    
+    def should_call_llm(self, call_llm: bool):
+        '''
+        是否在此消息事件中禁止默认的 LLM 请求。
+        
+        只会阻止 AstrBot 默认的 LLM 请求链路，不会阻止插件中的 LLM 请求。
+        '''
+        self.call_llm = call_llm
         
     def get_result(self) -> MessageEventResult:
         '''
