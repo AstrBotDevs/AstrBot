@@ -45,7 +45,7 @@ class ProcessStage(Stage):
         if not self.ctx.astrbot_config['provider_settings'].get('enable', True):
             return
         
-        if not event._has_send_oper and event.is_at_or_wake_command:
+        if not event._has_send_oper and event.is_at_or_wake_command and not event.call_llm:
             # 是否有过发送操作 and 是否是被 @ 或者通过唤醒前缀
             if (event.get_result() and not event.get_result().is_stopped()) or not event.get_result():
                 # 事件没有终止传播
