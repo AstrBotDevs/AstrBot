@@ -32,9 +32,6 @@ class AstrBotUpdator(RepoZipUpdator):
             pass
     
     def _reboot(self, delay: int = 3):
-        if os.environ.get('TEST_MODE', 'off') == 'on':
-            logger.info("测试模式下不会重启。")
-            return
         py = sys.executable
         time.sleep(delay)
         self.terminate_child_processes()
@@ -47,6 +44,9 @@ class AstrBotUpdator(RepoZipUpdator):
         
     async def check_update(self, url: str, current_version: str) -> ReleaseInfo:
         return await super().check_update(self.ASTRBOT_RELEASE_API, VERSION)
+    
+    async def get_releases(self) -> list:
+        return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
         
     async def update(self, reboot = False, latest = True, version = None, proxy = ""):
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)

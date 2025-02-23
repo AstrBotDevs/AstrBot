@@ -13,6 +13,7 @@ class UpdateRoute(Route):
         super().__init__(context)
         self.routes = {
             '/update/check': ('GET', self.check_update),
+            '/update/releases': ('GET', self.get_releases),
             '/update/do': ('POST', self.update_project),
             '/update/dashboard': ('POST', self.update_dashboard),
             '/update/pip-install': ('POST', self.install_pip_package)
@@ -45,6 +46,14 @@ class UpdateRoute(Route):
                 ).__dict__
         except Exception as e:
             logger.warning(f"检查更新失败: {str(e)} (不影响除项目更新外的正常使用)")
+            return Response().error(e.__str__()).__dict__
+        
+    async def get_releases(self):
+        try:
+            ret = await self.astrbot_updator.get_releases()
+            return Response().ok(ret).__dict__
+        except Exception as e:
+            logger.error(f"/api/update/releases: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
     
     async def update_project(self):

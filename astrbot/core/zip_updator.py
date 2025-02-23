@@ -34,10 +34,19 @@ class RepoZipUpdator():
                     result = await response.json()
             if not result: 
                 return []
-            if latest:
-                ret = self.github_api_release_parser([result[0]])
-            else:
-                ret = self.github_api_release_parser(result)
+            # if latest:
+            #     ret = self.github_api_release_parser([result[0]])
+            # else:
+            #     ret = self.github_api_release_parser(result)
+            ret = []
+            for release in result:
+                ret.append({
+                    "version": release['name'],
+                    "published_at": release['published_at'],
+                    "body": release['body'],
+                    "tag_name": release['tag_name'],
+                    "zipball_url": release['zipball_url']
+                })
         except BaseException:
             raise Exception("解析版本信息失败")
         return ret
@@ -49,17 +58,10 @@ class RepoZipUpdator():
         '''
         ret = []
         for release in releases:
-            version = release['name']
-            commit_hash = ''
-            # 规范是: v3.0.7.xxxxxx，其中xxxxxx为 commit hash
-            _t = version.split(".")
-            if len(_t) == 4: 
-                commit_hash = _t[3]
             ret.append({
                 "version": release['name'],
                 "published_at": release['published_at'],
                 "body": release['body'],
-                "commit_hash": commit_hash,
                 "tag_name": release['tag_name'],
                 "zipball_url": release['zipball_url']
             })
@@ -114,15 +116,6 @@ class RepoZipUpdator():
             release_url = f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
         else:
             release_url = releases[0]['zipball_url']
-            
-        # 镜像站点
-        # match self.repo_mirror:
-        #     case 'https://github-mirror.us.kg/':
-        #         release_url = self.repo_mirror + release_url
-        #     case "https://ghp.ci/":
-        #         release_url = self.repo_mirror + release_url
-        #     case _:
-        #         pass
         
         if proxy:
             release_url = f"{proxy}/{release_url}"

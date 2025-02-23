@@ -19,6 +19,18 @@ let botCurrVersion = ref('');
 let dashboardHasNewVersion = ref(false);
 let dashboardCurrentVersion = ref('');
 let version = ref('');
+let releases = ref([]);
+let devCommits = ref([]); // 新增的 ref
+
+let tab = ref(0);
+
+let releasesHeader = [
+  { title: '标签', key: 'tag_name' },
+  { title: '发布时间', key: 'published_at' },
+  { title: '内容', key: 'body' },
+  { title: '源码地址', key: 'zipball_url' },
+  { title: '操作', key: 'switch' }
+];
 
 const open = (link: string) => {
   window.open(link, '_blank');
@@ -80,6 +92,41 @@ function checkUpdate() {
       }
       console.log(err);
       updateStatus.value = err
+    });
+}
+
+function getReleases() {
+  axios.get('/api/update/releases')
+    .then((res) => {
+      // releases.value = res.data.data;
+      // 更新 published_at 的时间为本地时间
+      releases.value = res.data.data.map((item: any) => {
+        item.published_at = new Date(item.published_at).toLocaleString();
+        return item;
+      })
+    })
+    .catch((err) => {
+      console.log(err);
+    });
+}
+
+function getDevCommits() {
+  fetch('https://api.github.com/repos/Soulter/AstrBot/commits', {
+    headers: {
+      'Host': 'api.github.com',
+      'Referer': 'https://api.github.com'
+    }
+  })
+    .then(response => response.json())
+    .then(data => {
+      devCommits.value = data.map((commit: any) => ({
+        sha: commit.sha,
+        date: new Date(commit.commit.author.date).toLocaleString(),
+        message: commit.commit.message
+      }));
+    })
+    .catch(err => {
+      console.log(err);
     });
 }
 
@@ -151,10 +198,10 @@ commonStore.getStartTime();
     </div>
 
 
-    <v-dialog v-model="updateStatusDialog" width="700">
+    <v-dialog v-model="updateStatusDialog" width="1000">
       <template v-slot:activator="{ props }">
-        <v-btn @click="checkUpdate" class="text-primary mr-4" color="lightprimary" variant="flat" rounded="sm"
-          v-bind="props">
+        <v-btn @click="checkUpdate(); getReleases(); getDevCommits();" class="text-primary mr-4" color="lightprimary"
+          variant="flat" rounded="sm" v-bind="props">
           更新 🔄
         </v-btn>
       </template>
@@ -164,40 +211,80 @@ commonStore.getStartTime();
         </v-card-title>
         <v-card-text>
           <v-container>
-            <h3 class="mb-4">升级到项目最新版本</h3>
-            <small>当前版本 {{ botCurrVersion }}</small>
             <div class="mb-4">
-              <small>会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker 部署，也可以重新拉取镜像或者使用 <a
-                  href="https://containrrr.dev/watchtower/usage-overview/">watchtower</a> 来自动监控拉取。</small>
+              <small>跳到旧版本或者切换到某个版本不会重新下载管理面板文件，这可能会造成部分数据显示错误。您可在 <a href="https://github.com/Soulter/AstrBot/releases">此处</a>
+                找到对应的面板文件 dist.zip，解压后替换 data/dist 文件夹即可。当然，前端源代码在 dashboard 目录下，你也可以自己使用 npm install 和 npm build 构建。</small>
             </div>
-            <p>{{ updateStatus }}</p>
-            <v-btn class="mt-4 mb-4" @click="switchVersion('latest')" color="primary" style="border-radius: 10px;"
-              :disabled="!hasNewVersion">
-              更新到最新版本
+
+            <v-tabs v-model="tab">
+              <v-tab value="0">正式版</v-tab>
+              <v-tab value="1">开发版(master 分支)</v-tab>
+            </v-tabs>
+            <v-tabs-window v-model="tab">
+
+              <!-- 发行版 -->
+              <v-tabs-window-item key="0" v-show="tab == 0">
+                <small>当前版本 {{ botCurrVersion }}</small>
+                <p>{{ updateStatus }}</p>
+                <v-btn class="mt-4 mb-4" @click="switchVersion('latest')" color="primary" style="border-radius: 10px;"
+                  :disabled="!hasNewVersion">
+                  更新到最新版本
+                </v-btn>
+                <div class="mb-4">
+                  <small>`更新到最新版本` 按钮会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker 部署，也可以重新拉取镜像或者使用 <a
+                      href="https://containrrr.dev/watchtower/usage-overview/">watchtower</a> 来自动监控拉取。</small>
+                </div>
+
+                <v-data-table :headers="releasesHeader" :items="releases" item-key="name">
+                  <template v-slot:item.body="{ item }">
+                    <v-tooltip :text="item.body">
+                      <template v-slot:activator="{ props }">
+                        <v-btn v-bind="props" rounded="xl" variant="tonal" color="primary" size="small">查看</v-btn>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                  <template v-slot:item.switch="{ item }">
+                    <v-btn @click="switchVersion(item.tag_name)" rounded="xl" variant="plain" color="primary">
+                      切换
+                    </v-btn>
+                  </template>
+                </v-data-table>
+              </v-tabs-window-item>
+              
+              <!-- 开发版 -->
+              <v-tabs-window-item key="1" v-show="tab == 1">
+                <div style="margin-top: 16px;">
+                  <v-data-table
+                    :headers="[{ title: 'SHA', key: 'sha' }, { title: '日期', key: 'date' }, { title: '信息', key: 'message' }, { title: '操作', key: 'switch' }]"
+                    :items="devCommits" item-key="sha">
+                    <template v-slot:item.switch="{ item }">
+                      <v-btn @click="switchVersion(item.sha)" rounded="xl" variant="plain" color="primary">
+                        切换
+                      </v-btn>
+                    </template>
+                  </v-data-table>
+                </div>
+              </v-tabs-window-item>
+
+            </v-tabs-window>
+
+            <h3 class="mb-4">手动输入版本号或 Commit SHA</h3>
+
+            <v-text-field label="输入版本号或 master 分支下的 commit hash。" v-model="version" required
+              variant="outlined"></v-text-field>
+            <div class="mb-4">
+              <small>如 v3.3.16 (不带 SHA) 或 42e5ec5d80b93b6bfe8b566754d45ffac4c3fe0b</small>
+              <br>
+              <a href="https://github.com/Soulter/AstrBot/commits/master"><small>查看 master 分支提交记录（点击右边的 copy
+                  即可复制）</small></a>
+            </div>
+            <v-btn color="error" style="border-radius: 10px;" @click="switchVersion(version)">
+              确定切换
             </v-btn>
-            <v-divider></v-divider>
-            <div style="margin-top: 16px;">
-              <h3 class="mb-4">切换到项目指定版本或指定提交</h3>
-              <div class="mb-4">
-                <small>跳到旧版本不会重新下载管理面板文件，这可能会造成部分数据显示错误。您可在 <a href="https://github.com/Soulter/AstrBot/releases">此处</a>
-                  找到对应的面板文件 dist.zip，解压后替换 data/dist 文件夹即可。</small>
-              </div>
-              <v-text-field label="输入版本号或 master 分支下的 commit hash。" v-model="version" required
-                variant="outlined"></v-text-field>
-              <div class="mb-4">
-                <small>如 v3.3.16 (不带 SHA) 或 42e5ec5d80b93b6bfe8b566754d45ffac4c3fe0b</small>
-                <br>
-                <a href="https://github.com/Soulter/AstrBot/commits/master"><small>查看 master 分支提交记录（点击右边的 copy
-                    即可复制）</small></a>
-              </div>
-              <v-btn color="error" style="border-radius: 10px;" @click="switchVersion(version)">
-                确定切换
-              </v-btn>
-            </div>
 
             <v-divider></v-divider>
             <div style="margin-top: 16px;">
-              <h3 class="mb-4">更新管理面板到最新版本</h3>
+              <h3 class="mb-4">单独更新管理面板到最新版本</h3>
               <div class="mb-4">
                 <small>当前版本 {{ dashboardCurrentVersion }}</small>
                 <br>
