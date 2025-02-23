@@ -16,7 +16,7 @@ class StatRoute(Route):
             '/stat/get': ('GET', self.get_stat),
             '/stat/version': ('GET', self.get_version),
             '/stat/start-time': ('GET', self.get_start_time),
-            '/stat/restart-core': ('GET', self.restart_core)
+            '/stat/restart-core': ('POST', self.restart_core)
         }
         self.db_helper = db_helper
         self.register_routes()

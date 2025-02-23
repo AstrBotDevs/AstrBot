@@ -12,16 +12,32 @@
                 </v-combobox>
             </v-list-item>
 
+            <v-list-subheader>系统</v-list-subheader>
+
+            <v-list-item subtitle="重启 AstrBot" title="重启">
+                <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">重启</v-btn>
+            </v-list-item>
+
+            
+
 
         </v-list>
 
     </div>
 
+    <WaitingForRestart ref="wfr"></WaitingForRestart>
+
 
 </template>
 
 <script>
+import axios from 'axios';
+import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
+
 export default {
+    components: {
+        WaitingForRestart,
+    },
     data() {
         return {
             githubProxies: [
@@ -35,7 +51,11 @@ export default {
         }
     },
     methods: {
-
+        restartAstrBot() {
+            axios.post('/api/stat/restart-core').then(() => {
+                this.$refs.wfr.check();
+            })
+        }
     },
     mounted() {
         this.selectedGitHubProxy = localStorage.getItem('selectedGitHubProxy') || "";

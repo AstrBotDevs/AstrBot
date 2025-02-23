@@ -1,7 +1,7 @@
 <template>
     <div class="list-config-item">
       <h3>{{ label }}</h3>
-      <v-list dense style="background-color: transparent;max-height: 300px; overflow-y: scroll;" >
+      <v-list dense style="background-color: transparent;max-height: 300px; overflow-y: auto;" >
         <v-list-item v-for="(item, index) in items" :key="index">
           <v-list-item-content style="display: flex; justify-content: space-between;">
             <v-list-item-title>
