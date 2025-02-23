@@ -54,6 +54,8 @@ class SimpleGewechatClient():
         self.multimedia_downloader = None
         
         self.userrealnames = {}
+        
+        self.stop = False
     
     async def get_token_id(self):
         async with aiohttp.ClientSession() as session:
@@ -231,7 +233,7 @@ class SimpleGewechatClient():
         )
     
     async def shutdown_trigger_placeholder(self):
-        while not self.event_queue.closed:
+        while not self.event_queue.closed and not self.stop:
             await asyncio.sleep(1)
         logger.info("gewechat 适配器已关闭。")
         

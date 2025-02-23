@@ -154,7 +154,8 @@ CONFIG_METADATA_2 = {
                     "id": {
                         "description": "ID",
                         "type": "string",
-                        "hint": "用于在多实例下方便管理和识别。自定义，ID 不能重复。",
+                        "obvious_hint": True,
+                        "hint": "ID 不能和其它的平台适配器重复，否则将发生严重冲突。",
                     },
                     "type": {
                         "description": "适配器类型",
@@ -630,7 +631,8 @@ CONFIG_METADATA_2 = {
                     "id": {
                         "description": "ID",
                         "type": "string",
-                        "hint": "提供商 ID 名，用于在多实例下方便管理和识别。自定义，ID 不能重复。",
+                        "obvious_hint": True,
+                        "hint": "ID 不能和其它的服务提供商重复，否则将发生严重冲突。",
                     },
                     "type": {
                         "description": "模型提供商类型",

@@ -21,7 +21,17 @@ const sidebarItem: menu[] = [
     to: '/dashboard/default'
   },
   {
-    title: '配置文件',
+    title: '消息平台',
+    icon: 'mdi-message-processing',
+    to: '/platforms',
+  },
+  {
+    title: '服务提供商',
+    icon: 'mdi-creation',
+    to: '/providers',
+  },
+  {
+    title: '配置',
     icon: 'mdi-cog',
     to: '/config',
   },

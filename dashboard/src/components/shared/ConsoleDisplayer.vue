@@ -4,7 +4,7 @@ import { useCommonStore } from '@/stores/common';
 
 <template>
     <div id="term"
-      style="background-color: #1e1e1e; padding: 16px; border-radius: 8px; overflow-y:scroll">
+      style="background-color: #1e1e1e; padding: 16px; border-radius: 8px; overflow-y:auto">
     </div>
 </template>
 
@@ -70,7 +70,7 @@ export default {
           break
         }
       }
-      span.style = style + 'display: block; font-size: 12px; font-family: Consolas, monospace;'
+      span.style = style + 'display: block; font-size: 12px; font-family: Consolas, monospace; white-space: pre-wrap;'
       span.classList.add('fade-in')
       span.innerText = log
       ele.appendChild(span)
