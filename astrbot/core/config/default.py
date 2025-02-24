@@ -16,7 +16,7 @@ DEFAULT_CONFIG = {
             "strategy": "stall",  # stall, discard
         },
         "reply_prefix": "",
-        "forward_threshold": 200,
+        "forward_threshold": 1500,
         "enable_id_white_list": True,
         "id_whitelist": [],
         "id_whitelist_log": True,
