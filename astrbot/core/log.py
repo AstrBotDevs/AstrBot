@@ -7,7 +7,7 @@ from typing import List
 
 CACHED_SIZE = 200
 log_color_config = {
-    'DEBUG': 'bold_blue', 'INFO': 'bold_cyan',
+    'DEBUG': 'green', 'INFO': 'bold_cyan',
     'WARNING': 'bold_yellow', 'ERROR': 'red',
     'CRITICAL': 'bold_red', 'RESET': 'reset',
     'asctime': 'green'

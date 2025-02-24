@@ -124,7 +124,7 @@ CONFIG_METADATA_2 = {
                         "secret": "",
                         "port": 6196
                     },
-                    "aiocqhtp(QQ)": {
+                    "aiocqhttp(OneBotv11)": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,

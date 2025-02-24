@@ -18,9 +18,9 @@ docstring_parser
 aiodocker
 silk-python
 psutil>=5.8.0
-
 lark-oapi
 ormsgpack
 cryptography
 dashscope
 python-telegram-bot
+wechatpy
