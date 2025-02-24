@@ -4,7 +4,7 @@ import asyncio
 
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, PlatformMetadata, MessageType
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image, Record, File as AstrBotFile, Video
+from astrbot.api.message_components import Plain, Image, Record, File as AstrBotFile, Video, At
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.api.platform import register_platform_adapter
 
@@ -81,10 +81,21 @@ class TelegramPlatformAdapter(Platform):
         message.message_str = ""
         message.message = []
         
+        logger.debug(f"Telegram message: {update.message}")
+        
         if update.message.text:
             plain_text = update.message.text
-            message.message = [Plain(plain_text),]
+
+            if update.message.entities:
+                for entity in update.message.entities:
+                    if entity.type == "mention":
+                        name = plain_text[entity.offset:entity.offset+entity.length]
+                        message.message.append(At(qq=message.self_id, name=name))
+                        plain_text = plain_text[:entity.offset] + plain_text[entity.offset+entity.length:]
+            
+            message.message.append(Plain(plain_text))
             message.message_str = plain_text
+                        
             
         elif update.message.voice:
             file = await update.message.voice.get_file()
