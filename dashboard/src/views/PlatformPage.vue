@@ -47,14 +47,29 @@
                     </v-card>
                 </v-col>
             </v-row>
-            <v-dialog v-model="showPlatformCfg" width="700">
+            <v-dialog v-model="showPlatformCfg">
                 <v-card>
                     <v-card-title>
                         <span class="text-h4">{{ newSelectedPlatformName }} 配置</span>
                     </v-card-title>
                     <v-card-text>
-                        <AstrBotConfig :iterable="newSelectedPlatformConfig"
-                            :metadata="metadata['platform_group']['metadata']" metadataKey="platform" />
+                        <v-row>
+                            <v-col cols="12" md="6">
+                                <AstrBotConfig :iterable="newSelectedPlatformConfig"
+                                    :metadata="metadata['platform_group']['metadata']" metadataKey="platform" />
+                            </v-col>
+                            <v-col cols="12" md="6">
+                                <v-btn :loading="iframeLoading" @click="refreshIframe" variant="tonal" color="primary" style="float: right;">
+                                    <v-icon>mdi-refresh</v-icon>
+                                    刷新
+                                </v-btn>
+                                <iframe v-show="!iframeLoading"
+                                    :src="store.getTutorialLink(newSelectedPlatformConfig.type)"
+                                    @load="iframeLoading = false" style="width: 100%; border: none; height: 100%;">
+                                </iframe>
+                            </v-col>
+                        </v-row>
+
                     </v-card-text>
                     <v-card-actions>
                         <v-spacer></v-spacer>
@@ -66,7 +81,8 @@
             </v-dialog>
 
 
-            <v-btn style="margin-top: 16px" class="flex-grow-1" variant="tonal"  size="large" rounded="lg" color="gray" @click="showConsole = !showConsole">
+            <v-btn style="margin-top: 16px" class="flex-grow-1" variant="tonal" size="large" rounded="lg" color="gray"
+                @click="showConsole = !showConsole">
                 <template v-slot:default>
                     <v-icon>mdi-console-line</v-icon>
                     {{ showConsole ? '隐藏' : '显示' }}日志
@@ -91,6 +107,7 @@ import axios from 'axios';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
+import { useCommonStore } from '@/stores/common';
 
 export default {
     name: 'PlatformPage',
@@ -117,6 +134,9 @@ export default {
             save_message_success: "",
 
             showConsole: false,
+            iframeLoading: true,
+
+            store: useCommonStore()
         }
     },
 
@@ -125,6 +145,12 @@ export default {
     },
 
     methods: {
+        refreshIframe() {
+            this.iframeLoading = true;
+            const iframe = document.querySelector('iframe');
+            console.log(iframe.src);
+            iframe.src = iframe.src + '?t=' + new Date().getTime();
+        },
         getConfig() {
             // 获取配置
             axios.get('/api/config/get').then((res) => {

@@ -9,6 +9,17 @@ export const useCommonStore = defineStore({
     log_cache: [],
     log_cache_max_len: 1000,
     startTime: -1,
+
+    tutorial_map: {
+      "qq_official_webhook": "https://astrbot.app/deploy/platform/qqofficial/webhook.html",
+      "qq_official": "https://astrbot.app/deploy/platform/qqofficial/websockets.html",
+      "aiocqhttp": "https://astrbot.app/deploy/platform/aiocqhttp/napcat.html",
+      "wecom": "https://astrbot.app/deploy/platform/wecom.html",
+      "gewechat": "https://astrbot.app/deploy/platform/gewechat.html",
+      "lark": "https://astrbot.app/deploy/platform/lark.html",
+      "telegram": "https://astrbot.app/deploy/platform/telegram.html",
+    }
+
   }),
   actions: {
     createWebSocket() {
@@ -39,5 +50,8 @@ export const useCommonStore = defineStore({
           this.startTime = res.data.data.start_time
       })
     },
+    getTutorialLink(platform) {
+      return this.tutorial_map[platform]
+    }
   }
 });
