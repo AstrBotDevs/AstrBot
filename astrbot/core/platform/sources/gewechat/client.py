@@ -305,12 +305,11 @@ class SimpleGewechatClient():
             "uuid": qr_uuid,
             "appId": appid
         })
-        verify_flag = False
         while retry_cnt > 0:
             retry_cnt -= 1
 
             # 需要验证码
-            if verify_flag or os.path.exists("data/temp/gewe_code"):
+            if os.path.exists("data/temp/gewe_code"):
                 with open("data/temp/gewe_code", "r") as f:
                     code = f.read().strip()
                     if not code:
@@ -339,7 +338,6 @@ class SimpleGewechatClient():
                         msg = json_blob['data']['msg']
                     if ret == 500 and '安全验证码' in msg:
                         logger.warning("此次登录需要安全验证码，请在管理面板聊天页输入 /gewe_code 验证码 来验证，如 /gewe_code 123456")
-                        verify_flag = True
                     else:
                         status = json_blob['data']['status']
                         nickname = json_blob['data'].get('nickName', '')
