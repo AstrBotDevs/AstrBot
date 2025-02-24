@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import inspect
 
 from openai import AsyncOpenAI, AsyncAzureOpenAI
 from openai.types.chat.chat_completion import ChatCompletion
@@ -49,6 +50,8 @@ class ProviderOpenAIOfficial(Provider):
                 timeout=self.timeout
             )
         
+        self.default_params = inspect.signature(self.client.chat.completions.create).parameters.keys()
+        
         model_config = provider_config.get("model_config", {})
         model = model_config.get("model", "unknown")
         self.set_model(model)
@@ -69,10 +72,21 @@ class ProviderOpenAIOfficial(Provider):
             tool_list = tools.get_func_desc_openai_style()
             if tool_list:
                 payloads['tools'] = tool_list
-        
+
+        # 不在默认参数中的参数放在 extra_body 中
+        extra_body = {}
+        to_del = []
+        for key in payloads.keys():
+            if key not in self.default_params:
+                extra_body[key] = payloads[key]
+                to_del.append(key)
+        for key in to_del:
+            del payloads[key]
+
         completion = await self.client.chat.completions.create(
             **payloads,
-            stream=False
+            stream=False,
+            extra_body=extra_body
         )
 
         assert isinstance(completion, ChatCompletion)
