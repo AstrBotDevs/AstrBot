@@ -149,8 +149,21 @@ CONFIG_METADATA_2 = {
                         "app_secret": "",
                         "domain": "https://open.feishu.cn"
                     },
+                    "telegram": {
+                        "id": "telegram",
+                        "type": "telegram",
+                        "enable": False,
+                        "telegram_token": "your_bot_token",
+                        "start_message": "Hello, I'm AstrBot!",
+                        "telegram_api_base_url": "https://api.telegram.org/bot", 
+                    }
                 },
                 "items": {
+                    "telegram_token": {
+                        "description": "Bot Token",
+                        "type": "string",
+                        "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
+                    },
                     "id": {
                         "description": "ID",
                         "type": "string",
@@ -250,7 +263,7 @@ CONFIG_METADATA_2 = {
                                 "description": "间隔时间计算方法",
                                 "type": "string",
                                 "options": ["random", "log"],
-                                "hint": "分段回复的间隔时间计算方法。random 为随机时间，log 为根据消息长度计算，$y=log_{log\_base}(x)$，x为字数，y的单位为秒。",
+                                "hint": "分段回复的间隔时间计算方法。random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。",
                             },
                             "interval": {
                                 "description": "随机间隔时间(秒)",

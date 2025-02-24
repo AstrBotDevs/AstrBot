@@ -9,7 +9,6 @@ beautifulsoup4
 googlesearch-python
 readability-lxml
 quart
-psutil
 lxml_html_clean
 colorlog
 aiocqhttp
@@ -23,5 +22,5 @@ psutil>=5.8.0
 lark-oapi
 ormsgpack
 cryptography
-
 dashscope
+python-telegram-bot

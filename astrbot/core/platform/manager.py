@@ -49,6 +49,8 @@ class PlatformManager():
                     from .sources.gewechat.gewechat_platform_adapter import GewechatPlatformAdapter # noqa: F401
                 case "lark":
                     from .sources.lark.lark_adapter import LarkPlatformAdapter # noqa: F401
+                case "telegram":    
+                    from .sources.telegram.tg_adapter import TelegramPlatformAdapter # noqa: F401
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->控制台->安装Pip库 中安装依赖库。")
         except Exception as e:
@@ -56,7 +58,7 @@ class PlatformManager():
             
             
         if platform_config['type'] not in platform_cls_map:
-            logger.error(f"未找到适用于 {platform_config['type']}({platform_config['id']}) 平台适配器，请检查是否已经安装或者名称填写错误。")
+            logger.error(f"未找到适用于 {platform_config['type']}({platform_config['id']}) 平台适配器，请检查是否已经安装或者名称填写错误")
             return
         cls_type = platform_cls_map[platform_config['type']]
         inst = cls_type(platform_config, self.settings, self.event_queue)
