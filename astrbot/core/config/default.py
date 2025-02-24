@@ -67,17 +67,15 @@ DEFAULT_CONFIG = {
             "method": "possibility_reply",
             "possibility_reply": 0.1,
             "prompt": "",
-            "whitelist": []
-        }
+            "whitelist": [],
+        },
     },
     "content_safety": {
         "also_use_in_response": False,
         "internal_keywords": {"enable": True, "extra_keywords": []},
         "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
     },
-    "admins_id": [
-        "astrbot"
-    ],
+    "admins_id": ["astrbot"],
     "t2i": False,
     "t2i_word_threshold": 150,
     "http_proxy": "",
@@ -85,7 +83,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "username": "astrbot",
         "password": "77b90590a8945a7d36c963981a307dc9",
-        "port": 6185
+        "port": 6185,
     },
     "platform": [],
     "wake_prefix": ["/"],
@@ -122,7 +120,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "appid": "",
                         "secret": "",
-                        "port": 6196
+                        "port": 6196,
                     },
                     "aiocqhttp(OneBotv11)": {
                         "id": "default",
@@ -140,6 +138,14 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
+                    "wecom(企业微信)": {
+                        "corpid": "",
+                        "secret": "",
+                        "port": 6195,
+                        "token": "",
+                        "encoding_aes_key": "",
+                        "api_base_url": "https://qyapi.weixin.qq.com/cgi-bin/",
+                    },
                     "lark(飞书)": {
                         "id": "lark",
                         "type": "lark",
@@ -147,7 +153,7 @@ CONFIG_METADATA_2 = {
                         "lark_bot_name": "",
                         "app_id": "",
                         "app_secret": "",
-                        "domain": "https://open.feishu.cn"
+                        "domain": "https://open.feishu.cn",
                     },
                     "telegram": {
                         "id": "telegram",
@@ -155,8 +161,8 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "telegram_token": "your_bot_token",
                         "start_message": "Hello, I'm AstrBot!",
-                        "telegram_api_base_url": "https://api.telegram.org/bot", 
-                    }
+                        "telegram_api_base_url": "https://api.telegram.org/bot",
+                    },
                 },
                 "items": {
                     "telegram_token": {
@@ -214,8 +220,8 @@ CONFIG_METADATA_2 = {
                         "description": "飞书机器人的名字",
                         "type": "string",
                         "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
-                        "obvious_hint": True
-                    }
+                        "obvious_hint": True,
+                    },
                 },
             },
             "platform_settings": {
@@ -400,7 +406,7 @@ CONFIG_METADATA_2 = {
                 "description": "服务提供商配置",
                 "type": "list",
                 "config_template": {
-                    "openai": {
+                    "OpenAI": {
                         "id": "openai",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -411,7 +417,7 @@ CONFIG_METADATA_2 = {
                             "model": "gpt-4o-mini",
                         },
                     },
-                    "azure_openai": {
+                    "Azure_OpenAI": {
                         "id": "azure",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -423,7 +429,7 @@ CONFIG_METADATA_2 = {
                             "model": "gpt-4o-mini",
                         },
                     },
-                    "xAI": {
+                    "xAI(grok)": {
                         "id": "xai",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -434,7 +440,7 @@ CONFIG_METADATA_2 = {
                             "model": "grok-2-latest",
                         },
                     },
-                    "anthropic(claude)": {
+                    "Anthropic(claude)": {
                         "id": "claude",
                         "type": "anthropic_chat_completion",
                         "enable": True,
@@ -446,7 +452,7 @@ CONFIG_METADATA_2 = {
                             "max_tokens": 4096,
                         },
                     },
-                    "ollama": {
+                    "Ollama": {
                         "id": "ollama_default",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -456,7 +462,7 @@ CONFIG_METADATA_2 = {
                             "model": "llama3.1-8b",
                         },
                     },
-                    "gemini(OpenAI兼容)": {
+                    "Gemini(OpenAI兼容)": {
                         "id": "gemini_default",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -467,7 +473,7 @@ CONFIG_METADATA_2 = {
                             "model": "gemini-1.5-flash",
                         },
                     },
-                    "gemini(googlegenai原生)": {
+                    "Gemini(googlegenai原生)": {
                         "id": "gemini_default",
                         "type": "googlegenai_chat_completion",
                         "enable": True,
@@ -478,7 +484,7 @@ CONFIG_METADATA_2 = {
                             "model": "gemini-1.5-flash",
                         },
                     },
-                    "deepseek": {
+                    "DeepSeek": {
                         "id": "deepseek_default",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -489,7 +495,7 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek-chat",
                         },
                     },
-                    "zhipu": {
+                    "Zhipu(智谱)": {
                         "id": "zhipu_default",
                         "type": "zhipu_chat_completion",
                         "enable": True,
@@ -500,7 +506,7 @@ CONFIG_METADATA_2 = {
                             "model": "glm-4-flash",
                         },
                     },
-                    "siliconflow": {
+                    "SiliconFlow(硅基流动)": {
                         "id": "siliconflow",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -511,7 +517,7 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek-ai/DeepSeek-V3",
                         },
                     },
-                    "moonshot(kimi)": {
+                    "MoonShot(Kimi)": {
                         "id": "moonshot",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -522,7 +528,7 @@ CONFIG_METADATA_2 = {
                             "model": "moonshot-v1-8k",
                         },
                     },
-                    "llmtuner": {
+                    "LLMTuner": {
                         "id": "llmtuner_default",
                         "type": "llm_tuner",
                         "enable": True,
@@ -532,7 +538,7 @@ CONFIG_METADATA_2 = {
                         "finetuning_type": "lora",
                         "quantization_bit": 4,
                     },
-                    "dify": {
+                    "Dify": {
                         "id": "dify_app_default",
                         "type": "dify",
                         "enable": True,
@@ -544,7 +550,7 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                     },
-                    "dashscope": {
+                    "Dashscope(阿里云百炼应用)": {
                         "id": "dashscope",
                         "type": "dashscope",
                         "enable": True,
@@ -554,7 +560,7 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                     },
-                    "fastgpt": {
+                    "FastGPT": {
                         "id": "fastgpt",
                         "type": "openai_chat_completion",
                         "enable": True,
@@ -562,7 +568,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.fastgpt.in/api/v1",
                         "timeout": 60,
                     },
-                    "whisper(API)": {
+                    "Whisper(API)": {
                         "id": "whisper",
                         "type": "openai_whisper_api",
                         "enable": False,
@@ -570,14 +576,14 @@ CONFIG_METADATA_2 = {
                         "api_base": "",
                         "model": "whisper-1",
                     },
-                    "whisper(本地加载)": {
+                    "Whisper(本地加载)": {
                         "whisper_hint": "(不用修改我)",
                         "enable": False,
                         "id": "whisper",
                         "type": "openai_whisper_selfhost",
                         "model": "tiny",
                     },
-                    "openai_tts(API)": {
+                    "OpenAI_TTS(API)": {
                         "id": "openai_tts",
                         "type": "openai_tts_api",
                         "enable": False,
@@ -587,7 +593,7 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                     },
-                    "fishaudio_tts(API)": {
+                    "FishAudio_TTS(API)": {
                         "id": "fishaudio_tts",
                         "type": "fishaudio_tts_api",
                         "enable": False,
@@ -615,7 +621,12 @@ CONFIG_METADATA_2 = {
                         "description": "应用类型",
                         "type": "string",
                         "hint": "阿里云百炼应用的应用类型。",
-                        "options": ["agent", "agent-arrange", "dialog-workflow", "task-workflow"],
+                        "options": [
+                            "agent",
+                            "agent-arrange",
+                            "dialog-workflow",
+                            "task-workflow",
+                        ],
                         "obvious_hint": True,
                     },
                     "timeout": {
@@ -734,10 +745,10 @@ CONFIG_METADATA_2 = {
                     },
                     "dify_query_input_key": {
                         "description": "Prompt 输入变量名",
-                        "type": "string",   
+                        "type": "string",
                         "hint": "发送的消息文本内容对应的输入变量名。默认为 astrbot_text_query。",
                         "obvious": True,
-                    }
+                    },
                 },
             },
             "provider_settings": {

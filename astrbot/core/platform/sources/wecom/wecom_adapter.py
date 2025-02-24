@@ -97,14 +97,7 @@ class WecomServer():
         logger.info("企业微信 适配器已关闭。")
         
 
-@register_platform_adapter("wecom", "wecom 适配器", default_config_tmpl={
-    "corpid": "",
-    "secret": "",
-    "port": 6195,
-    "token": "",
-    "encoding_aes_key": "",
-    "api_base_url": "https://qyapi.weixin.qq.com/cgi-bin/",
-})
+@register_platform_adapter("wecom", "wecom 适配器")
 class WecomPlatformAdapter(Platform):
     def __init__(self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue) -> None:
         super().__init__(event_queue)
