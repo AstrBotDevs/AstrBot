@@ -532,6 +532,13 @@ CONFIG_METADATA_2 = {
                         "type": "openai_whisper_selfhost",
                         "model": "tiny",
                     },
+                    "sensevoice(本地加载)": {
+                        "whisper_hint": "(不用修改我)",
+                        "enable": False,
+                        "id": "sensevoice",
+                        "type": "sensevoice_stt_selfhost",
+                        "model": "tiny",
+                    },
                     "openai_tts(API)": {
                         "id": "openai_tts",
                         "type": "openai_tts_api",

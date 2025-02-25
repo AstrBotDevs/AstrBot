@@ -21,3 +21,6 @@ silk-python
 lark-oapi
 ormsgpack
 cryptography
+
+funasr
+torch~=2.6.0

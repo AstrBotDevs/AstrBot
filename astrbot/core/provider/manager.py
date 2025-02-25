@@ -128,6 +128,8 @@ class ProviderManager():
                         from .sources.whisper_api_source import ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI
                     case "openai_whisper_selfhost":
                         from .sources.whisper_selfhosted_source import ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost
+                    case "sensevoice_stt_selfhost":
+                        from .sources.sensevoice_selfhosted_source import ProviderSenseVoiceSTTSelfHost as ProviderSenseVoiceSTTSelfHost
                     case "openai_tts_api":
                         from .sources.openai_tts_api_source import ProviderOpenAITTSAPI as ProviderOpenAITTSAPI
                     case "fishaudio_tts_api":
