@@ -123,6 +123,7 @@ class ProviderManager():
             return
         
         logger.info(f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商适配器 ...")
+        logger.debug(f"Provider Config: {provider_config}")
         
         # 动态导入
         try:
@@ -242,7 +243,7 @@ class ProviderManager():
     async def terminate_provider(self, provider_id: str):
         if provider_id in self.inst_map:
             
-            logger.info(f"终止 {provider_id} 提供商适配器 ...")
+            logger.info(f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ...")
             
             if self.inst_map[provider_id] in self.provider_insts:
                 self.provider_insts.remove(self.inst_map[provider_id])
@@ -250,11 +251,19 @@ class ProviderManager():
                 self.stt_provider_insts.remove(self.inst_map[provider_id])
             if self.inst_map[provider_id] in self.tts_provider_insts:
                 self.tts_provider_insts.remove(self.inst_map[provider_id])
+
+            if self.inst_map[provider_id] == self.curr_provider_inst:
+                self.curr_provider_inst = None
+            if self.inst_map[provider_id] == self.curr_stt_provider_inst:
+                self.curr_stt_provider_inst = None
+            if self.inst_map[provider_id] == self.curr_tts_provider_inst:
+                self.curr_tts_provider_inst = None
                 
             if getattr(self.inst_map[provider_id], 'terminate', None):
                 await self.inst_map[provider_id].terminate()
-                logger.info(f"{provider_id} 提供商适配器已终止。")
-                del self.inst_map[provider_id]
+            
+            logger.info(f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})")
+            del self.inst_map[provider_id]
                         
     async def terminate(self):
         for provider_inst in self.provider_insts:
