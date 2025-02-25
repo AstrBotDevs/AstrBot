@@ -25,3 +25,5 @@ cryptography
 funasr_onnx
 torchaudio
 torch
+modelscope
+jieba
