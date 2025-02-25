@@ -300,7 +300,7 @@ commonStore.getStartTime();
                 </p>
               </div>
 
-              <v-btn color="primary" style="border-radius: 10px;" @click="updateDashboard()">
+              <v-btn color="primary" style="border-radius: 10px;" @click="updateDashboard()" :disabled="!dashboardHasNewVersion">
                 下载并更新
               </v-btn>
             </div>
