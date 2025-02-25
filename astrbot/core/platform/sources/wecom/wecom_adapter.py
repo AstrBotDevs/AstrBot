@@ -36,9 +36,9 @@ class WecomServer():
         self.event_queue = event_queue
         
         self.crypto = WeChatCrypto(
-            config['token'],
-            config['encoding_aes_key'],
-            config['corpid']
+            config['token'].strip(),
+            config['encoding_aes_key'].strip(),
+            config['corpid'].strip()
         )
 
         self.callback = None
@@ -136,8 +136,8 @@ class WecomPlatformAdapter(Platform):
         )
         
         self.client = WeChatClient(
-            self.config['corpid'],
-            self.config['secret'],
+            self.config['corpid'].strip(),
+            self.config['secret'].strip(),
         )
         self.client.API_BASE_URL = self.api_base_url
         

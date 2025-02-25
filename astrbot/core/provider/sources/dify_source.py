@@ -100,11 +100,11 @@ class ProviderDify(Provider):
                                 self.conversation_ids[session_id] = chunk['conversation_id']
                                 conversation_id = chunk['conversation_id']
                         elif chunk['event'] == 'message_end':
-                            logger.debug(f"Dify message end")
+                            logger.debug("Dify message end")
                             break
                         elif chunk['event'] == 'error':
-                            logger.error(f"Dify 出现错误：{chunk['error']}")
-                            raise Exception(f"Dify 出现错误 status: {chunk['status']} message: {chunk['message']} error_code: {chunk['error']}")
+                            logger.error(f"Dify 出现错误：{chunk}")
+                            raise Exception(f"Dify 出现错误 status: {chunk['status']} message: {chunk['message']}")
                 
                 case "workflow":
                     async for chunk in self.api_client.workflow_run(
