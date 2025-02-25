@@ -99,6 +99,12 @@ class ProviderDify(Provider):
                             if not conversation_id:
                                 self.conversation_ids[session_id] = chunk['conversation_id']
                                 conversation_id = chunk['conversation_id']
+                        elif chunk['event'] == 'message_end':
+                            logger.debug(f"Dify message end")
+                            break
+                        elif chunk['event'] == 'error':
+                            logger.error(f"Dify 出现错误：{chunk['error']}")
+                            raise Exception(f"Dify 出现错误 status: {chunk['status']} message: {chunk['message']} error_code: {chunk['error']}")
                 
                 case "workflow":
                     async for chunk in self.api_client.workflow_run(
@@ -129,6 +135,9 @@ class ProviderDify(Provider):
         except Exception as e:
             logger.error(f"Dify 请求失败：{str(e)}")
             return LLMResponse(role="err", completion_text=f"Dify 请求失败：{str(e)}")
+        
+        if not result:
+            logger.warning("Dify 请求结果为空，请查看 Debug 日志。")
         
         return LLMResponse(role="assistant", completion_text=result)
 
