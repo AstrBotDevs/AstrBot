@@ -22,5 +22,6 @@ lark-oapi
 ormsgpack
 cryptography
 
-funasr
-torch~=2.6.0
+funasr_onnx
+torchaudio
+torch

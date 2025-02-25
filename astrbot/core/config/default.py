@@ -533,11 +533,12 @@ CONFIG_METADATA_2 = {
                         "model": "tiny",
                     },
                     "sensevoice(本地加载)": {
-                        "whisper_hint": "(不用修改我)",
+                        "sensevoice_hint": "(不用修改我)",
                         "enable": False,
                         "id": "sensevoice",
                         "type": "sensevoice_stt_selfhost",
-                        "model": "tiny",
+                        "stt_model": "icc/SenseVoiceSmall",
+                        "is_emotion": False,
                     },
                     "openai_tts(API)": {
                         "id": "openai_tts",
@@ -560,6 +561,22 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "sensevoice_hint": {
+                        "description": "部署SenseVoice",
+                        "type": "string",
+                        "hint": "启用前请 pip 安装 funasr_onnx、torchaudio、torch 库（默认使用CPU，大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
+                        "obvious_hint": True,
+                    },
+                    "is_emotion": {
+                        "description": "情绪识别",
+                        "type": "bool",
+                        "hint": "是否开启情绪识别。happy｜sad｜angry｜neutral｜fearful｜disgusted｜surprised｜unknown",
+                    },
+                    "stt_model": {
+                        "description": "模型名称",
+                        "type": "string",
+                        "hint": "modelscope 上的模型名称。默认：iic/SenseVoiceSmall。",
+                    },
                     "timeout": {
                         "description": "超时时间",
                         "type": "int",
