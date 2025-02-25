@@ -89,7 +89,9 @@ class ProviderOpenAIOfficial(Provider):
             extra_body=extra_body
         )
 
-        assert isinstance(completion, ChatCompletion)
+        if not isinstance(completion, ChatCompletion):
+            raise Exception(f"API 返回的 completion 类型错误：{type(completion)}: {completion}。")
+
         logger.debug(f"completion: {completion}")
 
         if len(completion.choices) == 0:
