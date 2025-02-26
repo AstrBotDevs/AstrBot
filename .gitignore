@@ -25,5 +25,4 @@ package.json
 venv/*
 packages/python_interpreter/workplace
 .venv/*
-
 .conda/
