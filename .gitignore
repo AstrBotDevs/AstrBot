@@ -24,5 +24,3 @@ package.json
 venv/*
 packages/python_interpreter/workplace
 .venv/*
-
-Dockerfile_diudiu62
