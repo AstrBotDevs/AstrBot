@@ -21,9 +21,3 @@ silk-python
 lark-oapi
 ormsgpack
 cryptography
-
-funasr_onnx
-torchaudio
-torch
-modelscope
-jieba
