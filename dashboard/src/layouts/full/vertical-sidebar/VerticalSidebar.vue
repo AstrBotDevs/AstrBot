@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import { ref, shallowRef } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import sidebarItems from './sidebarItem';
@@ -8,20 +8,6 @@ const customizer = useCustomizerStore();
 const sidebarMenu = shallowRef(sidebarItems);
 
 const showIframe = ref(false);
-
-const iframeStyle = ref({
-  position: 'fixed',
-  bottom: '16px',
-  right: '16px',
-  width: '500px',
-  height: '400px',
-  border: '1px solid #ccc',
-  background: 'white',
-  resize: 'both',
-  overflow: 'auto',
-  zIndex: 10000000,
-  borderRadius: '8px'
-});
 
 const dragButtonStyle = {
   width: '100%',
@@ -41,16 +27,19 @@ let offsetX = 0;
 let offsetY = 0;
 let isDragging = false;
 
+// @ts-ignore
 function onMouseDown(event) {
   isDragging = true;
   offsetX = event.clientX - event.target.parentElement.getBoundingClientRect().left;
   offsetY = event.clientY - event.target.parentElement.getBoundingClientRect().top;
 }
-
+// @ts-ignore
 function onMouseMove(event) {
   if (isDragging) {
     const dm = document.getElementById('draggable-iframe');
+    // @ts-ignore
     dm.style.left = (event.clientX - offsetX) + 'px';
+    // @ts-ignore
     dm.style.top = (event.clientY - offsetY) + 'px';
   }
 }
@@ -92,10 +81,9 @@ function onMouseUp() {
     </div>
 
   </v-navigation-drawer>
-
   <div v-if="showIframe"
     id="draggable-iframe"
-    :style="iframeStyle"
+    style="position: fixed; bottom: 16px; right: 16px; width: 500px; height: 400px; border: 1px solid #ccc; background: white; resize: both; overflow: auto; z-index: 10000000; border-radius: 8px;"
     @mousemove="onMouseMove"
     @mouseup="onMouseUp"
     @mouseleave="onMouseUp">
