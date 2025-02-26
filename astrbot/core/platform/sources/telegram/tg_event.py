@@ -40,8 +40,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     image_path = i.path
                 else:
                     image_path = i.file
-                await client.send_photo(photo=image_path, **payload)
-        
+
+                if image_path.startswith("base64://"):
+                    import base64
+                    base64_data = image_path[9:]
+                    image_bytes = base64.b64decode(base64_data)
+                    await client.send_photo(photo=image_bytes, **payload)
+                else:
+                    await client.send_photo(photo=image_path, **payload)
+
     async def send(self, message: MessageChain):
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
             await self.send_with_client(self.client, message, self.message_obj.group_id)
