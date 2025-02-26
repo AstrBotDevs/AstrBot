@@ -144,6 +144,8 @@ class ProviderManager():
                     from .sources.dashscope_source import ProviderDashscope as ProviderDashscope
                 case "googlegenai_chat_completion":
                     from .sources.gemini_source import ProviderGoogleGenAI as ProviderGoogleGenAI
+                case "sensevoice_stt_selfhost":
+                    from .sources.sensevoice_selfhosted_source import ProviderSenseVoiceSTTSelfHost as ProviderSenseVoiceSTTSelfHost
                 case "openai_whisper_api":
                     from .sources.whisper_api_source import ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI
                 case "openai_whisper_selfhost":
