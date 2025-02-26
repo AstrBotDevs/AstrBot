@@ -142,6 +142,9 @@ class LLMRequestSubStage(Stage):
             return
         
     async def _save_to_history(self, event: AstrMessageEvent, req: ProviderRequest, llm_response: LLMResponse):
+        if not req or not req.conversation or not llm_response or not req.contexts:
+            return
+        
         if llm_response.role == "assistant":
             # 文本回复
             contexts = req.contexts
