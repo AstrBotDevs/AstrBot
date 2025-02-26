@@ -3,7 +3,6 @@ from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from .method.llm_request import LLMRequestSubStage
 from .method.star_request import StarRequestSubStage
-from .method.dify_request import DifyRequestSubStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import StarHandlerMetadata
 from astrbot.core.provider.entites import ProviderRequest
@@ -21,9 +20,6 @@ class ProcessStage(Stage):
         
         self.star_request_sub_stage = StarRequestSubStage()
         await self.star_request_sub_stage.initialize(ctx)
-        
-        self.dify_request_sub_stage = DifyRequestSubStage()
-        await self.dify_request_sub_stage.initialize(ctx)
 
     async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
         '''处理事件
@@ -49,7 +45,7 @@ class ProcessStage(Stage):
         if not self.ctx.astrbot_config['provider_settings'].get('enable', True):
             return
         
-        if not event._has_send_oper and event.is_at_or_wake_command:
+        if not event._has_send_oper and event.is_at_or_wake_command and not event.call_llm:
             # 是否有过发送操作 and 是否是被 @ 或者通过唤醒前缀
             if (event.get_result() and not event.get_result().is_stopped()) or not event.get_result():
                 # 事件没有终止传播
@@ -59,10 +55,5 @@ class ProcessStage(Stage):
                     logger.info("未找到可用的 LLM 提供商，请先前往配置服务提供商。")
                     return
                 
-                match provider.meta().type:
-                    case "dify":
-                        async for _ in self.dify_request_sub_stage.process(event):
-                            yield
-                    case _:
-                        async for _ in self.llm_request_sub_stage.process(event):
-                            yield
+                async for _ in self.llm_request_sub_stage.process(event):
+                    yield

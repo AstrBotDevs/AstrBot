@@ -4,7 +4,7 @@ import { useCommonStore } from '@/stores/common';
 
 <template>
     <div id="term"
-      style="background-color: #1e1e1e; padding: 16px; border-radius: 8px; overflow-y:scroll">
+      style="background-color: #1e1e1e; padding: 16px; border-radius: 8px; overflow-y:auto">
     </div>
 </template>
 
@@ -13,6 +13,7 @@ export default {
   name: 'ConsoleDisplayer',
   data() {
     return {
+      autoScroll: true,  // 默认开启自动滚动
       logColorAnsiMap: {
         '\u001b[1;34m': 'color: #0000FF; font-weight: bold;', // bold_blue
         '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;', // bold_cyan
@@ -54,6 +55,9 @@ export default {
     }
   },
   methods: {
+    toggleAutoScroll() {
+      this.autoScroll = !this.autoScroll;
+    },
     printLog(log) {
       // append 一个 span 标签到 term，block 的方式
       let ele = document.getElementById('term')
@@ -66,11 +70,13 @@ export default {
           break
         }
       }
-      span.style = style + 'display: block; font-size: 12px; font-family: Consolas, monospace;'
+      span.style = style + 'display: block; font-size: 12px; font-family: Consolas, monospace; white-space: pre-wrap;'
       span.classList.add('fade-in')
       span.innerText = log
       ele.appendChild(span)
-      ele.scrollTop = ele.scrollHeight
+      if (this.autoScroll) {
+        ele.scrollTop = ele.scrollHeight
+      }
     }
   },
 }

@@ -16,7 +16,7 @@ from ...register import register_platform_adapter
 from aiocqhttp.exceptions import ActionFailed
 from astrbot.core.utils.io import download_file
 
-@register_platform_adapter("aiocqhttp", "适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。")
+@register_platform_adapter("aiocqhttp", "适用于 OneBot V11 标准的消息平台适配器，支持反向 WebSockets。")
 class AiocqhttpAdapter(Platform):
     def __init__(self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue) -> None:
         super().__init__(event_queue)
@@ -31,6 +31,8 @@ class AiocqhttpAdapter(Platform):
             "aiocqhttp",
             "适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
         )
+        
+        self.stop = False
         
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
         ret = await AiocqhttpMessageEvent._parse_onebot_json(message_chain)
@@ -146,8 +148,11 @@ class AiocqhttpAdapter(Platform):
             a = None
             if t == 'text':
                 message_str += m['data']['text'].strip()
+                a = ComponentTypes[t](**m['data'])  # noqa: F405
+                abm.message.append(a)
+
             elif t == 'file':
-                if m['data']['url'] and m['data']['url'].startswith("http"):
+                if m['data'].get('url') and m['data'].get('url').startswith("http"):
                     # Lagrange
                     logger.info("guessing lagrange")
                     
@@ -159,6 +164,8 @@ class AiocqhttpAdapter(Platform):
                         "file": path,
                         "name": file_name
                     }
+                    a = ComponentTypes[t](**m['data'])  # noqa: F405
+                    abm.message.append(a)
                 
                 else:
                     try:
@@ -173,13 +180,17 @@ class AiocqhttpAdapter(Platform):
                             "file": ret['file'],
                             "name": ret['file_name']
                         }
+                        a = ComponentTypes[t](**m['data'])  # noqa: F405
+                        abm.message.append(a)
                     except ActionFailed as e:
                         logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
                     except BaseException as e:
                         logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
-                    
-            a = ComponentTypes[t](**m['data'])  # noqa: F405
-            abm.message.append(a)
+                        
+            else:
+                a = ComponentTypes[t](**m['data'])  # noqa: F405
+                abm.message.append(a)
+
         abm.timestamp = int(time.time())
         abm.message_str = message_str
         abm.raw_message = event
@@ -220,7 +231,7 @@ class AiocqhttpAdapter(Platform):
                 
         @self.bot.on_websocket_connection
         def on_websocket_connection(_):
-            logger.info("aiocqhttp 适配器已连接。")
+            logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
         
         bot = self.bot.run_task(host=self.host, port=int(self.port), shutdown_trigger=self.shutdown_trigger_placeholder)
         
@@ -230,11 +241,15 @@ class AiocqhttpAdapter(Platform):
         
         return bot
     
+    async def terminate(self):
+        self.stop = True
+        await asyncio.sleep(1)
+    
     def meta(self) -> PlatformMetadata:
         return self.metadata
     
     async def shutdown_trigger_placeholder(self):
-        while not self._event_queue.closed:
+        while not self._event_queue.closed and not self.stop:
             await asyncio.sleep(1)
         logger.info("aiocqhttp 适配器已关闭。")
 

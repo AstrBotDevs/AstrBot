@@ -5,6 +5,7 @@ import quart
 import base64
 import datetime
 import re
+import os
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.api.message_components import Plain, Image, At, Record
 from astrbot.api import logger, sp
@@ -53,6 +54,8 @@ class SimpleGewechatClient():
         self.multimedia_downloader = None
         
         self.userrealnames = {}
+        
+        self.stop = False
     
     async def get_token_id(self):
         async with aiohttp.ClientSession() as session:
@@ -230,7 +233,7 @@ class SimpleGewechatClient():
         )
     
     async def shutdown_trigger_placeholder(self):
-        while not self.event_queue.closed:
+        while not self.event_queue.closed and not self.stop:
             await asyncio.sleep(1)
         logger.info("gewechat 适配器已关闭。")
         
@@ -304,6 +307,22 @@ class SimpleGewechatClient():
         })
         while retry_cnt > 0:
             retry_cnt -= 1
+
+            # 需要验证码
+            if os.path.exists("data/temp/gewe_code"):
+                with open("data/temp/gewe_code", "r") as f:
+                    code = f.read().strip()
+                    if not code:
+                        logger.warning("未找到验证码，请在管理面板聊天页输入 /gewe_code 验证码 来验证，如 /gewe_code 123456")
+                        await asyncio.sleep(5)
+                        continue
+                    payload['captchCode'] = code
+                    logger.info(f"使用验证码: {code}")
+                    try:
+                        os.remove("data/temp/gewe_code")
+                    except:
+                        logger.warning("删除验证码文件 data/temp/gewe_code 失败。")
+
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     f"{self.base_url}/login/checkLogin",
@@ -312,17 +331,25 @@ class SimpleGewechatClient():
                 ) as resp:
                     json_blob = await resp.json()
                     logger.info(f"检查登录状态: {json_blob}")
-                    status = json_blob['data']['status']
-                    nickname = json_blob['data'].get('nickName', '')
-                    if status == 1:
-                        logger.info(f"等待确认...{nickname}")
-                    elif status == 2:
-                        logger.info(f"绿泡泡平台登录成功: {nickname}")
-                        break
-                    elif status == 0:
-                        logger.info("等待扫码...")
+
+                    ret = json_blob['ret']
+                    msg = ''
+                    if json_blob['data'] and 'msg' in json_blob['data']:
+                        msg = json_blob['data']['msg']
+                    if ret == 500 and '安全验证码' in msg:
+                        logger.warning("此次登录需要安全验证码，请在管理面板聊天页输入 /gewe_code 验证码 来验证，如 /gewe_code 123456")
                     else:
-                        logger.warning(f"未知状态: {status}")
+                        status = json_blob['data']['status']
+                        nickname = json_blob['data'].get('nickName', '')
+                        if status == 1: 
+                            logger.info(f"等待确认...{nickname}")
+                        elif status == 2:
+                            logger.info(f"绿泡泡平台登录成功: {nickname}")
+                            break
+                        elif status == 0:
+                            logger.info("等待扫码...")
+                        else:
+                            logger.warning(f"未知状态: {status}")
             await asyncio.sleep(5)
             
         if appid:

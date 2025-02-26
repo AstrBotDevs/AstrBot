@@ -6,8 +6,8 @@
         <div v-for="(index, key) in iterable" :key="key" style="margin-bottom: 0.5px;"
             v-if="metadata[metadataKey]?.type === 'object' || metadata[metadataKey]?.config_template">
             <v-alert v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint"
-                style="margin-bottom: 16px" :text="metadata[metadataKey].items[key]?.hint"
-                :title="'💡 关于' + metadata[metadataKey].items[key]?.description" type="info" variant="tonal">
+                style="margin-bottom: 8px" :text="metadata[metadataKey].items[key]?.hint"
+                :title="'💡 ' + metadata[metadataKey].items[key]?.description" type="info" variant="tonal" color="primary">
             </v-alert>
 
             <div style="display: flex; align-items: center; justify-content: center; gap: 16px">
@@ -66,8 +66,8 @@
         </div>
         <div v-else>
             <v-alert v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint"
-                style="margin-bottom: 16px" :text="metadata[metadataKey]?.hint"
-                :title="'💡 关于' + metadata[metadataKey]?.description" type="info" variant="tonal">
+                style="margin-bottom: 8px" :text="metadata[metadataKey]?.hint"
+                :title="'💡 ' + metadata[metadataKey]?.description" type="info" variant="tonal" color="primary">
             </v-alert>
 
             <div style="display: flex; align-items: center; justify-content: center; gap: 16px">

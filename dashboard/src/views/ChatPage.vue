@@ -56,7 +56,7 @@ marked.setOptions({
                             <div style="margin-top: 8px; color: #aaa;">
                                 <span>输入</span>
                                 <span
-                                    style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">/help</span>
+                                    style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">help</span>
                                 <span>获取帮助 😊</span>
                             </div>
                             <div style="margin-top: 8px; color: #aaa;">
@@ -64,6 +64,12 @@ marked.setOptions({
                                 <span
                                     style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">K</span>
                                 <span>开始语音 🎤</span>
+                            </div>
+                            <div style="margin-top: 8px; color: #aaa;">
+                                <span>按</span>
+                                <span
+                                    style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">Ctrl + V</span>
+                                <span>粘贴图片 🏞️</span>
                             </div>
 
                         </div>

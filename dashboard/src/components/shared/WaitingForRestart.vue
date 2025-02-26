@@ -4,17 +4,6 @@
             <v-card-title>正在等待 AstrBot 重启...</v-card-title>
             <v-card-text>
                 <v-progress-linear indeterminate color="primary"></v-progress-linear>
-                <div style="margin-top: 16px;">
-                    <div class="py-12 text-center" v-if="newStartTime != -1">
-                        <v-icon class="mb-6" color="success" icon="mdi-check-circle-outline" size="128"></v-icon>
-                        <p>重启成功！</p>
-                    </div>
-                    <small v-if="startTime != -1" style="display: block;">当前实例标识：{{ startTime }}</small>
-                    <small v-if="newStartTime != -1" style="display: block;">检查到新实例：{{ newStartTime }}，即将自动刷新页面</small>
-                    <small v-if="status" style="display: block;">{{ status }}</small>
-                    <small style="display: block;">尝试次数：{{ cnt }} / 60</small>
-                </div>
-
             </v-card-text>
         </v-card>
     </v-dialog>
@@ -73,11 +62,9 @@ export default {
             if (this.newStartTime !== this.startTime) {
                 this.newStartTime = newStartTime
                 console.log('wfr: restarted')
-                setTimeout(() => {
-                    this.visible = false
-                    // reload 
-                    window.location.reload()
-                }, 2000)
+                this.visible = false
+                // reload 
+                window.location.reload()
             }
             return this.newStartTime
         }

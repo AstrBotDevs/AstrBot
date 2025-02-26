@@ -146,6 +146,7 @@ class Main(star.Star):
         try:
             docker = aiodocker.Docker()
             await docker.version()
+            await docker.close()
             return True
         except BaseException as e:
             logger.info(f"检查 Docker 可用性: {e}")
@@ -309,6 +310,7 @@ class Main(star.Star):
             
             # 启动容器
             docker = aiodocker.Docker()
+            
             
             # 检查有没有image
             image_name = await self.get_image_name()

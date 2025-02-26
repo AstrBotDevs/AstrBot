@@ -1,5 +1,6 @@
 import os
 import uuid
+import base64
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image
@@ -31,6 +32,11 @@ class WebChatMessageEvent(AstrMessageEvent):
                     with open(path, "wb") as f:
                         with open(ph, "rb") as f2:
                             f.write(f2.read())
+                elif comp.file.startswith("base64://"):
+                    base64_str = comp.file[9:]
+                    image_data = base64.b64decode(base64_str)
+                    with open(path, "wb") as f:
+                        f.write(image_data)
                 elif comp.file and comp.file.startswith("http"):
                     await download_image_by_url(comp.file, path=path)
                 else:

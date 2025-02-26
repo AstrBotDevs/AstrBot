@@ -181,8 +181,8 @@ class ChatRoute(Route):
                     self.db.update_conversation(username, cid, history=json.dumps(history))
                     
                     await asyncio.sleep(0.5)
-            except BaseException as e:
-                logger.debug(f"用户 {username} 断开聊天长连接: {str(e)}。")
+            except BaseException as _:
+                logger.debug(f"用户 {username} 断开聊天长连接。")
                 self.curr_chat_sse.pop(username)
                 return
 

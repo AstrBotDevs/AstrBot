@@ -1,6 +1,7 @@
 pydantic~=2.10.3
 aiohttp
 openai
+anthropic
 qq-botpy
 chardet~=5.1.0
 Pillow
@@ -8,7 +9,6 @@ beautifulsoup4
 googlesearch-python
 readability-lxml
 quart
-psutil
 lxml_html_clean
 colorlog
 aiocqhttp
@@ -17,7 +17,10 @@ apscheduler
 docstring_parser
 aiodocker
 silk-python
-
+psutil>=5.8.0
 lark-oapi
 ormsgpack
 cryptography
+dashscope
+python-telegram-bot
+wechatpy

@@ -83,9 +83,6 @@ AstrBot 指令:
 /tool ls: 函数工具
 /key: API Key(op)
 /websearch: 网页搜索
-
-[其他]
-/set 变量名 值: 为会话定义变量(Dify 工作流输入)
 {notice}"""
 
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
@@ -788,6 +785,14 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                 yield event.plain_result("已登出 gewechat，请重启 AstrBot")
                 return
             
+                
+    @filter.command("gewe_code")
+    async def gewe_code(self, event: AstrMessageEvent, code: str):
+        '''保存 gewechat 验证码'''
+        with open("data/temp/gewe_code", "w", encoding='utf-8') as f:
+            f.write(code)
+        yield event.plain_result("验证码已保存。")
+            
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         '''群聊记忆增强'''
@@ -963,10 +968,6 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     # def kdb(self):
     #     pass
 
-    # @kdb.command("off")
-    # async def off_kdb(self, event: AstrMessageEvent):
-    #     self.kdb_enabled = False
-    #     yield event.plain_result("知识库已关闭")
         
     # @filter.on_llm_request()
     # async def on_llm_response(self, event: AstrMessageEvent, req: ProviderRequest):
