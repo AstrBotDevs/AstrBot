@@ -219,7 +219,7 @@ class ProviderManager():
             
             self.inst_map[provider_config['id']] = inst
         except Exception as e:
-            traceback.print_exc()
+            logger.error(traceback.format_exc())
             logger.error(f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}")
 
     async def reload(self, provider_config: dict):

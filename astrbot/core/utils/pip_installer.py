@@ -1,6 +1,7 @@
 import logging
 from pip import main as pip_main
 
+logger = logging.getLogger("astrbot")
 class PipInstaller():
     def __init__(self, pip_install_arg: str):
         self.pip_install_arg = pip_install_arg
@@ -20,7 +21,7 @@ class PipInstaller():
         if self.pip_install_arg:
             args.extend(self.pip_install_arg.split())
             
-        print(f"Pip 包管理器: {' '.join(args)}")
+        logger.info(f"Pip 包管理器: pip {' '.join(args)}")
         
         result_code = pip_main(args)
         

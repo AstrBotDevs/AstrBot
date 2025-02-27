@@ -588,7 +588,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "id": "sensevoice",
                         "type": "sensevoice_stt_selfhost",
-                        "stt_model": "icc/SenseVoiceSmall",
+                        "stt_model": "iic/SenseVoiceSmall",
                         "is_emotion": False,
                     },
                     "OpenAI_TTS(API)": {
