@@ -27,6 +27,9 @@ class PipelineScheduler():
                         logger.debug(f"阶段 {stage.__class__ .__name__} 已终止事件传播。")
                         break
                     await self._process_stages(event, i + 1)
+                    if event.is_stopped():
+                        logger.debug(f"阶段 {stage.__class__ .__name__} 已终止事件传播。")
+                        break
             else:
                 await coro
 

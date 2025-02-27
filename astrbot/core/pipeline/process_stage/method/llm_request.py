@@ -75,6 +75,10 @@ class LLMRequestSubStage(Stage):
             except BaseException:
                 logger.error(traceback.format_exc())
                 
+            if event.is_stopped():
+                logger.info(f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。")
+                return
+                
         if isinstance(req.contexts, str):
             req.contexts = json.loads(req.contexts)
         
@@ -92,6 +96,11 @@ class LLMRequestSubStage(Stage):
                     await handler.handler(event, llm_response)
                 except BaseException:
                     logger.error(traceback.format_exc())
+                    
+                if event.is_stopped():
+                    logger.info(f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。")
+                    return
+               
             
             # 保存到历史记录
             await self._save_to_history(event, req, llm_response)

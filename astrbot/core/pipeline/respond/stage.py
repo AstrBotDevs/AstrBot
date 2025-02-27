@@ -95,5 +95,9 @@ class RespondStage(Stage):
                 await handler.handler(event)
             except BaseException:
                 logger.error(traceback.format_exc())
+                
+            if event.is_stopped():
+                logger.info(f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。")
+                return
             
         event.clear_result()

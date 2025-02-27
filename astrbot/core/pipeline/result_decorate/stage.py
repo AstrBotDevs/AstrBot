@@ -70,6 +70,10 @@ class ResultDecorateStage(Stage):
                     logger.debug(f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name} 将消息结果清空。")
             except BaseException:
                 logger.error(traceback.format_exc())
+                
+            if event.is_stopped():
+                logger.info(f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。")
+                return
             
         # 需要再获取一次。插件可能直接对 chain 进行了替换。
         result = event.get_result()
