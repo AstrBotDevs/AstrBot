@@ -52,7 +52,7 @@ class ProviderEdgeTTS(TTSProvider):
             await communicate.save(mp3_path)
             
             # 使用ffmpeg将MP3转换为标准WAV格式
-            result = subprocess.run([
+            _ = subprocess.run([
                 "ffmpeg",
                 "-y",                   # 覆盖输出文件
                 "-i", mp3_path,         # 输入文件
