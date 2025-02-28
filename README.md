@@ -18,6 +18,7 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 ![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fstats&query=v&label=7%E6%97%A5%E6%B6%88%E6%81%AF%E4%B8%8A%E8%A1%8C%E9%87%8F&cacheSeconds=3600)
 [![codecov](https://codecov.io/gh/Soulter/AstrBot/graph/badge.svg?token=FF3P5967B8)](https://codecov.io/gh/Soulter/AstrBot)
 
+<a href="https://github.com/Soulter/AstrBot/blob/master/README_en.md">English</a> ｜
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://astrbot.app/">查看文档</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
