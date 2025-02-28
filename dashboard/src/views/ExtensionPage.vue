@@ -94,12 +94,15 @@ import { max } from 'date-fns';
 
           🧩 插件市场
 
-          <v-btn icon size="small" style="margin-left: 8px" variant="plain">
+          <v-btn icon size="small" style="margin-left: 8px" variant="plain" @click="jumpToPluginMarket()">
             <v-icon size="small">mdi-help</v-icon>
             <v-tooltip activator="parent" location="start">
-              如无法显示，请打开 <a href="https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json">链接</a> 复制想安装插件对应的
+              <span>
+                如无法显示，请单击此按钮跳转至插件市场，复制想安装插件对应的
               `repo`
               链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。
+            </span>
+              
             </v-tooltip>
           </v-btn>
 
@@ -390,6 +393,9 @@ export default {
     });
   },
   methods: {
+    jumpToPluginMarket() {
+      window.open('https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json', '_blank');
+    },
     toast(message, success) {
       this.snack_message = message;
       this.snack_show = true;
@@ -422,21 +428,34 @@ export default {
     },
 
     checkUpdate() {
-      // 遍历 extension_data 和 pluginMarketData，检查是否有更新\
-      for (let i = 0; i < this.extension_data.data.length; i++) {
-        for (let j = 0; j < this.pluginMarketData.length; j++) {
-          console.log(this.extension_data.data[i].repo, this.pluginMarketData[j].repo);
-          if (this.extension_data.data[i].repo === this.pluginMarketData[j].repo ||
-            this.extension_data.data[i].name === this.pluginMarketData[j].name) {
-            this.extension_data.data[i].online_version = this.pluginMarketData[j].version;
-            if (this.extension_data.data[i].version !== this.pluginMarketData[j].version && this.pluginMarketData[j].version !== "未知") {
-              this.extension_data.data[i].has_update = true;
-            } else {
-              this.extension_data.data[i].has_update = false;
-            }
-          }
+      // 创建在线插件的map
+      const onlinePluginsMap = new Map();
+      const onlinePluginsNameMap = new Map();
+      
+      // 将在线插件信息存储到map中
+      this.pluginMarketData.forEach(plugin => {
+        if (plugin.repo) {
+          onlinePluginsMap.set(plugin.repo.toLowerCase(), plugin);
         }
-      }
+        onlinePluginsNameMap.set(plugin.name, plugin);
+      });
+      
+      // 遍历本地插件列表
+      this.extension_data.data.forEach(extension => {
+        // 通过repo或name查找在线版本
+        const repoKey = extension.repo?.toLowerCase();
+        const onlinePlugin = repoKey ? onlinePluginsMap.get(repoKey) : null;
+        const onlinePluginByName = onlinePluginsNameMap.get(extension.name);
+        const matchedPlugin = onlinePlugin || onlinePluginByName;
+        
+        if (matchedPlugin) {
+          extension.online_version = matchedPlugin.version;
+          extension.has_update = extension.version !== matchedPlugin.version && 
+                                matchedPlugin.version !== "未知";
+        } else {
+          extension.has_update = false;
+        }
+      });
     },
 
     newExtension() {
@@ -613,15 +632,14 @@ export default {
       });
     },
     checkAlreadyInstalled() {
+      // 创建已安装插件的仓库和名称集合 统一格式
+      const installedRepos = new Set(this.extension_data.data.map(ext => ext.repo?.toLowerCase()));
+      const installedNames = new Set(this.extension_data.data.map(ext => ext.name));
+      
+      // 遍历检查安装状态
       for (let i = 0; i < this.pluginMarketData.length; i++) {
-        this.pluginMarketData[i].installed = false;
-      }
-      for (let i = 0; i < this.pluginMarketData.length; i++) {
-        for (let j = 0; j < this.extension_data.data.length; j++) {
-          if (this.pluginMarketData[i].repo === this.extension_data.data[j].repo || this.pluginMarketData[i].name === this.extension_data.data[j].name) {
-            this.pluginMarketData[i].installed = true;
-          }
-        }
+        const plugin = this.pluginMarketData[i];
+        plugin.installed = installedRepos.has(plugin.repo?.toLowerCase()) || installedNames.has(plugin.name);
       }
 
       // 将已安装的插件移动到最后面
