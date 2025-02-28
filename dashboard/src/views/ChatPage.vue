@@ -60,10 +60,10 @@ marked.setOptions({
                                 <span>获取帮助 😊</span>
                             </div>
                             <div style="margin-top: 8px; color: #aaa;">
-                                <span>按</span>
+                                <span>长按</span>
                                 <span
-                                    style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">K</span>
-                                <span>开始语音 🎤</span>
+                                    style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">Ctrl</span>
+                                <span>录制语音 🎤</span>
                             </div>
                             <div style="margin-top: 8px; color: #aaa;">
                                 <span>按</span>
@@ -112,7 +112,8 @@ marked.setOptions({
 
                             <v-text-field id="input-field" variant="outlined" v-model="prompt" :label="inputFieldLabel"
                                 placeholder="Start typing..." loading clear-icon="mdi-close-circle" clearable
-                                @click:clear="clearMessage" style="width: 100%; max-width: 850px;">
+                                @click:clear="clearMessage" style="width: 100%; max-width: 850px;"
+                                @keydown="handleInputKeyDown">
                                 <template v-slot:loader>
                                     <v-progress-linear :active="loadingChat" height="6"
                                         indeterminate></v-progress-linear>
@@ -189,7 +190,12 @@ export default {
             status: {},
             statusText: '',
             
-            eventSource: null
+            eventSource: null,
+            
+            // 添加Ctrl键长按相关变量
+            ctrlKeyDown: false,
+            ctrlKeyTimer: null,
+            ctrlKeyLongPressThreshold: 300 // 长按阈值，单位毫秒
         }
     },
 
@@ -205,11 +211,9 @@ export default {
                 this.sendMessage();
             }
         }.bind(this));
-        document.addEventListener('keydown', function (e) {
-            if (e.keyCode == 75) {
-                this.isRecording ? this.stopRecording() : this.startRecording();
-            }
-        }.bind(this));
+        
+        // 添加keyup事件监听
+        document.addEventListener('keyup', this.handleInputKeyUp);
     },
 
     beforeUnmount() {
@@ -218,6 +222,9 @@ export default {
             this.eventSource.cancel();
             console.log('SSE连接已断开');
         }
+        
+        // 移除keyup事件监听
+        document.removeEventListener('keyup', this.handleInputKeyUp);
     },
 
     methods: {
@@ -531,7 +538,40 @@ export default {
                 const container = this.$refs.messageContainer;
                 container.scrollTop = container.scrollHeight;
             });
-        }
+        },
+
+        handleInputKeyDown(e) {
+            if (e.keyCode === 17) { // Ctrl键
+                // 防止重复触发
+                if (this.ctrlKeyDown) return;
+                
+                this.ctrlKeyDown = true;
+                
+                // 设置定时器识别长按
+                this.ctrlKeyTimer = setTimeout(() => {
+                    if (this.ctrlKeyDown && !this.isRecording) {
+                        this.startRecording();
+                    }
+                }, this.ctrlKeyLongPressThreshold);
+            }
+        },
+        
+        handleInputKeyUp(e) {
+            if (e.keyCode === 17) { // Ctrl键
+                this.ctrlKeyDown = false;
+                
+                // 清除定时器
+                if (this.ctrlKeyTimer) {
+                    clearTimeout(this.ctrlKeyTimer);
+                    this.ctrlKeyTimer = null;
+                }
+                
+                // 如果正在录音，停止录音
+                if (this.isRecording) {
+                    this.stopRecording();
+                }
+            }
+        },
     },
 }
 
