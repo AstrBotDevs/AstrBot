@@ -75,7 +75,7 @@ class AiocqhttpAdapter(Platform):
         else:
             abm.type = MessageType.FRIEND_MESSAGE
         if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = abm.sender.user_id + "_" + str(event.group_id)
+            abm.session_id = str(abm.sender.user_id) + "_" + str(event.group_id)
         abm.message_str = ''
         abm.message = []
         abm.timestamp = int(time.time())
