@@ -601,6 +601,13 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                     },
+                    "Edge_TTS": {
+                        "id": "edge_tts",
+                        "type": "edge_tts",
+                        "enable": False,
+                        "edge-tts-voice": "zh-CN-XiaoxiaoNeural",
+                        "timeout": 20,
+                    },
                     "FishAudio_TTS(API)": {
                         "id": "fishaudio_tts",
                         "type": "fishaudio_tts_api",
