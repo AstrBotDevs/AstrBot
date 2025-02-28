@@ -4,7 +4,6 @@ import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import axios from 'axios';
-import { max } from 'date-fns';
 
 </script>
 
@@ -141,7 +140,7 @@ import { max } from 'date-fns';
         </template>
         <template v-else>
           <v-row style="margin: 8px;">
-            <v-col cols="12" md="6" lg="3" v-for="plugin in pluginMarketData">
+            <v-col cols="12" md="6" lg="3" v-for="plugin in filteredPluginMarketData">
               <ExtensionCard :key="plugin.name" :title="plugin.name" :link="plugin.repo" style="margin-bottom: 4px;">
                 <div style="min-height: 130px; max-height: 130px; overflow: hidden;">
                   <p style="font-weight: bold;">By @{{ plugin.author }}</p>
@@ -378,6 +377,17 @@ export default {
       ],
       marketSearch: "",
       alreadyCheckUpdate: false
+    }
+  },
+  computed: {
+    filteredPluginMarketData() {
+      if (!this.marketSearch) {
+        return this.pluginMarketData;
+      }
+      const search = this.marketSearch.toLowerCase();
+      return this.pluginMarketData.filter(plugin => 
+        plugin.name.toLowerCase().includes(search)
+      );
     }
   },
   mounted() {
