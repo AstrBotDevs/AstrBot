@@ -154,6 +154,8 @@ class ProviderManager():
                     from .sources.openai_tts_api_source import ProviderOpenAITTSAPI as ProviderOpenAITTSAPI
                 case "edge_tts":
                     from .sources.edge_tts_source import ProviderEdgeTTS as ProviderEdgeTTS
+                case "gsvi_tts_api":
+                    from .sources.gsvi_tts_source import ProviderGSVITTS as ProviderGSVITTS
                 case "fishaudio_tts_api":
                     from .sources.fishaudio_tts_api_source import ProviderFishAudioTTSAPI as ProviderFishAudioTTSAPI
         except (ImportError, ModuleNotFoundError) as e:

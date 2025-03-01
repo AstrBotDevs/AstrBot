@@ -608,6 +608,15 @@ CONFIG_METADATA_2 = {
                         "edge-tts-voice": "zh-CN-XiaoxiaoNeural",
                         "timeout": 20,
                     },
+                    "GSVI_TTS(API)": {
+                        "id": "gsvi_tts",
+                        "type": "gsvi_tts_api",
+                        "api_base": "http://127.0.0.1/5000",
+                        "character": "",
+                        "emotion": "default",
+                        "enable": False,
+                        "timeout": 20,
+                    },
                     "FishAudio_TTS(API)": {
                         "id": "fishaudio_tts",
                         "type": "fishaudio_tts_api",
