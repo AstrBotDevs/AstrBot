@@ -80,17 +80,24 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 | WhatsApp   | 🚧    | 计划内 | - |
 | 小爱音响   | 🚧    | 计划内 | - |
 
-# 🦌 接下来的路线图
+## ⚡ 提供商支持情况
 
-> [!TIP]
-> 欢迎在 Issue 提出更多建议 <3
-
-- [ ] 完善并保证目前所有平台适配器的功能一致性
-- [ ] 优化插件接口
-- [ ] 默认支持更多 TTS 服务，如 GPT-Sovits
-- [ ] 完善“聊天增强”部分，支持持久化记忆
-- [ ] 规划 i18n
-
+| 名称    | 支持性 | 类型 | 备注 |
+| -------- | ------- | ------- | ------- |
+| OpenAI API | ✔    | 文本生成 | 同时也支持 DeepSeek、Google Gemini、GLM（智谱）、Moonshot（月之暗面）、阿里云百炼、硅基流动、xAI 等所有兼容 OpenAI API 的服务 |
+| Claude API | ✔    | 文本生成 |  |
+| Google Gemini API | ✔    | 文本生成 |  |
+| Dify | ✔    | LLMOps |  |
+| DashScope(阿里云百炼应用) | ✔    | LLMOps |  |
+| Ollama | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
+| LM Studio | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
+| LLMTuner | ✔    | 模型加载器 | 本地加载 lora 等微调模型 |
+| OneAPI | ✔    | LLM 分发系统 |  |
+| Whisper | ✔    | 语音转文本 | 支持 API、本地部署 |
+| SenseVoice | ✔    | 语音转文本 | 本地部署 |
+| OpenAI TTS API | ✔    | 文本转语音 |  |
+| Fishaudio | ✔    | 文本转语音 | GPT-Sovits 作者参与的项目 |
+| Edge-TTS | ✔    | 文本转语音 | Edge 浏览器的免费 TTS |
 
 ## ❤️ 贡献
 
