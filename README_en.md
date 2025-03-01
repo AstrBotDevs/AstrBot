@@ -13,7 +13,7 @@ _✨ Easy-to-use Multi-platform LLM Chatbot & Development Framework ✨_
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot)](https://github.com/Soulter/AstrBot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python">
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg"/></a>
-<img alt="Static Badge" src="https://img.shields.io/badge/QQ群-630166526-purple">
+<a  href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="Static Badge" src="https://img.shields.io/badge/QQ群-630166526-purple"></a>
 [![wakatime](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e.svg)](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e)
 ![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fstats&query=v&label=7%E6%97%A5%E6%B6%88%E6%81%AF%E4%B8%8A%E8%A1%8C%E9%87%8F&cacheSeconds=3600)
 [![codecov](https://codecov.io/gh/Soulter/AstrBot/graph/badge.svg?token=FF3P5967B8)](https://codecov.io/gh/Soulter/AstrBot)
@@ -74,6 +74,24 @@ See docs: [Source Code Deployment](https://astrbot.app/deploy/astrbot/cli.html)
 | Discord                                                        | 🚧      | Planned             | -                   |
 | WhatsApp                                                       | 🚧      | Planned             | -                   |
 | Xiaomi Speakers                                                | 🚧      | Planned             | -                   |
+
+## Provider Support Status
+
+| Name                      | Support | Type                   | Notes                                                                 |
+|---------------------------|---------|------------------------|-----------------------------------------------------------------------|
+| OpenAI API                | ✔       | Text Generation        | Supports all OpenAI API-compatible services including DeepSeek, Google Gemini, GLM, Moonshot, Alibaba Cloud Bailian, Silicon Flow, xAI, etc. |
+| Claude API                | ✔       | Text Generation        |                                                                       |
+| Google Gemini API         | ✔       | Text Generation        |                                                                       |
+| Dify                      | ✔       | LLMOps                 |                                                                       |
+| DashScope (Alibaba Cloud) | ✔       | LLMOps                 |                                                                       |
+| Ollama                    | ✔       | Model Loader           | Local deployment for open-source LLMs (DeepSeek, Llama, etc.)         |
+| LM Studio                 | ✔       | Model Loader           | Local deployment for open-source LLMs (DeepSeek, Llama, etc.)         |
+| LLMTuner                  | ✔       | Model Loader           | Local loading of fine-tuned models (e.g. LoRA)                        |
+| OneAPI                    | ✔       | LLM Distribution       |                                                                       |
+| Whisper                   | ✔       | Speech-to-Text         | Supports API and local deployment                                    |
+| SenseVoice                | ✔       | Speech-to-Text         | Local deployment                                                     |
+| OpenAI TTS API            | ✔       | Text-to-Speech         |                                                                       |
+| Fishaudio                 | ✔       | Text-to-Speech         | Project involving GPT-Sovits author                                  |
 
 # 🦌 Roadmap
 
