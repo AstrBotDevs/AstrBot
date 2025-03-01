@@ -17,6 +17,7 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.config.default import VERSION
 from .long_term_memory import LongTermMemory
 from astrbot.core import logger
+from astrbot.api.message_components import Plain, Image
 
 from typing import Union
 
@@ -796,7 +797,14 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         '''群聊记忆增强'''
-        if self.ltm:
+        
+        has_image_or_plain = False
+        for comp in event.message_obj.message:
+            if isinstance(comp, Plain) or isinstance(comp, Image):
+                has_image_or_plain = True
+                break
+        
+        if self.ltm and has_image_or_plain:
             need_active = await self.ltm.need_active_reply(event)
                         
             group_icl_enable = self.context.get_config()['provider_ltm_settings']['group_icl_enable']
