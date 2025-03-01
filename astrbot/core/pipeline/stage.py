@@ -51,13 +51,17 @@ class Stage(abc.ABC):
             ready_to_call = handler(event, ctx.plugin_manager.context, *args, **kwargs)
         
         if isinstance(ready_to_call, AsyncGenerator):
+            _has_yielded = False
             async for ret in ready_to_call:
                 # 如果处理函数是生成器，返回值只能是 MessageEventResult 或者 None（无返回值）
+                _has_yielded = True
                 if isinstance(ret, (MessageEventResult, CommandResult)):
                     event.set_result(ret)
                     yield
                 else:
                     yield ret
+            if not _has_yielded:
+                yield
         elif inspect.iscoroutine(ready_to_call):
             # 如果只是一个 coroutine
             ret = await ready_to_call
