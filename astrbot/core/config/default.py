@@ -602,6 +602,7 @@ CONFIG_METADATA_2 = {
                         "timeout": "20",
                     },
                     "Edge_TTS": {
+                        "edgetts_hint": "提示：使用这个服务前需要安装有 ffmpeg，并且可以直接在终端调用 ffmpeg 指令。",
                         "id": "edge_tts",
                         "type": "edge_tts",
                         "enable": False,
