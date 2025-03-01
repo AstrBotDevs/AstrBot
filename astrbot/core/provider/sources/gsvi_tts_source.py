@@ -16,12 +16,13 @@ class ProviderGSVITTS(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.api_base = provider_config.get("api_base", "http://127.0.0.1:5000")
+        if self.api_base.endswith("/"):
+            self.api_base = self.api_base[:-1]
         self.character = provider_config.get("character")
         self.emotion = provider_config.get("emotion")
-        self.format = provider_config.get("format")
 
     async def get_audio(self, text: str) -> str:
-        path = f'data/temp/gsvi_tts_{uuid.uuid4()}.{self.format or "wav"}'
+        path = f'data/temp/gsvi_tts_{uuid.uuid4()}.wav'
         params = {"text": text}
         
         if self.character:
