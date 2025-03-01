@@ -28,7 +28,7 @@ body:
 
   - type: textarea
     attributes:
-      label: AstrBot 版本与部署方式
+      label: AstrBot 版本、部署方式（如 Windows Docker Desktop 部署）、使用的提供商、使用的消息平台适配器
       description: >
         请提供您的 AstrBot 版本和部署方式。
       placeholder: >
@@ -53,9 +53,9 @@ body:
 
   - type: textarea
     attributes:
-      label: 额外信息
+      label: 报错日志
       description: >
-        任何额外信息，如报错日志、截图等。
+        如报错日志、截图等。请提供完整的 Debug 级别的日志，不要介意它很长！
       placeholder: >
         请提供完整的报错日志或截图。
     validations:
@@ -65,7 +65,7 @@ body:
     attributes:
       label: 你愿意提交 PR 吗？
       description: >
-        这绝对不是必需的，但我们很乐意在贡献过程中为您提供指导特别是如果你已经很好地理解了如何实现修复。
+        这不是必需的，但我们很乐意在贡献过程中为您提供指导特别是如果你已经很好地理解了如何实现修复。
       options:
         - label: 是的，我愿意提交 PR!
 
