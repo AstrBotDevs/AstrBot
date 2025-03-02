@@ -327,12 +327,23 @@ class AstrMessageEvent(abc.ABC):
         yield event.request_llm(prompt="hi")
         ```
         prompt: 提示词
+        
+        system_prompt: 系统提示词
+        
         session_id: 已经过时，留空即可
+        
         image_urls: 可以是 base64:// 或者 http:// 开头的图片链接，也可以是本地图片路径。
-        contexts: 当指定 contexts 时，将会使用 contexts 作为上下文。
+        
+        contexts: 当指定 contexts 时，将会使用 contexts 作为上下文。如果同时传入了 conversation，将会忽略 conversation。
+        
         func_tool_manager: 函数工具管理器，用于调用函数工具。用 self.context.get_llm_tool_manager() 获取。
+        
         conversation: 可选。如果指定，将在指定的对话中进行 LLM 请求。对话的人格会被用于 LLM 请求，并且结果将会被记录到对话中。
         '''
+        
+        if len(contexts) > 0 and conversation:
+            conversation = None
+        
         return ProviderRequest(
             prompt = prompt,
             session_id = session_id,
