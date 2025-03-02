@@ -26,6 +26,19 @@ class GewechatPlatformAdapter(Platform):
         self.settingss = platform_settings
         self.test_mode = os.environ.get('TEST_MODE', 'off') == 'on'
         self.client = None
+        
+        self.client = SimpleGewechatClient(
+            self.config['base_url'],
+            self.config['nickname'],
+            self.config['host'],
+            self.config['port'],
+            self._event_queue,
+        )
+        
+        async def on_event_received(abm: AstrBotMessage):
+            await self.handle_msg(abm)
+            
+        self.client.on_event_received = on_event_received
     
     @override
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
@@ -50,32 +63,17 @@ class GewechatPlatformAdapter(Platform):
     async def terminate(self):
         self.client.stop = True
         await asyncio.sleep(1)
-
-    @override
-    def run(self):
-        self.client = SimpleGewechatClient(
-            self.config['base_url'],
-            self.config['nickname'],
-            self.config['host'],
-            self.config['port'],
-            self._event_queue,
-        )
-        
-        async def on_event_received(abm: AstrBotMessage):
-            await self.handle_msg(abm)
-            
-        self.client.on_event_received = on_event_received
-        
-        return self._run()
     
     async def logout(self):
         await self.client.logout()
+        
+    @override
+    def run(self):
+        return self._run()
     
     async def _run(self):
         await self.client.login()
-        
         await self.client.start_polling()
-        
     
     async def handle_msg(self, message: AstrBotMessage):
         if message.type == MessageType.GROUP_MESSAGE:
@@ -91,3 +89,6 @@ class GewechatPlatformAdapter(Platform):
         )
         
         self.commit_event(message_event)
+        
+    def get_client(self):
+        return self.client

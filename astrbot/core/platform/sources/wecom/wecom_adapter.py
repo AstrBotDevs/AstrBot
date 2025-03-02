@@ -116,20 +116,7 @@ class WecomPlatformAdapter(Platform):
             
         if not self.api_base_url.endswith("/"):
             self.api_base_url += "/"
-        
-    @override
-    async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
-        await super().send_by_session(session, message_chain)
-
-    @override
-    def meta(self) -> PlatformMetadata:
-        return PlatformMetadata(
-            "wecom",
-            "wecom 适配器",
-        )
-
-    @override
-    async def run(self):
+            
         self.server = WecomServer(
             self._event_queue,
             self.config
@@ -145,7 +132,21 @@ class WecomPlatformAdapter(Platform):
             await self.convert_message(msg)
             
         self.server.callback = callback
+
         
+    @override
+    async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
+        await super().send_by_session(session, message_chain)
+
+    @override
+    def meta(self) -> PlatformMetadata:
+        return PlatformMetadata(
+            "wecom",
+            "wecom 适配器",
+        )
+
+    @override
+    async def run(self):
         await self.server.start_polling()
         
     async def convert_message(self, msg):
@@ -228,3 +229,6 @@ class WecomPlatformAdapter(Platform):
             client=self.client
         )
         self.commit_event(message_event)
+        
+    def get_client(self):
+        return self.client

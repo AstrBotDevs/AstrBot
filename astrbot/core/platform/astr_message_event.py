@@ -33,17 +33,17 @@ class AstrMessageEvent(abc.ABC):
         self.message_str = message_str
         '''纯文本的消息'''
         self.message_obj = message_obj
-        '''消息对象，AstrBotMessage。带有完整的消息结构。'''
+        '''消息对象, AstrBotMessage。带有完整的消息结构。'''
         self.platform_meta = platform_meta
         '''消息平台的信息, 其中 name 是平台的类型，如 aiocqhttp'''
         self.session_id = session_id
         '''用户的会话 ID。可以直接使用下面的 unified_msg_origin'''
         self.role = "member"
         '''用户是否是管理员。如果是管理员，这里是 admin'''
-        self.is_wake = False # 是否通过 WakingStage
-        '''是否唤醒'''
+        self.is_wake = False
+        '''是否唤醒(是否通过 WakingStage)'''
         self.is_at_or_wake_command = False
-        '''是否是 At 机器人或者带有唤醒词或者是私聊（事件监听器会让 is_wake 设为 True，但是不会让这个属性置为 True）'''
+        '''是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)'''
         self._extras = {}
         self.session = MessageSesion(
             platform_name=platform_meta.name,
@@ -56,7 +56,7 @@ class AstrMessageEvent(abc.ABC):
         '''消息事件的结果'''
         
         self._has_send_oper = False 
-        '''是否有过至少一次发送操作'''
+        '''在此次事件中是否有过至少一次发送消息的操作'''
         self.call_llm = False
         '''是否在此消息事件中禁止默认的 LLM 请求'''
         

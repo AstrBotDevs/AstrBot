@@ -320,7 +320,7 @@ class SimpleGewechatClient():
                     logger.info(f"使用验证码: {code}")
                     try:
                         os.remove("data/temp/gewe_code")
-                    except:
+                    except Exception:
                         logger.warning("删除验证码文件 data/temp/gewe_code 失败。")
 
             async with aiohttp.ClientSession() as session:

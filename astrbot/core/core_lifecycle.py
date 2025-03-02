@@ -19,6 +19,9 @@ from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 from astrbot.core.conversation_mgr import ConversationManager
+from astrbot.core.star.star_handler import star_handlers_registry, EventType
+from astrbot.core.star.star_handler import star_map
+
 class AstrBotCoreLifecycle:
     def __init__(self, log_broker: LogBroker, db: BaseDatabase):
         self.log_broker = log_broker
@@ -103,6 +106,15 @@ class AstrBotCoreLifecycle:
     async def start(self):
         self._load()
         logger.info("AstrBot 启动完成。")
+        
+        # 执行启动完成事件钩子
+        handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnAstrBotLoadedEvent)
+        for handler in handlers:
+            try:
+                logger.info(f"hook(on_astrbot_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}")
+                await handler.handler()
+            except BaseException:
+                logger.error(traceback.format_exc())
         
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
         

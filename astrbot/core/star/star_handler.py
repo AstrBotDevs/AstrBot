@@ -77,6 +77,8 @@ class EventType(enum.Enum):
     
     用于对 Handler 的职能分组。
     '''
+    OnAstrBotLoadedEvent = enum.auto() # AstrBot 加载完成
+    
     AdapterMessageEvent = enum.auto() # 收到适配器发来的消息
     OnLLMRequestEvent = enum.auto() # 收到 LLM 请求（可以是用户也可以是插件）
     OnLLMResponseEvent = enum.auto() # LLM 响应后

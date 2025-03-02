@@ -28,6 +28,17 @@ class TelegramPlatformAdapter(Platform):
         self.config = platform_config
         self.settings = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
+        
+        base_url = self.config.get("telegram_api_base_url", "https://api.telegram.org/bot")
+        if not base_url:
+            base_url = "https://api.telegram.org/bot"
+        self.application = ApplicationBuilder().token(self.config['telegram_token']).base_url(base_url).build()
+        message_handler = TelegramMessageHandler(
+            filters=filters.ALL,  # receive all messages
+            callback=self.convert_message
+        )
+        self.application.add_handler(message_handler)
+        self.client = self.application.bot
     
     @override
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
@@ -44,22 +55,10 @@ class TelegramPlatformAdapter(Platform):
 
     @override
     async def run(self):
-        base_url = self.config.get("telegram_api_base_url", "https://api.telegram.org/bot")
-        if not base_url:
-            base_url = "https://api.telegram.org/bot"
-        
-        self.application = ApplicationBuilder().token(self.config['telegram_token']).base_url(base_url).build()
-        message_handler = TelegramMessageHandler(
-            filters=filters.ALL,  # receive all messages
-            callback=self.convert_message
-        )
-        self.application.add_handler(message_handler)
         await self.application.initialize()
         await self.application.start()
         queue = self.application.updater.start_polling()
-        self.client = self.application.bot
         logger.info("Telegram Platform Adapter is running.")
-
         await queue
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -126,3 +125,6 @@ class TelegramPlatformAdapter(Platform):
             client=self.client
         )
         self.commit_event(message_event)
+        
+    async def get_client(self):
+        return self.client

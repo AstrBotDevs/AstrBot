@@ -205,6 +205,15 @@ def register_permission_type(permission_type: PermissionType, raise_error: bool 
 
     return decorator
 
+def register_on_astrbot_loaded(**kwargs):
+    '''当 AstrBot 加载完成时
+    '''
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnAstrBotLoadedEvent, **kwargs)
+        return awaitable
+    
+    return decorator
+
 def register_on_llm_request(**kwargs):
     '''当有 LLM 请求时的事件
     

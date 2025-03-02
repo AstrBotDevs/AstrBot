@@ -34,6 +34,36 @@ class AiocqhttpAdapter(Platform):
         
         self.stop = False
         
+        self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp', api_timeout_sec=180)
+        
+        @self.bot.on_request()
+        async def request(event: Event):
+            abm = await self.convert_message(event)
+            if abm:
+                await self.handle_msg(abm)
+        
+        @self.bot.on_notice()
+        async def notice(event: Event):
+            abm = await self.convert_message(event)
+            if abm:
+                await self.handle_msg(abm)
+        
+        @self.bot.on_message('group')
+        async def group(event: Event):
+            abm = await self.convert_message(event)
+            if abm:
+                await self.handle_msg(abm)
+        
+        @self.bot.on_message('private')
+        async def private(event: Event):
+            abm = await self.convert_message(event)
+            if abm:
+                await self.handle_msg(abm)
+                
+        @self.bot.on_websocket_connection
+        def on_websocket_connection(_):
+            logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
+        
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
         ret = await AiocqhttpMessageEvent._parse_onebot_json(message_chain)
         match session.message_type.value:
@@ -112,7 +142,6 @@ class AiocqhttpAdapter(Platform):
                 abm.message.append(Poke(qq=str(event['target_id']), type='poke')) # noqa: F405
                 
         return abm
-    
     
     async def _convert_handle_message_event(self, event: Event) -> AstrBotMessage:
         '''OneBot V11 消息类事件'''
@@ -202,44 +231,14 @@ class AiocqhttpAdapter(Platform):
             logger.warning("aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://0.0.0.0:6199")
             self.host = "0.0.0.0"
             self.port = 6199
-            
-        self.bot = CQHttp(use_ws_reverse=True, import_name='aiocqhttp', api_timeout_sec=180)
         
-        @self.bot.on_request()
-        async def request(event: Event):
-            abm = await self.convert_message(event)
-            if abm:
-                await self.handle_msg(abm)
-        
-        @self.bot.on_notice()
-        async def notice(event: Event):
-            abm = await self.convert_message(event)
-            if abm:
-                await self.handle_msg(abm)
-        
-        @self.bot.on_message('group')
-        async def group(event: Event):
-            abm = await self.convert_message(event)
-            if abm:
-                await self.handle_msg(abm)
-        
-        @self.bot.on_message('private')
-        async def private(event: Event):
-            abm = await self.convert_message(event)
-            if abm:
-                await self.handle_msg(abm)
-                
-        @self.bot.on_websocket_connection
-        def on_websocket_connection(_):
-            logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
-        
-        bot = self.bot.run_task(host=self.host, port=int(self.port), shutdown_trigger=self.shutdown_trigger_placeholder)
+        coro = self.bot.run_task(host=self.host, port=int(self.port), shutdown_trigger=self.shutdown_trigger_placeholder)
         
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
         logging.getLogger('aiocqhttp').setLevel(logging.ERROR)
         
-        return bot
+        return coro
     
     async def terminate(self):
         self.stop = True
@@ -264,3 +263,6 @@ class AiocqhttpAdapter(Platform):
         )
         
         self.commit_event(message_event)
+
+    async def get_client(self):
+        return self.bot

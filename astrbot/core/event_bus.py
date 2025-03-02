@@ -10,7 +10,6 @@ class EventBus:
         self.pipeline_scheduler = pipeline_scheduler
 
     async def dispatch(self):
-        logger.info("事件总线已打开。")
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
             self._print_event(event)

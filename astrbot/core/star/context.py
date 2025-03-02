@@ -9,6 +9,7 @@ from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.platform import Platform
 from astrbot.core.platform.manager import PlatformManager
 from .star import star_registry, StarMetadata, star_map
 from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
@@ -17,6 +18,8 @@ from .filter.regex import RegexFilter
 from typing import Awaitable
 from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 from astrbot.core.conversation_mgr import ConversationManager
+from astrbot.core.star.filter.platform_adapter_type import PlatformAdapterType, ADAPTER_NAME_2_TYPE
+
 
 class Context:
     '''
@@ -169,9 +172,21 @@ class Context:
         '''
         return self._event_queue
     
+    def get_platform(self, platform_type: Union[PlatformAdapterType, str]) -> Platform:
+        '''
+        获取指定类型的平台适配器。
+        '''
+        for platform in self.platform_manager.platform_insts:
+            if isinstance(platform_type, str):
+                if platform.meta().name == platform_type:
+                    return platform
+            else:
+                if platform.meta().name == ADAPTER_NAME_2_TYPE[platform_type]:
+                    return platform
+    
     async def send_message(self, session: Union[str, MessageSesion], message_chain: MessageChain) -> bool:
         '''
-        根据 session(unified_msg_origin) 发送消息。
+        根据 session(unified_msg_origin) 主动发送消息。
         
         @param session: 消息会话。通过 event.session 或者 event.unified_msg_origin 获取。
         @param message_chain: 消息链。
@@ -179,6 +194,8 @@ class Context:
         @return: 是否找到匹配的平台。
         
         当 session 为字符串时，会尝试解析为 MessageSesion 对象，如果解析失败，会抛出 ValueError 异常。
+        
+        NOTE: qq_official(QQ 官方 API 平台) 不支持此方法
         '''
         
         if isinstance(session, str):
@@ -192,7 +209,7 @@ class Context:
                 await platform.send_by_session(session, message_chain)
                 return True
         return False
-
+    
     '''
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。
     '''
@@ -224,7 +241,6 @@ class Context:
         '''删除一个函数调用工具。如果再要启用，需要重新注册。'''
         self.provider_manager.llm_tools.remove_func(name)
         
-
     def register_commands(self, star_name: str, command_name: str, desc: str, priority: int, awaitable: Awaitable, use_regex=False, ignore_prefix=False):
         '''
         注册一个命令。

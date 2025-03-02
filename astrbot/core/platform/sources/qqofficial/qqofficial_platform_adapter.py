@@ -180,3 +180,6 @@ class QQOfficialPlatformAdapter(Platform):
             appid=self.appid,
             secret=self.secret
         )
+        
+    def get_client(self):
+        return self.client

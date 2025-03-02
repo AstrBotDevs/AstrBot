@@ -1,17 +1,14 @@
 import base64
-import time
 import asyncio
 import json
 import re
 
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, MessageType, PlatformMetadata
 from astrbot.api.event import MessageChain
-from typing import Union, List
 from astrbot.api.message_components import Image, Plain, At
 from astrbot.core.platform.astr_message_event import MessageSesion
 from .lark_event import LarkMessageEvent
 from ...register import register_platform_adapter
-from astrbot.core.message.components import BaseMessageComponent
 from astrbot import logger
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
@@ -91,7 +88,7 @@ class LarkPlatformAdapter(Platform):
         if message.message_type == 'text':
             message_str_raw = content_json_b['text'] # 带有 @ 的消息
             at_pattern = r"(@_user_\d+)"  # 可以根据需求修改正则
-            at_users = re.findall(at_pattern, message_str_raw)
+            # at_users = re.findall(at_pattern, message_str_raw)
             # 拆分文本，去掉AT符号部分
             parts = re.split(at_pattern, message_str_raw)
             for i in range(len(parts)):
@@ -173,3 +170,5 @@ class LarkPlatformAdapter(Platform):
         # self.client.start()
         await self.client._connect()
         
+    async def get_client(self):
+        return self.client
