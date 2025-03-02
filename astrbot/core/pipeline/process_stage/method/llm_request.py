@@ -116,6 +116,7 @@ class LLMRequestSubStage(Stage):
             elif llm_response.role == 'tool':
                 # function calling
                 function_calling_result = {}
+                logger.info(f"触发 {len(llm_response.tools_call_name)} 个函数调用: {llm_response.tools_call_name}")
                 for func_tool_name, func_tool_args in zip(llm_response.tools_call_name, llm_response.tools_call_args):
                     func_tool = req.func_tool.get_func(func_tool_name)
                     logger.info(f"调用工具函数：{func_tool_name}，参数：{func_tool_args}")

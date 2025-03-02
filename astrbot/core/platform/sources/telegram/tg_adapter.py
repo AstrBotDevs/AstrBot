@@ -102,13 +102,13 @@ class TelegramPlatformAdapter(Platform):
             message.message = [Record(file=file.file_path, url=file.file_path),]
             
         elif update.message.photo:
-            for photo in update.message.photo:
-                file = await photo.get_file()
-                message.message.append(Image(file=file.file_path, url=file.file_path))
+            photo = update.message.photo[-1] # get the largest photo
+            file = await photo.get_file()
+            message.message.append(Image(file=file.file_path, url=file.file_path))
             
         elif update.message.document:
             file = await update.message.document.get_file()
-            message.message = [AstrBotFile(file=file.file_path, name="file"),]
+            message.message = [AstrBotFile(file=file.file_path, name=update.message.document.file_name),]
         
         elif update.message.video:
             file = await update.message.video.get_file()
