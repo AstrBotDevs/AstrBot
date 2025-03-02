@@ -194,3 +194,8 @@ class Main(star.Star):
         '''The callback function of the reminder.'''
         logger.info(f"Reminder Activated: {d['text']}, created by {unified_msg_origin}")
         await self.context.send_message(unified_msg_origin, MessageEventResult().message("待办提醒: \n\n" + d['text'] + "\n时间: " + d.get("datetime", "") + d.get("cron_h", "")))
+        
+    async def terminate(self):
+        self.scheduler.shutdown()
+        await self._save_data()
+        logger.info("Reminder plugin terminated.")

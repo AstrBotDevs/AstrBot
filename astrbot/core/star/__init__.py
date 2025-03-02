@@ -17,3 +17,15 @@ class Star(CommandParserMixin):
     async def html_render(self, tmpl: str, data: dict, return_url = True) -> str:
         '''渲染 HTML'''
         return await html_renderer.render_custom_template(tmpl, data, return_url=return_url)
+    
+    async def terminate(self):
+        '''当插件被禁用、重载插件时会调用这个方法'''
+        pass
+    
+__all__ = [
+    'Star',
+    'StarMetadata',
+    'PluginManager',
+    'Context',
+    'Provider'
+]

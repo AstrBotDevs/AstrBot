@@ -980,19 +980,3 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             found_command.event_filters.insert(0, PermissionTypeFilter(filter.PermissionType.ADMIN if cmd_type == "admin" else filter.PermissionType.MEMBER))
 
         yield event.plain_result(f"已将 {cmd_name} 设置为 {cmd_type} 指令")
-
-    # @filter.command_group("kdb")
-    # def kdb(self):
-    #     pass
-
-        
-    # @filter.on_llm_request()
-    # async def on_llm_response(self, event: AstrMessageEvent, req: ProviderRequest):
-    #     curr_kdb_name = self.context.provider_manager.curr_kdb_name
-    #     if self.kdb_enabled and curr_kdb_name:
-    #         mgr = self.context.knowledge_db_manager
-    #         results = await mgr.retrive_records(curr_kdb_name, req.prompt)
-    #         if results:
-    #             req.system_prompt += "\nHere are documents that related to user's query: \n"
-    #             for result in results:
-    #                 req.system_prompt += f"- {result}\n"7
