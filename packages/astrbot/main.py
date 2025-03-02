@@ -565,7 +565,11 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.command("switch")
     async def switch_conv(self, message: AstrMessageEvent, index: int = None):
         '''通过 /ls 前面的序号切换对话'''
-        
+
+        if type(index) != int:
+            message.set_result(MessageEventResult().message("类型错误，请输入数字对话序号。"))
+            return
+
         provider = self.context.get_using_provider()
         if provider and provider.meta().type == 'dify':
             assert isinstance(provider, ProviderDify)
