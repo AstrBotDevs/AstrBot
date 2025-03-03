@@ -81,7 +81,12 @@ class SimpleGewechatClient:
                 self.headers = {"X-GEWE-TOKEN": self.token}
 
     async def _convert(self, data: dict) -> AstrBotMessage:
-        type_name = data["TypeName"]
+        if "TypeName" in data:
+            type_name = data["TypeName"]
+        elif "type_name" in data:
+            type_name = data["type_name"]
+        else:
+            raise Exception("无法识别的消息类型")
         if type_name == "Offline":
             logger.critical("收到 gewechat 下线通知。")
             return
