@@ -351,6 +351,7 @@ export default {
                         proxy: localStorage.getItem('selectedGitHubProxy') || ""
                     }).then((res) => {
                         this.loading_ = false;
+                        this.toast(res.data.message, res.data.status === "ok" ? "success" : "error");
                         if (res.data.status === "error") {
                             this.onLoadingDialogResult(2, res.data.message, -1);
                             return;
@@ -362,9 +363,9 @@ export default {
                         this.$refs.wfr.check();
                     }).catch((err) => {
                         this.loading_ = false;
+                        this.toast("安装插件失败: " + err, "error");
                         this.onLoadingDialogResult(2, err, -1);
                     });
-
             }
         },
         checkAlreadyInstalled() {

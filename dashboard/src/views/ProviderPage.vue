@@ -22,7 +22,7 @@
             </v-menu>
             <v-row style="margin-top: 16px;">
                 <v-col v-for="(provider, index) in config_data['provider']" :key="index" cols="12" md="6" lg="3">
-                    <v-card class="fade-in" style="margin-bottom: 16px; min-height: 200px; display: flex; justify-content: space-between; flex-direction: column;">
+                    <v-card class="fade-in" style="margin-bottom: 16px; min-height: 250px; max-height: 250px; display: flex; justify-content: space-between; flex-direction: column;">
                         <v-card-title class="d-flex justify-space-between align-center">
                             <span class="text-h4">{{ provider.id }}</span>
                             <v-switch color="primary" hide-details density="compact" v-model="provider['enable']"
