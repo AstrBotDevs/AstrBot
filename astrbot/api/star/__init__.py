@@ -9,8 +9,4 @@ __all__ = [
     "register",
     "Context",
     "Star",
-    "DEFAULT_CONFIG",
-    "VERSION",
-    "DB_PATH",
-    "AstrBotConfig",
 ]

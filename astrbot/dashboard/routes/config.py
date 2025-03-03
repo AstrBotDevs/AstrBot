@@ -36,7 +36,7 @@ def validate_config(
             value = data[key]
             # null 转换
             if value is None:
-                data[key] = DEFAULT_VALUE_MAP(meta["type"])
+                data[key] = DEFAULT_VALUE_MAP[meta["type"]]
                 continue
             # 递归验证
             if meta["type"] == "list" and isinstance(value, list):
