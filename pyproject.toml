@@ -1,0 +1,6 @@
+[tool.ruff]
+lint.ignore = ["F403", "F405"]
+exclude = [
+    "astrbot/core/utils/t2i/local_strategy.py",
+    "astrbot/api/all.py"
+]

@@ -1,8 +1,7 @@
-import json
 import os
 from llmtuner.chat import ChatModel
 from typing import List
-from .. import Provider, Personality
+from .. import Provider
 from ..entites import LLMResponse
 from ..func_tool_manager import FuncCall
 from astrbot.core.db import BaseDatabase
@@ -22,7 +21,11 @@ class LLMTunerModelLoader(Provider):
         default_persona=None,
     ) -> None:
         super().__init__(
-            provider_config, provider_settings, persistant_history, db_helper, default_persona
+            provider_config,
+            provider_settings,
+            persistant_history,
+            db_helper,
+            default_persona,
         )
         if not os.path.exists(provider_config["base_model_path"]) or not os.path.exists(
             provider_config["adapter_model_path"]
@@ -70,10 +73,10 @@ class LLMTunerModelLoader(Provider):
         for idx, context in enumerate(query_context):
             if context["role"] == "system":
                 system_idxs.append(idx)
-                
-            if '_no_save' in context:
-                del context['_no_save']
-            
+
+            if "_no_save" in context:
+                del context["_no_save"]
+
         for idx in reversed(system_idxs):
             system_prompt += " " + query_context.pop(idx)["content"]
 
@@ -84,12 +87,12 @@ class LLMTunerModelLoader(Provider):
         if func_tool:
             tool_list = func_tool.get_func_desc_openai_style()
             if tool_list:
-                conf['tools'] = tool_list
+                conf["tools"] = tool_list
 
         responses = await self.model.achat(**conf)
 
         llm_response = LLMResponse("assistant", responses[-1].response_text)
-                
+
         return llm_response
 
     async def get_current_key(self):

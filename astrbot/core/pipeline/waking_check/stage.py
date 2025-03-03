@@ -3,11 +3,11 @@ from ..context import PipelineContext
 from typing import Union, AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
-from astrbot.core.message.components import At, Reply
+from astrbot.core.message.components import At
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
-from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
+
 
 @register_stage
 class WakingCheckStage(Stage):
@@ -77,10 +77,12 @@ class WakingCheckStage(Stage):
         # 检查插件的 handler filter
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
-        
-        for handler in star_handlers_registry.get_handlers_by_event_type(EventType.AdapterMessageEvent):
+
+        for handler in star_handlers_registry.get_handlers_by_event_type(
+            EventType.AdapterMessageEvent
+        ):
             # filter 需满足 AND 逻辑关系
-            passed = True            
+            passed = True
             permission_not_pass = False
             if len(handler.event_filters) == 0:
                 continue
@@ -106,10 +108,14 @@ class WakingCheckStage(Stage):
             if passed:
                 if permission_not_pass:
                     if self.no_permission_reply:
-                        await event.send(MessageChain().message(f"ID {event.get_sender_id()} 权限不足。通过 /sid 获取 ID 并请管理员添加。"))
+                        await event.send(
+                            MessageChain().message(
+                                f"ID {event.get_sender_id()} 权限不足。通过 /sid 获取 ID 并请管理员添加。"
+                            )
+                        )
                     event.stop_event()
                     return
-                
+
                 is_wake = True
                 event.is_wake = True
 
@@ -118,7 +124,7 @@ class WakingCheckStage(Stage):
                     handlers_parsed_params[handler.handler_full_name] = event.get_extra(
                         "parsed_params"
                     )
-                    
+
             event.clear_extra()
 
         event.set_extra("activated_handlers", activated_handlers)

@@ -34,20 +34,20 @@ class DifyAPIClient:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(f"chat_messages 请求失败：{resp.status}. {text}")
-            
+
             buffer = ""
             while True:
                 # 保持原有的8192字节限制，防止数据过大导致高水位报错
                 chunk = await resp.content.read(8192)
                 if not chunk:
                     break
-                    
-                buffer += chunk.decode('utf-8')
-                blocks = buffer.split('\n\n')
-                
+
+                buffer += chunk.decode("utf-8")
+                blocks = buffer.split("\n\n")
+
                 # 处理完整的数据块
                 for block in blocks[:-1]:
-                    if block.strip() and block.startswith('data:'):
+                    if block.strip() and block.startswith("data:"):
                         try:
                             json_str = block[5:]  # 移除 "data:" 前缀
                             json_obj = json.loads(json_str)
@@ -55,7 +55,7 @@ class DifyAPIClient:
                         except json.JSONDecodeError as e:
                             logger.error(f"JSON解析错误: {str(e)}")
                             logger.error(f"原始数据块: {json_str}")
-                
+
                 # 保留最后一个可能不完整的块
                 buffer = blocks[-1] if blocks else ""
 
@@ -78,20 +78,20 @@ class DifyAPIClient:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(f"workflow_run 请求失败：{resp.status}. {text}")
-            
+
             buffer = ""
             while True:
                 # 保持原有的8192字节限制，防止数据过大导致高水位报错
                 chunk = await resp.content.read(8192)
                 if not chunk:
                     break
-                    
-                buffer += chunk.decode('utf-8')
-                blocks = buffer.split('\n\n')
-                
+
+                buffer += chunk.decode("utf-8")
+                blocks = buffer.split("\n\n")
+
                 # 处理完整的数据块
                 for block in blocks[:-1]:
-                    if block.strip() and block.startswith('data:'):
+                    if block.strip() and block.startswith("data:"):
                         try:
                             json_str = block[5:]  # 移除 "data:" 前缀
                             json_obj = json.loads(json_str)
@@ -99,7 +99,7 @@ class DifyAPIClient:
                         except json.JSONDecodeError as e:
                             logger.error(f"JSON解析错误: {str(e)}")
                             logger.error(f"原始数据块: {json_str}")
-                
+
                 # 保留最后一个可能不完整的块
                 buffer = blocks[-1] if blocks else ""
 
@@ -113,51 +113,33 @@ class DifyAPIClient:
             "user": user,
             "file": open(file_path, "rb"),
         }
-        async with self.session.post(
-            url, data=payload, headers=self.headers
-        ) as resp:
-            return await resp.json() # {"id": "xxx", ...}
-                
+        async with self.session.post(url, data=payload, headers=self.headers) as resp:
+            return await resp.json()  # {"id": "xxx", ...}
+
     async def close(self):
         await self.session.close()
-        
-    async def get_chat_convs(
-        self,
-        user: str,
-        limit: int = 20
-    ):
+
+    async def get_chat_convs(self, user: str, limit: int = 20):
         # conversations. GET
         url = f"{self.api_base}/conversations"
         payload = {
             "user": user,
             "limit": limit,
         }
-        async with self.session.get(
-            url, params=payload, headers=self.headers
-        ) as resp:
+        async with self.session.get(url, params=payload, headers=self.headers) as resp:
             return await resp.json()
-        
-    async def delete_chat_conv(
-        self,
-        user: str,
-        conversation_id: str
-    ):
+
+    async def delete_chat_conv(self, user: str, conversation_id: str):
         # conversation. DELETE
         url = f"{self.api_base}/conversations/{conversation_id}"
         payload = {
             "user": user,
         }
-        async with self.session.delete(
-            url, json=payload, headers=self.headers
-        ) as resp:
+        async with self.session.delete(url, json=payload, headers=self.headers) as resp:
             return await resp.json()
-        
+
     async def rename(
-        self,
-        conversation_id: str,
-        name: str,
-        user: str,
-        auto_generate: bool = False
+        self, conversation_id: str, name: str, user: str, auto_generate: bool = False
     ):
         # /conversations/:conversation_id/name
         url = f"{self.api_base}/conversations/{conversation_id}/name"
@@ -166,8 +148,5 @@ class DifyAPIClient:
             "name": name,
             "auto_generate": auto_generate,
         }
-        async with self.session.post(
-            url, json=payload, headers=self.headers
-        ) as resp:
+        async with self.session.post(url, json=payload, headers=self.headers) as resp:
             return await resp.json()
-        

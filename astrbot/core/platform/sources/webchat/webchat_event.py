@@ -7,19 +7,20 @@ from astrbot.api.message_components import Plain, Image
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core import web_chat_back_queue
 
+
 class WebChatMessageEvent(AstrMessageEvent):
     def __init__(self, message_str, message_obj, platform_meta, session_id):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.imgs_dir = "data/webchat/imgs"
-        os.makedirs(self.imgs_dir, exist_ok=True)        
+        os.makedirs(self.imgs_dir, exist_ok=True)
 
     async def send(self, message: MessageChain):
         if not message:
             web_chat_back_queue.put_nowait(None)
             return
-        
+
         cid = self.session_id.split("!")[-1]
-        
+
         for comp in message.chain:
             if isinstance(comp, Plain):
                 web_chat_back_queue.put_nowait((comp.text, cid))

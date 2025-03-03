@@ -12,26 +12,31 @@ from typing import Union
 
 from PIL import Image
 
+
 def on_error(func, path, exc_info):
-    '''
+    """
     a callback of the rmtree function.
-    '''
+    """
     print(f"remove {path} failed.")
     import stat
+
     if not os.access(path, os.W_OK):
         os.chmod(path, stat.S_IWUSR)
         func(path)
     else:
         raise
-    
+
+
 def remove_dir(file_path) -> bool:
-    if not os.path.exists(file_path): return True
+    if not os.path.exists(file_path):
+        return True
     try:
         shutil.rmtree(file_path, onerror=on_error)
         return True
     except BaseException:
         return False
-    
+
+
 def port_checker(port: int, host: str = "localhost"):
     sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sk.settimeout(1)
@@ -42,7 +47,7 @@ def port_checker(port: int, host: str = "localhost"):
     except Exception:
         sk.close()
         return False
-    
+
 
 def save_temp_img(img: Union[Image.Image, str]) -> str:
     os.makedirs("data/temp", exist_ok=True)
@@ -52,7 +57,7 @@ def save_temp_img(img: Union[Image.Image, str]) -> str:
             path = os.path.join("data/temp", f)
             if os.path.isfile(path):
                 ctime = os.path.getctime(path)
-                if time.time() - ctime > 3600*12:
+                if time.time() - ctime > 3600 * 12:
                     os.remove(path)
     except Exception as e:
         print(f"清除临时文件失败: {e}")
@@ -68,10 +73,13 @@ def save_temp_img(img: Union[Image.Image, str]) -> str:
             f.write(img)
     return p
 
-async def download_image_by_url(url: str, post: bool = False, post_data: dict = None, path = None) -> str:
-    '''
+
+async def download_image_by_url(
+    url: str, post: bool = False, post_data: dict = None, path=None
+) -> str:
+    """
     下载图片, 返回 path
-    '''
+    """
     try:
         async with aiohttp.ClientSession(trust_env=True) as session:
             if post:
@@ -93,7 +101,7 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
     except aiohttp.client.ClientConnectorSSLError:
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()
-        ssl_context.set_ciphers('DEFAULT')
+        ssl_context.set_ciphers("DEFAULT")
         async with aiohttp.ClientSession() as session:
             if post:
                 async with session.get(url, ssl=ssl_context) as resp:
@@ -103,22 +111,23 @@ async def download_image_by_url(url: str, post: bool = False, post_data: dict = 
                     return save_temp_img(await resp.read())
     except Exception as e:
         raise e
-    
+
+
 async def download_file(url: str, path: str, show_progress: bool = False):
-    '''
+    """
     从指定 url 下载文件到指定路径 path
-    '''
+    """
     try:
         async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.get(url, timeout=1800) as resp:
                 if resp.status != 200:
                     raise Exception(f"下载文件失败: {resp.status}")
-                total_size = int(resp.headers.get('content-length', 0))
+                total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
                     print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
-                with open(path, 'wb') as f:
+                with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
                         if not chunk:
@@ -128,19 +137,22 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                         if show_progress:
                             elapsed_time = time.time() - start_time
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s", end='')
+                            print(
+                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
+                                end="",
+                            )
     except aiohttp.client.ClientConnectorSSLError:
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()
-        ssl_context.set_ciphers('DEFAULT')
+        ssl_context.set_ciphers("DEFAULT")
         async with aiohttp.ClientSession() as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
-                total_size = int(resp.headers.get('content-length', 0))
+                total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
                     print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
-                with open(path, 'wb') as f:
+                with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
                         if not chunk:
@@ -150,11 +162,14 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                         if show_progress:
                             elapsed_time = time.time() - start_time
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s", end='')
+                            print(
+                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
+                                end="",
+                            )
     if show_progress:
         print()
-    
-    
+
+
 def file_to_base64(file_path: str) -> str:
     with open(file_path, "rb") as f:
         data_bytes = f.read()
@@ -165,13 +180,14 @@ def file_to_base64(file_path: str) -> str:
 def get_local_ip_addresses():
     net_interfaces = psutil.net_if_addrs()
     network_ips = []
-    
+
     for interface, addrs in net_interfaces.items():
         for addr in addrs:
             if addr.family == socket.AF_INET:  # 使用 socket.AF_INET 代替 psutil.AF_INET
                 network_ips.append(addr.address)
-    
+
     return network_ips
+
 
 async def get_dashboard_version():
     if os.path.exists("data/dist"):
@@ -181,14 +197,21 @@ async def get_dashboard_version():
                 return v
     return None
 
+
 async def download_dashboard():
-    '''下载管理面板文件'''
+    """下载管理面板文件"""
     dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
     try:
-        await download_file(dashboard_release_url, "data/dashboard.zip", show_progress=True)
+        await download_file(
+            dashboard_release_url, "data/dashboard.zip", show_progress=True
+        )
     except BaseException as _:
-        dashboard_release_url = "https://github.com/Soulter/AstrBot/releases/latest/download/dist.zip"
-        await download_file(dashboard_release_url, "data/dashboard.zip", show_progress=True)
+        dashboard_release_url = (
+            "https://github.com/Soulter/AstrBot/releases/latest/download/dist.zip"
+        )
+        await download_file(
+            dashboard_release_url, "data/dashboard.zip", show_progress=True
+        )
     print("解压管理面板文件中...")
     with zipfile.ZipFile("data/dashboard.zip", "r") as z:
         z.extractall("data")
