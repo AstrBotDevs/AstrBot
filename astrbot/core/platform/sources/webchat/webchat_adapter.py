@@ -3,16 +3,16 @@ import asyncio
 import uuid
 import os
 from typing import Awaitable, Any
-from astrbot.api.platform import (
+from astrbot.core.platform import (
     Platform,
     AstrBotMessage,
     MessageMember,
     MessageType,
     PlatformMetadata,
 )
-from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image, Record  # noqa: F403
-from astrbot.api import logger
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.message.components import Plain, Image, Record  # noqa: F403
+from astrbot import logger
 from astrbot.core import web_chat_queue, web_chat_back_queue
 from .webchat_event import WebChatMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
