@@ -2,6 +2,7 @@ from . import ContentSafetyStrategy
 from typing import List, Tuple
 from astrbot import logger
 
+
 class StrategySelector:
     def __init__(self, config: dict) -> None:
         self.enabled_strategies: List[ContentSafetyStrategy] = []

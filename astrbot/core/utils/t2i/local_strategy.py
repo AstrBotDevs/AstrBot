@@ -6,14 +6,22 @@ from . import RenderStrategy
 from PIL import ImageFont, Image, ImageDraw
 from astrbot.core.utils.io import save_temp_img
 
-class LocalRenderStrategy(RenderStrategy):
 
-    async def render_custom_template(self, tmpl_str: str, tmpl_data: dict, return_url: bool=True) -> str:
+class LocalRenderStrategy(RenderStrategy):
+    async def render_custom_template(
+        self, tmpl_str: str, tmpl_data: dict, return_url: bool = True
+    ) -> str:
         raise NotImplementedError
-    
+
     def get_font(self, size: int) -> ImageFont.FreeTypeFont:
         # common and default fonts on Windows, macOS and Linux
-        fonts = ["msyh.ttc", "NotoSansCJK-Regular.ttc", "msyhbd.ttc", "PingFang.ttc", "Heiti.ttc"]
+        fonts = [
+            "msyh.ttc",
+            "NotoSansCJK-Regular.ttc",
+            "msyhbd.ttc",
+            "PingFang.ttc",
+            "Heiti.ttc",
+        ]
         for font in fonts:
             try:
                 font = ImageFont.truetype(font, size)
@@ -21,13 +29,13 @@ class LocalRenderStrategy(RenderStrategy):
             except Exception:
                 pass
 
-    async def render(self, text: str, return_url: bool=False) -> str:
+    async def render(self, text: str, return_url: bool = False) -> str:
         font_size = 26
         image_width = 800
         image_height = 600
         font_color = (0, 0, 0)
         bg_color = (255, 255, 255)
-        
+
         HEADER_MARGIN = 20
         HEADER_FONT_STANDARD_SIZE = 42
 
@@ -71,7 +79,7 @@ class LocalRenderStrategy(RenderStrategy):
         images: Image = {}
 
         # pre_process, get height of each line
-        pre_lines = text.split('\n')
+        pre_lines = text.split("\n")
         height = 0
         pre_in_code = False
         i = -1
@@ -90,12 +98,21 @@ class LocalRenderStrategy(RenderStrategy):
                     # 最大不得超过image_width的50%
                     img_height = image_res.size[1]
 
-                    if image_res.size[0] > image_width*0.5:
+                    if image_res.size[0] > image_width * 0.5:
                         image_res = image_res.resize(
-                            (int(image_width*0.5), int(image_res.size[1]*image_width*0.5/image_res.size[0])))
+                            (
+                                int(image_width * 0.5),
+                                int(
+                                    image_res.size[1]
+                                    * image_width
+                                    * 0.5
+                                    / image_res.size[0]
+                                ),
+                            )
+                        )
                         img_height = image_res.size[1]
 
-                    height += img_height + IMAGE_MARGIN*2
+                    height += img_height + IMAGE_MARGIN * 2
 
                     line = re.sub(IMAGE_REGEX, "", line)
                 except Exception as e:
@@ -135,11 +152,13 @@ class LocalRenderStrategy(RenderStrategy):
                 continue
             if line.startswith("#"):
                 header_level = line.count("#")
-                height += HEADER_FONT_STANDARD_SIZE + HEADER_MARGIN*2 - header_level * 4
+                height += (
+                    HEADER_FONT_STANDARD_SIZE + HEADER_MARGIN * 2 - header_level * 4
+                )
             elif line.startswith("-"):
-                height += font_size+LIST_MARGIN*2
+                height += font_size + LIST_MARGIN * 2
             elif line.startswith(">"):
-                height += font_size+QUOTE_LEFT_LINE_MARGIN*2
+                height += font_size + QUOTE_LEFT_LINE_MARGIN * 2
             elif line.startswith("```"):
                 if pre_in_code:
                     pre_in_code = False
@@ -149,18 +168,20 @@ class LocalRenderStrategy(RenderStrategy):
                     pre_in_code = True
                     height += CODE_BLOCK_MARGIN
             elif re.search(r"`(.*?)`", line):
-                height += font_size+INLINE_CODE_FONT_MARGIN*2+INLINE_CODE_MARGIN*2
+                height += (
+                    font_size + INLINE_CODE_FONT_MARGIN * 2 + INLINE_CODE_MARGIN * 2
+                )
             else:
-                height += font_size + TEXT_LINE_MARGIN*2
+                height += font_size + TEXT_LINE_MARGIN * 2
 
-        text = '\n'.join(pre_lines)
+        text = "\n".join(pre_lines)
         image_height = height
         if image_height < 100:
             image_height = 100
         image_width += 20
 
         # 创建空白图像
-        image = Image.new('RGB', (image_width, image_height), bg_color)
+        image = Image.new("RGB", (image_width, image_height), bg_color)
         draw = ImageDraw.Draw(image)
 
         # 设置初始位置
@@ -192,19 +213,34 @@ class LocalRenderStrategy(RenderStrategy):
                 y += HEADER_MARGIN  # 上边距
                 # 字间距
                 draw.text((x, y), line, font=font, fill=font_color)
-                draw.line((x, y + font_size_header + 8, image_width - 10,
-                        y + font_size_header + 8), fill=(230, 230, 230), width=3)
+                draw.line(
+                    (
+                        x,
+                        y + font_size_header + 8,
+                        image_width - 10,
+                        y + font_size_header + 8,
+                    ),
+                    fill=(230, 230, 230),
+                    width=3,
+                )
                 y += font_size_header + HEADER_MARGIN
 
             elif line.startswith(">"):
                 # 处理引用
                 quote_text = line.strip(">")
                 y += QUOTE_LEFT_LINE_MARGIN
-                draw.line((x, y, x, y + QUOTE_LEFT_LINE_HEIGHT),
-                        fill=QUOTE_LEFT_LINE_COLOR, width=QUOTE_LEFT_LINE_WIDTH)
+                draw.line(
+                    (x, y, x, y + QUOTE_LEFT_LINE_HEIGHT),
+                    fill=QUOTE_LEFT_LINE_COLOR,
+                    width=QUOTE_LEFT_LINE_WIDTH,
+                )
                 font = self.get_font(QUOTE_FONT_SIZE)
-                draw.text((x + QUOTE_FONT_LINE_MARGIN, y + QUOTE_FONT_LINE_MARGIN),
-                        quote_text, font=font, fill=QUOTE_FONT_COLOR)
+                draw.text(
+                    (x + QUOTE_FONT_LINE_MARGIN, y + QUOTE_FONT_LINE_MARGIN),
+                    quote_text,
+                    font=font,
+                    fill=QUOTE_FONT_COLOR,
+                )
                 y += font_size + QUOTE_LEFT_LINE_HEIGHT + QUOTE_LEFT_LINE_MARGIN
 
             elif line.startswith("-"):
@@ -212,24 +248,41 @@ class LocalRenderStrategy(RenderStrategy):
                 list_text = line.strip("-").strip()
                 font = self.get_font(LIST_FONT_SIZE)
                 y += LIST_MARGIN
-                draw.text((x, y), "  ·  " + list_text,
-                        font=font, fill=LIST_FONT_COLOR)
+                draw.text((x, y), "  ·  " + list_text, font=font, fill=LIST_FONT_COLOR)
                 y += font_size + LIST_MARGIN
 
             elif line.startswith("```"):
                 if not in_code_block:
-                    code_block_start_y = y+CODE_BLOCK_MARGIN
+                    code_block_start_y = y + CODE_BLOCK_MARGIN
                     in_code_block = True
                 else:
                     # print(code_block_codes)
                     in_code_block = False
                     codes = "\n".join(code_block_codes)
                     code_block_codes = []
-                    draw.rounded_rectangle((x, code_block_start_y, image_width - 10, y+CODE_BLOCK_CODES_MARGIN_VERTICAL +
-                                        CODE_BLOCK_TEXT_MARGIN), radius=5, fill=CODE_BLOCK_BG_COLOR, width=2)
+                    draw.rounded_rectangle(
+                        (
+                            x,
+                            code_block_start_y,
+                            image_width - 10,
+                            y
+                            + CODE_BLOCK_CODES_MARGIN_VERTICAL
+                            + CODE_BLOCK_TEXT_MARGIN,
+                        ),
+                        radius=5,
+                        fill=CODE_BLOCK_BG_COLOR,
+                        width=2,
+                    )
                     font = self.get_font(CODE_BLOCK_FONT_SIZE)
-                    draw.text((x + CODE_BLOCK_CODES_MARGIN_HORIZONTAL, code_block_start_y +
-                            CODE_BLOCK_CODES_MARGIN_VERTICAL), codes, font=font, fill=font_color)
+                    draw.text(
+                        (
+                            x + CODE_BLOCK_CODES_MARGIN_HORIZONTAL,
+                            code_block_start_y + CODE_BLOCK_CODES_MARGIN_VERTICAL,
+                        ),
+                        codes,
+                        font=font,
+                        fill=font_color,
+                    )
                     y += CODE_BLOCK_CODES_MARGIN_VERTICAL + CODE_BLOCK_MARGIN
             # y += font_size+10
             elif re.search(r"`(.*?)`", line):
@@ -244,16 +297,21 @@ class LocalRenderStrategy(RenderStrategy):
                     if part in parts_inline:
                         font = self.get_font(INLINE_CODE_FONT_SIZE)
                         code_text = part.strip("`")
-                        code_width = font.getsize(
-                            code_text)[0] + INLINE_CODE_FONT_MARGIN*2
+                        code_width = (
+                            font.getsize(code_text)[0] + INLINE_CODE_FONT_MARGIN * 2
+                        )
                         x += INLINE_CODE_MARGIN
-                        code_box = (x, y, x + code_width,
-                                    y + INLINE_CODE_BG_HEIGHT)
+                        code_box = (x, y, x + code_width, y + INLINE_CODE_BG_HEIGHT)
                         draw.rounded_rectangle(
-                            code_box, radius=5, fill=INLINE_CODE_BG_COLOR, width=2)  # 使用灰色填充矩形框作为引用背景
-                        draw.text((x+INLINE_CODE_FONT_MARGIN, y),
-                                code_text, font=font, fill=font_color)
-                        x += code_width+INLINE_CODE_MARGIN-INLINE_CODE_FONT_MARGIN
+                            code_box, radius=5, fill=INLINE_CODE_BG_COLOR, width=2
+                        )  # 使用灰色填充矩形框作为引用背景
+                        draw.text(
+                            (x + INLINE_CODE_FONT_MARGIN, y),
+                            code_text,
+                            font=font,
+                            fill=font_color,
+                        )
+                        x += code_width + INLINE_CODE_MARGIN - INLINE_CODE_FONT_MARGIN
                     else:
                         font = self.get_font(font_size)
                         draw.text((x, y), part, font=font, fill=font_color)
@@ -269,15 +327,24 @@ class LocalRenderStrategy(RenderStrategy):
                     font = self.get_font(font_size)
 
                     draw.text((x, y), line, font=font, fill=font_color)
-                    y += font_size + TEXT_LINE_MARGIN*2
+                    y += font_size + TEXT_LINE_MARGIN * 2
 
             # 图片特殊处理
             if index in images:
                 image_res = images[index]
                 # 最大不得超过image_width的50%
-                if image_res.size[0] > image_width*0.5:
+                if image_res.size[0] > image_width * 0.5:
                     image_res = image_res.resize(
-                        (int(image_width*0.5), int(image_res.size[1]*image_width*0.5/image_res.size[0])))
+                        (
+                            int(image_width * 0.5),
+                            int(
+                                image_res.size[1]
+                                * image_width
+                                * 0.5
+                                / image_res.size[0]
+                            ),
+                        )
+                    )
                 image.paste(image_res, (IMAGE_MARGIN, y))
-                y += image_res.size[1] + IMAGE_MARGIN*2
+                y += image_res.size[1] + IMAGE_MARGIN * 2
         return save_temp_img(image)

@@ -1,0 +1,21 @@
+[tool.ruff]
+exclude = [
+  "astrbot/core/utils/t2i/local_strategy.py",
+  "astrbot/api/all.py",
+]
+line-length = 88
+lint.ignore = [
+    "F403", 
+    "F405", 
+    "E501",
+    "ASYNC230" # TODO: handle ASYNC230 in AstrBot
+]
+lint.select = [
+  "F", # Pyflakes
+  "W", # pycodestyle warnings
+  "E", # pycodestyle errors
+  "ASYNC", # flake8-async
+  "C4", # flake8-comprehensions
+  "Q", # flake8-quotes
+]
+target-version = "py310"

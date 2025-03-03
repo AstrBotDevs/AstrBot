@@ -10,8 +10,9 @@ from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image, Record, At, File
 from .client import SimpleGewechatClient
 
+
 def get_wav_duration(file_path):
-    with wave.open(file_path, 'rb') as wav_file:
+    with wave.open(file_path, "rb") as wav_file:
         file_size = os.path.getsize(file_path)
         n_channels, sampwidth, framerate, n_frames = wav_file.getparams()[:4]
         if n_frames == 2147483647:
@@ -22,30 +23,30 @@ def get_wav_duration(file_path):
             duration = n_frames / float(framerate)
         return duration
 
+
 class GewechatPlatformEvent(AstrMessageEvent):
     def __init__(
-            self, 
-            message_str: str, 
-            message_obj: AstrBotMessage, 
-            platform_meta: PlatformMetadata, 
-            session_id: str,
-            client: SimpleGewechatClient
-        ):
+        self,
+        message_str: str,
+        message_obj: AstrBotMessage,
+        platform_meta: PlatformMetadata,
+        session_id: str,
+        client: SimpleGewechatClient,
+    ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
-        
+
     @staticmethod
     async def send_with_client(message: MessageChain, user_name: str):
         pass
-                
-        
+
     async def send(self, message: MessageChain):
-        to_wxid = self.message_obj.raw_message.get('to_wxid', None)
-        
+        to_wxid = self.message_obj.raw_message.get("to_wxid", None)
+
         if not to_wxid:
             logger.error("无法获取到 to_wxid。")
             return
-        
+
         #  检查@
         ats = []
         ats_names = []
@@ -54,7 +55,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 ats.append(comp.qq)
                 ats_names.append(comp.name)
         has_at = False
-        
+
         for comp in message.chain:
             if isinstance(comp, Plain):
                 text = comp.text
@@ -70,7 +71,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     payload["ats"] = ats
                     has_at = True
                 await self.client.post_text(**payload)
-                
+
             elif isinstance(comp, Image):
                 img_url = comp.file
                 img_path = ""
@@ -80,9 +81,9 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     img_path = await download_image_by_url(comp.file)
                 else:
                     img_path = img_url
-                    
+
                 # 检查 record_path 是否在 data/temp 目录中, record_path 可能是绝对路径
-                temp_directory = os.path.abspath('data/temp')
+                temp_directory = os.path.abspath("data/temp")
                 img_path = os.path.abspath(img_path)
                 if os.path.commonpath([temp_directory, img_path]) != temp_directory:
                     with open(img_path, "rb") as f:
@@ -96,27 +97,29 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 # 默认已经存在 data/temp 中
                 record_url = comp.file
                 record_path = ""
-                
+
                 if record_url.startswith("file:///"):
                     record_path = record_url[8:]
                 elif record_url.startswith("http"):
                     await download_file(record_url, f"data/temp/{uuid.uuid4()}.wav")
                 else:
                     record_path = record_url
-                    
+
                 silk_path = f"data/temp/{uuid.uuid4()}.silk"
                 try:
                     duration = await wav_to_tencent_silk(record_path, silk_path)
                 except Exception as e:
                     logger.error(traceback.format_exc())
-                    await self.send(MessageChain().message(f"语音文件转换失败。{str(e)}"))
+                    await self.send(
+                        MessageChain().message(f"语音文件转换失败。{str(e)}")
+                    )
                 logger.info("Silk 语音文件格式转换至: " + record_path)
                 if duration == 0:
                     duration = get_wav_duration(record_path)
                 file_id = os.path.basename(silk_path)
                 record_url = f"{self.client.file_server_url}/{file_id}"
                 logger.debug(f"gewe callback record url: {record_url}")
-                await self.client.post_voice(to_wxid, record_url, duration*1000)
+                await self.client.post_voice(to_wxid, record_url, duration * 1000)
             elif isinstance(comp, File):
                 file_path = comp.file
                 file_name = comp.name
@@ -126,14 +129,14 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     await download_file(file_path, f"data/temp/{file_name}")
                 else:
                     file_path = file_path
-                    
+
                 file_id = os.path.basename(file_path)
                 file_url = f"{self.client.file_server_url}/{file_id}"
                 logger.debug(f"gewe callback file url: {file_url}")
-                await self.client.post_file(to_wxid, file_url, file_id) 
+                await self.client.post_file(to_wxid, file_url, file_id)
             elif isinstance(comp, At):
                 pass
             else:
-                logger.debug(f"gewechat 忽略: {comp.type}")   
-        
+                logger.debug(f"gewechat 忽略: {comp.type}")
+
         await super().send(message)

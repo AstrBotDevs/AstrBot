@@ -3,15 +3,23 @@ from astrbot.api.platform import AstrBotMessage, PlatformMetadata, MessageType
 from astrbot.api.message_components import Plain, Image, Reply, At, File, Record
 from telegram.ext import ExtBot
 
+
 class TelegramPlatformEvent(AstrMessageEvent):
-    def __init__(self, message_str: str, message_obj: AstrBotMessage, platform_meta: PlatformMetadata, session_id: str, client: ExtBot):
+    def __init__(
+        self,
+        message_str: str,
+        message_obj: AstrBotMessage,
+        platform_meta: PlatformMetadata,
+        session_id: str,
+        client: ExtBot,
+    ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
-        
+
     @staticmethod
     async def send_with_client(client: ExtBot, message: MessageChain, user_name: str):
         image_path = None
-        
+
         has_reply = False
         reply_message_id = None
         at_user_id = None
@@ -21,7 +29,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 reply_message_id = i.id
             if isinstance(i, At):
                 at_user_id = i.name
-        
+
         at_flag = False
         for i in message.chain:
             payload = {
@@ -29,7 +37,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             }
             if has_reply:
                 payload["reply_to_message_id"] = reply_message_id
-            
+
             if isinstance(i, Plain):
                 if at_user_id and not at_flag:
                     i.text = f"@{at_user_id} " + i.text
@@ -43,6 +51,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
                 if image_path.startswith("base64://"):
                     import base64
+
                     base64_data = image_path[9:]
                     image_bytes = base64.b64decode(base64_data)
                     await client.send_photo(photo=image_bytes, **payload)
@@ -52,7 +61,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_document(document=i.file, filename=i.name, **payload)
             elif isinstance(i, Record):
                 await client.send_voice(voice=i.file, **payload)
-            
 
     async def send(self, message: MessageChain):
         if self.get_message_type() == MessageType.GROUP_MESSAGE:

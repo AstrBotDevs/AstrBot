@@ -14,10 +14,11 @@ class FuncTool:
     parameters: Dict
     description: str
     handler: Awaitable
-    handler_module_path: str = None # 必须要保留这个，handler 在初始化会被 functools.partial 包装，导致 handler 的 __module__ 为 functools
+    handler_module_path: str = None  # 必须要保留这个，handler 在初始化会被 functools.partial 包装，导致 handler 的 __module__ 为 functools
 
     active: bool = True
-    '''是否激活'''
+    """是否激活"""
+
 
 SUPPORTED_TYPES = [
     "string",
@@ -101,7 +102,7 @@ class FuncCall:
                 }
             )
         return _l
-    
+
     def get_func_desc_anthropic_style(self) -> list:
         """
         获得 Anthropic API 风格的**已经激活**的工具描述
@@ -119,12 +120,12 @@ class FuncCall:
                     "type": "object",
                     "properties": f.parameters.get("properties", {}),
                     # Keep the required field from the original parameters if it exists
-                    "required": f.parameters.get("required", [])
-                }
+                    "required": f.parameters.get("required", []),
+                },
             }
             tools.append(tool)
         return tools
-    
+
     def get_func_desc_google_genai_style(self) -> Dict:
         declarations = {}
         tools = []
@@ -132,10 +133,7 @@ class FuncCall:
             if not f.active:
                 continue
 
-            func_declaration = {
-                "name": f.name,
-                "description": f.description
-            }
+            func_declaration = {"name": f.name, "description": f.description}
 
             # 检查并添加非空的properties参数
             params = f.parameters if isinstance(f.parameters, dict) else {}
@@ -147,7 +145,6 @@ class FuncCall:
         if tools:
             declarations["function_declarations"] = tools
         return declarations
-        
 
     async def func_call(self, question: str, session_id: str, provider) -> tuple:
         _l = []
@@ -220,9 +217,8 @@ class FuncCall:
                 tool_call_result.append(str(ret))
         return tool_call_result, True
 
-    
     def __str__(self):
         return str(self.func_list)
-    
+
     def __repr__(self):
         return str(self.func_list)

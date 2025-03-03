@@ -1,6 +1,7 @@
 import json
 import os
 
+
 class SharedPreferences:
     def __init__(self, path="data/shared_preferences.json"):
         self.path = path

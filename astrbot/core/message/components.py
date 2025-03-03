@@ -1,4 +1,4 @@
-'''
+"""
 MIT License
 
 Copyright (c) 2021 Lxns-Network
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-'''
+"""
 
 import base64
 import json
@@ -29,20 +29,21 @@ import typing as T
 from enum import Enum
 from pydantic.v1 import BaseModel
 
+
 class ComponentType(Enum):
-    Plain = "Plain" # 纯文本消息
-    Face = "Face" # QQ表情
-    Record = "Record" # 语音
-    Video = "Video" # 视频
-    At = "At" # At
-    Node = "Node" # 转发消息的一个节点
-    Nodes = "Nodes" # 转发消息的多个节点
-    Poke = "Poke" # QQ 戳一戳
-    Image = "Image" # 图片
-    Reply = "Reply" # 回复
-    Forward = "Forward" # 转发消息
-    File = "File" # 文件
-    
+    Plain = "Plain"  # 纯文本消息
+    Face = "Face"  # QQ表情
+    Record = "Record"  # 语音
+    Video = "Video"  # 视频
+    At = "At"  # At
+    Node = "Node"  # 转发消息的一个节点
+    Nodes = "Nodes"  # 转发消息的多个节点
+    Poke = "Poke"  # QQ 戳一戳
+    Image = "Image"  # 图片
+    Reply = "Reply"  # 回复
+    Forward = "Forward"  # 转发消息
+    File = "File"  # 文件
+
     RPS = "RPS"  # TODO
     Dice = "Dice"  # TODO
     Shake = "Shake"  # TODO
@@ -71,25 +72,26 @@ class BaseMessageComponent(BaseModel):
                 k = "type"
             if isinstance(v, bool):
                 v = 1 if v else 0
-            output += ",%s=%s" % (k, str(v).replace("&", "&amp;") \
-                                  .replace(",", "&#44;") \
-                                  .replace("[", "&#91;") \
-                                  .replace("]", "&#93;"))
+            output += ",%s=%s" % (
+                k,
+                str(v)
+                .replace("&", "&amp;")
+                .replace(",", "&#44;")
+                .replace("[", "&#91;")
+                .replace("]", "&#93;"),
+            )
         output += "]"
         return output
 
     def toDict(self):
-        data = dict()
+        data = {}
         for k, v in self.__dict__.items():
             if k == "type" or v is None:
                 continue
             if k == "_type":
                 k = "type"
             data[k] = v
-        return {
-            "type": self.type.lower(),
-            "data": data
-        }
+        return {"type": self.type.lower(), "data": data}
 
 
 class Plain(BaseMessageComponent):
@@ -103,9 +105,9 @@ class Plain(BaseMessageComponent):
     def toString(self):  # 没有 [CQ:plain] 这种东西，所以直接导出纯文本
         if not self.convert:
             return self.text
-        return self.text.replace("&", "&amp;") \
-            .replace("[", "&#91;") \
-            .replace("]", "&#93;")
+        return (
+            self.text.replace("&", "&amp;").replace("[", "&#91;").replace("]", "&#93;")
+        )
 
 
 class Face(BaseMessageComponent):
@@ -274,7 +276,7 @@ class Image(BaseMessageComponent):
     c: T.Optional[int] = 2
     # 额外
     path: T.Optional[str] = ""
-    file_unique: T.Optional[str] = "" # 某些平台可能有图片缓存的唯一标识
+    file_unique: T.Optional[str] = ""  # 某些平台可能有图片缓存的唯一标识
 
     def __init__(self, file: T.Optional[str], **_):
         # for k in _.keys():
@@ -343,14 +345,16 @@ class Forward(BaseMessageComponent):
     def __init__(self, **_):
         super().__init__(**_)
 
+
 class Node(BaseMessageComponent):
-    '''群合并转发消息'''
+    """群合并转发消息"""
+
     type: ComponentType = "Node"
-    id: T.Optional[int] = 0 # 忽略
-    name: T.Optional[str] = "" # qq昵称
-    uin: T.Optional[int] = 0 # qq号
-    content: T.Optional[T.Union[str, list]] = "" # 子消息段列表
-    seq: T.Optional[T.Union[str, list]] = "" # 忽略
+    id: T.Optional[int] = 0  # 忽略
+    name: T.Optional[str] = ""  # qq昵称
+    uin: T.Optional[int] = 0  # qq号
+    content: T.Optional[T.Union[str, list]] = ""  # 子消息段列表
+    seq: T.Optional[T.Union[str, list]] = ""  # 忽略
     time: T.Optional[int] = 0
 
     def __init__(self, content: T.Union[str, list], **_):
@@ -364,25 +368,24 @@ class Node(BaseMessageComponent):
     def toString(self):
         # logger.warn("Protocol: node doesn't support stringify")
         return ""
-    
+
+
 class Nodes(BaseMessageComponent):
     type: ComponentType = "Nodes"
     nodes: T.List[Node]
-    
+
     def __init__(self, nodes: T.List[Node], **_):
         super().__init__(nodes=nodes, **_)
-        
+
     def toDict(self):
-        return {
-            "messages": [node.toDict() for node in self.nodes]
-        }
+        return {"messages": [node.toDict() for node in self.nodes]}
 
 
 class Xml(BaseMessageComponent):
     type: ComponentType = "Xml"
     data: str
     resid: T.Optional[int] = 0
- 
+
     def __init__(self, **_):
         super().__init__(**_)
 
@@ -432,14 +435,16 @@ class Unknown(BaseMessageComponent):
     def toString(self):
         return ""
 
+
 class File(BaseMessageComponent):
-    '''
+    """
     目前此消息段只适配了 Napcat。
-    '''
+    """
+
     type: ComponentType = "File"
-    name: T.Optional[str] = "" # 名字
-    file: T.Optional[str] = "" # url（本地路径）
-    
+    name: T.Optional[str] = ""  # 名字
+    file: T.Optional[str] = ""  # url（本地路径）
+
     def __init__(self, name: str, file: str):
         super().__init__(name=name, file=file)
 
@@ -471,5 +476,5 @@ ComponentTypes = {
     "cardimage": CardImage,
     "tts": TTS,
     "unknown": Unknown,
-    'file': File,
+    "file": File,
 }

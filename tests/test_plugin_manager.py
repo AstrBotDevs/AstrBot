@@ -16,24 +16,28 @@ db = SQLiteDatabase("data/data_v3.db")
 
 star_context = Context(event_queue, config, db)
 
+
 @pytest.fixture
 def plugin_manager_pm():
     return PluginManager(star_context, config)
+
 
 def test_plugin_manager_initialization(plugin_manager_pm: PluginManager):
     assert plugin_manager_pm is not None
     assert plugin_manager_pm.context is not None
     assert plugin_manager_pm.config is not None
 
+
 @pytest.mark.asyncio
 async def test_plugin_manager_reload(plugin_manager_pm: PluginManager):
     success, err_message = await plugin_manager_pm.reload()
     assert success is True
     assert err_message is None
-    
+
+
 @pytest.mark.asyncio
 async def test_plugin_crud(plugin_manager_pm: PluginManager):
-    '''测试插件安装和重载'''
+    """测试插件安装和重载"""
     os.makedirs("data/plugins", exist_ok=True)
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
     plugin_path = await plugin_manager_pm.install_plugin(test_repo)
@@ -44,19 +48,19 @@ async def test_plugin_crud(plugin_manager_pm: PluginManager):
             break
     assert plugin_path is not None
     assert os.path.exists(plugin_path)
-    assert exists is True, "插件 astrbot_plugin_essential 未成功载入" 
+    assert exists is True, "插件 astrbot_plugin_essential 未成功载入"
     # shutil.rmtree(plugin_path)
-    
+
     # install plugin which is not exists
     with pytest.raises(Exception):
         plugin_path = await plugin_manager_pm.install_plugin(test_repo + "haha")
-        
+
     # update
     await plugin_manager_pm.update_plugin("astrbot_plugin_essential")
-    
+
     with pytest.raises(Exception):
         await plugin_manager_pm.update_plugin("astrbot_plugin_essentialhaha")
-    
+
     # uninstall
     await plugin_manager_pm.uninstall_plugin("astrbot_plugin_essential")
     assert not os.path.exists(plugin_path)
@@ -72,7 +76,7 @@ async def test_plugin_crud(plugin_manager_pm: PluginManager):
             exists = True
             break
     assert exists is False, "插件 astrbot_plugin_essential 未成功卸载"
-    
+
     with pytest.raises(Exception):
         await plugin_manager_pm.uninstall_plugin("astrbot_plugin_essentialhaha")
 

@@ -8,39 +8,39 @@ from .context import PipelineContext
 from astrbot.core.message.message_event_result import MessageEventResult, CommandResult
 
 registered_stages: List[Stage] = []
-'''维护了所有已注册的 Stage 实现类'''
+"""维护了所有已注册的 Stage 实现类"""
+
 
 def register_stage(cls):
-    '''一个简单的装饰器，用于注册 pipeline 包下的 Stage 实现类
-    '''
+    """一个简单的装饰器，用于注册 pipeline 包下的 Stage 实现类"""
     registered_stages.append(cls())
     return cls
-    
+
+
 class Stage(abc.ABC):
-    '''描述一个 Pipeline 的某个阶段
-    '''
-    
+    """描述一个 Pipeline 的某个阶段"""
+
     @abc.abstractmethod
     async def initialize(self, ctx: PipelineContext) -> None:
-        '''初始化阶段
-        '''
+        """初始化阶段"""
         raise NotImplementedError
-    
+
     @abc.abstractmethod
-    async def process(self, event: AstrMessageEvent) -> Union[None, AsyncGenerator[None, None]]:
-        '''处理事件
-        '''
+    async def process(
+        self, event: AstrMessageEvent
+    ) -> Union[None, AsyncGenerator[None, None]]:
+        """处理事件"""
         raise NotImplementedError
-    
+
     async def _call_handler(
-        self, 
+        self,
         ctx: PipelineContext,
-        event: AstrMessageEvent, 
+        event: AstrMessageEvent,
         handler: Awaitable,
         *args,
         **kwargs,
     ) -> AsyncGenerator[None, None]:
-        '''调用 Handler。'''
+        """调用 Handler。"""
         # 判断 handler 是否是类方法（通过装饰器注册的没有 __self__ 属性）
         ready_to_call = None
         try:
@@ -49,7 +49,7 @@ class Stage(abc.ABC):
             # 向下兼容
             logger.debug(str(e))
             ready_to_call = handler(event, ctx.plugin_manager.context, *args, **kwargs)
-        
+
         if isinstance(ready_to_call, AsyncGenerator):
             _has_yielded = False
             async for ret in ready_to_call:

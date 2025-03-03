@@ -4,6 +4,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.config import AstrBotConfig
 from typing import Union
 
+
 class PlatformAdapterType(enum.Flag):
     AIOCQHTTP = enum.auto()
     QQOFFICIAL = enum.auto()
@@ -13,7 +14,8 @@ class PlatformAdapterType(enum.Flag):
     WECOM = enum.auto()
     LARK = enum.auto()
     ALL = AIOCQHTTP | QQOFFICIAL | VCHAT | GEWECHAT | TELEGRAM | WECOM | LARK
-    
+
+
 ADAPTER_NAME_2_TYPE = {
     "aiocqhttp": PlatformAdapterType.AIOCQHTTP,
     "qq_official": PlatformAdapterType.QQOFFICIAL,
@@ -21,13 +23,14 @@ ADAPTER_NAME_2_TYPE = {
     "gewechat": PlatformAdapterType.GEWECHAT,
     "telegram": PlatformAdapterType.TELEGRAM,
     "wecom": PlatformAdapterType.WECOM,
-    "lark": PlatformAdapterType.LARK
+    "lark": PlatformAdapterType.LARK,
 }
+
 
 class PlatformAdapterTypeFilter(HandlerFilter):
     def __init__(self, platform_adapter_type_or_str: Union[PlatformAdapterType, str]):
         self.type_or_str = platform_adapter_type_or_str
-        
+
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         adapter_name = event.get_platform_name()
         if adapter_name in ADAPTER_NAME_2_TYPE:

@@ -10,17 +10,25 @@ from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core import logger
 
+
 def try_cast(value: str, type_: str):
     if type_ == "int" and value.isdigit():
         return int(value)
-    elif type_ == "float" and isinstance(value, str) \
-        and value.replace(".", "", 1).isdigit():
+    elif (
+        type_ == "float"
+        and isinstance(value, str)
+        and value.replace(".", "", 1).isdigit()
+    ):
         return float(value)
     elif type_ == "float" and isinstance(value, int):
         return float(value)
 
-def validate_config(data, schema: dict, is_core: bool) -> typing.Tuple[typing.List[str], typing.Dict]:
+
+def validate_config(
+    data, schema: dict, is_core: bool
+) -> typing.Tuple[typing.List[str], typing.Dict]:
     errors = []
+
     def validate(data, metadata=schema, path=""):
         for key, meta in metadata.items():
             if key not in data:
@@ -28,7 +36,7 @@ def validate_config(data, schema: dict, is_core: bool) -> typing.Tuple[typing.Li
             value = data[key]
             # null 转换
             if value is None:
-                data[key] = DEFAULT_VALUE_MAP(meta["type"])
+                data[key] = DEFAULT_VALUE_MAP[meta["type"]]
                 continue
             # 递归验证
             if meta["type"] == "list" and isinstance(value, list):
@@ -40,21 +48,33 @@ def validate_config(data, schema: dict, is_core: bool) -> typing.Tuple[typing.Li
             if meta["type"] == "int" and not isinstance(value, int):
                 casted = try_cast(value, "int")
                 if casted is None:
-                    errors.append(f"错误的类型 {path}{key}: 期望是 int, 得到了 {type(value).__name__}")
+                    errors.append(
+                        f"错误的类型 {path}{key}: 期望是 int, 得到了 {type(value).__name__}"
+                    )
                 data[key] = casted
             elif meta["type"] == "float" and not isinstance(value, float):
                 casted = try_cast(value, "float")
                 if casted is None:
-                    errors.append(f"错误的类型 {path}{key}: 期望是 float, 得到了 {type(value).__name__}")
+                    errors.append(
+                        f"错误的类型 {path}{key}: 期望是 float, 得到了 {type(value).__name__}"
+                    )
                 data[key] = casted
             elif meta["type"] == "bool" and not isinstance(value, bool):
-                errors.append(f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}")
+                errors.append(
+                    f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}"
+                )
             elif meta["type"] in ["string", "text"] and not isinstance(value, str):
-                errors.append(f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}")
+                errors.append(
+                    f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}"
+                )
             elif meta["type"] == "list" and not isinstance(value, list):
-                errors.append(f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}")
+                errors.append(
+                    f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}"
+                )
             elif meta["type"] == "object" and not isinstance(value, dict):
-                errors.append(f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}")
+                errors.append(
+                    f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}"
+                )
                 validate(value, meta["items"], path=f"{path}{key}.")
 
     if is_core:
@@ -66,15 +86,18 @@ def validate_config(data, schema: dict, is_core: bool) -> typing.Tuple[typing.Li
             validate(data, group_meta, path=f"{key}.")
     else:
         validate(data, schema)
-    
+
     return errors, data
 
+
 def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False):
-    '''验证并保存配置'''
+    """验证并保存配置"""
     errors = None
     try:
         if is_core:
-            errors, post_config = validate_config(post_config, CONFIG_METADATA_2, is_core)
+            errors, post_config = validate_config(
+                post_config, CONFIG_METADATA_2, is_core
+            )
         else:
             errors, post_config = validate_config(post_config, config.schema, is_core)
     except BaseException as e:
@@ -83,23 +106,24 @@ def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False)
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
     config.save_config(post_config)
-    
+
+
 class ConfigRoute(Route):
-    def __init__(self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(
+        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle
+    ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.routes = {
-            '/config/get': ('GET', self.get_configs),
-            '/config/astrbot/update': ('POST', self.post_astrbot_configs),
-            '/config/plugin/update': ('POST', self.post_plugin_configs),
-            
-            '/config/platform/new': ('POST', self.post_new_platform),
-            '/config/platform/update': ('POST', self.post_update_platform),
-            '/config/platform/delete': ('POST', self.post_delete_platform),
-            
-            '/config/provider/new': ('POST', self.post_new_provider),
-            '/config/provider/update': ('POST', self.post_update_provider),
-            '/config/provider/delete': ('POST', self.post_delete_provider)
+            "/config/get": ("GET", self.get_configs),
+            "/config/astrbot/update": ("POST", self.post_astrbot_configs),
+            "/config/plugin/update": ("POST", self.post_plugin_configs),
+            "/config/platform/new": ("POST", self.post_new_platform),
+            "/config/platform/update": ("POST", self.post_update_platform),
+            "/config/platform/delete": ("POST", self.post_delete_platform),
+            "/config/provider/new": ("POST", self.post_new_provider),
+            "/config/provider/update": ("POST", self.post_update_provider),
+            "/config/provider/delete": ("POST", self.post_delete_provider),
         }
         self.register_routes()
 
@@ -119,83 +143,91 @@ class ConfigRoute(Route):
         except Exception as e:
             logger.error(e)
             return Response().error(str(e)).__dict__
-    
+
     async def post_plugin_configs(self):
         post_configs = await request.json
         plugin_name = request.args.get("plugin_name", "unknown")
         try:
             await self._save_plugin_configs(post_configs, plugin_name)
-            return Response().ok(None, f"保存插件 {plugin_name} 成功~ 机器人正在重载配置。").__dict__
+            return (
+                Response()
+                .ok(None, f"保存插件 {plugin_name} 成功~ 机器人正在重载配置。")
+                .__dict__
+            )
         except Exception as e:
             return Response().error(str(e)).__dict__
-    
+
     async def post_new_platform(self):
         new_platform_config = await request.json
-        self.config['platform'].append(new_platform_config)
+        self.config["platform"].append(new_platform_config)
         try:
             save_config(self.config, self.config, is_core=True)
-            await self.core_lifecycle.platform_manager.load_platform(new_platform_config)
+            await self.core_lifecycle.platform_manager.load_platform(
+                new_platform_config
+            )
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "新增平台配置成功~").__dict__
-    
+
     async def post_new_provider(self):
         new_provider_config = await request.json
-        self.config['provider'].append(new_provider_config)
+        self.config["provider"].append(new_provider_config)
         try:
             save_config(self.config, self.config, is_core=True)
-            await self.core_lifecycle.provider_manager.load_provider(new_provider_config)
+            await self.core_lifecycle.provider_manager.load_provider(
+                new_provider_config
+            )
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "新增服务提供商配置成功~").__dict__
-    
+
     async def post_update_platform(self):
         update_platform_config = await request.json
         platform_id = update_platform_config.get("id", None)
         new_config = update_platform_config.get("config", None)
         if not platform_id or not new_config:
             return Response().error("参数错误").__dict__
-        
-        for i, platform in enumerate(self.config['platform']):
-            if platform['id'] == platform_id:
-                self.config['platform'][i] = new_config
+
+        for i, platform in enumerate(self.config["platform"]):
+            if platform["id"] == platform_id:
+                self.config["platform"][i] = new_config
                 break
         else:
             return Response().error("未找到对应平台").__dict__
-        
+
         try:
             await self._save_astrbot_configs(self.config)
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "更新平台配置成功~").__dict__
-    
+
     async def post_update_provider(self):
         update_provider_config = await request.json
         provider_id = update_provider_config.get("id", None)
         new_config = update_provider_config.get("config", None)
         if not provider_id or not new_config:
             return Response().error("参数错误").__dict__
-        
-        for i, provider in enumerate(self.config['provider']):
-            if provider['id'] == provider_id:
-                self.config['provider'][i] = new_config
+
+        for i, provider in enumerate(self.config["provider"]):
+            if provider["id"] == provider_id:
+                self.config["provider"][i] = new_config
                 break
         else:
             return Response().error("未找到对应服务提供商").__dict__
-        
+
         try:
             save_config(self.config, self.config, is_core=True)
             await self.core_lifecycle.provider_manager.reload(new_config)
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "更新成功，已经实时生效~").__dict__
-    
+
     async def post_delete_platform(self):
         platform_id = await request.json
         platform_id = platform_id.get("id")
-        for i, platform in enumerate(self.config['platform']):
-            if platform['id'] == platform_id:
-                del self.config['platform'][i]
+        for i, platform in enumerate(self.config["platform"]):
+            if platform["id"] == platform_id:
+                del self.config["platform"][i]
                 break
         else:
             return Response().error("未找到对应平台").__dict__
@@ -204,13 +236,13 @@ class ConfigRoute(Route):
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "删除平台配置成功~").__dict__
-    
+
     async def post_delete_provider(self):
         provider_id = await request.json
         provider_id = provider_id.get("id")
-        for i, provider in enumerate(self.config['provider']):
-            if provider['id'] == provider_id:
-                del self.config['provider'][i]
+        for i, provider in enumerate(self.config["provider"]):
+            if provider["id"] == provider_id:
+                del self.config["provider"][i]
                 break
         else:
             return Response().error("未找到对应服务提供商").__dict__
@@ -223,64 +255,64 @@ class ConfigRoute(Route):
 
     async def _get_astrbot_config(self):
         config = self.config
-        
+
         # 平台适配器的默认配置模板注入
-        platform_default_tmpl = CONFIG_METADATA_2['platform_group']['metadata']['platform']['config_template']
+        platform_default_tmpl = CONFIG_METADATA_2["platform_group"]["metadata"][
+            "platform"
+        ]["config_template"]
         for platform in platform_registry:
             if platform.default_config_tmpl:
                 platform_default_tmpl[platform.name] = platform.default_config_tmpl
-        
+
         # 服务提供商的默认配置模板注入
-        provider_default_tmpl = CONFIG_METADATA_2['provider_group']['metadata']['provider']['config_template']
+        provider_default_tmpl = CONFIG_METADATA_2["provider_group"]["metadata"][
+            "provider"
+        ]["config_template"]
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
-        
-        return {
-            "metadata": CONFIG_METADATA_2,
-            "config": config
-        }
+
+        return {"metadata": CONFIG_METADATA_2, "config": config}
 
     async def _get_plugin_config(self, plugin_name: str):
-        ret = {
-            "metadata": None,
-            "config": None
-        }
-        
+        ret = {"metadata": None, "config": None}
+
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:
                 if not plugin_md.config:
                     break
-                ret['config'] = plugin_md.config # 这是自定义的 Dict 类（AstrBotConfig）
-                ret['metadata'] = {
+                ret["config"] = (
+                    plugin_md.config
+                )  # 这是自定义的 Dict 类（AstrBotConfig）
+                ret["metadata"] = {
                     plugin_name: {
                         "description": f"{plugin_name} 配置",
                         "type": "object",
-                        "items": plugin_md.config.schema # 初始化时通过 __setattr__ 存入了 schema
+                        "items": plugin_md.config.schema,  # 初始化时通过 __setattr__ 存入了 schema
                     }
                 }
                 break
-            
+
         return ret
-        
+
     async def _save_astrbot_configs(self, post_configs: dict):
         try:
             save_config(post_configs, self.config, is_core=True)
             self.core_lifecycle.restart()
         except Exception as e:
             raise e
-        
+
     async def _save_plugin_configs(self, post_configs: dict, plugin_name: str):
         md = None
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:
                 md = plugin_md
-        
+
         if not md:
             raise ValueError(f"插件 {plugin_name} 不存在")
         if not md.config:
             raise ValueError(f"插件 {plugin_name} 没有注册配置")
-        
+
         try:
             save_config(post_configs, md.config)
             self.core_lifecycle.restart()

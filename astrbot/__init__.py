@@ -1,2 +1,3 @@
 from .core.log import LogManager
-logger = LogManager.GetLogger(log_name='astrbot')
+
+logger = LogManager.GetLogger(log_name="astrbot")
