@@ -139,6 +139,9 @@ CONFIG_METADATA_2 = {
                         "port": 11451,
                     },
                     "wecom(企业微信)": {
+                        "id": "wecom",
+                        "type": "wecom",
+                        "enable": False,
                         "corpid": "",
                         "secret": "",
                         "port": 6195,

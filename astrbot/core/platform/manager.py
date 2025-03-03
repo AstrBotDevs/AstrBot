@@ -23,7 +23,10 @@ class PlatformManager:
     async def initialize(self):
         """初始化所有平台适配器"""
         for platform in self.platforms_config:
-            await self.load_platform(platform)
+            try:
+                await self.load_platform(platform)
+            except Exception as e:
+                logger.error(f"初始化 {platform} 平台适配器失败: {e}")
 
         # 网页聊天
         webchat_inst = WebChatAdapter({}, self.settings, self.event_queue)
@@ -34,15 +37,14 @@ class PlatformManager:
 
     async def load_platform(self, platform_config: dict):
         """实例化一个平台"""
-        if not platform_config["enable"]:
-            return
-
-        logger.info(
-            f"载入 {platform_config['type']}({platform_config['id']}) 平台适配器 ..."
-        )
-
         # 动态导入
         try:
+            if not platform_config["enable"]:
+                return
+
+            logger.info(
+                f"载入 {platform_config['type']}({platform_config['id']}) 平台适配器 ..."
+            )
             match platform_config["type"]:
                 case "aiocqhttp":
                     from .sources.aiocqhttp.aiocqhttp_platform_adapter import (
@@ -64,6 +66,8 @@ class PlatformManager:
                     from .sources.lark.lark_adapter import LarkPlatformAdapter  # noqa: F401
                 case "telegram":
                     from .sources.telegram.tg_adapter import TelegramPlatformAdapter  # noqa: F401
+                case "wecom":
+                    from .sources.wecom.wecom_adapter import WecomPlatformAdapter  # noqa: F401
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->控制台->安装Pip库 中安装依赖库。"
