@@ -107,7 +107,7 @@ class TelegramPlatformAdapter(Platform):
         message.sender = MessageMember(
             str(update.effective_user.id), update.effective_user.username
         )
-        message.self_id = str(context.bot.id)
+        message.self_id = str(context.bot.username)
         message.raw_message = update
         message.message_str = ""
         message.message = []
@@ -120,8 +120,8 @@ class TelegramPlatformAdapter(Platform):
             if update.message.entities:
                 for entity in update.message.entities:
                     if entity.type == "mention":
-                        name = plain_text[entity.offset : entity.offset + entity.length]
-                        message.message.append(At(qq=message.self_id, name=name))
+                        name = plain_text[entity.offset+1 : entity.offset + entity.length]
+                        message.message.append(At(qq=name, name=name))
                         plain_text = (
                             plain_text[: entity.offset]
                             + plain_text[entity.offset + entity.length :]
