@@ -91,18 +91,27 @@ class SimpleGewechatClient:
             logger.critical("收到 gewechat 下线通知。")
             return
 
-        if "Data" in data and "CreateTime" in data["Data"]:
+        d = None
+        if "Data" in data:
+            d = data["Data"]
+        elif "data" in data:
+            d = data["data"]
+
+        if not d:
+            logger.warning(f"消息不含 data 字段: {data}")
+            return
+
+        if "CreateTime" in d:
             # 得到系统 UTF+8 的 ts
             tz_offset = datetime.timedelta(hours=8)
             tz = datetime.timezone(tz_offset)
             ts = datetime.datetime.now(tz).timestamp()
-            create_time = data["Data"]["CreateTime"]
+            create_time = d["CreateTime"]
             if create_time < ts - 30:
                 logger.warning(f"消息时间戳过旧: {create_time}，当前时间戳: {ts}")
                 return
 
         abm = AstrBotMessage()
-        d = data["Data"]
 
         from_user_name = d["FromUserName"]["string"]  # 消息来源
         d["to_wxid"] = from_user_name  # 用于发信息
