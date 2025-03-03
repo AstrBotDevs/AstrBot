@@ -297,6 +297,26 @@ class Main(star.Star):
             )
             self.user_waiting.pop(uid)
 
+    @pi.command("clear", alias=["clean"])
+    async def pi_file_clean(self, event: AstrMessageEvent):
+        """清理用户上传的文件"""
+        uid = event.get_sender_id()
+        if uid in self.user_waiting:
+            self.user_waiting.pop(uid)
+            yield event.plain_result(f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 已清理。")
+        else:
+            yield event.plain_result(f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 没有等待上传文件。")
+
+    @pi.command("list")
+    async def pi_file_list(self, event: AstrMessageEvent):
+        """列出用户上传的文件"""
+        uid = event.get_sender_id()
+        if uid in self.user_file_msg_buffer:
+            files = self.user_file_msg_buffer[uid]
+            yield event.plain_result(f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 上传的文件: {files}")
+        else:
+            yield event.plain_result(f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 没有上传文件。")
+
     @llm_tool("python_interpreter")
     async def python_interpreter(self, event: AstrMessageEvent):
         """Use this tool only if user really want to solve a complex problem and the problem can be solved very well by Python code.
