@@ -18,7 +18,9 @@ export const useCommonStore = defineStore({
       "gewechat": "https://astrbot.app/deploy/platform/gewechat.html",
       "lark": "https://astrbot.app/deploy/platform/lark.html",
       "telegram": "https://astrbot.app/deploy/platform/telegram.html",
-    }
+    },
+
+    pluginMarketData: []
 
   }),
   actions: {
@@ -52,6 +54,34 @@ export const useCommonStore = defineStore({
     },
     getTutorialLink(platform) {
       return this.tutorial_map[platform]
-    }
+    },
+    async getPluginCollections(force = false) {
+      // 获取插件市场数据
+      if (!force && this.pluginMarketData.length > 0) {
+        return Promise.resolve(this.pluginMarketData);
+      }
+      return axios.get('/api/plugin/market_list')
+        .then((res) => {
+          let data = []
+          for (let key in res.data.data) {
+            data.push({
+              "name": key,
+              "desc": res.data.data[key].desc,
+              "author": res.data.data[key].author,
+              "repo": res.data.data[key].repo,
+              "installed": false,
+              "version": res.data.data[key]?.version ? res.data.data[key].version : "未知",
+              "social_link": res.data.data[key]?.social_link,
+              "tags": res.data.data[key]?.tags ? res.data.data[key].tags : []
+            })
+          }
+          this.pluginMarketData = data;
+          return data;
+        })
+        .catch((err) => {
+          this.toast("获取插件市场数据失败: " + err, "error");
+          return Promise.reject(err);
+        });
+    },
   }
 });

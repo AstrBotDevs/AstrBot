@@ -36,9 +36,14 @@ const sidebarItem: menu[] = [
     to: '/config',
   },
   {
-    title: '插件',
+    title: '插件管理',
     icon: 'mdi-puzzle',
     to: '/extension'
+  },
+  {
+    title: '插件市场',
+    icon: 'mdi-storefront',
+    to: '/extension-marketplace'
   },
   {
     title: '聊天',

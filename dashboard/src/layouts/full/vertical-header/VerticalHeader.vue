@@ -175,7 +175,7 @@ commonStore.getStartTime();
 </script>
 
 <template>
-  <v-app-bar elevation="0" height="70">
+  <v-app-bar elevation="0" height="55">
 
     <v-btn style="margin-left: 22px;" class="hidden-md-and-down text-secondary" color="lightsecondary" icon rounded="sm"
       variant="flat" @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
