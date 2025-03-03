@@ -202,5 +202,5 @@ class QQOfficialPlatformAdapter(Platform):
     def run(self):
         return self.client.start(appid=self.appid, secret=self.secret)
 
-    def get_client(self):
+    def get_client(self) -> botClient:
         return self.client

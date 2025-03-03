@@ -185,5 +185,5 @@ class LarkPlatformAdapter(Platform):
         # self.client.start()
         await self.client._connect()
 
-    async def get_client(self):
+    def get_client(self) -> lark.Client:
         return self.client

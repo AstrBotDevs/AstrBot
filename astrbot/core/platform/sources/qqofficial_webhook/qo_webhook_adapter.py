@@ -109,5 +109,5 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         await self.webhook_helper.initialize()
         await self.webhook_helper.start_polling()
 
-    async def get_client(self):
+    def get_client(self) -> botClient:
         return self.client

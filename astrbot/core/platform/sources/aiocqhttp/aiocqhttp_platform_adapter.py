@@ -294,5 +294,5 @@ class AiocqhttpAdapter(Platform):
 
         self.commit_event(message_event)
 
-    async def get_client(self):
+    def get_client(self) -> CQHttp:
         return self.bot

@@ -27,6 +27,7 @@ from telegram.constants import ChatType
 from telegram.ext import MessageHandler as TelegramMessageHandler
 from .tg_event import TelegramPlatformEvent
 from astrbot.api import logger
+from telegram.ext import ExtBot
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -167,5 +168,5 @@ class TelegramPlatformAdapter(Platform):
         )
         self.commit_event(message_event)
 
-    async def get_client(self):
+    def get_client(self) -> ExtBot:
         return self.client

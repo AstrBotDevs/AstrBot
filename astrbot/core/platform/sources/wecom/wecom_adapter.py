@@ -230,5 +230,5 @@ class WecomPlatformAdapter(Platform):
         )
         self.commit_event(message_event)
 
-    def get_client(self):
+    def get_client(self) -> WeChatClient:
         return self.client
