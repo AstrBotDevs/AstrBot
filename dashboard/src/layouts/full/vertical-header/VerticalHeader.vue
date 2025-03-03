@@ -22,6 +22,8 @@ let version = ref('');
 let releases = ref([]);
 let devCommits = ref([]); // 新增的 ref
 
+let installLoading = ref(false);
+
 let tab = ref(0);
 
 let releasesHeader = [
@@ -132,6 +134,7 @@ function getDevCommits() {
 
 function switchVersion(version: string) {
   updateStatus.value = '正在切换版本...';
+  installLoading.value = true;
   axios.post('/api/update/do', {
     version: version,
     proxy: localStorage.getItem('selectedGitHubProxy') || ''
@@ -147,6 +150,8 @@ function switchVersion(version: string) {
     .catch((err) => {
       console.log(err);
       updateStatus.value = err
+    }).finally(() => {
+      installLoading.value = false;
     });
 }
 
@@ -211,21 +216,26 @@ commonStore.getStartTime();
         </v-card-title>
         <v-card-text>
           <v-container>
-            <div class="mb-4">
-              <small>跳到旧版本或者切换到某个版本不会重新下载管理面板文件，这可能会造成部分数据显示错误。您可在 <a href="https://github.com/Soulter/AstrBot/releases">此处</a>
+            <v-progress-linear v-show="installLoading" class="mb-4" indeterminate color="primary"></v-progress-linear>
+            
+            <div>
+              <h1 style="display:inline-block;">{{ botCurrVersion }}</h1>
+              <small style="margin-left: 4px;">{{ updateStatus }}</small>
+            </div>
+
+            <div class="mb-4 mt-4">
+              <small>💡 TIP: 跳到旧版本或者切换到某个版本不会重新下载管理面板文件，这可能会造成部分数据显示错误。您可在 <a href="https://github.com/Soulter/AstrBot/releases">此处</a>
                 找到对应的面板文件 dist.zip，解压后替换 data/dist 文件夹即可。当然，前端源代码在 dashboard 目录下，你也可以自己使用 npm install 和 npm build 构建。</small>
             </div>
 
             <v-tabs v-model="tab">
-              <v-tab value="0">正式版</v-tab>
-              <v-tab value="1">开发版(master 分支)</v-tab>
+              <v-tab value="0">😊 正式版</v-tab>
+              <v-tab value="1">🧐 开发版(master 分支)</v-tab>
             </v-tabs>
             <v-tabs-window v-model="tab">
 
               <!-- 发行版 -->
               <v-tabs-window-item key="0" v-show="tab == 0">
-                <small>当前版本 {{ botCurrVersion }}</small>
-                <p>{{ updateStatus }}</p>
                 <v-btn class="mt-4 mb-4" @click="switchVersion('latest')" color="primary" style="border-radius: 10px;"
                   :disabled="!hasNewVersion">
                   更新到最新版本
@@ -282,7 +292,7 @@ commonStore.getStartTime();
               确定切换
             </v-btn>
 
-            <v-divider></v-divider>
+            <v-divider class="mt-4 mb-4"></v-divider>
             <div style="margin-top: 16px;">
               <h3 class="mb-4">单独更新管理面板到最新版本</h3>
               <div class="mb-4">

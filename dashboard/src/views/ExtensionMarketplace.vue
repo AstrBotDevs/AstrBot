@@ -51,7 +51,7 @@ import { useCommonStore } from '@/stores/common';
 
                 <template v-if="isListView">
                     <v-col cols="12" md="12">
-                        <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
+                        <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name" :loading="loading_"
                             v-model:search="marketSearch" :filter-keys="['name', 'desc']">
                             <template v-slot:item.name="{ item }">
                                 <span v-if="item?.repo"><a :href="item?.repo"
@@ -228,10 +228,12 @@ export default {
         this.getExtensions();
 
         // 获取插件市场数据
+        this.loading_ = true
         this.commonStore.getPluginCollections().then((data) => {
             this.pluginMarketData = data;
             this.checkAlreadyInstalled();
             this.checkUpdate();
+            this.loading_ = false
         }).catch((err) => {
             console.error("获取插件市场数据失败:", err);
         });
