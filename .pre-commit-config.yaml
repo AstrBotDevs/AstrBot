@@ -1,8 +1,13 @@
+default_install_hook_types: [pre-commit, prepare-commit-msg]
+ci:
+  autofix_commit_msg: ":balloon: auto fixes by pre-commit hooks"
+  autofix_prs: true
+  autoupdate_branch: master
+  autoupdate_schedule: weekly
+  autoupdate_commit_msg: ":balloon: pre-commit autoupdate"
 repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.9.9
-  hooks:
-    # Run the linter.
-    - id: ruff
-    # Run the formatter.
-    - id: ruff-format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.9
+    hooks:
+      - id: ruff
+      - id: ruff-format

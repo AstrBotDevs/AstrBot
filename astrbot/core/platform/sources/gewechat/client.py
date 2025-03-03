@@ -6,6 +6,7 @@ import base64
 import datetime
 import re
 import os
+import anyio
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.api.message_components import Plain, Image, At, Record
 from astrbot.api import logger, sp
@@ -189,8 +190,8 @@ class SimpleGewechatClient:
                 if "ImgBuf" in d and "buffer" in d["ImgBuf"]:
                     voice_data = base64.b64decode(d["ImgBuf"]["buffer"])
                     file_path = f"data/temp/gewe_voice_{abm.message_id}.silk"
-                    with open(file_path, "wb") as f:
-                        f.write(voice_data)
+                    async with await anyio.open_file(file_path, "wb") as f:
+                        await f.write(voice_data)
                     abm.message.append(Record(file=file_path, url=file_path))
             case _:
                 logger.info(f"未实现的消息类型: {d['MsgType']}")
@@ -251,7 +252,8 @@ class SimpleGewechatClient:
         )
 
     async def shutdown_trigger_placeholder(self):
-        while not self.event_queue.closed and not self.stop:
+        # TODO: use asyncio.Event
+        while not self.event_queue.closed and not self.stop:  # noqa: ASYNC110
             await asyncio.sleep(1)
         logger.info("gewechat 适配器已关闭。")
 

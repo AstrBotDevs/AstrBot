@@ -71,7 +71,7 @@ class AstrBotDashboard:
             return r
 
     async def shutdown_trigger_placeholder(self):
-        while not self.core_lifecycle.event_queue.closed:
+        while not self.core_lifecycle.event_queue.closed:  # noqa: ASYNC110
             await asyncio.sleep(1)
         logger.info("管理面板已关闭。")
 

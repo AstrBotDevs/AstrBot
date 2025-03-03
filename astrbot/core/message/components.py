@@ -84,7 +84,7 @@ class BaseMessageComponent(BaseModel):
         return output
 
     def toDict(self):
-        data = dict()
+        data = {}
         for k, v in self.__dict__.items():
             if k == "type" or v is None:
                 continue

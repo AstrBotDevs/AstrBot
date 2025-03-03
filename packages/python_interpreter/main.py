@@ -23,7 +23,7 @@ You need to generate python codes to solve user's problem: {prompt}
 {extra_input}
 
 ## Limit
-1. Available libraries: 
+1. Available libraries:
     - standard libs
     - `Pillow`
     - `requests`
@@ -40,8 +40,8 @@ You need to generate python codes to solve user's problem: {prompt}
     - `mplfonts`
     You can only use these libraries and the libraries that they depend on.
 2. Do not generate malicious code.
-3. Use given `shared.api` package to output the result. 
-   It has 3 functions: `send_text(text: str)`, `send_image(image_path: str)`, `send_file(file_path: str)`. 
+3. Use given `shared.api` package to output the result.
+   It has 3 functions: `send_text(text: str)`, `send_image(image_path: str)`, `send_file(file_path: str)`.
    For Image and file, you must save it to `output` folder.
 4. You must only output the code, do not output the result of the code and any other information.
 5. The output language is same as user's input language.
@@ -58,7 +58,7 @@ def fabonacci(n):
         return n
     else:
         return fabonacci(n-1) + fabonacci(n-2)
-        
+
 result = fabonacci(10)
 send_text("The fabonacci sequence is a series of numbers in which each number is the sum of the two preceding ones, starting from 0 and 1.")
 send_text("Let's calculate the fabonacci sequence of 10: " + result) # send_text is a function to send pure text to user

@@ -102,6 +102,6 @@ class QQOfficialWebhook:
         )
 
     async def shutdown_trigger_placeholder(self):
-        while not self.event_queue.closed:
+        while not self.event_queue.closed:  # noqa: ASYNC110
             await asyncio.sleep(1)
         logger.info("qq_official_webhook 适配器已关闭。")

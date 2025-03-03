@@ -2,6 +2,7 @@ import uuid
 import os
 import edge_tts
 import subprocess
+import asyncio
 from ..provider import TTSProvider
 from ..entites import ProviderType
 from ..register import register_provider_adapter
@@ -55,7 +56,7 @@ class ProviderEdgeTTS(TTSProvider):
             await communicate.save(mp3_path)
 
             # 使用ffmpeg将MP3转换为标准WAV格式
-            _ = subprocess.run(
+            _ = await asyncio.create_subprocess_exec(
                 [
                     "ffmpeg",
                     "-y",  # 覆盖输出文件

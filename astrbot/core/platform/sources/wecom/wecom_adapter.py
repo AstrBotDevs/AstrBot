@@ -94,7 +94,7 @@ class WecomServer:
         )
 
     async def shutdown_trigger_placeholder(self):
-        while not self.event_queue.closed:
+        while not self.event_queue.closed:  # noqa: ASYNC110
             await asyncio.sleep(1)
         logger.info("企业微信 适配器已关闭。")
 

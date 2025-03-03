@@ -278,7 +278,8 @@ class AiocqhttpAdapter(Platform):
         return self.metadata
 
     async def shutdown_trigger_placeholder(self):
-        while not self._event_queue.closed and not self.stop:
+        # TODO: use asyncio.Event
+        while not self._event_queue.closed and not self.stop:  # noqa: ASYNC110
             await asyncio.sleep(1)
         logger.info("aiocqhttp 适配器已关闭。")
 
