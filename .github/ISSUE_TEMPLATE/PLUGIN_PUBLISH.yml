@@ -1,5 +1,5 @@
-name: '🎉 功能建议'
-title: "[Feature]"
+name: '🥳 发布插件'
+title: "[Plugin] "
 description: 提交插件到插件市场
 labels: [ "plugin-publish" ]
 body:
