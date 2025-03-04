@@ -64,6 +64,14 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
+## 🚀 路线图
+
+### 垂类功能
+
+1. 更好的上下文管理：限制 token 总数、对话上下文总结
+3. AstrBot in Minecraft
+
+### 横功能
 
 ## ⚡ 消息平台支持情况
 
