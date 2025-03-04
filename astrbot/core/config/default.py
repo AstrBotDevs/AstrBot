@@ -465,6 +465,16 @@ CONFIG_METADATA_2 = {
                             "model": "llama3.1-8b",
                         },
                     },
+                    "LM_Studio": {
+                        "id": "lm_studio",
+                        "type": "openai_chat_completion",
+                        "enable": True,
+                        "key": ["lmstudio"],
+                        "api_base": "http://localhost:1234/v1",
+                        "model_config": {
+                            "model": "llama-3.1-8b",
+                        },
+                    },
                     "Gemini(OpenAI兼容)": {
                         "id": "gemini_default",
                         "type": "openai_chat_completion",
