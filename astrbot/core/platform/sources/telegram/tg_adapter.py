@@ -24,7 +24,7 @@ from astrbot.api.platform import register_platform_adapter
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, filters
 from telegram.constants import ChatType
-from telegram.ext import MessageHandler as TelegramMessageHandler
+from telegram.ext import MessageHandler as TelegramMessageHandler, CommandHandler
 from .tg_event import TelegramPlatformEvent
 from astrbot.api import logger
 from telegram.ext import ExtBot
@@ -130,6 +130,10 @@ class TelegramPlatformAdapter(Platform):
 
             message.message.append(Plain(plain_text))
             message.message_str = plain_text
+
+            if message.message_str == "/start":
+                await self.start(update, context)
+                return
 
         elif update.message.voice:
             file = await update.message.voice.get_file()
