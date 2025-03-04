@@ -1,5 +1,5 @@
 name: '🥳 发布插件'
-title: "[Plugin] "
+title: "[Plugin] 插件名"
 description: 提交插件到插件市场
 labels: [ "plugin-publish" ]
 body:
