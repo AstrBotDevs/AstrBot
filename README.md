@@ -166,6 +166,7 @@ _✨ 内置 Web Chat，在线与机器人交互 ✨_
 </div>
 
 ## ⭐ Star History
+![star](https://gitcode.com/Soulter/AstrBot/star/badge.svg)
 
 > [!TIP] 
 > 如果本项目对您的生活 / 工作产生了帮助，或者您关注本项目的未来发展，请给项目 Star，这是我维护这个开源项目的动力 <3
