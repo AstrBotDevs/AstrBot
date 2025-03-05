@@ -183,11 +183,15 @@ class Context:
         获取指定类型的平台适配器。
         """
         for platform in self.platform_manager.platform_insts:
+            name = platform.meta().name
             if isinstance(platform_type, str):
-                if platform.meta().name == platform_type:
+                if name == platform_type:
                     return platform
             else:
-                if platform.meta().name == ADAPTER_NAME_2_TYPE[platform_type]:
+                if (
+                    name in ADAPTER_NAME_2_TYPE
+                    and ADAPTER_NAME_2_TYPE[name] & platform_type
+                ):
                     return platform
 
     async def send_message(
