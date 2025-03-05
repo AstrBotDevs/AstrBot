@@ -1,3 +1,7 @@
+"""
+插件的重载、启停、安装、卸载等操作。
+"""
+
 import inspect
 import functools
 import os
@@ -527,7 +531,9 @@ class PluginManager:
         logging.info(f"正在终止插件 {star_metadata.name} ...")
 
         if hasattr(star_metadata.star_cls, "__del__"):
-            asyncio.get_event_loop().run_in_executor(star_metadata.star_cls.__del__)
+            asyncio.get_event_loop().run_in_executor(
+                None, star_metadata.star_cls.__del__
+            )
         else:
             await star_metadata.star_cls.terminate()
 
