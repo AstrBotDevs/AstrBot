@@ -7,19 +7,20 @@ from astrbot.api.message_components import Plain, Image
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core import web_chat_back_queue
 
+imgs_dir = "data/webchat/imgs"
 
 class WebChatMessageEvent(AstrMessageEvent):
     def __init__(self, message_str, message_obj, platform_meta, session_id):
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.imgs_dir = "data/webchat/imgs"
-        os.makedirs(self.imgs_dir, exist_ok=True)
+        os.makedirs(imgs_dir, exist_ok=True)
 
-    async def send(self, message: MessageChain):
+    @staticmethod
+    async def _send(message: MessageChain, session_id: str):
         if not message:
             web_chat_back_queue.put_nowait(None)
             return
 
-        cid = self.session_id.split("!")[-1]
+        cid = session_id.split("!")[-1]
 
         for comp in message.chain:
             if isinstance(comp, Plain):
@@ -27,7 +28,7 @@ class WebChatMessageEvent(AstrMessageEvent):
             elif isinstance(comp, Image):
                 # save image to local
                 filename = str(uuid.uuid4()) + ".jpg"
-                path = os.path.join(self.imgs_dir, filename)
+                path = os.path.join(imgs_dir, filename)
                 if comp.file and comp.file.startswith("file:///"):
                     ph = comp.file[8:]
                     with open(path, "wb") as f:
@@ -48,4 +49,7 @@ class WebChatMessageEvent(AstrMessageEvent):
             else:
                 logger.debug(f"webchat 忽略: {comp.type}")
         web_chat_back_queue.put_nowait(None)
+
+    async def send(self, message: MessageChain):
+        await WebChatMessageEvent._send(message, session_id=self.session_id)
         await super().send(message)

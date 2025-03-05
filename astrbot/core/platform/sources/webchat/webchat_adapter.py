@@ -50,14 +50,7 @@ class WebChatAdapter(Platform):
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
     ):
-        # abm.session_id = f"webchat!{username}!{cid}"
-        plain = ""
-        cid = session.session_id.split("!")[-1]
-        for comp in message_chain.chain:
-            if isinstance(comp, Plain):
-                plain += comp.text
-        web_chat_back_queue.put_nowait((plain, cid))
-
+        await WebChatMessageEvent._send(message_chain, session.session_id)
         await super().send_by_session(session, message_chain)
 
     async def convert_message(self, data: tuple) -> AstrBotMessage:
