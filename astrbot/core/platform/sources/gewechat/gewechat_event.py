@@ -37,12 +37,9 @@ class GewechatPlatformEvent(AstrMessageEvent):
         self.client = client
 
     @staticmethod
-    async def send_with_client(message: MessageChain, user_name: str):
-        pass
-
-    async def send(self, message: MessageChain):
-        to_wxid = self.message_obj.raw_message.get("to_wxid", None)
-
+    async def send_with_client(
+        message: MessageChain, to_wxid: str, client: SimpleGewechatClient
+    ):
         if not to_wxid:
             logger.error("无法获取到 to_wxid。")
             return
@@ -70,7 +67,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     payload["content"] = text
                     payload["ats"] = ats
                     has_at = True
-                await self.client.post_text(**payload)
+                await client.post_text(**payload)
 
             elif isinstance(comp, Image):
                 img_url = comp.file
@@ -90,9 +87,9 @@ class GewechatPlatformEvent(AstrMessageEvent):
                         img_path = save_temp_img(f.read())
 
                 file_id = os.path.basename(img_path)
-                img_url = f"{self.client.file_server_url}/{file_id}"
+                img_url = f"{client.file_server_url}/{file_id}"
                 logger.debug(f"gewe callback img url: {img_url}")
-                await self.client.post_image(to_wxid, img_url)
+                await client.post_image(to_wxid, img_url)
             elif isinstance(comp, Record):
                 # 默认已经存在 data/temp 中
                 record_url = comp.file
@@ -110,16 +107,14 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     duration = await wav_to_tencent_silk(record_path, silk_path)
                 except Exception as e:
                     logger.error(traceback.format_exc())
-                    await self.send(
-                        MessageChain().message(f"语音文件转换失败。{str(e)}")
-                    )
+                    await client.post_text(to_wxid, f"语音文件转换失败。{str(e)}")
                 logger.info("Silk 语音文件格式转换至: " + record_path)
                 if duration == 0:
                     duration = get_wav_duration(record_path)
                 file_id = os.path.basename(silk_path)
-                record_url = f"{self.client.file_server_url}/{file_id}"
+                record_url = f"{client.file_server_url}/{file_id}"
                 logger.debug(f"gewe callback record url: {record_url}")
-                await self.client.post_voice(to_wxid, record_url, duration * 1000)
+                await client.post_voice(to_wxid, record_url, duration * 1000)
             elif isinstance(comp, File):
                 file_path = comp.file
                 file_name = comp.name
@@ -131,12 +126,17 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     file_path = file_path
 
                 file_id = os.path.basename(file_path)
-                file_url = f"{self.client.file_server_url}/{file_id}"
+                file_url = f"{client.file_server_url}/{file_id}"
                 logger.debug(f"gewe callback file url: {file_url}")
-                await self.client.post_file(to_wxid, file_url, file_id)
+                await client.post_file(to_wxid, file_url, file_id)
             elif isinstance(comp, At):
                 pass
             else:
                 logger.debug(f"gewechat 忽略: {comp.type}")
 
+    async def send(self, message: MessageChain):
+        to_wxid = self.message_obj.raw_message.get("to_wxid", None)
+        await GewechatPlatformEvent.send_with_client(
+            message, to_wxid, self.client
+        )
         await super().send(message)
