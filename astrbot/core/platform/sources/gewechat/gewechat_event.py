@@ -136,7 +136,5 @@ class GewechatPlatformEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain):
         to_wxid = self.message_obj.raw_message.get("to_wxid", None)
-        await GewechatPlatformEvent.send_with_client(
-            message, to_wxid, self.client
-        )
+        await GewechatPlatformEvent.send_with_client(message, to_wxid, self.client)
         await super().send(message)

@@ -25,7 +25,9 @@ class AstrBotDashboard:
         self.config = core_lifecycle.astrbot_config
         self.data_path = os.path.abspath(os.path.join(DATAPATH, "dist"))
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
-        self.app.config['MAX_CONTENT_LENGTH'] = 128 * 1024 * 1024  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
+        self.app.config["MAX_CONTENT_LENGTH"] = (
+            128 * 1024 * 1024
+        )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
         self.app.json.sort_keys = False
         self.app.before_request(self.auth_middleware)
         # token 用于验证请求

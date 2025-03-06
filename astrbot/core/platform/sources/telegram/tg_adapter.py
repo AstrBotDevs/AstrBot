@@ -24,7 +24,7 @@ from astrbot.api.platform import register_platform_adapter
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, filters
 from telegram.constants import ChatType
-from telegram.ext import MessageHandler as TelegramMessageHandler, CommandHandler
+from telegram.ext import MessageHandler as TelegramMessageHandler
 from .tg_event import TelegramPlatformEvent
 from astrbot.api import logger
 from telegram.ext import ExtBot
@@ -121,7 +121,9 @@ class TelegramPlatformAdapter(Platform):
             if update.message.entities:
                 for entity in update.message.entities:
                     if entity.type == "mention":
-                        name = plain_text[entity.offset+1 : entity.offset + entity.length]
+                        name = plain_text[
+                            entity.offset + 1 : entity.offset + entity.length
+                        ]
                         message.message.append(At(qq=name, name=name))
                         plain_text = (
                             plain_text[: entity.offset]

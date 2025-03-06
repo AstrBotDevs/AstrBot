@@ -9,6 +9,7 @@ from astrbot.core import web_chat_back_queue
 
 imgs_dir = "data/webchat/imgs"
 
+
 class WebChatMessageEvent(AstrMessageEvent):
     def __init__(self, message_str, message_obj, platform_meta, session_id):
         super().__init__(message_str, message_obj, platform_meta, session_id)

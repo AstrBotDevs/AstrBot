@@ -139,7 +139,9 @@ class SessionWaiter:
                     session.session_controller.stop(e)
 
 
-def session_waiter(session_id_param: str, timeout: int = 30, record_history_chains: bool = False):
+def session_waiter(
+    session_id_param: str, timeout: int = 30, record_history_chains: bool = False
+):
     """
     装饰器：自动将函数注册为 SessionWaiter 处理函数，并等待外部输入触发执行。
 

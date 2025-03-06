@@ -4,12 +4,10 @@ import os
 
 from astrbot.api.platform import Platform, AstrBotMessage, MessageType, PlatformMetadata
 from astrbot.api.event import MessageChain
-from astrbot.api import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 from .gewechat_event import GewechatPlatformEvent
 from .client import SimpleGewechatClient
-from astrbot.core.message.components import Plain
 
 if sys.version_info >= (3, 12):
     from typing import override
