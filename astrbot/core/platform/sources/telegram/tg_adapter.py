@@ -50,10 +50,14 @@ class TelegramPlatformAdapter(Platform):
         )
         if not base_url:
             base_url = "https://api.telegram.org/bot"
+
+        self.base_url = base_url
+
         self.application = (
             ApplicationBuilder()
             .token(self.config["telegram_token"])
             .base_url(base_url)
+            .base_file_url(base_url)
             .build()
         )
         message_handler = TelegramMessageHandler(
@@ -62,6 +66,7 @@ class TelegramPlatformAdapter(Platform):
         )
         self.application.add_handler(message_handler)
         self.client = self.application.bot
+        logger.debug(f"Telegram base url: {self.client.base_url}")
 
     @override
     async def send_by_session(
