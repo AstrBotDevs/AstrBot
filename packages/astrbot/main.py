@@ -164,8 +164,11 @@ AstrBot 指令:
             plugin_list_info = "已加载的插件：\n"
             for plugin in self.context.get_all_stars():
                 plugin_list_info += (
-                    f"- `{plugin.name}` By {plugin.author}: {plugin.desc}\n"
+                    f"- `{plugin.name}` By {plugin.author}: {plugin.desc}"
                 )
+                if not plugin.activated:
+                    plugin_list_info += " (未启用)"
+                plugin_list_info += "\n"
             if plugin_list_info.strip() == "":
                 plugin_list_info = "没有加载任何插件。"
 
@@ -199,12 +202,8 @@ AstrBot 指令:
                 if plugin is None:
                     event.set_result(MessageEventResult().message("未找到此插件。"))
                     return
-                help_msg = (
-                    plugin.star_cls.__doc__
-                    if plugin.star_cls.__doc__
-                    else "帮助信息: 未提供"
-                )
-                help_msg += f"\n\n作者: {plugin.author}\n版本: {plugin.version}"
+                help_msg = ""
+                help_msg += f"\n\n✨ 作者: {plugin.author}\n✨ 版本: {plugin.version}"
                 command_handlers = []
                 command_names = []
                 for handler in star_handlers_registry:
@@ -221,13 +220,16 @@ AstrBot 指令:
                             command_names.append(filter_.group_name)
 
                 if len(command_handlers) > 0:
-                    help_msg += "\n\n指令列表：\n"
+                    help_msg += "\n\n🔧 指令列表：\n"
                     for i in range(len(command_handlers)):
-                        help_msg += f"{command_names[i]}: {command_handlers[i].desc}\n"
+                        help_msg += f"- {command_names[i]}"
+                        if command_handlers[i].desc:
+                            help_msg += f": {command_handlers[i].desc}"
+                        help_msg += "\n"
 
                     help_msg += "\nTip: 指令的触发需要添加唤醒前缀，默认为 /。"
 
-                ret = f"插件 {oper1} 帮助信息：\n" + help_msg
+                ret = f"🧩 插件 {oper1} 帮助信息：\n" + help_msg
                 ret += "更多帮助信息请查看插件仓库 README。"
                 event.set_result(MessageEventResult().message(ret).use_t2i(False))
 
