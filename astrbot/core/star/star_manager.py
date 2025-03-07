@@ -207,10 +207,6 @@ class PluginManager:
                     )
 
                 await self._unbind_plugin(smd.name, specified_module_path)
-                try:
-                    del sys.modules[specified_module_path]
-                except KeyError:
-                    logger.warning(f"模块 {specified_module_path} 未载入")
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -480,6 +476,11 @@ class PluginManager:
             logger.debug(f"unbind handler {v.handler_name} from {plugin_name} (map)")
             del star_handlers_registry.star_handlers_map[k]
 
+        try:
+            del sys.modules[plugin_module_path]
+        except KeyError:
+            logger.warning(f"模块 {plugin_module_path} 未载入")
+
     async def update_plugin(self, plugin_name: str, proxy=""):
         """升级一个插件"""
         plugin = self.context.get_registered_star(plugin_name)
@@ -530,6 +531,11 @@ class PluginManager:
         """终止插件，调用插件的 terminate() 和 __del__() 方法"""
         logging.info(f"正在终止插件 {star_metadata.name} ...")
 
+        if not star_metadata.activated:
+            # 说明之前已经被禁用了
+            logger.debug(f"插件 {star_metadata.name} 未被激活，不需要终止，跳过。")
+            return
+
         if hasattr(star_metadata.star_cls, "__del__"):
             asyncio.get_event_loop().run_in_executor(
                 None, star_metadata.star_cls.__del__
@@ -547,12 +553,17 @@ class PluginManager:
 
         # 启用插件启用的 llm_tool
         for func_tool in llm_tools.func_list:
-            if func_tool.handler_module_path == plugin.module_path:
+            if (
+                func_tool.handler_module_path == plugin.module_path
+                and func_tool.name in inactivated_llm_tools
+            ):
                 inactivated_llm_tools.remove(func_tool.name)
                 func_tool.active = True
         sp.put("inactivated_llm_tools", inactivated_llm_tools)
 
-        plugin.activated = True
+        await self.reload(plugin_name)
+
+        # plugin.activated = True
 
     async def install_plugin_from_file(self, zip_file_path: str):
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")
