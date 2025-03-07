@@ -1,8 +1,8 @@
-
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 from astrbot.core.utils.session_waiter import SessionWaiter, USER_SESSIONS
 from sys import maxsize
+
 
 @register(
     "session_controller",

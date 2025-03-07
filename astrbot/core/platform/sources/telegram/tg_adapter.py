@@ -51,13 +51,19 @@ class TelegramPlatformAdapter(Platform):
         if not base_url:
             base_url = "https://api.telegram.org/bot"
 
+        file_base_url = self.config.get(
+            "telegram_file_base_url", "https://api.telegram.org/file/bot"
+        )
+        if not file_base_url:
+            file_base_url = "https://api.telegram.org/file/bot"
+
         self.base_url = base_url
 
         self.application = (
             ApplicationBuilder()
             .token(self.config["telegram_token"])
             .base_url(base_url)
-            .base_file_url(base_url)
+            .base_file_url(file_base_url)
             .build()
         )
         message_handler = TelegramMessageHandler(
