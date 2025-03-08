@@ -139,13 +139,10 @@ class SessionWaiter:
                     session.session_controller.stop(e)
 
 
-def session_waiter(
-    session_id_param: str, timeout: int = 30, record_history_chains: bool = False
-):
+def session_waiter(timeout: int = 30, record_history_chains: bool = False):
     """
     装饰器：自动将函数注册为 SessionWaiter 处理函数，并等待外部输入触发执行。
 
-    :param session_id_param: 用于从参数中获取 session_id 的参数名称
     :param timeout: 超时时间（秒）
     :param record_history_chain: 是否自动记录历史消息链。可以通过 controller.get_history_chains() 获取。深拷贝。
     """
@@ -153,9 +150,9 @@ def session_waiter(
     def decorator(func: Callable[[str], Awaitable[Any]]):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            session_id = kwargs.get(session_id_param)
+            session_id = kwargs.get("session_id", None)
             if not session_id:
-                raise ValueError(f"缺少 session_id 参数 '{session_id_param}'")
+                raise ValueError("缺少 session_id 参数")
 
             waiter = SessionWaiter(session_id, record_history_chains)
             return await waiter.register_wait(func, timeout)

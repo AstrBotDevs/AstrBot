@@ -141,7 +141,8 @@ class TelegramPlatformAdapter(Platform):
                             + plain_text[entity.offset + entity.length :]
                         )
 
-            message.message.append(Plain(plain_text))
+            if plain_text:
+                message.message.append(Plain(plain_text))
             message.message_str = plain_text
 
             if message.message_str == "/start":

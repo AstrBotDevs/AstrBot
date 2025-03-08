@@ -2,7 +2,7 @@
 如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
 """
 
-VERSION = "3.4.35"
+VERSION = "3.4.36"
 DB_PATH = "data/data_v3.db"
 
 # 默认配置
@@ -36,6 +36,7 @@ DEFAULT_CONFIG = {
             "content_cleanup_rule": "",
         },
         "no_permission_reply": True,
+        "empty_mention_waiting": True,
     },
     "provider": [],
     "provider_settings": {
@@ -256,6 +257,11 @@ CONFIG_METADATA_2 = {
                         "description": "无权限回复",
                         "type": "bool",
                         "hint": "启用后，当用户没有权限执行某个操作时，机器人会回复一条消息。",
+                    },
+                    "empty_mention_waiting": {
+                        "description": "只 @ 机器人是否触发等待回复",
+                        "type": "bool",
+                        "hint": "启用后，当消息内容只有 @ 机器人时，会触发等待回复，在 60 秒内的该用户的任意一条消息均会唤醒机器人。这在某些平台不支持 @ 和语音/图片等消息同时发送时特别有用。",
                     },
                     "segmented_reply": {
                         "description": "分段回复",

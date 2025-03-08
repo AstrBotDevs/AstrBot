@@ -1,4 +1,5 @@
 import abc
+import asyncio
 from dataclasses import dataclass
 from .astrbot_message import AstrBotMessage
 from .platform_metadata import PlatformMetadata
@@ -196,7 +197,7 @@ class AstrMessageEvent(abc.ABC):
         """
         发送消息到消息平台。
         """
-        await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        asyncio.create_task(Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name))
         self._has_send_oper = True
 
     async def _pre_send(self):

@@ -267,10 +267,14 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("op")
-    async def op(self, event: AstrMessageEvent, admin_id: str=None):
+    async def op(self, event: AstrMessageEvent, admin_id: str = None):
         """授权管理员。op <admin_id>"""
         if admin_id is None:
-            event.set_result(MessageEventResult().message("使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。可通过 /sid 获取 ID。"))
+            event.set_result(
+                MessageEventResult().message(
+                    "使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。可通过 /sid 获取 ID。"
+                )
+            )
             return
         self.context.get_config()["admins_id"].append(admin_id)
         self.context.get_config().save_config()
@@ -291,10 +295,14 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("wl")
-    async def wl(self, event: AstrMessageEvent, sid: str=None):
+    async def wl(self, event: AstrMessageEvent, sid: str = None):
         """添加白名单。wl <sid>"""
         if sid is None:
-            event.set_result(MessageEventResult().message("使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。"))
+            event.set_result(
+                MessageEventResult().message(
+                    "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。"
+                )
+            )
         self.context.get_config()["platform_settings"]["id_whitelist"].append(sid)
         self.context.get_config().save_config()
         event.set_result(MessageEventResult().message("添加白名单成功。"))
