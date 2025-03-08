@@ -1,6 +1,7 @@
 import logging
 import colorlog
 import asyncio
+import os
 from collections import deque
 from asyncio import Queue
 from typing import List
@@ -15,6 +16,31 @@ log_color_config = {
     "RESET": "reset",
     "asctime": "green",
 }
+
+
+def is_plugin_path(pathname):
+    """
+    检查文件路径是否来自插件目录
+    """
+    if not pathname:
+        return False
+
+    norm_path = os.path.normpath(pathname)
+    return ("data/plugins" in norm_path) or ("packages/" in norm_path)
+
+
+def get_short_level_name(level_name):
+    """
+    将日志级别名称转换为四个字母的缩写
+    """
+    level_map = {
+        "DEBUG": "DBUG",
+        "INFO": "INFO",
+        "WARNING": "WARN",
+        "ERROR": "ERRO",
+        "CRITICAL": "CRIT",
+    }
+    return level_map.get(level_name, level_name[:4].upper())
 
 
 class LogBroker:
@@ -62,12 +88,41 @@ class LogManager:
             return logger
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG)
+
         console_formatter = colorlog.ColoredFormatter(
-            fmt="%(log_color)s [%(asctime)s] [%(levelname)-5s] [%(filename)s:%(lineno)d]: %(message)s %(reset)s",
+            fmt="%(log_color)s [%(asctime)s] %(plugin_tag)s [%(short_levelname)-4s] [%(filename)s:%(lineno)d]: %(message)s %(reset)s",
             datefmt="%H:%M:%S",
             log_colors=log_color_config,
         )
+
+        class PluginFilter(logging.Filter):
+            def filter(self, record):
+                record.plugin_tag = (
+                    "[Plug]" if is_plugin_path(record.pathname) else "[Core]"
+                )
+                return True
+
+        class FileNameFilter(logging.Filter):
+            # 获取这个文件和父文件夹的名字：<folder>.<file> 并且去除 .py
+            def filter(self, record):
+                dirname = os.path.dirname(record.pathname)
+                record.filename = (
+                    os.path.basename(dirname)
+                    + "."
+                    + os.path.basename(record.pathname).replace(".py", "")
+                )
+                return True
+
+        class LevelNameFilter(logging.Filter):
+            # 添加短日志级别名称
+            def filter(self, record):
+                record.short_levelname = get_short_level_name(record.levelname)
+                return True
+
         console_handler.setFormatter(console_formatter)
+        logger.addFilter(PluginFilter())
+        logger.addFilter(FileNameFilter())
+        logger.addFilter(LevelNameFilter())  # 添加级别名称过滤器
         logger.setLevel(logging.DEBUG)
         logger.addHandler(console_handler)
 
@@ -80,9 +135,10 @@ class LogManager:
         if logger.handlers:
             handler.setFormatter(logger.handlers[0].formatter)
         else:
+            # 为队列处理器设置相同格式的formatter
             handler.setFormatter(
                 logging.Formatter(
-                    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                    "[%(asctime)s] [%(short_levelname)s] %(plugin_tag)s[%(filename)s:%(lineno)d]: %(message)s"
                 )
             )
         logger.addHandler(handler)

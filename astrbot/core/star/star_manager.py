@@ -79,7 +79,7 @@ class PluginManager:
                 elif os.path.exists(os.path.join(path, d, d + ".py")):
                     module_str = d
                 else:
-                    print(f"插件 {d} 未找到 main.py 或者 {d}.py，跳过。")
+                    logger.info(f"插件 {d} 未找到 main.py 或者 {d}.py，跳过。")
                     continue
                 if os.path.exists(os.path.join(path, d, "main.py")) or os.path.exists(
                     os.path.join(path, d, d + ".py")

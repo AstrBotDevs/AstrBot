@@ -19,6 +19,9 @@ class FuncTool:
     active: bool = True
     """是否激活"""
 
+    def __repr__(self):
+        return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description}), active={self.active})"
+
 
 SUPPORTED_TYPES = [
     "string",

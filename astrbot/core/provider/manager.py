@@ -132,9 +132,8 @@ class ProviderManager:
             return
 
         logger.info(
-            f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商适配器 ..."
+            f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商 ..."
         )
-        logger.debug(f"Provider Config: {provider_config}")
 
         # 动态导入
         try:
