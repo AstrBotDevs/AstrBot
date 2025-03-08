@@ -6,6 +6,7 @@ from astrbot.api.star import Context, Star, register
 from astrbot.core.utils.session_waiter import (
     SessionWaiter,
     USER_SESSIONS,
+    FILTERS,
     session_waiter,
     SessionController,
 )
@@ -33,10 +34,11 @@ class Waiter(Star):
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)
     async def handle_session_control_agent(self, event: AstrMessageEvent):
         """会话控制代理"""
-        session_id = event.get_sender_id()
-        if session_id in USER_SESSIONS:
-            await SessionWaiter.trigger(session_id, event)
-            event.stop_event()
+        for session_filter in FILTERS:
+            session_id = session_filter.filter(event)
+            if session_id in USER_SESSIONS:
+                await SessionWaiter.trigger(session_id, event)
+                event.stop_event()
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)
     async def handle_empty_mention(self, event: AstrMessageEvent):
@@ -70,9 +72,7 @@ class Waiter(Star):
                         controller.stop()
 
                     try:
-                        await empty_mention_waiter(
-                            event, session_id=event.get_sender_id()
-                        )
+                        await empty_mention_waiter(event)
                     except TimeoutError as _:
                         yield event.plain_result("如果需要帮助，请再次 @ 我哦~")
                     except Exception as e:
