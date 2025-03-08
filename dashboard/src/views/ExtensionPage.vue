@@ -108,6 +108,7 @@ const checkUpdate = () => {
     } else {
       extension.has_update = false;
     }
+    extension.logo = matchedPlugin?.logo;
   });
 };
 
