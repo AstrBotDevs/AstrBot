@@ -16,83 +16,101 @@ import { useCommonStore } from '@/stores/common';
 
         <v-col cols="12" md="12">
             <v-card>
-                <v-card-title class="d-flex align-center pe-2">
 
-                    🧩 插件市场
+                <v-card-title>
+                    <div class="pl-2 pt-2 d-flex align-center pe-2">
+                        <h2>✨ 插件市场</h2>
+                        <v-btn icon size="small" style="margin-left: 8px" variant="plain" @click="jumpToPluginMarket()">
+                            <v-icon size="small">mdi-help</v-icon>
+                            <v-tooltip activator="parent" location="start">
+                                <span>
+                                    如无法显示，请单击此按钮跳转至插件市场，复制想安装插件对应的
+                                    `repo`
+                                    链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。
 
-                    <v-btn icon size="small" style="margin-left: 8px" variant="plain" @click="jumpToPluginMarket()">
-                        <v-icon size="small">mdi-help</v-icon>
-                        <v-tooltip activator="parent" location="start">
-                            <span>
-                                如无法显示，请单击此按钮跳转至插件市场，复制想安装插件对应的
-                                `repo`
-                                链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。
+                                    如果因为网络问题安装失败，点击设置页选择 GitHub 加速地址。或前往仓库下载压缩包然后本地上传。
+                                </span>
+                            </v-tooltip>
+                        </v-btn>
 
-                                如果因为网络问题安装失败，点击设置页选择 GitHub 加速地址。或前往仓库下载压缩包然后本地上传。
-                            </span>
+                        <v-btn icon @click="isListView = !isListView" size="small" style="margin-left: auto;"
+                            variant="plain">
+                            <v-icon>{{ isListView ? 'mdi-view-grid' : 'mdi-view-list' }}</v-icon>
+                        </v-btn>
 
+                        <v-spacer></v-spacer>
 
-                        </v-tooltip>
-                    </v-btn>
+                        <v-text-field v-model="marketSearch" density="compact" label="Search"
+                            prepend-inner-icon="mdi-magnify" variant="solo-filled" flat hide-details
+                            single-line></v-text-field>
+                    </div>
 
-                    <v-btn icon @click="isListView = !isListView" size="small" style="margin-left: auto;"
-                        variant="plain">
-                        <v-icon>{{ isListView ? 'mdi-view-grid' : 'mdi-view-list' }}</v-icon>
-                    </v-btn>
-
-                    <v-spacer></v-spacer>
-
-                    <v-text-field v-model="marketSearch" density="compact" label="Search"
-                        prepend-inner-icon="mdi-magnify" variant="solo-filled" flat hide-details
-                        single-line></v-text-field>
                 </v-card-title>
 
-                <v-divider></v-divider>
+                <v-card-text>
 
-                <template v-if="isListView">
-                    <v-col cols="12" md="12">
-                        <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
-                            :loading="loading_" v-model:search="marketSearch" :filter-keys="['name', 'desc', 'author']">
-                            <template v-slot:item.name="{ item }">
-                                <div class="d-flex align-center">
-                                    <img v-if="item.logo" :src="item.logo"
-                                        style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
-                                        alt="logo">
-                                    <span v-if="item?.repo"><a :href="item?.repo"
-                                            style="color: #000; text-decoration:none">{{
-                                                item.name }}</a></span>
-                                    <span v-else>{{ item.name }}</span>
+                    <div v-if="pinnedPlugins.length > 0" class="mt-4">
+                        <h2>🥳 推荐</h2>
 
-                                </div>
+                        <v-row style="margin-top: 8px;">
+                            <v-col cols="12" md="6" lg="6" v-for="plugin in pinnedPlugins">
+                                <ExtensionCard :extension="plugin" market-mode="true" :highlight="true">
+                                </ExtensionCard>
+                            </v-col>
+                        </v-row>
+                    </div>
 
-                            </template>
-                            <template v-slot:item.author="{ item }">
-                                <span v-if="item?.social_link"><a :href="item?.social_link">{{ item.author }}</a></span>
-                                <span v-else>{{ item.author }}</span>
-                            </template>
-                            <template v-slot:item.tags="{ item }">
-                                <span v-if="item.tags.length === 0">无</span>
-                                <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="small">{{ tag
-                                }}</v-chip>
-                            </template>
-                            <template v-slot:item.actions="{ item }">
-                                <v-btn v-if="!item.installed" class="text-none mr-2" size="small" text="Read"
-                                    variant="flat" border @click="extension_url = item.repo; newExtension()">安装</v-btn>
-                                <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border
-                                    disabled>已安装</v-btn>
-                            </template>
-                        </v-data-table>
-                    </v-col>
-                </template>
-                <template v-else>
-                    <v-row style="margin: 8px;">
-                        <v-col cols="12" md="6" lg="6" v-for="plugin in filteredPluginMarketData">
-                            <ExtensionCard :extension="plugin" market-mode="true">
-                            </ExtensionCard>
+                    
+
+                    <div v-if="isListView" class="mt-4">
+                        <h2>📦 全部插件</h2>
+                        <v-col cols="12" md="12" style="padding: 0px;">
+                            <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
+                                :loading="loading_" v-model:search="marketSearch"
+                                :filter-keys="['name', 'desc', 'author']">
+                                <template v-slot:item.name="{ item }">
+                                    <div class="d-flex align-center">
+                                        <img v-if="item.logo" :src="item.logo"
+                                            style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
+                                            alt="logo">
+                                        <span v-if="item?.repo"><a :href="item?.repo"
+                                                style="color: #000; text-decoration:none">{{
+                                                    item.name }}</a></span>
+                                        <span v-else>{{ item.name }}</span>
+
+                                    </div>
+
+                                </template>
+                                <template v-slot:item.author="{ item }">
+                                    <span v-if="item?.social_link"><a :href="item?.social_link">{{ item.author
+                                            }}</a></span>
+                                    <span v-else>{{ item.author }}</span>
+                                </template>
+                                <template v-slot:item.tags="{ item }">
+                                    <span v-if="item.tags.length === 0">无</span>
+                                    <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="small">{{ tag
+                                    }}</v-chip>
+                                </template>
+                                <template v-slot:item.actions="{ item }">
+                                    <v-btn v-if="!item.installed" class="text-none mr-2" size="small" text="Read"
+                                        variant="flat" border
+                                        @click="extension_url = item.repo; newExtension()">安装</v-btn>
+                                    <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border
+                                        disabled>已安装</v-btn>
+                                </template>
+                            </v-data-table>
                         </v-col>
-                    </v-row>
-
-                </template>
+                    </div>
+                    <div v-else class="mt-4">
+                        <h2>📦 全部插件</h2>
+                        <v-row style="margin-top: 16px;">
+                            <v-col cols="12" md="6" lg="6" v-for="plugin in filteredPluginMarketData">
+                                <ExtensionCard :extension="plugin" market-mode="true">
+                                </ExtensionCard>
+                            </v-col>
+                        </v-row>
+                    </div>
+                </v-card-text>
 
             </v-card>
 
@@ -215,6 +233,9 @@ export default {
             return this.pluginMarketData.filter(plugin =>
                 plugin.name.toLowerCase().includes(search)
             );
+        },
+        pinnedPlugins() {
+            return this.pluginMarketData.filter(plugin => plugin?.pinned);
         }
     },
     mounted() {

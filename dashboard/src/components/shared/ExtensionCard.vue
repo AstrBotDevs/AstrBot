@@ -10,6 +10,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  highlight: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // 定义要发送到父组件的事件
@@ -62,7 +66,8 @@ const viewHandlers = () => {
 </script>
 
 <template>
-  <v-card class="mx-auto d-flex flex-column" :style="{ height: $vuetify.display.xs ? '250px' : '220px' }">
+  <v-card class="mx-auto d-flex flex-column" :elevation="highlight ? 0 : 1"
+    :style="{ height: $vuetify.display.xs ? '250px' : '220px', backgroundColor: highlight ? '#FAF0DB' : '#ffffff', color: highlight ? '#000' : '#000000' }">
     <v-card-text style="padding: 16px; padding-bottom: 0px; display: flex; justify-content: space-between;">
 
       <div class="flex-grow-1">
@@ -99,47 +104,40 @@ const viewHandlers = () => {
           </v-chip>
         </div>
 
-        <div class="text-medium-emphasis mt-2" :class="{ 'text-caption': $vuetify.display.xs }">
+        <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }">
           {{ extension.desc }}
         </div>
       </div>
 
       <div class="extension-image-container" v-if="extension.logo">
-        <img 
-          :src="extension.logo" 
-          :style="{ 
-            height: $vuetify.display.xs ? '75px' : '100px', 
-            width: $vuetify.display.xs ? '75px' : '100px', 
-            borderRadius: '8px',
-            objectFit: 'cover',
-            objectPosition: 'center'
-          }"
-          alt="logo"
-        />
+        <img :src="extension.logo" :style="{
+          height: $vuetify.display.xs ? '75px' : '100px',
+          width: $vuetify.display.xs ? '75px' : '100px',
+          borderRadius: '8px',
+          objectFit: 'cover',
+          objectPosition: 'center'
+        }" alt="logo" />
       </div>
     </v-card-text>
 
     <v-card-actions style="padding: 0px; margin-top: auto;">
       <v-btn color="teal-accent-4" text="帮助" variant="text" @click="open(extension.repo)"></v-btn>
       <v-btn v-if="!marketMode" color="teal-accent-4" text="操作" variant="text" @click="reveal = true"></v-btn>
-      <v-btn v-if="marketMode && !extension?.installed" color="teal-accent-4" text="安装" variant="text" @click="emit('install', extension)"></v-btn>
+      <v-btn v-if="marketMode && !extension?.installed" color="teal-accent-4" text="安装" variant="text"
+        @click="emit('install', extension)"></v-btn>
       <v-btn v-if="marketMode && extension?.installed" color="teal-accent-4" text="已安装" variant="text" disabled></v-btn>
-    </v-card-actions> 
+    </v-card-actions>
 
     <v-expand-transition v-if="!marketMode">
       <v-card v-if="reveal" class="position-absolute w-100" height="100%"
         style="bottom: 0; display: flex; flex-direction: column;">
         <v-card-text style="overflow-y: auto;">
           <div class="d-flex align-center mb-4">
-            <img 
-              v-if="extension.logo"
-              :src="extension.logo"
-              style="height: 50px; width: 50px; border-radius: 8px; margin-right: 16px;"
-              alt="扩展图标"
-            />
+            <img v-if="extension.logo" :src="extension.logo"
+              style="height: 50px; width: 50px; border-radius: 8px; margin-right: 16px;" alt="扩展图标" />
             <h3>{{ extension.name }}</h3>
           </div>
-          
+
           <div class="mt-4" :style="{
             justifyContent: 'center',
             display: 'flex',
