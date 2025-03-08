@@ -149,9 +149,10 @@ class ConfigRoute(Route):
         plugin_name = request.args.get("plugin_name", "unknown")
         try:
             await self._save_plugin_configs(post_configs, plugin_name)
+            await self.core_lifecycle.plugin_manager.reload(plugin_name)
             return (
                 Response()
-                .ok(None, f"保存插件 {plugin_name} 成功~ 机器人正在重载配置。")
+                .ok(None, f"保存插件 {plugin_name} 成功~ 机器人正在热重载插件。")
                 .__dict__
             )
         except Exception as e:
@@ -315,6 +316,5 @@ class ConfigRoute(Route):
 
         try:
             save_config(post_configs, md.config)
-            self.core_lifecycle.restart()
         except Exception as e:
             raise e

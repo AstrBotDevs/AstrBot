@@ -73,11 +73,9 @@
                 </template>
             </v-btn>
 
-            <div v-if="showConsole" style="margin-top: 32px; ">
-                <ConsoleDisplayer style="background-color: #fff; height: 300px"></ConsoleDisplayer>
+            <div v-if="showConsole" style="margin-top: 32px">
+                <ConsoleDisplayer style="background-color: #000; height: 300px"></ConsoleDisplayer>
             </div>
-
-
 
         </v-card-text>
     </v-card>
