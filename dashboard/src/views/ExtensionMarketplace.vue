@@ -51,13 +51,20 @@ import { useCommonStore } from '@/stores/common';
 
                 <template v-if="isListView">
                     <v-col cols="12" md="12">
-                        <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name" :loading="loading_"
-                            v-model:search="marketSearch" :filter-keys="['name', 'desc', 'author']">
+                        <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
+                            :loading="loading_" v-model:search="marketSearch" :filter-keys="['name', 'desc', 'author']">
                             <template v-slot:item.name="{ item }">
-                                <span v-if="item?.repo"><a :href="item?.repo"
-                                        style="color: #000; text-decoration:none">{{
-                                            item.name }}</a></span>
-                                <span v-else>{{ item.name }}</span>
+                                <div class="d-flex align-center">
+                                    <img v-if="item.logo" :src="item.logo"
+                                        style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
+                                        alt="logo">
+                                    <span v-if="item?.repo"><a :href="item?.repo"
+                                            style="color: #000; text-decoration:none">{{
+                                                item.name }}</a></span>
+                                    <span v-else>{{ item.name }}</span>
+
+                                </div>
+
                             </template>
                             <template v-slot:item.author="{ item }">
                                 <span v-if="item?.social_link"><a :href="item?.social_link">{{ item.author }}</a></span>
@@ -66,7 +73,7 @@ import { useCommonStore } from '@/stores/common';
                             <template v-slot:item.tags="{ item }">
                                 <span v-if="item.tags.length === 0">无</span>
                                 <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="small">{{ tag
-                                    }}</v-chip>
+                                }}</v-chip>
                             </template>
                             <template v-slot:item.actions="{ item }">
                                 <v-btn v-if="!item.installed" class="text-none mr-2" size="small" text="Read"
