@@ -267,40 +267,14 @@ onMounted(async () => {
       </div>
     </v-col>
     
-    <v-col cols="12" md="6" lg="3" v-for="extension in filteredExtensions" :key="extension.name">
-      <ExtensionCard :title="extension.name" :link="extension.repo" :logo="extension?.logo"
-        :has_update="extension.has_update" style="margin-bottom: 4px;" :activated="extension.activated">
-        <div style="min-height: 140px; max-height: 140px; overflow: auto;">
-          <div>
-            <span style="font-weight: bold;">By @{{ extension.author }}</span>
-            <span> | {{ extension.handlers.length }} 个行为</span>
-          </div>
-          <div>
-            当前: <v-chip size="small" color="primary">{{ extension.version }}</v-chip>
-            <span v-if="extension.online_version">
-              | 最新: <v-chip size="small" color="primary">{{ extension.online_version }}</v-chip>
-            </span>
-            <span v-if="extension.has_update" style="font-weight: bold;">有更新</span>
-          </div>
-          <p style="margin-top: 8px;">{{ extension.desc }}</p>
-          <a style="font-size: 12px; cursor: pointer; text-decoration: underline; color: #555;"
-            @click="reloadPlugin(extension.name)">重载插件</a>
-        </div>
-        
-        <div class="d-flex align-center gap-2" style="overflow-x: auto;">
-          <v-btn v-if="!extension.reserved" class="text-none mr-2" size="small" variant="flat" border
-            @click="openExtensionConfig(extension.name)">配置</v-btn>
-          <v-btn v-if="!extension.reserved" class="text-none mr-2" size="small" variant="flat" border
-            @click="updateExtension(extension.name)">更新</v-btn>
-          <v-btn v-if="!extension.reserved" class="text-none mr-2" size="small" variant="flat" border
-            @click="uninstallExtension(extension.name)">卸载</v-btn>
-          <v-btn class="text-none mr-2" size="small" variant="flat" border v-if="extension.activated"
-            @click="pluginOff(extension)">禁用</v-btn>
-          <v-btn class="text-none mr-2" size="small" variant="flat" border v-else
-            @click="pluginOn(extension)">启用</v-btn>
-          <v-btn class="text-none mr-2" size="small" variant="flat" border
-            @click="showPluginInfo(extension)">行为</v-btn>
-        </div>
+    <v-col cols="10" md="6" lg="6" v-for="extension in filteredExtensions" :key="extension.name">
+      <ExtensionCard :extension="extension" 
+        @configure="openExtensionConfig(extension.name)"
+        @uninstall="uninstallExtension(extension.name)"
+        @update="updateExtension(extension.name)"
+        @reload="reloadPlugin(extension.name)"
+        @toggle-activation="extension.activated ? pluginOff(extension) : pluginOn(extension)"
+        @view-handlers="showPluginInfo(extension)">
       </ExtensionCard>
     </v-col>
   </v-row>

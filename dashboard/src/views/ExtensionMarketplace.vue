@@ -52,7 +52,7 @@ import { useCommonStore } from '@/stores/common';
                 <template v-if="isListView">
                     <v-col cols="12" md="12">
                         <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name" :loading="loading_"
-                            v-model:search="marketSearch" :filter-keys="['name', 'desc']">
+                            v-model:search="marketSearch" :filter-keys="['name', 'desc', 'author']">
                             <template v-slot:item.name="{ item }">
                                 <span v-if="item?.repo"><a :href="item?.repo"
                                         style="color: #000; text-decoration:none">{{
@@ -79,21 +79,8 @@ import { useCommonStore } from '@/stores/common';
                 </template>
                 <template v-else>
                     <v-row style="margin: 8px;">
-                        <v-col cols="12" md="6" lg="3" v-for="plugin in filteredPluginMarketData">
-                            <ExtensionCard :key="plugin.name" :title="plugin.name" :link="plugin.repo"
-                                style="margin-bottom: 4px;">
-                                <div style="min-height: 130px; max-height: 130px; overflow: hidden;">
-                                    <p style="font-weight: bold;">By @{{ plugin.author }}</p>
-                                    {{ plugin.desc }}
-                                </div>
-
-                                <div class="d-flex align-center gap-2">
-                                    <v-btn v-if="!plugin.installed" class="text-none mr-2" size="small" text="Read"
-                                        variant="flat" border
-                                        @click="extension_url = plugin.repo; newExtension()">安装</v-btn>
-                                    <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border
-                                        disabled>已安装</v-btn>
-                                </div>
+                        <v-col cols="12" md="6" lg="6" v-for="plugin in filteredPluginMarketData">
+                            <ExtensionCard :extension="plugin" market-mode="true">
                             </ExtensionCard>
                         </v-col>
                     </v-row>

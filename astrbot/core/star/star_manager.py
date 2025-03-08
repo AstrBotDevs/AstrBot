@@ -207,7 +207,7 @@ class PluginManager:
 
                 await self._unbind_plugin(smd.name, specified_module_path)
 
-        await self.load(specified_module_path)
+        return await self.load(specified_module_path)
 
     async def load(self, specified_module_path=None, specified_dir_name=None):
         """载入插件。

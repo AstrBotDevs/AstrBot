@@ -71,16 +71,14 @@ class Main(star.Star):
         dashboard_version = await get_dashboard_version()
 
         msg = f"""AstrBot v{VERSION}(WebUI: {dashboard_version})
-AstrBot 指令:
+内置指令:
 [System]
 /plugin: 查看插件、插件帮助
 /t2i: 开关文本转图片
 /tts: 开关文本转语音
 /sid: 获取会话 ID
-/op <admin_id>: 授权管理员(op)
-/deop <admin_id>: 取消管理员(op)
-/wl <sid>: 添加白名单(op)
-/dwl <sid>: 删除白名单(op)
+/op: 管理员
+/wl: 白名单
 /dashboard_update: 更新管理面板(op)
 /alter_cmd: 设置指令权限(op)
 
@@ -269,8 +267,11 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("op")
-    async def op(self, event: AstrMessageEvent, admin_id: str):
+    async def op(self, event: AstrMessageEvent, admin_id: str=None):
         """授权管理员。op <admin_id>"""
+        if admin_id is None:
+            event.set_result(MessageEventResult().message("使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。可通过 /sid 获取 ID。"))
+            return
         self.context.get_config()["admins_id"].append(admin_id)
         self.context.get_config().save_config()
         event.set_result(MessageEventResult().message("授权成功。"))
@@ -290,8 +291,10 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("wl")
-    async def wl(self, event: AstrMessageEvent, sid: str):
+    async def wl(self, event: AstrMessageEvent, sid: str=None):
         """添加白名单。wl <sid>"""
+        if sid is None:
+            event.set_result(MessageEventResult().message("使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。"))
         self.context.get_config()["platform_settings"]["id_whitelist"].append(sid)
         self.context.get_config().save_config()
         event.set_result(MessageEventResult().message("添加白名单成功。"))
