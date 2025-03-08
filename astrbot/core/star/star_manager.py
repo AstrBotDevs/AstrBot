@@ -308,7 +308,9 @@ class PluginManager:
                                     context=self.context
                                 )
                         else:
-                            metadata.star_cls = metadata.star_cls_type(context=self.context)
+                            metadata.star_cls = metadata.star_cls_type(
+                                context=self.context
+                            )
                     else:
                         logger.info(f"插件 {metadata.name} 已被禁用。")
 
