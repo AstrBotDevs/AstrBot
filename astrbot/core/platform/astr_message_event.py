@@ -197,7 +197,9 @@ class AstrMessageEvent(abc.ABC):
         """
         发送消息到消息平台。
         """
-        asyncio.create_task(Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name))
+        asyncio.create_task(
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        )
         self._has_send_oper = True
 
     async def _pre_send(self):

@@ -138,11 +138,13 @@ class LLMRequestSubStage(Stage):
             # 保存到历史记录
             await self._save_to_history(event, req, llm_response)
 
-            asyncio.create_task(Metric.upload(
-                llm_tick=1,
-                model_name=provider.get_model(),
-                provider_type=provider.meta().type,
-            ))
+            asyncio.create_task(
+                Metric.upload(
+                    llm_tick=1,
+                    model_name=provider.get_model(),
+                    provider_type=provider.meta().type,
+                )
+            )
 
             if llm_response.role == "assistant":
                 # text completion
