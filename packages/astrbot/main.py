@@ -1,7 +1,6 @@
 import aiohttp
 import datetime
 import builtins
-import json
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -1025,9 +1024,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                     return
                 try:
                     conv = None
-                    history = []
                     if provider.meta().type != "dify":
-                        # Dify 自己有维护对话，不需要 bot 端维护。
                         session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
                             event.unified_msg_origin
                         )
@@ -1041,10 +1038,8 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                         conv = await self.context.conversation_manager.get_conversation(
                             event.unified_msg_origin, session_curr_cid
                         )
-                        history = []
-                        if conv:
-                            history = json.loads(conv.history)
                     else:
+                        # Dify 自己有维护对话，不需要 bot 端维护。
                         assert isinstance(provider, ProviderDify)
                         cid = provider.conversation_ids.get(
                             event.unified_msg_origin, None
@@ -1063,7 +1058,6 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                         prompt=prompt,
                         func_tool_manager=self.context.get_llm_tool_manager(),
                         session_id=event.session_id,
-                        contexts=history if history else [],
                         conversation=conv,
                     )
                 except BaseException as e:
@@ -1072,6 +1066,8 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
         """在请求 LLM 前注入人格信息、Identifier、时间等 System Prompt"""
+        logger.debug(req.conversation)
+
         if self.prompt_prefix:
             req.prompt = self.prompt_prefix + req.prompt
 
