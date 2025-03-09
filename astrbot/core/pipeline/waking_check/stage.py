@@ -25,6 +25,10 @@ class WakingCheckStage(Stage):
         self.no_permission_reply = self.ctx.astrbot_config["platform_settings"].get(
             "no_permission_reply", True
         )
+        # 私聊是否需要 wake_prefix 才能唤醒机器人
+        self.friend_message_needs_wake_prefix = self.ctx.astrbot_config[
+            "platform_settings"
+        ].get("friend_message_needs_wake_prefix", False)
 
     async def process(
         self, event: AstrMessageEvent
@@ -68,7 +72,7 @@ class WakingCheckStage(Stage):
                     event.is_at_or_wake_command = True
                     break
             # 检查是否是私聊
-            if event.is_private_chat():
+            if event.is_private_chat() and not self.friend_message_needs_wake_prefix:
                 is_wake = True
                 event.is_wake = True
                 event.is_at_or_wake_command = True

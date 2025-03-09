@@ -37,6 +37,7 @@ DEFAULT_CONFIG = {
         },
         "no_permission_reply": True,
         "empty_mention_waiting": True,
+        "friend_message_needs_wake_prefix": False,
     },
     "provider": [],
     "provider_settings": {
@@ -269,6 +270,11 @@ CONFIG_METADATA_2 = {
                         "description": "只 @ 机器人是否触发等待回复",
                         "type": "bool",
                         "hint": "启用后，当消息内容只有 @ 机器人时，会触发等待回复，在 60 秒内的该用户的任意一条消息均会唤醒机器人。这在某些平台不支持 @ 和语音/图片等消息同时发送时特别有用。",
+                    },
+                    "friend_message_needs_wake_prefix": {
+                        "description": "私聊消息是否需要唤醒前缀",
+                        "type": "bool",
+                        "hint": "启用后，私聊消息需要唤醒前缀才会被处理，同群聊一样。",
                     },
                     "segmented_reply": {
                         "description": "分段回复",
