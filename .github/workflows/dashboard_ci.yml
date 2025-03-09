@@ -19,13 +19,13 @@ jobs:
         id: get_sha
         run: |
           echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          mkdir -p dist/assets
-          echo $COMMIT_SHA > dist/assets/version
+          mkdir -p dashboard/dist/assets
+          echo $COMMIT_SHA > dashboard/dist/assets/version
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dist-without-markdown
           path: |
-            dist
+            dashboard/dist
             !dist/**/*.md
