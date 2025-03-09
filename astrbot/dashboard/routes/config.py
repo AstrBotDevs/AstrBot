@@ -39,9 +39,10 @@ def validate_config(
                 data[key] = DEFAULT_VALUE_MAP[meta["type"]]
                 continue
             # 递归验证
-            if meta["type"] == "list" and isinstance(value, list):
-                for item in value:
-                    validate(item, meta["items"], path=f"{path}{key}.")
+            if meta["type"] == "list" and not isinstance(value, list):
+                errors.append(
+                    f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}"
+                )
             elif meta["type"] == "object" and isinstance(value, dict):
                 validate(value, meta["items"], path=f"{path}{key}.")
 
@@ -103,6 +104,7 @@ def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False)
     except BaseException as e:
         logger.error(traceback.format_exc())
         logger.warning(f"验证配置时出现异常: {e}")
+        raise ValueError(f"验证配置时出现异常: {e}")
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
     config.save_config(post_config)

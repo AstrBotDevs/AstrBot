@@ -183,6 +183,7 @@ const openExtensionConfig = async (extension_name) => {
     const res = await axios.get('/api/config/get?plugin_name=' + extension_name);
     extension_config.metadata = res.data.data.metadata;
     extension_config.config = res.data.data.config;
+    
   } catch (err) {
     toast(err, "error");
   }
@@ -197,6 +198,9 @@ const updateConfig = async () => {
       toast(res.data.message, "error");
     }
     configDialog.value = false;
+    extension_config.metadata = {};
+    extension_config.config = {};
+    getExtensions();
   } catch (err) {
     toast(err, "error");
   }
