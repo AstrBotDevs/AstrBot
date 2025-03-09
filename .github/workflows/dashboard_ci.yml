@@ -1,0 +1,31 @@
+name: AstrBot Dashboard CI
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: npm install, build
+        run: |
+          cd dashboard
+          npm install
+          npm run build
+
+      - name: Inject Commit SHA
+        id: get_sha
+        run: |
+          echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          mkdir -p dist/assets
+          echo $COMMIT_SHA > dist/assets/version
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-without-markdown
+          path: |
+            dist
+            !dist/**/*.md
