@@ -1089,7 +1089,9 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             req.prompt = user_info + req.prompt
 
         if self.enable_datetime:
-            current_time = datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+            current_time = (
+                datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+            )
             req.system_prompt += f"\nCurrent datetime: {current_time}\n"
 
         if req.conversation:
