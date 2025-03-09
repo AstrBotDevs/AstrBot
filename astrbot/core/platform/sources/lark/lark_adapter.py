@@ -66,7 +66,7 @@ class LarkPlatformAdapter(Platform):
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
     ):
-        raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
+        raise NotImplementedError("Lark 适配器不支持 send_by_session")
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(

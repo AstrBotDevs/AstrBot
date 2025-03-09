@@ -159,6 +159,13 @@ CONFIG_METADATA_2 = {
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
                     },
+                    "dingtalk(钉钉)": {
+                        "id": "dingtalk",
+                        "type": "dingtalk",
+                        "enable": False,
+                        "client_id": "",
+                        "client_secret": "",
+                    },
                     "telegram": {
                         "id": "telegram",
                         "type": "telegram",

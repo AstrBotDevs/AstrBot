@@ -24,3 +24,4 @@ cryptography
 dashscope
 python-telegram-bot
 wechatpy
+dingtalk-stream
