@@ -65,7 +65,9 @@ class PlatformManager:
                 case "lark":
                     from .sources.lark.lark_adapter import LarkPlatformAdapter  # noqa: F401
                 case "dingtalk":
-                    from .sources.dingtalk.dingtalk_adapter import DingtalkPlatformAdapter  # noqa: F401
+                    from .sources.dingtalk.dingtalk_adapter import (
+                        DingtalkPlatformAdapter,  # noqa: F401
+                    )
                 case "telegram":
                     from .sources.telegram.tg_adapter import TelegramPlatformAdapter  # noqa: F401
                 case "wecom":

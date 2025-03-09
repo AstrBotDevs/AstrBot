@@ -2,7 +2,6 @@ import asyncio
 import uuid
 import aiohttp
 import dingtalk_stream
-import logging
 
 from astrbot.api.platform import (
     Platform,
@@ -98,9 +97,7 @@ class DingtalkPlatformAdapter(Platform):
 
         if abm.type == MessageType.GROUP_MESSAGE:
             if message.is_in_at_list:
-                abm.message.append(
-                    At(qq=abm.self_id)
-                )
+                abm.message.append(At(qq=abm.self_id))
             abm.group_id = message.conversation_id
             if self.unique_session:
                 abm.session_id = abm.sender.user_id

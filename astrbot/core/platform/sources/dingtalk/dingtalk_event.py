@@ -1,14 +1,8 @@
-import json
-import uuid
 import asyncio
-import aiohttp
 import dingtalk_stream
 import astrbot.api.message_components as Comp
-from typing import List
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.core.utils.io import download_image_by_url
 from astrbot import logger
-from astrbot.core.utils.io import file_to_base64
 
 
 class DingtalkMessageEvent(AstrMessageEvent):
@@ -35,7 +29,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
             elif isinstance(segment, Comp.Image):
                 markdown_str = ""
                 if segment.file and segment.file.startswith("file:///"):
-                    logger.warning("dingtalk only support url image, not: " + segment.file)
+                    logger.warning(
+                        "dingtalk only support url image, not: " + segment.file
+                    )
                     continue
                 elif segment.file and segment.file.startswith("http"):
                     markdown_str += f"![image]({segment.file})\n\n"
@@ -43,7 +39,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
                     logger.warning("dingtalk only support url image, not base64")
                     continue
                 else:
-                    logger.warning("dingtalk only support url image, not: " + segment.file)
+                    logger.warning(
+                        "dingtalk only support url image, not: " + segment.file
+                    )
                     continue
 
                 ret = await asyncio.get_event_loop().run_in_executor(
