@@ -656,7 +656,7 @@ CONFIG_METADATA_2 = {
                         "type": "fishaudio_tts_api",
                         "enable": False,
                         "api_key": "",
-                        "api_base": "https://api.fish-audio.cn/v1",
+                        "api_base": "https://api.fish.audio/v1",
                         "fishaudio-tts-character": "可莉",
                         "timeout": "20",
                     },
