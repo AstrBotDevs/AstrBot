@@ -1,6 +1,7 @@
 import aiohttp
 import datetime
 import builtins
+import traceback
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -1072,6 +1073,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                         conversation=conv,
                     )
                 except BaseException as e:
+                    logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
 
     @filter.on_llm_request()
