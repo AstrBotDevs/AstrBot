@@ -1,6 +1,7 @@
 from __future__ import annotations
 import abc
 import inspect
+import traceback
 from astrbot.api import logger
 from typing import List, AsyncGenerator, Union, Awaitable
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -43,25 +44,32 @@ class Stage(abc.ABC):
         """调用 Handler。"""
         # 判断 handler 是否是类方法（通过装饰器注册的没有 __self__ 属性）
         ready_to_call = None
+
+        trace_ = None
+
         try:
             ready_to_call = handler(event, *args, **kwargs)
-        except TypeError as e:
+        except TypeError as _:
             # 向下兼容
-            logger.debug(str(e))
+            trace_ = traceback.format_exc()
             ready_to_call = handler(event, ctx.plugin_manager.context, *args, **kwargs)
 
         if isinstance(ready_to_call, AsyncGenerator):
             _has_yielded = False
-            async for ret in ready_to_call:
-                # 如果处理函数是生成器，返回值只能是 MessageEventResult 或者 None（无返回值）
-                _has_yielded = True
-                if isinstance(ret, (MessageEventResult, CommandResult)):
-                    event.set_result(ret)
+            try:
+                async for ret in ready_to_call:
+                    # 如果处理函数是生成器，返回值只能是 MessageEventResult 或者 None（无返回值）
+                    _has_yielded = True
+                    if isinstance(ret, (MessageEventResult, CommandResult)):
+                        event.set_result(ret)
+                        yield
+                    else:
+                        yield ret
+                if not _has_yielded:
                     yield
-                else:
-                    yield ret
-            if not _has_yielded:
-                yield
+            except Exception as e:
+                logger.error(f"Previous Error: {trace_}")
+                raise e
         elif inspect.iscoroutine(ready_to_call):
             # 如果只是一个 coroutine
             ret = await ready_to_call
