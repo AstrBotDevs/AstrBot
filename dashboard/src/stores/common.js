@@ -18,6 +18,7 @@ export const useCommonStore = defineStore({
       "gewechat": "https://astrbot.app/deploy/platform/gewechat.html",
       "lark": "https://astrbot.app/deploy/platform/lark.html",
       "telegram": "https://astrbot.app/deploy/platform/telegram.html",
+      "dingtalk": "https://astrbot.app/deploy/platform/dingtalk.html",
     },
 
     pluginMarketData: []

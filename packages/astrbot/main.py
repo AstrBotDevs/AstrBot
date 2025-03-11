@@ -1,6 +1,7 @@
 import aiohttp
 import datetime
 import builtins
+import traceback
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -261,8 +262,15 @@ class Main(star.Star):
         """获取会话 ID 和 管理员 ID"""
         sid = event.unified_msg_origin
         user_id = str(event.get_sender_id())
-        ret = f"""SID: {sid} 此 ID 可用于设置会话白名单。/wl <SID> 添加白名单, /dwl <SID> 删除白名单。
-UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deop <UID> 取消管理员。"""
+        ret = f"""SID: {sid} 此 ID 可用于设置会话白名单。
+/wl <SID> 添加白名单, /dwl <SID> 删除白名单。
+
+UID: {user_id} 此 ID 可用于设置管理员。
+/op <UID> 授权管理员, /deop <UID> 取消管理员。"""
+
+        if self.context.get_config()["platform_settings"]["unique_session"] and event.get_group_id():
+            ret += f"\n\n当前处于独立会话模式, 此群 ID: {event.get_group_id()}, 也可将此 ID 加入白名单来放行整个群聊。"
+
         event.set_result(MessageEventResult().message(ret).use_t2i(False))
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -1072,6 +1080,7 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
                         conversation=conv,
                     )
                 except BaseException as e:
+                    logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
 
     @filter.on_llm_request()
@@ -1089,9 +1098,9 @@ UID: {user_id} 此 ID 可用于设置管理员。/op <UID> 授权管理员, /deo
             req.prompt = user_info + req.prompt
 
         if self.enable_datetime:
-            tz_offset = datetime.timedelta(hours=8)
-            tz = datetime.timezone(tz_offset)
-            current_time = datetime.datetime.now(tz).strftime("%Y-%m-%d %H:%M")
+            current_time = (
+                datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+            )
             req.system_prompt += f"\nCurrent datetime: {current_time}\n"
 
         if req.conversation:
