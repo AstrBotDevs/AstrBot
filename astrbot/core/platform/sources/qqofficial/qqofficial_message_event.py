@@ -130,7 +130,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         "base64://", ""
                     )
                 else:
-                    image_base64 = file_to_base64(i.file).replace("base64://", "")
+                    image_base64 = i.file.replace("base64://", "")
                     image_file_path = i.file
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
