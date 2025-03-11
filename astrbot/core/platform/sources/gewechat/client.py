@@ -335,7 +335,9 @@ class SimpleGewechatClient:
                     if json_blob["ret"] != 200:
                         error_msg = json_blob.get("data", {}).get("msg", "")
                         if "设备不存在" in error_msg:
-                            logger.error(f"检测到无效的appid: {self.appid}，将清除并重新登录。")
+                            logger.error(
+                                f"检测到无效的appid: {self.appid}，将清除并重新登录。"
+                            )
                             sp.put(f"gewechat-appid-{self.nickname}", "")
                             self.appid = None
                             return await self.login()
