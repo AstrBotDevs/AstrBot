@@ -147,6 +147,11 @@ class SimpleGewechatClient:
             abm.type = MessageType.FRIEND_MESSAGE
             user_id = from_user_name
 
+        # 检查消息是否由自己发送，若是则忽略
+        if user_id == abm.self_id:
+            logger.info("忽略自己发送的消息")
+            return None
+
         abm.message = []
         if at_me:
             abm.message.insert(0, At(qq=abm.self_id))
