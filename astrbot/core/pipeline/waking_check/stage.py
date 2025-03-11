@@ -36,7 +36,7 @@ class WakingCheckStage(Stage):
         # 设置 sender 身份
         event.message_str = event.message_str.strip()
         for admin_id in self.ctx.astrbot_config["admins_id"]:
-            if event.get_sender_id() == admin_id:
+            if str(event.get_sender_id()) == admin_id:
                 event.role = "admin"
                 break
 
