@@ -268,7 +268,10 @@ class Main(star.Star):
 UID: {user_id} 此 ID 可用于设置管理员。
 /op <UID> 授权管理员, /deop <UID> 取消管理员。"""
 
-        if self.context.get_config()["platform_settings"]["unique_session"] and event.get_group_id():
+        if (
+            self.context.get_config()["platform_settings"]["unique_session"]
+            and event.get_group_id()
+        ):
             ret += f"\n\n当前处于独立会话模式, 此群 ID: {event.get_group_id()}, 也可将此 ID 加入白名单来放行整个群聊。"
 
         event.set_result(MessageEventResult().message(ret).use_t2i(False))
