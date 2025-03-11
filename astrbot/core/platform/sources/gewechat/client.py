@@ -541,13 +541,14 @@ class SimpleGewechatClient:
                 logger.debug(f"获取群信息结果: {json_blob}")
                 return json_blob
 
-
-    async def add_group_member_to_friend(self, group_id: str,to_wxid: str,content: str):
+    async def add_group_member_to_friend(
+        self, group_id: str, to_wxid: str, content: str
+    ):
         payload = {
             "appId": self.appid,
             "chatroomId": group_id,
             "content": content,
-            "memberWxid": to_wxid
+            "memberWxid": to_wxid,
         }
 
         async with aiohttp.ClientSession() as session:

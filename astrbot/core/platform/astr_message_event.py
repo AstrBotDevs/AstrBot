@@ -38,11 +38,11 @@ class MessageSesion:
 
 class AstrMessageEvent(abc.ABC):
     def __init__(
-            self,
-            message_str: str,
-            message_obj: AstrBotMessage,
-            platform_meta: PlatformMetadata,
-            session_id: str,
+        self,
+        message_str: str,
+        message_obj: AstrBotMessage,
+        platform_meta: PlatformMetadata,
+        session_id: str,
     ):
         self.message_str = message_str
         """纯文本的消息"""
@@ -321,14 +321,14 @@ class AstrMessageEvent(abc.ABC):
     """LLM 请求相关"""
 
     def request_llm(
-            self,
-            prompt: str,
-            func_tool_manager=None,
-            session_id: str = None,
-            image_urls: List[str] = [],
-            contexts: List = [],
-            system_prompt: str = "",
-            conversation: Conversation = None,
+        self,
+        prompt: str,
+        func_tool_manager=None,
+        session_id: str = None,
+        image_urls: List[str] = [],
+        contexts: List = [],
+        system_prompt: str = "",
+        conversation: Conversation = None,
     ) -> ProviderRequest:
         """
         创建一个 LLM 请求。
