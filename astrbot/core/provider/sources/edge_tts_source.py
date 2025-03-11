@@ -57,23 +57,30 @@ class ProviderEdgeTTS(TTSProvider):
 
             # 使用ffmpeg将MP3转换为标准WAV格式
             _ = await asyncio.create_subprocess_exec(
-                [
-                    "ffmpeg",
-                    "-y",  # 覆盖输出文件
-                    "-i",
-                    mp3_path,  # 输入文件
-                    "-acodec",
-                    "pcm_s16le",  # 16位PCM编码
-                    "-ar",
-                    "24000",  # 采样率24kHz (适合微信语音)
-                    "-ac",
-                    "1",  # 单声道
-                    wav_path,  # 输出文件
-                ],
-                capture_output=True,
-                check=True,
+                "ffmpeg",
+                "-y",  # 覆盖输出文件
+                "-i",
+                mp3_path,  # 输入文件
+                "-acodec",
+                "pcm_s16le",  # 16位PCM编码
+                "-ar",
+                "24000",  # 采样率24kHz (适合微信语音)
+                "-ac",
+                "1",  # 单声道
+                "-af",
+                "apad=pad_dur=2",  # 确保输出时长准确
+                "-fflags",
+                "+genpts",  # 强制生成时间戳
+                "-hide_banner",  # 隐藏版本信息
+                wav_path,  # 输出文件
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
-
+            # 等待进程完成并获取输出
+            stdout, stderr = await _.communicate()
+            logger.info(f"[EdgeTTS] FFmpeg 标准输出: {stdout.decode().strip()}")
+            logger.debug(f"FFmpeg错误输出: {stderr.decode().strip()}")
+            logger.info(f"[EdgeTTS] 返回值(0代表成功): {_.returncode}")
             os.remove(mp3_path)
             if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
                 return wav_path
@@ -82,13 +89,15 @@ class ProviderEdgeTTS(TTSProvider):
                 raise RuntimeError("生成的WAV文件不存在或为空")
 
         except subprocess.CalledProcessError as e:
-            logger.error(f"FFmpeg转换失败: {e.stderr.decode() if e.stderr else str(e)}")
+            logger.error(
+                f"FFmpeg 转换失败: {e.stderr.decode() if e.stderr else str(e)}"
+            )
             try:
                 if os.path.exists(mp3_path):
                     os.remove(mp3_path)
             except Exception:
                 pass
-            raise RuntimeError(f"FFmpeg转换失败: {str(e)}")
+            raise RuntimeError(f"FFmpeg 转换失败: {str(e)}")
 
         except Exception as e:
             logger.error(f"音频生成失败: {str(e)}")

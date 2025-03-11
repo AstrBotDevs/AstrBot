@@ -191,17 +191,12 @@ class SimpleGewechatClient:
                 abm.message_str = content
             case 3:
                 # 图片消息
-                # 先看看 base64 数据
-                if "ImgBuf" in d and "buffer" in d["ImgBuf"]:
-                    logger.debug("发现图片消息包含 base64 数据，使用。")
-                    abm.message.append(Image.fromBase64(d["ImgBuf"]["buffer"]))
-                else:
-                    file_url = await self.multimedia_downloader.download_image(
-                        self.appid, content
-                    )
-                    logger.debug(f"下载图片: {file_url}")
-                    file_path = await download_image_by_url(file_url)
-                    abm.message.append(Image(file=file_path, url=file_path))
+                file_url = await self.multimedia_downloader.download_image(
+                    self.appid, content
+                )
+                logger.debug(f"下载图片: {file_url}")
+                file_path = await download_image_by_url(file_url)
+                abm.message.append(Image(file=file_path, url=file_path))
 
             case 34:
                 # 语音消息
