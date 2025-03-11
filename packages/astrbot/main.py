@@ -1101,8 +1101,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
             req.prompt = user_info + req.prompt
 
         if self.enable_datetime:
+            # Including timezone
             current_time = (
-                datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+                datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
             )
             req.system_prompt += f"\nCurrent datetime: {current_time}\n"
 
