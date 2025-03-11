@@ -51,9 +51,9 @@ function onMouseUp() {
 </script>
 
 <template>
-  <v-navigation-drawer left v-model="customizer.Sidebar_drawer" elevation="0" rail-width="80" app class="leftSidebar"
+  <v-navigation-drawer left v-model="customizer.Sidebar_drawer" elevation="0" rail-width="80" app class="leftSidebar" width="220"
     :rail="customizer.mini_sidebar">
-    <v-list class="pa-4 listitem" style="height: auto">
+    <v-list class="pa-4 listitem" style="height: auto;">
       <template v-for="(item, i) in sidebarMenu" :key="i">
         <NavItem :item="item" class="leftPadding" />
       </template>
@@ -62,13 +62,13 @@ function onMouseUp() {
       <v-chip color="inputBorder" size="small"> {{ version }} </v-chip>
     </div>
 
-    <div style="position: absolute; bottom: 32px; width: 100%" class="text-center">
+    <div style="position: absolute; bottom: 32px; width: 100%; font-size: 13px;" class="text-center">
       <v-list-item v-if="!customizer.mini_sidebar" @click="toggleIframe">
         <v-btn variant="plain" size="small">
           🤔 点击查看悬浮文档！
         </v-btn>
       </v-list-item>
-      <small style="display: block;" v-if="buildVer">构建: {{ buildVer }}</small>
+      <small style="display: block;" v-if="buildVer">WebUI 版本: {{ buildVer }}</small>
       <small style="display: block;" v-else>构建: embedded</small>
       <v-tooltip text="使用 /dashboard_update 指令更新管理面板">
         <template v-slot:activator="{ props }">
@@ -76,8 +76,7 @@ function onMouseUp() {
         </template>
       </v-tooltip>
 
-
-      <small style="display: block; margin-top: 8px;">© 2025 AstrBot</small>
+      <small style="display: block; margin-top: 8px;">AGPL-3.0</small>
     </div>
 
   </v-navigation-drawer>
