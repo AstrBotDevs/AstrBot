@@ -122,16 +122,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 plain_text += i.text
             elif isinstance(i, Image) and not image_base64:
                 if i.file and i.file.startswith("file:///"):
-                    image_base64 = file_to_base64(i.file[8:]).replace("base64://", "")
+                    image_base64 = file_to_base64(i.file[8:])
                     image_file_path = i.file[8:]
                 elif i.file and i.file.startswith("http"):
                     image_file_path = await download_image_by_url(i.file)
-                    image_base64 = file_to_base64(image_file_path).replace(
-                        "base64://", ""
-                    )
+                    image_base64 = file_to_base64(image_file_path)
+                elif i.file and i.file.startswith("base64://"):
+                    image_base64 = i.file
                 else:
-                    image_base64 = i.file.replace("base64://", "")
-                    image_file_path = i.file
+                    image_base64 = file_to_base64(i.file)
+                image_base64 = image_base64.removeprefix("base64://")
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
         return plain_text, image_base64, image_file_path
