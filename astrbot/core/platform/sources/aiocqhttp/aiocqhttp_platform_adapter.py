@@ -160,8 +160,14 @@ class AiocqhttpAdapter(Platform):
 
         return abm
 
-    async def _convert_handle_message_event(self, event: Event) -> AstrBotMessage:
-        """OneBot V11 消息类事件"""
+    async def _convert_handle_message_event(
+        self, event: Event, get_reply=True
+    ) -> AstrBotMessage:
+        """OneBot V11 消息类事件
+
+        @param event: 事件对象
+        @param get_reply: 是否获取回复消息。这个参数是为了防止多个回复嵌套。
+        """
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
@@ -240,6 +246,34 @@ class AiocqhttpAdapter(Platform):
                     except BaseException as e:
                         logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
 
+            elif t == "reply":
+                if not get_reply:
+                    a = ComponentTypes[t](**m["data"])  # noqa: F405
+                    abm.message.append(a)
+                else:
+                    try:
+                        reply_event_data = await self.bot.call_action(
+                            action="get_msg",
+                            message_id=int(m["data"]["id"]),
+                        )
+                        abm_reply = await self._convert_handle_message_event(
+                            Event.from_payload(reply_event_data), get_reply=False
+                        )
+
+                        reply_seg = Reply(
+                            id=abm_reply.message_id,
+                            chain=abm_reply.message,
+                            sender_id=abm_reply.sender.user_id,
+                            sender_nickname=abm_reply.sender.nickname,
+                            time=abm_reply.timestamp,
+                            message_str=abm_reply.message_str,
+                            text=abm_reply.message_str,  # for compatibility
+                            qq=abm_reply.sender.user_id,  # for compatibility
+                        )
+
+                        abm.message.append(reply_seg)
+                    except BaseException as e:
+                        logger.error(f"获取消息失败: {e}，此消息段将被忽略。")
             else:
                 a = ComponentTypes[t](**m["data"])  # noqa: F405
                 abm.message.append(a)
