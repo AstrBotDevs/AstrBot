@@ -2,6 +2,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata, MessageType
 from astrbot.api.message_components import Plain, Image, Reply, At, File, Record
 from telegram.ext import ExtBot
+from astrbot.core.utils.io import download_file
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -58,6 +59,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 else:
                     await client.send_photo(photo=image_path, **payload)
             elif isinstance(i, File):
+                if i.file.startswith("https://"):
+                    path = "data/temp/" + i.name
+                    await download_file(i.file, path)
+                    i.file = path
+
                 await client.send_document(document=i.file, filename=i.name, **payload)
             elif isinstance(i, Record):
                 await client.send_voice(voice=i.file, **payload)
