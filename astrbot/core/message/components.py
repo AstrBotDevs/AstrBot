@@ -371,16 +371,14 @@ class Node(BaseMessageComponent):
     seq: T.Optional[T.Union[str, list]] = ""  # 忽略
     time: T.Optional[int] = 0
 
-    def __init__(self, content: T.Union[str, list, dict, "Node"], **_):
+    def __init__(self, content: T.Union[str, list, dict, "Node", T.List["Node"]], **_):
         if isinstance(content, list):
-            _content = ""
-            for chain in content:
-                _content += chain.toString()
-            content = _content
+            if all(isinstance(item, str) for item in content):
+                content = "".join(content)
+            elif all(isinstance(item, Node) for item in content):
+                content = [node.toDict() for node in content]
         elif isinstance(content, Node):
             content = content.toDict()
-        else:
-            content = content
         super().__init__(content=content, **_)
 
     def toString(self):
