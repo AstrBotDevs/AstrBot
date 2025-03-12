@@ -359,10 +359,14 @@ class Node(BaseMessageComponent):
 
     def __init__(self, content: T.Union[str, list, dict, "Node", T.List["Node"]], **_):
         if isinstance(content, list):
-            if all(isinstance(item, str) for item in content):
-                content = "".join(content)
-            elif all(isinstance(item, Node) for item in content):
-                content = [node.toDict() for node in content]
+            _content = None
+            if all(isinstance(item, Node) for item in content):
+                _content = [node.toDict() for node in content]
+            else:
+                _content = ""
+                for chain in content:
+                    _content += chain.toString()
+            content = _content
         elif isinstance(content, Node):
             content = content.toDict()
         super().__init__(content=content, **_)
