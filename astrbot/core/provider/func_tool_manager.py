@@ -2,7 +2,7 @@ import json
 import textwrap
 from typing import Dict, List, Awaitable
 from dataclasses import dataclass
-
+from astrbot import logger
 
 @dataclass
 class FuncTool:
@@ -46,14 +46,16 @@ class FuncCall:
         desc: str,
         handler: Awaitable,
     ) -> None:
-        """
-        为函数调用（function-calling / tools-use）添加工具。
+        """添加函数调用工具
 
         @param name: 函数名
         @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
         @param desc: 函数描述
         @param func_obj: 处理函数
         """
+        # check if the tool has been added before
+        self.remove_func(name)
+
         params = {
             "type": "object",  # hard-coded here
             "properties": {},
@@ -70,13 +72,14 @@ class FuncCall:
             handler=handler,
         )
         self.func_list.append(_func)
+        logger.info(f"添加了函数调用工具({len(self.func_list)}): {name} - {desc}")
 
     def remove_func(self, name: str) -> None:
         """
         删除一个函数调用工具。
         """
         for i, f in enumerate(self.func_list):
-            if f["name"] == name:
+            if f.name == name:
                 self.func_list.pop(i)
                 break
 

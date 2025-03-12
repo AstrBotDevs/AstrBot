@@ -360,8 +360,6 @@ def register_llm_tool(name: str = None):
             )
         md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)
         llm_tools.add_func(llm_tool_name, args, docstring.description, md.handler)
-
-        logger.debug(f"LLM 函数工具 {llm_tool_name} 已注册")
         return awaitable
 
     return decorator
