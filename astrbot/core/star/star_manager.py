@@ -485,7 +485,7 @@ class PluginManager:
         for handler in star_handlers_registry.get_handlers_by_module_name(
             plugin_module_path
         ):
-            logger.debug(f"unbind handler {handler.handler_name} from {plugin_name}")
+            logger.info(f"移除了插件 {plugin_name} 的处理函数 {handler.handler_name} ({len(star_handlers_registry)})")
             star_handlers_registry.remove(handler)
         keys_to_delete = [
             k
@@ -493,8 +493,6 @@ class PluginManager:
             if k.startswith(plugin_module_path)
         ]
         for k in keys_to_delete:
-            v = star_handlers_registry.star_handlers_map[k]
-            logger.debug(f"unbind handler {v.handler_name} from {plugin_name} (map)")
             try:
                 del star_handlers_registry.star_handlers_map[k]
             except KeyError:
