@@ -113,7 +113,11 @@ class TelegramPlatformAdapter(Platform):
             message.type = MessageType.FRIEND_MESSAGE
         else:
             message.type = MessageType.GROUP_MESSAGE
-            message.group_id = update.effective_chat.id
+            message.group_id = str(update.effective_chat.id)
+            if update.message.message_thread_id:
+                # Topic Group
+                message.group_id += "#" + str(update.message.message_thread_id)
+
         message.message_id = str(update.message.message_id)
         message.session_id = str(update.effective_chat.id)
         message.sender = MessageMember(
