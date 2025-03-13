@@ -17,7 +17,7 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.config.default import VERSION
 from .long_term_memory import LongTermMemory
 from astrbot.core import logger
-from astrbot.api.message_components import Plain, Image
+from astrbot.api.message_components import Plain, Image, Reply
 
 from typing import Union
 
@@ -1088,11 +1088,16 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
-        """在请求 LLM 前注入人格信息、Identifier、时间等 System Prompt"""
-        logger.debug(req.conversation)
-
+        """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
         if self.prompt_prefix:
             req.prompt = self.prompt_prefix + req.prompt
+
+        # 解析引用内容
+        quote = None
+        for comp in event.message_obj.message:
+            if isinstance(comp, Reply):
+                quote = comp
+                break
 
         if self.identifier:
             user_id = event.message_obj.sender.user_id
@@ -1128,6 +1133,13 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     req.system_prompt += mood_dialogs
                 if begin_dialogs := persona["_begin_dialogs_processed"]:
                     req.contexts[:0] = begin_dialogs
+
+        if quote and quote.message_str:
+            if quote.sender_nickname:
+                sender_info = f"(Sent by {quote.sender_nickname})"
+            else:
+                sender_info = ""
+            req.system_prompt += f"\nUser is quoting the message{sender_info}: {quote.message_str}, please consider the context."
 
         if self.ltm:
             try:
