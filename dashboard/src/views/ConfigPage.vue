@@ -42,9 +42,16 @@ import config from '@/config';
           <div v-for="(val2, key2, index2) in metadata[key]['metadata']">
             <!-- <h3>{{ metadata[key]['metadata'][key2]['description'] }}</h3> -->
             <div v-if="metadata[key]['metadata'][key2]?.config_template"
-              v-show="key2 !== 'platform' && key2 !== 'provider'">
+              v-show="key2 !== 'platform' && key2 !== 'provider'" style="border: 1px solid #e0e0e0; padding: 8px; margin-bottom: 16px; border-radius: 10px">
               <!-- 带有 config_template 的配置项 -->
+              <v-list-item-title>
+                {{ metadata[key]['metadata'][key2]['description'] }} ({{ key2 }})
+                <v-chip color="primary" label size="x-small" class="mb-1">
+                  object
+                </v-chip>
+              </v-list-item-title>
               <v-tabs style="margin-top: 16px;" align-tabs="left" color="deep-purple-accent-4"
+              
                 v-model="config_template_tab">
                 <v-tab v-if="metadata[key]['metadata'][key2]?.tmpl_display_title"
                   v-for="(item, index) in config_data[key2]" :key="index" :value="index">
@@ -70,14 +77,14 @@ import config from '@/config';
               <v-tabs-window v-model="config_template_tab">
                 <v-tabs-window-item v-for="(config_item, index) in config_data[key2]"
                   v-show="config_template_tab === index" :key="index" :value="index">
-                  <v-container>
+                  <div style="padding: 16px;">
                     <v-btn variant="tonal" rounded="xl" color="error" @click="deleteItem(key2, index)">
                       删除这项
                     </v-btn>
 
                     <AstrBotConfig :metadata="metadata[key]['metadata']" :iterable="config_item" :metadataKey="key2">
                     </AstrBotConfig>
-                  </v-container>
+                  </div>
                 </v-tabs-window-item>
               </v-tabs-window>
             </div>
