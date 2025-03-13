@@ -14,6 +14,7 @@ from astrbot.core.message.components import (
     At,
     AtAll,
     Forward,
+    Reply,
 )
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.provider.entites import ProviderRequest
@@ -101,8 +102,15 @@ class AstrMessageEvent(abc.ABC):
             elif isinstance(i, Forward):
                 # 转发消息
                 outline += "[转发消息]"
+            elif isinstance(i, Reply):
+                # 引用回复
+                if i.message_str:
+                    outline += f"[引用消息({i.sender_nickname}: {i.message_str})]"
+                else:
+                    outline += "[引用消息]"
             else:
                 outline += f"[{i.type}]"
+            outline += " "
         return outline
 
     def get_message_outline(self) -> str:

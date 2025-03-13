@@ -15,7 +15,6 @@ from ..filter.regex import RegexFilter
 from typing import Awaitable
 from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
-from astrbot.core import logger
 
 
 def get_handler_full_name(awaitable: Awaitable) -> str:

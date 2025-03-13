@@ -311,10 +311,24 @@ class Image(BaseMessageComponent):
 class Reply(BaseMessageComponent):
     type: ComponentType = "Reply"
     id: T.Union[str, int]
-    text: T.Optional[str] = ""
-    qq: T.Optional[int] = 0
+    """所引用的消息 ID"""
+    chain: T.Optional[T.List["BaseMessageComponent"]] = []
+    """引用的消息段列表"""
+    sender_id: T.Optional[int] | T.Optional[str] = 0
+    """引用的消息发送者 ID"""
+    sender_nickname: T.Optional[str] = ""
+    """引用的消息发送者昵称"""
     time: T.Optional[int] = 0
+    """引用的消息发送时间"""
+    message_str: T.Optional[str] = ""
+    """解析后的纯文本消息字符串"""
+
+    text: T.Optional[str] = ""
+    """deprecated"""
+    qq: T.Optional[int] = 0
+    """deprecated"""
     seq: T.Optional[int] = 0
+    """deprecated"""
 
     def __init__(self, **_):
         super().__init__(**_)
