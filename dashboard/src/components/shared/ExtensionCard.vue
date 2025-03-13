@@ -99,7 +99,7 @@ const viewHandlers = () => {
           </v-chip>
         </div>
 
-        <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }">
+        <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }" style="max-height: 65px; overflow-y: auto;">
           {{ extension.desc }}
         </div>
       </div>
