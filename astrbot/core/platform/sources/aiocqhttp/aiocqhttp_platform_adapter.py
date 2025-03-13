@@ -273,7 +273,9 @@ class AiocqhttpAdapter(Platform):
 
                         abm.message.append(reply_seg)
                     except BaseException as e:
-                        logger.error(f"获取消息失败: {e}，此消息段将被忽略。")
+                        logger.error(f"获取引用消息失败: {e}。")
+                        a = ComponentTypes[t](**m["data"])  # noqa: F405
+                        abm.message.append(a)
             else:
                 a = ComponentTypes[t](**m["data"])  # noqa: F405
                 abm.message.append(a)
