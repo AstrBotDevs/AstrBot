@@ -14,7 +14,7 @@ from astrbot.core.message.components import (
     At,
     AtAll,
     Forward,
-    Reply
+    Reply,
 )
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.provider.entites import ProviderRequest

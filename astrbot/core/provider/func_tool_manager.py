@@ -4,6 +4,7 @@ from typing import Dict, List, Awaitable
 from dataclasses import dataclass
 from astrbot import logger
 
+
 @dataclass
 class FuncTool:
     """
