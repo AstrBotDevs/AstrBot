@@ -14,7 +14,7 @@
     </div>
 
     <v-card-text style="padding: 12px;">
-        <div v-for="(index, key) in iterable" :key="key" style="margin-bottom: 0.5px;"
+        <div v-for="(val, key, index) in iterable" :key="key" style="margin-bottom: 0.5px;"
             v-if="metadata[metadataKey]?.type === 'object' || metadata[metadataKey]?.config_template">
 
             <div v-if="metadata[metadataKey].items[key]?.type === 'object'" style="padding-left: 16px;">
@@ -51,8 +51,7 @@
                             v-if="metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible"
                             v-model="iterable[key]" variant="outlined"
                             :items="metadata[metadataKey].items[key]?.options" dense
-                            :disabled="metadata[metadataKey].items[key]?.readonly" density="compact"
-                            flat hide-details
+                            :disabled="metadata[metadataKey].items[key]?.readonly" density="compact" flat hide-details
                             single-line></v-select>
                         <v-text-field
                             v-else-if="metadata[metadataKey].items[key]?.type === 'string' && !metadata[metadataKey].items[key]?.invisible"
@@ -60,14 +59,11 @@
                             single-line></v-text-field>
                         <v-text-field
                             v-else-if="(metadata[metadataKey].items[key]?.type === 'int' || metadata[metadataKey].items[key]?.type === 'float') && !metadata[metadataKey].items[key]?.invisible"
-                            v-model="iterable[key]" variant="outlined" dense density="compact"
-                            flat hide-details
+                            v-model="iterable[key]" variant="outlined" dense density="compact" flat hide-details
                             single-line></v-text-field>
                         <v-textarea
                             v-else-if="metadata[metadataKey].items[key]?.type === 'text' && !metadata[metadataKey].items[key]?.invisible"
-                            v-model="iterable[key]" variant="outlined" dense
-                            flat hide-details
-                            single-line></v-textarea>
+                            v-model="iterable[key]" variant="outlined" dense flat hide-details single-line></v-textarea>
                         <v-switch
                             v-else-if="metadata[metadataKey].items[key]?.type === 'bool' && !metadata[metadataKey].items[key]?.invisible"
                             v-model="iterable[key]" color="primary" hide-details></v-switch>
@@ -80,8 +76,8 @@
                         <v-text-field v-model="iterable[key]" :label="key" variant="outlined" dense></v-text-field>
                     </div>
                 </v-col>
-
-                <v-divider class="mb-4" style="border-color: #ddd; margin-left: -18px; margin-right: -18px;" ></v-divider>
+                <v-divider class="mb-4" style="border-color: #ccc; margin-left: -18px; margin-right: -18px;"
+                    v-if="index !== Object.keys(iterable).length - 1"></v-divider>
             </v-row>
 
         </div>
@@ -128,7 +124,7 @@
                 </v-col>
             </v-row>
 
-            <v-divider class="mb-4" style="border-color: #ddd; margin-left: -18px; margin-right: -18px;" ></v-divider>
+            <v-divider class="mb-4" style="border-color: #ddd; margin-left: -18px; margin-right: -18px;"></v-divider>
         </div>
     </v-card-text>
 </template>
