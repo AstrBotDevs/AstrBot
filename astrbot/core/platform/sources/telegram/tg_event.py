@@ -32,12 +32,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 at_user_id = i.name
 
         at_flag = False
+        message_thread_id = None
+        if "#" in user_name:
+            # it's a supergroup chat with message_thread_id
+            user_name, message_thread_id = user_name.split("#")
         for i in message.chain:
             payload = {
                 "chat_id": user_name,
             }
             if has_reply:
                 payload["reply_to_message_id"] = reply_message_id
+            if message_thread_id:
+                payload["reply_to_message_id"] = message_thread_id
 
             if isinstance(i, Plain):
                 if at_user_id and not at_flag:
