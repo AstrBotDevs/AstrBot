@@ -115,6 +115,12 @@ class SimpleGewechatClient:
 
         abm = AstrBotMessage()
 
+        if type_name == "ModContacts":
+            abm.type = MessageType.OTHER_MESSAGE
+            abm.raw_message = data
+            logger.debug(f"abm: {abm}")
+            return abm
+
         from_user_name = d["FromUserName"]["string"]  # 消息来源
         d["to_wxid"] = from_user_name  # 用于发信息
 
