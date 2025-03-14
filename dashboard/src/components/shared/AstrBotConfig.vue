@@ -1,10 +1,10 @@
 <template>
     <div style="margin-bottom: 6px;" v-if="iterable && metadata[metadataKey]?.type === 'object'">
         <v-list-item-title style="font-weight: bold;">
-            {{ metadata[metadataKey]?.description }} ({{ metadataKey }})
             <v-chip color="primary" label size="x-small" class="mb-1">
                 object
             </v-chip>
+            {{ metadata[metadataKey]?.description }} ({{ metadataKey }})
         </v-list-item-title>
         <v-list-item-subtitle style="font-size: 12px;">
             <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint"
@@ -29,11 +29,11 @@
                 <v-col cols="6">
                     <v-list-item>
                         <v-list-item-title style="font-size: 14px; font-weight: bold;">
-                            {{ metadata[metadataKey].items[key]?.description + '(' + key + ')' }}
                             <v-chip v-if="!metadata[metadataKey].items[key]?.invisible" color="primary" label
                                 size="x-small" class="mb-1">{{
                                     metadata[metadataKey].items[key]?.type }}
                             </v-chip>
+                            {{ metadata[metadataKey].items[key]?.description + '(' + key + ')' }}
                         </v-list-item-title>
 
                         <v-list-item-subtitle style="font-size: 12px;">
@@ -87,11 +87,12 @@
                 <v-col cols="6">
                     <v-list-item>
                         <v-list-item-title style="font-size: 14px; font-weight: bold">
-                            {{ metadata[metadataKey]?.description + '(' + metadataKey + ')' }}
                             <v-chip v-if="!metadata[metadataKey]?.invisible" color="primary" label size="x-small"
                                 class="mb-1">{{
                                     metadata[metadataKey]?.type }}
                             </v-chip>
+                            {{ metadata[metadataKey]?.description + '(' + metadataKey + ')' }}
+                            
                         </v-list-item-title>
 
                         <v-list-item-subtitle style="font-size: 12px;">
