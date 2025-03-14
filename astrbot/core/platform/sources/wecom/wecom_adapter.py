@@ -34,6 +34,7 @@ class WecomServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict):
         self.server = quart.Quart(__name__)
         self.port = int(config.get("port"))
+        self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.server.add_url_rule(
             "/callback/command", view_func=self.verify, methods=["GET"]
         )
@@ -86,9 +87,9 @@ class WecomServer:
         return "success"
 
     async def start_polling(self):
-        logger.info(f"将在 0.0.0.0:{self.port} 端口启动 企业微信 适配器。")
+        logger.info(f"将在 {self.callback_server_host}:{self.port} 端口启动 企业微信 适配器。")
         await self.server.run_task(
-            host="0.0.0.0",
+            host=self.callback_server_host,
             port=self.port,
             shutdown_trigger=self.shutdown_trigger_placeholder,
         )

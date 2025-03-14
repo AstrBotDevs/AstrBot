@@ -120,12 +120,14 @@ class AstrBotDashboard:
             return f"获取进程信息失败: {str(e)}"
 
     def run(self):
-        try:
-            ip_addr = get_local_ip_addresses()
-        except Exception as _:
-            ip_addr = []
-
+        ip_addr = []
         port = self.core_lifecycle.astrbot_config["dashboard"].get("port", 6185)
+        host = self.core_lifecycle.astrbot_config["dashboard"].get("host", "127.0.0.1")
+        if host not in ["localhost", "127.0.0.1"]:
+            try:
+                ip_addr = get_local_ip_addresses()
+            except Exception as _:
+                pass
         if isinstance(port, str):
             port = int(port)
 
@@ -147,10 +149,14 @@ class AstrBotDashboard:
         for ip in ip_addr:
             display += f"   ➜  网络: http://{ip}:{port}\n"
         display += "   ➜  默认用户名和密码: astrbot\n ✨✨✨\n"
+
+        if not ip_addr:
+            display += "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
+
         logger.info(display)
 
         return self.app.run_task(
-            host="0.0.0.0",
+            host=host,
             port=port,
             shutdown_trigger=self.shutdown_trigger_placeholder,
         )

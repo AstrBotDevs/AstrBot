@@ -15,6 +15,7 @@ class QQOfficialWebhook:
         self.appid = config["appid"]
         self.secret = config["secret"]
         self.port = config.get("port", 6196)
+        self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
 
         if isinstance(self.port, str):
             self.port = int(self.port)
@@ -95,8 +96,9 @@ class QQOfficialWebhook:
         return {"opcode": 12}
 
     async def start_polling(self):
+        logger.info(f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。")
         await self.server.run_task(
-            host="0.0.0.0",
+            host=self.callback_server_host,
             port=self.port,
             shutdown_trigger=self.shutdown_trigger_placeholder,
         )
