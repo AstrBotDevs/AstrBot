@@ -1,3 +1,5 @@
+import astrbot.core.message.components as Comp
+
 from typing import List
 from .. import Provider, Personality
 from ..entites import LLMResponse
@@ -5,8 +7,9 @@ from ..func_tool_manager import FuncCall
 from astrbot.core.db import BaseDatabase
 from ..register import register_provider_adapter
 from astrbot.core.utils.dify_api_client import DifyAPIClient
-from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.io import download_image_by_url, download_file
 from astrbot.core import logger, sp
+from astrbot.core.message.message_event_result import MessageChain
 
 
 @register_provider_adapter("dify", "Dify APP 适配器。")
@@ -148,8 +151,9 @@ class ProviderDify(Provider):
                                 )
                             case "workflow_finished":
                                 logger.info(
-                                    f"Dify 工作流(ID: {chunk['workflow_run_id']})运行结束。"
+                                    f"Dify 工作流(ID: {chunk['workflow_run_id']})运行结束"
                                 )
+                                logger.debug(f"Dify 工作流结果：{chunk}")
                                 if chunk["data"]["error"]:
                                     logger.error(
                                         f"Dify 工作流出现错误：{chunk['data']['error']}"
@@ -164,9 +168,7 @@ class ProviderDify(Provider):
                                     raise Exception(
                                         f"Dify 工作流的输出不包含指定的键名：{self.workflow_output_key}"
                                     )
-                                result = chunk["data"]["outputs"][
-                                    self.workflow_output_key
-                                ]
+                                result = chunk
                 case _:
                     raise Exception(f"未知的 Dify API 类型：{self.api_type}")
         except Exception as e:
@@ -176,7 +178,54 @@ class ProviderDify(Provider):
         if not result:
             logger.warning("Dify 请求结果为空，请查看 Debug 日志。")
 
-        return LLMResponse(role="assistant", completion_text=result)
+        chain = await self.parse_dify_result(result)
+
+        return LLMResponse(role="assistant", result_chain=chain)
+
+    async def parse_dify_result(self, chunk: dict | str) -> MessageChain:
+        if isinstance(chunk, str):
+            # Chat
+            return MessageChain(chain=[Comp.Plain(chunk)])
+
+        async def parse_file(item: dict) -> Comp:
+            match item["type"]:
+                case "image":
+                    return Comp.Image(file=item["url"], url=item["url"])
+                case "audio":
+                    # 仅支持 wav
+                    path = f"data/temp/{item['filename']}.wav"
+                    await download_file(item["url"], path)
+                    return Comp.Image(file=item["url"], url=item["url"])
+                case "video":
+                    return Comp.Video(file=item["url"])
+                case _:
+                    return Comp.File(name=item["filename"], file=item["url"])
+
+        output = chunk["data"]["outputs"][self.workflow_output_key]
+        chains = []
+        if isinstance(output, str):
+            # 纯文本输出
+            chains.append(Comp.Plain(output))
+        elif isinstance(output, list):
+            # 主要适配 Dify 的 HTTP 请求结点的多模态输出
+            for item in output:
+                # handle Array[File]
+                if (
+                    not isinstance(item, dict)
+                    or item.get("dify_model_identity", "") != "__dify__file__"
+                ):
+                    chains.append(Comp.Plain(str(output)))
+                    break
+        else:
+            chains.append(Comp.Plain(str(output)))
+
+        # scan file
+        files = chunk["data"].get("files", [])
+        for item in files:
+            comp = await parse_file(item)
+            chains.append(comp)
+
+        return MessageChain(chain=chains)
 
     async def forget(self, session_id):
         self.conversation_ids[session_id] = ""

@@ -8,7 +8,7 @@ class DifyAPIClient:
     def __init__(self, api_key: str, api_base: str = "https://api.dify.ai/v1"):
         self.api_key = api_key
         self.api_base = api_base
-        self.session = ClientSession()
+        self.session = ClientSession(trust_env=True)
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
         }
