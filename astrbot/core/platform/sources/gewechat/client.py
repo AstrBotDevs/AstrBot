@@ -490,6 +490,23 @@ class SimpleGewechatClient:
                 json_blob = await resp.json()
                 logger.debug(f"发送图片结果: {json_blob}")
 
+    async def post_video(
+        self, to_wxid, video_url: str, thumb_url: str, video_duration: int
+    ):
+        payload = {
+            "appId": self.appid,
+            "toWxid": to_wxid,
+            "videoUrl": video_url,
+            "thumbUrl": thumb_url,
+            "videoDuration": video_duration,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.base_url}/message/postVideo", headers=self.headers, json=payload
+            ) as resp:
+                json_blob = await resp.json()
+                logger.debug(f"发送视频结果: {json_blob}")
+
     async def post_voice(self, to_wxid, voice_url: str, voice_duration: int):
         payload = {
             "appId": self.appid,

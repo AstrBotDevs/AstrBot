@@ -2,6 +2,8 @@ import wave
 import uuid
 import traceback
 import os
+
+from astrbot.core.message.components import Video
 from astrbot.core.utils.io import save_temp_img, download_image_by_url, download_file
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 from astrbot.api import logger
@@ -90,6 +92,48 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 img_url = f"{client.file_server_url}/{file_id}"
                 logger.debug(f"gewe callback img url: {img_url}")
                 await client.post_image(to_wxid, img_url)
+            elif isinstance(comp, Video):
+                from pyffmpeg import FFmpeg
+
+                video_url = comp.file
+                # 根据 url 下载视频
+                video_filename = f"{uuid.uuid4()}.mp4"
+                video_path = f"data/temp/{video_filename}"
+                await download_file(video_url, video_path)
+
+                # 获取视频第一帧
+                thumb_path = f"data/temp/{uuid.uuid4()}.jpg"
+                try:
+                    ff = FFmpeg()
+                    command = f'-i "{video_path}" -ss 0 -vframes 1 "{thumb_path}"'
+                    ff.options(command)
+                    thumb_file_id = os.path.basename(thumb_path)
+                    thumb_url = f"{client.file_server_url}/{thumb_file_id}"
+                except Exception as e:
+                    logger.error(f"获取视频第一帧失败: {e}")
+                # 获取视频时长
+                try:
+                    from pyffmpeg import FFprobe
+
+                    # 创建 FFprobe 实例
+                    ffprobe = FFprobe(video_url)
+                    # 获取时长字符串
+                    duration_str = ffprobe.duration
+                    # 处理时长字符串
+                    video_duration = float(duration_str.replace(":", ""))
+                except Exception as e:
+                    logger.error(f"获取时长失败: {e}")
+                    video_duration = 10
+
+                file_id = os.path.basename(video_path)
+                video_url = f"{client.file_server_url}/{file_id}"
+                await client.post_video(to_wxid, video_url, thumb_url, video_duration)
+
+                # 删除临时视频和缩略图文件
+                if os.path.exists(video_path):
+                    os.remove(video_path)
+                if os.path.exists(thumb_path):
+                    os.remove(thumb_path)
             elif isinstance(comp, Record):
                 # 默认已经存在 data/temp 中
                 record_url = comp.file
