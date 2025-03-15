@@ -150,8 +150,9 @@ class LLMRequestSubStage(Stage):
                 # text completion
                 if llm_response.result_chain:
                     event.set_result(
-                        MessageEventResult(chain=llm_response.result_chain.chain)
-                        .set_result_content_type(ResultContentType.LLM_RESULT)
+                        MessageEventResult(
+                            chain=llm_response.result_chain.chain
+                        ).set_result_content_type(ResultContentType.LLM_RESULT)
                     )
                 else:
                     event.set_result(

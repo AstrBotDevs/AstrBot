@@ -96,7 +96,9 @@ class QQOfficialWebhook:
         return {"opcode": 12}
 
     async def start_polling(self):
-        logger.info(f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。")
+        logger.info(
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。"
+        )
         await self.server.run_task(
             host=self.callback_server_host,
             port=self.port,
