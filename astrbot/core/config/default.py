@@ -85,6 +85,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "username": "astrbot",
         "password": "77b90590a8945a7d36c963981a307dc9",
+        "host": "127.0.0.1",
         "port": 6185,
     },
     "platform": [],
@@ -122,6 +123,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "appid": "",
                         "secret": "",
+                        "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
                     "aiocqhttp(OneBotv11)": {
@@ -146,10 +148,11 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "corpid": "",
                         "secret": "",
-                        "port": 6195,
                         "token": "",
                         "encoding_aes_key": "",
                         "api_base_url": "https://qyapi.weixin.qq.com/cgi-bin/",
+                        "callback_server_host": "0.0.0.0",
+                        "port": 6195,
                     },
                     "lark(飞书)": {
                         "id": "lark",

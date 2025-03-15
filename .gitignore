@@ -26,3 +26,5 @@ venv/*
 packages/python_interpreter/workplace
 .venv/*
 .conda/
+.idea/
+pytest.ini

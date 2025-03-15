@@ -21,6 +21,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             d = segment.toDict()
             if isinstance(segment, Plain):
                 d["type"] = "text"
+                d["data"]["text"] = segment.text.strip()
             elif isinstance(segment, (Image, Record)):
                 # convert to base64
                 if segment.file and segment.file.startswith("file:///"):

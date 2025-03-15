@@ -4,6 +4,7 @@ from typing import List, Dict, Type
 from .func_tool_manager import FuncCall
 from openai.types.chat.chat_completion import ChatCompletion
 from astrbot.core.db.po import Conversation
+from astrbot.core.message.message_event_result import MessageChain
 
 
 class ProviderType(enum.Enum):
@@ -56,8 +57,10 @@ class ProviderRequest:
 class LLMResponse:
     role: str
     """角色, assistant, tool, err"""
+    result_chain: MessageChain = None
+    """返回的消息链"""
     completion_text: str = ""
-    """LLM 返回的文本"""
+    """LLM 返回的文本, 已经废弃但仍然兼容。使用 result_chain 替代"""
     tools_call_args: List[Dict[str, any]] = field(default_factory=list)
     """工具调用参数"""
     tools_call_name: List[str] = field(default_factory=list)
