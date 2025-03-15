@@ -87,7 +87,9 @@ class WecomServer:
         return "success"
 
     async def start_polling(self):
-        logger.info(f"将在 {self.callback_server_host}:{self.port} 端口启动 企业微信 适配器。")
+        logger.info(
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 企业微信 适配器。"
+        )
         await self.server.run_task(
             host=self.callback_server_host,
             port=self.port,

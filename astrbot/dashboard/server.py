@@ -151,7 +151,9 @@ class AstrBotDashboard:
         display += "   ➜  默认用户名和密码: astrbot\n ✨✨✨\n"
 
         if not ip_addr:
-            display += "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
+            display += (
+                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
+            )
 
         logger.info(display)
 
