@@ -82,7 +82,7 @@ class MCPClient:
 class FuncCall:
     def __init__(self) -> None:
         self.func_list: List[FuncTool] = []
-        self.mcp_client_dict: Dict[str:MCPClient] = dict()
+        self.mcp_client_dict: Dict[str:MCPClient] = {}
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -198,7 +198,6 @@ class FuncCall:
                 }
             )
 
-        loop = asyncio.get_event_loop()
         for name, client in self.mcp_client_dict.items():
             responses = await client.session.list_tools()
             for tool in responses.tools:
