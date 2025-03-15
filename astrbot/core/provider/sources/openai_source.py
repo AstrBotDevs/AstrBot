@@ -124,7 +124,10 @@ class ProviderOpenAIOfficial(Provider):
                 for tool in tools.func_list:
                     if tool.name == tool_call.function.name:
                         args = json.loads(tool_call.function.arguments)
-                if tool_call.function.name.startswith("mcp:") and tool_call.function.name.split(':')[1] in tools.mcp_client_dict:
+                if (
+                    tool_call.function.name.startswith("mcp:")
+                    and tool_call.function.name.split(":")[1] in tools.mcp_client_dict
+                ):
                     args = json.loads(tool_call.function.arguments)
                 args_ls.append(args)
                 func_name_ls.append(tool_call.function.name)

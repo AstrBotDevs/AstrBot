@@ -176,13 +176,18 @@ class LLMRequestSubStage(Stage):
                     llm_response.tools_call_name, llm_response.tools_call_args
                 ):
                     try:
-                        if func_tool_name.startswith('mcp:'):
-                            _, mcp_server_name, mcp_func_name = func_tool_name.split(':')
+                        if func_tool_name.startswith("mcp:"):
+                            _, mcp_server_name, mcp_func_name = func_tool_name.split(
+                                ":"
+                            )
                             logger.info(
-                                f"从mcp服务 {mcp_server_name} 调用工具函数：{mcp_func_name}，参数：{func_tool_args}")
+                                f"从mcp服务 {mcp_server_name} 调用工具函数：{mcp_func_name}，参数：{func_tool_args}"
+                            )
 
                             client = req.func_tool.mcp_client_dict[mcp_server_name]
-                            res = await client.session.call_tool(mcp_func_name, func_tool_args)
+                            res = await client.session.call_tool(
+                                mcp_func_name, func_tool_args
+                            )
                             if res:
                                 # TODO content的类型可能包括list[TextContent | ImageContent | EmbeddedResource]，这里只处理了TextContent。
                                 res_event = event.plain_result(res.content[0].text)
