@@ -13,9 +13,6 @@ from astrbot import logger
 
 from anthropic import Anthropic
 
-from ... import logger
-
-
 @dataclass
 class FuncTool:
     """
