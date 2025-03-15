@@ -358,7 +358,7 @@ def register_llm_tool(name: str = None):
                 }
             )
         md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)
-        llm_tools.add_func(llm_tool_name, args, docstring.description, md.handler)
+        llm_tools.add_func(llm_tool_name, args, docstring.description.strip(), md.handler)
         return awaitable
 
     return decorator
