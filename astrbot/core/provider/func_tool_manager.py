@@ -1,9 +1,19 @@
 import json
 import textwrap
+import os
+import asyncio
 from typing import Dict, List, Awaitable
 from dataclasses import dataclass
+from typing import Optional
+from contextlib import AsyncExitStack
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 from astrbot import logger
 
+from anthropic import Anthropic
+
+from ... import logger
 
 @dataclass
 class FuncTool:
@@ -33,9 +43,44 @@ SUPPORTED_TYPES = [
 ]  # json schema 支持的数据类型
 
 
+class MCPClient:
+    def __init__(self):
+        # Initialize session and client objects
+        self.session: Optional[ClientSession] = None
+        self.exit_stack = AsyncExitStack()
+        self.anthropic = Anthropic()
+
+        self.name = None
+        self.active: bool = True
+
+    async def connect_to_server(self, server_script_path: str):
+        """Connect to an MCP server
+
+        Args:
+            server_script_path: Path to the server script (.py or .js)
+        """
+        is_python = server_script_path.endswith('.py')
+        is_js = server_script_path.endswith('.js')
+        if not (is_python or is_js):
+            raise ValueError("Server script must be a .py or .js file")
+
+        command = "python" if is_python else "node"
+        server_params = StdioServerParameters(
+            command=command,
+            args=[server_script_path],
+            env=None
+        )
+
+        stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
+        self.stdio, self.write = stdio_transport
+        self.session = await self.exit_stack.enter_async_context(ClientSession(self.stdio, self.write))
+
+        await self.session.initialize()
+
 class FuncCall:
     def __init__(self) -> None:
         self.func_list: List[FuncTool] = []
+        self.mcp_client_dict: Dict[str: MCPClient] = dict()
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -90,7 +135,43 @@ class FuncCall:
                 return f
         return None
 
-    def get_func_desc_openai_style(self) -> list:
+    async def init_mcp_client_list(self) -> None:
+        """
+        从项目根目录读取mcp_server.json。提供mcp_server.json.example作为参考。
+        内容格式为
+        {
+            "mcpServers": {
+                "example_cmp_server": {
+                    "script_path": "path/to/cmp/server/script.py"
+                }
+            },
+            ...
+        }
+        """
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.abspath(os.path.join(current_dir, "../../.."))
+
+        mcp_json_file = os.path.join(project_root, "mcp_server.json")
+        if not os.path.exists(mcp_json_file):
+            # 配置文件不存在错误处理
+            logger.warning(f"mcp server config file {mcp_json_file} not found. skip init mcp client list.")
+            return
+
+        mcp_server_json_obj = json.load(open(mcp_json_file, "r", encoding="utf-8"))
+
+        for mcp_server_name, mcp_server_script_path in mcp_server_json_obj["mcpServers"].items():
+            if not os.path.exists(mcp_server_script_path["script_path"]):
+                logger.error(f"mcp server import err: Server script {mcp_server_script_path["script_path"]} not found.")
+                continue
+            mcp_client = MCPClient()
+            mcp_client.name = mcp_server_name
+            await mcp_client.connect_to_server(mcp_server_script_path["script_path"])
+            self.mcp_client_dict[mcp_server_name] = mcp_client
+            logger.info(f"添加mcp服务 {mcp_server_name}.")
+        if len(self.mcp_client_dict) == 0:
+            logger.info("未启用任何mcp服务.")
+
+    async def get_func_desc_openai_style(self) -> list:
         """
         获得 OpenAI API 风格的**已经激活**的工具描述
         """
@@ -105,9 +186,22 @@ class FuncCall:
                         "name": f.name,
                         "parameters": f.parameters,
                         "description": f.description,
-                    },
+                    }
                 }
             )
+
+        loop = asyncio.get_event_loop()
+        for name, client in self.mcp_client_dict.items():
+            responses = await client.session.list_tools()
+            for tool in responses.tools:
+                _l.append({
+                    "type": "function",
+                    "function": {
+                        "name": f"mcp:{name}:{tool.name}",
+                        "parameters": tool.inputSchema,
+                        "description": tool.description,
+                    }
+                })
         return _l
 
     def get_func_desc_anthropic_style(self) -> list:

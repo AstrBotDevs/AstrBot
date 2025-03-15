@@ -80,7 +80,7 @@ class ProviderOpenAIOfficial(Provider):
 
     async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
         if tools:
-            tool_list = tools.get_func_desc_openai_style()
+            tool_list = await tools.get_func_desc_openai_style()
             if tool_list:
                 payloads["tools"] = tool_list
 
@@ -124,8 +124,10 @@ class ProviderOpenAIOfficial(Provider):
                 for tool in tools.func_list:
                     if tool.name == tool_call.function.name:
                         args = json.loads(tool_call.function.arguments)
-                        args_ls.append(args)
-                        func_name_ls.append(tool_call.function.name)
+                if tool_call.function.name.startswith("mcp:") and tool_call.function.name.split(':')[1] in tools.mcp_client_dict:
+                    args = json.loads(tool_call.function.arguments)
+                args_ls.append(args)
+                func_name_ls.append(tool_call.function.name)
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls

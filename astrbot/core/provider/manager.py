@@ -127,6 +127,9 @@ class ProviderManager:
         if self.tts_enabled and not self.curr_tts_provider_inst:
             logger.warning("未启用任何用于 文本转语音 的提供商适配器。")
 
+        # 初始化mcpclient连接
+        await self.llm_tools.init_mcp_client_list()
+
     async def load_provider(self, provider_config: dict):
         if not provider_config["enable"]:
             return

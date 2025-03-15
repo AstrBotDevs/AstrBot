@@ -175,21 +175,35 @@ class LLMRequestSubStage(Stage):
                 for func_tool_name, func_tool_args in zip(
                     llm_response.tools_call_name, llm_response.tools_call_args
                 ):
-                    func_tool = req.func_tool.get_func(func_tool_name)
-                    logger.info(
-                        f"调用工具函数：{func_tool_name}，参数：{func_tool_args}"
-                    )
                     try:
-                        # 尝试调用工具函数
-                        wrapper = self._call_handler(
-                            self.ctx, event, func_tool.handler, **func_tool_args
-                        )
-                        async for resp in wrapper:
-                            if resp is not None:  # 有 return 返回
-                                function_calling_result[func_tool_name] = resp
-                            else:
-                                yield  # 有生成器返回
-                        event.clear_result()  # 清除上一个 handler 的结果
+                        if func_tool_name.startswith('mcp:'):
+                            _, mcp_server_name, mcp_func_name = func_tool_name.split(':')
+                            logger.info(
+                                f"从mcp服务 {mcp_server_name} 调用工具函数：{mcp_func_name}，参数：{func_tool_args}")
+
+                            client = req.func_tool.mcp_client_dict[mcp_server_name]
+                            res = await client.session.call_tool(mcp_func_name, func_tool_args)
+                            if res:
+                                # TODO content的类型可能包括list[TextContent | ImageContent | EmbeddedResource]，这里只处理了TextContent。
+                                res_event = event.plain_result(res.content[0].text)
+                                event.set_result(res_event)
+                            yield
+                        else:
+                            func_tool = req.func_tool.get_func(func_tool_name)
+                            logger.info(
+                                f"调用工具函数：{func_tool_name}，参数：{func_tool_args}"
+                            )
+
+                            # 尝试调用工具函数
+                            wrapper = self._call_handler(
+                                self.ctx, event, func_tool.handler, **func_tool_args
+                            )
+                            async for resp in wrapper:
+                                if resp is not None:  # 有 return 返回
+                                    function_calling_result[func_tool_name] = resp
+                                else:
+                                    yield  # 有生成器返回
+                            event.clear_result()  # 清除上一个 handler 的结果
                     except BaseException as e:
                         logger.warning(traceback.format_exc())
                         function_calling_result[func_tool_name] = (
