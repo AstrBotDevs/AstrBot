@@ -323,7 +323,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def dwl(self, event: AstrMessageEvent, sid: str):
         """删除白名单。dwl <sid>"""
         try:
-            self.context.get_config()["platform_settings"]["id_whitelist"].remove(str(sid))
+            self.context.get_config()["platform_settings"]["id_whitelist"].remove(
+                str(sid)
+            )
             self.context.get_config().save_config()
             event.set_result(MessageEventResult().message("删除白名单成功。"))
         except ValueError:
