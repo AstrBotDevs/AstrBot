@@ -99,6 +99,9 @@ class ProviderDify(Provider):
         try:
             match self.api_type:
                 case "chat" | "agent":
+                    if not prompt:
+                        prompt = "请描述这张图片。"
+
                     async for chunk in self.api_client.chat_messages(
                         inputs={
                             **payload_vars,
