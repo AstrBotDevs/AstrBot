@@ -56,8 +56,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
         if send_one_by_one:
             for seg in message.chain:
-                if isinstance(seg, Nodes):
-                    # 带有多个节点的合并转发消息
+                if isinstance(seg, (Node, Nodes)):
+                    # 合并转发消息
+
+                    if isinstance(seg, Node):
+                        nodes = Nodes([seg])
+                        seg = nodes
+
                     payload = seg.toDict()
                     if self.get_group_id():
                         payload["group_id"] = self.get_group_id()
