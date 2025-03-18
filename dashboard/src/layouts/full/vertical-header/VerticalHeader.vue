@@ -8,6 +8,7 @@ import { useCommonStore } from '@/stores/common';
 
 const customizer = useCustomizerStore();
 let dialog = ref(false);
+let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
 let password = ref('');
 let newPassword = ref('');
@@ -177,6 +178,14 @@ checkUpdate();
 const commonStore = useCommonStore();
 commonStore.createWebSocket();
 commonStore.getStartTime();
+
+
+if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('change_pwd_hint') == 'true') {
+  dialog.value = true;
+  accountWarning.value = true;
+  localStorage.removeItem('change_pwd_hint');
+}
+
 </script>
 
 <template>
@@ -339,6 +348,11 @@ commonStore.getStartTime();
           <v-container>
             <v-row>
               <v-col cols="12">
+
+                <v-alert v-if="accountWarning" color="warning" style="margin-bottom: 16px;">
+                  <div>为了安全，请尽快修改默认密码。</div>
+                </v-alert>
+
                 <v-text-field label="原密码*" type="password" v-model="password" required
                   variant="outlined"></v-text-field>
 
