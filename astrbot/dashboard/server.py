@@ -122,7 +122,10 @@ class AstrBotDashboard:
     def run(self):
         ip_addr = []
         port = self.core_lifecycle.astrbot_config["dashboard"].get("port", 6185)
-        host = self.core_lifecycle.astrbot_config["dashboard"].get("host", "127.0.0.1")
+        host = self.core_lifecycle.astrbot_config["dashboard"].get("host", "0.0.0.0")
+
+        logger.info(f"正在启动 WebUI, 监听地址: http://{host}:{port}")
+
         if host not in ["localhost", "127.0.0.1"]:
             try:
                 ip_addr = get_local_ip_addresses()
@@ -144,7 +147,7 @@ class AstrBotDashboard:
 
             raise Exception(f"端口 {port} 已被占用")
 
-        display = f"\n ✨✨✨\n  AstrBot v{VERSION} 管理面板已启动，可访问\n\n"
+        display = f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"
         display += f"   ➜  本地: http://localhost:{port}\n"
         for ip in ip_addr:
             display += f"   ➜  网络: http://{ip}:{port}\n"
