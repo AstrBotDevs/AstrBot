@@ -126,6 +126,9 @@ class AstrBotDashboard:
 
         logger.info(f"正在启动 WebUI, 监听地址: http://{host}:{port}")
 
+        if host == "0.0.0.0":
+            logger.info("提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）")
+
         if host not in ["localhost", "127.0.0.1"]:
             try:
                 ip_addr = get_local_ip_addresses()
