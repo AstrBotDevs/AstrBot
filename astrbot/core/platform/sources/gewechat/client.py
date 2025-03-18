@@ -192,6 +192,11 @@ class SimpleGewechatClient:
         abm.sender = MessageMember(user_id, user_real_name)
         abm.raw_message = d
         abm.message_str = ""
+
+        if user_id == "weixin":
+            # 忽略微信团队消息
+            return
+
         # 不同消息类型
         match d["MsgType"]:
             case 1:
