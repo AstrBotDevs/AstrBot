@@ -5,6 +5,7 @@ from .func_tool_manager import FuncCall
 from openai.types.chat.chat_completion import ChatCompletion
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
+import astrbot.core.message.components as Comp
 
 
 class ProviderType(enum.Enum):
@@ -59,8 +60,6 @@ class LLMResponse:
     """角色, assistant, tool, err"""
     result_chain: MessageChain = None
     """返回的消息链"""
-    completion_text: str = ""
-    """LLM 返回的文本, 已经废弃但仍然兼容。使用 result_chain 替代"""
     tools_call_args: List[Dict[str, any]] = field(default_factory=list)
     """工具调用参数"""
     tools_call_name: List[str] = field(default_factory=list)
@@ -68,3 +67,51 @@ class LLMResponse:
 
     raw_completion: ChatCompletion = None
     _new_record: Dict[str, any] = None
+
+    _completion_text: str = ""
+
+    def __init__(
+        self,
+        role: str,
+        completion_text: str = "",
+        result_chain: MessageChain = None,
+        tools_call_args: List[Dict[str, any]] = None,
+        tools_call_name: List[str] = None,
+        raw_completion: ChatCompletion = None,
+        _new_record: Dict[str, any] = None,
+    ):
+        """初始化 LLMResponse
+
+        Args:
+            role (str): 角色, assistant, tool, err
+            completion_text (str, optional): 返回的结果文本，已经过时，推荐使用 result_chain. Defaults to "".
+            result_chain (MessageChain, optional): 返回的消息链. Defaults to None.
+            tools_call_args (List[Dict[str, any]], optional): 工具调用参数. Defaults to None.
+            tools_call_name (List[str], optional): 工具调用名称. Defaults to None.
+            raw_completion (ChatCompletion, optional): 原始响应, OpenAI 格式. Defaults to None.
+        """
+        self.role = role
+        self.completion_text = completion_text
+        self.result_chain = result_chain
+        self.tools_call_args = tools_call_args
+        self.tools_call_name = tools_call_name
+        self.raw_completion = raw_completion
+        self._new_record = _new_record
+
+    @property
+    def completion_text(self):
+        if self.result_chain:
+            return self.result_chain.get_plain_text()
+        return self._completion_text
+
+    @completion_text.setter
+    def completion_text(self, value):
+        if self.result_chain:
+            self.result_chain.chain = [
+                comp
+                for comp in self.result_chain.chain
+                if not isinstance(comp, Comp.Plain)
+            ]  # 清空 Plain 组件
+            self.result_chain.chain.insert(0, Comp.Plain(value))
+        else:
+            self._completion_text = value

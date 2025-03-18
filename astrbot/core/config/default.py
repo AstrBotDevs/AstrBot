@@ -581,7 +581,7 @@ CONFIG_METADATA_2 = {
                         "dify_api_type": "chat",
                         "dify_api_key": "",
                         "dify_api_base": "https://api.dify.ai/v1",
-                        "dify_workflow_output_key": "",
+                        "dify_workflow_output_key": "astrbot_wf_output",
                         "dify_query_input_key": "astrbot_text_query",
                         "variables": {},
                         "timeout": 60,

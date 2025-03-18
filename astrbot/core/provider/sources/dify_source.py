@@ -44,9 +44,11 @@ class ProviderDify(Provider):
         self.dify_query_input_key = provider_config.get(
             "dify_query_input_key", "astrbot_text_query"
         )
-        self.variables: dict = provider_config.get("variables", {})
         if not self.dify_query_input_key:
             self.dify_query_input_key = "astrbot_text_query"
+        if not self.workflow_output_key:
+            self.workflow_output_key = "astrbot_wf_output"
+        self.variables: dict = provider_config.get("variables", {})
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
