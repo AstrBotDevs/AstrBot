@@ -75,8 +75,7 @@ class SimpleGewechatClient:
         self.stop = False
 
     async def get_token_id(self):
-        """获取 Gewechat Token。
-        """
+        """获取 Gewechat Token。"""
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{self.base_url}/tools/getTokenId") as resp:
                 json_blob = await resp.json()
@@ -320,8 +319,7 @@ class SimpleGewechatClient:
         logger.info("gewechat 适配器已关闭。")
 
     async def check_online(self, appid: str):
-        """检查 APPID 对应的设备是否在线。
-        """
+        """检查 APPID 对应的设备是否在线。"""
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{self.base_url}/login/checkOnline",
@@ -332,8 +330,7 @@ class SimpleGewechatClient:
                 return json_blob["data"]
 
     async def logout(self):
-        """登出 gewechat。
-        """
+        """登出 gewechat。"""
         if self.appid:
             online = await self.check_online(self.appid)
             if online:
@@ -347,8 +344,7 @@ class SimpleGewechatClient:
                         logger.info(f"登出结果: {json_blob}")
 
     async def login(self):
-        """登录 gewechat。一般来说插件用不到这个方法。
-        """
+        """登录 gewechat。一般来说插件用不到这个方法。"""
         if self.token is None:
             await self.get_token_id()
 
