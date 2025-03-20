@@ -151,4 +151,5 @@ class MessageEventResult(MessageChain):
         """是否为 LLM 结果。"""
         return self.result_content_type == ResultContentType.LLM_RESULT
 
+
 CommandResult = MessageEventResult
