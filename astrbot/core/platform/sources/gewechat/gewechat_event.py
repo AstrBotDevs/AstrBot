@@ -2,7 +2,7 @@ import wave
 import uuid
 import traceback
 import os
-from astrbot.core.utils.io import save_temp_img, download_image_by_url, download_file
+from astrbot.core.utils.io import save_temp_img, download_file
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
