@@ -127,9 +127,9 @@ class GewechatPlatformEvent(AstrMessageEvent):
     async def get_group(self, group_id=None, **kwargs):
         # 确定有效的 group_id
         if group_id is None:
-            group_id = self.message_obj.group_id
+            group_id = self.get_group_id()
 
-        if group_id is None:
+        if not group_id:
             return None
 
         res = await self.client.get_group(group_id)
