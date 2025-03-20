@@ -356,24 +356,25 @@ class Image(BaseMessageComponent):
         Returns:
             str: 图片的本地路径，以绝对路径表示。
         """
-        if self.file and self.file.startswith("file:///"):
-            image_file_path = self.file[8:]
+        url = self.url if self.url else self.file
+        if url and url.startswith("file:///"):
+            image_file_path = url[8:]
             return image_file_path
-        elif self.file and self.file.startswith("http"):
-            image_file_path = await download_image_by_url(self.file)
+        elif url and url.startswith("http"):
+            image_file_path = await download_image_by_url(url)
             return os.path.abspath(image_file_path)
-        elif self.file and self.file.startswith("base64://"):
-            bs64_data = self.file.removeprefix("base64://")
+        elif url and url.startswith("base64://"):
+            bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             image_file_path = f"data/temp/{uuid.uuid4()}.jpg"
             with open(image_file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(image_file_path)
-        elif os.path.exists(self.file):
-            image_file_path = self.file
+        elif os.path.exists(url):
+            image_file_path = url
             return os.path.abspath(image_file_path)
         else:
-            raise Exception(f"not a valid file: {self.file}")
+            raise Exception(f"not a valid file: {url}")
 
     async def convert_to_base64(self) -> str:
         """将这个图片统一转换为 base64 编码。这个方法避免了手动判断图片数据类型，直接返回图片数据的 base64 编码。
@@ -382,17 +383,18 @@ class Image(BaseMessageComponent):
             str: 图片的 base64 编码，不以 base64:// 或者 data:image/jpeg;base64, 开头。
         """
         # convert to base64
-        if self.file and self.file.startswith("file:///"):
-            bs64_data = file_to_base64(self.file[8:])
-        elif self.file and self.file.startswith("http"):
-            image_file_path = await download_image_by_url(self.file)
+        url = self.url if self.url else self.file
+        if url and url.startswith("file:///"):
+            bs64_data = file_to_base64(url[8:])
+        elif url and url.startswith("http"):
+            image_file_path = await download_image_by_url(url)
             bs64_data = file_to_base64(image_file_path)
-        elif self.file and self.file.startswith("base64://"):
-            bs64_data = self.file
-        elif os.path.exists(self.file):
-            bs64_data = file_to_base64(self.file)
+        elif url and url.startswith("base64://"):
+            bs64_data = url
+        elif os.path.exists(url):
+            bs64_data = file_to_base64(url)
         else:
-            raise Exception(f"not a valid file: {self.file}")
+            raise Exception(f"not a valid file: {url}")
         return bs64_data
 
 
