@@ -223,7 +223,7 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
                     },
                     "ws_reverse_host": {
-                        "description": "反向 Websocket 主机地址",
+                        "description": "反向 Websocket 主机地址(AstrBot 为服务器端)",
                         "type": "string",
                         "hint": "aiocqhttp 适配器的反向 Websocket 服务器 IP 地址，不包含端口号。",
                     },
