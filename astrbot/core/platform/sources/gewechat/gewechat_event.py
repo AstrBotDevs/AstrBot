@@ -6,7 +6,7 @@ from astrbot.core.utils.io import save_temp_img, download_file
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, PlatformMetadata, Group, MessageMember
 from astrbot.api.message_components import Plain, Image, Record, At, File
 from .client import SimpleGewechatClient
 
@@ -123,3 +123,30 @@ class GewechatPlatformEvent(AstrMessageEvent):
         to_wxid = self.message_obj.raw_message.get("to_wxid", None)
         await GewechatPlatformEvent.send_with_client(message, to_wxid, self.client)
         await super().send(message)
+
+    async def get_group(self, group_id = None, **kwargs):
+        # 确定有效的 group_id
+        if group_id is None:
+            group_id = self.message_obj.group_id
+
+        if group_id is None:
+            return None
+
+        res = await self.client.get_group(group_id)
+        data: dict = res["data"]
+
+        if not data["chatroomId"]:
+            return None
+
+        members = [
+            MessageMember(user_id=member["wxid"], nickname=member["nickName"])
+            for member in data.get("memberList", [])
+        ]
+
+        return Group(
+            group_id=data["chatroomId"],
+            group_name=data.get("nickName"),
+            group_avatar=data.get("smallHeadImgUrl"),
+            group_owner=data.get("chatRoomOwner"),
+            members=members,
+        )

@@ -13,7 +13,7 @@ class MessageMember:
     def __str__(self):
         # 使用 f-string 来构建返回的字符串表示形式
         return (
-            f"User ID: {self.user_id}\n"
+            f"User ID: {self.user_id},"
             f"Nickname: {self.nickname if self.nickname else 'N/A'}"
         )
 
@@ -21,19 +21,17 @@ class MessageMember:
 @dataclass
 class Group:
     group_id: str
+    """群号"""
     group_name: str = None
-
-    # 群头像
+    """群名称"""
     group_avatar: str = None
-
-    # 群主id
+    """群头像"""
     group_owner: str = None
-
-    # 群管理员id
-    group_admin: str = None
-
-    # 群成员
+    """群主 id"""
+    group_admins: List[str] = None
+    """群管理员 id"""
     members: List[MessageMember] = None
+    """所有群成员"""
 
     def __str__(self):
         # 使用 f-string 来构建返回的字符串表示形式
@@ -42,23 +40,9 @@ class Group:
             f"Name: {self.group_name if self.group_name else 'N/A'}\n"
             f"Avatar: {self.group_avatar if self.group_avatar else 'N/A'}\n"
             f"Owner ID: {self.group_owner if self.group_owner else 'N/A'}\n"
-            f"Admin ID: {self.group_admin if self.group_admin else 'N/A'}"
-        )
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Group":
-        # 提取members信息并转换为MessageMember对象
-        members = [
-            MessageMember(user_id=member["wxid"], nickname=member["nickName"])
-            for member in data.get("memberList", [])
-        ]
-
-        return cls(
-            group_id=data["chatroomId"],
-            group_name=data.get("nickName"),
-            group_avatar=data.get("smallHeadImgUrl"),
-            group_owner=data.get("chatRoomOwner"),
-            members=members,
+            f"Admin IDs: {self.group_admins if self.group_admins else 'N/A'}\n"
+            f"Members Len: {len(self.members) if self.members else 0}\n"
+            f"First Member: {self.members[0] if self.members else 'N/A'}\n"
         )
 
 

@@ -202,15 +202,6 @@ class AstrMessageEvent(abc.ABC):
         """
         return self.role == "admin"
 
-    async def send(self, message: MessageChain):
-        """
-        发送消息到消息平台。
-        """
-        asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
-        )
-        self._has_send_oper = True
-
     async def _pre_send(self):
         """调度器会在执行 send() 前调用该方法"""
 
@@ -373,36 +364,25 @@ class AstrMessageEvent(abc.ABC):
             conversation=conversation,
         )
 
-    async def get_group(self, group_id: str = None) -> Optional[Group]:
+    """平台适配器"""
+
+    async def send(self, message: MessageChain):
+        """发送消息到消息平台。
+
+        Args:
+            message (MessageChain): 消息链，具体使用方式请参考文档。
         """
-        获取群聊，如果不填写group_id，且消息是私聊消息，则返回 None
-        目前只实现了 GeweChat 协议
-        """
-        # 确定有效的 group_id
-        if group_id is None:
-            group_id = self.message_obj.group_id
-
-        if group_id is None:
-            return None
-
-        # 检查平台是否为 gewechat
-        if self.platform_meta.name != "gewechat":
-            return None
-
-        from astrbot.core.platform.sources.gewechat.gewechat_event import (
-            GewechatPlatformEvent,
+        asyncio.create_task(
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
         )
+        self._has_send_oper = True
 
-        assert isinstance(self, GewechatPlatformEvent)
-        client = self.client
+    async def get_group(self, group_id: str = None, **kwargs) -> Optional[Group]:
+        """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 
-        # 从客户端获取群信息
-        res = await client.get_group(group_id)
+        适配情况:
 
-        data = res["data"]
-
-        # 检查 chatroomId 是否为空
-        if data["chatroomId"] == "":
-            return None
-
-        return Group.from_dict(data)
+        - gewechat
+        - aiocqhttp(OneBotv11)
+        """
+        ...
