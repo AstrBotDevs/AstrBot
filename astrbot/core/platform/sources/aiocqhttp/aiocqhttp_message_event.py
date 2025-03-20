@@ -4,6 +4,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image, Record, At, Node, Nodes
 from aiocqhttp import CQHttp
 
+
 class AiocqhttpMessageEvent(AstrMessageEvent):
     def __init__(
         self, message_str, message_obj, platform_meta, session_id, bot: CQHttp

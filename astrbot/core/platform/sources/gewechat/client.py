@@ -125,7 +125,7 @@ class SimpleGewechatClient:
         abm = AstrBotMessage()
 
         # if type_name == "ModContacts":
-            # self
+        # self
 
         from_user_name = d["FromUserName"]["string"]  # 消息来源
         d["to_wxid"] = from_user_name  # 用于发信息
@@ -642,12 +642,9 @@ class SimpleGewechatClient:
                 json_blob = await resp.json()
                 logger.debug(f"获取群信息结果: {json_blob}")
                 return json_blob
+
     async def send_message(self, to_wxid, content):
-        payload = {
-            "appId": self.appid,
-            "toWxid": to_wxid,
-            "content":content
-        }
+        payload = {"appId": self.appid, "toWxid": to_wxid, "content": content}
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
