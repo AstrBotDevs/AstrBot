@@ -53,11 +53,11 @@ class SimpleGewechatClient:
 
         self.server = quart.Quart(__name__)
         self.server.add_url_rule(
-            "/astrbot-gewechat/callback", view_func=self.callback, methods=["POST"]
+            "/astrbot-gewechat/callback", view_func=self._callback, methods=["POST"]
         )
         self.server.add_url_rule(
             "/astrbot-gewechat/file/<file_id>",
-            view_func=self.handle_file,
+            view_func=self._handle_file,
             methods=["GET"],
         )
 
@@ -75,6 +75,8 @@ class SimpleGewechatClient:
         self.stop = False
 
     async def get_token_id(self):
+        """获取 Gewechat Token。
+        """
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{self.base_url}/tools/getTokenId") as resp:
                 json_blob = await resp.json()
@@ -260,7 +262,7 @@ class SimpleGewechatClient:
         logger.debug(f"abm: {abm}")
         return abm
 
-    async def callback(self):
+    async def _callback(self):
         data = await quart.request.json
         logger.debug(f"收到 gewechat 回调: {data}")
 
@@ -282,7 +284,7 @@ class SimpleGewechatClient:
 
         return quart.jsonify({"r": "AstrBot ACK"})
 
-    async def handle_file(self, file_id):
+    async def _handle_file(self, file_id):
         file_path = f"data/temp/{file_id}"
         return await quart.send_file(file_path)
 
@@ -308,17 +310,18 @@ class SimpleGewechatClient:
         await self.server.run_task(
             host="0.0.0.0",
             port=self.port,
-            shutdown_trigger=self.shutdown_trigger_placeholder,
+            shutdown_trigger=self._shutdown_trigger_placeholder,
         )
 
-    async def shutdown_trigger_placeholder(self):
+    async def _shutdown_trigger_placeholder(self):
         # TODO: use asyncio.Event
         while not self.event_queue.closed and not self.stop:  # noqa: ASYNC110
             await asyncio.sleep(1)
         logger.info("gewechat 适配器已关闭。")
 
     async def check_online(self, appid: str):
-        # /login/checkOnline
+        """检查 APPID 对应的设备是否在线。
+        """
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{self.base_url}/login/checkOnline",
@@ -329,6 +332,8 @@ class SimpleGewechatClient:
                 return json_blob["data"]
 
     async def logout(self):
+        """登出 gewechat。
+        """
         if self.appid:
             online = await self.check_online(self.appid)
             if online:
@@ -342,6 +347,8 @@ class SimpleGewechatClient:
                         logger.info(f"登出结果: {json_blob}")
 
     async def login(self):
+        """登录 gewechat。一般来说插件用不到这个方法。
+        """
         if self.token is None:
             await self.get_token_id()
 
@@ -453,9 +460,18 @@ class SimpleGewechatClient:
             self.appid = appid
             logger.info(f"已保存 APPID: {appid}")
 
-    """API"""
+    """API 部分。Gewechat 的 API 文档请参考: https://apifox.com/apidoc/shared/69ba62ca-cb7d-437e-85e4-6f3d3df271b1
+    """
 
-    async def get_chatroom_member_list(self, chatroom_wxid: str):
+    async def get_chatroom_member_list(self, chatroom_wxid: str) -> dict:
+        """获取群成员列表。
+
+        Args:
+            chatroom_wxid (str): 微信群聊的id。可以通过 event.get_group_id() 获取。
+
+        Returns:
+            dict: 返回群成员列表字典。其中键为 memberList 的值为群成员列表。
+        """
         payload = {"appId": self.appid, "chatroomId": chatroom_wxid}
 
         async with aiohttp.ClientSession() as session:
@@ -468,6 +484,7 @@ class SimpleGewechatClient:
                 return json_blob["data"]
 
     async def post_text(self, to_wxid, content: str, ats: str = ""):
+        """发送纯文本消息"""
         payload = {
             "appId": self.appid,
             "toWxid": to_wxid,
@@ -484,6 +501,7 @@ class SimpleGewechatClient:
                 logger.debug(f"发送消息结果: {json_blob}")
 
     async def post_image(self, to_wxid, image_url: str):
+        """发送图片消息"""
         payload = {
             "appId": self.appid,
             "toWxid": to_wxid,
@@ -498,6 +516,12 @@ class SimpleGewechatClient:
                 logger.debug(f"发送图片结果: {json_blob}")
 
     async def post_voice(self, to_wxid, voice_url: str, voice_duration: int):
+        """发送语音信息
+
+        Args:
+            voice_url (str): 语音文件的网络链接
+            voice_duration (int): 语音时长，毫秒
+        """
         payload = {
             "appId": self.appid,
             "toWxid": to_wxid,
@@ -515,6 +539,13 @@ class SimpleGewechatClient:
                 logger.debug(f"发送语音结果: {json_blob}")
 
     async def post_file(self, to_wxid, file_url: str, file_name: str):
+        """发送文件
+
+        Args:
+            to_wxid (string): 微信ID
+            file_url (str): 文件的网络链接
+            file_name (str): 文件名
+        """
         payload = {
             "appId": self.appid,
             "toWxid": to_wxid,
