@@ -43,14 +43,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                     message_obj.self_id, message_obj.session_id, comp.text
                 )
             elif isinstance(comp, Image):
-                img_url = comp.file
-                img_path = ""
-                if img_url.startswith("file:///"):
-                    img_path = img_url[8:]
-                elif comp.file and comp.file.startswith("http"):
-                    img_path = await download_image_by_url(comp.file)
-                else:
-                    img_path = img_url
+                img_path = await comp.convert_to_file_path()
 
                 with open(img_path, "rb") as f:
                     try:
@@ -68,16 +61,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                         response["media_id"],
                     )
             elif isinstance(comp, Record):
-                record_url = comp.file
-                record_path = ""
-
-                if record_url.startswith("file:///"):
-                    record_path = record_url[8:]
-                elif record_url.startswith("http"):
-                    await download_file(record_url, f"data/temp/{uuid.uuid4()}.wav")
-                else:
-                    record_path = record_url
-
+                record_path = await comp.convert_to_file_path()
                 # 转成amr
                 record_path_amr = f"data/temp/{uuid.uuid4()}.amr"
                 pydub.AudioSegment.from_wav(record_path).export(

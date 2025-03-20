@@ -30,73 +30,83 @@ import config from '@/config';
   <!-- 可视化编辑 -->
   <v-card v-if="editorTab === 0">
     <v-tabs v-model="tab" align-tabs="left" color="deep-purple-accent-4">
-      <v-tab v-for="(val, key, index) in metadata" :key="index" :value="index" style="font-weight: 1000; font-size: 15px">
+      <v-tab v-for="(val, key, index) in metadata" :key="index" :value="index"
+        style="font-weight: 1000; font-size: 15px">
         {{ metadata[key]['name'] }}
       </v-tab>
     </v-tabs>
     <v-tabs-window v-model="tab">
       <v-tabs-window-item v-for="(val, key, index) in metadata" v-show="index == tab" :key="index">
         <v-container fluid>
-          <v-expansion-panels variant="accordion">
-            <v-expansion-panel v-for="(val2, key2, index2) in metadata[key]['metadata']">
-              <v-expansion-panel-title>
-                <h3>{{metadata[key]['metadata'][key2]['description']}}</h3>
-              </v-expansion-panel-title>
-              <v-expansion-panel-text v-if="metadata[key]['metadata'][key2]?.config_template">
-                <!-- 带有 config_template 的配置项 -->
 
-                <v-alert style="margin-top: 16px; margin-bottom: 16px" color="primary" variant="tonal" v-if="key2 === 'platform' || key2 === 'provider'">
-                  😄 消息平台适配器和服务提供商的配置已经迁移至更方便的独立页面！推荐前往左栏配置哦～
-                </v-alert>
+          <div v-for="(val2, key2, index2) in metadata[key]['metadata']">
+            <!-- <h3>{{ metadata[key]['metadata'][key2]['description'] }}</h3> -->
+            <div v-if="metadata[key]['metadata'][key2]?.config_template"
+              v-show="key2 !== 'platform' && key2 !== 'provider'" style="border: 1px solid #e0e0e0; padding: 8px; margin-bottom: 16px; border-radius: 10px">
+              <!-- 带有 config_template 的配置项 -->
+              <v-list-item-title style="font-weight: bold;">
+                {{ metadata[key]['metadata'][key2]['description'] }} ({{ key2 }})
+              </v-list-item-title>
+              <v-tabs style="margin-top: 16px;" align-tabs="left" color="deep-purple-accent-4"
+              
+                v-model="config_template_tab">
+                <v-tab v-if="metadata[key]['metadata'][key2]?.tmpl_display_title"
+                  v-for="(item, index) in config_data[key2]" :key="index" :value="index">
+                  {{ item[metadata[key]['metadata'][key2]?.tmpl_display_title] }}
+                </v-tab>
+                <v-tab v-else v-for="(item, index) in config_data[key2]" :key="index + '_'" :value="index">
+                  {{ item.id }}({{ item.type }})
+                </v-tab>
+                <v-menu>
+                  <template v-slot:activator="{ props }">
+                    <v-btn variant="plain" size="large" v-bind="props">
+                      <v-icon>mdi-plus</v-icon>
+                    </v-btn>
+                  </template>
+                  <v-list @update:selected="addFromDefaultConfigTmpl($event, key, key2)">
+                    <v-list-item v-for="(item, index) in metadata[key]['metadata'][key2]?.config_template" :key="index"
+                      :value="index">
+                      <v-list-item-title>{{ index }}</v-list-item-title>
+                    </v-list-item>
+                  </v-list>
+                </v-menu>
+              </v-tabs>
+              <v-tabs-window v-model="config_template_tab">
+                <v-tabs-window-item v-for="(config_item, index) in config_data[key2]"
+                  v-show="config_template_tab === index" :key="index" :value="index">
+                  <div style="padding: 16px;">
+                    <v-btn variant="tonal" rounded="xl" color="error" @click="deleteItem(key2, index)">
+                      删除这项
+                    </v-btn>
 
-                <v-tabs style="margin-top: 16px;" align-tabs="left" color="deep-purple-accent-4" v-model="config_template_tab">
-                  <v-tab v-if="metadata[key]['metadata'][key2]?.tmpl_display_title" v-for="(item, index) in config_data[key2]" :key="index" :value="index">
-                    {{ item[metadata[key]['metadata'][key2]?.tmpl_display_title] }}
-                  </v-tab>
-                  <v-tab v-else v-for="(item, index) in config_data[key2]" :key="index + '_'" :value="index">
-                    {{ item.id }}({{ item.type }})
-                  </v-tab>
-                  <v-menu>
-                    <template v-slot:activator="{ props }">
-                      <v-btn variant="plain" size="large" v-bind="props">
-                        <v-icon>mdi-plus</v-icon>
-                      </v-btn>
-                    </template>
-                    <v-list @update:selected="addFromDefaultConfigTmpl($event, key, key2)">
-                      <v-list-item v-for="(item, index) in metadata[key]['metadata'][key2]?.config_template" :key="index" :value="index">
-                        <v-list-item-title>{{ index }}</v-list-item-title>
-                      </v-list-item>
-                    </v-list>
-                  </v-menu>
-                </v-tabs>
-                <v-tabs-window v-model="config_template_tab">
-                  <v-tabs-window-item v-for="(config_item, index) in config_data[key2]" v-show="config_template_tab === index"
-                    :key="index" :value="index">
-                    <v-container>
-                      <v-btn variant="tonal" rounded="xl" color="error" @click="deleteItem(key2, index)">
-                        删除这项
-                      </v-btn>
+                    <AstrBotConfig :metadata="metadata[key]['metadata']" :iterable="config_item" :metadataKey="key2">
+                    </AstrBotConfig>
+                  </div>
+                </v-tabs-window-item>
+              </v-tabs-window>
+            </div>
 
-                      <AstrBotConfig :metadata="metadata[key]['metadata']" :iterable="config_item" :metadataKey="key2"></AstrBotConfig>
-                    </v-container>
-                  </v-tabs-window-item>
-                </v-tabs-window>
-              </v-expansion-panel-text>
-              <v-expansion-panel-text v-else>
-                <!-- 如果配置项是一个 object，那么 iterable 需要取到这个 object 的值，否则取到整个 config_data -->
-                <AstrBotConfig v-if="metadata[key]['metadata'][key2]['type'] == 'object'" :metadata="metadata[key]['metadata']" :iterable="config_data[key2]" :metadataKey="key2"></AstrBotConfig>
-                <AstrBotConfig v-else :metadata="metadata[key]['metadata']" :iterable="config_data" :metadataKey="key2"></AstrBotConfig>
-              </v-expansion-panel-text>
-            </v-expansion-panel>
+            <div v-else>
+              <!-- 如果配置项是一个 object，那么 iterable 需要取到这个 object 的值，否则取到整个 config_data -->
+              <div v-if="metadata[key]['metadata'][key2]['type'] == 'object'" style="border: 1px solid #e0e0e0; padding: 8px; margin-bottom: 16px; border-radius: 10px">
+                <AstrBotConfig
+                  :metadata="metadata[key]['metadata']" :iterable="config_data[key2]" :metadataKey="key2">
+                </AstrBotConfig>
+              </div>
+              <AstrBotConfig v-else :metadata="metadata[key]['metadata']" :iterable="config_data" :metadataKey="key2">
+              </AstrBotConfig>
+            </div>
 
-          </v-expansion-panels>
+          </div>
+
+
+
         </v-container>
       </v-tabs-window-item>
 
 
       <div style="margin-left: 16px; padding-bottom: 16px">
-        <small>不了解配置？请见 <a
-            href="https://astrbot.app/">官方文档</a>
+        <small>不了解配置？请见 <a href="https://astrbot.app/">官方文档</a>
           或 <a
             href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft">加群询问</a>。</small>
       </div>

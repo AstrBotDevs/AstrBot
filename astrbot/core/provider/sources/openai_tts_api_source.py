@@ -18,10 +18,14 @@ class ProviderOpenAITTSAPI(TTSProvider):
         self.chosen_api_key = provider_config.get("api_key", "")
         self.voice = provider_config.get("openai-tts-voice", "alloy")
 
+        timeout = provider_config.get("timeout", NOT_GIVEN)
+        if isinstance(timeout, str):
+            timeout = int(timeout)
+
         self.client = AsyncOpenAI(
             api_key=self.chosen_api_key,
             base_url=provider_config.get("api_base", None),
-            timeout=provider_config.get("timeout", NOT_GIVEN),
+            timeout=timeout,
         )
 
         self.set_model(provider_config.get("model", None))

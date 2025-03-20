@@ -3,6 +3,7 @@ import datetime
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core import WEBUI_SK
+from astrbot import logger
 
 
 class AuthRoute(Route):
@@ -19,9 +20,20 @@ class AuthRoute(Route):
         password = self.config["dashboard"]["password"]
         post_data = await request.json
         if post_data["username"] == username and post_data["password"] == password:
+            change_pwd_hint = False
+            if username == "astrbot" and password == "77b90590a8945a7d36c963981a307dc9":
+                change_pwd_hint = True
+                logger.warning("为了保证安全，请尽快修改默认密码。")
+
             return (
                 Response()
-                .ok({"token": self.generate_jwt(username), "username": username})
+                .ok(
+                    {
+                        "token": self.generate_jwt(username),
+                        "username": username,
+                        "change_pwd_hint": change_pwd_hint,
+                    }
+                )
                 .__dict__
             )
         else:

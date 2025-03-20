@@ -120,12 +120,22 @@ class AstrBotDashboard:
             return f"获取进程信息失败: {str(e)}"
 
     def run(self):
-        try:
-            ip_addr = get_local_ip_addresses()
-        except Exception as _:
-            ip_addr = []
-
+        ip_addr = []
         port = self.core_lifecycle.astrbot_config["dashboard"].get("port", 6185)
+        host = self.core_lifecycle.astrbot_config["dashboard"].get("host", "0.0.0.0")
+
+        logger.info(f"正在启动 WebUI, 监听地址: http://{host}:{port}")
+
+        if host == "0.0.0.0":
+            logger.info(
+                "提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）"
+            )
+
+        if host not in ["localhost", "127.0.0.1"]:
+            try:
+                ip_addr = get_local_ip_addresses()
+            except Exception as _:
+                pass
         if isinstance(port, str):
             port = int(port)
 
@@ -142,15 +152,21 @@ class AstrBotDashboard:
 
             raise Exception(f"端口 {port} 已被占用")
 
-        display = f"\n ✨✨✨\n  AstrBot v{VERSION} 管理面板已启动，可访问\n\n"
+        display = f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"
         display += f"   ➜  本地: http://localhost:{port}\n"
         for ip in ip_addr:
             display += f"   ➜  网络: http://{ip}:{port}\n"
         display += "   ➜  默认用户名和密码: astrbot\n ✨✨✨\n"
+
+        if not ip_addr:
+            display += (
+                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
+            )
+
         logger.info(display)
 
         return self.app.run_task(
-            host="0.0.0.0",
+            host=host,
             port=port,
             shutdown_trigger=self.shutdown_trigger_placeholder,
         )

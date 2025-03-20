@@ -29,11 +29,21 @@ def validate_config(
 ) -> typing.Tuple[typing.List[str], typing.Dict]:
     errors = []
 
-    def validate(data, metadata=schema, path=""):
-        for key, meta in metadata.items():
-            if key not in data:
+    def validate(data: dict, metadata: dict = schema, path=""):
+        for key, value in data.items():
+            if key not in metadata:
+                # 无 schema 的配置项，执行类型猜测
+                if isinstance(value, str):
+                    if value.isdigit():
+                        data[key] = int(value)
+                    elif value.replace(".", "", 1).isdigit():
+                        data[key] = float(value)
+                    elif value == "true":
+                        data[key] = True
+                    elif value == "false":
+                        data[key] = False
                 continue
-            value = data[key]
+            meta = metadata[key]
             # null 转换
             if value is None:
                 data[key] = DEFAULT_VALUE_MAP[meta["type"]]
@@ -43,6 +53,16 @@ def validate_config(
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}"
                 )
+            elif (
+                meta["type"] == "list"
+                and isinstance(value, list)
+                and value
+                and "items" in meta
+                and isinstance(value[0], dict)
+            ):
+                # 当前仅针对 list[dict] 的情况进行类型校验，以适配 AstrBot 中 platform、provider 的配置
+                for item in value:
+                    validate(item, meta["items"], path=f"{path}{key}.")
             elif meta["type"] == "object" and isinstance(value, dict):
                 validate(value, meta["items"], path=f"{path}{key}.")
 

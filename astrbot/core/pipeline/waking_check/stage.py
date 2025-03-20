@@ -36,7 +36,7 @@ class WakingCheckStage(Stage):
         # 设置 sender 身份
         event.message_str = event.message_str.strip()
         for admin_id in self.ctx.astrbot_config["admins_id"]:
-            if event.get_sender_id() == admin_id:
+            if str(event.get_sender_id()) == admin_id:
                 event.role = "admin"
                 break
 
@@ -106,6 +106,7 @@ class WakingCheckStage(Stage):
                             f"插件 {star_map[handler.handler_module_path].name}: {e}"
                         )
                     )
+                    await event._post_send()
                     event.stop_event()
                     passed = False
                     break
@@ -117,6 +118,7 @@ class WakingCheckStage(Stage):
                                 f"ID {event.get_sender_id()} 权限不足。通过 /sid 获取 ID 并请管理员添加。"
                             )
                         )
+                        await event._post_send()
                     event.stop_event()
                     return
 

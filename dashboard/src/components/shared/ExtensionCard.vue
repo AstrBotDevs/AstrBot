@@ -33,12 +33,6 @@ const open = (link: string | undefined) => {
 
 const reveal = ref(false);
 
-// 检查是否有更新可用
-const hasUpdate = computed(() => {
-  if (!props.extension.online_version || !props.extension.version) return false;
-  return props.extension.online_version !== props.extension.version;
-});
-
 // 操作函数
 const configure = () => {
   emit('configure', props.extension);
@@ -75,7 +69,7 @@ const viewHandlers = () => {
 
         <p class="text-h3 font-weight-black" :class="{ 'text-h4': $vuetify.display.xs }">
           {{ extension.name }}
-          <v-tooltip location="top" v-if="hasUpdate && !marketMode">
+          <v-tooltip location="top" v-if="extension?.has_update && !marketMode">
             <template v-slot:activator="{ props: tooltipProps }">
               <v-icon v-bind="tooltipProps" color="warning" class="ml-2" icon="mdi-update" size="small"></v-icon>
             </template>
@@ -94,7 +88,7 @@ const viewHandlers = () => {
             <v-icon icon="mdi-source-branch" start></v-icon>
             {{ extension.version }}
           </v-chip>
-          <v-chip v-if="hasUpdate" color="warning" label size="small" class="ml-2">
+          <v-chip v-if="extension?.has_update " color="warning" label size="small" class="ml-2">
             <v-icon icon="mdi-arrow-up-bold" start></v-icon>
             {{ extension.online_version }}
           </v-chip>
@@ -104,7 +98,7 @@ const viewHandlers = () => {
           </v-chip>
         </div>
 
-        <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }">
+        <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }" style="max-height: 65px; overflow-y: auto;">
           {{ extension.desc }}
         </div>
       </div>
@@ -172,7 +166,7 @@ const viewHandlers = () => {
               查看行为 ({{ extension.handlers.length }})
             </v-btn>
 
-            <v-btn prepend-icon="mdi-update" color="primary" variant="tonal" :disabled="!hasUpdate"
+            <v-btn prepend-icon="mdi-update" color="primary" variant="tonal" :disabled="!extension?.has_update "
               @click="updateExtension" :block="$vuetify.display.xs">
               更新到 {{ extension.online_version || extension.version }}
             </v-btn>
