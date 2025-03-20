@@ -3,7 +3,6 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image, Record
 from wechatpy.enterprise import WeChatClient
-from astrbot.core.utils.io import download_image_by_url, download_file
 
 from astrbot.api import logger
 
