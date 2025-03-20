@@ -593,6 +593,11 @@ CONFIG_METADATA_2 = {
                         "dashscope_app_type": "agent",
                         "dashscope_api_key": "",
                         "dashscope_app_id": "",
+                        "rag_options": {
+                            "pipeline_ids": [],
+                            "file_ids": [],
+                            "output_reference": False,
+                        },
                         "variables": {},
                         "timeout": 60,
                     },
@@ -665,6 +670,30 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "rag_options": {
+                        "description": "RAG 选项",
+                        "type": "object",
+                        "hint": "检索知识库设置, 非必填。仅 Agent 应用类型支持(智能体应用, 包括 RAG 应用)",
+                        "items": {
+                            "pipeline_ids": {
+                                "description": "知识库 ID 列表",
+                                "type": "list",
+                                "items": {"type": "string"},
+                                "hint": "对指定知识库内所有文档进行检索, 前往 https://bailian.console.aliyun.com/ 数据应用->知识索引创建和获取 ID。",
+                            },
+                            "file_ids": {
+                                "description": "非结构化文档 ID, 传入该参数将对指定非结构化文档进行检索。",
+                                "type": "list",
+                                "items": {"type": "string"},
+                                "hint": "对指定非结构化文档进行检索。前往 https://bailian.console.aliyun.com/ 数据管理创建和获取 ID。",
+                            },
+                            "output_reference": {
+                                "description": "是否输出知识库/文档的引用",
+                                "type": "bool",
+                                "hint": "在每次回答尾部加上引用源。默认为 False。",
+                            },
+                        },
+                    },
                     "sensevoice_hint": {
                         "description": "部署SenseVoice",
                         "type": "string",
@@ -681,12 +710,14 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "modelscope 上的模型名称。默认：iic/SenseVoiceSmall。",
                     },
-                    # "variables": {
-                    #     "description": "工作流固定输入变量",
-                    #     "type": "object",
-                    #     "obvious_hint": True,
-                    #     "hint": "可选。工作流固定输入变量，将会作为工作流的输入。也可以在对话时使用 /set 指令动态设置变量。如果变量名冲突，优先使用动态设置的变量。",
-                    # },
+                    "variables": {
+                        "description": "工作流固定输入变量",
+                        "type": "object",
+                        "obvious_hint": True,
+                        "items": {},
+                        "hint": "可选。工作流固定输入变量，将会作为工作流的输入。也可以在对话时使用 /set 指令动态设置变量。如果变量名冲突，优先使用动态设置的变量。",
+                        "invisible": True,
+                    },
                     # "fastgpt_app_type": {
                     #     "description": "应用类型",
                     #     "type": "string",
@@ -697,7 +728,7 @@ CONFIG_METADATA_2 = {
                     "dashscope_app_type": {
                         "description": "应用类型",
                         "type": "string",
-                        "hint": "阿里云百炼应用的应用类型。",
+                        "hint": "百炼应用的应用类型。",
                         "options": [
                             "agent",
                             "agent-arrange",
