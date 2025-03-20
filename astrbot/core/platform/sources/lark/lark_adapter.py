@@ -2,6 +2,7 @@ import base64
 import asyncio
 import json
 import re
+import astrbot.api.message_components as Comp
 
 from astrbot.api.platform import (
     Platform,
@@ -11,7 +12,6 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Image, Plain, At
 from astrbot.core.platform.astr_message_event import MessageSesion
 from .lark_event import LarkMessageEvent
 from ...register import register_platform_adapter
@@ -92,7 +92,7 @@ class LarkPlatformAdapter(Platform):
         at_list = {}
         if message.mentions:
             for m in message.mentions:
-                at_list[m.key] = At(qq=m.id.open_id, name=m.name)
+                at_list[m.key] = Comp.At(qq=m.id.open_id, name=m.name)
                 if m.name == self.bot_name:
                     abm.self_id = m.id.open_id
 
@@ -111,7 +111,7 @@ class LarkPlatformAdapter(Platform):
                 if s in at_list:
                     abm.message.append(at_list[s])
                 else:
-                    abm.message.append(Plain(parts[i].strip()))
+                    abm.message.append(Comp.Plain(parts[i].strip()))
         elif message.message_type == "post":
             _ls = []
 
@@ -132,7 +132,7 @@ class LarkPlatformAdapter(Platform):
                 if comp["tag"] == "at":
                     abm.message.append(at_list[comp["user_id"]])
                 elif comp["tag"] == "text" and comp["text"].strip():
-                    abm.message.append(Plain(comp["text"].strip()))
+                    abm.message.append(Comp.Plain(comp["text"].strip()))
                 elif comp["tag"] == "img":
                     image_key = comp["image_key"]
                     request = (
@@ -147,10 +147,10 @@ class LarkPlatformAdapter(Platform):
                         logger.error(f"无法下载飞书图片: {image_key}")
                     image_bytes = response.file.read()
                     image_base64 = base64.b64encode(image_bytes).decode()
-                    abm.message.append(Image.fromBase64(image_base64))
+                    abm.message.append(Comp.Image.fromBase64(image_base64))
 
         for comp in abm.message:
-            if isinstance(comp, Plain):
+            if isinstance(comp, Comp.Plain):
                 abm.message_str += comp.text
         abm.message_id = message.message_id
         abm.raw_message = message

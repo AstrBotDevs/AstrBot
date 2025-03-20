@@ -33,7 +33,6 @@ class ProviderDify(Provider):
         if not self.api_key:
             raise Exception("Dify API Key 不能为空。")
         api_base = provider_config.get("dify_api_base", "https://api.dify.ai/v1")
-        self.api_client = DifyAPIClient(self.api_key, api_base)
         self.api_type = provider_config.get("dify_api_type", "")
         if not self.api_type:
             raise Exception("Dify API 类型不能为空。")
@@ -55,6 +54,8 @@ class ProviderDify(Provider):
         self.conversation_ids = {}
         """记录当前 session id 的对话 ID"""
 
+        self.api_client = DifyAPIClient(self.api_key, api_base)
+
     async def text_chat(
         self,
         prompt: str,
@@ -70,26 +71,27 @@ class ProviderDify(Provider):
 
         files_payload = []
         for image_url in image_urls:
-            if image_url.startswith("http"):
-                image_path = await download_image_by_url(image_url)
-                file_response = await self.api_client.file_upload(
-                    image_path, user=session_id
+            image_path = (
+                await download_image_by_url(image_url)
+                if image_url.startswith("http")
+                else image_url
+            )
+            file_response = await self.api_client.file_upload(
+                image_path, user=session_id
+            )
+            logger.debug(f"Dify 上传图片响应：{file_response}")
+            if "id" not in file_response:
+                logger.warning(
+                    f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。"
                 )
-                if "id" not in file_response:
-                    logger.warning(
-                        f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。"
-                    )
-                    continue
-                files_payload.append(
-                    {
-                        "type": "image",
-                        "transfer_method": "local_file",
-                        "upload_file_id": file_response["id"],
-                    }
-                )
-            else:
-                # TODO: 处理更多情况
-                logger.warning(f"未知的图片链接：{image_url}，图片将忽略。")
+                continue
+            files_payload.append(
+                {
+                    "type": "image",
+                    "transfer_method": "local_file",
+                    "upload_file_id": file_response["id"],
+                }
+            )
 
         # 获得会话变量
         payload_vars = self.variables.copy()

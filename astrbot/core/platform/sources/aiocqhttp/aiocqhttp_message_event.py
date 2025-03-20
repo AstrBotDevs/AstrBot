@@ -3,8 +3,6 @@ import asyncio
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image, Record, At, Node, Nodes
 from aiocqhttp import CQHttp
-from astrbot.core.utils.io import file_to_base64, download_image_by_url
-
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
     def __init__(
@@ -24,18 +22,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 d["data"]["text"] = segment.text.strip()
             elif isinstance(segment, (Image, Record)):
                 # convert to base64
-                if segment.file and segment.file.startswith("file:///"):
-                    bs64_data = file_to_base64(segment.file[8:])
-                    image_file_path = segment.file[8:]
-                elif segment.file and segment.file.startswith("http"):
-                    image_file_path = await download_image_by_url(segment.file)
-                    bs64_data = file_to_base64(image_file_path)
-                elif segment.file and segment.file.startswith("base64://"):
-                    bs64_data = segment.file
-                else:
-                    bs64_data = file_to_base64(segment.file)
+                bs64 = await segment.convert_to_base64()
                 d["data"] = {
-                    "file": bs64_data,
+                    "file": bs64,
                 }
             elif isinstance(segment, At):
                 d["data"] = {

@@ -31,7 +31,6 @@ def validate_config(
 
     def validate(data: dict, metadata: dict = schema, path=""):
         for key, value in data.items():
-            print(key, value)
             if key not in metadata:
                 # 无 schema 的配置项，执行类型猜测
                 if isinstance(value, str):
