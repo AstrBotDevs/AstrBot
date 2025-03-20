@@ -1,5 +1,5 @@
 import time
-from typing import List, Dict, Any
+from typing import List
 from dataclasses import dataclass
 from astrbot.core.message.components import BaseMessageComponent
 from .message_type import MessageType

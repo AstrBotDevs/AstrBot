@@ -10,4 +10,5 @@ __all__ = [
     "AstrBotMessage",
     "MessageMember",
     "MessageType",
+    "Group",
 ]
