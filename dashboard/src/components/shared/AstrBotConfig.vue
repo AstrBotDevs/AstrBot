@@ -26,7 +26,8 @@
                 <v-col cols="6" style="padding: 0px;">
                     <v-list-item>
                         <v-list-item-title style="font-size: 14px; font-weight: bold;">
-                            {{ metadata[metadataKey].items[key]?.description + '(' + key + ')' }}
+                            <span v-if="metadata[metadataKey].items[key]?.description">{{ metadata[metadataKey].items[key]?.description + '(' + key + ')' }}</span>
+                            <span v-else>{{ key }}</span>
                         </v-list-item-title>
 
                         <v-list-item-subtitle style="font-size: 12px;">
@@ -41,7 +42,7 @@
                 <v-col cols="1">
                     <v-chip v-if="!metadata[metadataKey].items[key]?.invisible" color="primary" label size="x-small"
                         class="mb-1">{{
-                            metadata[metadataKey].items[key]?.type }}
+                            metadata[metadataKey].items[key]?.type || 'string' }}
                     </v-chip>
                 </v-col>
 
@@ -73,13 +74,14 @@
                     </div>
                     <div style="width: 100%;" v-else>
                         <!-- 在 metadata 中没有 key -->
-                        <v-text-field v-model="iterable[key]" :label="key" variant="outlined" dense></v-text-field>
+                        <v-text-field v-model="iterable[key]" :label="key" variant="outlined" dense density="compact" flat hide-details
+                        single-line></v-text-field>
                     </div>
                 </v-col>
 
             </v-row>
 
-            <v-divider style="border-color: #ccc;" v-if="index !== Object.keys(iterable).length - 1"></v-divider>
+            <v-divider style="border-color: #ccc;" v-if="index !== Object.keys(iterable).length - 1 && !metadata[metadataKey].items[key]?.invisible "></v-divider>
 
         </div>
         <div v-else>
