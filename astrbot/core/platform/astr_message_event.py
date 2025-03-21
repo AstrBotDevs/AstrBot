@@ -1,11 +1,9 @@
 import abc
 import asyncio
 from dataclasses import dataclass
-from .astrbot_message import AstrBotMessage
-from .platform_metadata import PlatformMetadata
-from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
-from astrbot.core.platform.message_type import MessageType
-from typing import List, Union
+from typing import List, Union, Optional
+
+from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
     Plain,
     Image,
@@ -16,9 +14,12 @@ from astrbot.core.message.components import (
     Forward,
     Reply,
 )
-from astrbot.core.utils.metrics import Metric
+from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
-from astrbot.core.db.po import Conversation
+from astrbot.core.utils.metrics import Metric
+from .astrbot_message import AstrBotMessage, Group
+from .platform_metadata import PlatformMetadata
 
 
 @dataclass
@@ -201,15 +202,6 @@ class AstrMessageEvent(abc.ABC):
         """
         return self.role == "admin"
 
-    async def send(self, message: MessageChain):
-        """
-        发送消息到消息平台。
-        """
-        asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
-        )
-        self._has_send_oper = True
-
     async def _pre_send(self):
         """调度器会在执行 send() 前调用该方法"""
 
@@ -371,3 +363,26 @@ class AstrMessageEvent(abc.ABC):
             system_prompt=system_prompt,
             conversation=conversation,
         )
+
+    """平台适配器"""
+
+    async def send(self, message: MessageChain):
+        """发送消息到消息平台。
+
+        Args:
+            message (MessageChain): 消息链，具体使用方式请参考文档。
+        """
+        asyncio.create_task(
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        )
+        self._has_send_oper = True
+
+    async def get_group(self, group_id: str = None, **kwargs) -> Optional[Group]:
+        """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
+
+        适配情况:
+
+        - gewechat
+        - aiocqhttp(OneBotv11)
+        """
+        ...
