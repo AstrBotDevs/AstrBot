@@ -77,6 +77,10 @@ class MessageChain:
         self.use_t2i_ = use_t2i
         return self
 
+    def get_plain_text(self) -> str:
+        """获取纯文本消息。这个方法将获取 chain 中所有 Plain 组件的文本并拼接成一条消息。空格分隔。"""
+        return " ".join([comp.text for comp in self.chain if isinstance(comp, Plain)])
+
 
 class EventResultType(enum.Enum):
     """用于描述事件处理的结果类型。
@@ -146,10 +150,6 @@ class MessageEventResult(MessageChain):
     def is_llm_result(self) -> bool:
         """是否为 LLM 结果。"""
         return self.result_content_type == ResultContentType.LLM_RESULT
-
-    def get_plain_text(self) -> str:
-        """获取纯文本消息。这个方法将获取所有 Plain 组件的文本并拼接成一条消息。空格分隔。"""
-        return " ".join([comp.text for comp in self.chain if isinstance(comp, Plain)])
 
 
 CommandResult = MessageEventResult

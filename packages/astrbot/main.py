@@ -287,7 +287,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 )
             )
             return
-        self.context.get_config()["admins_id"].append(admin_id)
+        self.context.get_config()["admins_id"].append(str(admin_id))
         self.context.get_config().save_config()
         event.set_result(MessageEventResult().message("授权成功。"))
 
@@ -296,7 +296,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def deop(self, event: AstrMessageEvent, admin_id: str):
         """取消授权管理员。deop <admin_id>"""
         try:
-            self.context.get_config()["admins_id"].remove(admin_id)
+            self.context.get_config()["admins_id"].remove(str(admin_id))
             self.context.get_config().save_config()
             event.set_result(MessageEventResult().message("取消授权成功。"))
         except ValueError:
@@ -314,7 +314,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。"
                 )
             )
-        self.context.get_config()["platform_settings"]["id_whitelist"].append(sid)
+        self.context.get_config()["platform_settings"]["id_whitelist"].append(str(sid))
         self.context.get_config().save_config()
         event.set_result(MessageEventResult().message("添加白名单成功。"))
 
@@ -323,7 +323,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def dwl(self, event: AstrMessageEvent, sid: str):
         """删除白名单。dwl <sid>"""
         try:
-            self.context.get_config()["platform_settings"]["id_whitelist"].remove(sid)
+            self.context.get_config()["platform_settings"]["id_whitelist"].remove(
+                str(sid)
+            )
             self.context.get_config().save_config()
             event.set_result(MessageEventResult().message("删除白名单成功。"))
         except ValueError:

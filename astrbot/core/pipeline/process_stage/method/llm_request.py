@@ -64,8 +64,8 @@ class LLMRequestSubStage(Stage):
             req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
-                    image_url = comp.url if comp.url else comp.file
-                    req.image_urls.append(image_url)
+                    image_path = await comp.convert_to_file_path()
+                    req.image_urls.append(image_path)
 
             # 获取对话上下文
             conversation_id = await self.conv_manager.get_curr_conversation_id(
@@ -148,11 +148,18 @@ class LLMRequestSubStage(Stage):
 
             if llm_response.role == "assistant":
                 # text completion
-                event.set_result(
-                    MessageEventResult()
-                    .message(llm_response.completion_text)
-                    .set_result_content_type(ResultContentType.LLM_RESULT)
-                )
+                if llm_response.result_chain:
+                    event.set_result(
+                        MessageEventResult(
+                            chain=llm_response.result_chain.chain
+                        ).set_result_content_type(ResultContentType.LLM_RESULT)
+                    )
+                else:
+                    event.set_result(
+                        MessageEventResult()
+                        .message(llm_response.completion_text)
+                        .set_result_content_type(ResultContentType.LLM_RESULT)
+                    )
             elif llm_response.role == "err":
                 event.set_result(
                     MessageEventResult().message(

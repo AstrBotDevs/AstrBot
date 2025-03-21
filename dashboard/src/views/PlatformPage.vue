@@ -40,7 +40,7 @@
                                 删除
                             </v-btn>
                             <v-btn color="blue-darken-1" text
-                                @click="updatingMode = true; showPlatformCfg = true; newSelectedPlatformConfig = platform; newSelectedPlatformName = platform.id">
+                                @click="configExistingPlatform(platform)">
                                 配置
                             </v-btn>
                         </v-card-actions>
@@ -243,6 +243,59 @@ export default {
                 this.save_message_snack = true;
                 this.save_message_success = "error";
             });
+        },
+
+        configExistingPlatform(platform) {
+            // 配置现有平台
+            this.newSelectedPlatformName = platform.id;
+            this.newSelectedPlatformConfig = {};
+
+            // 比对默认配置模版，看看是否有更新
+            let templates = this.metadata['platform_group']['metadata']['platform'].config_template;
+            let defaultConfig = {};
+            for (let key in templates) {
+                if (templates[key]?.type === platform.type) {
+                    defaultConfig = templates[key];
+                    break;
+                }
+            }
+            const mergeConfigWithOrder = (target, source, reference) => {
+                // 首先复制所有source中的属性到target
+                if (source && typeof source === 'object' && !Array.isArray(source)) {
+                    for (let key in source) {
+                        if (source.hasOwnProperty(key)) {
+                            if (typeof source[key] === 'object' && source[key] !== null) {
+                                target[key] = Array.isArray(source[key]) ? [...source[key]] : {...source[key]};
+                            } else {
+                                target[key] = source[key];
+                            }
+                        }
+                    }
+                }
+                
+                // 然后根据reference的结构添加或覆盖属性
+                for (let key in reference) {
+                    if (typeof reference[key] === 'object' && reference[key] !== null) {
+                        if (!(key in target)) {
+                            target[key] = Array.isArray(reference[key]) ? [] : {};
+                        }
+                        mergeConfigWithOrder(
+                            target[key], 
+                            source && source[key] ? source[key] : {}, 
+                            reference[key]
+                        );
+                    } else if (!(key in target)) {
+                        // 只有当target中不存在该键时才从reference复制
+                        target[key] = reference[key];
+                    }
+                }
+            };
+            if (defaultConfig) {
+                mergeConfigWithOrder(this.newSelectedPlatformConfig, platform, defaultConfig);
+            }
+
+            this.showPlatformCfg = true;
+            this.updatingMode = true;
         }
 
     }

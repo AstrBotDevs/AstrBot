@@ -51,19 +51,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     at_flag = True
                 await client.send_message(text=i.text, **payload)
             elif isinstance(i, Image):
-                if i.path:
-                    image_path = i.path
-                else:
-                    image_path = i.file
-
-                if image_path.startswith("base64://"):
-                    import base64
-
-                    base64_data = image_path[9:]
-                    image_bytes = base64.b64decode(base64_data)
-                    await client.send_photo(photo=image_bytes, **payload)
-                else:
-                    await client.send_photo(photo=image_path, **payload)
+                image_path = await i.convert_to_file_path()
+                await client.send_photo(photo=image_path, **payload)
             elif isinstance(i, File):
                 if i.file.startswith("https://"):
                     path = "data/temp/" + i.name
@@ -72,7 +61,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
                 await client.send_document(document=i.file, filename=i.name, **payload)
             elif isinstance(i, Record):
-                await client.send_voice(voice=i.file, **payload)
+                path = await i.convert_to_file_path()
+                await client.send_voice(voice=path, **payload)
 
     async def send(self, message: MessageChain):
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
