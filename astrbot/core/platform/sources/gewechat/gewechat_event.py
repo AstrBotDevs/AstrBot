@@ -84,7 +84,15 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 logger.debug(f"gewe callback img url: {img_url}")
                 await client.post_image(to_wxid, img_url)
             elif isinstance(comp, Video):
-                from pyffmpeg import FFmpeg
+                try:
+                    from pyffmpeg import FFmpeg
+                except (ImportError, ModuleNotFoundError):
+                    logger.error(
+                        "需要安装 pyffmpeg 库才能发送视频: pip install pyffmpeg"
+                    )
+                    raise ModuleNotFoundError(
+                        "需要安装 pyffmpeg 库才能发送视频: pip install pyffmpeg"
+                    )
 
                 video_url = comp.file
                 # 根据 url 下载视频
