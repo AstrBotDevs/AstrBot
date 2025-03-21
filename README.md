@@ -111,6 +111,7 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 | Whisper | ✔    | 语音转文本 | 支持 API、本地部署 |
 | SenseVoice | ✔    | 语音转文本 | 本地部署 |
 | OpenAI TTS API | ✔    | 文本转语音 |  |
+| GSVI | ✔    | 文本转语音 | GPT-Sovits-Inference |
 | Fishaudio | ✔    | 文本转语音 | GPT-Sovits 作者参与的项目 |
 | Edge-TTS | ✔    | 文本转语音 | Edge 浏览器的免费 TTS |
 
