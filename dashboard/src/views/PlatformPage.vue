@@ -99,7 +99,6 @@
     <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack">
         {{ save_message }}
     </v-snackbar>
-    <WaitingForRestart ref="wfr"></WaitingForRestart>
 </template>
 <script>
 
@@ -184,7 +183,6 @@ export default {
                     this.loading = false;
                     this.showPlatformCfg = false;
                     this.getConfig();
-                    this.$refs.wfr.check();
                     this.save_message = res.data.message;
                     this.save_message_snack = true;
                     this.save_message_success = "success";
@@ -216,7 +214,6 @@ export default {
             // 删除平台
             axios.post('/api/config/platform/delete', { id: platform_id }).then((res) => {
                 this.getConfig();
-                this.$refs.wfr.check();
                 this.save_message = res.data.message;
                 this.save_message_snack = true;
                 this.save_message_success = "success";
@@ -234,7 +231,6 @@ export default {
                 config: platform
             }).then((res) => {
                 this.getConfig();
-                this.$refs.wfr.check();
                 this.save_message = res.data.message;
                 this.save_message_snack = true;
                 this.save_message_success = "success";

@@ -1,4 +1,5 @@
 import abc
+import uuid
 from typing import Awaitable, Any
 from asyncio import Queue
 from .platform_metadata import PlatformMetadata
@@ -13,6 +14,7 @@ class Platform(abc.ABC):
         super().__init__()
         # 维护了消息平台的事件队列，EventBus 会从这里取出事件并处理。
         self._event_queue = event_queue
+        self.client_self_id = uuid.uuid4().hex
 
     @abc.abstractmethod
     def run(self) -> Awaitable[Any]:

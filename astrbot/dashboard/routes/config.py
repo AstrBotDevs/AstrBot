@@ -219,7 +219,8 @@ class ConfigRoute(Route):
             return Response().error("未找到对应平台").__dict__
 
         try:
-            await self._save_astrbot_configs(self.config)
+            save_config(self.config, self.config, is_core=True)
+            await self.core_lifecycle.platform_manager.reload(new_config)
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "更新平台配置成功~").__dict__
@@ -255,7 +256,8 @@ class ConfigRoute(Route):
         else:
             return Response().error("未找到对应平台").__dict__
         try:
-            await self._save_astrbot_configs(self.config)
+            save_config(self.config, self.config, is_core=True)
+            await self.core_lifecycle.platform_manager.terminate_platform(platform_id)
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "删除平台配置成功~").__dict__
