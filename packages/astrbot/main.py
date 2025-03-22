@@ -7,6 +7,8 @@ import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
 from astrbot.api.provider import ProviderRequest
+from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
@@ -88,6 +90,7 @@ class Main(star.Star):
 /model: 模型列表
 /ls: 对话列表
 /new: 创建新对话
+/groupnew 群号: 为群聊创建新对话(op)
 /switch 序号: 切换对话
 /rename 新名字: 重命名当前对话
 /del: 删除当前会话对话(op)
@@ -699,6 +702,37 @@ UID: {user_id} 此 ID 可用于设置管理员。
         message.set_result(
             MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})。")
         )
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("groupnew")
+    async def groupnew_conv(self, message: AstrMessageEvent, sid: str):
+        """创建新群聊对话"""
+        provider = self.context.get_using_provider()
+        if provider and provider.meta().type == "dify":
+            assert isinstance(provider, ProviderDify)
+            await provider.forget(message.unified_msg_origin)
+            message.set_result(
+                MessageEventResult().message("成功，下次聊天将是新对话。")
+            )
+            return
+        if sid:
+            session = str(
+                MessageSesion(
+                    platform_name=message.platform_meta.name,
+                    message_type=MessageType("GroupMessage"),
+                    session_id=sid,
+                )
+            )
+            cid = await self.context.conversation_manager.new_conversation(session)
+            message.set_result(
+                MessageEventResult().message(
+                    f"群聊 {session} 已切换到新对话: 新对话({cid[:4]})。"
+                )
+            )
+        else:
+            message.set_result(
+                MessageEventResult().message("请输入群聊 ID。/newgroup 群聊ID。")
+            )
 
     @filter.command("switch")
     async def switch_conv(self, message: AstrMessageEvent, index: int = None):
