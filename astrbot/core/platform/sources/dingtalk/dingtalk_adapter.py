@@ -2,7 +2,6 @@ import asyncio
 import uuid
 import aiohttp
 import dingtalk_stream
-import time
 import threading
 
 from astrbot.api.platform import (
