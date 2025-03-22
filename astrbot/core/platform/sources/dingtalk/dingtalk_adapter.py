@@ -196,7 +196,10 @@ class DingtalkPlatformAdapter(Platform):
         self._event_queue.put_nowait(event)
 
     async def run(self):
-        await self.client_.start()
+        # await self.client_.start()
+        loop = asyncio.get_event_loop()
+        # 钉钉的 SDK 并没有实现真正的异步，start() 里面有堵塞方法。
+        await loop.run_in_executor(None, lambda: asyncio.run(self.client_.start()))
 
     def get_client(self):
         return self.client
