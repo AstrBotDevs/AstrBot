@@ -43,7 +43,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if has_reply:
                 payload["reply_to_message_id"] = reply_message_id
             if message_thread_id:
-                payload["reply_to_message_id"] = message_thread_id
+                payload["message_thread_id"] = message_thread_id
 
             if isinstance(i, Plain):
                 if at_user_id and not at_flag:
