@@ -92,7 +92,8 @@ class PlatformManager:
         asyncio.create_task(
             self._task_wrapper(
                 asyncio.create_task(
-                    inst.run(), name=f"platform_{platform_config['type']}_{platform_config['id']}"
+                    inst.run(),
+                    name=f"platform_{platform_config['type']}_{platform_config['id']}",
                 )
             )
         )

@@ -96,7 +96,6 @@ class WecomServer:
         )
 
 
-
 @register_platform_adapter("wecom", "wecom 适配器")
 class WecomPlatformAdapter(Platform):
     def __init__(
