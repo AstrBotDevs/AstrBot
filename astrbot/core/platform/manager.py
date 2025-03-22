@@ -92,7 +92,7 @@ class PlatformManager:
         asyncio.create_task(
             self._task_wrapper(
                 asyncio.create_task(
-                    inst.run(), name=platform_config["id"] + "_platform"
+                    inst.run(), name=f"platform_{platform_config['type']}_{platform_config['id']}"
                 )
             )
         )
@@ -141,6 +141,11 @@ class PlatformManager:
 
             # 再启动新的实例
             await self.load_platform(platform_config)
+
+    async def terminate(self):
+        for inst in self.platform_insts:
+            if getattr(inst, "terminate", None):
+                await inst.terminate()
 
     def get_insts(self):
         return self.platform_insts

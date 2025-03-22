@@ -225,3 +225,7 @@ class TelegramPlatformAdapter(Platform):
 
     def get_client(self) -> ExtBot:
         return self.client
+
+    async def terminate(self):
+        await self.application.stop()
+        logger.info("Telegram 适配器已被优雅地关闭")

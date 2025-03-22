@@ -25,7 +25,7 @@ class Platform(abc.ABC):
         """
         终止一个平台的运行实例。
         """
-        pass
+        ...
 
     @abc.abstractmethod
     def meta(self) -> PlatformMetadata:

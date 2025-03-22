@@ -13,6 +13,7 @@ from .qo_webhook_event import QQOfficialWebhookMessageEvent
 from ...register import register_platform_adapter
 from .qo_webhook_server import QQOfficialWebhook
 from ..qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter
+from astrbot import logger
 
 # remove logger handler
 for handler in logging.root.handlers[:]:
@@ -111,3 +112,8 @@ class QQOfficialWebhookPlatformAdapter(Platform):
 
     def get_client(self) -> botClient:
         return self.client
+
+    async def terminate(self):
+        await self.client.close()
+        await self.webhook_helper.server.shutdown()
+        logger.info("QQ 机器人官方 API 适配器已经被优雅地关闭")

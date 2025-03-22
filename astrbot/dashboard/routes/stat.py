@@ -28,7 +28,7 @@ class StatRoute(Route):
         self.core_lifecycle = core_lifecycle
 
     async def restart_core(self):
-        self.core_lifecycle.restart()
+        await self.core_lifecycle.restart()
         return Response().ok().__dict__
 
     def format_sec(self, sec: int):

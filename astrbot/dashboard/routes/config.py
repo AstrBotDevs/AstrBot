@@ -321,7 +321,7 @@ class ConfigRoute(Route):
     async def _save_astrbot_configs(self, post_configs: dict):
         try:
             save_config(post_configs, self.config, is_core=True)
-            self.core_lifecycle.restart()
+            await self.core_lifecycle.restart()
         except Exception as e:
             raise e
 

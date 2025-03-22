@@ -20,7 +20,12 @@ DATAPATH = os.path.abspath(
 
 
 class AstrBotDashboard:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle, db: BaseDatabase) -> None:
+    def __init__(
+        self,
+        core_lifecycle: AstrBotCoreLifecycle,
+        db: BaseDatabase,
+        shutdown_event: asyncio.Event,
+    ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.data_path = os.path.abspath(os.path.join(DATAPATH, "dist"))
@@ -45,6 +50,8 @@ class AstrBotDashboard:
         self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
+
+        self.shutdown_event = shutdown_event
 
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
@@ -72,11 +79,6 @@ class AstrBotDashboard:
             r = jsonify(Response().error("Token 无效").__dict__)
             r.status_code = 401
             return r
-
-    async def shutdown_trigger_placeholder(self):
-        while not self.core_lifecycle.event_queue.closed:  # noqa: ASYNC110
-            await asyncio.sleep(1)
-        logger.info("管理面板已关闭。")
 
     def check_port_in_use(self, port: int) -> bool:
         """
@@ -166,7 +168,9 @@ class AstrBotDashboard:
         logger.info(display)
 
         return self.app.run_task(
-            host=host,
-            port=port,
-            shutdown_trigger=self.shutdown_trigger_placeholder,
+            host=host, port=port, shutdown_trigger=self.shutdown_trigger
         )
+
+    async def shutdown_trigger(self):
+        await self.shutdown_event.wait()
+        logger.info("AstrBot WebUI 已经被优雅地关闭")

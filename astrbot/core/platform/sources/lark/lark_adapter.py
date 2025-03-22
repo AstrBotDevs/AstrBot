@@ -185,5 +185,9 @@ class LarkPlatformAdapter(Platform):
         # self.client.start()
         await self.client._connect()
 
+    async def terminate(self):
+        await self.client._disconnect()
+        logger.info("飞书(Lark) 适配器已被优雅地关闭")
+
     def get_client(self) -> lark.Client:
         return self.client
