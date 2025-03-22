@@ -90,7 +90,7 @@ class Main(star.Star):
 /model: 模型列表
 /ls: 对话列表
 /new: 创建新对话
-/newgroup 群号: 为群聊创建新对话
+/groupnew 群号: 为群聊创建新对话(op)
 /switch 序号: 切换对话
 /rename 新名字: 重命名当前对话
 /del: 删除当前会话对话(op)
@@ -703,8 +703,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
             MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})。")
         )
 
-    @filter.command("newgroup")
-    async def newgroup_conv(self, message: AstrMessageEvent, sid: str):
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("groupnew")
+    async def groupnew_conv(self, message: AstrMessageEvent, sid: str):
         """创建新群聊对话"""
         provider = self.context.get_using_provider()
         if provider and provider.meta().type == "dify":
