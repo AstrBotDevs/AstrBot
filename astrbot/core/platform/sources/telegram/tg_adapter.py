@@ -14,7 +14,7 @@ from astrbot.api.event import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.api.platform import register_platform_adapter
 
-from telegram import Update, Message
+from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, filters
 from telegram.constants import ChatType
 from telegram.ext import MessageHandler as TelegramMessageHandler
@@ -201,9 +201,7 @@ class TelegramPlatformAdapter(Platform):
         elif update.message.document:
             file = await update.message.document.get_file()
             message.message = [
-                Comp.File(
-                    file=file.file_path, name=update.message.document.file_name
-                ),
+                Comp.File(file=file.file_path, name=update.message.document.file_name),
             ]
 
         elif update.message.video:

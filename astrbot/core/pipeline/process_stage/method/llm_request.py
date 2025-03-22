@@ -49,9 +49,9 @@ class LLMRequestSubStage(Stage):
 
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
-            assert isinstance(
-                req, ProviderRequest
-            ), "provider_request 必须是 ProviderRequest 类型。"
+            assert isinstance(req, ProviderRequest), (
+                "provider_request 必须是 ProviderRequest 类型。"
+            )
 
             if req.conversation:
                 req.contexts = json.loads(req.conversation.history)

@@ -56,7 +56,6 @@ class ProviderRequest:
     def __str__(self):
         return self.__repr__()
 
-
     def _print_friendly_context(self):
         """打印友好的消息上下文。将 image_url 的值替换为 <Image>"""
         if not self.contexts:
