@@ -1,4 +1,7 @@
 import enum
+import base64
+from astrbot.core.utils.io import download_image_by_url
+from astrbot import logger
 from dataclasses import dataclass, field
 from typing import List, Dict, Type
 from .func_tool_manager import FuncCall
@@ -48,10 +51,81 @@ class ProviderRequest:
     conversation: Conversation = None
 
     def __repr__(self):
-        return f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, image_urls={self.image_urls}, func_tool={self.func_tool}, contexts={self.contexts}, system_prompt={self.system_prompt.strip()})"
+        return f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, image_urls={self.image_urls}, func_tool={self.func_tool}, contexts={self._print_friendly_context()}, system_prompt={self.system_prompt.strip()})"
 
     def __str__(self):
         return self.__repr__()
+
+
+    def _print_friendly_context(self):
+        """打印友好的消息上下文。将 image_url 的值替换为 <Image>"""
+        if not self.contexts:
+            return f"prompt: {self.prompt}, image_count: {len(self.image_urls or [])}"
+
+        result_parts = []
+
+        for ctx in self.contexts:
+            role = ctx.get("role", "unknown")
+            content = ctx.get("content", "")
+
+            if isinstance(content, str):
+                result_parts.append(f"{role}: {content}")
+            elif isinstance(content, list):
+                msg_parts = []
+                image_count = 0
+
+                for item in content:
+                    item_type = item.get("type", "")
+
+                    if item_type == "text":
+                        msg_parts.append(item.get("text", ""))
+                    elif item_type == "image_url":
+                        image_count += 1
+
+                if image_count > 0:
+                    if msg_parts:
+                        msg_parts.append(f"[+{image_count} images]")
+                    else:
+                        msg_parts.append(f"[{image_count} images]")
+
+                result_parts.append(f"{role}: {''.join(msg_parts)}")
+
+        return result_parts
+
+    async def assemble_context(self) -> Dict:
+        """将请求(prompt 和 image_urls)包装成 OpenAI 的消息格式。"""
+        if self.image_urls:
+            user_content = {
+                "role": "user",
+                "content": [{"type": "text", "text": self.prompt}],
+            }
+            for image_url in self.image_urls:
+                if image_url.startswith("http"):
+                    image_path = await download_image_by_url(image_url)
+                    image_data = await self._encode_image_bs64(image_path)
+                elif image_url.startswith("file:///"):
+                    image_path = image_url.replace("file:///", "")
+                    image_data = await self._encode_image_bs64(image_path)
+                else:
+                    image_data = await self._encode_image_bs64(image_url)
+                if not image_data:
+                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                    continue
+                user_content["content"].append(
+                    {"type": "image_url", "image_url": {"url": image_data}}
+                )
+            return user_content
+        else:
+            return {"role": "user", "content": self.prompt}
+
+    async def _encode_image_bs64(self, image_url: str) -> str:
+        """将图片转换为 base64"""
+        if image_url.startswith("base64://"):
+            return image_url.replace("base64://", "data:image/jpeg;base64,")
+        with open(image_url, "rb") as f:
+            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
+            return "data:image/jpeg;base64," + image_bs64
+        return ""
 
 
 @dataclass

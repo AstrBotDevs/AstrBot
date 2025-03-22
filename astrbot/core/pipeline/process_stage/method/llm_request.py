@@ -49,9 +49,9 @@ class LLMRequestSubStage(Stage):
 
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
-            assert isinstance(req, ProviderRequest), (
-                "provider_request 必须是 ProviderRequest 类型。"
-            )
+            assert isinstance(
+                req, ProviderRequest
+            ), "provider_request 必须是 ProviderRequest 类型。"
 
             if req.conversation:
                 req.contexts = json.loads(req.conversation.history)
@@ -231,8 +231,7 @@ class LLMRequestSubStage(Stage):
         if llm_response.role == "assistant":
             # 文本回复
             contexts = req.contexts
-            new_record = {"role": "user", "content": req.prompt}
-            contexts.append(new_record)
+            contexts.append(await req.assemble_context())
             contexts.append(
                 {"role": "assistant", "content": llm_response.completion_text}
             )
