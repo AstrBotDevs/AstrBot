@@ -1,6 +1,7 @@
 import sys
 import uuid
 import asyncio
+import astrbot.api.message_components as Comp
 
 from astrbot.api.platform import (
     Platform,
@@ -10,19 +11,10 @@ from astrbot.api.platform import (
     MessageType,
 )
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import (
-    Plain,
-    Image,
-    Record,
-    File as AstrBotFile,
-    Video,
-    At,
-    Reply,
-)
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.api.platform import register_platform_adapter
 
-from telegram import Update
+from telegram import Update, Message
 from telegram.ext import ApplicationBuilder, ContextTypes, filters
 from telegram.constants import ChatType
 from telegram.ext import MessageHandler as TelegramMessageHandler
@@ -149,7 +141,7 @@ class TelegramPlatformAdapter(Platform):
             reply_abm = await self.convert_message(reply_update, context, False)
 
             message.message.append(
-                Reply(
+                Comp.Reply(
                     id=reply_abm.message_id,
                     chain=reply_abm.message,
                     sender_id=reply_abm.sender.user_id,
@@ -171,14 +163,14 @@ class TelegramPlatformAdapter(Platform):
                         name = plain_text[
                             entity.offset + 1 : entity.offset + entity.length
                         ]
-                        message.message.append(At(qq=name, name=name))
+                        message.message.append(Comp.At(qq=name, name=name))
                         plain_text = (
                             plain_text[: entity.offset]
                             + plain_text[entity.offset + entity.length :]
                         )
 
             if plain_text:
-                message.message.append(Plain(plain_text))
+                message.message.append(Comp.Plain(plain_text))
             message.message_str = plain_text
 
             if message.message_str == "/start":
@@ -188,18 +180,28 @@ class TelegramPlatformAdapter(Platform):
         elif update.message.voice:
             file = await update.message.voice.get_file()
             message.message = [
-                Record(file=file.file_path, url=file.file_path),
+                Comp.Record(file=file.file_path, url=file.file_path),
             ]
 
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
             file = await photo.get_file()
-            message.message.append(Image(file=file.file_path, url=file.file_path))
+            message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
+            if update.message.caption:
+                message.message_str = update.message.caption
+                message.message.append(Comp.Plain(message.message_str))
+            if update.message.caption_entities:
+                for entity in update.message.caption_entities:
+                    if entity.type == "mention":
+                        name = message.message_str[
+                            entity.offset + 1 : entity.offset + entity.length
+                        ]
+                        message.message.append(Comp.At(qq=name, name=name))
 
         elif update.message.document:
             file = await update.message.document.get_file()
             message.message = [
-                AstrBotFile(
+                Comp.File(
                     file=file.file_path, name=update.message.document.file_name
                 ),
             ]
@@ -207,7 +209,7 @@ class TelegramPlatformAdapter(Platform):
         elif update.message.video:
             file = await update.message.video.get_file()
             message.message = [
-                Video(file=file.file_path, path=file.file_path),
+                Comp.Video(file=file.file_path, path=file.file_path),
             ]
 
         return message
