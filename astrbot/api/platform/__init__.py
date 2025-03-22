@@ -5,6 +5,7 @@ from astrbot.core.platform import (
     MessageMember,
     MessageType,
     PlatformMetadata,
+    Group,
 )
 
 from astrbot.core.platform.register import register_platform_adapter
@@ -18,4 +19,5 @@ __all__ = [
     "MessageType",
     "PlatformMetadata",
     "register_platform_adapter",
+    "Group",
 ]

@@ -1,16 +1,21 @@
 version: '3.8'
 
+# 当接入 QQ NapCat 时，请使用这个 compose 文件一件部署: https://github.com/NapNeko/NapCat-Docker/blob/main/compose/astrbot.yml
+
 services:
   astrbot:
     image: soulter/astrbot:latest
     container_name: astrbot
+    restart: always
     ports: # mappings description: https://github.com/Soulter/AstrBot/issues/497
-      - "6185:6185"
-      - "6195:6195" # optional, wecom default port
-      - "6199:6199" # optional, aiocqhttp default port
-      - "6196:6196" # optional, qq official webhook default port
-      - "11451:11451" # optional, gewechat default port
+      - "6185:6185" # 必选，AstrBot WebUI 端口
+      - "6195:6195" # 可选, 企业微信 Webhook 端口
+      - "6199:6199" # 可选, QQ 个人号 WebSocket 端口
+      - "6196:6196" # 可选, QQ 官方接口 Webhook 端口
+      - "11451:11451" # 可选, 微信个人号 Webhook 端口
+    environment:
+      - TZ=Asia/Shanghai
     volumes:
       - ./data:/AstrBot/data
-      - /etc/timezone:/etc/timezone:ro
-      - /etc/localtime:/etc/localtime:ro
+      # - /etc/timezone:/etc/timezone:ro
+      # - /etc/localtime:/etc/localtime:ro

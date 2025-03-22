@@ -1,6 +1,7 @@
 import asyncio
-
+import typing
 from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.platform import Group, MessageMember
 from astrbot.api.message_components import Plain, Image, Record, At, Node, Nodes
 from aiocqhttp import CQHttp
 
@@ -74,3 +75,46 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             await self.bot.send(self.message_obj.raw_message, ret)
 
         await super().send(message)
+
+    async def get_group(self, group_id=None, **kwargs):
+        if isinstance(group_id, str) and group_id.isdigit():
+            group_id = int(group_id)
+        elif self.get_group_id():
+            group_id = int(self.get_group_id())
+        else:
+            return None
+
+        info: dict = await self.bot.call_action(
+            "get_group_info",
+            group_id=group_id,
+        )
+
+        members: typing.List[typing.Dict] = await self.bot.call_action(
+            "get_group_member_list",
+            group_id=group_id,
+        )
+
+        owner_id = None
+        admin_ids = []
+        for member in members:
+            if member["role"] == "owner":
+                owner_id = member["user_id"]
+            if member["role"] == "admin":
+                admin_ids.append(member["user_id"])
+
+        group = Group(
+            group_id=str(group_id),
+            group_name=info.get("group_name"),
+            group_avatar="",
+            group_admins=admin_ids,
+            group_owner=str(owner_id),
+            members=[
+                MessageMember(
+                    user_id=member["user_id"],
+                    nickname=member.get("nickname") or member.get("card"),
+                )
+                for member in members
+            ],
+        )
+
+        return group
