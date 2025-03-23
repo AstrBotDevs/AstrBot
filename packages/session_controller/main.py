@@ -58,19 +58,29 @@ class Waiter(Star):
                     try:
                         # 尝试使用 LLM 生成更生动的回复
                         func_tools_mgr = self.context.get_llm_tool_manager()
-                        
+
                         # 获取用户当前的对话信息
-                        curr_cid = await self.context.conversation_manager.get_curr_conversation_id(event.unified_msg_origin)
+                        curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
+                            event.unified_msg_origin
+                        )
                         conversation = None
                         context = []
-                        
+
                         if curr_cid:
-                            conversation = await self.context.conversation_manager.get_conversation(event.unified_msg_origin, curr_cid)
-                            context = json.loads(conversation.history) if conversation.history else []
+                            conversation = await self.context.conversation_manager.get_conversation(
+                                event.unified_msg_origin, curr_cid
+                            )
+                            context = (
+                                json.loads(conversation.history)
+                                if conversation.history
+                                else []
+                            )
                         else:
                             # 创建新对话
-                            curr_cid = await self.context.conversation_manager.new_conversation(event.unified_msg_origin)
-                            
+                            curr_cid = await self.context.conversation_manager.new_conversation(
+                                event.unified_msg_origin
+                            )
+
                         # 使用 LLM 生成回复
                         yield event.request_llm(
                             prompt="用户只是@我或唤醒我，请友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。",
@@ -78,13 +88,13 @@ class Waiter(Star):
                             session_id=curr_cid,
                             contexts=context,
                             system_prompt="",
-                            conversation=conversation
+                            conversation=conversation,
                         )
                     except Exception as e:
                         logger.error(f"LLM response failed: {str(e)}")
                         # LLM 回复失败，使用原始预设回复
                         yield event.plain_result("想要问什么呢？😄")
-                    
+
                     @session_waiter(60)
                     async def empty_mention_waiter(
                         controller: SessionController, event: AstrMessageEvent
@@ -108,7 +118,7 @@ class Waiter(Star):
                             yield event.request_llm(
                                 prompt="用户在提问后超时未回复，请生成一个温馨友好的提醒，告诉用户如果需要帮助可以再次提问，回答要符合人设。",
                                 func_tool_manager=self.context.get_llm_tool_manager(),
-                                system_prompt=""
+                                system_prompt="",
                             )
                         except Exception:
                             # LLM 回复失败，使用原始预设回复
