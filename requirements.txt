@@ -21,10 +21,8 @@ psutil>=5.8.0
 lark-oapi
 ormsgpack
 cryptography
-
-mcp~=1.4.1
-anthropic~=0.49.0
 dashscope
 python-telegram-bot
 wechatpy
 dingtalk-stream
+mcp

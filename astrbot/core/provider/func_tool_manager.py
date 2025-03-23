@@ -82,7 +82,7 @@ class MCPClient:
 class FuncCall:
     def __init__(self) -> None:
         self.func_list: List[FuncTool] = []
-        self.mcp_client_dict: Dict[str:MCPClient] = {}
+        self.mcp_client_dict: Dict[str, MCPClient] = {}
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -138,9 +138,8 @@ class FuncCall:
         return None
 
     async def init_mcp_client_list(self) -> None:
-        """
-        从项目根目录读取mcp_server.json。提供mcp_server.json.example作为参考。
-        内容格式为
+        """从项目根目录读取 mcp_server.json 文件，初始化 MCP 服务列表。文件格式如下：
+        ```
         {
             "mcpServers": {
                 "example_cmp_server": {
@@ -149,6 +148,7 @@ class FuncCall:
             },
             ...
         }
+        ```
         """
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.abspath(os.path.join(current_dir, "../../.."))
@@ -161,23 +161,23 @@ class FuncCall:
             )
             return
 
-        mcp_server_json_obj = json.load(open(mcp_json_file, "r", encoding="utf-8"))
+        mcp_server_json_obj: Dict[str, Dict] = json.load(open(mcp_json_file, "r", encoding="utf-8"))
 
         for mcp_server_name, mcp_server_script_path in mcp_server_json_obj[
             "mcpServers"
         ].items():
             if not os.path.exists(mcp_server_script_path["script_path"]):
                 logger.error(
-                    f"mcp server import err: Server script {mcp_server_script_path['script_path']} not found."
+                    f"MCP server import err: Server script {mcp_server_script_path['script_path']} not found."
                 )
                 continue
             mcp_client = MCPClient()
             mcp_client.name = mcp_server_name
             await mcp_client.connect_to_server(mcp_server_script_path["script_path"])
             self.mcp_client_dict[mcp_server_name] = mcp_client
-            logger.info(f"添加mcp服务 {mcp_server_name}.")
+            logger.info(f"添加 MCP 服务 {mcp_server_name}")
         if len(self.mcp_client_dict) == 0:
-            logger.info("未启用任何mcp服务.")
+            logger.info("未启用任何 MCP 服务")
 
     async def get_func_desc_openai_style(self) -> list:
         """
