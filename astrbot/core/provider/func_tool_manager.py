@@ -127,6 +127,7 @@ class FuncCall:
         """MCP 服务列表"""
         self.mcp_service_queue = asyncio.Queue()
         """用于外部控制 MCP 服务的启停"""
+        self.mcp_client_event: Dict[str, asyncio.Event] = {}
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -218,7 +219,11 @@ class FuncCall:
         for name in mcp_server_json_obj.keys():
             cfg = mcp_server_json_obj[name]
             if cfg.get("active", True):
-                asyncio.create_task(self._init_mcp_client(name, cfg))
+                event = asyncio.Event()
+                asyncio.create_task(
+                    self._init_mcp_client_task_wrapper(name, cfg, event)
+                )
+                self.mcp_client_event[name] = event
 
     async def mcp_service_selector(self):
         """为了避免在不同异步任务中控制 MCP 服务导致的报错，整个项目统一通过这个 Task 来控制
@@ -237,17 +242,40 @@ class FuncCall:
             data = await self.mcp_service_queue.get()
             if data["type"] == "init":
                 if "name" in data:
+                    event = asyncio.Event()
                     asyncio.create_task(
-                        self._init_mcp_client(data["name"], data["cfg"])
+                        self._init_mcp_client_task_wrapper(
+                            data["name"], data["cfg"], event
+                        )
                     )
+                    self.mcp_client_event[data["name"]] = event
                 else:
                     await self._init_mcp_clients()
             elif data["type"] == "terminate":
                 if "name" in data:
-                    await self._terminate_mcp_client(data["name"])
+                    # await self._terminate_mcp_client(data["name"])
+                    if data["name"] in self.mcp_client_event:
+                        self.mcp_client_event[data["name"]].set()
+                        self.mcp_client_event.pop(data["name"], None)
                 else:
                     for name in self.mcp_client_dict.keys():
-                        await self._terminate_mcp_client(name)
+                        # await self._terminate_mcp_client(name)
+                        # self.mcp_client_event[name].set()
+                        if name in self.mcp_client_event:
+                            self.mcp_client_event[name].set()
+                            self.mcp_client_event.pop(name, None)
+
+    async def _init_mcp_client_task_wrapper(
+        self, name: str, cfg: dict, event: asyncio.Event
+    ) -> None:
+        """初始化 MCP 客户端的包装函数，用于捕获异常"""
+        try:
+            await self._init_mcp_client(name, cfg)
+            await event.wait()
+            logger.info(f"收到 MCP 客户端 {name} 终止信号")
+            await self._terminate_mcp_client(name)
+        except Exception as e:
+            logger.error(f"初始化 MCP 客户端 {name} 失败: {e}")
 
     async def _init_mcp_client(self, name: str, config: dict) -> None:
         """初始化单个MCP客户端"""
