@@ -1,4 +1,5 @@
 import traceback
+import asyncio
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from .provider import Provider, STTProvider, TTSProvider, Personality
 from .entites import ProviderType
@@ -127,8 +128,9 @@ class ProviderManager:
         if self.tts_enabled and not self.curr_tts_provider_inst:
             logger.warning("未启用任何用于 文本转语音 的提供商适配器。")
 
-        # 初始化mcpclient连接
-        await self.llm_tools.init_mcp_client_list()
+        # 初始化 MCP Client 连接
+        asyncio.create_task(self.llm_tools.mcp_service_selector(), name="mcp-service-handler")
+        self.llm_tools.mcp_service_queue.put_nowait({"type": "init"})
 
     async def load_provider(self, provider_config: dict):
         if not provider_config["enable"]:
@@ -342,3 +344,5 @@ class ProviderManager:
         for provider_inst in self.provider_insts:
             if hasattr(provider_inst, "terminate"):
                 await provider_inst.terminate()
+        # 清理 MCP Client 连接
+        await self.llm_tools.mcp_service_queue.put({"type": "terminate"})

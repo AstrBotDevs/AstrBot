@@ -176,17 +176,14 @@ class LLMRequestSubStage(Stage):
                     llm_response.tools_call_name, llm_response.tools_call_args
                 ):
                     try:
-                        if func_tool_name.startswith("mcp:"):
-                            _, mcp_server_name, mcp_func_name = func_tool_name.split(
-                                ":"
-                            )
+                        func_tool = req.func_tool.get_func(func_tool_name)
+                        if func_tool.origin == "mcp":
                             logger.info(
-                                f"从mcp服务 {mcp_server_name} 调用工具函数：{mcp_func_name}，参数：{func_tool_args}"
+                                f"从 MCP 服务 {func_tool.mcp_server_name} 调用工具函数：{func_tool.name}，参数：{func_tool_args}"
                             )
-
-                            client = req.func_tool.mcp_client_dict[mcp_server_name]
+                            client = req.func_tool.mcp_client_dict[func_tool.mcp_server_name]
                             res = await client.session.call_tool(
-                                mcp_func_name, func_tool_args
+                                func_tool.name, func_tool_args
                             )
                             if res:
                                 # TODO content的类型可能包括list[TextContent | ImageContent | EmbeddedResource]，这里只处理了TextContent。
@@ -194,11 +191,9 @@ class LLMRequestSubStage(Stage):
                                 event.set_result(res_event)
                             yield
                         else:
-                            func_tool = req.func_tool.get_func(func_tool_name)
                             logger.info(
                                 f"调用工具函数：{func_tool_name}，参数：{func_tool_args}"
                             )
-
                             # 尝试调用工具函数
                             wrapper = self._call_handler(
                                 self.ctx, event, func_tool.handler, **func_tool_args
@@ -208,7 +203,7 @@ class LLMRequestSubStage(Stage):
                                     function_calling_result[func_tool_name] = resp
                                 else:
                                     yield  # 有生成器返回
-                            event.clear_result()  # 清除上一个 handler 的结果
+                        event.clear_result()  # 清除上一个 handler 的结果
                     except BaseException as e:
                         logger.warning(traceback.format_exc())
                         function_calling_result[func_tool_name] = (
