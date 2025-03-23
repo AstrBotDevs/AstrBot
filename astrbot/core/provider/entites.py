@@ -1,11 +1,15 @@
 import enum
 import base64
+import json
 from astrbot.core.utils.io import download_image_by_url
 from astrbot import logger
 from dataclasses import dataclass, field
 from typing import List, Dict, Type
 from .func_tool_manager import FuncCall
 from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.chat.chat_completion_message_tool_call import (
+    ChatCompletionMessageToolCall,
+)
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
 import astrbot.core.message.components as Comp
@@ -33,6 +37,58 @@ class ProviderMetaData:
 
 
 @dataclass
+class ToolCallMessageSegment:
+    """OpenAI 格式的上下文中 role 为 tool 的消息段。参考: https://platform.openai.com/docs/guides/function-calling"""
+
+    tool_call_id: str
+    content: str
+    role: str = "tool"
+
+    def to_dict(self):
+        return {
+            "tool_call_id": self.tool_call_id,
+            "content": self.content,
+            "role": self.role,
+        }
+
+
+@dataclass
+class AssistantMessageSegment:
+    """OpenAI 格式的上下文中 role 为 assistant 的消息段。参考: https://platform.openai.com/docs/guides/function-calling"""
+
+    content: str = None
+    tool_calls: List[ChatCompletionMessageToolCall | Dict] = None
+    role: str = "assistant"
+
+    def to_dict(self):
+        ret = {
+            "role": self.role,
+        }
+        if self.content:
+            ret["content"] = self.content
+        elif self.tool_calls:
+            ret["tool_calls"] = self.tool_calls
+        return ret
+
+
+@dataclass
+class ToolCallsResult:
+    """工具调用结果"""
+
+    tool_calls_info: AssistantMessageSegment
+    """函数调用的信息"""
+    tool_calls_result: List[ToolCallMessageSegment]
+    """函数调用的结果"""
+
+    def to_openai_messages(self) -> List[Dict]:
+        ret = [
+            self.tool_calls_info.to_dict(),
+            *[item.to_dict() for item in self.tool_calls_result],
+        ]
+        return ret
+
+
+@dataclass
 class ProviderRequest:
     prompt: str
     """提示词"""
@@ -41,7 +97,7 @@ class ProviderRequest:
     image_urls: List[str] = None
     """图片 URL 列表"""
     func_tool: FuncCall = None
-    """工具"""
+    """可用的函数工具"""
     contexts: List = None
     """上下文。格式与 openai 的上下文格式一致：
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages
@@ -50,8 +106,11 @@ class ProviderRequest:
     """系统提示词"""
     conversation: Conversation = None
 
+    tool_calls_result: ToolCallsResult = None
+    """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
+
     def __repr__(self):
-        return f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, image_urls={self.image_urls}, func_tool={self.func_tool}, contexts={self._print_friendly_context()}, system_prompt={self.system_prompt.strip()})"
+        return f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, image_urls={self.image_urls}, func_tool={self.func_tool}, contexts={self._print_friendly_context()}, system_prompt={self.system_prompt.strip()}, tool_calls_result={self.tool_calls_result})"
 
     def __str__(self):
         return self.__repr__()
@@ -137,6 +196,8 @@ class LLMResponse:
     """工具调用参数"""
     tools_call_name: List[str] = field(default_factory=list)
     """工具调用名称"""
+    tools_call_ids: List[str] = field(default_factory=list)
+    """工具调用 ID"""
 
     raw_completion: ChatCompletion = None
     _new_record: Dict[str, any] = None
@@ -148,8 +209,9 @@ class LLMResponse:
         role: str,
         completion_text: str = "",
         result_chain: MessageChain = None,
-        tools_call_args: List[Dict[str, any]] = None,
-        tools_call_name: List[str] = None,
+        tools_call_args: List[Dict[str, any]] = [],
+        tools_call_name: List[str] = [],
+        tools_call_ids: List[str] = [],
         raw_completion: ChatCompletion = None,
         _new_record: Dict[str, any] = None,
     ):
@@ -168,6 +230,7 @@ class LLMResponse:
         self.result_chain = result_chain
         self.tools_call_args = tools_call_args
         self.tools_call_name = tools_call_name
+        self.tools_call_ids = tools_call_ids
         self.raw_completion = raw_completion
         self._new_record = _new_record
 
@@ -188,3 +251,19 @@ class LLMResponse:
             self.result_chain.chain.insert(0, Comp.Plain(value))
         else:
             self._completion_text = value
+
+    def to_openai_tool_calls(self) -> List[Dict]:
+        """将工具调用信息转换为 OpenAI 格式"""
+        ret = []
+        for idx, tool_call_arg in enumerate(self.tools_call_args):
+            ret.append(
+                {
+                    "id": self.tools_call_ids[idx],
+                    "function": {
+                        "name": self.tools_call_name[idx],
+                        "arguments": json.dumps(tool_call_arg),
+                    },
+                    "type": "function",
+                }
+            )
+        return ret

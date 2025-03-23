@@ -10,7 +10,7 @@ from astrbot.api.provider import Provider, Personality
 from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
 from ..register import register_provider_adapter
-from astrbot.core.provider.entites import LLMResponse
+from astrbot.core.provider.entites import LLMResponse, ToolCallsResult
 from .openai_source import ProviderOpenAIOfficial
 
 
@@ -79,11 +79,14 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
             # tools call (function calling)
             args_ls = []
             func_name_ls = []
+            tool_use_ids = []
             func_name_ls.append(content.name)
             args_ls.append(content.input)
+            tool_use_ids.append(content.id)
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
+            llm_response.tools_call_ids = tool_use_ids
 
         if not llm_response.completion_text and not llm_response.tools_call_args:
             logger.error(f"API 返回的 completion 无法解析：{completion}。")
@@ -101,6 +104,7 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
+        tool_calls_result: ToolCallsResult=None,
         **kwargs,
     ) -> LLMResponse:
         if not prompt:
@@ -112,6 +116,10 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         for part in context_query:
             if "_no_save" in part:
                 del part["_no_save"]
+
+        if tool_calls_result:
+            # 暂时这样写。
+            prompt += f"Here are the related results via using tools: {str(tool_calls_result.tool_calls_result)}"
 
         model_config = self.provider_config.get("model_config", {})
 

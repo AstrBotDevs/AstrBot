@@ -4,6 +4,7 @@ import textwrap
 import os
 import asyncio
 import mcp
+import copy
 
 from typing import Dict, List, Awaitable, Literal, Any
 from dataclasses import dataclass
@@ -391,7 +392,13 @@ class FuncCall:
 
             # 检查并添加非空的properties参数
             params = f.parameters if isinstance(f.parameters, dict) else {}
+            params = copy.deepcopy(params)
             if params.get("properties", {}):
+                properties = params["properties"]
+                for key, value in properties.items():
+                    if "default" in value:
+                        del value["default"]
+                params["properties"] = properties
                 func_declaration["parameters"] = params
 
             tools.append(func_declaration)

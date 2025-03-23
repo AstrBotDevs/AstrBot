@@ -1,5 +1,6 @@
 import base64
 import aiohttp
+import json
 import random
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.db import BaseDatabase
@@ -115,6 +116,7 @@ class ProviderGoogleGenAI(Provider):
                 break
 
         google_genai_conversation = []
+        print(payloads)
         for message in payloads["messages"]:
             if message["role"] == "user":
                 if isinstance(message["content"], str):
@@ -146,11 +148,39 @@ class ProviderGoogleGenAI(Provider):
                     google_genai_conversation.append({"role": "user", "parts": parts})
 
             elif message["role"] == "assistant":
-                if not message["content"]:
-                    message["content"] = "<empty_content>"
-                google_genai_conversation.append(
-                    {"role": "model", "parts": [{"text": message["content"]}]}
+                if "content" in message:
+                    if not message["content"]:
+                        message["content"] = "<empty_content>"
+                    google_genai_conversation.append(
+                        {"role": "model", "parts": [{"text": message["content"]}]}
+                    )
+                elif "tool_calls" in message:
+                    # tool calls in the last turn
+                    parts = []
+                    for tool_call in message["tool_calls"]:
+                        parts.append(
+                            {
+                                "functionCall": {
+                                    "name": tool_call["function"]["name"],
+                                    "args": json.loads(tool_call["function"]["arguments"]),
+                                }
+                            }
+                        )
+                    google_genai_conversation.append({"role": "model", "parts": parts})
+            elif message["role"] == "tool":
+                parts = []
+                parts.append(
+                    {
+                        "functionResponse": {
+                            "name": message["tool_call_id"],
+                            "response": {
+                                "name": message["tool_call_id"],
+                                "content": message["content"],
+                            },
+                        }
+                    }
                 )
+                google_genai_conversation.append({"role": "user", "parts": parts})
 
         logger.debug(f"google_genai_conversation: {google_genai_conversation}")
 
@@ -174,6 +204,7 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.role = "tool"
                 llm_response.tools_call_args.append(candidate["functionCall"]["args"])
                 llm_response.tools_call_name.append(candidate["functionCall"]["name"])
+                llm_response.tools_call_ids.append(candidate["functionCall"]["name"])  # 没有 tool id
 
         llm_response.completion_text = llm_response.completion_text.strip()
         return llm_response
@@ -186,6 +217,7 @@ class ProviderGoogleGenAI(Provider):
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
+        tool_calls_result=None,
         **kwargs,
     ) -> LLMResponse:
         new_record = await self.assemble_context(prompt, image_urls)
@@ -197,6 +229,10 @@ class ProviderGoogleGenAI(Provider):
         for part in context_query:
             if "_no_save" in part:
                 del part["_no_save"]
+
+        # tool calls result
+        if tool_calls_result:
+            context_query.extend(tool_calls_result.to_openai_messages())
 
         model_config = self.provider_config.get("model_config", {})
         model_config["model"] = self.get_model()
