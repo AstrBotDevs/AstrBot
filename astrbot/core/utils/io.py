@@ -217,9 +217,6 @@ async def download_dashboard():
     """下载管理面板文件"""
     dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
     try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where()
-        )  # 使用 certifi 提供的 CA 证书
         await download_file(
             dashboard_release_url, "data/dashboard.zip", show_progress=True
         )

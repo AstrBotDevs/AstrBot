@@ -56,7 +56,7 @@ class RepoZipUpdator:
                         raise Exception(f"请求失败，状态码: {response.status}")
                     result = await response.json()
             if not result:
-                logger.error("返回空的结果喵♡～")
+                logger.error("返回空的结果")
                 return []
             # if latest:
             #     ret = self.github_api_release_parser([result[0]])
