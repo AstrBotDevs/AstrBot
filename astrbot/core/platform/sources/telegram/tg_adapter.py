@@ -1,6 +1,7 @@
 import sys
 import uuid
 import asyncio
+import astrbot.api.message_components as Comp
 
 from astrbot.api.platform import (
     Platform,
@@ -10,15 +11,6 @@ from astrbot.api.platform import (
     MessageType,
 )
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import (
-    Plain,
-    Image,
-    Record,
-    File as AstrBotFile,
-    Video,
-    At,
-    Reply,
-)
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.api.platform import register_platform_adapter
 
@@ -120,6 +112,7 @@ class TelegramPlatformAdapter(Platform):
         @param get_reply: 是否获取回复消息。这个参数是为了防止多个回复嵌套。
         """
         message = AstrBotMessage()
+        message.session_id = str(update.message.chat.id)
         # 获得是群聊还是私聊
         if update.message.chat.type == ChatType.PRIVATE:
             message.type = MessageType.FRIEND_MESSAGE
@@ -129,9 +122,9 @@ class TelegramPlatformAdapter(Platform):
             if update.message.message_thread_id:
                 # Topic Group
                 message.group_id += "#" + str(update.message.message_thread_id)
+                message.session_id = message.group_id
 
         message.message_id = str(update.message.message_id)
-        message.session_id = str(update.message.chat.id)
         message.sender = MessageMember(
             str(update.message.from_user.id), update.message.from_user.username
         )
@@ -149,7 +142,7 @@ class TelegramPlatformAdapter(Platform):
             reply_abm = await self.convert_message(reply_update, context, False)
 
             message.message.append(
-                Reply(
+                Comp.Reply(
                     id=reply_abm.message_id,
                     chain=reply_abm.message,
                     sender_id=reply_abm.sender.user_id,
@@ -171,14 +164,14 @@ class TelegramPlatformAdapter(Platform):
                         name = plain_text[
                             entity.offset + 1 : entity.offset + entity.length
                         ]
-                        message.message.append(At(qq=name, name=name))
+                        message.message.append(Comp.At(qq=name, name=name))
                         plain_text = (
                             plain_text[: entity.offset]
                             + plain_text[entity.offset + entity.length :]
                         )
 
             if plain_text:
-                message.message.append(Plain(plain_text))
+                message.message.append(Comp.Plain(plain_text))
             message.message_str = plain_text
 
             if message.message_str == "/start":
@@ -188,26 +181,34 @@ class TelegramPlatformAdapter(Platform):
         elif update.message.voice:
             file = await update.message.voice.get_file()
             message.message = [
-                Record(file=file.file_path, url=file.file_path),
+                Comp.Record(file=file.file_path, url=file.file_path),
             ]
 
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
             file = await photo.get_file()
-            message.message.append(Image(file=file.file_path, url=file.file_path))
+            message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
+            if update.message.caption:
+                message.message_str = update.message.caption
+                message.message.append(Comp.Plain(message.message_str))
+            if update.message.caption_entities:
+                for entity in update.message.caption_entities:
+                    if entity.type == "mention":
+                        name = message.message_str[
+                            entity.offset + 1 : entity.offset + entity.length
+                        ]
+                        message.message.append(Comp.At(qq=name, name=name))
 
         elif update.message.document:
             file = await update.message.document.get_file()
             message.message = [
-                AstrBotFile(
-                    file=file.file_path, name=update.message.document.file_name
-                ),
+                Comp.File(file=file.file_path, name=update.message.document.file_name),
             ]
 
         elif update.message.video:
             file = await update.message.video.get_file()
             message.message = [
-                Video(file=file.file_path, path=file.file_path),
+                Comp.Video(file=file.file_path, path=file.file_path),
             ]
 
         return message
@@ -224,3 +225,7 @@ class TelegramPlatformAdapter(Platform):
 
     def get_client(self) -> ExtBot:
         return self.client
+
+    async def terminate(self):
+        await self.application.stop()
+        logger.info("Telegram 适配器已被优雅地关闭")

@@ -2,6 +2,7 @@ import asyncio
 import uuid
 import aiohttp
 import dingtalk_stream
+import threading
 
 from astrbot.api.platform import (
     Platform,
@@ -196,7 +197,31 @@ class DingtalkPlatformAdapter(Platform):
         self._event_queue.put_nowait(event)
 
     async def run(self):
-        await self.client_.start()
+        # await self.client_.start()
+        # 钉钉的 SDK 并没有实现真正的异步，start() 里面有堵塞方法。
+        def start_client(loop: asyncio.AbstractEventLoop):
+            try:
+                self._shutdown_event = threading.Event()
+                task = loop.create_task(self.client_.start())
+                self._shutdown_event.wait()
+                if task.done():
+                    task.result()
+            except Exception as e:
+                if "Graceful shutdown" in str(e):
+                    logger.info("钉钉适配器已被优雅地关闭")
+                    return
+                logger.error(f"钉钉机器人启动失败: {e}")
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, start_client, loop)
+
+    async def terminate(self):
+        def monkey_patch_close():
+            raise Exception("Graceful shutdown")
+
+        self.client_.open_connection = monkey_patch_close
+        await self.client_.websocket.close(code=1000, reason="Graceful shutdown")
+        self._shutdown_event.set()
 
     def get_client(self):
         return self.client

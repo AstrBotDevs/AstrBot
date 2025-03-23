@@ -2,11 +2,11 @@ import wave
 import uuid
 import traceback
 import os
-from astrbot.core.utils.io import save_temp_img, download_image_by_url, download_file
+from astrbot.core.utils.io import save_temp_img, download_file
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, PlatformMetadata, Group, MessageMember
 from astrbot.api.message_components import Plain, Image, Record, At, File
 from .client import SimpleGewechatClient
 
@@ -70,18 +70,10 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 await client.post_text(**payload)
 
             elif isinstance(comp, Image):
-                img_url = comp.file
-                img_path = ""
-                if img_url.startswith("file:///"):
-                    img_path = img_url[8:]
-                elif comp.file and comp.file.startswith("http"):
-                    img_path = await download_image_by_url(comp.file)
-                else:
-                    img_path = img_url
+                img_path = await comp.convert_to_file_path()
 
-                # 检查 record_path 是否在 data/temp 目录中, record_path 可能是绝对路径
+                # 检查 record_path 是否在 data/temp 目录中
                 temp_directory = os.path.abspath("data/temp")
-                img_path = os.path.abspath(img_path)
                 if os.path.commonpath([temp_directory, img_path]) != temp_directory:
                     with open(img_path, "rb") as f:
                         img_path = save_temp_img(f.read())
@@ -93,14 +85,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
             elif isinstance(comp, Record):
                 # 默认已经存在 data/temp 中
                 record_url = comp.file
-                record_path = ""
-
-                if record_url.startswith("file:///"):
-                    record_path = record_url[8:]
-                elif record_url.startswith("http"):
-                    await download_file(record_url, f"data/temp/{uuid.uuid4()}.wav")
-                else:
-                    record_path = record_url
+                record_path = await comp.convert_to_file_path()
 
                 silk_path = f"data/temp/{uuid.uuid4()}.silk"
                 try:
@@ -138,3 +123,30 @@ class GewechatPlatformEvent(AstrMessageEvent):
         to_wxid = self.message_obj.raw_message.get("to_wxid", None)
         await GewechatPlatformEvent.send_with_client(message, to_wxid, self.client)
         await super().send(message)
+
+    async def get_group(self, group_id=None, **kwargs):
+        # 确定有效的 group_id
+        if group_id is None:
+            group_id = self.get_group_id()
+
+        if not group_id:
+            return None
+
+        res = await self.client.get_group(group_id)
+        data: dict = res["data"]
+
+        if not data["chatroomId"]:
+            return None
+
+        members = [
+            MessageMember(user_id=member["wxid"], nickname=member["nickName"])
+            for member in data.get("memberList", [])
+        ]
+
+        return Group(
+            group_id=data["chatroomId"],
+            group_name=data.get("nickName"),
+            group_avatar=data.get("smallHeadImgUrl"),
+            group_owner=data.get("chatRoomOwner"),
+            members=members,
+        )

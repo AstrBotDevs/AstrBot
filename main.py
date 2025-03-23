@@ -2,7 +2,7 @@ import os
 import asyncio
 import sys
 import mimetypes
-from astrbot.dashboard import AstrBotDashBoardLifecycle
+from astrbot.core.initial_loader import InitialLoader
 from astrbot.core import db_helper
 from astrbot.core import logger, LogManager, LogBroker
 from astrbot.core.config.default import VERSION
@@ -79,5 +79,5 @@ if __name__ == "__main__":
     # print logo
     logger.info(logo_tmpl)
 
-    dashboard_lifecycle = AstrBotDashBoardLifecycle(db, log_broker)
+    dashboard_lifecycle = InitialLoader(db, log_broker)
     asyncio.run(dashboard_lifecycle.start())

@@ -95,8 +95,7 @@ class UpdateRoute(Route):
                 logger.error(f"更新依赖失败: {e}")
 
             if reboot:
-                # threading.Thread(target=self.astrbot_updator._reboot, args=(2, )).start()
-                self.core_lifecycle.restart()
+                await self.core_lifecycle.restart()
                 return (
                     Response()
                     .ok(None, "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。")

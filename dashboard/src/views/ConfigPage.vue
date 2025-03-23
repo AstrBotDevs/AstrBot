@@ -44,11 +44,8 @@ import config from '@/config';
             <div v-if="metadata[key]['metadata'][key2]?.config_template"
               v-show="key2 !== 'platform' && key2 !== 'provider'" style="border: 1px solid #e0e0e0; padding: 8px; margin-bottom: 16px; border-radius: 10px">
               <!-- 带有 config_template 的配置项 -->
-              <v-list-item-title>
+              <v-list-item-title style="font-weight: bold;">
                 {{ metadata[key]['metadata'][key2]['description'] }} ({{ key2 }})
-                <v-chip color="primary" label size="x-small" class="mb-1">
-                  object
-                </v-chip>
               </v-list-item-title>
               <v-tabs style="margin-top: 16px;" align-tabs="left" color="deep-purple-accent-4"
               

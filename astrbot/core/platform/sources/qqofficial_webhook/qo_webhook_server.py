@@ -99,13 +99,4 @@ class QQOfficialWebhook:
         logger.info(
             f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。"
         )
-        await self.server.run_task(
-            host=self.callback_server_host,
-            port=self.port,
-            shutdown_trigger=self.shutdown_trigger_placeholder,
-        )
-
-    async def shutdown_trigger_placeholder(self):
-        while not self.event_queue.closed:  # noqa: ASYNC110
-            await asyncio.sleep(1)
-        logger.info("qq_official_webhook 适配器已关闭。")
+        await self.server.run_task(host=self.callback_server_host, port=self.port)

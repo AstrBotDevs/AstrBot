@@ -41,14 +41,14 @@
                                 删除
                             </v-btn>
                             <v-btn color="blue-darken-1" text
-                                @click="updatingMode = true; showproviderCfg = true; newSelectedproviderConfig = provider; newSelectedproviderName = provider.id">
+                                @click="configExistingProvider(provider)">
                                 配置
                             </v-btn>
                         </v-card-actions>
                     </v-card>
                 </v-col>
             </v-row>
-            <v-dialog v-model="showproviderCfg" width="700">
+            <v-dialog v-model="showproviderCfg" width="900">
                 <v-card>
                     <v-card-title>
                         <span class="text-h4">{{ newSelectedproviderName }} 配置</span>
@@ -214,6 +214,59 @@ export default {
                 this.save_message_snack = true;
                 this.save_message_success = "error";
             });
+        },
+
+        configExistingProvider(provider) {
+            // 配置现有平台
+            this.newSelectedproviderName = provider.id;
+            this.newSelectedproviderConfig = {};
+
+            // 比对默认配置模版，看看是否有更新
+            let templates = this.metadata['provider_group']['metadata']['provider'].config_template;
+            let defaultConfig = {};
+            for (let key in templates) {
+                if (templates[key]?.type === provider.type) {
+                    defaultConfig = templates[key];
+                    break;
+                }
+            }
+            const mergeConfigWithOrder = (target, source, reference) => {
+                // 首先复制所有source中的属性到target
+                if (source && typeof source === 'object' && !Array.isArray(source)) {
+                    for (let key in source) {
+                        if (source.hasOwnProperty(key)) {
+                            if (typeof source[key] === 'object' && source[key] !== null) {
+                                target[key] = Array.isArray(source[key]) ? [...source[key]] : {...source[key]};
+                            } else {
+                                target[key] = source[key];
+                            }
+                        }
+                    }
+                }
+                
+                // 然后根据reference的结构添加或覆盖属性
+                for (let key in reference) {
+                    if (typeof reference[key] === 'object' && reference[key] !== null) {
+                        if (!(key in target)) {
+                            target[key] = Array.isArray(reference[key]) ? [] : {};
+                        }
+                        mergeConfigWithOrder(
+                            target[key], 
+                            source && source[key] ? source[key] : {}, 
+                            reference[key]
+                        );
+                    } else if (!(key in target)) {
+                        // 只有当target中不存在该键时才从reference复制
+                        target[key] = reference[key];
+                    }
+                }
+            };
+            if (defaultConfig) {
+                mergeConfigWithOrder(this.newSelectedproviderConfig, provider, defaultConfig);
+            }
+
+            this.showproviderCfg = true;
+            this.updatingMode = true;
         }
 
     }
