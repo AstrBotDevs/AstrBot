@@ -181,7 +181,9 @@ class LLMRequestSubStage(Stage):
                             logger.info(
                                 f"从 MCP 服务 {func_tool.mcp_server_name} 调用工具函数：{func_tool.name}，参数：{func_tool_args}"
                             )
-                            client = req.func_tool.mcp_client_dict[func_tool.mcp_server_name]
+                            client = req.func_tool.mcp_client_dict[
+                                func_tool.mcp_server_name
+                            ]
                             res = await client.session.call_tool(
                                 func_tool.name, func_tool_args
                             )

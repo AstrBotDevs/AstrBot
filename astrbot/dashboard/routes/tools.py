@@ -65,7 +65,7 @@ class ToolsRoute(Route):
                     "name": name,
                     "active": server_config.get("active", True),
                 }
-                
+
                 # 复制所有配置字段
                 for key, value in server_config.items():
                     if key != "active":  # active 已经处理
@@ -94,7 +94,7 @@ class ToolsRoute(Route):
             server_data = await request.json
 
             name = server_data.get("name", "")
-            
+
             # 检查必填字段
             if not name:
                 return Response().error("服务器名称不能为空").__dict__
@@ -102,13 +102,13 @@ class ToolsRoute(Route):
             # 移除特殊字段并检查配置是否有效
             has_valid_config = False
             server_config = {"active": server_data.get("active", True)}
-            
+
             # 复制所有配置字段
             for key, value in server_data.items():
                 if key not in ["name", "active", "tools"]:  # 排除特殊字段
                     server_config[key] = value
                     has_valid_config = True
-            
+
             if not has_valid_config:
                 return Response().error("必须提供有效的服务器配置").__dict__
 
@@ -140,7 +140,7 @@ class ToolsRoute(Route):
             server_data = await request.json
 
             name = server_data.get("name", "")
-            
+
             if not name:
                 return Response().error("服务器名称不能为空").__dict__
 
@@ -150,26 +150,28 @@ class ToolsRoute(Route):
                 return Response().error(f"服务器 {name} 不存在").__dict__
 
             # 获取活动状态
-            active = server_data.get("active", config["mcpServers"][name].get("active", True))
-            
+            active = server_data.get(
+                "active", config["mcpServers"][name].get("active", True)
+            )
+
             # 创建新的配置对象
             server_config = {"active": active}
-            
+
             # 仅更新活动状态的特殊处理
             only_update_active = True
-            
+
             # 复制所有配置字段
             for key, value in server_data.items():
                 if key not in ["name", "active", "tools"]:  # 排除特殊字段
                     server_config[key] = value
                     only_update_active = False
-            
+
             # 如果只更新活动状态，保留原始配置
             if only_update_active:
                 for key, value in config["mcpServers"][name].items():
                     if key != "active":  # 除了active之外的所有字段都保留
                         server_config[key] = value
-            
+
             config["mcpServers"][name] = server_config
 
             if self.save_mcp_config(config):

@@ -237,7 +237,9 @@ class FuncCall:
             data = await self.mcp_service_queue.get()
             if data["type"] == "init":
                 if "name" in data:
-                    asyncio.create_task(self._init_mcp_client(data["name"], data["cfg"]))
+                    asyncio.create_task(
+                        self._init_mcp_client(data["name"], data["cfg"])
+                    )
                 else:
                     await self._init_mcp_clients()
             elif data["type"] == "terminate":
@@ -297,9 +299,7 @@ class FuncCall:
                 await self.mcp_client_dict[name].cleanup()
                 del self.mcp_client_dict[name]
             except Exception as e:
-                logger.info(
-                    f"清空 MCP 客户端资源 {name}: {e}。"
-                )
+                logger.info(f"清空 MCP 客户端资源 {name}: {e}。")
             # 移除关联的FuncTool
             self.func_list = [
                 f

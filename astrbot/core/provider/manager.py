@@ -129,7 +129,9 @@ class ProviderManager:
             logger.warning("未启用任何用于 文本转语音 的提供商适配器。")
 
         # 初始化 MCP Client 连接
-        asyncio.create_task(self.llm_tools.mcp_service_selector(), name="mcp-service-handler")
+        asyncio.create_task(
+            self.llm_tools.mcp_service_selector(), name="mcp-service-handler"
+        )
         self.llm_tools.mcp_service_queue.put_nowait({"type": "init"})
 
     async def load_provider(self, provider_config: dict):
