@@ -3,7 +3,7 @@ from typing import List
 from astrbot.core.db import BaseDatabase
 from typing import TypedDict
 from astrbot.core.provider.func_tool_manager import FuncCall
-from astrbot.core.provider.entites import LLMResponse
+from astrbot.core.provider.entites import LLMResponse, ToolCallsResult
 from dataclasses import dataclass
 
 
@@ -90,6 +90,7 @@ class Provider(AbstractProvider):
         func_tool: FuncCall = None,
         contexts: List = None,
         system_prompt: str = None,
+        tool_calls_result: ToolCallsResult = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -100,6 +101,7 @@ class Provider(AbstractProvider):
             image_urls: 图片 URL 列表
             tools: Function-calling 工具
             contexts: 上下文
+            tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
             kwargs: 其他参数
 
         Notes:

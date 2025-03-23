@@ -146,6 +146,7 @@ class ConfigRoute(Route):
             "/config/provider/new": ("POST", self.post_new_provider),
             "/config/provider/update": ("POST", self.post_update_provider),
             "/config/provider/delete": ("POST", self.post_delete_provider),
+            "/config/llmtools": ("GET", self.get_llm_tools),
         }
         self.register_routes()
 
@@ -277,6 +278,12 @@ class ConfigRoute(Route):
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "删除成功，已经实时生效~").__dict__
+
+    async def get_llm_tools(self):
+        """获取函数调用工具。包含了本地加载的以及 MCP 服务的工具"""
+        tool_mgr = self.core_lifecycle.provider_manager.llm_tools
+        tools = tool_mgr.get_func_desc_openai_style()
+        return Response().ok(tools).__dict__
 
     async def _get_astrbot_config(self):
         config = self.config

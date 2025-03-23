@@ -120,15 +120,18 @@ class ProviderOpenAIOfficial(Provider):
             # tools call (function calling)
             args_ls = []
             func_name_ls = []
+            tool_call_ids = []
             for tool_call in choice.message.tool_calls:
                 for tool in tools.func_list:
                     if tool.name == tool_call.function.name:
                         args = json.loads(tool_call.function.arguments)
                         args_ls.append(args)
                         func_name_ls.append(tool_call.function.name)
+                        tool_call_ids.append(tool_call.id)
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
+            llm_response.tools_call_ids = tool_call_ids
 
         if choice.finish_reason == "content_filter":
             raise Exception(
@@ -151,6 +154,7 @@ class ProviderOpenAIOfficial(Provider):
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
+        tool_calls_result=None,
         **kwargs,
     ) -> LLMResponse:
         new_record = await self.assemble_context(prompt, image_urls)
@@ -162,10 +166,15 @@ class ProviderOpenAIOfficial(Provider):
             if "_no_save" in part:
                 del part["_no_save"]
 
+        # tool calls result
+        if tool_calls_result:
+            context_query.extend(tool_calls_result.to_openai_messages())
+
         model_config = self.provider_config.get("model_config", {})
         model_config["model"] = self.get_model()
 
         payloads = {"messages": context_query, **model_config}
+
         llm_response = None
         try:
             llm_response = await self._query(payloads, func_tool)
@@ -275,10 +284,8 @@ class ProviderOpenAIOfficial(Provider):
     def set_key(self, key):
         self.client.api_key = key
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None):
-        """
-        组装上下文。
-        """
+    async def assemble_context(self, text: str, image_urls: List[str] = None) -> dict:
+        """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         if image_urls:
             user_content = {"role": "user", "content": [{"type": "text", "text": text}]}
             for image_url in image_urls:

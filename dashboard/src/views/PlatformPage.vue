@@ -1,316 +1,304 @@
 <template>
-    <v-card style="height: 100%;">
-        <v-card-text style="padding: 32px; height: 100%;">
+  <div class="platform-page">
+    <v-container fluid class="pa-0">
+      <!-- 页面标题 -->
+      <v-row>
+        <v-col cols="12">
+          <h1 class="text-h4 font-weight-bold mb-2">
+            <v-icon size="x-large" color="primary" class="me-2">mdi-connection</v-icon>平台适配器管理
+          </h1>
+          <p class="text-subtitle-1 text-medium-emphasis mb-4">
+            管理机器人的平台适配器，连接到不同的聊天平台
+          </p>
+        </v-col>
+      </v-row>
 
-            <v-menu>
-                <template v-slot:activator="{ props }">
-                    <v-btn class="flex-grow-1" variant="tonal" @click="new_platform_dialog = true" size="large"
-                        rounded="lg" v-bind="props" color="primary">
-                        <template v-slot:default>
-                            <v-icon>mdi-plus</v-icon>
-                            新增平台适配器
-                        </template>
-                    </v-btn>
-                </template>
-                <v-list @update:selected="addFromDefaultConfigTmpl($event)">
-                    <v-list-item
-                        v-for="(item, index) in metadata['platform_group']['metadata']['platform'].config_template"
-                        :key="index" rounded="xl" :value="index">
-                        <v-list-item-title>{{ index }}</v-list-item-title>
-                    </v-list-item>
-                </v-list>
-            </v-menu>
-            <v-row style="margin-top: 16px;">
-                <v-col v-for="(platform, index) in config_data['platform']" :key="index" cols="12" md="6" lg="3">
-                    <v-card class="fade-in"
-                        style="margin-bottom: 16px; min-height: 250px; max-height: 250px; display: flex; justify-content: space-between; flex-direction: column;">
-                        <v-card-title class="d-flex justify-space-between align-center">
-                            <span class="text-h4">{{ platform.id }}</span>
-                            <v-switch color="primary" hide-details density="compact" v-model="platform['enable']"
-                                @update:modelValue="platformStatusChange(platform)"></v-switch>
-                        </v-card-title>
-                        <v-card-text>
-                            <div>
-                                <span style="font-size:12px">适配器类型: </span>
-                                <v-chip size="small" color="primary" text>{{ platform.type }}</v-chip>
-                            </div>
-                        </v-card-text>
-                        <v-card-actions class="d-flex justify-end">
-                            <v-btn color="error" text @click="deletePlatform(platform.id);">
-                                删除
-                            </v-btn>
-                            <v-btn color="blue-darken-1" text
-                                @click="configExistingPlatform(platform)">
-                                配置
-                            </v-btn>
-                        </v-card-actions>
-                    </v-card>
-                </v-col>
-            </v-row>
-            <v-dialog v-model="showPlatformCfg">
-                <v-card>
-                    <v-card-title>
-                        <span class="text-h4">{{ newSelectedPlatformName }} 配置</span>
-                    </v-card-title>
-                    <v-card-text>
-                        <v-row>
-                            <v-col cols="12" md="6">
-                                <AstrBotConfig :iterable="newSelectedPlatformConfig"
-                                    :metadata="metadata['platform_group']['metadata']" metadataKey="platform" />
-                            </v-col>
-                            <v-col cols="12" md="6">
-                                <v-btn :loading="iframeLoading" @click="refreshIframe" variant="tonal" color="primary" style="float: right;">
-                                    <v-icon>mdi-refresh</v-icon>
-                                    刷新
-                                </v-btn>
-                                <iframe v-show="!iframeLoading"
-                                    :src="store.getTutorialLink(newSelectedPlatformConfig.type)"
-                                    @load="iframeLoading = false" style="width: 100%; border: none; height: 100%;">
-                                </iframe>
-                            </v-col>
-                        </v-row>
+      <!-- 平台适配器部分 -->
+      <v-card class="mb-6" elevation="2">
+        <v-card-title class="d-flex align-center py-3 px-4">
+          <v-icon color="primary" class="me-2">mdi-apps</v-icon>
+          <span class="text-h6">平台适配器</span>
+          <v-chip color="info" size="small" class="ml-2">{{ config_data.platform?.length || 0 }}</v-chip>
+          <v-spacer></v-spacer>
+          <v-menu>
+            <template v-slot:activator="{ props }">
+              <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" v-bind="props">
+                新增适配器
+              </v-btn>
+            </template>
+            <v-list @update:selected="addFromDefaultConfigTmpl($event)">
+              <v-list-item 
+                v-for="(item, index) in metadata['platform_group']?.metadata?.platform?.config_template || {}" 
+                :key="index" 
+                rounded="xl" 
+                :value="index"
+              >
+                <v-list-item-title>{{ index }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+        </v-card-title>
 
-                    </v-card-text>
-                    <v-card-actions>
-                        <v-spacer></v-spacer>
-                        <v-btn color="blue-darken-1" variant="text" @click="newPlatform" :loading="loading">
-                            保存
-                        </v-btn>
-                    </v-card-actions>
-                </v-card>
-            </v-dialog>
+        <v-divider></v-divider>
 
-
-            <v-btn style="margin-top: 16px" class="flex-grow-1" variant="tonal" size="large" rounded="lg" color="gray"
-                @click="showConsole = !showConsole">
-                <template v-slot:default>
-                    <v-icon>mdi-console-line</v-icon>
-                    {{ showConsole ? '隐藏' : '显示' }}日志
-                </template>
-            </v-btn>
-
-            <div v-if="showConsole" style="margin-top: 32px">
-                <ConsoleDisplayer style="background-color: #000; height: 300px"></ConsoleDisplayer>
-            </div>
-
+        <v-card-text class="px-4 py-3">
+          <item-card-grid
+            :items="config_data.platform || []"
+            title-field="id" 
+            enabled-field="enable"
+            empty-icon="mdi-connection"
+            empty-text="暂无平台适配器，点击 新增适配器 添加"
+            @toggle-enabled="platformStatusChange"
+            @delete="deletePlatform"
+            @edit="editPlatform"
+          >
+            <template v-slot:item-details="{ item }">
+              <div class="d-flex align-center mb-2">
+                <v-icon size="small" color="grey" class="me-2">mdi-tag</v-icon>
+                <span class="text-caption text-medium-emphasis">
+                  适配器类型: 
+                  <v-chip size="x-small" color="primary" class="ml-1">{{ item.type }}</v-chip>
+                </span>
+              </div>
+              <div v-if="item.token" class="d-flex align-center mb-2">
+                <v-icon size="small" color="grey" class="me-2">mdi-key</v-icon>
+                <span class="text-caption text-medium-emphasis">Token: ••••••••</span>
+              </div>
+              <div v-if="item.description" class="d-flex align-center">
+                <v-icon size="small" color="grey" class="me-2">mdi-information-outline</v-icon>
+                <span class="text-caption text-medium-emphasis text-truncate">{{ item.description }}</span>
+              </div>
+            </template>
+          </item-card-grid>
         </v-card-text>
-    </v-card>
+      </v-card>
 
-    <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack">
-        {{ save_message }}
+      <!-- 日志部分 -->
+      <v-card elevation="2">
+        <v-card-title class="d-flex align-center py-3 px-4">
+          <v-icon color="primary" class="me-2">mdi-console-line</v-icon>
+          <span class="text-h6">平台日志</span>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" color="primary" @click="showConsole = !showConsole">
+            {{ showConsole ? '收起' : '展开' }}
+            <v-icon>{{ showConsole ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+          </v-btn>
+        </v-card-title>
+
+        <v-divider></v-divider>
+
+        <v-expand-transition>
+          <v-card-text class="pa-0" v-if="showConsole">
+            <ConsoleDisplayer style="background-color: #1e1e1e; height: 300px; border-radius: 0"></ConsoleDisplayer>
+          </v-card-text>
+        </v-expand-transition>
+      </v-card>
+    </v-container>
+
+    <!-- 配置对话框 -->
+    <v-dialog v-model="showPlatformCfg" width="900" persistent>
+      <v-card>
+        <v-card-title class="bg-primary text-white py-3">
+          <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
+          <span>{{ updatingMode ? '编辑' : '新增' }} {{ newSelectedPlatformName }} 平台适配器</span>
+        </v-card-title>
+        
+        <v-card-text class="py-4">
+          <v-row>
+            <v-col cols="12" md="6">
+              <AstrBotConfig :iterable="newSelectedPlatformConfig"
+                :metadata="metadata['platform_group']?.metadata"
+                metadataKey="platform" />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-btn :loading="iframeLoading" @click="refreshIframe" variant="tonal" color="primary" style="float: right;">
+                <v-icon>mdi-refresh</v-icon>
+                刷新
+              </v-btn>
+              <iframe v-show="!iframeLoading"
+                :src="store.getTutorialLink(newSelectedPlatformConfig.type)"
+                @load="iframeLoading = false" style="width: 100%; border: none; height: 100%; min-height: 400px;">
+              </iframe>
+            </v-col>
+          </v-row>
+        </v-card-text>
+        
+        <v-divider></v-divider>
+        
+        <v-card-actions class="pa-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="showPlatformCfg = false" :disabled="loading">
+            取消
+          </v-btn>
+          <v-btn color="primary" @click="newPlatform" :loading="loading">
+            保存
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 消息提示 -->
+    <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack"
+      location="top">
+      {{ save_message }}
     </v-snackbar>
+    
+    <WaitingForRestart ref="wfr"></WaitingForRestart>
+  </div>
 </template>
-<script>
 
+<script>
 import axios from 'axios';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
+import ItemCardGrid from '@/components/shared/ItemCardGrid.vue';
 import { useCommonStore } from '@/stores/common';
 
 export default {
-    name: 'PlatformPage',
-    components: {
-        AstrBotConfig,
-        WaitingForRestart,
-        ConsoleDisplayer
-    },
-    data() {
-        return {
-            config_data: {},
-            fetched: false,
-            metadata: {},
-            showPlatformCfg: false,
+  name: 'PlatformPage',
+  components: {
+    AstrBotConfig,
+    WaitingForRestart,
+    ConsoleDisplayer,
+    ItemCardGrid
+  },
+  data() {
+    return {
+      config_data: {},
+      fetched: false,
+      metadata: {},
+      showPlatformCfg: false,
 
-            newSelectedPlatformName: '',
-            newSelectedPlatformConfig: {},
-            updatingMode: false,
+      newSelectedPlatformName: '',
+      newSelectedPlatformConfig: {},
+      updatingMode: false,
 
-            loading: false,
+      loading: false,
 
-            save_message_snack: false,
-            save_message: "",
-            save_message_success: "",
+      save_message_snack: false,
+      save_message: "",
+      save_message_success: "success",
 
-            showConsole: false,
-            iframeLoading: true,
+      showConsole: false,
+      iframeLoading: true,
 
-            store: useCommonStore()
-        }
-    },
-
-    mounted() {
-        this.getConfig();
-    },
-
-    methods: {
-        refreshIframe() {
-            this.iframeLoading = true;
-            const iframe = document.querySelector('iframe');
-            console.log(iframe.src);
-            iframe.src = iframe.src + '?t=' + new Date().getTime();
-        },
-        getConfig() {
-            // 获取配置
-            axios.get('/api/config/get').then((res) => {
-                this.config_data = res.data.data.config;
-                this.fetched = true
-                this.metadata = res.data.data.metadata;
-            }).catch((err) => {
-                this.save_message = err;
-                this.save_message_snack = true;
-                this.save_message_success = "error";
-            });
-        },
-
-        addFromDefaultConfigTmpl(index) {
-            // 从默认配置模板中添加
-            console.log(index);
-            this.newSelectedPlatformName = index[0];
-            this.showPlatformCfg = true;
-            this.updatingMode = false;
-            this.newSelectedPlatformConfig = this.metadata['platform_group']['metadata']['platform'].config_template[index[0]];
-        },
-
-        newPlatform() {
-            // 新建或者更新平台
-            this.loading = true;
-            if (this.updatingMode) {
-                axios.post('/api/config/platform/update', {
-                    id: this.newSelectedPlatformName,
-                    config: this.newSelectedPlatformConfig
-                }).then((res) => {
-                    this.loading = false;
-                    this.showPlatformCfg = false;
-                    this.getConfig();
-                    this.save_message = res.data.message;
-                    this.save_message_snack = true;
-                    this.save_message_success = "success";
-                }).catch((err) => {
-                    this.loading = false;
-                    this.save_message = err;
-                    this.save_message_snack = true;
-                    this.save_message_success = "error";
-                });
-                this.updatingMode = false;
-            } else {
-                axios.post('/api/config/platform/new', this.newSelectedPlatformConfig).then((res) => {
-                    this.loading = false;
-                    this.showPlatformCfg = false;
-                    this.getConfig();
-                    this.save_message = res.data.message;
-                    this.save_message_snack = true;
-                    this.save_message_success = "success";
-                }).catch((err) => {
-                    this.loading = false;
-                    this.save_message = err;
-                    this.save_message_snack = true;
-                    this.save_message_success = "error";
-                });
-            }
-        },
-
-        deletePlatform(platform_id) {
-            // 删除平台
-            axios.post('/api/config/platform/delete', { id: platform_id }).then((res) => {
-                this.getConfig();
-                this.save_message = res.data.message;
-                this.save_message_snack = true;
-                this.save_message_success = "success";
-            }).catch((err) => {
-                this.save_message = err;
-                this.save_message_snack = true;
-                this.save_message_success = "error";
-            });
-        },
-
-        platformStatusChange(platform) {
-            // 平台状态改变
-            axios.post('/api/config/platform/update', {
-                id: platform.id,
-                config: platform
-            }).then((res) => {
-                this.getConfig();
-                this.save_message = res.data.message;
-                this.save_message_snack = true;
-                this.save_message_success = "success";
-            }).catch((err) => {
-                this.save_message = err;
-                this.save_message_snack = true;
-                this.save_message_success = "error";
-            });
-        },
-
-        configExistingPlatform(platform) {
-            // 配置现有平台
-            this.newSelectedPlatformName = platform.id;
-            this.newSelectedPlatformConfig = {};
-
-            // 比对默认配置模版，看看是否有更新
-            let templates = this.metadata['platform_group']['metadata']['platform'].config_template;
-            let defaultConfig = {};
-            for (let key in templates) {
-                if (templates[key]?.type === platform.type) {
-                    defaultConfig = templates[key];
-                    break;
-                }
-            }
-            const mergeConfigWithOrder = (target, source, reference) => {
-                // 首先复制所有source中的属性到target
-                if (source && typeof source === 'object' && !Array.isArray(source)) {
-                    for (let key in source) {
-                        if (source.hasOwnProperty(key)) {
-                            if (typeof source[key] === 'object' && source[key] !== null) {
-                                target[key] = Array.isArray(source[key]) ? [...source[key]] : {...source[key]};
-                            } else {
-                                target[key] = source[key];
-                            }
-                        }
-                    }
-                }
-                
-                // 然后根据reference的结构添加或覆盖属性
-                for (let key in reference) {
-                    if (typeof reference[key] === 'object' && reference[key] !== null) {
-                        if (!(key in target)) {
-                            target[key] = Array.isArray(reference[key]) ? [] : {};
-                        }
-                        mergeConfigWithOrder(
-                            target[key], 
-                            source && source[key] ? source[key] : {}, 
-                            reference[key]
-                        );
-                    } else if (!(key in target)) {
-                        // 只有当target中不存在该键时才从reference复制
-                        target[key] = reference[key];
-                    }
-                }
-            };
-            if (defaultConfig) {
-                mergeConfigWithOrder(this.newSelectedPlatformConfig, platform, defaultConfig);
-            }
-
-            this.showPlatformCfg = true;
-            this.updatingMode = true;
-        }
-
+      store: useCommonStore()
     }
-}
+  },
 
+  mounted() {
+    this.getConfig();
+  },
+
+  methods: {
+    refreshIframe() {
+      this.iframeLoading = true;
+      const iframe = document.querySelector('iframe');
+      iframe.src = iframe.src + '?t=' + new Date().getTime();
+    },
+    
+    getConfig() {
+      axios.get('/api/config/get').then((res) => {
+        this.config_data = res.data.data.config;
+        this.fetched = true
+        this.metadata = res.data.data.metadata;
+      }).catch((err) => {
+        this.showError(err);
+      });
+    },
+
+    addFromDefaultConfigTmpl(index) {
+      this.newSelectedPlatformName = index[0];
+      this.showPlatformCfg = true;
+      this.updatingMode = false;
+      this.newSelectedPlatformConfig = JSON.parse(JSON.stringify(
+        this.metadata['platform_group']?.metadata?.platform?.config_template[index[0]] || {}
+      ));
+    },
+
+    editPlatform(platform) {
+      this.newSelectedPlatformName = platform.id;
+      this.newSelectedPlatformConfig = JSON.parse(JSON.stringify(platform));
+      this.updatingMode = true;
+      this.showPlatformCfg = true;
+    },
+
+    newPlatform() {
+      this.loading = true;
+      if (this.updatingMode) {
+        axios.post('/api/config/platform/update', {
+          id: this.newSelectedPlatformName,
+          config: this.newSelectedPlatformConfig
+        }).then((res) => {
+          this.loading = false;
+          this.showPlatformCfg = false;
+          this.getConfig();
+          this.$refs.wfr.check();
+          this.showSuccess(res.data.message || "更新成功!");
+        }).catch((err) => {
+          this.loading = false;
+          this.showError(err.response?.data?.message || err.message);
+        });
+        this.updatingMode = false;
+      } else {
+        axios.post('/api/config/platform/new', this.newSelectedPlatformConfig).then((res) => {
+          this.loading = false;
+          this.showPlatformCfg = false;
+          this.getConfig();
+          this.showSuccess(res.data.message || "添加成功!");
+        }).catch((err) => {
+          this.loading = false;
+          this.showError(err.response?.data?.message || err.message);
+        });
+      }
+    },
+
+    deletePlatform(platform) {
+      if (confirm(`确定要删除平台适配器 ${platform.id} 吗?`)) {
+        axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
+          this.getConfig();
+          this.$refs.wfr.check();
+          this.showSuccess(res.data.message || "删除成功!");
+        }).catch((err) => {
+          this.showError(err.response?.data?.message || err.message);
+        });
+      }
+    },
+
+    platformStatusChange(platform) {
+      platform.enable = !platform.enable; // 切换状态
+      
+      axios.post('/api/config/platform/update', {
+        id: platform.id,
+        config: platform
+      }).then((res) => {
+        this.getConfig();
+        this.$refs.wfr.check();
+        this.showSuccess(res.data.message || "状态更新成功!");
+      }).catch((err) => {
+        platform.enable = !platform.enable; // 发生错误时回滚状态
+        this.showError(err.response?.data?.message || err.message);
+      });
+    },
+    
+    showSuccess(message) {
+      this.save_message = message;
+      this.save_message_success = "success";
+      this.save_message_snack = true;
+    },
+    
+    showError(message) {
+      this.save_message = message;
+      this.save_message_success = "error";
+      this.save_message_snack = true;
+    }
+  }
+}
 </script>
 
-<style>
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
-}
-
-.fade-in {
-    animation: fadeIn 0.2s ease-in-out;
+<style scoped>
+.platform-page {
+  padding: 20px;
 }
 </style>
