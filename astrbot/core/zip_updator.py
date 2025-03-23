@@ -2,6 +2,10 @@ import aiohttp
 import os
 import zipfile
 import shutil
+
+import ssl
+import certifi
+
 from astrbot.core.utils.io import on_error, download_file
 from astrbot.core import logger
 
@@ -33,10 +37,18 @@ class RepoZipUpdator:
         返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         """
         try:
-            async with aiohttp.ClientSession(trust_env=True) as session:
+            ssl_context = ssl.create_default_context(cafile=certifi.where())  # 新增：创建基于 certifi 的 SSL 上下文
+            connector = aiohttp.TCPConnector(ssl=ssl_context)  # 新增：使用 TCPConnector 指定 SSL 上下文
+            async with aiohttp.ClientSession(trust_env=True, connector=connector) as session:
                 async with session.get(url) as response:
+                    # 检查 HTTP 状态码
+                    if response.status != 200:
+                        text = await response.text()
+                        logger.error(f"请求 {url} 失败，状态码: {response.status}, 内容: {text}")
+                        raise Exception(f"请求失败，状态码: {response.status}")
                     result = await response.json()
             if not result:
+                logger.error("返回空的结果喵♡～")
                 return []
             # if latest:
             #     ret = self.github_api_release_parser([result[0]])
@@ -53,7 +65,8 @@ class RepoZipUpdator:
                         "zipball_url": release["zipball_url"],
                     }
                 )
-        except BaseException:
+        except Exception as e:
+            logger.error(f"解析版本信息时发生异常: {e}")
             raise Exception("解析版本信息失败")
         return ret
 
