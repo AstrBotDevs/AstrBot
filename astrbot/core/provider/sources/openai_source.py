@@ -124,8 +124,8 @@ class ProviderOpenAIOfficial(Provider):
                 for tool in tools.func_list:
                     if tool.name == tool_call.function.name:
                         args = json.loads(tool_call.function.arguments)
-                args_ls.append(args)
-                func_name_ls.append(tool_call.function.name)
+                        args_ls.append(args)
+                        func_name_ls.append(tool_call.function.name)
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
