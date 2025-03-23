@@ -7,8 +7,22 @@
           <h1 class="text-h4 font-weight-bold mb-2">
             <v-icon size="x-large" color="primary" class="me-2">mdi-function-variant</v-icon>函数工具管理
           </h1>
-          <p class="text-subtitle-1 text-medium-emphasis mb-4">
-            管理 MCP 服务器和查看可用的函数工具
+          <p class="text-subtitle-1 text-medium-emphasis mb-4 d-flex align-center">
+            管理 MCP 服务器和查看可用的函数工具 
+            <v-tooltip location="top">
+              <template v-slot:activator="{ props }">
+                <v-icon 
+                  v-bind="props"
+                  size="small" 
+                  color="primary" 
+                  class="ms-1 cursor-pointer"
+                  @click="openurl('https://astrbot.app/use/function-calling.html')"
+                >
+                  mdi-information
+                </v-icon>
+              </template>
+              <span>函数调用和 MCP 是什么？</span>
+            </v-tooltip>
           </p>
         </v-col>
       </v-row>
@@ -393,6 +407,9 @@ export default {
   },
 
   methods: {
+    openurl(url) {
+      window.open(url, '_blank');
+    },
     formatToolName(name) {
       if (name.includes(':')) {
         // MCP 工具通常命名为 mcp:server:tool
