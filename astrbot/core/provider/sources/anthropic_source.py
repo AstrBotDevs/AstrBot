@@ -104,7 +104,7 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
-        tool_calls_result: ToolCallsResult=None,
+        tool_calls_result: ToolCallsResult = None,
         **kwargs,
     ) -> LLMResponse:
         if not prompt:

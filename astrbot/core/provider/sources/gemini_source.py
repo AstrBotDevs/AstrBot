@@ -162,7 +162,9 @@ class ProviderGoogleGenAI(Provider):
                             {
                                 "functionCall": {
                                     "name": tool_call["function"]["name"],
-                                    "args": json.loads(tool_call["function"]["arguments"]),
+                                    "args": json.loads(
+                                        tool_call["function"]["arguments"]
+                                    ),
                                 }
                             }
                         )
@@ -204,7 +206,9 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.role = "tool"
                 llm_response.tools_call_args.append(candidate["functionCall"]["args"])
                 llm_response.tools_call_name.append(candidate["functionCall"]["name"])
-                llm_response.tools_call_ids.append(candidate["functionCall"]["name"])  # 没有 tool id
+                llm_response.tools_call_ids.append(
+                    candidate["functionCall"]["name"]
+                )  # 没有 tool id
 
         llm_response.completion_text = llm_response.completion_text.strip()
         return llm_response

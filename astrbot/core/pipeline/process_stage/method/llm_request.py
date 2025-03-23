@@ -292,9 +292,7 @@ class LLMRequestSubStage(Stage):
 
             # tool calls result
             if req.tool_calls_result:
-                contexts.extend(
-                    req.tool_calls_result.to_openai_messages()
-                )
+                contexts.extend(req.tool_calls_result.to_openai_messages())
 
             contexts.append(
                 {"role": "assistant", "content": llm_response.completion_text}
