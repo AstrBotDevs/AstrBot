@@ -116,7 +116,6 @@ class ProviderGoogleGenAI(Provider):
                 break
 
         google_genai_conversation = []
-        print(payloads)
         for message in payloads["messages"]:
             if message["role"] == "user":
                 if isinstance(message["content"], str):
