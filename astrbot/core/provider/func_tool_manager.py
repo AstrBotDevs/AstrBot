@@ -161,7 +161,9 @@ class FuncCall:
             )
             return
 
-        mcp_server_json_obj: Dict[str, Dict] = json.load(open(mcp_json_file, "r", encoding="utf-8"))
+        mcp_server_json_obj: Dict[str, Dict] = json.load(
+            open(mcp_json_file, "r", encoding="utf-8")
+        )
 
         for mcp_server_name, mcp_server_script_path in mcp_server_json_obj[
             "mcpServers"
