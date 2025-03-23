@@ -74,7 +74,9 @@ class PluginRoute(Route):
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         for url in urls:
             try:
-                async with aiohttp.ClientSession(trust_env=True, connector=connector) as session:
+                async with aiohttp.ClientSession(
+                    trust_env=True, connector=connector
+                ) as session:
                     async with session.get(url) as response:
                         if response.status == 200:
                             result = await response.json()

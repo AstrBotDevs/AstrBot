@@ -37,14 +37,22 @@ class RepoZipUpdator:
         返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         """
         try:
-            ssl_context = ssl.create_default_context(cafile=certifi.where())  # 新增：创建基于 certifi 的 SSL 上下文
-            connector = aiohttp.TCPConnector(ssl=ssl_context)  # 新增：使用 TCPConnector 指定 SSL 上下文
-            async with aiohttp.ClientSession(trust_env=True, connector=connector) as session:
+            ssl_context = ssl.create_default_context(
+                cafile=certifi.where()
+            )  # 新增：创建基于 certifi 的 SSL 上下文
+            connector = aiohttp.TCPConnector(
+                ssl=ssl_context
+            )  # 新增：使用 TCPConnector 指定 SSL 上下文
+            async with aiohttp.ClientSession(
+                trust_env=True, connector=connector
+            ) as session:
                 async with session.get(url) as response:
                     # 检查 HTTP 状态码
                     if response.status != 200:
                         text = await response.text()
-                        logger.error(f"请求 {url} 失败，状态码: {response.status}, 内容: {text}")
+                        logger.error(
+                            f"请求 {url} 失败，状态码: {response.status}, 内容: {text}"
+                        )
                         raise Exception(f"请求失败，状态码: {response.status}")
                     result = await response.json()
             if not result:
