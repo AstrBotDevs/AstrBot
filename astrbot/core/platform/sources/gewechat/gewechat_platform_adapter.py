@@ -64,8 +64,7 @@ class GewechatPlatformAdapter(Platform):
         )
 
     async def terminate(self):
-        self.client.stop = True
-        await asyncio.sleep(1)
+        await self.client.server.shutdown()
 
     async def logout(self):
         await self.client.logout()

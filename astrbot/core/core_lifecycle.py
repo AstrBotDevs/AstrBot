@@ -40,7 +40,6 @@ class AstrBotCoreLifecycle:
         else:
             logger.setLevel(self.astrbot_config["log_level"])
         self.event_queue = Queue()
-        self.event_queue.closed = False
 
         self.provider_manager = ProviderManager(self.astrbot_config, self.db)
 
@@ -80,6 +79,8 @@ class AstrBotCoreLifecycle:
 
         await self.platform_manager.initialize()
         """根据配置实例化各个平台适配器"""
+
+        self.dashboard_shutdown_event = asyncio.Event()
 
     def _load(self):
         event_bus_task = asyncio.create_task(
@@ -129,11 +130,12 @@ class AstrBotCoreLifecycle:
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
 
     async def stop(self):
-        self.event_queue.closed = True
         for task in self.curr_tasks:
             task.cancel()
 
         await self.provider_manager.terminate()
+        await self.platform_manager.terminate()
+        self.dashboard_shutdown_event.set()
 
         for task in self.curr_tasks:
             try:
@@ -143,8 +145,10 @@ class AstrBotCoreLifecycle:
             except Exception as e:
                 logger.error(f"任务 {task.get_name()} 发生错误: {e}")
 
-    def restart(self):
-        self.event_queue.closed = True
+    async def restart(self):
+        await self.provider_manager.terminate()
+        await self.platform_manager.terminate()
+        self.dashboard_shutdown_event.set()
         threading.Thread(
             target=self.astrbot_updator._reboot, name="restart", daemon=True
         ).start()

@@ -85,14 +85,18 @@ class PlatformManager:
             )
             return
         cls_type = platform_cls_map[platform_config["type"]]
-        inst = cls_type(platform_config, self.settings, self.event_queue)
-        self._inst_map[platform_config["id"]] = inst
+        inst: Platform = cls_type(platform_config, self.settings, self.event_queue)
+        self._inst_map[platform_config["id"]] = {
+            "inst": inst,
+            "client_id": inst.client_self_id,
+        }
         self.platform_insts.append(inst)
 
         asyncio.create_task(
             self._task_wrapper(
                 asyncio.create_task(
-                    inst.run(), name=platform_config["id"] + "_platform"
+                    inst.run(),
+                    name=f"platform_{platform_config['type']}_{platform_config['id']}",
                 )
             )
         )
@@ -109,38 +113,42 @@ class PlatformManager:
             logger.error("-------")
 
     async def reload(self, platform_config: dict):
-        # 还未实现完成，不要调用此方法
-
-        if platform_config["id"] in self._inst_map:
-            # 正在运行
-            if getattr(self._inst_map[platform_config["id"]], "terminate", None):
-                logger.info(f"正在尝试终止 {platform_config['id']} 平台适配器 ...")
-                await self._inst_map[platform_config["id"]].terminate()
-                logger.info(f"{platform_config['id']} 平台适配器已终止。")
-                del self._inst_map[platform_config["id"]]
-                self.platform_insts.remove(self._inst_map[platform_config["id"]])
-            else:
-                logger.warning(f"可能无法正常终止 {platform_config['id']} 平台适配器。")
-
-            # 再启动新的实例
+        await self.terminate_platform(platform_config["id"])
+        if platform_config["enable"]:
             await self.load_platform(platform_config)
 
-        else:
-            # 先将 _inst_map 中在 platform_config 中不存在的实例删除
-            config_ids = [platform["id"] for platform in self.platforms_config]
-            for key in list(self._inst_map.keys()):
-                if key not in config_ids:
-                    if getattr(self._inst_map[key], "terminate", None):
-                        logger.info(f"正在尝试终止 {key} 平台适配器 ...")
-                        await self._inst_map[key].terminate()
-                        logger.info(f"{key} 平台适配器已终止。")
-                        del self._inst_map[key]
-                        self.platform_insts.remove(self._inst_map[key])
-                    else:
-                        logger.warning(f"可能无法正常终止 {key} 平台适配器。")
+        # 和配置文件保持同步
+        config_ids = [provider["id"] for provider in self.platforms_config]
+        for key in list(self._inst_map.keys()):
+            if key not in config_ids:
+                await self.terminate_platform(key)
 
-            # 再启动新的实例
-            await self.load_platform(platform_config)
+    async def terminate_platform(self, platform_id: str):
+        if platform_id in self._inst_map:
+            logger.info(f"正在尝试终止 {platform_id} 平台适配器 ...")
+
+            # client_id = self._inst_map.pop(platform_id, None)
+            info = self._inst_map.pop(platform_id, None)
+            client_id = info["client_id"]
+            inst = info["inst"]
+            try:
+                self.platform_insts.remove(
+                    next(
+                        inst
+                        for inst in self.platform_insts
+                        if inst.client_self_id == client_id
+                    )
+                )
+            except Exception:
+                logger.warning(f"可能未完全移除 {platform_id} 平台适配器")
+
+            if getattr(inst, "terminate", None):
+                await inst.terminate()
+
+    async def terminate(self):
+        for inst in self.platform_insts:
+            if getattr(inst, "terminate", None):
+                await inst.terminate()
 
     def get_insts(self):
         return self.platform_insts

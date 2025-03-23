@@ -93,13 +93,7 @@ class WecomServer:
         await self.server.run_task(
             host=self.callback_server_host,
             port=self.port,
-            shutdown_trigger=self.shutdown_trigger_placeholder,
         )
-
-    async def shutdown_trigger_placeholder(self):
-        while not self.event_queue.closed:  # noqa: ASYNC110
-            await asyncio.sleep(1)
-        logger.info("企业微信 适配器已关闭。")
 
 
 @register_platform_adapter("wecom", "wecom 适配器")
@@ -235,3 +229,7 @@ class WecomPlatformAdapter(Platform):
 
     def get_client(self) -> WeChatClient:
         return self.client
+
+    async def terminate(self):
+        await self.server.server.shutdown()
+        logger.info("企业微信 适配器已被优雅地关闭")

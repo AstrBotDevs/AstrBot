@@ -119,3 +119,7 @@ class WebChatAdapter(Platform):
         )
 
         self.commit_event(message_event)
+
+    async def terminate(self):
+        # Do nothing
+        pass

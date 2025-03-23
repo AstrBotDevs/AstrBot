@@ -112,6 +112,7 @@ class TelegramPlatformAdapter(Platform):
         @param get_reply: 是否获取回复消息。这个参数是为了防止多个回复嵌套。
         """
         message = AstrBotMessage()
+        message.session_id = str(update.message.chat.id)
         # 获得是群聊还是私聊
         if update.message.chat.type == ChatType.PRIVATE:
             message.type = MessageType.FRIEND_MESSAGE
@@ -121,9 +122,9 @@ class TelegramPlatformAdapter(Platform):
             if update.message.message_thread_id:
                 # Topic Group
                 message.group_id += "#" + str(update.message.message_thread_id)
+                message.session_id = message.group_id
 
         message.message_id = str(update.message.message_id)
-        message.session_id = str(update.message.chat.id)
         message.sender = MessageMember(
             str(update.message.from_user.id), update.message.from_user.username
         )
@@ -224,3 +225,7 @@ class TelegramPlatformAdapter(Platform):
 
     def get_client(self) -> ExtBot:
         return self.client
+
+    async def terminate(self):
+        await self.application.stop()
+        logger.info("Telegram 适配器已被优雅地关闭")

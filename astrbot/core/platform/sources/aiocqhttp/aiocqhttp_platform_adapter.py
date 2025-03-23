@@ -43,8 +43,6 @@ class AiocqhttpAdapter(Platform):
             "适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
         )
 
-        self.stop = False
-
         self.bot = CQHttp(
             use_ws_reverse=True, import_name="aiocqhttp", api_timeout_sec=180
         )
@@ -303,21 +301,18 @@ class AiocqhttpAdapter(Platform):
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
         logging.getLogger("aiocqhttp").setLevel(logging.ERROR)
-
+        self.shutdown_event = asyncio.Event()
         return coro
 
     async def terminate(self):
-        self.stop = True
-        await asyncio.sleep(1)
+        self.shutdown_event.set()
+
+    async def shutdown_trigger_placeholder(self):
+        await self.shutdown_event.wait()
+        logger.info("aiocqhttp 适配器已被优雅地关闭")
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
-
-    async def shutdown_trigger_placeholder(self):
-        # TODO: use asyncio.Event
-        while not self._event_queue.closed and not self.stop:  # noqa: ASYNC110
-            await asyncio.sleep(1)
-        logger.info("aiocqhttp 适配器已关闭。")
 
     async def handle_msg(self, message: AstrBotMessage):
         message_event = AiocqhttpMessageEvent(
