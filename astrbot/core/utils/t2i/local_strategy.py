@@ -1,5 +1,6 @@
 import re
 import aiohttp
+import ssl, certifi
 from io import BytesIO
 
 from . import RenderStrategy
@@ -91,7 +92,9 @@ class LocalRenderStrategy(RenderStrategy):
                 try:
                     image_url = re.findall(IMAGE_REGEX, line)[0]
                     print(image_url)
-                    async with aiohttp.ClientSession(trust_env=True) as session:
+                    ssl_context = ssl.create_default_context(cafile=certifi.where())
+                    connector = aiohttp.TCPConnector(ssl=ssl_context)
+                    async with aiohttp.ClientSession(trust_env=True, connector=connector) as session:
                         async with session.get(image_url) as resp:
                             image_res = Image.open(BytesIO(await resp.read()))
                     images[i] = image_res
