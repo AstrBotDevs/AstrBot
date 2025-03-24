@@ -96,7 +96,7 @@
     </v-container>
 
     <!-- 配置对话框 -->
-    <v-dialog v-model="showPlatformCfg" width="900" persistent>
+    <v-dialog v-model="showPlatformCfg" persistent>
       <v-card>
         <v-card-title class="bg-primary text-white py-3">
           <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
@@ -105,12 +105,12 @@
         
         <v-card-text class="py-4">
           <v-row>
-            <v-col cols="12" md="6">
+            <v-col cols="12" md="8">
               <AstrBotConfig :iterable="newSelectedPlatformConfig"
                 :metadata="metadata['platform_group']?.metadata"
                 metadataKey="platform" />
             </v-col>
-            <v-col cols="12" md="6">
+            <v-col cols="12" md="4">
               <v-btn :loading="iframeLoading" @click="refreshIframe" variant="tonal" color="primary" style="float: right;">
                 <v-icon>mdi-refresh</v-icon>
                 刷新

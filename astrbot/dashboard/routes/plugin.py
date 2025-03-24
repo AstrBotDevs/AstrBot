@@ -1,5 +1,9 @@
 import traceback
 import aiohttp
+
+import ssl
+import certifi
+
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
 from quart import request
@@ -65,9 +69,14 @@ class PluginRoute(Route):
         else:
             urls = ["https://api.soulter.top/astrbot/plugins"]
 
+        # 新增：创建 SSL 上下文，使用 certifi 提供的根证书
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
         for url in urls:
             try:
-                async with aiohttp.ClientSession(trust_env=True) as session:
+                async with aiohttp.ClientSession(
+                    trust_env=True, connector=connector
+                ) as session:
                     async with session.get(url) as response:
                         if response.status == 200:
                             result = await response.json()
