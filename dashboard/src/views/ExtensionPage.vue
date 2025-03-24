@@ -46,7 +46,7 @@ const filteredExtensions = computed(() => {
   if (showReserved.value) {
     return extension_data.data;
   }
-  return extension_data.data.filter(ext => !ext.reserved);
+  return extension_data?.data?.filter(ext => !ext.reserved);
 });
 
 // 方法
