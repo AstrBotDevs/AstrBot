@@ -133,7 +133,11 @@ class TelegramPlatformAdapter(Platform):
         message.message_str = ""
         message.message = []
 
-        if update.message.reply_to_message:
+        if update.message.reply_to_message and not (
+            update.message.is_topic_message
+            and update.message.message_thread_id
+            == update.message.reply_to_message.message_id
+        ):
             # 获取回复消息
             reply_update = Update(
                 update_id=1,
