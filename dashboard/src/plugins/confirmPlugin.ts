@@ -7,15 +7,12 @@ export default {
     const mountNode = document.createElement("div");
     document.body.appendChild(mountNode);
 
-    let resolvePromise: (value: boolean) => void;
-
     const vNode = h(ConfirmDialog);
     vNode.appContext = app._context;
     render(vNode, mountNode);
 
     const confirm = (options: { title?: string; message?: string }) => {
       return new Promise<boolean>((resolve) => {
-        resolvePromise = resolve;
         vNode.component?.exposed?.open(options).then(resolve); // ✅ 确保返回 `Promise<boolean>`
       });
     };
