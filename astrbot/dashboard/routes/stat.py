@@ -69,10 +69,10 @@ class StatRoute(Route):
             process = psutil.Process()
             # 获取系统CPU使用率而不是进程CPU使用率
             cpu_percent = psutil.cpu_percent(interval=0.5)
-            
+
             # 获取线程数
             thread_count = threading.active_count()
-            
+
             # 获取插件信息
             plugins = self.core_lifecycle.star_context.get_all_stars()
             plugin_info = []
@@ -80,7 +80,7 @@ class StatRoute(Route):
                 info = {
                     "name": getattr(plugin, "name", plugin.__class__.__name__),
                     "version": getattr(plugin, "version", "1.0.0"),
-                    "is_enabled": True
+                    "is_enabled": True,
                 }
                 plugin_info.append(info)
 
