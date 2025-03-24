@@ -80,6 +80,8 @@ DEFAULT_CONFIG = {
     "admins_id": ["astrbot"],
     "t2i": False,
     "t2i_word_threshold": 150,
+    "t2i_strategy": "remote",
+    "t2i_endpoint": "",
     "http_proxy": "",
     "dashboard": {
         "enable": True,
@@ -91,7 +93,6 @@ DEFAULT_CONFIG = {
     "platform": [],
     "wake_prefix": ["/"],
     "log_level": "INFO",
-    "t2i_endpoint": "",
     "pip_install_arg": "",
     "plugin_repo_mirror": "",
     "knowledge_db": {},
@@ -1094,10 +1095,16 @@ CONFIG_METADATA_2 = {
                 "hint": "控制台输出日志的级别。",
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
+            "t2i_strategy": {
+                "description": "文本转图像渲染源",
+                "type": "string",
+                "hint": "文本转图像策略。`remote` 为使用远程基于 HTML 的渲染服务，`local` 为使用 PIL 本地渲染。当使用 local 时，将 ttf 字体命名为 'font.ttf' 放在 data/ 目录下可自定义字体。",
+                "options": ["remote", "local"],
+            },
             "t2i_endpoint": {
                 "description": "文本转图像服务接口",
                 "type": "string",
-                "hint": "为空时使用 AstrBot API 服务",
+                "hint": "当 t2i_strategy 为 remote 时生效。为空时使用 AstrBot API 服务",
             },
             "pip_install_arg": {
                 "description": "pip 安装参数",
