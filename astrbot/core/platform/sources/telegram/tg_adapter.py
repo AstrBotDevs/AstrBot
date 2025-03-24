@@ -199,6 +199,15 @@ class TelegramPlatformAdapter(Platform):
                         ]
                         message.message.append(Comp.At(qq=name, name=name))
 
+        elif update.message.sticker:
+            # 将sticker当作图片处理
+            file = await update.message.sticker.get_file()
+            message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
+            if update.message.sticker.emoji:
+                sticker_text = f"Sticker: {update.message.sticker.emoji}"
+                message.message_str = sticker_text
+                message.message.append(Comp.Plain(sticker_text))
+
         elif update.message.document:
             file = await update.message.document.get_file()
             message.message = [
