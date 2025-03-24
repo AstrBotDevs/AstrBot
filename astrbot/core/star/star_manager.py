@@ -471,9 +471,11 @@ class PluginManager:
         # 从 star_registry 和 star_map 中删除
         await self._unbind_plugin(plugin_name, plugin.module_path)
 
-        if not remove_dir(os.path.join(ppath, root_dir_name)):
+        try:
+            remove_dir(os.path.join(ppath, root_dir_name))
+        except Exception as e:
             raise Exception(
-                "移除插件成功，但是删除插件文件夹失败。您可以手动删除该文件夹，位于 addons/plugins/ 下。"
+                f"移除插件成功，但是删除插件文件夹失败: {str(e)}。您可以手动删除该文件夹，位于 addons/plugins/ 下。"
             )
 
     async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str):

@@ -20,24 +20,20 @@ def on_error(func, path, exc_info):
     """
     a callback of the rmtree function.
     """
-    print(f"remove {path} failed.")
     import stat
 
     if not os.access(path, os.W_OK):
         os.chmod(path, stat.S_IWUSR)
         func(path)
     else:
-        raise
+        raise exc_info[1]
 
 
 def remove_dir(file_path) -> bool:
     if not os.path.exists(file_path):
         return True
-    try:
-        shutil.rmtree(file_path, onerror=on_error)
-        return True
-    except BaseException:
-        return False
+    shutil.rmtree(file_path, onerror=on_error)
+    return True
 
 
 def port_checker(port: int, host: str = "localhost"):

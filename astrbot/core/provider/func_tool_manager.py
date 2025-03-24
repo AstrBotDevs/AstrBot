@@ -3,16 +3,18 @@ import json
 import textwrap
 import os
 import asyncio
-import mcp
 import copy
 
 from typing import Dict, List, Awaitable, Literal, Any
 from dataclasses import dataclass
 from typing import Optional
 from contextlib import AsyncExitStack
-
-from mcp.client.stdio import stdio_client
 from astrbot import logger
+
+try:
+    import mcp
+except (ModuleNotFoundError, ImportError):
+    logger.warning("警告: 缺少依赖库 'mcp'，将无法使用 MCP 服务。")
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
@@ -99,7 +101,7 @@ class MCPClient:
         )
 
         stdio_transport = await self.exit_stack.enter_async_context(
-            stdio_client(server_params)
+            mcp.stdio_client(server_params)
         )
         self.stdio, self.write = stdio_transport
         self.session = await self.exit_stack.enter_async_context(
