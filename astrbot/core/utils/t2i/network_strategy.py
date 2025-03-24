@@ -1,6 +1,7 @@
 import aiohttp
 import os
-import ssl, certifi
+import ssl
+import certifi
 
 from . import RenderStrategy
 from astrbot.core.config import VERSION

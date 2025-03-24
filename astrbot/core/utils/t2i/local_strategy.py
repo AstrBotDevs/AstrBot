@@ -1,6 +1,7 @@
 import re
 import aiohttp
-import ssl, certifi
+import ssl
+import certifi
 from io import BytesIO
 
 from . import RenderStrategy
