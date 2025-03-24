@@ -1,37 +1,84 @@
-<script setup>
- //
-</script>
-
 <template>
-  <v-card elevation="0" class="bg-primary overflow-hidden bubble-shape bubble-primary-shape">
+  <v-card elevation="1" class="stat-card platform-card">
     <v-card-text>
-      <div class="d-flex align-start mb-3">
-        <v-btn icon rounded="sm" color="darkprimary" variant="flat">
-          <v-icon icon="mdi-account-multiple-outline"></v-icon>
-        </v-btn>
+      <div class="d-flex align-start">
+        <div class="icon-wrapper">
+          <v-icon icon="mdi-server-network" size="24"></v-icon>
+        </div>
+        
+        <div class="stat-content">
+          <div class="stat-title">消息平台</div>
+          <div class="stat-value-wrapper">
+            <h2 class="stat-value">{{ stat.platform_count || 0 }}</h2>
+          </div>
+          <div class="stat-subtitle">已连接的消息平台数量</div>
+        </div>
       </div>
-      <v-row>
-        <v-col cols="6">
-          <h2 class="text-h1 font-weight-medium">
-            {{ stat.platform_count }}
-          </h2>
-          <span class="text-subtitle-1 text-medium-emphasis text-white">消息平台数</span>
-        </v-col>
-      </v-row>
     </v-card-text>
   </v-card>
 </template>
 
-
 <script>
-
 export default {
-  name: 'TotalSession',
-  props: ['stat'],
-  data: () => ({
-    stat: {
-      platform_count: 0
-    }
-  }),
+  name: 'OnlinePlatform',
+  props: ['stat']
 };
 </script>
+
+<style scoped>
+.stat-card {
+  height: 100%;
+  transition: transform 0.2s, box-shadow 0.2s;
+  overflow: hidden;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+.platform-card {
+  background-color: #2196f3;
+  color: white;
+}
+
+.icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  margin-right: 16px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-title {
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.9;
+  margin-bottom: 4px;
+}
+
+.stat-value-wrapper {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.2;
+  margin-right: 8px;
+}
+
+.stat-subtitle {
+  font-size: 12px;
+  opacity: 0.7;
+}
+</style>

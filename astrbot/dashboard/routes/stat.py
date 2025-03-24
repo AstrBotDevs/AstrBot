@@ -1,6 +1,7 @@
 import traceback
 import psutil
 import time
+import threading
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
 from quart import request
@@ -64,6 +65,25 @@ class StatRoute(Route):
 
             stat_dict = stat.__dict__
 
+            # 获取CPU使用率 - 修复CPU始终为0的问题
+            process = psutil.Process()
+            # 获取系统CPU使用率而不是进程CPU使用率
+            cpu_percent = psutil.cpu_percent(interval=0.5)
+            
+            # 获取线程数
+            thread_count = threading.active_count()
+            
+            # 获取插件信息
+            plugins = self.core_lifecycle.star_context.get_all_stars()
+            plugin_info = []
+            for plugin in plugins:
+                info = {
+                    "name": getattr(plugin, "name", plugin.__class__.__name__),
+                    "version": getattr(plugin, "version", "1.0.0"),
+                    "is_enabled": True
+                }
+                plugin_info.append(info)
+
             stat_dict.update(
                 {
                     "platform": self.db_helper.get_grouped_base_stats(
@@ -73,9 +93,8 @@ class StatRoute(Route):
                     "platform_count": len(
                         self.core_lifecycle.platform_manager.get_insts()
                     ),
-                    "plugin_count": len(
-                        self.core_lifecycle.star_context.get_all_stars()
-                    ),
+                    "plugin_count": len(plugins),
+                    "plugins": plugin_info,
                     "message_time_series": message_time_based_stats,
                     "running": self.format_sec(
                         int(time.time()) - self.core_lifecycle.start_time
@@ -84,6 +103,9 @@ class StatRoute(Route):
                         "process": psutil.Process().memory_info().rss >> 20,
                         "system": psutil.virtual_memory().total >> 20,
                     },
+                    "cpu_percent": round(cpu_percent, 1),
+                    "thread_count": thread_count,
+                    "start_time": self.core_lifecycle.start_time,
                 }
             )
 

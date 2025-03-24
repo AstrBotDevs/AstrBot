@@ -8,164 +8,181 @@ marked.setOptions({
 </script>
 
 <template>
+    <v-card class="chat-page-card">
+        <v-card-text class="chat-page-container">
+            <div class="chat-layout">
+                <!-- 左侧对话列表面板 -->
+                <div class="sidebar-panel">
+                    <v-btn variant="tonal" rounded="xl" class="new-chat-btn" @click="newC"
+                        :disabled="!currCid">
+                        <v-icon class="mr-2">mdi-plus</v-icon>创建对话
+                    </v-btn>
 
-    <v-card style="margin-bottom: 16px; width: 100%; background-color: #fff; height: 100%;">
-        <v-card-text style="width: 100%; height: calc(100vh - 120px);">
-            <div style="height: 100%; display: flex; gap: 16px;">
-                <div style="max-width: 200px;">
-                    <!-- conversation -->
-                    <v-btn variant="tonal" rounded="xl" style="margin-bottom: 16px; min-width: 200px;" @click="newC"
-                        :disabled="!currCid">+ 创建对话</v-btn>
-
-                    <v-card class="mx-auto" min-width="200">
-                        <v-list dense nav v-if="conversations.length > 0" style="max-height: 500px; overflow-y: auto;"
-                            @update:selected="getConversationMessages">
+                    <v-card class="conversation-list-card" v-if="conversations.length > 0">
+                        <v-list density="compact" nav class="conversation-list" @update:selected="getConversationMessages">
                             <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
-                                color="primary" rounded="xl">
+                                color="primary" rounded="xl" class="conversation-item">
                                 <v-list-item-title>新对话</v-list-item-title>
-                                <v-list-item-subtitle>{{ formatDate(item.updated_at) }}</v-list-item-subtitle>
-
+                                <v-list-item-subtitle class="timestamp">{{ formatDate(item.updated_at) }}</v-list-item-subtitle>
                             </v-list-item>
                         </v-list>
                     </v-card>
 
-                    <div>
-
-                        <v-chip class="mt-4" color="primary" :append-icon="status?.llm_enabled ? 'mdi-check' : 'mdi-close'">
+                    <div class="status-chips">
+                        <v-chip class="status-chip" color="primary" :append-icon="status?.llm_enabled ? 'mdi-check' : 'mdi-close'">
                             LLM
                         </v-chip>
 
-                        <v-chip class="mt-4 ml-2" color="success" :append-icon="status?.stt_enabled ? 'mdi-check' : 'mdi-close'">
+                        <v-chip class="status-chip" color="success" :append-icon="status?.stt_enabled ? 'mdi-check' : 'mdi-close'">
                             语音转文本
                         </v-chip>
                     </div>
 
-                    <v-btn variant="tonal" rounded="xl"
-                        style="position: fixed; bottom: 48px; margin-bottom: 16px; min-width: 200px;" v-if="currCid"
-                        @click="deleteConversation(currCid)" color="error">删除此对话</v-btn>
+                    <v-btn variant="tonal" rounded="xl" class="delete-chat-btn" v-if="currCid"
+                        @click="deleteConversation(currCid)" color="error">
+                        <v-icon class="mr-2">mdi-delete</v-icon>删除此对话
+                    </v-btn>
                 </div>
 
-                <div style="height: 100%; width: 100%;">
-                    <div style="height: calc(100% - 120px); overflow-y: auto; padding: 16px; " ref="messageContainer">
-                        <div class="fade-in" v-if="messages.length == 0"
-                            style="height: 100%; display: flex; justify-content: center; align-items: center; flex-direction: column;">
-                            <div>
-                                <span style="font-size: 28px;">Hello, I'm</span>
-                                <span style="font-weight: 1000; font-size: 28px; margin-left: 8px;">AstrBot ⭐</span>
+                <!-- 右侧聊天内容区域 -->
+                <div class="chat-content-panel">
+                    <div class="messages-container" ref="messageContainer">
+                        <!-- 空聊天欢迎页 -->
+                        <div class="welcome-container fade-in" v-if="messages.length == 0">
+                            <div class="welcome-title">
+                                <span>Hello, I'm</span>
+                                <span class="bot-name">AstrBot ⭐</span>
                             </div>
-                            <div style="margin-top: 8px; color: #aaa;">
+                            <div class="welcome-hint">
                                 <span>输入</span>
-                                <span
-                                    style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">help</span>
+                                <code>help</code>
                                 <span>获取帮助 😊</span>
                             </div>
-                            <div style="margin-top: 8px; color: #aaa;">
+                            <div class="welcome-hint">
                                 <span>长按</span>
-                                <span
-                                    style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">Ctrl</span>
+                                <code>Ctrl</code>
                                 <span>录制语音 🎤</span>
                             </div>
-                            <div style="margin-top: 8px; color: #aaa;">
+                            <div class="welcome-hint">
                                 <span>按</span>
-                                <span
-                                    style="background-color: #eee; padding-left: 4px; padding-right: 4px; margin: 2px; border-radius: 4px;">Ctrl + V</span>
+                                <code>Ctrl + V</code>
                                 <span>粘贴图片 🏞️</span>
                             </div>
-
                         </div>
-                        <div v-else style="max-height: 100%; padding: 16px; max-width: 700px; margin: 0 auto;">
-                            <div class="fade-in" v-for="(msg, index) in messages" :key="index"
-                                style="margin-bottom: 16px;">
-                                <div v-if="msg.type == 'user'" style="display: flex; justify-content: flex-end;">
-                                    <div
-                                        style="padding: 12px; border-radius: 8px; background-color: rgba(94, 53, 177, 0.15)">
+
+                        <!-- 聊天消息列表 -->
+                        <div v-else class="message-list">
+                            <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
+                                <!-- 用户消息 -->
+                                <div v-if="msg.type == 'user'" class="user-message">
+                                    <div class="message-bubble user-bubble">
                                         <span>{{ msg.message }}</span>
-                                        <div style="display: flex; gap: 8px; margin-top: 8px;"
-                                            v-if="msg.image_url && msg.image_url.length > 0">
-                                            <div v-for="(img, index) in msg.image_url" :key="index"
-                                                style="position: relative; display: inline-block;">
-                                                <img :src="img"
-                                                    style="width: 100px; height: 100px; border-radius: 8px; box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);" />
+                                        
+                                        <!-- 图片附件 -->
+                                        <div class="image-attachments" v-if="msg.image_url && msg.image_url.length > 0">
+                                            <div v-for="(img, index) in msg.image_url" :key="index" class="image-attachment">
+                                                <img :src="img" class="attached-image" />
                                             </div>
                                         </div>
-                                        <!-- audio -->
-                                        <div>
-                                            <audio controls v-if="msg.audio_url && msg.audio_url.length > 0">
+                                        
+                                        <!-- 音频附件 -->
+                                        <div class="audio-attachment" v-if="msg.audio_url && msg.audio_url.length > 0">
+                                            <audio controls class="audio-player">
                                                 <source :src="msg.audio_url" type="audio/wav">
-                                                Your browser does not support the audio element.
+                                                您的浏览器不支持音频播放。
                                             </audio>
                                         </div>
                                     </div>
+                                    <v-avatar class="user-avatar" color="deep-purple-lighten-3" size="36">
+                                        <v-icon icon="mdi-account" />
+                                    </v-avatar>
                                 </div>
-                                <div v-else style="display: flex; justify-content: flex-start; gap: 16px;">
-                                    <span style="font-size: 32px;">✨</span>
-                                    <div v-html="marked(msg.message)" class="mc" style="font-family: inherit;"></div>
+                                
+                                <!-- 机器人消息 -->
+                                <div v-else class="bot-message">
+                                    <v-avatar class="bot-avatar" color="deep-purple" size="36">
+                                        <span class="text-h6">✨</span>
+                                    </v-avatar>
+                                    <div class="message-bubble bot-bubble">
+                                        <div v-html="marked(msg.message)" class="markdown-content"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="fade-in" style="bottom: 16px; width: 100%; padding: 8px; ">
+                    <!-- 输入区域 -->
+                    <div class="input-area fade-in">
+                        <v-text-field 
+                            id="input-field" 
+                            variant="outlined" 
+                            v-model="prompt" 
+                            :label="inputFieldLabel"
+                            placeholder="开始输入..." 
+                            :loading="loadingChat"
+                            clear-icon="mdi-close-circle" 
+                            clearable
+                            @click:clear="clearMessage" 
+                            class="message-input"
+                            @keydown="handleInputKeyDown"
+                            hide-details
+                        >
+                            <template v-slot:loader>
+                                <v-progress-linear :active="loadingChat" height="3" color="deep-purple" indeterminate></v-progress-linear>
+                            </template>
 
-                        <div
-                            style="width: 100%; justify-content: center; align-items: center; display: flex; flex-direction: column; margin-top: 8px;">
+                            <template v-slot:append>
+                                <v-tooltip text="发送">
+                                    <template v-slot:activator="{ props }">
+                                        <v-btn 
+                                            v-bind="props" 
+                                            @click="sendMessage" 
+                                            class="send-btn" 
+                                            icon="mdi-send" 
+                                            variant="text"
+                                            color="deep-purple"
+                                            :disabled="!prompt && stagedImagesUrl.length === 0 && !stagedAudioUrl"
+                                        />
+                                    </template>
+                                </v-tooltip>
 
-                            <v-text-field id="input-field" variant="outlined" v-model="prompt" :label="inputFieldLabel"
-                                placeholder="Start typing..." loading clear-icon="mdi-close-circle" clearable
-                                @click:clear="clearMessage" style="width: 100%; max-width: 850px;"
-                                @keydown="handleInputKeyDown">
-                                <template v-slot:loader>
-                                    <v-progress-linear :active="loadingChat" height="6"
-                                        indeterminate></v-progress-linear>
-                                </template>
+                                <v-tooltip text="语音输入">
+                                    <template v-slot:activator="{ props }">
+                                        <v-btn 
+                                            v-bind="props"
+                                            @click="isRecording ? stopRecording() : startRecording()" 
+                                            class="record-btn" 
+                                            :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'"
+                                            variant="text"
+                                            :color="isRecording ? 'error' : 'deep-purple'"
+                                        />
+                                    </template>
+                                </v-tooltip>
+                            </template>
+                        </v-text-field>
 
-                                <template v-slot:append>
-                                    <v-tooltip text="发送">
-                                        <template v-slot:activator="{ props }">
-                                            <v-icon v-bind="props" @click="sendMessage" size="35"
-                                                icon="mdi-arrow-up-circle" />
-                                        </template>
-                                    </v-tooltip>
-
-
-                                    <v-tooltip text="语音输入">
-                                        <template v-slot:activator="{ props }">
-                                            <v-icon :color="isRecording ? 'error' : ''" v-bind="props"
-                                                @click="isRecording ? stopRecording() : startRecording()" size="35"
-                                                icon="mdi-record-circle" />
-                                        </template>
-                                    </v-tooltip>
-
-                                </template>
-                            </v-text-field>
-
-                            <div style="display: flex; gap: 8px; margin-top: -8px;">
-                                <div v-for="(img, index) in stagedImagesUrl" :key="index"
-                                    style="position: relative; display: inline-block;">
-                                    <img :src="img"
-                                        style="width: 50px; height: 50px; border-radius: 8px; box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);" />
-                                    <v-icon @click="removeImage(index)" size="20" color="red"
-                                        style="position: absolute; top: 0; right: 0; cursor: pointer;">mdi-close-circle</v-icon>
-                                </div>
-                                <div style="display: inline-block; width: 50px; height: 50px;">
-                                    <div v-if="stagedAudioUrl"
-                                        style="position: relative; padding: 6px; border-radius: 8px; background-color: rgba(94, 53, 177, 0.15); display: inline-block;">
-                                        新录音
-                                        <v-icon @click="removeAudio" size="20" color="red"
-                                            style="position: absolute; top: 0; right: 0; cursor: pointer;">mdi-close-circle</v-icon>
-                                    </div>
-
-                                </div>
+                        <!-- 附件预览区 -->
+                        <div class="attachments-preview" v-if="stagedImagesUrl.length > 0 || stagedAudioUrl">
+                            <div v-for="(img, index) in stagedImagesUrl" :key="index" class="image-preview">
+                                <img :src="img" class="preview-image" />
+                                <v-btn @click="removeImage(index)" class="remove-attachment-btn" icon="mdi-close" size="small" color="error" variant="text" />
+                            </div>
+                            
+                            <div v-if="stagedAudioUrl" class="audio-preview">
+                                <v-chip color="deep-purple-lighten-4" class="audio-chip">
+                                    <v-icon start icon="mdi-microphone" size="small"></v-icon>
+                                    新录音
+                                </v-chip>
+                                <v-btn @click="removeAudio" class="remove-attachment-btn" icon="mdi-close" size="small" color="error" variant="text" />
                             </div>
                         </div>
                     </div>
                 </div>
-
             </div>
-
         </v-card-text>
     </v-card>
 </template>
+
 <script>
 export default {
     name: 'ChatPage',
@@ -192,7 +209,7 @@ export default {
             
             eventSource: null,
             
-            // 添加Ctrl键长按相关变量
+            // Ctrl键长按相关变量
             ctrlKeyDown: false,
             ctrlKeyTimer: null,
             ctrlKeyLongPressThreshold: 300 // 长按阈值，单位毫秒
@@ -574,40 +591,415 @@ export default {
         },
     },
 }
-
 </script>
 
 <style>
+/* 基础动画 */
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-.fade-in {
-    animation: fadeIn 0.2s ease-in-out;
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
 }
 
-.mc h1,
-.mc h2,
-.mc h3,
-.mc h4,
-.mc h5,
-.mc h6 {
+@keyframes slideIn {
+    from { transform: translateX(20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* 聊天页面布局 */
+.chat-page-card {
+    margin-bottom: 16px;
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+    background-color: #fff;
+}
+
+.chat-page-container {
+    width: 100%;
+    height: calc(100vh - 120px);
+    padding: 0;
+}
+
+.chat-layout {
+    height: 100%;
+    display: flex;
+    gap: 24px;
+}
+
+/* 侧边栏样式 */
+.sidebar-panel {
+    max-width: 240px;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 8px;
+    border-right: 1px solid #f0f0f0;
+}
+
+.new-chat-btn {
+    margin-bottom: 16px;
+    min-width: 200px;
+    background-color: #f5f0ff !important;
+    color: #673ab7 !important;
+    font-weight: 500;
+    box-shadow: none !important;
+    transition: all 0.2s ease;
+}
+
+.new-chat-btn:hover {
+    background-color: #ede7f6 !important;
+    transform: translateY(-1px);
+}
+
+.conversation-list-card {
+    border-radius: 12px;
+    box-shadow: none !important;
+    border: 1px solid #f0f0f0;
+    background-color: #fafafa;
+}
+
+.conversation-list {
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.conversation-item {
+    margin-bottom: 4px;
+    border-radius: 8px !important;
+    transition: all 0.2s ease;
+}
+
+.conversation-item:hover {
+    background-color: #f5f0ff;
+}
+
+.timestamp {
+    font-size: 11px;
+    color: #999;
+    margin-top: 4px;
+}
+
+.status-chips {
+    margin-top: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.status-chip {
+    font-size: 12px;
+}
+
+.delete-chat-btn {
+    position: fixed;
+    bottom: 24px;
+    margin-bottom: 16px;
+    min-width: 200px;
+    background-color: #feecec !important;
+    color: #d32f2f !important;
+    font-weight: 500;
+    box-shadow: none !important;
+}
+
+.delete-chat-btn:hover {
+    background-color: #ffebee !important;
+}
+
+/* 聊天内容区域 */
+.chat-content-panel {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.messages-container {
+    height: calc(100% - 80px);
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 欢迎页样式 */
+.welcome-container {
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.welcome-title {
+    font-size: 28px;
+    margin-bottom: 16px;
+}
+
+.bot-name {
+    font-weight: 700;
+    margin-left: 8px;
+    color: #673ab7;
+}
+
+.welcome-hint {
+    margin-top: 8px;
+    color: #666;
+    font-size: 14px;
+}
+
+.welcome-hint code {
+    background-color: #f5f0ff;
+    padding: 2px 6px;
+    margin: 0 4px;
+    border-radius: 4px;
+    color: #673ab7;
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+}
+
+/* 消息列表样式 */
+.message-list {
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.message-item {
+    margin-bottom: 24px;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.user-message {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.bot-message {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.message-bubble {
+    padding: 12px 16px;
+    border-radius: 18px;
+    max-width: 80%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.user-bubble {
+    background-color: #f5f0ff;
+    color: #333;
+    border-top-right-radius: 4px;
+}
+
+.bot-bubble {
+    background-color: #fff;
+    border: 1px solid #e8e8e8;
+    color: #333;
+    border-top-left-radius: 4px;
+}
+
+.user-avatar, .bot-avatar {
+    align-self: flex-end;
+}
+
+/* 附件样式 */
+.image-attachments {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.image-attachment {
+    position: relative;
+    display: inline-block;
+}
+
+.attached-image {
+    width: 120px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease;
+}
+
+.attached-image:hover {
+    transform: scale(1.02);
+}
+
+.audio-attachment {
+    margin-top: 8px;
+}
+
+.audio-player {
+    width: 100%;
+    height: 36px;
+    border-radius: 18px;
+}
+
+/* 输入区域样式 */
+.input-area {
+    padding: 16px;
+    background-color: #fff;
+    position: relative;
+    border-top: 1px solid #f5f5f5;
+}
+
+.message-input {
+    border-radius: 24px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.send-btn, .record-btn {
+    margin-left: 4px;
+}
+
+/* 附件预览区 */
+.attachments-preview {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    max-width: 900px;
+    margin: 8px auto 0;
+    flex-wrap: wrap;
+}
+
+.image-preview, .audio-preview {
+    position: relative;
+    display: inline-flex;
+}
+
+.preview-image {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.audio-chip {
+    height: 36px;
+    border-radius: 18px;
+}
+
+.remove-attachment-btn {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.remove-attachment-btn:hover {
+    opacity: 1;
+}
+
+/* Markdown内容样式 */
+.markdown-content {
+    font-family: inherit;
+    line-height: 1.6;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    margin-top: 16px;
     margin-bottom: 10px;
+    font-weight: 600;
+    color: #333;
 }
 
-.mc li {
+.markdown-content h1 {
+    font-size: 1.8em;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 6px;
+}
+
+.markdown-content h2 {
+    font-size: 1.5em;
+}
+
+.markdown-content h3 {
+    font-size: 1.3em;
+}
+
+.markdown-content li {
     margin-left: 16px;
+    margin-bottom: 4px;
 }
 
-
-.mc p {
+.markdown-content p {
     margin-top: 10px;
     margin-bottom: 10px;
+}
+
+.markdown-content pre {
+    background-color: #f8f8f8;
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 12px 0;
+}
+
+.markdown-content code {
+    background-color: #f5f0ff;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9em;
+    color: #673ab7;
+}
+
+.markdown-content img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+.markdown-content blockquote {
+    border-left: 4px solid #673ab7;
+    padding-left: 16px;
+    color: #666;
+    margin: 16px 0;
+}
+
+.markdown-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+}
+
+.markdown-content th, 
+.markdown-content td {
+    border: 1px solid #eee;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.markdown-content th {
+    background-color: #f5f0ff;
+}
+
+/* 动画类 */
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
 }
 </style>
