@@ -3,6 +3,7 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import { router } from './router';
 import vuetify from './plugins/vuetify';
+import confirmPlugin from './plugins/confirmPlugin';
 import '@/scss/style.scss';
 import VueApexCharts from 'vue3-apexcharts';
 
@@ -15,7 +16,10 @@ app.use(router);
 app.use(createPinia());
 app.use(print);
 app.use(VueApexCharts);
-app.use(vuetify).mount('#app');
+app.use(vuetify);
+app.use(confirmPlugin);
+app.mount('#app');
+
 
 axios.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');

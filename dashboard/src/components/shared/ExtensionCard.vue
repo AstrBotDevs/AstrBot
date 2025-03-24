@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, inject } from 'vue';
 
 const props = defineProps({
   extension: {
@@ -46,8 +46,21 @@ const reloadExtension = () => {
   emit('reload', props.extension);
 };
 
-const uninstallExtension = () => {
-  emit('uninstall', props.extension);
+const $confirm = inject("$confirm");
+const uninstallExtension = async () => {
+  if (typeof $confirm !== "function") {
+    console.error("$confirm 未正确注册");
+    return;
+  }
+
+  const confirmed = await $confirm({
+    title: "删除确认",
+    message: "你确定要删除当前插件吗？",
+  });
+
+  if (confirmed) {
+    emit("uninstall", props.extension);
+  }
 };
 
 const toggleActivation = () => {
