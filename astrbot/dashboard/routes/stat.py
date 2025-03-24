@@ -65,10 +65,7 @@ class StatRoute(Route):
 
             stat_dict = stat.__dict__
 
-            # 获取系统CPU使用率而不是进程CPU使用率
             cpu_percent = psutil.cpu_percent(interval=0.5)
-
-            # 获取线程数
             thread_count = threading.active_count()
 
             # 获取插件信息

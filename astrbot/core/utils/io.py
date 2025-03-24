@@ -8,6 +8,9 @@ import base64
 import zipfile
 import uuid
 import psutil
+
+import certifi
+
 from typing import Union
 
 from PIL import Image
@@ -81,7 +84,13 @@ async def download_image_by_url(
     下载图片, 返回 path
     """
     try:
-        async with aiohttp.ClientSession(trust_env=True) as session:
+        ssl_context = ssl.create_default_context(
+            cafile=certifi.where()
+        )  # 使用 certifi 提供的 CA 证书
+        connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
+        async with aiohttp.ClientSession(
+            trust_env=True, connector=connector
+        ) as session:
             if post:
                 async with session.post(url, json=post_data) as resp:
                     if not path:
@@ -118,7 +127,13 @@ async def download_file(url: str, path: str, show_progress: bool = False):
     从指定 url 下载文件到指定路径 path
     """
     try:
-        async with aiohttp.ClientSession(trust_env=True) as session:
+        ssl_context = ssl.create_default_context(
+            cafile=certifi.where()
+        )  # 使用 certifi 提供的 CA 证书
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(
+            trust_env=True, connector=connector
+        ) as session:
             async with session.get(url, timeout=1800) as resp:
                 if resp.status != 200:
                     raise Exception(f"下载文件失败: {resp.status}")

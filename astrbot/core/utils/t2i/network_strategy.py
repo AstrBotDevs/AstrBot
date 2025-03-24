@@ -1,5 +1,7 @@
 import aiohttp
 import os
+import ssl
+import certifi
 
 from . import RenderStrategy
 from astrbot.core.config import VERSION
@@ -46,7 +48,11 @@ class NetworkRenderStrategy(RenderStrategy):
             },
         }
         if return_url:
-            async with aiohttp.ClientSession(trust_env=True) as session:
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(
+                trust_env=True, connector=connector
+            ) as session:
                 async with session.post(
                     f"{self.BASE_RENDER_URL}/generate", json=post_data
                 ) as resp:
