@@ -26,3 +26,4 @@ python-telegram-bot
 wechatpy
 dingtalk-stream
 mcp
+certifi
