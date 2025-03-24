@@ -65,8 +65,6 @@ class StatRoute(Route):
 
             stat_dict = stat.__dict__
 
-            # 获取CPU使用率 - 修复CPU始终为0的问题
-            process = psutil.Process()
             # 获取系统CPU使用率而不是进程CPU使用率
             cpu_percent = psutil.cpu_percent(interval=0.5)
 
