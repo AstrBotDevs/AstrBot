@@ -300,5 +300,6 @@ export default {
 <style scoped>
 .platform-page {
   padding: 20px;
+  padding-top: 8px;
 }
 </style>

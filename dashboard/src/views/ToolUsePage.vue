@@ -589,6 +589,7 @@ export default {
 <style scoped>
 .tools-page {
   padding: 20px;
+  padding-top: 8px;
 }
 
 .server-card {

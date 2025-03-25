@@ -12,7 +12,7 @@
         <v-card class="item-card hover-elevation" :color="getItemEnabled(item) ? '' : 'grey-lighten-4'">
           <div class="item-status-indicator" :class="{'active': getItemEnabled(item)}"></div>
           <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
-            <span class="text-h6 text-truncate" :title="getItemTitle(item)">{{ getItemTitle(item) }}</span>
+            <span class="text-h4 text-truncate" :title="getItemTitle(item)">{{ getItemTitle(item) }}</span>
             <v-tooltip location="top">
               <template v-slot:activator="{ props }">
                 <v-switch 
