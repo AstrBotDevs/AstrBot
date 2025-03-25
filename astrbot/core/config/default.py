@@ -347,7 +347,7 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                         "obvious_hint": True,
-                        "hint": "只处理所填写的 ID 发来的消息事件。为空时不启用白名单过滤。可以使用 /sid 指令获取在某个平台上的会话 ID。会话 ID 类似 aiocqhttp:GroupMessage:547540978。管理员可使用 /wl 添加白名单",
+                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可使用 /wl 添加白名单",
                     },
                     "id_whitelist_log": {
                         "description": "打印白名单日志",
@@ -1008,10 +1008,10 @@ CONFIG_METADATA_2 = {
                         "hint": "群聊消息最大数量。超过此数量后，会自动清除旧消息。",
                     },
                     "image_caption": {
-                        "description": "启用图像转述(需要模型支持)",
+                        "description": "群聊图像转述(需模型支持)",
                         "type": "bool",
                         "obvious_hint": True,
-                        "hint": "启用后，当接收到图片消息时，会使用模型先将图片转述为文字再进行后续处理。推荐使用 gpt-4o-mini 模型。",
+                        "hint": "用模型将群聊中的图片消息转述为文字，推荐 gpt-4o-mini 模型。和机器人的唤醒聊天中的图片消息仍然会直接作为上下文输入。",
                     },
                     "image_caption_provider_id": {
                         "description": "图像转述提供商 ID",
