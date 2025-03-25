@@ -27,3 +27,4 @@ wechatpy
 dingtalk-stream
 mcp
 certifi
+pip
