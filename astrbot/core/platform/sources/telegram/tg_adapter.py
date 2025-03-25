@@ -241,5 +241,13 @@ class TelegramPlatformAdapter(Platform):
         return self.client
 
     async def terminate(self):
-        await self.application.stop()
-        logger.info("Telegram 适配器已被优雅地关闭")
+        try:
+            await self.application.stop()
+
+            # 保险起见先判断是否存在updater对象
+            if self.application.updater is not None:
+                await self.application.updater.stop()
+
+            logger.info("Telegram 适配器已被优雅地关闭")
+        except Exception as e:
+            logger.error(f"Telegram 适配器关闭时出错: {e}")
