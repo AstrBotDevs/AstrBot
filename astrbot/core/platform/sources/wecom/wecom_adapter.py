@@ -50,6 +50,7 @@ class WecomServer:
         )
 
         self.callback = None
+        self.shutdown_event = asyncio.Event()
 
     async def verify(self):
         logger.info(f"验证请求有效性: {quart.request.args}")
@@ -93,7 +94,11 @@ class WecomServer:
         await self.server.run_task(
             host=self.callback_server_host,
             port=self.port,
+            shutdown_trigger=self.shutdown_trigger,
         )
+
+    async def shutdown_trigger(self):
+        await self.shutdown_event.wait()
 
 
 @register_platform_adapter("wecom", "wecom 适配器")
@@ -231,5 +236,6 @@ class WecomPlatformAdapter(Platform):
         return self.client
 
     async def terminate(self):
+        self.server.shutdown_event.set()
         await self.server.server.shutdown()
         logger.info("企业微信 适配器已被优雅地关闭")

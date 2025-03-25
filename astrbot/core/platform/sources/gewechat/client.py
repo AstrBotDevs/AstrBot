@@ -72,6 +72,8 @@ class SimpleGewechatClient:
 
         self.userrealnames = {}
 
+        self.shutdown_event = asyncio.Event()
+
     async def get_token_id(self):
         """获取 Gewechat Token。"""
         async with aiohttp.ClientSession() as session:
@@ -304,7 +306,14 @@ class SimpleGewechatClient:
 
     async def start_polling(self):
         threading.Thread(target=asyncio.run, args=(self._set_callback_url(),)).start()
-        await self.server.run_task(host="0.0.0.0", port=self.port)
+        await self.server.run_task(
+            host="0.0.0.0",
+            port=self.port,
+            shutdown_trigger=self.shutdown_trigger,
+        )
+
+    async def shutdown_trigger(self):
+        await self.shutdown_event.wait()
 
     async def check_online(self, appid: str):
         """检查 APPID 对应的设备是否在线。"""

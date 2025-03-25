@@ -8,6 +8,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 from .gewechat_event import GewechatPlatformEvent
 from .client import SimpleGewechatClient
+from astrbot import logger
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -64,7 +65,9 @@ class GewechatPlatformAdapter(Platform):
         )
 
     async def terminate(self):
+        self.client.shutdown_event.set()
         await self.client.server.shutdown()
+        logger.info("Gewechat 适配器已被优雅地关闭。")
 
     async def logout(self):
         await self.client.logout()
