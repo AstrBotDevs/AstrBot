@@ -96,7 +96,6 @@ def validate_config(
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}"
                 )
-                validate(value, meta["items"], path=f"{path}{key}.")
 
     if is_core:
         for key, group in schema.items():
