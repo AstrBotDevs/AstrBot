@@ -103,9 +103,16 @@ class RespondStage(Stage):
                 for comp in result.chain:
                     i = await self._calc_comp_interval(comp)
                     await asyncio.sleep(i)
-                    await event.send(MessageChain([*decorated_comps, comp]))
+                    try:
+                        await event.send(MessageChain([*decorated_comps, comp]))
+                    except Exception as e:
+                        logger.error(f"发送消息失败: {e} chain: {result.chain}")
+                        break
             else:
-                await event.send(result)
+                try:
+                    await event.send(result)
+                except Exception as e:
+                    logger.error(f"发送消息失败: {e} chain: {result.chain}")
             await event._post_send()
             logger.info(
                 f"AstrBot -> {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}"
