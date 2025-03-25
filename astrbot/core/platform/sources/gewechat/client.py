@@ -10,10 +10,11 @@ import anyio
 import quart
 
 from astrbot.api import logger, sp
-from astrbot.api.message_components import Plain, Image, At, Record
+from astrbot.api.message_components import Plain, Image, At, Record, Video
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.utils.io import download_image_by_url
 from .downloader import GeweDownloader
+from .xml_data_parser import GeweDataParser
 
 
 class SimpleGewechatClient:
@@ -217,15 +218,10 @@ class SimpleGewechatClient:
 
             case 34:
                 # 语音消息
-                # data = await self.multimedia_downloader.download_voice(
-                #     self.appid,
-                #     content,
-                #     abm.message_id
-                # )
-                # print(data)
                 if "ImgBuf" in d and "buffer" in d["ImgBuf"]:
                     voice_data = base64.b64decode(d["ImgBuf"]["buffer"])
                     file_path = f"data/temp/gewe_voice_{abm.message_id}.silk"
+
                     async with await anyio.open_file(file_path, "wb") as f:
                         await f.write(voice_data)
                     abm.message.append(Record(file=file_path, url=file_path))
@@ -236,15 +232,19 @@ class SimpleGewechatClient:
             case 42:  # 名片
                 logger.info("消息类型(42)：名片")
             case 43:  # 视频
-                logger.info("消息类型(43)：视频")
+                video = Video(file="", cover=content)
+                abm.message.append(video)
             case 47:  # emoji
-                logger.info("消息类型(47)：emoji")
+                data_parser = GeweDataParser(content, abm.group_id == "")
+                emoji = data_parser.parse_emoji()
+                abm.message.append(emoji)
             case 48:  # 地理位置
                 logger.info("消息类型(48)：地理位置")
             case 49:  # 公众号/文件/小程序/引用/转账/红包/视频号/群聊邀请
-                logger.info(
-                    "消息类型(49)：公众号/文件/小程序/引用/转账/红包/视频号/群聊邀请"
-                )
+                data_parser = GeweDataParser(content, abm.group_id == "")
+                abm_data = data_parser.parse_mutil_49()
+                if abm_data:
+                    abm.message.append(abm_data)
             case 51:  # 帐号消息同步?
                 logger.info("消息类型(51)：帐号消息同步？")
             case 10000:  # 被踢出群聊/更换群主/修改群名称
@@ -508,6 +508,34 @@ class SimpleGewechatClient:
                 json_blob = await resp.json()
                 logger.debug(f"发送图片结果: {json_blob}")
 
+    async def post_emoji(self, to_wxid, emoji_md5, emoji_size, cdnurl=""):
+        """发送emoji消息"""
+        payload = {
+            "appId": self.appid,
+            "toWxid": to_wxid,
+            "emojiMd5": emoji_md5,
+            "emojiSize": emoji_size,
+        }
+
+        # 优先表情包，若拿不到表情包的md5，就用当作图片发
+        try:
+            if emoji_md5 != "" and emoji_size != "":
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{self.base_url}/message/postEmoji",
+                        headers=self.headers,
+                        json=payload,
+                    ) as resp:
+                        json_blob = await resp.json()
+                        logger.info(
+                            f"发送emoji消息结果: {json_blob.get('msg', '操作失败')}"
+                        )
+            else:
+                await self.post_image(to_wxid, cdnurl)
+
+        except Exception as e:
+            logger.error(e)
+
     async def post_video(
         self, to_wxid, video_url: str, thumb_url: str, video_duration: int
     ):
@@ -524,6 +552,27 @@ class SimpleGewechatClient:
             ) as resp:
                 json_blob = await resp.json()
                 logger.debug(f"发送视频结果: {json_blob}")
+
+    async def forward_video(self, to_wxid, cnd_xml: str):
+        """转发视频
+
+        Args:
+            to_wxid (str): 发送给谁
+            cnd_xml (str): 视频消息的cdn信息
+        """
+        payload = {
+            "appId": self.appid,
+            "toWxid": to_wxid,
+            "xml": cnd_xml,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.base_url}/message/forwardVideo",
+                headers=self.headers,
+                json=payload,
+            ) as resp:
+                json_blob = await resp.json()
+                logger.debug(f"转发视频结果: {json_blob}")
 
     async def post_voice(self, to_wxid, voice_url: str, voice_duration: int):
         """发送语音信息
@@ -546,7 +595,7 @@ class SimpleGewechatClient:
                 f"{self.base_url}/message/postVoice", headers=self.headers, json=payload
             ) as resp:
                 json_blob = await resp.json()
-                logger.debug(f"发送语音结果: {json_blob}")
+                logger.info(f"发送语音结果: {json_blob.get('msg', '操作失败')}")
 
     async def post_file(self, to_wxid, file_url: str, file_name: str):
         """发送文件
