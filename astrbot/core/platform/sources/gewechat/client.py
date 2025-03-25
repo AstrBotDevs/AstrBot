@@ -14,7 +14,13 @@ from astrbot.api.message_components import Plain, Image, At, Record, Video
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.utils.io import download_image_by_url
 from .downloader import GeweDownloader
-from .xml_data_parser import GeweDataParser
+
+try:
+    from .xml_data_parser import GeweDataParser
+except (ImportError, ModuleNotFoundError) as e:
+    logger.warning(
+        f"警告: 可能未安装 defusedxml 依赖库，将导致无法解析微信的 表情包、引用 类型的消息: {str(e)}"
+    )
 
 
 class SimpleGewechatClient:
