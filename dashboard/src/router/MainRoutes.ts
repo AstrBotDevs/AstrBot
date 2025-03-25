@@ -47,6 +47,11 @@ const MainRoutes = {
       component: () => import('@/views/dashboards/default/DefaultDashboard.vue')
     },
     {
+      name: 'Conversation',
+      path: '/conversation',
+      component: () => import('@/views/ConversationPage.vue')
+    },
+    {
       name: 'Console',
       path: '/console',
       component: () => import('@/views/ConsolePage.vue')

@@ -3,7 +3,7 @@ import os
 import time
 from astrbot.core.db.po import Platform, Stats, LLMHistory, ATRIVision, Conversation
 from . import BaseDatabase
-from typing import Tuple
+from typing import Tuple, List, Dict, Any
 
 
 class SQLiteDatabase(BaseDatabase):
@@ -389,3 +389,177 @@ class SQLiteDatabase(BaseDatabase):
         if res:
             return ATRIVision(*res)
         return None
+
+    def get_all_conversations(
+        self, page: int = 1, page_size: int = 20
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """获取所有对话，支持分页，按更新时间降序排序"""
+        try:
+            c = self.conn.cursor()
+        except sqlite3.ProgrammingError:
+            c = self._get_conn(self.db_path).cursor()
+
+        try:
+            # 获取总记录数
+            c.execute("""
+                SELECT COUNT(*) FROM webchat_conversation
+            """)
+            total_count = c.fetchone()[0]
+
+            # 计算偏移量
+            offset = (page - 1) * page_size
+
+            # 获取分页数据，按更新时间降序排序
+            c.execute(
+                """
+                SELECT user_id, cid, created_at, updated_at, title, persona_id
+                FROM webchat_conversation
+                ORDER BY updated_at DESC
+                LIMIT ? OFFSET ?
+            """,
+                (page_size, offset),
+            )
+
+            rows = c.fetchall()
+
+            conversations = []
+
+            for row in rows:
+                user_id, cid, created_at, updated_at, title, persona_id = row
+                # 确保 cid 是字符串类型且至少有8个字符，否则使用一个默认值
+                safe_cid = str(cid) if cid else "unknown"
+                display_cid = safe_cid[:8] if len(safe_cid) >= 8 else safe_cid
+
+                conversations.append(
+                    {
+                        "user_id": user_id or "",
+                        "cid": safe_cid,
+                        "title": title or f"对话 {display_cid}",
+                        "persona_id": persona_id or "",
+                        "created_at": created_at or 0,
+                        "updated_at": updated_at or 0,
+                    }
+                )
+
+            return conversations, total_count
+
+        except Exception as _:
+            # 返回空列表和0，确保即使出错也有有效的返回值
+            return [], 0
+        finally:
+            c.close()
+
+    def get_filtered_conversations(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        platforms: List[str] = None,
+        message_types: List[str] = None,
+        search_query: str = None,
+        exclude_ids: List[str] = None,
+        exclude_platforms: List[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """获取筛选后的对话列表"""
+        try:
+            c = self.conn.cursor()
+        except sqlite3.ProgrammingError:
+            c = self._get_conn(self.db_path).cursor()
+
+        try:
+            # 构建查询条件
+            where_clauses = []
+            params = []
+
+            # 平台筛选
+            if platforms and len(platforms) > 0:
+                platform_conditions = []
+                for platform in platforms:
+                    platform_conditions.append("user_id LIKE ?")
+                    params.append(f"{platform}:%")
+
+                if platform_conditions:
+                    where_clauses.append(f"({' OR '.join(platform_conditions)})")
+
+            # 消息类型筛选
+            if message_types and len(message_types) > 0:
+                message_type_conditions = []
+                for msg_type in message_types:
+                    message_type_conditions.append("user_id LIKE ?")
+                    params.append(f"%:{msg_type}:%")
+
+                if message_type_conditions:
+                    where_clauses.append(f"({' OR '.join(message_type_conditions)})")
+
+            # 搜索关键词
+            if search_query:
+                where_clauses.append(
+                    "(title LIKE ? OR user_id LIKE ? OR cid LIKE ? OR history LIKE ?)"
+                )
+                search_param = f"%{search_query}%"
+                params.extend([search_param, search_param, search_param, search_param])
+
+            # 排除特定用户ID
+            if exclude_ids and len(exclude_ids) > 0:
+                for exclude_id in exclude_ids:
+                    where_clauses.append("user_id NOT LIKE ?")
+                    params.append(f"{exclude_id}%")
+
+            # 排除特定平台
+            if exclude_platforms and len(exclude_platforms) > 0:
+                for exclude_platform in exclude_platforms:
+                    where_clauses.append("user_id NOT LIKE ?")
+                    params.append(f"{exclude_platform}:%")
+
+            # 构建完整的 WHERE 子句
+            where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+            # 构建计数查询
+            count_sql = f"SELECT COUNT(*) FROM webchat_conversation{where_sql}"
+
+            # 获取总记录数
+            c.execute(count_sql, params)
+            total_count = c.fetchone()[0]
+
+            # 计算偏移量
+            offset = (page - 1) * page_size
+
+            # 构建分页数据查询
+            data_sql = f"""
+                SELECT user_id, cid, created_at, updated_at, title, persona_id
+                FROM webchat_conversation
+                {where_sql}
+                ORDER BY updated_at DESC
+                LIMIT ? OFFSET ?
+            """
+            query_params = params + [page_size, offset]
+
+            # 获取分页数据
+            c.execute(data_sql, query_params)
+            rows = c.fetchall()
+
+            conversations = []
+
+            for row in rows:
+                user_id, cid, created_at, updated_at, title, persona_id = row
+                # 确保 cid 是字符串类型，否则使用一个默认值
+                safe_cid = str(cid) if cid else "unknown"
+                display_cid = safe_cid[:8] if len(safe_cid) >= 8 else safe_cid
+
+                conversations.append(
+                    {
+                        "user_id": user_id or "",
+                        "cid": safe_cid,
+                        "title": title or f"对话 {display_cid}",
+                        "persona_id": persona_id or "",
+                        "created_at": created_at or 0,
+                        "updated_at": updated_at or 0,
+                    }
+                )
+
+            return conversations, total_count
+
+        except Exception as _:
+            # 返回空列表和0，确保即使出错也有有效的返回值
+            return [], 0
+        finally:
+            c.close()
