@@ -18,4 +18,4 @@ services:
     volumes:
       - ./data:/AstrBot/data
       # - /etc/timezone:/etc/timezone:ro
-      # - /etc/localtime:/etc/localtime:ro
+      - /etc/localtime:/etc/localtime:ro
