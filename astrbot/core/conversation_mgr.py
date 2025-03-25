@@ -11,6 +11,7 @@ class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
     def __init__(self, db_helper: BaseDatabase):
+        # session_conversations 字典记录会话ID-用户ID 映射关系
         self.session_conversations: Dict[str, str] = sp.get("session_conversation", {})
         self.db = db_helper
         self.save_interval = 60  # 每 60 秒保存一次
