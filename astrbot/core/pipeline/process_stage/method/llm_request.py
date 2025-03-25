@@ -34,6 +34,9 @@ class LLMRequestSubStage(Stage):
         self.provider_wake_prefix = ctx.astrbot_config["provider_settings"][
             "wake_prefix"
         ]  # str
+        self.max_context_length = ctx.astrbot_config["provider_settings"][
+            "max_context_length"
+        ]  # int
 
         for bwp in self.bot_wake_prefixs:
             if self.provider_wake_prefix.startswith(bwp):
@@ -122,6 +125,14 @@ class LLMRequestSubStage(Stage):
 
         if isinstance(req.contexts, str):
             req.contexts = json.loads(req.contexts)
+
+        # max context length
+        if (
+            self.max_context_length != -1 # -1 为不限制
+            and len(req.contexts) // 2 > self.max_context_length
+        ):
+            logger.debug("上下文长度超过限制，将截断。")
+            req.contexts = req.contexts[-self.max_context_length * 2 :]
 
         try:
             need_loop = True

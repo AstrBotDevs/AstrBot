@@ -49,6 +49,7 @@ DEFAULT_CONFIG = {
         "datetime_system_prompt": True,
         "default_personality": "default",
         "prompt_prefix": "",
+        "max_context_length": -1,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -908,6 +909,11 @@ CONFIG_METADATA_2 = {
                         "description": "Prompt 前缀文本",
                         "type": "string",
                         "hint": "添加之后，会在每次对话的 Prompt 前加上此文本。",
+                    },
+                    "max_context_length": {
+                        "description": "最多携带对话数量(条)",
+                        "type": "int",
+                        "hint": "超出这个数量时将丢弃最旧的部分，用户和AI的一轮聊天记为 1 条。-1 表示不限制，默认为不限制。",
                     },
                 },
             },
