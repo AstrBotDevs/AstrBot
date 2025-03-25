@@ -1,6 +1,6 @@
 version: '3.8'
 
-# 当接入 QQ NapCat 时，请使用这个 compose 文件一件部署: https://github.com/NapNeko/NapCat-Docker/blob/main/compose/astrbot.yml
+# 当接入 QQ NapCat 时，请使用这个 compose 文件一键部署: https://github.com/NapNeko/NapCat-Docker/blob/main/compose/astrbot.yml
 
 services:
   astrbot:
