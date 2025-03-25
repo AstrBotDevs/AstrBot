@@ -100,7 +100,8 @@ class TelegramPlatformAdapter(Platform):
     async def message_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.debug(f"Telegram message: {update.message}")
         abm = await self.convert_message(update, context)
-        await self.handle_msg(abm)
+        if abm:
+            await self.handle_msg(abm)
 
     async def convert_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, get_reply=True
@@ -178,7 +179,7 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(Comp.Plain(plain_text))
             message.message_str = plain_text
 
-            if message.message_str == "/start":
+            if message.message_str.strip() == "/start":
                 await self.start(update, context)
                 return
 
