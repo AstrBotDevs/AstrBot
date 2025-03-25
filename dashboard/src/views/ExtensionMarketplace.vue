@@ -67,7 +67,7 @@ import { useCommonStore } from '@/stores/common';
                         <v-col cols="12" md="12" style="padding: 0px;">
                             <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
                                 :loading="loading_" v-model:search="marketSearch"
-                                :filter-keys="['name', 'desc', 'author']">
+                                :filter-keys="filterKeys">
                                 <template v-slot:item.name="{ item }">
                                     <div class="d-flex align-center">
                                         <img v-if="item.logo" :src="item.logo"
@@ -221,7 +221,9 @@ export default {
             ],
             marketSearch: "",
 
-            commonStore: useCommonStore()
+            commonStore: useCommonStore(),
+
+            filterKeys: ['name', 'desc', 'author']
         }
     },
     computed: {
@@ -231,8 +233,9 @@ export default {
             }
             const search = this.marketSearch.toLowerCase();
             return this.pluginMarketData.filter(plugin =>
-                plugin.name.toLowerCase().includes(search)
-            );
+                this.filterKeys.some(key =>
+                plugin[key]?.toLowerCase().includes(search)
+            ));
         },
         pinnedPlugins() {
             return this.pluginMarketData.filter(plugin => plugin?.pinned);
