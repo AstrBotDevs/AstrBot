@@ -39,3 +39,17 @@ class GeweDownloader:
                 continue
 
         raise Exception("无法下载图片")
+
+    async def download_emoji_md5(self, app_id, emoji_md5):
+        """下载emoji"""
+        try:
+            payload = {"appId": app_id, "emojiMd5": emoji_md5}
+
+            # gewe 计划中的接口，暂时没有实现。返回代码404
+            data = await self._post_json(
+                self.base_url, "/message/downloadEmojiMd5", payload
+            )
+            json_blob = json.loads(data)
+            return json_blob
+        except BaseException as e:
+            logger.error(f"gewe download emoji: {e}")
