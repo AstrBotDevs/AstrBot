@@ -7,23 +7,29 @@ from astrbot.core import logger
 
 
 class PipelineScheduler:
+    """管道调度器，负责调度各个阶段的执行"""
+
     def __init__(self, context: PipelineContext):
-        registered_stages.sort(key=lambda x: STAGES_ORDER.index(x.__class__.__name__))
-        self.ctx = context
+        registered_stages.sort(
+            key=lambda x: STAGES_ORDER.index(x.__class__.__name__)
+        )  # 按照顺序排序
+        self.ctx = context  # 上下文对象
 
     async def initialize(self):
+        """初始化管道调度器时, 初始化所有阶段"""
         for stage in registered_stages:
             # logger.debug(f"初始化阶段 {stage.__class__ .__name__}")
 
             await stage.initialize(self.ctx)
 
     async def _process_stages(self, event: AstrMessageEvent, from_stage=0):
+        """依次执行各个阶段"""
         for i in range(from_stage, len(registered_stages)):
             stage = registered_stages[i]
             # logger.debug(f"执行阶段 {stage.__class__ .__name__}")
-            coro = stage.process(event)
-            if isinstance(coro, AsyncGenerator):
-                async for _ in coro:
+            coroutine = stage.process(event)
+            if isinstance(coroutine, AsyncGenerator):
+                async for _ in coroutine:
                     if event.is_stopped():
                         logger.debug(
                             f"阶段 {stage.__class__.__name__} 已终止事件传播。"
@@ -36,7 +42,7 @@ class PipelineScheduler:
                         )
                         break
             else:
-                await coro
+                await coroutine
 
                 if event.is_stopped():
                     logger.debug(f"阶段 {stage.__class__.__name__} 已终止事件传播。")

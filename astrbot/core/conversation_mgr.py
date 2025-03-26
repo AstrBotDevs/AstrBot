@@ -1,3 +1,10 @@
+"""
+AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json 格式的shared_preferences, 另外一个是数据库
+
+在 AstrBot 中, 会话和对话是独立的, 会话用于标记对话窗口, 例如群聊"123456789"可以建立一个会话,
+在一个会话中可以建立多个对话, 并且支持对话的切换和删除
+"""
+
 import uuid
 import json
 import asyncio
@@ -11,21 +18,24 @@ class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
     def __init__(self, db_helper: BaseDatabase):
-        # session_conversations 字典记录会话ID-用户ID 映射关系
+        # session_conversations 字典记录会话ID-对话ID 映射关系
         self.session_conversations: Dict[str, str] = sp.get("session_conversation", {})
         self.db = db_helper
         self.save_interval = 60  # 每 60 秒保存一次
         self._start_periodic_save()
 
     def _start_periodic_save(self):
+        """启动定时保存任务"""
         asyncio.create_task(self._periodic_save())
 
     async def _periodic_save(self):
+        """定时保存会话对话映射关系到存储中"""
         while True:
             await asyncio.sleep(self.save_interval)
             self._save_to_storage()
 
     def _save_to_storage(self):
+        """保存会话对话映射关系到存储中"""
         sp.put("session_conversation", self.session_conversations)
 
     async def new_conversation(self, unified_msg_origin: str) -> str:
@@ -97,6 +107,7 @@ class ConversationManager:
     async def get_human_readable_context(
         self, unified_msg_origin, conversation_id, page=1, page_size=10
     ):
+        """获取人类可读的上下文"""
         conversation = await self.get_conversation(unified_msg_origin, conversation_id)
         history = json.loads(conversation.history)
 
