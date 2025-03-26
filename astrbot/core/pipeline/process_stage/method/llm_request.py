@@ -140,6 +140,26 @@ class LLMRequestSubStage(Stage):
                 need_loop = False
                 logger.debug(f"提供商请求 Payload: {req}")
                 llm_response = await provider.text_chat(**req.__dict__)  # 请求 LLM
+
+                # 执行 LLM 响应后的事件钩子。
+                handlers = star_handlers_registry.get_handlers_by_event_type(
+                    EventType.OnLLMResponseEvent
+                )
+                for handler in handlers:
+                    try:
+                        logger.debug(
+                            f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
+                        )
+                        await handler.handler(event, llm_response)
+                    except BaseException:
+                        logger.error(traceback.format_exc())
+
+                    if event.is_stopped():
+                        logger.info(
+                            f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
+                        )
+                        return
+
                 async for result in self._handle_llm_response(event, req, llm_response):
                     if isinstance(result, ProviderRequest):
                         # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
@@ -147,25 +167,6 @@ class LLMRequestSubStage(Stage):
                         need_loop = True
                     else:
                         yield
-
-            # 执行 LLM 响应后的事件钩子。
-            handlers = star_handlers_registry.get_handlers_by_event_type(
-                EventType.OnLLMResponseEvent
-            )
-            for handler in handlers:
-                try:
-                    logger.debug(
-                        f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
-                    )
-                    await handler.handler(event, llm_response)
-                except BaseException:
-                    logger.error(traceback.format_exc())
-
-                if event.is_stopped():
-                    logger.info(
-                        f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
-                    )
-                    return
 
             asyncio.create_task(
                 Metric.upload(
