@@ -38,11 +38,13 @@ CREATE TABLE IF NOT EXISTS atri_vision(
 );
 
 CREATE TABLE IF NOT EXISTS webchat_conversation(
-    user_id TEXT,
-    cid TEXT,
+    user_id TEXT, -- 会话 id
+    cid TEXT, -- 对话 id
     history TEXT,
     created_at INTEGER,
     updated_at INTEGER,
     title TEXT,
     persona_id TEXT
 );
+
+PRAGMA encoding = 'UTF-8';

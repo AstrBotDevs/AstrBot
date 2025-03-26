@@ -128,7 +128,7 @@ class LLMRequestSubStage(Stage):
 
         # max context length
         if (
-            self.max_context_length != -1 # -1 为不限制
+            self.max_context_length != -1  # -1 为不限制
             and len(req.contexts) // 2 > self.max_context_length
         ):
             logger.debug("上下文长度超过限制，将截断。")
