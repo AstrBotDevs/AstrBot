@@ -13,6 +13,7 @@ from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
 from astrbot.core.star.star import star_map
+from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
@@ -196,7 +197,29 @@ class Main(star.Star):
                     return
                 await self.context._star_manager.turn_on_plugin(oper2)
                 event.set_result(MessageEventResult().message(f"插件 {oper2} 已启用。"))
+            elif oper1 == "get":
+                if not oper2:
+                    raise Exception("请输入插件地址。")
+                if not event.is_admin():
+                    raise Exception(
+                        "改指令限制仅管理员使用，且无法通过 /alter_cmd 更改。"
+                    )
+                if not oper2.startswith("http"):
+                    oper2 = f"https://github.com/{oper2}"
 
+                logger.info(f"准备从 {oper2} 获取插件。")
+
+                if self.context._star_manager:
+                    star_mgr: PluginManager = self.context._star_manager
+                    try:
+                        await star_mgr.install_plugin(oper2)
+                        event.set_result(MessageEventResult().message("获取插件成功。"))
+                    except Exception as e:
+                        logger.error(f"获取插件失败: {e}")
+                        event.set_result(
+                            MessageEventResult().message(f"获取插件失败: {e}")
+                        )
+                        return
             else:
                 # 获取插件帮助
                 plugin = self.context.get_registered_star(oper1)

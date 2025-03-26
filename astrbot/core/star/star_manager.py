@@ -332,7 +332,10 @@ class PluginManager:
                         )
                     # 绑定 llm_tool handler
                     for func_tool in llm_tools.func_list:
-                        if func_tool.handler.__module__ == metadata.module_path:
+                        if (
+                            func_tool.handler
+                            and func_tool.handler.__module__ == metadata.module_path
+                        ):
                             func_tool.handler_module_path = metadata.module_path
                             func_tool.handler = functools.partial(
                                 func_tool.handler, metadata.star_cls
