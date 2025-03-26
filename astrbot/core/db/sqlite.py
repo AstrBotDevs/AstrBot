@@ -128,24 +128,23 @@ class SQLiteDatabase(BaseDatabase):
         except sqlite3.ProgrammingError:
             c = self._get_conn(self.db_path).cursor()
 
-        where_clause = ""
-        if session_id or provider_type:
-            where_clause += " WHERE "
-            has = False
-            if session_id:
-                where_clause += f"session_id = '{session_id}'"
-                has = True
-            if provider_type:
-                if has:
-                    where_clause += " AND "
-                where_clause += f"provider_type = '{provider_type}'"
+        conditions = []
+        params = []
 
-        c.execute(
-            """
-            SELECT * FROM llm_history
-            """
-            + where_clause
-        )
+        if session_id:
+            conditions.append("session_id = ?")
+            params.append(session_id)
+
+        if provider_type:
+            conditions.append("provider_type = ?")
+            params.append(provider_type)
+
+        sql = "SELECT * FROM llm_history"
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+
+        c.execute(sql, params)
+
         res = c.fetchall()
         histories = []
         for row in res:
