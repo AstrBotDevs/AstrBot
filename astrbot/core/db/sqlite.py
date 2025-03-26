@@ -491,6 +491,7 @@ class SQLiteDatabase(BaseDatabase):
 
             # 搜索关键词
             if search_query:
+                search_query = search_query.encode("unicode_escape").decode("utf-8")
                 where_clauses.append(
                     "(title LIKE ? OR user_id LIKE ? OR cid LIKE ? OR history LIKE ?)"
                 )
