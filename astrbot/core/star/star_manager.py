@@ -606,4 +606,4 @@ class PluginManager:
         except BaseException as e:
             logger.warning(f"删除插件压缩包失败: {str(e)}")
         # await self.reload()
-        await self.load(desti_dir)
+        await self.load(specified_dir_name=dir_name)
