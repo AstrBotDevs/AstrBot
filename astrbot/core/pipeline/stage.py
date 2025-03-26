@@ -8,8 +8,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from .context import PipelineContext
 from astrbot.core.message.message_event_result import MessageEventResult, CommandResult
 
-registered_stages: List[Stage] = []
-"""维护了所有已注册的 Stage 实现类"""
+registered_stages: List[Stage] = []  # 维护了所有已注册的 Stage 实现类
 
 
 def register_stage(cls):

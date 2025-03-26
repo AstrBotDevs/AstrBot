@@ -21,6 +21,11 @@ class WakingCheckStage(Stage):
     """
 
     async def initialize(self, ctx: PipelineContext) -> None:
+        """初始化唤醒检查阶段
+
+        Args:
+            ctx (PipelineContext): 消息管道上下文对象, 包括配置和插件管理器
+        """
         self.ctx = ctx
         self.no_permission_reply = self.ctx.astrbot_config["platform_settings"].get(
             "no_permission_reply", True

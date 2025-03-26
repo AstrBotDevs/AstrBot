@@ -46,7 +46,7 @@ log_color_config = {
 def is_plugin_path(pathname):
     """检查文件路径是否来自插件目录
 
-    Parameters:
+    Args:
         pathname (str): 文件路径
 
     Returns:
@@ -62,7 +62,7 @@ def is_plugin_path(pathname):
 def get_short_level_name(level_name):
     """将日志级别名称转换为四个字母的缩写
 
-    Parameters:
+    Args:
         level_name (str): 日志级别名称, 如 "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
 
     Returns:
@@ -103,7 +103,7 @@ class LogBroker:
     def unregister(self, q: Queue):
         """取消订阅
 
-        Parameters:
+        Args:
             q (Queue): 需要取消订阅的队列
         """
         self.subscribers.remove(q)
@@ -111,7 +111,7 @@ class LogBroker:
     def publish(self, log_entry: str):
         """发布新日志到所有订阅者, 使用非阻塞方式投递, 避免一个订阅者阻塞整个系统
 
-        Parameters:
+        Args:
             log_entry (str): 日志消息, 可以是字符串或字典
         """
         self.log_cache.append(log_entry)
@@ -136,7 +136,7 @@ class LogQueueHandler(logging.Handler):
         """日志处理的入口方法, 接受一个日志记录, 转换为字符串后由 LogBroker 发布
         这个方法会在每次日志记录时被调用
 
-        Parameters:
+        Args:
             record (logging.LogRecord): 日志记录对象, 包含日志信息
         """
         log_entry = self.format(record)
@@ -151,7 +151,14 @@ class LogManager:
 
     @classmethod
     def GetLogger(cls, log_name: str = "default"):
-        """获取指定名称的日志记录器logger"""
+        """获取指定名称的日志记录器logger
+
+        Args:
+            log_name (str): 日志记录器的名称, 默认为 "default"
+
+        Returns:
+            logging.Logger: 返回配置好的日志记录器
+        """
         logger = logging.getLogger(log_name)
         # 检查该logger或父级logger是否已经有处理器, 如果已经有处理器, 直接返回该logger, 避免重复配置
         if logger.hasHandlers():
@@ -211,7 +218,12 @@ class LogManager:
 
     @classmethod
     def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker):
-        """设置队列处理器, 用于将日志消息发送到 LogBroker"""
+        """设置队列处理器, 用于将日志消息发送到 LogBroker
+
+        Args:
+            logger (logging.Logger): 日志记录器
+            log_broker (LogBroker): 日志代理类, 用于缓存和分发日志消息
+        """
         handler = LogQueueHandler(log_broker)
         handler.setLevel(logging.DEBUG)
         if logger.handlers:
