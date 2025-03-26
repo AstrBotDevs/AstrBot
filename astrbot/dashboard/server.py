@@ -51,6 +51,7 @@ class AstrBotDashboard:
         self.ar = AuthRoute(self.context)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
+        self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
 
         self.shutdown_event = shutdown_event
 

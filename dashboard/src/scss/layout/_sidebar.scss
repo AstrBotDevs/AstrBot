@@ -16,6 +16,9 @@
       color: rgb(var(--v-theme-secondary));
     }
   }
+  .v-list-item--density-default.v-list-item--one-line {
+    min-height: 42px;
+  }
   .leftPadding {
     margin-left: 4px;
   }

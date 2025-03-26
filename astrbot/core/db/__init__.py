@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict, Any, Tuple
 from astrbot.core.db.po import Stats, LLMHistory, ATRIVision, Conversation
 
 
@@ -116,4 +116,46 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     def update_conversation_persona_id(self, user_id: str, cid: str, persona_id: str):
         """更新 Conversation Persona ID"""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_all_conversations(
+        self, page: int = 1, page_size: int = 20
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """获取所有对话，支持分页
+
+        Args:
+            page: 页码，从1开始
+            page_size: 每页数量
+
+        Returns:
+            Tuple[List[Dict[str, Any]], int]: 返回一个元组，包含对话列表和总对话数
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_filtered_conversations(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        platforms: List[str] = None,
+        message_types: List[str] = None,
+        search_query: str = None,
+        exclude_ids: List[str] = None,
+        exclude_platforms: List[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """获取筛选后的对话列表
+
+        Args:
+            page: 页码
+            page_size: 每页数量
+            platforms: 平台筛选列表
+            message_types: 消息类型筛选列表
+            search_query: 搜索关键词
+            exclude_ids: 排除的用户ID列表
+            exclude_platforms: 排除的平台列表
+
+        Returns:
+            Tuple[List[Dict[str, Any]], int]: 返回一个元组，包含对话列表和总对话数
+        """
         raise NotImplementedError

@@ -324,5 +324,6 @@ export default {
 <style scoped>
 .provider-page {
   padding: 20px;
+  padding-top: 8px;
 }
 </style>

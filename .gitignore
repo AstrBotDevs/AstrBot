@@ -1,6 +1,8 @@
 __pycache__
 botpy.log
 .vscode
+.venv*
+.idea
 data_v2.db
 data_v3.db
 configs/session

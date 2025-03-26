@@ -100,7 +100,8 @@ class TelegramPlatformAdapter(Platform):
     async def message_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.debug(f"Telegram message: {update.message}")
         abm = await self.convert_message(update, context)
-        await self.handle_msg(abm)
+        if abm:
+            await self.handle_msg(abm)
 
     async def convert_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, get_reply=True
@@ -178,7 +179,7 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(Comp.Plain(plain_text))
             message.message_str = plain_text
 
-            if message.message_str == "/start":
+            if message.message_str.strip() == "/start":
                 await self.start(update, context)
                 return
 
@@ -240,5 +241,13 @@ class TelegramPlatformAdapter(Platform):
         return self.client
 
     async def terminate(self):
-        await self.application.stop()
-        logger.info("Telegram 适配器已被优雅地关闭")
+        try:
+            await self.application.stop()
+
+            # 保险起见先判断是否存在updater对象
+            if self.application.updater is not None:
+                await self.application.updater.stop()
+
+            logger.info("Telegram 适配器已被优雅地关闭")
+        except Exception as e:
+            logger.error(f"Telegram 适配器关闭时出错: {e}")
