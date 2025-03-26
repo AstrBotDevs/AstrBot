@@ -23,7 +23,7 @@ class ReleaseInfo:
         self.body = body
 
     def __str__(self) -> str:
-        return f"新版本: {self.version}, 发布于: {self.published_at}, 详细内容: {self.body}"
+        return f"\n{self.body}\n\n版本: {self.version} | 发布于: {self.published_at}"
 
 
 class RepoZipUpdator:
