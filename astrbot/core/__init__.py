@@ -8,6 +8,7 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.config.default import DB_PATH
 from astrbot.core.config import AstrBotConfig
 
+# 初始化数据存储文件夹
 os.makedirs("data", exist_ok=True)
 
 astrbot_config = AstrBotConfig()

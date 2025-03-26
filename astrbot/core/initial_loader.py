@@ -1,3 +1,11 @@
+"""
+AstrBot 启动器，负责初始化和启动核心组件和仪表板服务器。
+
+工作流程:
+1. 初始化核心生命周期, 传递数据库和日志代理实例到核心生命周期
+2. 运行核心生命周期任务和仪表板服务器
+"""
+
 import asyncio
 import traceback
 from astrbot.core import logger
@@ -8,6 +16,8 @@ from astrbot.dashboard.server import AstrBotDashboard
 
 
 class InitialLoader:
+    """AstrBot 启动器，负责初始化和启动核心组件和仪表板服务器。"""
+
     def __init__(self, db: BaseDatabase, log_broker: LogBroker):
         self.db = db
         self.logger = logger
@@ -27,10 +37,12 @@ class InitialLoader:
         self.dashboard_server = AstrBotDashboard(
             core_lifecycle, self.db, core_lifecycle.dashboard_shutdown_event
         )
-        task = asyncio.gather(core_task, self.dashboard_server.run())
+        task = asyncio.gather(
+            core_task, self.dashboard_server.run()
+        )  # 启动核心任务和仪表板服务器
 
         try:
-            await task
+            await task  # 整个AstrBot在这里运行
         except asyncio.CancelledError:
             logger.info("🌈 正在关闭 AstrBot...")
             await core_lifecycle.stop()

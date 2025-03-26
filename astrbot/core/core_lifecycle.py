@@ -1,3 +1,14 @@
+"""
+Astrbot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作。
+该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、KnowledgeDBManager、ConversationManager、PluginManager、PipelineScheduler、EventBus等。
+该类还负责加载和执行插件, 以及处理事件总线的分发。
+
+工作流程:
+1. 初始化所有组件
+2. 启动事件总线和任务, 所有任务都在这里运行
+3. 执行启动完成事件钩子
+"""
+
 import traceback
 import asyncio
 import time
@@ -121,7 +132,7 @@ class AstrBotCoreLifecycle:
             self.event_bus.dispatch(), name="event_bus"
         )
 
-        # 把插件中注册的所有协程函数注册到事件总线中
+        # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
         for task in self.star_context._register_tasks:
             extra_tasks.append(asyncio.create_task(task, name=task.__name__))
