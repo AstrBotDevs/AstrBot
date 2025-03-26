@@ -156,7 +156,9 @@ class ResultDecorateStage(Stage):
                 self.ctx.astrbot_config["provider_tts_settings"]["enable"]
                 and result.is_llm_result()
             ):
-                tts_provider = self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
+                tts_provider = (
+                    self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
+                )
                 new_chain = []
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
