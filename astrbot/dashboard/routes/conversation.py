@@ -53,13 +53,6 @@ class ConversationRoute(Route):
                 exclude_platforms.split(",") if exclude_platforms else []
             )
 
-            logger.info(
-                f"获取对话列表: page={page}, page_size={page_size}, "
-                f"platforms={platform_list}, message_types={message_type_list}, "
-                f"search={search_query}, exclude_ids={exclude_id_list}, "
-                f"exclude_platforms={exclude_platform_list}"
-            )
-
             # 限制页面大小，防止请求过大数据
             if page < 1:
                 page = 1
@@ -79,7 +72,6 @@ class ConversationRoute(Route):
                     exclude_ids=exclude_id_list,
                     exclude_platforms=exclude_platform_list,
                 )
-                logger.info(f"获取到 {len(conversations)} 条对话，总数: {total_count}")
             except Exception as e:
                 logger.error(f"数据库查询出错: {str(e)}\n{traceback.format_exc()}")
                 return Response().error(f"数据库查询出错: {str(e)}").__dict__
@@ -98,10 +90,6 @@ class ConversationRoute(Route):
                     "total_pages": total_pages,
                 },
             }
-
-            logger.info(
-                f"返回对话列表成功: {json.dumps(result, ensure_ascii=False)[:200]}..."
-            )
             return Response().ok(result).__dict__
 
         except Exception as e:

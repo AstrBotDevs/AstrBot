@@ -357,6 +357,7 @@ export default {
                     this.upload_file = "";
                     this.onLoadingDialogResult(1, res.data.message);
                     this.dialog = false;
+                    this.getExtensions();
                     // this.$refs.wfr.check();
                 }).catch((err) => {
                     this.loading_ = false;
@@ -380,6 +381,7 @@ export default {
                         this.extension_url = "";
                         this.onLoadingDialogResult(1, res.data.message);
                         this.dialog = false;
+                        this.getExtensions();
                         // this.$refs.wfr.check();
                     }).catch((err) => {
                         this.loading_ = false;
