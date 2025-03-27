@@ -2,7 +2,7 @@ import jwt
 import datetime
 from .route import Route, Response, RouteContext
 from quart import request
-from astrbot.core import WEBUI_SK
+from astrbot.core import WEBUI_SK, DEMO_MODE
 from astrbot import logger
 
 
@@ -40,6 +40,13 @@ class AuthRoute(Route):
             return Response().error("用户名或密码错误").__dict__
 
     async def edit_account(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
         password = self.config["dashboard"]["password"]
         post_data = await request.json
 
