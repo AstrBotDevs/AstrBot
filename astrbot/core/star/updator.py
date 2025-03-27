@@ -41,7 +41,7 @@ class PluginUpdator(RepoZipUpdator):
         plugin_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
 
         logger.info(f"正在更新插件，路径: {plugin_path}，仓库地址: {repo_url}")
-        await self.download_from_repo_url(plugin_path, repo_url)
+        await self.download_from_repo_url(plugin_path, repo_url, proxy=proxy)
 
         try:
             remove_dir(plugin_path)
