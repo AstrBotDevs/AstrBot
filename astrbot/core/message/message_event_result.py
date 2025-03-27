@@ -2,7 +2,13 @@ import enum
 
 from typing import List, Optional, Union
 from dataclasses import dataclass, field
-from astrbot.core.message.components import BaseMessageComponent, Plain, Image, At, AtAll
+from astrbot.core.message.components import (
+    BaseMessageComponent,
+    Plain,
+    Image,
+    At,
+    AtAll,
+)
 from typing_extensions import deprecated
 
 
