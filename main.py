@@ -79,5 +79,5 @@ if __name__ == "__main__":
     # print logo
     logger.info(logo_tmpl)
 
-    dashboard_lifecycle = InitialLoader(db, log_broker)
-    asyncio.run(dashboard_lifecycle.start())
+    core_lifecycle = InitialLoader(db, log_broker)
+    asyncio.run(core_lifecycle.start())
