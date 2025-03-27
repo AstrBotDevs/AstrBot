@@ -741,9 +741,7 @@ class SimpleGewechatClient:
         获取通讯录列表
         见 https://apifox.com/apidoc/shared/69ba62ca-cb7d-437e-85e4-6f3d3df271b1/api-196794504
         """
-        payload = {
-            "appId": self.appid
-        }
+        payload = {"appId": self.appid}
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
