@@ -8,6 +8,7 @@ from quart import request
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config import VERSION
+from astrbot.core import DEMO_MODE
 
 
 class StatRoute(Route):
@@ -29,6 +30,13 @@ class StatRoute(Route):
         self.core_lifecycle = core_lifecycle
 
     async def restart_core(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
         await self.core_lifecycle.restart()
         return Response().ok().__dict__
 
