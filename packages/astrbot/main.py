@@ -760,7 +760,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             )
         else:
             message.set_result(
-                MessageEventResult().message("请输入群聊 ID。/newgroup 群聊ID。")
+                MessageEventResult().message("请输入群聊 ID。/groupnew 群聊ID。")
             )
 
     @filter.command("switch")
