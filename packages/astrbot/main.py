@@ -2,6 +2,7 @@ import aiohttp
 import datetime
 import builtins
 import traceback
+import re
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -520,15 +521,20 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。")
             )
             return
+        # 定义正则表达式匹配 API 密钥
+        api_key_pattern = re.compile(r"key=[^&'\" ]+")
 
         if idx_or_name is None:
             models = []
             try:
                 models = await self.context.get_using_provider().get_models()
             except BaseException as e:
+                err_msg = api_key_pattern.sub(
+                    "key=***", str(e)
+                )
                 message.set_result(
                     MessageEventResult()
-                    .message("获取模型列表失败: " + str(e))
+                    .message("获取模型列表失败: " + err_msg)
                     .use_t2i(False)
                 )
                 return
