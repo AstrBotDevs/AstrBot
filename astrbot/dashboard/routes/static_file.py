@@ -20,6 +20,8 @@ class StaticFileRoute(Route):
             "/providers",
             "/about",
             "/extension-marketplace",
+            "/conversation",
+            "/tool-use"
         ]
         for i in index_:
             self.app.add_url_rule(i, view_func=self.index)
