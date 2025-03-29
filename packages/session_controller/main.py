@@ -83,7 +83,7 @@ class Waiter(Star):
 
                         # 使用 LLM 生成回复
                         yield event.request_llm(
-                            prompt="用户只是@我或唤醒我，请友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。",
+                            prompt="用户只是@我或唤醒我，请友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。仅输出要回复内容。",
                             func_tool_manager=func_tools_mgr,
                             session_id=curr_cid,
                             contexts=context,
@@ -113,16 +113,7 @@ class Waiter(Star):
                     try:
                         await empty_mention_waiter(event)
                     except TimeoutError as _:
-                        try:
-                            # 超时时也尝试使用 LLM 生成回复
-                            yield event.request_llm(
-                                prompt="用户在提问后超时未回复，请生成一个温馨友好的提醒，告诉用户如果需要帮助可以再次提问，回答要符合人设。",
-                                func_tool_manager=self.context.get_llm_tool_manager(),
-                                system_prompt="",
-                            )
-                        except Exception:
-                            # LLM 回复失败，使用原始预设回复
-                            yield event.plain_result("如果需要帮助，请再次 @ 我哦~")
+                        pass
                     except Exception as e:
                         yield event.plain_result("发生错误，请联系管理员: " + str(e))
                     finally:
