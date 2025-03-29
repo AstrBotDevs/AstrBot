@@ -88,6 +88,7 @@ class Main(star.Star):
 /alter_cmd: 设置指令权限(op)
 
 [大模型]
+/llm: 开启/关闭 LLM
 /provider: 大模型提供商
 /model: 模型列表
 /ls: 对话列表
@@ -96,7 +97,7 @@ class Main(star.Star):
 /switch 序号: 切换对话
 /rename 新名字: 重命名当前对话
 /del: 删除当前会话对话(op)
-/reset: 重置 LLM 会话(op)
+/reset: 重置 LLM 会话
 /history: 当前对话的对话记录
 /persona: 人格情景(op)
 /tool ls: 函数工具
@@ -105,6 +106,20 @@ class Main(star.Star):
 {notice}"""
 
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
+
+    @filter.command("llm")
+    async def llm(self, event: AstrMessageEvent):
+        """开启/关闭 LLM"""
+        cfg = self.context.get_config()
+        enable = cfg["provider_settings"]["enable"]
+        if enable:
+            cfg["provider_settings"]["enable"] = False
+            status = "关闭"
+        else:
+            cfg["provider_settings"]["enable"] = True
+            status = "开启"
+        cfg.save_config()
+        yield event.plain_result(f"{status} LLM 聊天功能。")
 
     @filter.command_group("tool")
     def tool(self):
@@ -529,9 +544,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             try:
                 models = await self.context.get_using_provider().get_models()
             except BaseException as e:
-                err_msg = api_key_pattern.sub(
-                    "key=***", str(e)
-                )
+                err_msg = api_key_pattern.sub("key=***", str(e))
                 message.set_result(
                     MessageEventResult()
                     .message("获取模型列表失败: " + err_msg)
