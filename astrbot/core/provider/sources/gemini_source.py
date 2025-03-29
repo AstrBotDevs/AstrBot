@@ -2,6 +2,8 @@ import base64
 import aiohttp
 import json
 import random
+import astrbot.core.message.components as Comp
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.db import BaseDatabase
 from astrbot.api.provider import Provider, Personality
@@ -39,6 +41,7 @@ class SimpleGoogleGenAIClient:
         model: str = "gemini-1.5-flash",
         system_instruction: str = "",
         tools: dict = None,
+        modalities: List[str] = ["Text"],
     ):
         payload = {}
         if system_instruction:
@@ -46,6 +49,9 @@ class SimpleGoogleGenAIClient:
         if tools:
             payload["tools"] = [tools]
         payload["contents"] = contents
+        payload["generationConfig"] = {
+            "responseModalities": modalities,
+        }
         logger.debug(f"payload: {payload}")
         request_url = (
             f"{self.api_base}/v1beta/models/{model}:generateContent?key={self.api_key}"
@@ -185,22 +191,53 @@ class ProviderGoogleGenAI(Provider):
 
         logger.debug(f"google_genai_conversation: {google_genai_conversation}")
 
-        result = await self.client.generate_content(
-            contents=google_genai_conversation,
-            model=self.get_model(),
-            system_instruction=system_instruction,
-            tools=tool,
-        )
-        logger.debug(f"result: {result}")
+        modalites = ["Text"]
+        if self.provider_config.get("gm_resp_image_modal", False):
+            modalites.append("Image")
 
-        if "candidates" not in result:
-            raise Exception("Gemini 返回异常结果: " + str(result))
+        loop = True
+        while loop:
+            loop = False
+            result = await self.client.generate_content(
+                contents=google_genai_conversation,
+                model=self.get_model(),
+                system_instruction=system_instruction,
+                tools=tool,
+                modalities=modalites,
+            )
+            logger.debug(f"result: {result}")
+
+            # Developer instruction is not enabled for models/gemini-2.0-flash-exp
+            if "Developer instruction is not enabled" in str(result):
+                logger.warning(
+                    f"{self.get_model()} 不支持 system prompt, 已自动去除, 将会影响人格设置。"
+                )
+                system_instruction = ""
+                loop = True
+
+            elif "Function calling is not enabled" in str(result):
+                logger.warning(
+                    f"{self.get_model()} 不支持函数调用，已自动去除，不影响使用。"
+                )
+                tool = None
+                loop = True
+
+            elif "Multi-modal output is not supported" in str(result):
+                logger.warning(
+                    f"{self.get_model()} 不支持多模态输出，降级为文本模态重新请求。"
+                )
+                modalites = ["Text"]
+                loop = True
+
+            elif "candidates" not in result:
+                raise Exception("Gemini 返回异常结果: " + str(result))
 
         candidates = result["candidates"][0]["content"]["parts"]
         llm_response = LLMResponse("assistant")
+        chain = []
         for candidate in candidates:
             if "text" in candidate:
-                llm_response.completion_text += candidate["text"]
+                chain.append(Comp.Plain(candidate["text"]))
             elif "functionCall" in candidate:
                 llm_response.role = "tool"
                 llm_response.tools_call_args.append(candidate["functionCall"]["args"])
@@ -208,8 +245,12 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.tools_call_ids.append(
                     candidate["functionCall"]["name"]
                 )  # 没有 tool id
+            elif "inlineData" in candidate:
+                mime_type: str = candidate["inlineData"]["mimeType"]
+                if mime_type.startswith("image/"):
+                    chain.append(Comp.Image.fromBase64(candidate["inlineData"]["data"]))
 
-        llm_response.completion_text = llm_response.completion_text.strip()
+        llm_response.result_chain = MessageChain(chain=chain)
         return llm_response
 
     async def text_chat(
@@ -253,34 +294,7 @@ class ProviderGoogleGenAI(Provider):
                 llm_response = await self._query(payloads, func_tool)
                 break
             except Exception as e:
-                if "maximum context length" in str(e):
-                    retry_cnt = 20
-                    while retry_cnt > 0:
-                        logger.warning(
-                            f"请求失败：{e}。上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}"
-                        )
-                        try:
-                            await self.pop_record(context_query)
-                            llm_response = await self._query(payloads, func_tool)
-                            break
-                        except Exception as e:
-                            if "maximum context length" in str(e):
-                                retry_cnt -= 1
-                            else:
-                                raise e
-                    if retry_cnt == 0:
-                        llm_response = LLMResponse(
-                            "err", "err: 请尝试  /reset 重置会话"
-                        )
-                elif "Function calling is not enabled" in str(e):
-                    logger.info(
-                        f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。"
-                    )
-                    if "tools" in payloads:
-                        del payloads["tools"]
-                    llm_response = await self._query(payloads, None)
-                    break
-                elif "429" in str(e) or "API key not valid" in str(e):
+                if "429" in str(e) or "API key not valid" in str(e):
                     keys.remove(chosen_key)
                     if len(keys) > 0:
                         chosen_key = random.choice(keys)
@@ -292,7 +306,7 @@ class ProviderGoogleGenAI(Provider):
                         logger.error(
                             f"检测到 Key 异常({str(e)})，且已没有可用的 Key。 当前 Key: {chosen_key[:12]}..."
                         )
-                        raise Exception("API 资源已耗尽，且没有可用的 Key 重试...")
+                        raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
                 else:
                     logger.error(
                         f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}"

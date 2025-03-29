@@ -519,8 +519,9 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://generativelanguage.googleapis.com/",
                         "timeout": 120,
                         "model_config": {
-                            "model": "gemini-1.5-flash",
+                            "model": "gemini-2.0-flash-exp",
                         },
+                        "gm_resp_image_modal": False,
                     },
                     "DeepSeek": {
                         "id": "deepseek_default",
@@ -672,6 +673,11 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "gm_resp_image_modal": {
+                        "description": "启用图片模态",
+                        "type": "bool",
+                        "hint": "启用后，将支持返回图片内容。需要模型支持，否则会报错。具体支持模型请查看 Google Gemini 官方网站。温馨提示，如果您需要生成图片，请关闭 `启用群员识别` 配置获得更好的效果。",
+                    },
                     "rag_options": {
                         "description": "RAG 选项",
                         "type": "object",
