@@ -48,14 +48,6 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return os.path.join("data", "temp", f"{timestamp}")
 
-    async def _convert_audio(self, path: str) -> str:
-        from pyffmpeg import FFmpeg
-
-        filename = await self.get_timestamped_path() + ".mp3"
-        ff = FFmpeg()
-        output_path = ff.convert(path, os.path.join('data","temp', filename))
-        return output_path
-
     async def _is_silk_file(self, file_path):
         silk_header = b"SILK"
         with open(file_path, "rb") as f:
