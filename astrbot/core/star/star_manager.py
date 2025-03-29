@@ -558,7 +558,7 @@ class PluginManager:
 
     async def _terminate_plugin(self, star_metadata: StarMetadata):
         """终止插件，调用插件的 terminate() 和 __del__() 方法"""
-        logging.info(f"正在终止插件 {star_metadata.name} ...")
+        logger.info(f"正在终止插件 {star_metadata.name} ...")
 
         if not star_metadata.activated:
             # 说明之前已经被禁用了
