@@ -133,6 +133,16 @@ class AstrBotCoreLifecycle:
         for task in self.curr_tasks:
             task.cancel()
 
+        for plugin in self.plugin_manager.context.get_all_stars():
+            logger.info(f"正在终止插件 {plugin.name} ...")
+            try:
+                await self.plugin_manager._terminate_plugin(plugin)
+            except Exception as e:
+                logger.warning(traceback.format_exc())
+                logger.warning(
+                    f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。"
+                )
+
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         self.dashboard_shutdown_event.set()
