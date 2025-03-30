@@ -1018,6 +1018,13 @@ UID: {user_id} 此 ID 可用于设置管理员。
             message.set_result(MessageEventResult().message("取消人格成功。"))
         else:
             ps = "".join(l[1:]).strip()
+            if not cid:
+                message.set_result(
+                    MessageEventResult().message(
+                        "当前没有对话，请先开始对话或使用 /new 创建一个对话。"
+                    )
+                )
+                return
             if persona := next(
                 builtins.filter(
                     lambda persona: persona["name"] == ps,
