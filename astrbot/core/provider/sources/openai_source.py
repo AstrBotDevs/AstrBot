@@ -178,13 +178,13 @@ class ProviderOpenAIOfficial(Provider):
 
         llm_response = None
 
-        retry = 10
-        keys = self.api_keys.copy()
-        chosen_key = random.choice(keys)
+        max_retries = 10
+        available_api_keys = self.api_keys.copy()
+        chosen_key = random.choice(available_api_keys)
 
         e = None
         retry_cnt = 0
-        for retry_cnt in range(retry):
+        for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
                 llm_response = await self._query(payloads, func_tool)
@@ -200,9 +200,9 @@ class ProviderOpenAIOfficial(Provider):
                     logger.warning(
                         f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}"
                     )
-                    keys.remove(chosen_key)
-                    if len(keys) > 0:
-                        chosen_key = random.choice(keys)
+                    available_api_keys.remove(chosen_key)
+                    if len(available_api_keys) > 0:
+                        chosen_key = random.choice(available_api_keys)
                         continue
                     else:
                         raise e
@@ -246,8 +246,8 @@ class ProviderOpenAIOfficial(Provider):
 
                     raise e
 
-        if retry_cnt == retry - 1:
-            logger.error(f"API 调用失败，重试 {retry} 次仍然失败。")
+        if retry_cnt == max_retries - 1:
+            logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             raise e
         return llm_response
 
