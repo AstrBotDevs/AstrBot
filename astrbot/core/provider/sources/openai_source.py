@@ -200,6 +200,9 @@ class ProviderOpenAIOfficial(Provider):
                     logger.warning(
                         f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}"
                     )
+                    # 最后一次不等待
+                    if retry_cnt < max_retries - 1:
+                        await asyncio.sleep(1)
                     available_api_keys.remove(chosen_key)
                     if len(available_api_keys) > 0:
                         chosen_key = random.choice(available_api_keys)
