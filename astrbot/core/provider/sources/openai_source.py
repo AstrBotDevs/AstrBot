@@ -3,6 +3,7 @@ import json
 import os
 import inspect
 import random
+import asyncio
 
 from openai import AsyncOpenAI, AsyncAzureOpenAI
 from openai.types.chat.chat_completion import ChatCompletion
