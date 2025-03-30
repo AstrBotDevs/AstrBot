@@ -70,7 +70,15 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 #### 手动部署
 
-请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
+推荐使用 `uv`。
+
+```bash
+git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
+pip install uv
+uv run main.py
+```
+
+或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
 #### Replit 部署
 
