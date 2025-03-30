@@ -2,6 +2,7 @@ import base64
 import aiohttp
 import json
 import random
+import asyncio
 import astrbot.core.message.components as Comp
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.io import download_image_by_url
@@ -301,6 +302,7 @@ class ProviderGoogleGenAI(Provider):
                         logger.info(
                             f"检测到 Key 异常({str(e)})，正在尝试更换 API Key 重试... 当前 Key: {chosen_key[:12]}..."
                         )
+                        await asyncio.sleep(1)
                         continue
                     else:
                         logger.error(
