@@ -7,14 +7,27 @@ import aiohttp
 import base64
 import zipfile
 import uuid
+from pathlib import Path
 import psutil
-
+from rich.progress import TimeRemainingColumn, BarColumn, Progress, TextColumn, TransferSpeedColumn, DownloadColumn
 import certifi
 
 from typing import Union
 
 from PIL import Image
 
+download_progress_bar = Progress(
+    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+    BarColumn(bar_width=None),
+    "[progress.percentage]{task.percentage:>3.1f}%",
+    "•",
+    DownloadColumn(),
+    "•",
+    TransferSpeedColumn(),
+    "•",
+    TimeRemainingColumn(),
+    transient=False,
+)
 
 def on_error(func, path, exc_info):
     """
@@ -117,69 +130,60 @@ async def download_image_by_url(
     except Exception as e:
         raise e
 
-
 async def download_file(url: str, path: str, show_progress: bool = False):
     """
     从指定 url 下载文件到指定路径 path
     """
     try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where()
-        )  # 使用 certifi 提供的 CA 证书
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
-        async with aiohttp.ClientSession(
-            trust_env=True, connector=connector
-        ) as session:
+        async with aiohttp.ClientSession(trust_env=True, connector=connector) as session:
             async with session.get(url, timeout=1800) as resp:
                 if resp.status != 200:
                     raise Exception(f"下载文件失败: {resp.status}")
                 total_size = int(resp.headers.get("content-length", 0))
-                downloaded_size = 0
-                start_time = time.time()
                 if show_progress:
-                    print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
-                with open(path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        if show_progress:
-                            elapsed_time = time.time() - start_time
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
-                                end="",
-                            )
+                    with download_progress_bar as progress:
+                        task = progress.add_task(f"[cyan]下载 {url}", total=total_size, filename=Path(path).name)
+                        with open(path, "wb") as f:
+                            while True:
+                                chunk = await resp.content.read(8192)
+                                if not chunk:
+                                    break
+                                f.write(chunk)
+                                progress.update(task, advance=len(chunk))
+                else:
+                    with open(path, "wb") as f:
+                        while True:
+                            chunk = await resp.content.read(8192)
+                            if not chunk:
+                                break
+                            f.write(chunk)
     except aiohttp.client.ClientConnectorSSLError:
-        # 关闭SSL验证
         ssl_context = ssl.create_default_context()
         ssl_context.set_ciphers("DEFAULT")
         async with aiohttp.ClientSession() as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 total_size = int(resp.headers.get("content-length", 0))
-                downloaded_size = 0
-                start_time = time.time()
                 if show_progress:
-                    print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
-                with open(path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        if show_progress:
-                            elapsed_time = time.time() - start_time
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
-                                end="",
-                            )
+                    with download_progress_bar as progress:
+                        task = progress.add_task(f"[cyan]下载 {url}", total=total_size)
+                        with open(path, "wb") as f:
+                            while True:
+                                chunk = await resp.content.read(8192)
+                                if not chunk:
+                                    break
+                                f.write(chunk)
+                                progress.update(task, advance=len(chunk))
+                else:
+                    with open(path, "wb") as f:
+                        while True:
+                            chunk = await resp.content.read(8192)
+                            if not chunk:
+                                break
+                            f.write(chunk)
     if show_progress:
-        print()
-
+        print("[green]下载完成！")
 
 def file_to_base64(file_path: str) -> str:
     with open(file_path, "rb") as f:

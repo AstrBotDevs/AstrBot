@@ -1,22 +1,13 @@
 import logging
-import colorlog
-import asyncio
+from rich.console import Console
+from rich.logging import RichHandler
 import os
 from collections import deque
 from asyncio import Queue
+import asyncio
 from typing import List
 
 CACHED_SIZE = 200
-log_color_config = {
-    "DEBUG": "green",
-    "INFO": "bold_cyan",
-    "WARNING": "bold_yellow",
-    "ERROR": "red",
-    "CRITICAL": "bold_red",
-    "RESET": "reset",
-    "asctime": "green",
-}
-
 
 def is_plugin_path(pathname):
     """
@@ -49,7 +40,9 @@ class LogBroker:
         self.subscribers: List[Queue] = []
 
     def register(self) -> Queue:
-        """给每个订阅者返回一个带有日志缓存的队列"""
+        """
+        给每个订阅者返回一个带有日志缓存的队列
+        """
         q = Queue(maxsize=CACHED_SIZE + 10)
         for log in self.log_cache:
             q.put_nowait(log)
@@ -57,11 +50,15 @@ class LogBroker:
         return q
 
     def unregister(self, q: Queue):
-        """取消订阅"""
+        """
+        取消订阅
+        """
         self.subscribers.remove(q)
 
     def publish(self, log_entry: str):
-        """发布消息"""
+        """
+        发布消息
+        """
         self.log_cache.append(log_entry)
         for q in self.subscribers:
             try:
@@ -81,19 +78,24 @@ class LogQueueHandler(logging.Handler):
 
 
 class LogManager:
+    _console = Console()
+    _handler = None
+
     @classmethod
     def GetLogger(cls, log_name: str = "default"):
         logger = logging.getLogger(log_name)
         if logger.hasHandlers():
             return logger
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.DEBUG)
-
-        console_formatter = colorlog.ColoredFormatter(
-            fmt="%(log_color)s [%(asctime)s] %(plugin_tag)s [%(short_levelname)-4s] [%(filename)s:%(lineno)d]: %(message)s %(reset)s",
-            datefmt="%H:%M:%S",
-            log_colors=log_color_config,
-        )
+        if cls._handler is None:
+            console_handler = RichHandler(console=cls._console)
+            console_handler.setLevel(logging.DEBUG)
+            cls._handler = console_handler
+            cls._handler.setFormatter(
+                logging.Formatter(
+                    datefmt="%X",
+                    fmt="| %(plugin_tag)s | %(filename)s:%(lineno)d ===>> %(message)s"
+                )
+            )
 
         class PluginFilter(logging.Filter):
             def filter(self, record):
@@ -103,7 +105,6 @@ class LogManager:
                 return True
 
         class FileNameFilter(logging.Filter):
-            # 获取这个文件和父文件夹的名字：<folder>.<file> 并且去除 .py
             def filter(self, record):
                 dirname = os.path.dirname(record.pathname)
                 record.filename = (
@@ -114,12 +115,10 @@ class LogManager:
                 return True
 
         class LevelNameFilter(logging.Filter):
-            # 添加短日志级别名称
             def filter(self, record):
                 record.short_levelname = get_short_level_name(record.levelname)
                 return True
 
-        console_handler.setFormatter(console_formatter)
         logger.addFilter(PluginFilter())
         logger.addFilter(FileNameFilter())
         logger.addFilter(LevelNameFilter())  # 添加级别名称过滤器
@@ -135,10 +134,17 @@ class LogManager:
         if logger.handlers:
             handler.setFormatter(logger.handlers[0].formatter)
         else:
-            # 为队列处理器设置相同格式的formatter
             handler.setFormatter(
                 logging.Formatter(
                     "[%(asctime)s] [%(short_levelname)s] %(plugin_tag)s[%(filename)s:%(lineno)d]: %(message)s"
                 )
             )
         logger.addHandler(handler)
+
+if __name__ == "__main__":
+    logger = LogManager.GetLogger("test")
+    logger.debug("这是一个调试信息")
+    logger.info("这是一个信息")
+    logger.warning("这是一个警告")
+    logger.error("这是一个错误")
+    logger.critical("这是一个严重错误")
