@@ -12,8 +12,11 @@ from astrbot.core import logger
 
 
 def try_cast(value: str, type_: str):
-    if type_ == "int" and value.isdigit():
-        return int(value)
+    if type_ == "int":
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None
     elif (
         type_ == "float"
         and isinstance(value, str)
@@ -22,6 +25,11 @@ def try_cast(value: str, type_: str):
         return float(value)
     elif type_ == "float" and isinstance(value, int):
         return float(value)
+    elif type_ == "float":
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
 
 
 def validate_config(
@@ -34,13 +42,21 @@ def validate_config(
             if key not in metadata:
                 # 无 schema 的配置项，执行类型猜测
                 if isinstance(value, str):
-                    if value.isdigit():
+                    try:
                         data[key] = int(value)
-                    elif value.replace(".", "", 1).isdigit():
+                        continue
+                    except ValueError:
+                        pass
+
+                    try:
                         data[key] = float(value)
-                    elif value == "true":
+                        continue
+                    except ValueError:
+                        pass
+
+                    if value.lower() == "true":
                         data[key] = True
-                    elif value == "false":
+                    elif value.lower() == "false":
                         data[key] = False
                 continue
             meta = metadata[key]
