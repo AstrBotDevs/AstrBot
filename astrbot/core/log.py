@@ -93,7 +93,7 @@ class LogManager:
             cls._handler.setFormatter(
                 logging.Formatter(
                     datefmt="%X",
-                    fmt="| %(plugin_tag)s | %(filename)s:%(lineno)d ===>> %(message)s"
+                    fmt="| %(plugin_tag)s | %(short_levelname)s | %(filename)s:%(lineno)d ===>> %(message)s"
                 )
             )
 
