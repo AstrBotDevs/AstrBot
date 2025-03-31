@@ -11,6 +11,7 @@ from pathlib import Path
 import psutil
 from rich.progress import TimeRemainingColumn, BarColumn, Progress, TextColumn, TransferSpeedColumn, DownloadColumn
 import certifi
+import asyncio
 
 from typing import Union
 
@@ -213,20 +214,32 @@ async def get_dashboard_version():
     return None
 
 
-async def download_dashboard():
+async def download_dashboard(retry_times: int = 3, show_progress: bool = True):
     """下载管理面板文件"""
-    dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
-    try:
-        await download_file(
-            dashboard_release_url, "data/dashboard.zip", show_progress=True
-        )
-    except BaseException as _:
-        dashboard_release_url = (
-            "https://github.com/Soulter/AstrBot/releases/latest/download/dist.zip"
-        )
-        await download_file(
-            dashboard_release_url, "data/dashboard.zip", show_progress=True
-        )
+    dashboard_release_url = "https://astrobot-registry.soulter.top/download/astrobot-dashboard/latest/dist.zip"
+    github_dashboard_release_url = "https://github.com/Soulter/AstrBot/releases/latest/download/dist.zip"
+
+    for i in range(retry_times):
+        try:
+            print(f"尝试下载管理面板文件（尝试 {i+1}）")
+            await download_file(dashboard_release_url, "data/dashboard.zip", show_progress=show_progress)
+            print("下载管理面板文件成功。")
+            return
+        except Exception as e:
+            print(f"下载管理面板文件失败：{type(e).__name__}, {e}")
+            print(f"正在尝试第 {i+1} 次下载...")
+            if i >= retry_times - 1:
+                print(f"下载管理面板文件失败：超过最大重试次数 {retry_times} 次，尝试备用路线...")
+                await download_file(github_dashboard_release_url, "data/dashboard.zip", show_progress=show_progress)
+                break
+            else:
+                await asyncio.sleep(2)  # 增加延迟时间
+                continue
+    else:
+        print(f"下载管理面板文件失败：超过最大重试次数 {retry_times} 次")
+        raise Exception("下载管理面板文件失败")
+
+    print("下载管理面板文件完成！")
     print("解压管理面板文件中...")
     with zipfile.ZipFile("data/dashboard.zip", "r") as z:
         z.extractall("data")
