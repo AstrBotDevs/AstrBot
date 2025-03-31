@@ -152,4 +152,5 @@ class MessageEventResult(MessageChain):
         return self.result_content_type == ResultContentType.LLM_RESULT
 
 
+# 为了兼容旧版代码，保留 CommandResult 的别名
 CommandResult = MessageEventResult

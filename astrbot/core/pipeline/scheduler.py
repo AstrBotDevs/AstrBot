@@ -23,7 +23,12 @@ class PipelineScheduler:
             await stage.initialize(self.ctx)
 
     async def _process_stages(self, event: AstrMessageEvent, from_stage=0):
-        """依次执行各个阶段"""
+        """依次执行各个阶段
+
+        Args:
+            event (AstrMessageEvent): 事件对象
+            from_stage (int): 从第几个阶段开始执行, 默认从0开始
+        """
         for i in range(from_stage, len(registered_stages)):
             stage = registered_stages[i]  # 获取当前要执行的阶段
             # logger.debug(f"执行阶段 {stage.__class__ .__name__}")
@@ -60,7 +65,11 @@ class PipelineScheduler:
                     break
 
     async def execute(self, event: AstrMessageEvent):
-        """执行 pipeline"""
+        """执行 pipeline
+
+        Args:
+            event (AstrMessageEvent): 事件对象
+        """
         await self._process_stages(event)
 
         # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
