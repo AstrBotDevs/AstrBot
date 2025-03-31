@@ -43,26 +43,35 @@ def format_stack_trace(exctype, value, tb, max_depth=15, nested=False) -> Text:
         exception_info.append(f"  ... {more_frames} more ...\n", style="dim")
 
     # 检查是否有原因和其他信息
-    cause = getattr(value, "__cause__", None)
-    context = getattr(value, "__context__", None)
-
+    cause = getattr(value, '__cause__', None)
+    context = getattr(value, '__context__', None)
+    
     if cause:
         exception_info.append("Caused by: \n", style="bold red")
         exception_info.append(format_stack_trace(type(cause), cause, cause.__traceback__, nested=True))
     if context and not cause:
         exception_info.append("Original exception: \n", style="bold red")
         exception_info.append(format_stack_trace(type(context), context, context.__traceback__, nested=True))
-
+    
     return exception_info
 
-def ExtractException(exctype, value, tb, panel: bool = True) -> Text | Panel | None:
+def ExtractException(exctype, value, tb, panel: bool = True, rich_printable: bool = False) -> Text | Panel | None:
+    """
+    - panel: 是否以Panel形式返回异常信息
+    - rich_printable: 是否以可打印的格式返回异常信息 (把rich转换为普通print或者 stdout | stderr等控制台输出有效果的格式)
+    """
     # 获取回溯信息并格式化为字符串
+    _exc_info = None
     if all(x is None for x in (exctype, value, tb)):
         return None
     tb_str = format_stack_trace(exctype, value, tb)
     # 返回异常信息
     if panel:
-        return Panel(tb_str, title="[bold red]Exception Occurred[/bold red]", border_style="red")
+        _exc_info = Panel(tb_str, title="[bold red]Exception Occurred[/bold red]", border_style="red")
+    if rich_printable:
+        with console.capture() as capture:
+            console.print(_exc_info)
+        return capture.get()
     return tb_str
 
 def sys_excepthook(exctype, value, tb):
@@ -91,6 +100,6 @@ def GetStackTrace(vokedepth: int = 1) -> str:
         stack_info.append(f"  at {funcname} in ({filename}:{line})\n", style="yellow")
     return stack_info
 
-if __name__ == "__main__":
-
+if __name__ == '__main__':
+    
     set_exechook()
