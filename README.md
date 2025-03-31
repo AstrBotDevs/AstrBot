@@ -36,6 +36,9 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 ## ✨ 主要功能
 
+> [!NOTE]
+> 🪧 我们正基于前沿科研成果，设计并实现适用于角色扮演和情感陪伴的长短期记忆模型及情绪控制模型，旨在提升对话的真实性与情感表达能力。敬请期待 `v3.6.0` 版本！
+
 1. **大语言模型对话**。支持各种大语言模型，包括 OpenAI API、Google Gemini、Llama、Deepseek、ChatGLM 等，支持接入本地部署的大模型，通过 Ollama、LLMTuner。具有多轮对话、人格情境、多模态能力，支持图片理解、语音转文字（Whisper）。
 2. **多消息平台接入**。支持接入 QQ（OneBot）、QQ 频道、微信（Gewechat）、飞书、Telegram。后续将支持钉钉、Discord、WhatsApp、小爱音响。支持速率限制、白名单、关键词过滤、百度内容审核。
 3. **Agent**。原生支持部分 Agent 能力，如代码执行器、自然语言待办、网页搜索。对接 [Dify 平台](https://astrbot.app/others/dify.html)，便捷接入 Dify 智能助手、知识库和 Dify 工作流。
@@ -70,7 +73,15 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 #### 手动部署
 
-请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
+推荐使用 `uv`。
+
+```bash
+git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
+pip install uv
+uv run main.py
+```
+
+或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
 #### Replit 部署
 

@@ -2,6 +2,8 @@ import base64
 import json
 import os
 import inspect
+import random
+import asyncio
 
 from openai import AsyncOpenAI, AsyncAzureOpenAI
 from openai.types.chat.chat_completion import ChatCompletion
@@ -176,77 +178,81 @@ class ProviderOpenAIOfficial(Provider):
         payloads = {"messages": context_query, **model_config}
 
         llm_response = None
-        try:
-            llm_response = await self._query(payloads, func_tool)
-        except UnprocessableEntityError as e:
-            logger.warning(f"不可处理的实体错误：{e}，尝试删除图片。")
-            # 尝试删除所有 image
-            new_contexts = await self._remove_image_from_context(context_query)
-            payloads["messages"] = new_contexts
-            context_query = new_contexts
-            llm_response = await self._query(payloads, func_tool)
-        except Exception as e:
-            if "maximum context length" in str(e):
-                # 重试 10 次
-                retry_cnt = 20
-                while retry_cnt > 0:
-                    logger.warning(
-                        f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}"
-                    )
-                    try:
-                        await self.pop_record(context_query)
-                        llm_response = await self._query(payloads, func_tool)
-                        break
-                    except Exception as e:
-                        if "maximum context length" in str(e):
-                            retry_cnt -= 1
-                        else:
-                            raise e
-                if retry_cnt == 0:
-                    llm_response = LLMResponse(
-                        "err", "err: 请尝试 /reset 清除会话记录。"
-                    )
-            elif "The model is not a VLM" in str(e):  # siliconcloud
+
+        max_retries = 10
+        available_api_keys = self.api_keys.copy()
+        chosen_key = random.choice(available_api_keys)
+
+        e = None
+        retry_cnt = 0
+        for retry_cnt in range(max_retries):
+            try:
+                self.client.api_key = chosen_key
+                llm_response = await self._query(payloads, func_tool)
+                break
+            except UnprocessableEntityError as e:
+                logger.warning(f"不可处理的实体错误：{e}，尝试删除图片。")
                 # 尝试删除所有 image
                 new_contexts = await self._remove_image_from_context(context_query)
                 payloads["messages"] = new_contexts
-                llm_response = await self._query(payloads, func_tool)
-
-            # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一，只能通过字符串匹配
-            elif (
-                "does not support Function Calling" in str(e)
-                or "does not support tools" in str(e)
-                or "Function call is not supported" in str(e)
-                or "Function calling is not enabled" in str(e)
-                or "Tool calling is not supported" in str(e)
-                or "No endpoints found that support tool use" in str(e)
-                or "model does not support function calling" in str(e)
-                or ("tool" in str(e) and "support" in str(e).lower())
-                or ("function" in str(e) and "support" in str(e).lower())
-            ):
-                logger.info(
-                    f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。"
-                )
-                if "tools" in payloads:
-                    del payloads["tools"]
-                llm_response = await self._query(payloads, None)
-            else:
-                logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
-
-                if "tool" in str(e).lower() and "support" in str(e).lower():
+                context_query = new_contexts
+            except Exception as e:
+                if "429" in str(e):
+                    logger.warning(
+                        f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}"
+                    )
+                    # 最后一次不等待
+                    if retry_cnt < max_retries - 1:
+                        await asyncio.sleep(1)
+                    available_api_keys.remove(chosen_key)
+                    if len(available_api_keys) > 0:
+                        chosen_key = random.choice(available_api_keys)
+                        continue
+                    else:
+                        raise e
+                elif "maximum context length" in str(e):
+                    logger.warning(
+                        f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}"
+                    )
+                    await self.pop_record(context_query)
+                elif "The model is not a VLM" in str(e):  # siliconcloud
+                    # 尝试删除所有 image
+                    new_contexts = await self._remove_image_from_context(context_query)
+                    payloads["messages"] = new_contexts
+                elif (
+                    "Function calling is not enabled" in str(e)
+                    or ("tool" in str(e) and "support" in str(e).lower())
+                    or ("function" in str(e) and "support" in str(e).lower())
+                ):
+                    # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一，只能通过字符串匹配
+                    logger.info(
+                        f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。"
+                    )
+                    if "tools" in payloads:
+                        del payloads["tools"]
+                    func_tool = None
+                else:
                     logger.error(
-                        "疑似该模型不支持函数调用工具调用。请输入 /tool off_all"
+                        f"发生了错误。Provider 配置如下: {self.provider_config}"
                     )
 
-                if "Connection error." in str(e):
-                    proxy = os.environ.get("http_proxy", None)
-                    if proxy:
+                    if "tool" in str(e).lower() and "support" in str(e).lower():
                         logger.error(
-                            f"可能为代理原因，请检查代理是否正常。当前代理: {proxy}"
+                            "疑似该模型不支持函数调用工具调用。请输入 /tool off_all"
                         )
 
-                raise e
+                    if "Connection error." in str(e):
+                        proxy = os.environ.get("http_proxy", None)
+                        if proxy:
+                            logger.error(
+                                f"可能为代理原因，请检查代理是否正常。当前代理: {proxy}"
+                            )
 
+                    raise e
+
+        if retry_cnt == max_retries - 1:
+            logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
+            raise e
         return llm_response
 
     async def _remove_image_from_context(self, contexts: List):

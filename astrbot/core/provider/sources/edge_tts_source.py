@@ -35,6 +35,8 @@ class ProviderEdgeTTS(TTSProvider):
         self.pitch = provider_config.get("pitch", None)
         self.timeout = provider_config.get("timeout", 30)
 
+        self.proxy = os.getenv("https_proxy", None)
+
         self.set_model("edge_tts")
 
     async def get_audio(self, text: str) -> str:
@@ -42,7 +44,7 @@ class ProviderEdgeTTS(TTSProvider):
         mp3_path = f"data/temp/edge_tts_temp_{uuid.uuid4()}.mp3"
         wav_path = f"data/temp/edge_tts_{uuid.uuid4()}.wav"
 
-        # 构建Edge TTS参数
+        # 构建 Edge TTS 参数
         kwargs = {"text": text, "voice": self.voice}
         if self.rate:
             kwargs["rate"] = self.rate
@@ -52,35 +54,47 @@ class ProviderEdgeTTS(TTSProvider):
             kwargs["pitch"] = self.pitch
 
         try:
-            communicate = edge_tts.Communicate(**kwargs)
+            communicate = edge_tts.Communicate(proxy=self.proxy, **kwargs)
             await communicate.save(mp3_path)
 
-            # 使用ffmpeg将MP3转换为标准WAV格式
-            _ = await asyncio.create_subprocess_exec(
-                "ffmpeg",
-                "-y",  # 覆盖输出文件
-                "-i",
-                mp3_path,  # 输入文件
-                "-acodec",
-                "pcm_s16le",  # 16位PCM编码
-                "-ar",
-                "24000",  # 采样率24kHz (适合微信语音)
-                "-ac",
-                "1",  # 单声道
-                "-af",
-                "apad=pad_dur=2",  # 确保输出时长准确
-                "-fflags",
-                "+genpts",  # 强制生成时间戳
-                "-hide_banner",  # 隐藏版本信息
-                wav_path,  # 输出文件
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            # 等待进程完成并获取输出
-            stdout, stderr = await _.communicate()
-            logger.info(f"[EdgeTTS] FFmpeg 标准输出: {stdout.decode().strip()}")
-            logger.debug(f"FFmpeg错误输出: {stderr.decode().strip()}")
-            logger.info(f"[EdgeTTS] 返回值(0代表成功): {_.returncode}")
+            try:
+                from pyffmpeg import FFmpeg
+
+                ff = FFmpeg()
+                ff.convert(input=mp3_path, output=wav_path)
+            except Exception as e:
+                logger.debug(
+                    f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换"
+                )
+                # use ffmpeg command line
+
+                # 使用ffmpeg将MP3转换为标准WAV格式
+                p = await asyncio.create_subprocess_exec(
+                    "ffmpeg",
+                    "-y",  # 覆盖输出文件
+                    "-i",
+                    mp3_path,  # 输入文件
+                    "-acodec",
+                    "pcm_s16le",  # 16位PCM编码
+                    "-ar",
+                    "24000",  # 采样率24kHz (适合微信语音)
+                    "-ac",
+                    "1",  # 单声道
+                    "-af",
+                    "apad=pad_dur=2",  # 确保输出时长准确
+                    "-fflags",
+                    "+genpts",  # 强制生成时间戳
+                    "-hide_banner",  # 隐藏版本信息
+                    wav_path,  # 输出文件
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                # 等待进程完成并获取输出
+                stdout, stderr = await p.communicate()
+                logger.info(f"[EdgeTTS] FFmpeg 标准输出: {stdout.decode().strip()}")
+                logger.debug(f"FFmpeg错误输出: {stderr.decode().strip()}")
+                logger.info(f"[EdgeTTS] 返回值(0代表成功): {p.returncode}")
+
             os.remove(mp3_path)
             if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
                 return wav_path

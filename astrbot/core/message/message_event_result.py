@@ -1,8 +1,14 @@
 import enum
 
-from typing import List, Optional
+from typing import List, Optional, Union
 from dataclasses import dataclass, field
-from astrbot.core.message.components import BaseMessageComponent, Plain, Image
+from astrbot.core.message.components import (
+    BaseMessageComponent,
+    Plain,
+    Image,
+    At,
+    AtAll,
+)
 from typing_extensions import deprecated
 
 
@@ -29,6 +35,30 @@ class MessageChain:
 
         """
         self.chain.append(Plain(message))
+        return self
+
+    def at(self, name: str, qq: Union[str, int]):
+        """添加一条 At 消息到消息链 `chain` 中。
+
+        Example:
+
+            CommandResult().at("张三", "12345678910")
+            # 输出 @张三
+
+        """
+        self.chain.append(At(name=name, qq=qq))
+        return self
+
+    def at_all(self):
+        """添加一条 AtAll 消息到消息链 `chain` 中。
+
+        Example:
+
+            CommandResult().at_all()
+            # 输出 @所有人
+
+        """
+        self.chain.append(AtAll())
         return self
 
     @deprecated("请使用 message 方法代替。")

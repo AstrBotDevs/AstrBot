@@ -1,0 +1,35 @@
+FROM python:3.10-slim
+
+WORKDIR /AstrBot
+
+COPY . /AstrBot/
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    build-essential \
+    python3-dev \
+    libffi-dev \
+    libssl-dev \
+    curl \
+    unzip \
+    ca-certificates \
+    bash \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Installation of Node.js
+ENV NVM_DIR="/root/.nvm"
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash && \
+    . "$NVM_DIR/nvm.sh" && \
+    nvm install 22 && \
+    nvm use 22
+RUN /bin/bash -c ". \"$NVM_DIR/nvm.sh\" && node -v && npm -v"
+
+RUN python -m pip install uv
+RUN uv pip install -r requirements.txt --no-cache-dir --system
+RUN uv pip install socksio uv pyffmpeg --no-cache-dir --system
+
+EXPOSE 6185
+EXPOSE 6186
+
+CMD ["python", "main.py"]

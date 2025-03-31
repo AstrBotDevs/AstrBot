@@ -306,10 +306,42 @@ class ProviderManager:
 
         if len(self.provider_insts) == 0:
             self.curr_provider_inst = None
+        elif (
+            self.curr_provider_inst is None
+            and len(self.provider_insts) > 0
+            and self.provider_enabled
+        ):
+            self.curr_provider_inst = self.provider_insts[0]
+            self.selected_provider_id = self.curr_provider_inst.meta().id
+            logger.info(
+                f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。"
+            )
+
         if len(self.stt_provider_insts) == 0:
             self.curr_stt_provider_inst = None
+        elif (
+            self.curr_stt_provider_inst is None
+            and len(self.stt_provider_insts) > 0
+            and self.stt_enabled
+        ):
+            self.curr_stt_provider_inst = self.stt_provider_insts[0]
+            self.selected_stt_provider_id = self.curr_stt_provider_inst.meta().id
+            logger.info(
+                f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。"
+            )
+
         if len(self.tts_provider_insts) == 0:
             self.curr_tts_provider_inst = None
+        elif (
+            self.curr_tts_provider_inst is None
+            and len(self.tts_provider_insts) > 0
+            and self.tts_enabled
+        ):
+            self.curr_tts_provider_inst = self.tts_provider_insts[0]
+            self.selected_tts_provider_id = self.curr_tts_provider_inst.meta().id
+            logger.info(
+                f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。"
+            )
 
     def get_insts(self):
         return self.provider_insts
