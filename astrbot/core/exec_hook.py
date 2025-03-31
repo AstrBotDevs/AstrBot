@@ -55,7 +55,7 @@ def format_stack_trace(exctype, value, tb, max_depth=15, nested=False) -> Text:
 
     return exception_info
 
-def ExtractException(exctype, value, tb, panel: bool = True, rich_printable: bool = False) -> Text | Panel | None:
+def ExtractException(exctype, value, tb, panel: bool = True, rich_printable: bool = False) -> Text | Panel | str | None:
     """
     - panel: 是否以Panel形式返回异常信息
     - rich_printable: 是否以可打印的格式返回异常信息 (把rich转换为普通print或者 stdout | stderr等控制台输出有效果的格式)
