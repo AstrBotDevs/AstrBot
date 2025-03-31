@@ -1,11 +1,10 @@
-"""指标数据"""
-
 from dataclasses import dataclass, field
 from typing import List
 
 
 @dataclass
 class Platform:
+    """平台消息计数"""
     name: str
     count: int
     timestamp: int
@@ -13,13 +12,6 @@ class Platform:
 
 @dataclass
 class Provider:
-    name: str
-    count: int
-    timestamp: int
-
-
-@dataclass
-class Plugin:
     name: str
     count: int
     timestamp: int
@@ -40,34 +32,10 @@ class Stats:
 
 
 @dataclass
-class LLMHistory:
-    """LLM 聊天时持久化的信息"""
-
-    provider_type: str
-    session_id: str
-    content: str
-
-
-@dataclass
-class ATRIVision:
-    """Deprecated"""
-
-    id: str
-    url_or_path: str
-    caption: str
-    is_meme: bool
-    keywords: List[str]
-    platform_name: str
-    session_id: str
-    sender_nickname: str
-    timestamp: int = -1
-
-
-@dataclass
 class Conversation:
     """LLM 对话存储
 
-    对于网页聊天，history 存储了包括指令、回复、图片等在内的所有消息。
+    对于网页聊天, history 存储了包括指令、回复、图片等在内的所有消息。
     对于其他平台的聊天，不存储非 LLM 的回复（因为考虑到已经存储在各自的平台上）。
     """
 

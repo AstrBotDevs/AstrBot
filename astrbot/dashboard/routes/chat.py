@@ -137,7 +137,7 @@ class ChatRoute(Route):
         )
 
         # 持久化
-        conversation = self.db.get_conversation_by_user_id(username, conversation_id)
+        conversation = await self.db.get_conversation_by_user_id(username, conversation_id)
         try:
             history = json.loads(conversation.history)
         except BaseException as e:
@@ -149,7 +149,7 @@ class ChatRoute(Route):
         if audio_url:
             new_his["audio_url"] = audio_url
         history.append(new_his)
-        self.db.update_conversation(
+        await self.db.update_conversation(
             username, conversation_id, history=json.dumps(history)
         )
 
@@ -185,14 +185,14 @@ class ChatRoute(Route):
                         continue
                     yield result_text + "\n"
 
-                    conversation = self.db.get_conversation_by_user_id(username, cid)
+                    conversation = await self.db.get_conversation_by_user_id(username, cid)
                     try:
                         history = json.loads(conversation.history)
                     except BaseException as e:
                         print(e)
                         history = []
                     history.append({"type": "bot", "message": result_text})
-                    self.db.update_conversation(
+                    await self.db.update_conversation(
                         username, cid, history=json.dumps(history)
                     )
 
@@ -220,18 +220,18 @@ class ChatRoute(Route):
         if not conversation_id:
             return Response().error("Missing key: conversation_id").__dict__
 
-        self.db.delete_conversation(username, conversation_id)
+        await self.db.delete_conversation(username, conversation_id)
         return Response().ok().__dict__
 
     async def new_conversation(self):
         username = g.get("username", "guest")
         conversation_id = str(uuid.uuid4())
-        self.db.new_conversation(username, conversation_id)
+        await self.db.new_conversation(username, conversation_id)
         return Response().ok(data={"conversation_id": conversation_id}).__dict__
 
     async def get_conversations(self):
         username = g.get("username", "guest")
-        conversations = self.db.get_conversations(username)
+        conversations = await self.db.get_conversations(username)
         return Response().ok(data=conversations).__dict__
 
     async def get_conversation(self):
@@ -240,7 +240,7 @@ class ChatRoute(Route):
         if not conversation_id:
             return Response().error("Missing key: conversation_id").__dict__
 
-        conversation = self.db.get_conversation_by_user_id(username, conversation_id)
+        conversation = await self.db.get_conversation_by_user_id(username, conversation_id)
 
         self.curr_user_cid[username] = conversation_id
 

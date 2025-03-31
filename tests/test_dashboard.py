@@ -2,7 +2,7 @@ import pytest
 import os
 from quart import Quart
 from astrbot.dashboard.server import AstrBotDashboard
-from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.db.base.sqlite import SQLiteDatabase
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core import LogBroker
 from astrbot.core.star.star_handler import star_handlers_registry

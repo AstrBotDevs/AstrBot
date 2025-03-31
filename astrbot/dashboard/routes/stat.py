@@ -55,7 +55,7 @@ class StatRoute(Route):
         offset_sec = request.args.get("offset_sec", 86400)
         offset_sec = int(offset_sec)
         try:
-            stat = self.db_helper.get_base_stats(offset_sec)
+            stat = await self.db_helper.get_base_stats(offset_sec)
             now = int(time.time())
             start_time = now - offset_sec
             message_time_based_stats = []
@@ -87,12 +87,13 @@ class StatRoute(Route):
                 }
                 plugin_info.append(info)
 
+            base_stats = await self.db_helper.get_base_stats(offset_sec)
+
             stat_dict.update(
                 {
-                    "platform": self.db_helper.get_grouped_base_stats(
-                        offset_sec
-                    ).platform,
-                    "message_count": self.db_helper.get_total_message_count() or 0,
+                    "platform": base_stats.platform,
+                    "message_count": await self.db_helper.get_total_message_count()
+                    or 0,
                     "platform_count": len(
                         self.core_lifecycle.platform_manager.get_insts()
                     ),

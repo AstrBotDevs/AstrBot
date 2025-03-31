@@ -4,7 +4,7 @@ from .log import LogManager, LogBroker  # noqa
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.pip_installer import PipInstaller
-from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.db.base.sqlite import SQLiteDatabase
 from astrbot.core.config.default import DB_PATH
 from astrbot.core.config import AstrBotConfig
 
@@ -18,7 +18,10 @@ logger = LogManager.GetLogger(log_name="astrbot")
 if os.environ.get("TESTING", ""):
     logger.setLevel("DEBUG")
 
+# Initializing the database
 db_helper = SQLiteDatabase(DB_PATH)
+asyncio.run(db_helper.initialize())
+
 sp = SharedPreferences()  # 简单的偏好设置存储
 pip_installer = PipInstaller(astrbot_config.get("pip_install_arg", ""))
 web_chat_queue = asyncio.Queue(maxsize=32)

@@ -1,39 +1,20 @@
+-- This table is used to store the tick metrics of platform message events
 CREATE TABLE IF NOT EXISTS platform(
     name VARCHAR(32),
     count INTEGER,
     timestamp INTEGER
 );
+
+-- This table is used to store the tick metrics of llm usage events
 CREATE TABLE IF NOT EXISTS llm(
     name VARCHAR(32),
     count INTEGER,
     timestamp INTEGER
 );
-CREATE TABLE IF NOT EXISTS plugin(
-    name VARCHAR(32),
-    count INTEGER,
-    timestamp INTEGER
-);
+
 CREATE TABLE IF NOT EXISTS command(
     name VARCHAR(32),
     count INTEGER,
-    timestamp INTEGER
-);
-CREATE TABLE IF NOT EXISTS llm_history(
-    provider_type VARCHAR(32),
-    session_id VARCHAR(32),
-    content TEXT
-);
-
--- ATRI
-CREATE TABLE IF NOT EXISTS atri_vision(
-    id TEXT,
-    url_or_path TEXT,
-    caption TEXT,
-    is_meme BOOLEAN,
-    keywords TEXT,
-    platform_name VARCHAR(32),
-    session_id VARCHAR(32),
-    sender_nickname VARCHAR(32),
     timestamp INTEGER
 );
 
@@ -45,6 +26,13 @@ CREATE TABLE IF NOT EXISTS webchat_conversation(
     updated_at INTEGER,
     title TEXT,
     persona_id TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_webchat_conversation ON webchat_conversation(user_id, cid);
+
+CREATE TABLE IF NOT EXISTS shared_preferences(
+    key TEXT PRIMARY KEY,
+    value TEXT
 );
 
 PRAGMA encoding = 'UTF-8';

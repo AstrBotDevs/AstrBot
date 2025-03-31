@@ -5,7 +5,7 @@ from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.context import Context
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.db.base.sqlite import SQLiteDatabase
 from asyncio import Queue
 
 event_queue = Queue()

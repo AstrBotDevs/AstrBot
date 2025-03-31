@@ -63,7 +63,7 @@ class ConversationRoute(Route):
 
             # 使用数据库的分页方法获取会话列表和总数，传入筛选条件
             try:
-                conversations, total_count = self.db_helper.get_filtered_conversations(
+                conversations, total_count = await self.db_helper.get_filtered_conversations(
                     page=page,
                     page_size=page_size,
                     platforms=platform_list,
@@ -107,7 +107,7 @@ class ConversationRoute(Route):
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
 
-            conversation = self.db_helper.get_conversation_by_user_id(user_id, cid)
+            conversation = await self.db_helper.get_conversation_by_user_id(user_id, cid)
             if not conversation:
                 return Response().error("对话不存在").__dict__
 
@@ -142,13 +142,13 @@ class ConversationRoute(Route):
 
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
-            conversation = self.db_helper.get_conversation_by_user_id(user_id, cid)
+            conversation = await self.db_helper.get_conversation_by_user_id(user_id, cid)
             if not conversation:
                 return Response().error("对话不存在").__dict__
             if title is not None:
-                self.db_helper.update_conversation_title(user_id, cid, title)
+                await self.db_helper.update_conversation_title(user_id, cid, title)
             if persona_id is not None:
-                self.db_helper.update_conversation_persona_id(user_id, cid, persona_id)
+                await self.db_helper.update_conversation_persona_id(user_id, cid, persona_id)
 
             return Response().ok({"message": "对话信息更新成功"}).__dict__
 
@@ -165,10 +165,10 @@ class ConversationRoute(Route):
 
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
-            conversation = self.db_helper.get_conversation_by_user_id(user_id, cid)
+            conversation = await self.db_helper.get_conversation_by_user_id(user_id, cid)
             if not conversation:
                 return Response().error("对话不存在").__dict__
-            self.db_helper.delete_conversation(user_id, cid)
+            await self.db_helper.delete_conversation(user_id, cid)
 
             return Response().ok({"message": "对话删除成功"}).__dict__
 
@@ -202,11 +202,11 @@ class ConversationRoute(Route):
                     Response().error("history 必须是有效的 JSON 字符串或数组").__dict__
                 )
 
-            conversation = self.db_helper.get_conversation_by_user_id(user_id, cid)
+            conversation = await self.db_helper.get_conversation_by_user_id(user_id, cid)
             if not conversation:
                 return Response().error("对话不存在").__dict__
 
-            self.db_helper.update_conversation(user_id, cid, history)
+            await self.db_helper.update_conversation(user_id, cid, history)
 
             return Response().ok({"message": "对话历史更新成功"}).__dict__
 

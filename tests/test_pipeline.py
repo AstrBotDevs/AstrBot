@@ -16,7 +16,7 @@ from astrbot.core.message.components import Plain, At
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.provider.manager import ProviderManager
-from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.db.base.sqlite import SQLiteDatabase
 from astrbot.core.star.context import Context
 from asyncio import Queue
 

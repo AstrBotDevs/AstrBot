@@ -30,7 +30,7 @@ class ConversationManager:
     async def new_conversation(self, unified_msg_origin: str) -> str:
         """新建对话，并将当前会话的对话转移到新对话"""
         conversation_id = str(uuid.uuid4())
-        self.db.new_conversation(user_id=unified_msg_origin, cid=conversation_id)
+        await self.db.new_conversation(user_id=unified_msg_origin, cid=conversation_id)
         self.session_conversations[unified_msg_origin] = conversation_id
         sp.put("session_conversation", self.session_conversations)
         return conversation_id
@@ -46,7 +46,7 @@ class ConversationManager:
         """删除会话的对话，当 conversation_id 为 None 时删除会话当前的对话"""
         conversation_id = self.session_conversations.get(unified_msg_origin)
         if conversation_id:
-            self.db.delete_conversation(user_id=unified_msg_origin, cid=conversation_id)
+            await self.db.delete_conversation(user_id=unified_msg_origin, cid=conversation_id)
             del self.session_conversations[unified_msg_origin]
             sp.put("session_conversation", self.session_conversations)
 
@@ -58,18 +58,18 @@ class ConversationManager:
         self, unified_msg_origin: str, conversation_id: str
     ) -> Conversation:
         """获取会话的对话"""
-        return self.db.get_conversation_by_user_id(unified_msg_origin, conversation_id)
+        return await self.db.get_conversation_by_user_id(unified_msg_origin, conversation_id)
 
     async def get_conversations(self, unified_msg_origin: str) -> List[Conversation]:
         """获取会话的所有对话"""
-        return self.db.get_conversations(unified_msg_origin)
+        return await self.db.get_conversations(unified_msg_origin)
 
     async def update_conversation(
         self, unified_msg_origin: str, conversation_id: str, history: List[Dict]
     ):
         """更新会话的对话"""
         if conversation_id:
-            self.db.update_conversation(
+            await self.db.update_conversation(
                 user_id=unified_msg_origin,
                 cid=conversation_id,
                 history=json.dumps(history),
@@ -79,7 +79,7 @@ class ConversationManager:
         """更新会话的对话标题"""
         conversation_id = self.session_conversations.get(unified_msg_origin)
         if conversation_id:
-            self.db.update_conversation_title(
+            await self.db.update_conversation_title(
                 user_id=unified_msg_origin, cid=conversation_id, title=title
             )
 
@@ -89,7 +89,7 @@ class ConversationManager:
         """更新会话的对话 Persona ID"""
         conversation_id = self.session_conversations.get(unified_msg_origin)
         if conversation_id:
-            self.db.update_conversation_persona_id(
+            await self.db.update_conversation_persona_id(
                 user_id=unified_msg_origin, cid=conversation_id, persona_id=persona_id
             )
 
