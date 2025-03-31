@@ -11,8 +11,6 @@ from astrbot.core.exec_hook import set_exechook
 
 set_exechook() # 设置美化异常信息的钩子
 
-1 / 0
-
 # add parent path to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
