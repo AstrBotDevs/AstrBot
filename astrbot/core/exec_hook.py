@@ -43,16 +43,16 @@ def format_stack_trace(exctype, value, tb, max_depth=15, nested=False) -> Text:
         exception_info.append(f"  ... {more_frames} more ...\n", style="dim")
 
     # 检查是否有原因和其他信息
-    cause = getattr(value, '__cause__', None)
-    context = getattr(value, '__context__', None)
-    
+    cause = getattr(value, "__cause__", None)
+    context = getattr(value, "__context__", None)
+
     if cause:
         exception_info.append("Caused by: \n", style="bold red")
         exception_info.append(format_stack_trace(type(cause), cause, cause.__traceback__, nested=True))
     if context and not cause:
         exception_info.append("Original exception: \n", style="bold red")
         exception_info.append(format_stack_trace(type(context), context, context.__traceback__, nested=True))
-    
+
     return exception_info
 
 def ExtractException(exctype, value, tb, panel: bool = True, rich_printable: bool = False) -> Text | Panel | None:
@@ -86,7 +86,7 @@ def set_exechook():
     """
     sys.excepthook = sys_excepthook
 
-def GetStackTrace(vokedepth: int = 1) -> str:
+def GetStackTrace(vokedepth: int = 1) -> Text:
     """
     获取堆栈跟踪信息
     """
@@ -100,6 +100,6 @@ def GetStackTrace(vokedepth: int = 1) -> str:
         stack_info.append(f"  at {funcname} in ({filename}:{line})\n", style="yellow")
     return stack_info
 
-if __name__ == '__main__':
-    
+if __name__ == "__main__":
+
     set_exechook()
