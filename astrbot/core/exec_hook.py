@@ -72,7 +72,7 @@ def ExtractException(exctype, value, tb, panel: bool = True, rich_printable: boo
         with console.capture() as capture:
             console.print(_exc_info)
         return capture.get()
-    return tb_str
+    return _exc_info
 
 def sys_excepthook(exctype, value, tb):
     # 获取异常信息并打印到控制台
