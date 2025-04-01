@@ -5,14 +5,14 @@ import os
 import asyncio
 import copy
 
-from typing import Dict, List, Awaitable, Literal, Any
+from typing import Awaitable, Literal, Any
 from dataclasses import dataclass
 from typing import Optional
 from contextlib import AsyncExitStack
 from astrbot import logger
 
 try:
-    import mcp
+    import mcp # type: ignore
 except (ModuleNotFoundError, ImportError):
     logger.warning("警告: 缺少依赖库 'mcp'，将无法使用 MCP 服务。")
 
@@ -34,8 +34,11 @@ class FuncTool:
     """
 
     name: str
-    parameters: Dict
+    """ 调用函数的名字 """
+    parameters: dict
+    """ 调用的时候传入的参数 """
     description: str
+    """ 函数工具的描述 """
     handler: Awaitable = None
     """处理函数, 当 origin 为 mcp 时，这个为空"""
     handler_module_path: str = None
@@ -86,7 +89,7 @@ class MCPClient:
 
         self.name = None
         self.active: bool = True
-        self.tools: List[mcp.Tool] = []
+        self.tools: list[mcp.Tool] = []
 
     async def connect_to_server(self, mcp_server_config: dict):
         """Connect to an MCP server
@@ -124,15 +127,16 @@ class MCPClient:
 
 class FuncCall:
     def __init__(self) -> None:
-        self.func_list: List[FuncTool] = []
+        self.func_list: list[FuncTool] = []
         """内部加载的 func tools"""
-        self.mcp_client_dict: Dict[str, MCPClient] = {}
+        self.mcp_client_dict: dict[str, MCPClient] = {}
         """MCP 服务列表"""
         self.mcp_service_queue = asyncio.Queue()
         """用于外部控制 MCP 服务的启停"""
-        self.mcp_client_event: Dict[str, asyncio.Event] = {}
+        self.mcp_client_event: dict[str, asyncio.Event] = {}
 
     def empty(self) -> bool:
+        """ 是否为空 """
         return len(self.func_list) == 0
 
     def add_func(
@@ -179,7 +183,8 @@ class FuncCall:
                 self.func_list.pop(i)
                 break
 
-    def get_func(self, name) -> FuncTool:
+    def get_func(self, name: str) -> FuncTool:
+        """ 获取函数工具 """
         for f in self.func_list:
             if f.name == name:
                 return f
@@ -215,7 +220,7 @@ class FuncCall:
             logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
             return
 
-        mcp_server_json_obj: Dict[str, Dict] = json.load(
+        mcp_server_json_obj: dict[str, dict] = json.load(
             open(mcp_json_file, "r", encoding="utf-8")
         )["mcpServers"]
 
@@ -383,7 +388,7 @@ class FuncCall:
             tools.append(tool)
         return tools
 
-    def get_func_desc_google_genai_style(self) -> Dict:
+    def get_func_desc_google_genai_style(self) -> dict:
         declarations = {}
         tools = []
         for f in self.func_list:

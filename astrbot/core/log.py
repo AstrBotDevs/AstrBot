@@ -5,7 +5,6 @@ import os
 from collections import deque
 from asyncio import Queue
 import asyncio
-from typing import List
 
 CACHED_SIZE = 200
 
@@ -37,7 +36,7 @@ def get_short_level_name(level_name):
 class LogBroker:
     def __init__(self):
         self.log_cache = deque(maxlen=CACHED_SIZE)
-        self.subscribers: List[Queue] = []
+        self.subscribers: list[Queue] = []
 
     def register(self) -> Queue:
         """
@@ -79,7 +78,6 @@ class LogQueueHandler(logging.Handler):
 
 class LogManager:
     _console = Console()
-    _handler = None
 
     @classmethod
     def GetLogger(cls, log_name: str = "default"):
@@ -89,11 +87,10 @@ class LogManager:
         if cls._handler is None:
             console_handler = RichHandler(console=cls._console)
             console_handler.setLevel(logging.DEBUG)
-            cls._handler = console_handler
-            cls._handler.setFormatter(
+            console_handler.setFormatter(
                 logging.Formatter(
                     datefmt="%X",
-                    fmt="| %(plugin_tag)s | %(short_levelname)s | %(filename)s:%(lineno)d ===>> %(message)s"
+                    fmt="| %(short_levelname)s | %(plugin_tag)s | %(filename)s:%(lineno)d ===>> %(message)s"
                 )
             )
 

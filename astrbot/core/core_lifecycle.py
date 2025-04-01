@@ -21,6 +21,7 @@ from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star_handler import star_map
+from .exec_hook import ExtractException
 
 
 class AstrBotCoreLifecycle:
@@ -106,9 +107,8 @@ class AstrBotCoreLifecycle:
             pass
         except Exception as e:
             logger.error(f"------- 任务 {task.get_name()} 发生错误: {e}")
-            for line in traceback.format_exc().split("\n"):
-                logger.error(f"|    {line}")
-            logger.error("-------")
+            err_msg = ExtractException(type(e), e, e.__traceback__, rich_printable=True)
+            logger.error(err_msg)
 
     async def start(self):
         self._load()
@@ -124,8 +124,9 @@ class AstrBotCoreLifecycle:
                     f"hook(on_astrbot_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
                 )
                 await handler.handler()
-            except BaseException:
-                logger.error(traceback.format_exc())
+            except BaseException as e:
+                err_msg = ExtractException(type(e), e, e.__traceback__, rich_printable=True)
+                logger.error(err_msg)
 
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
 

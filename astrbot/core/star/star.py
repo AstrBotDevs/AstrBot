@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from types import ModuleType
-from typing import List, Dict
 from dataclasses import dataclass, field
 from astrbot.core.config import AstrBotConfig
 
-star_registry: List[StarMetadata] = []
-star_map: Dict[str, StarMetadata] = {}
+star_registry: list[StarMetadata] = []
+star_map: dict[str, StarMetadata] = {}
 """key 是模块路径，__module__"""
 
 
@@ -44,7 +43,7 @@ class StarMetadata:
     config: AstrBotConfig = None
     """插件配置"""
 
-    star_handler_full_names: List[str] = field(default_factory=list)
+    star_handler_full_names: list[str] = field(default_factory=list)
     """注册的 Handler 的全名列表"""
 
     def __str__(self) -> str:
