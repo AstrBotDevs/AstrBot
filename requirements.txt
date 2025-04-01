@@ -10,7 +10,7 @@ googlesearch-python
 readability-lxml
 quart
 lxml_html_clean
-colorlog
+rich
 aiocqhttp
 pyjwt
 apscheduler

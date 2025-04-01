@@ -1,10 +1,10 @@
 import asyncio
-import traceback
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core import LogBroker
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.core.exec_hook import ExtractException
 
 
 class InitialLoader:
@@ -21,7 +21,7 @@ class InitialLoader:
             await core_lifecycle.initialize()
             core_task = core_lifecycle.start()
         except Exception as e:
-            logger.critical(traceback.format_exc())
+            logger.critical(ExtractException(type(e), e, e.__traceback__, rich_printable=True))
             logger.critical(f"😭 初始化 AstrBot 失败：{e} !!!")
 
         self.dashboard_server = AstrBotDashboard(
