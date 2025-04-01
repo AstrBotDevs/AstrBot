@@ -1,6 +1,7 @@
 import logging
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.theme import Theme
 import os
 from collections import deque
 from asyncio import Queue
@@ -77,7 +78,18 @@ class LogQueueHandler(logging.Handler):
 
 
 class LogManager:
-    _console = Console()
+    _default_log_theme = Theme({
+        "log.time": "bold white",
+    "log.level": "bold",
+    "log.message": "white",
+    "log.level.debug": "bold blue",
+    "log.level.info": "bold cyan",
+    "log.level.warning": "bold yellow",
+    "log.level.error": "bold red",
+    "log.level.critical": "bold red"
+    })
+
+    _console = Console(theme=_default_log_theme)
 
     @classmethod
     def GetLogger(cls, log_name: str = "default"):
@@ -90,7 +102,7 @@ class LogManager:
         console_handler.setFormatter(
             logging.Formatter(
                 datefmt="%X",
-                fmt="| %(short_levelname)s | %(plugin_tag)s | %(filename)s:%(lineno)d ===>> %(message)s"
+                fmt="| %(plugin_tag)s | %(filename)s:%(lineno)d ===>> %(message)s"
             )
         )
 
@@ -128,14 +140,12 @@ class LogManager:
     def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker):
         handler = LogQueueHandler(log_broker)
         handler.setLevel(logging.DEBUG)
-        if logger.handlers:
-            handler.setFormatter(logger.handlers[0].formatter)
-        else:
-            handler.setFormatter(
-                logging.Formatter(
-                    "[%(asctime)s] [%(short_levelname)s] %(plugin_tag)s[%(filename)s:%(lineno)d]: %(message)s"
-                )
+        handler.setFormatter(
+            logging.Formatter(
+                datefmt="%X",
+                fmt=" %(asctime)s | %(short_levelname)s | %(plugin_tag)s | %(filename)s:%(lineno)d ===>> %(message)s"
             )
+        )
         logger.addHandler(handler)
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import certifi
 
 from astrbot.core.utils.io import on_error, download_file
 from astrbot.core import logger
+from .exec_hook import ExtractException
 
 
 class ReleaseInfo:
@@ -73,8 +74,9 @@ class RepoZipUpdator:
                     }
                 )
         except Exception as e:
-            logger.error(f"解析版本信息时发生异常: {e}")
-            raise Exception("解析版本信息失败")
+            err_msg = ExtractException(type(e), e, e.__traceback__, rich_printable=True)
+            logger.error(f"解析版本信息时发生异常: {err_msg}")
+            raise
         return ret
 
     def github_api_release_parser(self, releases: list) -> list:
