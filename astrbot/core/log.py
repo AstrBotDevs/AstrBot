@@ -84,15 +84,15 @@ class LogManager:
         logger = logging.getLogger(log_name)
         if logger.hasHandlers():
             return logger
-        if cls._handler is None:
-            console_handler = RichHandler(console=cls._console)
-            console_handler.setLevel(logging.DEBUG)
-            console_handler.setFormatter(
-                logging.Formatter(
-                    datefmt="%X",
-                    fmt="| %(short_levelname)s | %(plugin_tag)s | %(filename)s:%(lineno)d ===>> %(message)s"
-                )
+
+        console_handler = RichHandler(console=cls._console)
+        console_handler.setLevel(logging.DEBUG)
+        console_handler.setFormatter(
+            logging.Formatter(
+                datefmt="%X",
+                fmt="| %(short_levelname)s | %(plugin_tag)s | %(filename)s:%(lineno)d ===>> %(message)s"
             )
+        )
 
         class PluginFilter(logging.Filter):
             def filter(self, record):
