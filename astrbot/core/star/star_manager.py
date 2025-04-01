@@ -451,7 +451,34 @@ class PluginManager:
         # reload the plugin
         dir_name = os.path.basename(plugin_path)
         await self.load(specified_dir_name=dir_name)
-        return plugin_path
+
+        # Get the plugin metadata to return repo info
+        plugin = self.context.get_registered_star(dir_name)
+        if not plugin:
+            # Try to find by other name if directory name doesn't match plugin name
+            for star in self.context.get_all_stars():
+                if star.root_dir_name == dir_name:
+                    plugin = star
+                    break
+
+        # Extract README.md content if exists
+        readme_content = None
+        readme_path = os.path.join(plugin_path, "README.md")
+        if not os.path.exists(readme_path):
+            readme_path = os.path.join(plugin_path, "readme.md")
+
+        if os.path.exists(readme_path):
+            try:
+                with open(readme_path, "r", encoding="utf-8") as f:
+                    readme_content = f.read()
+            except Exception as e:
+                logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")
+
+        plugin_info = None
+        if plugin:
+            plugin_info = {"repo": plugin.repo, "readme": readme_content}
+
+        return plugin_info
 
     async def uninstall_plugin(self, plugin_name: str):
         plugin = self.context.get_registered_star(plugin_name)
@@ -607,3 +634,31 @@ class PluginManager:
             logger.warning(f"删除插件压缩包失败: {str(e)}")
         # await self.reload()
         await self.load(specified_dir_name=dir_name)
+
+        # Get the plugin metadata to return repo info
+        plugin = self.context.get_registered_star(dir_name)
+        if not plugin:
+            # Try to find by other name if directory name doesn't match plugin name
+            for star in self.context.get_all_stars():
+                if star.root_dir_name == dir_name:
+                    plugin = star
+                    break
+
+        # Extract README.md content if exists
+        readme_content = None
+        readme_path = os.path.join(desti_dir, "README.md")
+        if not os.path.exists(readme_path):
+            readme_path = os.path.join(desti_dir, "readme.md")
+
+        if os.path.exists(readme_path):
+            try:
+                with open(readme_path, "r", encoding="utf-8") as f:
+                    readme_content = f.read()
+            except Exception as e:
+                logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")
+
+        plugin_info = None
+        if plugin:
+            plugin_info = {"repo": plugin.repo, "readme": readme_content}
+
+        return plugin_info

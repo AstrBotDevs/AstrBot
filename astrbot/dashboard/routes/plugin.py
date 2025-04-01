@@ -211,10 +211,10 @@ class PluginRoute(Route):
 
         try:
             logger.info(f"正在安装插件 {repo_url}")
-            await self.plugin_manager.install_plugin(repo_url, proxy)
+            plugin_info = await self.plugin_manager.install_plugin(repo_url, proxy)
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")
-            return Response().ok(None, "安装成功。").__dict__
+            return Response().ok(plugin_info, "安装成功。").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
@@ -233,10 +233,10 @@ class PluginRoute(Route):
             logger.info(f"正在安装用户上传的插件 {file.filename}")
             file_path = f"data/temp/{file.filename}"
             await file.save(file_path)
-            await self.plugin_manager.install_plugin_from_file(file_path)
+            plugin_info = await self.plugin_manager.install_plugin_from_file(file_path)
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {file.filename} 成功")
-            return Response().ok(None, "安装成功。").__dict__
+            return Response().ok(plugin_info, "安装成功。").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__

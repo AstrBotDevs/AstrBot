@@ -5,6 +5,9 @@ import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import axios from 'axios';
 import { useCommonStore } from '@/stores/common';
+import { marked } from 'marked';
+import hljs from 'highlight.js';
+import 'highlight.js/styles/github.css';
 </script>
 
 <template>
@@ -175,6 +178,45 @@ import { useCommonStore } from '@/stores/common';
     </v-snackbar>
 
     <WaitingForRestart ref="wfr"></WaitingForRestart>
+    
+    <!-- README Dialog -->
+    <v-dialog v-model="readmeDialog.show" width="800" persistent>
+        <v-card>
+            <v-card-title class="d-flex justify-space-between align-center">
+                <span class="text-h5">插件说明文档</span>
+                <v-btn icon @click="readmeDialog.show = false">
+                    <v-icon>mdi-close</v-icon>
+                </v-btn>
+            </v-card-title>
+            <v-divider></v-divider>
+            <v-card-text style="height: 70vh; overflow-y: auto;">
+                <v-btn 
+                    color="primary" 
+                    prepend-icon="mdi-open-in-new"
+                    @click="openReadmeInNewTab()" 
+                    class="mt-4"
+                >
+                    在GitHub中查看文档
+                </v-btn>
+                <div v-if="readmeDialog.content" class="markdown-body" v-html="renderMarkdown(readmeDialog.content)"></div>
+                <div v-else-if="readmeDialog.error" class="d-flex flex-column align-center justify-center" style="height: 100%;">
+                    <v-icon size="64" color="error" class="mb-4">mdi-alert-circle-outline</v-icon>
+                    <p class="text-body-1 text-center mb-4">{{ readmeDialog.error }}</p>
+                </div>
+                <div v-else class="d-flex flex-column align-center justify-center" style="height: 100%;">
+                    <v-icon size="64" color="warning" class="mb-4">mdi-file-question-outline</v-icon>
+                    <p class="text-body-1 text-center mb-4">该插件未提供文档链接或GitHub仓库地址。<br>请查看插件市场或联系插件作者获取更多信息。</p>
+                </div>
+            </v-card-text>
+            <v-divider></v-divider>
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn color="primary" variant="tonal" @click="readmeDialog.show = false">
+                    关闭
+                </v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
 </template>
 
 
@@ -208,6 +250,12 @@ export default {
                 title: "加载中...",
                 statusCode: 0, // 0: loading, 1: success, 2: error,
                 result: ""
+            },
+            readmeDialog: {
+                show: false,
+                url: null,
+                content: null,
+                error: null
             },
 
             announcement: "",
@@ -327,7 +375,50 @@ export default {
             });
         },
 
-        newExtension() {
+        async getReadmeUrl(repoUrl) {
+            // 去掉 repoUrl 末尾的斜杠
+            repoUrl = repoUrl.replace(/\/+$/, '');
+ 
+            const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+            if (!match) {
+                throw new Error("无效的 GitHub 仓库地址");
+            }
+ 
+            const owner = match[1];
+            const repo = match[2];
+ 
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}`;
+ 
+            try {
+                const res = await fetch(apiUrl);
+                const data = await res.json();
+ 
+                const branch = data?.default_branch || 'master';
+                return `${repoUrl}/blob/${branch}/README.md`;
+            } catch (error) {
+                console.error("获取默认分支失败，使用 master 作为默认：", error);
+                return `${repoUrl}/blob/master/README.md`;
+            }
+        },
+
+        async showReadmeDialog(res) {
+            this.readmeDialog.content = null;
+            this.readmeDialog.error = null;
+            if (res?.data?.data?.repo) {
+                this.readmeDialog.url = await this.getReadmeUrl(res.data.data.repo);
+                if (res.data.data.readme) {
+                    this.readmeDialog.content = res.data.data.readme;
+                } else {
+                    this.readmeDialog.error = "插件未提供README文档";
+                }
+            } else {
+                this.readmeDialog.url = null;
+                this.readmeDialog.error = "插件没有仓库信息或README文档";
+            }
+            this.readmeDialog.show = true;
+        },
+
+        async newExtension() {
             if (this.extension_url === "" && this.upload_file === null) {
                 this.toast("请填写插件链接或上传插件文件", "error");
                 return;
@@ -347,7 +438,7 @@ export default {
                     headers: {
                         'Content-Type': 'multipart/form-data'
                     }
-                }).then((res) => {
+                }).then(async (res) => {
                     this.loading_ = false;
                     if (res.data.status === "error") {
                         this.onLoadingDialogResult(2, res.data.message, -1);
@@ -358,7 +449,8 @@ export default {
                     this.onLoadingDialogResult(1, res.data.message);
                     this.dialog = false;
                     this.getExtensions();
-                    // this.$refs.wfr.check();
+                    
+                    await this.showReadmeDialog(res);
                 }).catch((err) => {
                     this.loading_ = false;
                     this.onLoadingDialogResult(2, err, -1);
@@ -370,7 +462,7 @@ export default {
                     {
                         url: this.extension_url,
                         proxy: localStorage.getItem('selectedGitHubProxy') || ""
-                    }).then((res) => {
+                    }).then(async (res) => {
                         this.loading_ = false;
                         this.toast(res.data.message, res.data.status === "ok" ? "success" : "error");
                         if (res.data.status === "error") {
@@ -382,7 +474,7 @@ export default {
                         this.onLoadingDialogResult(1, res.data.message);
                         this.dialog = false;
                         this.getExtensions();
-                        // this.$refs.wfr.check();
+                        await this.showReadmeDialog(res);
                     }).catch((err) => {
                         this.loading_ = false;
                         this.toast("安装插件失败: " + err, "error");
@@ -412,8 +504,157 @@ export default {
                 }
             }
             this.pluginMarketData = notInstalled.concat(installed);
-        }
+        },
+        openReadmeInNewTab() {
+            if (this.readmeDialog.url) {
+                window.open(this.readmeDialog.url, '_blank');
+            }
+        },
+        renderMarkdown(content) {
+            if (!content) return '';
+            // Configure marked with highlight.js for syntax highlighting
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        try {
+                            return hljs.highlight(code, { language: lang }).value;
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }
+                    return hljs.highlightAuto(code).value;
+                },
+                gfm: true, // GitHub Flavored Markdown
+                breaks: true, // Convert \n to <br>
+                headerIds: true, // Add id attributes to headers
+                mangle: false // Don't mangle email addresses
+            });
+            return marked(content);
+        },
     },
 }
 
 </script>
+
+<style>
+.markdown-body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    padding: 8px 0;
+    color: #24292e;
+}
+
+.markdown-body h1, 
+.markdown-body h2, 
+.markdown-body h3, 
+.markdown-body h4, 
+.markdown-body h5, 
+.markdown-body h6 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.markdown-body h1 {
+    font-size: 2em;
+    border-bottom: 1px solid #eaecef;
+    padding-bottom: 0.3em;
+}
+
+.markdown-body h2 {
+    font-size: 1.5em;
+    border-bottom: 1px solid #eaecef;
+    padding-bottom: 0.3em;
+}
+
+.markdown-body p {
+    margin-top: 0;
+    margin-bottom: 16px;
+}
+
+.markdown-body code {
+    padding: 0.2em 0.4em;
+    margin: 0;
+    background-color: rgba(27, 31, 35, 0.05);
+    border-radius: 3px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 85%;
+}
+
+.markdown-body pre {
+    padding: 16px;
+    overflow: auto;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f6f8fa;
+    border-radius: 3px;
+    margin-bottom: 16px;
+}
+
+.markdown-body pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+    padding-left: 2em;
+    margin-bottom: 16px;
+}
+
+.markdown-body img {
+    max-width: 100%;
+    margin: 8px 0;
+    box-sizing: border-box;
+    background-color: #fff;
+    border-radius: 3px;
+}
+
+.markdown-body blockquote {
+    padding: 0 1em;
+    color: #6a737d;
+    border-left: 0.25em solid #dfe2e5;
+    margin-bottom: 16px;
+}
+
+.markdown-body a {
+    color: #0366d6;
+    text-decoration: none;
+}
+
+.markdown-body a:hover {
+    text-decoration: underline;
+}
+
+.markdown-body table {
+    border-spacing: 0;
+    border-collapse: collapse;
+    width: 100%;
+    overflow: auto;
+    margin-bottom: 16px;
+}
+
+.markdown-body table th,
+.markdown-body table td {
+    padding: 6px 13px;
+    border: 1px solid #dfe2e5;
+}
+
+.markdown-body table tr {
+    background-color: #fff;
+    border-top: 1px solid #c6cbd1;
+}
+
+.markdown-body table tr:nth-child(2n) {
+    background-color: #f6f8fa;
+}
+
+.markdown-body hr {
+    height: 0.25em;
+    padding: 0;
+    margin: 24px 0;
+    background-color: #e1e4e8;
+    border: 0;
+}
+</style>
