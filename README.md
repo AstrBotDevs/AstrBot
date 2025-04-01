@@ -47,9 +47,9 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 6. **高稳定性、高模块化**。基于事件总线和流水线的架构设计，高度模块化，低耦合。
 
 > [!TIP]
-> 管理面板在线体验 Demo: [https://demo.astrbot.app/](https://demo.astrbot.app/)
+> WebUI 在线体验 Demo: [https://demo.astrbot.app/](https://demo.astrbot.app/)
 > 
-> 用户名: `astrbot`, 密码: `astrbot`。未配置 LLM，无法在聊天页使用大模型。
+> 用户名: `astrbot`, 密码: `astrbot`。
 
 ## ✨ 使用方式
 
@@ -149,37 +149,35 @@ pre-commit install
 
 ## ✨ Demo
 
-> [!NOTE]
-> 代码执行器的文件输入/输出目前仅测试了 Napcat(QQ), Lagrange(QQ)
-
 <div align='center'>
 
 <img src="https://github.com/user-attachments/assets/4ee688d9-467d-45c8-99d6-368f9a8a92d8" width="600">
 
-_✨基于 Docker 的沙箱化代码执行器（Beta 测试中）✨_
+_✨基于 Docker 的沙箱化代码执行器（Beta 测试）✨_
 
 <img src="https://github.com/user-attachments/assets/0378f407-6079-4f64-ae4c-e97ab20611d2" height=500>
 
 _✨ 多模态、网页搜索、长文本转图片（可配置） ✨_
-
-<img src="https://github.com/user-attachments/assets/8ec12797-e70f-460a-959e-48eca39ca2bb" height=100>
-
-_✨ 自然语言待办事项 ✨_
 
 <img src="https://github.com/user-attachments/assets/e137a9e1-340a-4bf2-bb2b-771132780735" height=150>
 <img src="https://github.com/user-attachments/assets/480f5e82-cf6a-4955-a869-0d73137aa6e1" height=150>
 
 _✨ 插件系统——部分插件展示 ✨_
 
-<img src="https://github.com/user-attachments/assets/592a8630-14c7-4e06-b496-9c0386e4f36c" width=600>
+<img src="https://github.com/user-attachments/assets/0cdbf564-2f59-4da5-b524-ce0e7ef3d978" width=600>
 
-_✨ 管理面板 ✨_
-
-![webchat](https://drive.soulter.top/f/vlsA/ezgif-5-fb044b2542.gif)
-
-_✨ 内置 Web Chat，在线与机器人交互 ✨_
+_✨ WebUI ✨_
 
 </div>
+
+## ❤️ Special Thanks
+
+特别感谢所有 Contributors 和插件开发者对 AstrBot 的贡献 ❤️
+
+<a href="https://github.com/AstrBotDevs/Soulter/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot" />
+</a>
+
 
 ## ⭐ Star History
 
