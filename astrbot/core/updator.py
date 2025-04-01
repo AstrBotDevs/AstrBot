@@ -9,6 +9,11 @@ from astrbot.core.utils.io import download_file
 
 
 class AstrBotUpdator(RepoZipUpdator):
+    """AstrBot 更新器，继承自 RepoZipUpdator 类
+    该类用于处理 AstrBot 的更新操作
+    功能包括检查更新、下载更新文件、解压缩更新文件等
+    """
+
     def __init__(self, repo_mirror: str = "") -> None:
         super().__init__(repo_mirror)
         self.MAIN_PATH = os.path.abspath(
@@ -17,6 +22,9 @@ class AstrBotUpdator(RepoZipUpdator):
         self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
 
     def terminate_child_processes(self):
+        """终止当前进程的所有子进程
+        使用 psutil 库获取当前进程的所有子进程，并尝试终止它们
+        """
         try:
             parent = psutil.Process(os.getpid())
             children = parent.children(recursive=True)
@@ -35,6 +43,9 @@ class AstrBotUpdator(RepoZipUpdator):
             pass
 
     def _reboot(self, delay: int = 3):
+        """重启当前程序
+        在指定的延迟后，终止所有子进程并重新启动程序
+        """
         py = sys.executable
         time.sleep(delay)
         self.terminate_child_processes()
@@ -46,6 +57,7 @@ class AstrBotUpdator(RepoZipUpdator):
             raise e
 
     async def check_update(self, url: str, current_version: str) -> ReleaseInfo:
+        """检查更新"""
         return await super().check_update(self.ASTRBOT_RELEASE_API, VERSION)
 
     async def get_releases(self) -> list:

@@ -12,6 +12,7 @@ from .process_stage.stage import ProcessStage
 from .result_decorate.stage import ResultDecorateStage
 from .respond.stage import RespondStage
 
+# 管道阶段顺序
 STAGES_ORDER = [
     "WakingCheckStage",  # 检查是否需要唤醒
     "WhitelistCheckStage",  # 检查是否在群聊/私聊白名单

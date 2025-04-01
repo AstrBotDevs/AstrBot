@@ -6,6 +6,8 @@ from typing import List
 
 @dataclass
 class Platform:
+    """平台使用统计数据"""
+
     name: str
     count: int
     timestamp: int
@@ -13,6 +15,8 @@ class Platform:
 
 @dataclass
 class Provider:
+    """供应商使用统计数据"""
+
     name: str
     count: int
     timestamp: int
@@ -20,6 +24,8 @@ class Provider:
 
 @dataclass
 class Plugin:
+    """插件使用统计数据"""
+
     name: str
     count: int
     timestamp: int
@@ -27,6 +33,8 @@ class Plugin:
 
 @dataclass
 class Command:
+    """命令使用统计数据"""
+
     name: str
     count: int
     timestamp: int
