@@ -5,8 +5,10 @@ export const useCommonStore = defineStore({
   id: 'common',
   state: () => ({
     // @ts-ignore
-    websocket: null,
+    eventSource: null,
     log_cache: [],
+    sse_connected: false,
+
     log_cache_max_len: 1000,
     startTime: -1,
 
@@ -18,28 +20,86 @@ export const useCommonStore = defineStore({
       "gewechat": "https://astrbot.app/deploy/platform/gewechat.html",
       "lark": "https://astrbot.app/deploy/platform/lark.html",
       "telegram": "https://astrbot.app/deploy/platform/telegram.html",
-      "dingtalk": "https://astrbot.app/deploy/platform/dingtalk.html",
+      "dingtalk": "https: //astrbot.app/deploy/platform/dingtalk.html",
     },
 
-    pluginMarketData: []
-
+    pluginMarketData: [],
   }),
   actions: {
-    createWebSocket() {
-      if (this.websocket) {
+    createEventSource() {
+      if (this.eventSource) {
         return
       }
-      let protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      let route = '/api/live-log'
-      let port = window.location.port
-      let url = `${protocol}://${window.location.hostname}:${port}${route}`
-      console.log('websocket url:', url)
-      this.websocket = new WebSocket(url)
-      this.websocket.onmessage = (evt) => {
-        this.log_cache.push(evt.data)
-        if (this.log_cache.length > this.log_cache_max_len) {
-          this.log_cache.shift()
+      const controller = new AbortController();
+      const { signal } = controller;
+      const headers = {
+        'Content-Type': 'multipart/form-data',
+        'Authorization': 'Bearer ' + localStorage.getItem('token')
+      };
+      fetch('/api/live-log', {
+        method: 'GET',
+        headers,
+        signal,
+        cache: 'no-cache',
+      }).then(response => {
+        if (!response.ok) {
+          throw new Error(`SSE connection failed: ${response.status}`);
         }
+        console.log('SSE stream opened');
+        this.sse_connected = true;
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        const processStream = ({ done, value }) => {
+          if (done) {
+            console.log('SSE stream closed');
+            setTimeout(() => {
+              this.eventSource = null;
+              this.createEventSource();
+            }, 2000);
+            return;
+          }
+
+          const text = decoder.decode(value);
+          const lines = text.split('\n');
+          lines.forEach(line => {
+            if (line.startsWith('data:')) {
+              const data = line.substring(5).trim();
+
+              // {"type":"log","data":"[2021-08-01 00:00:00] INFO: Hello, world!"}
+
+              let data_json = JSON.parse(data)
+              if (data_json.type === 'log') {
+                let log = data_json.data
+                this.log_cache.push(log);
+                if (this.log_cache.length > this.log_cache_max_len) {
+                  this.log_cache.shift();
+                }
+              }
+            }
+          });
+          return reader.read().then(processStream);
+        };
+
+        reader.read().then(processStream);
+      }).catch(error => {
+        console.error('SSE error:', error);
+        // Attempt to reconnect after a delay
+        this.log_cache.push('SSE Connection failed, retrying in 5 seconds...');
+        setTimeout(() => {
+          this.eventSource = null;
+          this.createEventSource();
+        }, 1000);
+      });
+
+      // Store controller to allow closing the connection
+      this.eventSource = controller;
+    },
+    closeEventSourcet() {
+      if (this.eventSource) {
+        this.eventSource.abort();
+        this.eventSource = null;
       }
     },
     getLogCache() {
@@ -50,7 +110,7 @@ export const useCommonStore = defineStore({
         return this.startTime
       }
       axios.get('/api/stat/start-time').then((res) => {
-          this.startTime = res.data.data.start_time
+        this.startTime = res.data.data.start_time
       })
     },
     getTutorialLink(platform) {

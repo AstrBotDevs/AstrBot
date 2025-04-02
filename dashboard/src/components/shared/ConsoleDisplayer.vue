@@ -43,18 +43,36 @@ export default {
     }
   },
   mounted() {
-    this.historyNum_ = parseInt(this.historyNum)
-    let i = 0
-    for (let log of this.logCache) {
-        if (this.historyNum_ != -1 && i >= this.logCache.length - this.historyNum_) {
-          this.printLog(log)
-          ++i
-        } else if (this.historyNum_ == -1) {
-          this.printLog(log)
-        }
+    if (this.logCache.length === 0) {
+      this.delayInit()
+    } else {
+      this.init()
     }
   },
   methods: {
+    delayInit() {
+      if (this.logCache.length === 0) {
+        setTimeout(() => {
+          this.delayInit()
+        }, 500)
+      } else {
+        this.init()
+      }
+    },
+
+    init() {
+      this.historyNum_ = parseInt(this.historyNum)
+      let i = 0
+      for (let log of this.logCache) {
+          if (this.historyNum_ != -1 && i >= this.logCache.length - this.historyNum_) {
+            this.printLog(log)
+            ++i
+          } else if (this.historyNum_ == -1) {
+            this.printLog(log)
+          }
+      }
+    },
+
     toggleAutoScroll() {
       this.autoScroll = !this.autoScroll;
     },

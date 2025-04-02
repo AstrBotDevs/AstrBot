@@ -184,7 +184,7 @@ function updateDashboard() {
 checkUpdate();
 
 const commonStore = useCommonStore();
-commonStore.createWebSocket();
+commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 
