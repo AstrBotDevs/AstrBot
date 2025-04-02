@@ -135,15 +135,28 @@ class RepoZipUpdator:
         author = repo_namespace[0]
         repo = repo_namespace[1]
 
+        # 关闭非github的代理
+        if not "github" in repo_url:
+            proxy = False
+
         logger.info(f"正在下载更新 {repo} ...")
-        release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
+        if "codeberg" in repo_url:
+            release_url = f"https://codeberg.org/api/v1/repos/{author}/{repo}/releases"
+        else:
+            release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
+
         releases = await self.fetch_release_info(url=release_url)
         if not releases:
             # download from the default branch directly.
             logger.info(f"正在从默认分支下载 {author}/{repo} ")
-            release_url = (
-                f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
-            )
+            if "codeberg" in repo_url:
+                release_url = (
+                    f"https://codeberg.org/{author}/{repo}/archive/master.zip"
+                )
+            else:
+                release_url = (
+                    f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
+                )
         else:
             release_url = releases[0]["zipball_url"]
 
