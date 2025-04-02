@@ -22,6 +22,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             if isinstance(segment, Plain):
                 d["type"] = "text"
                 d["data"]["text"] = segment.text.strip()
+                # 如果是空文本或者只带换行符的文本，不发送
+                if not d["data"]["text"]:
+                    continue
             elif isinstance(segment, (Image, Record)):
                 # convert to base64
                 bs64 = await segment.convert_to_base64()
@@ -37,6 +40,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain):
         ret = await AiocqhttpMessageEvent._parse_onebot_json(message)
+
+        if not ret:
+            return
 
         send_one_by_one = False
         for seg in message.chain:
