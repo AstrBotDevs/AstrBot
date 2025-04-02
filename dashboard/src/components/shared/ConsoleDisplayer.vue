@@ -43,7 +43,7 @@ export default {
     }
   },
   mounted() {
-    if (this.logCache.length == 0) {
+    if (this.logCache.length === 0) {
       this.delayInit()
     } else {
       this.init()
@@ -51,7 +51,7 @@ export default {
   },
   methods: {
     delayInit() {
-      if (this.logCache.length == 0) {
+      if (this.logCache.length === 0) {
         setTimeout(() => {
           this.delayInit()
         }, 500)

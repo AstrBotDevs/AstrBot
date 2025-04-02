@@ -96,7 +96,7 @@ export const useCommonStore = defineStore({
       // Store controller to allow closing the connection
       this.eventSource = controller;
     },
-    closeWebSocket() {
+    closeEventSourcet() {
       if (this.eventSource) {
         this.eventSource.abort();
         this.eventSource = null;
