@@ -596,7 +596,7 @@ class PluginManager:
             asyncio.get_event_loop().run_in_executor(
                 None, star_metadata.star_cls.__del__
             )
-        else:
+        elif hasattr(star_metadata.star_cls, "terminate"):
             await star_metadata.star_cls.terminate()
 
     async def turn_on_plugin(self, plugin_name: str):

@@ -15,6 +15,9 @@ class WhitelistCheckStage(Stage):
             "enable_id_white_list"
         ]
         self.whitelist = ctx.astrbot_config["platform_settings"]["id_whitelist"]
+        self.whitelist = [
+            str(i).strip() for i in self.whitelist if str(i).strip() != ""
+        ]
         self.wl_ignore_admin_on_group = ctx.astrbot_config["platform_settings"][
             "wl_ignore_admin_on_group"
         ]
@@ -53,7 +56,7 @@ class WhitelistCheckStage(Stage):
                 return
         if (
             event.unified_msg_origin not in self.whitelist
-            and event.get_group_id() not in self.whitelist
+            and str(event.get_group_id()).strip() not in self.whitelist
         ):
             if self.wl_log:
                 logger.info(
