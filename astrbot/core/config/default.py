@@ -671,8 +671,22 @@ CONFIG_METADATA_2 = {
                         "fishaudio-tts-character": "可莉",
                         "timeout": "20",
                     },
+                    "阿里云百炼_TTS(API)": {
+                        "id": "dashscope_tts",
+                        "type": "dashscope_tts",
+                        "enable": False,
+                        "api_key": "",
+                        "model": "cosyvoice-v1",
+                        "dashscope_tts_voice": "loongstella",
+                        "timeout": "20",
+                    },
                 },
                 "items": {
+                    "dashscope_tts_voice": {
+                        "description": "语音合成模型",
+                        "type": "string",
+                        "hint": "阿里云百炼语音合成模型名称。具体可参考 https://help.aliyun.com/zh/model-studio/developer-reference/cosyvoice-python-api 等内容",
+                    },
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
                         "type": "bool",
