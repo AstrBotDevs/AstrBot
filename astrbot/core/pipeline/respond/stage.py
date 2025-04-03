@@ -72,6 +72,20 @@ class RespondStage(Stage):
             # random
             return random.uniform(self.interval[0], self.interval[1])
 
+    async def _is_empty_message_chain(self, chain):
+        """检查消息链是否为空
+
+        Args:
+            chain (MessageChain): 消息链
+        """
+        for comp in chain:
+            if isinstance(comp, Plain):
+                if comp.text.strip():
+                    return False
+            else:
+                return True
+        return True
+
     async def process(
         self, event: AstrMessageEvent
     ) -> Union[None, AsyncGenerator[None, None]]:
@@ -81,6 +95,13 @@ class RespondStage(Stage):
 
         if len(result.chain) > 0:
             await event._pre_send()
+
+            # 检查消息链是否为空
+            if await self._is_empty_message_chain(result.chain):
+                logger.info("消息为空，跳过发送阶段")
+                event.clear_result()
+                event.stop_event()
+                return
 
             if self.enable_seg and (
                 (self.only_llm_result and result.is_llm_result())
