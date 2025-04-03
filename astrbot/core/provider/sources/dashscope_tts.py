@@ -18,7 +18,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key: str = provider_config.get("api_key", "")
-        self.voice: str = provider_config.get("voice", "可莉")
+        self.voice: str = provider_config.get("dashscope_tts_voice", "loongstella")
         self.set_model(provider_config.get("model", None))
         self.timeout_ms = float(provider_config.get("timeout", 20))*1000
 
