@@ -58,9 +58,9 @@ class LLMRequestSubStage(Stage):
 
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
-            assert isinstance(
-                req, ProviderRequest
-            ), "provider_request 必须是 ProviderRequest 类型。"
+            assert isinstance(req, ProviderRequest), (
+                "provider_request 必须是 ProviderRequest 类型。"
+            )
 
             if req.conversation:
                 req.contexts = json.loads(req.conversation.history)
@@ -80,7 +80,6 @@ class LLMRequestSubStage(Stage):
             conversation_id = await self.conv_manager.get_curr_conversation_id(
                 event.unified_msg_origin
             )
-            req.session_id = event.unified_msg_origin
             if not conversation_id:
                 conversation_id = await self.conv_manager.new_conversation(
                     event.unified_msg_origin
@@ -133,6 +132,10 @@ class LLMRequestSubStage(Stage):
         ):
             logger.debug("上下文长度超过限制，将截断。")
             req.contexts = req.contexts[-self.max_context_length * 2 :]
+
+        # session_id
+        if not req.session_id:
+            req.session_id = event.unified_msg_origin
 
         try:
             need_loop = True
