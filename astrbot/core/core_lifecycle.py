@@ -190,7 +190,6 @@ class AstrBotCoreLifecycle:
             task.cancel()
 
         for plugin in self.plugin_manager.context.get_all_stars():
-            logger.info(f"正在终止插件 {plugin.name} ...")
             try:
                 await self.plugin_manager._terminate_plugin(plugin)
             except Exception as e:
