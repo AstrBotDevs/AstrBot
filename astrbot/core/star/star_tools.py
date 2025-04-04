@@ -19,6 +19,7 @@ class StarTools:
 
     _context: ClassVar[Optional[Context]] = None
 
+    @classmethod
     def initialize(cls, context: Context) -> None:
         """
         初始化StarTools，设置context引用
