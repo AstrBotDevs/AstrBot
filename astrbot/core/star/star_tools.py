@@ -1,4 +1,4 @@
-from typing import Union, Awaitable, List
+from typing import Union, Awaitable, List, Optional, ClassVar
 from asyncio import Queue
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
@@ -17,17 +17,20 @@ class StarTools:
     这些方法封装了一些常用操作，使插件开发更加简单便捷!
     """
 
-    def __init__(self, context: Context):
+    _context: ClassVar[Optional[Context]] = None
+
+    def initialize(cls, context: Context) -> None:
         """
-        初始化StarTools实例
+        初始化StarTools，设置context引用
 
         Args:
-            context(Context): 暴露给插件的上下文
+            context: 暴露给插件的上下文
         """
-        self._context = context
+        cls._context = context
 
+    @classmethod
     async def send_message(
-        self, session: Union[str, MessageSesion], message_chain: MessageChain
+        cls, session: Union[str, MessageSesion], message_chain: MessageChain
     ) -> bool:
         """
         根据session(unified_msg_origin)主动发送消息
@@ -45,10 +48,11 @@ class StarTools:
         Note:
             qq_official(QQ官方API平台)不支持此方法
         """
-        return await self._context.send_message(session, message_chain)
+        return await cls._context.send_message(session, message_chain)
 
+    @classmethod
     async def create_message(
-        self,
+        cls,
         type: str,
         self_id: str,
         session_id: str,
@@ -88,10 +92,16 @@ class StarTools:
         abm.group_id = group_id
         return abm
 
-    # todo: 添加构造event的方法
+    # todo: 添加构造事件的方法
+    # async def create_event(
+    #     self, platform: str, umo: str, sender_id: str, session_id: str
+    # ):
+    #     platform = self._context.get_platform(platform)
+
     # todo: 添加找到对应平台并提交对应事件的方法
 
-    def activate_llm_tool(self, name: str) -> bool:
+    @classmethod
+    def activate_llm_tool(cls, name: str) -> bool:
         """
         激活一个已经注册的函数调用工具
         注册的工具默认是激活状态
@@ -99,19 +109,21 @@ class StarTools:
         Args:
             name (str): 工具名称
         """
-        return self._context.activate_llm_tool(name)
+        return cls._context.activate_llm_tool(name)
 
-    def deactivate_llm_tool(self, name: str) -> bool:
+    @classmethod
+    def deactivate_llm_tool(cls, name: str) -> bool:
         """
         停用一个已经注册的函数调用工具
 
         Args:
             name (str): 工具名称
         """
-        return self._context.deactivate_llm_tool(name)
+        return cls._context.deactivate_llm_tool(name)
 
+    @classmethod
     def register_llm_tool(
-        self, name: str, func_args: list, desc: str, func_obj: Awaitable
+        cls, name: str, func_args: list, desc: str, func_obj: Awaitable
     ) -> None:
         """
         为函数调用（function-calling/tools-use）添加工具
@@ -122,9 +134,10 @@ class StarTools:
             desc (str): 工具描述
             func_obj (Awaitable): 函数对象，必须是异步函数
         """
-        self._context.register_llm_tool(name, func_args, desc, func_obj)
+        cls._context.register_llm_tool(name, func_args, desc, func_obj)
 
-    def unregister_llm_tool(self, name: str) -> None:
+    @classmethod
+    def unregister_llm_tool(cls, name: str) -> None:
         """
         删除一个函数调用工具
         如果再要启用，需要重新注册
@@ -132,4 +145,4 @@ class StarTools:
         Args:
             name (str): 工具名称
         """
-        self._context.unregister_llm_tool(name)
+        cls._context.unregister_llm_tool(name)
