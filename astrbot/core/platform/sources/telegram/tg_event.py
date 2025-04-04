@@ -1,8 +1,10 @@
+import telegramify_markdown
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata, MessageType
 from astrbot.api.message_components import Plain, Image, Reply, At, File, Record
 from telegram.ext import ExtBot
 from astrbot.core.utils.io import download_file
+from astrbot import logger
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -49,7 +51,17 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if at_user_id and not at_flag:
                     i.text = f"@{at_user_id} " + i.text
                     at_flag = True
-                await client.send_message(text=i.text, **payload)
+                text = i.text
+                try:
+                    text = telegramify_markdown.markdownify(
+                        i.text, max_line_length=None, normalize_whitespace=False
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"MarkdownV2 conversion failed: {e}. Using plain text instead."
+                    )
+                    return
+                await client.send_message(text=text, parse_mode="MarkdownV2", **payload)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
                 await client.send_photo(photo=image_path, **payload)
