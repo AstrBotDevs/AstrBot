@@ -11,7 +11,36 @@ from astrbot.core import logger
 from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
-from astrbot.core.message.components import Plain, Reply, At
+from astrbot.core.message.components import (
+    Plain,
+    Face,
+    Record,
+    Video,
+    At,
+    AtAll,
+    RPS,
+    Dice,
+    Shake,
+    Anonymous,
+    Share,
+    Contact,
+    Location,
+    Music,
+    Image,
+    Reply,
+    RedBag,
+    Poke,
+    Forward,
+    Node,
+    Nodes,
+    Xml,
+    Json,
+    CardImage,
+    TTS,
+    Unknown,
+    File,
+    WechatEmoji,
+)
 
 
 @register_stage
@@ -72,18 +101,65 @@ class RespondStage(Stage):
             # random
             return random.uniform(self.interval[0], self.interval[1])
 
-    async def _is_empty_message_chain(self, chain):
+    async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]):
         """检查消息链是否为空
 
         Args:
-            chain (MessageChain): 消息链
+            chain (list[BaseMessageComponent]): 包含消息对象的列表
         """
+        if not chain:
+            return True
+
+        # 组件类型到其非空判断函数的映射
+        component_validators = {
+            Plain: lambda comp: bool(
+                comp.text and comp.text.strip()
+            ),  # 纯文本消息需要strip
+            Face: lambda comp: comp.id is not None,  # QQ表情
+            Record: lambda comp: bool(comp.file),  # 语音
+            Video: lambda comp: bool(comp.file),  # 视频
+            At: lambda comp: bool(comp.qq) or bool(comp.name),  # @
+            AtAll: lambda comp: True,  # @所有人
+            RPS: lambda comp: True,  # 不知道是啥(未完成)
+            Dice: lambda comp: True,  # 骰子(未完成)
+            Shake: lambda comp: True,  # 摇一摇(未完成)
+            Anonymous: lambda comp: True,  # 匿名(未完成)
+            Share: lambda comp: bool(comp.url) and bool(comp.title),  # 分享
+            Contact: lambda comp: True,  # 联系人(未完成)
+            Location: lambda comp: bool(comp.lat and comp.lon),  # 位置
+            Music: lambda comp: bool(comp._type)
+            and bool(comp.url)
+            and bool(comp.audio),  # 音乐
+            Image: lambda comp: bool(comp.file),  # 图片
+            Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
+            RedBag: lambda comp: bool(comp.title),  # 红包
+            Poke: lambda comp: comp.id != 0 and comp.qq != 0,  # 戳一戳
+            Forward: lambda comp: bool(comp.id and comp.id.strip()),  # 转发
+            Node: lambda comp: bool(comp.name)
+            and comp.uin != 0
+            and bool(comp.content),  # 一个转发节点
+            Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
+            Xml: lambda comp: bool(comp.data and comp.data.strip()),  # XML
+            Json: lambda comp: bool(comp.data),  # JSON
+            CardImage: lambda comp: bool(comp.file),  # 卡片图片
+            TTS: lambda comp: bool(comp.text and comp.text.strip()),  # 语音合成
+            Unknown: lambda comp: bool(comp.text and comp.text.strip()),  # 未知消息
+            File: lambda comp: bool(comp.file),  # 文件
+            WechatEmoji: lambda comp: bool(comp.md5),  # 微信表情
+        }
+
         for comp in chain:
-            if isinstance(comp, Plain):
-                if comp.text.strip():
+            comp_type = type(comp)
+
+            # 检查组件类型是否在字典中
+            if comp_type in component_validators:
+                if component_validators[comp_type](comp):
                     return False
             else:
+                logger.error(f"消息链中包含非消息组件: {comp}, 停止事件传播")
                 return True
+
+        # 如果所有组件都为空
         return True
 
     async def process(
