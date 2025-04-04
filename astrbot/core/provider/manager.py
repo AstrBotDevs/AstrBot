@@ -198,6 +198,10 @@ class ProviderManager:
                     from .sources.fishaudio_tts_api_source import (
                         ProviderFishAudioTTSAPI as ProviderFishAudioTTSAPI,
                     )
+                case "dashscope_tts":
+                    from .sources.dashscope_tts import (
+                        ProviderDashscopeTTSAPI as ProviderDashscopeTTSAPI,
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。"

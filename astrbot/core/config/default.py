@@ -522,6 +522,12 @@ CONFIG_METADATA_2 = {
                             "model": "gemini-2.0-flash-exp",
                         },
                         "gm_resp_image_modal": False,
+                        "gm_safety_settings": {
+                            "harassment": "BLOCK_MEDIUM_AND_ABOVE",
+                            "hate_speech": "BLOCK_MEDIUM_AND_ABOVE",
+                            "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
+                            "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
+                        },
                     },
                     "DeepSeek": {
                         "id": "deepseek_default",
@@ -671,12 +677,77 @@ CONFIG_METADATA_2 = {
                         "fishaudio-tts-character": "可莉",
                         "timeout": "20",
                     },
+                    "阿里云百炼_TTS(API)": {
+                        "id": "dashscope_tts",
+                        "type": "dashscope_tts",
+                        "enable": False,
+                        "api_key": "",
+                        "model": "cosyvoice-v1",
+                        "dashscope_tts_voice": "loongstella",
+                        "timeout": "20",
+                    },
                 },
                 "items": {
+                    "dashscope_tts_voice": {
+                        "description": "语音合成模型",
+                        "type": "string",
+                        "hint": "阿里云百炼语音合成模型名称。具体可参考 https://help.aliyun.com/zh/model-studio/developer-reference/cosyvoice-python-api 等内容",
+                    },
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
                         "type": "bool",
                         "hint": "启用后，将支持返回图片内容。需要模型支持，否则会报错。具体支持模型请查看 Google Gemini 官方网站。温馨提示，如果您需要生成图片，请关闭 `启用群员识别` 配置获得更好的效果。",
+                    },
+                    "gm_safety_settings": {
+                        "description": "安全过滤器",
+                        "type": "object",
+                        "hint": "设置模型输入的内容安全过滤级别。过滤级别分类为NONE(不屏蔽)、HIGH(高风险时屏蔽)、MEDIUM_AND_ABOVE(中等风险及以上屏蔽)、LOW_AND_ABOVE(低风险及以上时屏蔽)，具体参见Gemini API文档。",
+                        "items": {
+                            "harassment": {
+                                "description": "骚扰内容",
+                                "type": "string",
+                                "hint": "负面或有害评论",
+                                "options": [
+                                    "BLOCK_NONE",
+                                    "BLOCK_ONLY_HIGH",
+                                    "BLOCK_MEDIUM_AND_ABOVE",
+                                    "BLOCK_LOW_AND_ABOVE",
+                                ],
+                            },
+                            "hate_speech": {
+                                "description": "仇恨言论",
+                                "type": "string",
+                                "hint": "粗鲁、无礼或亵渎性质内容",
+                                "options": [
+                                    "BLOCK_NONE",
+                                    "BLOCK_ONLY_HIGH",
+                                    "BLOCK_MEDIUM_AND_ABOVE",
+                                    "BLOCK_LOW_AND_ABOVE",
+                                ],
+                            },
+                            "sexually_explicit": {
+                                "description": "露骨色情内容",
+                                "type": "string",
+                                "hint": "包含性行为或其他淫秽内容的引用",
+                                "options": [
+                                    "BLOCK_NONE",
+                                    "BLOCK_ONLY_HIGH",
+                                    "BLOCK_MEDIUM_AND_ABOVE",
+                                    "BLOCK_LOW_AND_ABOVE",
+                                ],
+                            },
+                            "dangerous_content": {
+                                "description": "危险内容",
+                                "type": "string",
+                                "hint": "宣扬、助长或鼓励有害行为的信息",
+                                "options": [
+                                    "BLOCK_NONE",
+                                    "BLOCK_ONLY_HIGH",
+                                    "BLOCK_MEDIUM_AND_ABOVE",
+                                    "BLOCK_LOW_AND_ABOVE",
+                                ],
+                            },
+                        },
                     },
                     "rag_options": {
                         "description": "RAG 选项",

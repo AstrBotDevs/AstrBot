@@ -1,6 +1,5 @@
 import astrbot.api.message_components as Comp
 import copy
-import json
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
@@ -64,16 +63,10 @@ class Waiter(Star):
                             event.unified_msg_origin
                         )
                         conversation = None
-                        context = []
 
                         if curr_cid:
                             conversation = await self.context.conversation_manager.get_conversation(
                                 event.unified_msg_origin, curr_cid
-                            )
-                            context = (
-                                json.loads(conversation.history)
-                                if conversation.history
-                                else []
                             )
                         else:
                             # 创建新对话
