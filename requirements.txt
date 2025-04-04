@@ -29,3 +29,4 @@ defusedxml
 mcp
 certifi
 pip
+telegramify-markdown
