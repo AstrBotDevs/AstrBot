@@ -37,6 +37,9 @@ class LLMRequestSubStage(Stage):
         self.max_context_length = ctx.astrbot_config["provider_settings"][
             "max_context_length"
         ]  # int
+        self.streaming_response = ctx.astrbot_config["provider_settings"][
+            "streaming_response"
+        ]  # bool
 
         for bwp in self.bot_wake_prefixs:
             if self.provider_wake_prefix.startswith(bwp):
@@ -137,59 +140,90 @@ class LLMRequestSubStage(Stage):
         if not req.session_id:
             req.session_id = event.unified_msg_origin
 
-        try:
-            need_loop = True
-            while need_loop:
-                need_loop = False
-                logger.debug(f"提供商请求 Payload: {req}")
-                llm_response = await provider.text_chat(**req.__dict__)  # 请求 LLM
+        async def requesting(req: ProviderRequest):
+            try:
+                need_loop = True
+                while need_loop:
+                    need_loop = False
+                    logger.debug(f"提供商请求 Payload: {req}")
 
-                # 执行 LLM 响应后的事件钩子。
-                handlers = star_handlers_registry.get_handlers_by_event_type(
-                    EventType.OnLLMResponseEvent
-                )
-                for handler in handlers:
-                    try:
-                        logger.debug(
-                            f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
+                    final_llm_response = None
+
+                    if self.streaming_response:
+                        stream = provider.text_chat_stream(
+                            **req.__dict__
                         )
-                        await handler.handler(event, llm_response)
-                    except BaseException:
-                        logger.error(traceback.format_exc())
-
-                    if event.is_stopped():
-                        logger.info(
-                            f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
-                        )
-                        return
-
-                async for result in self._handle_llm_response(event, req, llm_response):
-                    if isinstance(result, ProviderRequest):
-                        # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
-                        req = result
-                        need_loop = True
+                        async for llm_response in stream:
+                            if llm_response.is_chunk:
+                                logger.debug(llm_response)
+                                yield llm_response.result_chain
+                            else:
+                                final_llm_response = llm_response
                     else:
-                        yield
+                        final_llm_response = await provider.text_chat(
+                            **req.__dict__
+                        )  # 请求 LLM
 
-            asyncio.create_task(
-                Metric.upload(
-                    llm_tick=1,
-                    model_name=provider.get_model(),
-                    provider_type=provider.meta().type,
+                    if not final_llm_response:
+                        raise Exception("LLM response is None.")
+
+                    # 执行 LLM 响应后的事件钩子。
+                    handlers = star_handlers_registry.get_handlers_by_event_type(
+                        EventType.OnLLMResponseEvent
+                    )
+                    for handler in handlers:
+                        try:
+                            logger.debug(
+                                f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
+                            )
+                            await handler.handler(event, final_llm_response)
+                        except BaseException:
+                            logger.error(traceback.format_exc())
+
+                        if event.is_stopped():
+                            logger.info(
+                                f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
+                            )
+                            return
+
+                    async for result in self._handle_llm_response(
+                        event, req, final_llm_response
+                    ):
+                        if isinstance(result, ProviderRequest):
+                            # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
+                            req = result
+                            need_loop = True
+                        else:
+                            yield
+
+                asyncio.create_task(
+                    Metric.upload(
+                        llm_tick=1,
+                        model_name=provider.get_model(),
+                        provider_type=provider.meta().type,
+                    )
                 )
-            )
 
-            # 保存到历史记录
-            await self._save_to_history(event, req, llm_response)
+                # 保存到历史记录
+                await self._save_to_history(event, req, final_llm_response)
 
-        except BaseException as e:
-            logger.error(traceback.format_exc())
+            except BaseException as e:
+                logger.error(traceback.format_exc())
+                event.set_result(
+                    MessageEventResult().message(
+                        f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}"
+                    )
+                )
+
+        if not self.streaming_response:
+            async for _ in requesting(req):
+                yield
+        else:
             event.set_result(
-                MessageEventResult().message(
-                    f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}"
-                )
+                MessageEventResult()
+                .set_result_content_type(ResultContentType.STREAMING_RESULT)
+                .set_async_stream(requesting(req))
             )
-            return
 
     async def _handle_llm_response(
         self, event: AstrMessageEvent, req: ProviderRequest, llm_response: LLMResponse

@@ -141,11 +141,28 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         if self.output_reference and response.output.get("doc_references", None):
             ref_str = ""
             for ref in response.output.get("doc_references", []):
-                ref_title = ref.get("title", "") if ref.get("title") else ref.get("doc_name", "")
+                ref_title = (
+                    ref.get("title", "")
+                    if ref.get("title")
+                    else ref.get("doc_name", "")
+                )
                 ref_str += f"{ref['index_id']}. {ref_title}\n"
             output_text += f"\n\n回答来源:\n{ref_str}"
 
         return LLMResponse(role="assistant", completion_text=output_text)
+
+    async def text_chat_stream(
+        self,
+        prompt,
+        session_id=None,
+        image_urls=...,
+        func_tool=None,
+        contexts=...,
+        system_prompt=None,
+        tool_calls_result=None,
+        **kwargs,
+    ):
+        raise NotImplementedError("This method is not implemented yet.")
 
     async def forget(self, session_id):
         return True

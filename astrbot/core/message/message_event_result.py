@@ -1,6 +1,6 @@
 import enum
 
-from typing import List, Optional, Union
+from typing import List, Optional, Union, AsyncGenerator
 from dataclasses import dataclass, field
 from astrbot.core.message.components import (
     BaseMessageComponent,
@@ -131,6 +131,8 @@ class ResultContentType(enum.Enum):
     """调用 LLM 产生的结果"""
     GENERAL_RESULT = enum.auto()
     """普通的消息结果"""
+    STREAMING_RESULT = enum.auto()
+    """调用 LLM 产生的流式结果"""
 
 
 @dataclass
@@ -152,6 +154,9 @@ class MessageEventResult(MessageChain):
         default_factory=lambda: ResultContentType.GENERAL_RESULT
     )
 
+    async_stream: Optional[AsyncGenerator] = None
+    """异步流"""
+
     def stop_event(self) -> "MessageEventResult":
         """终止事件传播。"""
         self.result_type = EventResultType.STOP
@@ -167,6 +172,11 @@ class MessageEventResult(MessageChain):
         是否终止事件传播。
         """
         return self.result_type == EventResultType.STOP
+
+    def set_async_stream(self, stream: AsyncGenerator) -> "MessageEventResult":
+        """设置异步流。"""
+        self.async_stream = stream
+        return self
 
     def set_result_content_type(self, typ: ResultContentType) -> "MessageEventResult":
         """设置事件处理的结果类型。

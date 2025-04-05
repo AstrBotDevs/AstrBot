@@ -189,6 +189,19 @@ class ProviderDify(Provider):
 
         return LLMResponse(role="assistant", result_chain=chain)
 
+    async def text_chat_stream(
+        self,
+        prompt,
+        session_id=None,
+        image_urls=...,
+        func_tool=None,
+        contexts=...,
+        system_prompt=None,
+        tool_calls_result=None,
+        **kwargs,
+    ):
+        raise NotImplementedError("This method is not implemented yet.")
+
     async def parse_dify_result(self, chunk: dict | str) -> MessageChain:
         if isinstance(chunk, str):
             # Chat
