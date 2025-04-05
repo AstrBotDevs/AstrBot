@@ -3,6 +3,7 @@ import datetime
 import builtins
 import traceback
 import re
+import zoneinfo
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -23,7 +24,6 @@ from .long_term_memory import LongTermMemory
 from astrbot.core import logger
 from astrbot.api.message_components import Plain, Image, Reply
 from typing import Union
-import pytz
 
 
 @star.register(
@@ -39,8 +39,11 @@ class Main(star.Star):
         self.prompt_prefix = cfg["provider_settings"]["prompt_prefix"]
         self.identifier = cfg["provider_settings"]["identifier"]
         self.enable_datetime = cfg["provider_settings"]["datetime_system_prompt"]
-        self.timezone = cfg["provider_settings"]["timezone"]
-
+        self.timezone = cfg.get("timezone", "Asia/Shanghai")
+        if not self.timezone:
+            # 系统默认时区
+            self.timezone = None
+        logger.info(f"Timezone set to: {self.timezone}")
         self.ltm = None
         if (
             self.context.get_config()["provider_ltm_settings"]["group_icl_enable"]
@@ -1195,21 +1198,15 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         # 启用附加时间戳
         if self.enable_datetime:
-            # 启用时区
+            current_time = None
             if self.timezone:
+                # 启用时区
                 try:
-                    tz = pytz.timezone(self.timezone)
-                    now = datetime.datetime.now(tz)
+                    now = datetime.datetime.now(zoneinfo.ZoneInfo(self.timezone))
                     current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
                 except Exception as e:
                     logger.error(f"时区设置错误: {e}, 使用本地时区")
-                    current_time = (
-                        datetime.datetime.now()
-                        .astimezone()
-                        .strftime("%Y-%m-%d %H:%M (%Z)")
-                    )
-            # 未启用时区
-            else:
+            if not current_time:
                 current_time = (
                     datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
                 )
