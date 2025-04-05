@@ -94,7 +94,6 @@
                   v-else-if="metadata[metadataKey].items[key]?.type === 'text' && !metadata[metadataKey].items[key]?.invisible"
                   v-model="iterable[key]"
                   variant="outlined"
-                  auto-grow
                   rows="3"
                   class="config-field"
                   hide-details
