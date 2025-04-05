@@ -39,11 +39,12 @@ class Main(star.Star):
         self.prompt_prefix = cfg["provider_settings"]["prompt_prefix"]
         self.identifier = cfg["provider_settings"]["identifier"]
         self.enable_datetime = cfg["provider_settings"]["datetime_system_prompt"]
-        self.timezone = cfg.get("timezone", "Asia/Shanghai")
+        self.timezone = cfg.get("timezone")
         if not self.timezone:
             # 系统默认时区
             self.timezone = None
-        logger.info(f"Timezone set to: {self.timezone}")
+        else:
+            logger.info(f"Timezone set to: {self.timezone}")
         self.ltm = None
         if (
             self.context.get_config()["provider_ltm_settings"]["group_icl_enable"]
