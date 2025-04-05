@@ -51,10 +51,14 @@ class ProviderDashscope(ProviderOpenAIOfficial):
             self.timeout = int(self.timeout)
 
     def has_rag_options(self):
-        if (
-            self.rag_options
-            and self.rag_options.get("pipeline_ids", None)
-            and self.rag_options.get("file_ids", None)
+        """判断是否有 RAG 选项
+
+        Returns:
+            bool: 是否有 RAG 选项
+        """
+        if self.rag_options and (
+            len(self.rag_options.get("pipeline_ids", [])) > 0
+            or len(self.rag_options.get("file_ids", [])) > 0
         ):
             return True
         return False
@@ -78,7 +82,7 @@ class ProviderDashscope(ProviderOpenAIOfficial):
 
         if (
             self.dashscope_app_type in ["agent", "dialog-workflow"]
-            and self.has_rag_options()
+            and not self.has_rag_options()
         ):
             # 支持多轮对话的
             new_record = {"role": "user", "content": prompt}
@@ -92,12 +96,15 @@ class ProviderDashscope(ProviderOpenAIOfficial):
                 if "_no_save" in part:
                     del part["_no_save"]
             # 调用阿里云百炼 API
+            payload = {
+                "app_id": self.app_id,
+                "api_key": self.api_key,
+                "messages": context_query,
+                "biz_params": payload_vars or None,
+            }
             partial = functools.partial(
                 Application.call,
-                app_id=self.app_id,
-                api_key=self.api_key,
-                messages=context_query,
-                biz_params=payload_vars or None,
+                **payload,
             )
             response = await asyncio.get_event_loop().run_in_executor(None, partial)
         else:
@@ -134,7 +141,8 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         if self.output_reference and response.output.get("doc_references", None):
             ref_str = ""
             for ref in response.output.get("doc_references", []):
-                ref_str += f"{ref['index_id']}. {ref['title']}\n"
+                ref_title = ref.get("title", "") if ref.get("title") else ref.get("doc_name", "")
+                ref_str += f"{ref['index_id']}. {ref_title}\n"
             output_text += f"\n\n回答来源:\n{ref_str}"
 
         return LLMResponse(role="assistant", completion_text=output_text)

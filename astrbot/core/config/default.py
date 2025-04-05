@@ -752,7 +752,7 @@ CONFIG_METADATA_2 = {
                     "rag_options": {
                         "description": "RAG 选项",
                         "type": "object",
-                        "hint": "检索知识库设置, 非必填。仅 Agent 应用类型支持(智能体应用, 包括 RAG 应用)",
+                        "hint": "检索知识库设置, 非必填。仅 Agent 应用类型支持(智能体应用, 包括 RAG 应用)。阿里云百炼应用开启此功能后将无法多轮对话。",
                         "items": {
                             "pipeline_ids": {
                                 "description": "知识库 ID 列表",
