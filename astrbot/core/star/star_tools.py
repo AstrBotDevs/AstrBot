@@ -1,14 +1,9 @@
 from typing import Union, Awaitable, List, Optional, ClassVar
-from asyncio import Queue
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.api.platform import MessageType, MessageMember, AstrBotMessage
+from astrbot.api.platform import MessageMember, AstrBotMessage
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.context import Context
-from astrbot.core.star.filter.command import CommandFilter
-from astrbot.core.star.filter.regex import RegexFilter
-from astrbot.core.star import star_handlers_registry, StarHandlerMetadata, EventType
-from astrbot.core import sp
 
 
 class StarTools:

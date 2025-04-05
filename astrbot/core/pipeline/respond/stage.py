@@ -2,6 +2,7 @@ import random
 import asyncio
 import math
 import traceback
+import astrbot.core.message.components as Comp
 from typing import Union, AsyncGenerator
 from ..stage import register_stage, Stage
 from ..context import PipelineContext
@@ -11,36 +12,6 @@ from astrbot.core import logger
 from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
-from astrbot.core.message.components import (
-    Plain,
-    Face,
-    Record,
-    Video,
-    At,
-    AtAll,
-    RPS,
-    Dice,
-    Shake,
-    Anonymous,
-    Share,
-    Contact,
-    Location,
-    Music,
-    Image,
-    Reply,
-    RedBag,
-    Poke,
-    Forward,
-    Node,
-    Nodes,
-    Xml,
-    Json,
-    CardImage,
-    TTS,
-    Unknown,
-    File,
-    WechatEmoji,
-)
 
 
 @register_stage
@@ -91,7 +62,7 @@ class RespondStage(Stage):
     async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
         """分段回复 计算间隔时间"""
         if self.interval_method == "log":
-            if isinstance(comp, Plain):
+            if isinstance(comp, Comp.Plain):
                 wc = await self._word_cnt(comp.text)
                 i = math.log(wc + 1, self.log_base)
                 return random.uniform(i, i + 0.5)
@@ -112,40 +83,40 @@ class RespondStage(Stage):
 
         # 组件类型到其非空判断函数的映射
         component_validators = {
-            Plain: lambda comp: bool(
+            Comp.Plain: lambda comp: bool(
                 comp.text and comp.text.strip()
             ),  # 纯文本消息需要strip
-            Face: lambda comp: comp.id is not None,  # QQ表情
-            Record: lambda comp: bool(comp.file),  # 语音
-            Video: lambda comp: bool(comp.file),  # 视频
-            At: lambda comp: bool(comp.qq) or bool(comp.name),  # @
-            AtAll: lambda comp: True,  # @所有人
-            RPS: lambda comp: True,  # 不知道是啥(未完成)
-            Dice: lambda comp: True,  # 骰子(未完成)
-            Shake: lambda comp: True,  # 摇一摇(未完成)
-            Anonymous: lambda comp: True,  # 匿名(未完成)
-            Share: lambda comp: bool(comp.url) and bool(comp.title),  # 分享
-            Contact: lambda comp: True,  # 联系人(未完成)
-            Location: lambda comp: bool(comp.lat and comp.lon),  # 位置
-            Music: lambda comp: bool(comp._type)
+            Comp.Face: lambda comp: comp.id is not None,  # QQ表情
+            Comp.Record: lambda comp: bool(comp.file),  # 语音
+            Comp.Video: lambda comp: bool(comp.file),  # 视频
+            Comp.At: lambda comp: bool(comp.qq) or bool(comp.name),  # @
+            Comp.AtAll: lambda comp: True,  # @所有人
+            Comp.RPS: lambda comp: True,  # 不知道是啥(未完成)
+            Comp.Dice: lambda comp: True,  # 骰子(未完成)
+            Comp.Shake: lambda comp: True,  # 摇一摇(未完成)
+            Comp.Anonymous: lambda comp: True,  # 匿名(未完成)
+            Comp.Share: lambda comp: bool(comp.url) and bool(comp.title),  # 分享
+            Comp.Contact: lambda comp: True,  # 联系人(未完成)
+            Comp.Location: lambda comp: bool(comp.lat and comp.lon),  # 位置
+            Comp.Music: lambda comp: bool(comp._type)
             and bool(comp.url)
             and bool(comp.audio),  # 音乐
-            Image: lambda comp: bool(comp.file),  # 图片
-            Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
-            RedBag: lambda comp: bool(comp.title),  # 红包
-            Poke: lambda comp: comp.id != 0 and comp.qq != 0,  # 戳一戳
-            Forward: lambda comp: bool(comp.id and comp.id.strip()),  # 转发
-            Node: lambda comp: bool(comp.name)
+            Comp.Image: lambda comp: bool(comp.file),  # 图片
+            Comp.Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
+            Comp.RedBag: lambda comp: bool(comp.title),  # 红包
+            Comp.Poke: lambda comp: comp.id != 0 and comp.qq != 0,  # 戳一戳
+            Comp.Forward: lambda comp: bool(comp.id and comp.id.strip()),  # 转发
+            Comp.Node: lambda comp: bool(comp.name)
             and comp.uin != 0
             and bool(comp.content),  # 一个转发节点
-            Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
-            Xml: lambda comp: bool(comp.data and comp.data.strip()),  # XML
-            Json: lambda comp: bool(comp.data),  # JSON
-            CardImage: lambda comp: bool(comp.file),  # 卡片图片
-            TTS: lambda comp: bool(comp.text and comp.text.strip()),  # 语音合成
-            Unknown: lambda comp: bool(comp.text and comp.text.strip()),  # 未知消息
-            File: lambda comp: bool(comp.file),  # 文件
-            WechatEmoji: lambda comp: bool(comp.md5),  # 微信表情
+            Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
+            Comp.Xml: lambda comp: bool(comp.data and comp.data.strip()),  # XML
+            Comp.Json: lambda comp: bool(comp.data),  # JSON
+            Comp.CardImage: lambda comp: bool(comp.file),  # 卡片图片
+            Comp.TTS: lambda comp: bool(comp.text and comp.text.strip()),  # 语音合成
+            Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),  # 未知消息
+            Comp.File: lambda comp: bool(comp.file),  # 文件
+            Comp.WechatEmoji: lambda comp: bool(comp.md5),  # 微信表情
         }
 
         for comp in chain:
@@ -156,8 +127,7 @@ class RespondStage(Stage):
                 if component_validators[comp_type](comp):
                     return False
             else:
-                logger.error(f"消息链中包含非消息组件: {comp}, 停止事件传播")
-                return True
+                logger.info(f"空内容检查: 无法识别的组件类型: {comp_type.__name__}")
 
         # 如果所有组件都为空
         return True
@@ -173,11 +143,14 @@ class RespondStage(Stage):
             await event._pre_send()
 
             # 检查消息链是否为空
-            if await self._is_empty_message_chain(result.chain):
-                logger.info("消息为空，跳过发送阶段")
-                event.clear_result()
-                event.stop_event()
-                return
+            try:
+                if await self._is_empty_message_chain(result.chain):
+                    logger.info("消息为空，跳过发送阶段")
+                    event.clear_result()
+                    event.stop_event()
+                    return
+            except Exception as e:
+                logger.warning(f"空内容检查异常: {e}")
 
             if self.enable_seg and (
                 (self.only_llm_result and result.is_llm_result())
@@ -186,13 +159,13 @@ class RespondStage(Stage):
                 decorated_comps = []
                 if self.reply_with_mention:
                     for comp in result.chain:
-                        if isinstance(comp, At):
+                        if isinstance(comp, Comp.At):
                             decorated_comps.append(comp)
                             result.chain.remove(comp)
                             break
                 if self.reply_with_quote:
                     for comp in result.chain:
-                        if isinstance(comp, Reply):
+                        if isinstance(comp, Comp.Reply):
                             decorated_comps.append(comp)
                             result.chain.remove(comp)
                             break
