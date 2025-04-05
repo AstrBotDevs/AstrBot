@@ -86,7 +86,6 @@ export default {
     isLevelSelected(level) {
       for (let i = 0; i < this.selectedLevels.length; ++i) {
         let level_ = this.logLevels[this.selectedLevels[i]]
-        console
         if (level_ === level) {
           return true;
         }
