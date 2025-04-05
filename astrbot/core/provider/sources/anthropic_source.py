@@ -160,6 +160,19 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
 
         return llm_response
 
+    async def text_chat_stream(
+        self,
+        prompt,
+        session_id=None,
+        image_urls=...,
+        func_tool=None,
+        contexts=...,
+        system_prompt=None,
+        tool_calls_result=None,
+        **kwargs,
+    ):
+        raise NotImplementedError("This method is not implemented yet.")
+
     async def assemble_context(self, text: str, image_urls: List[str] = None):
         """组装上下文，支持文本和图片"""
         if not image_urls:

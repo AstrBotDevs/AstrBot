@@ -204,6 +204,9 @@ class LLMResponse:
 
     _completion_text: str = ""
 
+    is_chunk: bool = False
+    """是否是流式输出的单个 Chunk"""
+
     def __init__(
         self,
         role: str,
@@ -214,6 +217,7 @@ class LLMResponse:
         tools_call_ids: List[str] = [],
         raw_completion: ChatCompletion = None,
         _new_record: Dict[str, any] = None,
+        is_chunk: bool = False,
     ):
         """初始化 LLMResponse
 
@@ -233,6 +237,7 @@ class LLMResponse:
         self.tools_call_ids = tools_call_ids
         self.raw_completion = raw_completion
         self._new_record = _new_record
+        self.is_chunk = is_chunk
 
     @property
     def completion_text(self):

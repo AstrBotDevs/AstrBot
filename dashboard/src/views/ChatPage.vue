@@ -1,6 +1,7 @@
 <script setup>
 import axios from 'axios';
 import { marked } from 'marked';
+import { ref } from 'vue';
 
 marked.setOptions({
     breaks: true
@@ -13,27 +14,30 @@ marked.setOptions({
             <div class="chat-layout">
                 <!-- 左侧对话列表面板 -->
                 <div class="sidebar-panel">
-                    <v-btn variant="tonal" rounded="xl" class="new-chat-btn" @click="newC"
-                        :disabled="!currCid">
+                    <v-btn variant="tonal" rounded="xl" class="new-chat-btn" @click="newC" :disabled="!currCid">
                         <v-icon class="mr-2">mdi-plus</v-icon>创建对话
                     </v-btn>
 
                     <v-card class="conversation-list-card" v-if="conversations.length > 0">
-                        <v-list density="compact" nav class="conversation-list" @update:selected="getConversationMessages">
+                        <v-list density="compact" nav class="conversation-list"
+                            @update:selected="getConversationMessages">
                             <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                 color="primary" rounded="xl" class="conversation-item">
                                 <v-list-item-title>新对话</v-list-item-title>
-                                <v-list-item-subtitle class="timestamp">{{ formatDate(item.updated_at) }}</v-list-item-subtitle>
+                                <v-list-item-subtitle class="timestamp">{{ formatDate(item.updated_at)
+                                    }}</v-list-item-subtitle>
                             </v-list-item>
                         </v-list>
                     </v-card>
 
                     <div class="status-chips">
-                        <v-chip class="status-chip" color="primary" :append-icon="status?.llm_enabled ? 'mdi-check' : 'mdi-close'">
+                        <v-chip class="status-chip" color="primary"
+                            :append-icon="status?.llm_enabled ? 'mdi-check' : 'mdi-close'">
                             LLM
                         </v-chip>
 
-                        <v-chip class="status-chip" color="success" :append-icon="status?.stt_enabled ? 'mdi-check' : 'mdi-close'">
+                        <v-chip class="status-chip" color="success"
+                            :append-icon="status?.stt_enabled ? 'mdi-check' : 'mdi-close'">
                             语音转文本
                         </v-chip>
                     </div>
@@ -77,14 +81,15 @@ marked.setOptions({
                                 <div v-if="msg.type == 'user'" class="user-message">
                                     <div class="message-bubble user-bubble">
                                         <span>{{ msg.message }}</span>
-                                        
+
                                         <!-- 图片附件 -->
                                         <div class="image-attachments" v-if="msg.image_url && msg.image_url.length > 0">
-                                            <div v-for="(img, index) in msg.image_url" :key="index" class="image-attachment">
+                                            <div v-for="(img, index) in msg.image_url" :key="index"
+                                                class="image-attachment">
                                                 <img :src="img" class="attached-image" />
                                             </div>
                                         </div>
-                                        
+
                                         <!-- 音频附件 -->
                                         <div class="audio-attachment" v-if="msg.audio_url && msg.audio_url.length > 0">
                                             <audio controls class="audio-player">
@@ -97,7 +102,7 @@ marked.setOptions({
                                         <v-icon icon="mdi-account" />
                                     </v-avatar>
                                 </div>
-                                
+
                                 <!-- 机器人消息 -->
                                 <div v-else class="bot-message">
                                     <v-avatar class="bot-avatar" color="deep-purple" size="36">
@@ -113,49 +118,30 @@ marked.setOptions({
 
                     <!-- 输入区域 -->
                     <div class="input-area fade-in">
-                        <v-text-field 
-                            id="input-field" 
-                            variant="outlined" 
-                            v-model="prompt" 
-                            :label="inputFieldLabel"
-                            placeholder="开始输入..." 
-                            :loading="loadingChat"
-                            clear-icon="mdi-close-circle" 
-                            clearable
-                            @click:clear="clearMessage" 
-                            class="message-input"
-                            @keydown="handleInputKeyDown"
-                            hide-details
-                        >
+                        <v-text-field id="input-field" variant="outlined" v-model="prompt" :label="inputFieldLabel"
+                            placeholder="开始输入..." :loading="loadingChat" clear-icon="mdi-close-circle" clearable
+                            @click:clear="clearMessage" class="message-input" @keydown="handleInputKeyDown"
+                            hide-details>
                             <template v-slot:loader>
-                                <v-progress-linear :active="loadingChat" height="3" color="deep-purple" indeterminate></v-progress-linear>
+                                <v-progress-linear :active="loadingChat" height="3" color="deep-purple"
+                                    indeterminate></v-progress-linear>
                             </template>
 
                             <template v-slot:append>
                                 <v-tooltip text="发送">
                                     <template v-slot:activator="{ props }">
-                                        <v-btn 
-                                            v-bind="props" 
-                                            @click="sendMessage" 
-                                            class="send-btn" 
-                                            icon="mdi-send" 
-                                            variant="text"
-                                            color="deep-purple"
-                                            :disabled="!prompt && stagedImagesUrl.length === 0 && !stagedAudioUrl"
-                                        />
+                                        <v-btn v-bind="props" @click="sendMessage" class="send-btn" icon="mdi-send"
+                                            variant="text" color="deep-purple"
+                                            :disabled="!prompt && stagedImagesUrl.length === 0 && !stagedAudioUrl" />
                                     </template>
                                 </v-tooltip>
 
                                 <v-tooltip text="语音输入">
                                     <template v-slot:activator="{ props }">
-                                        <v-btn 
-                                            v-bind="props"
-                                            @click="isRecording ? stopRecording() : startRecording()" 
-                                            class="record-btn" 
-                                            :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'"
-                                            variant="text"
-                                            :color="isRecording ? 'error' : 'deep-purple'"
-                                        />
+                                        <v-btn v-bind="props" @click="isRecording ? stopRecording() : startRecording()"
+                                            class="record-btn"
+                                            :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
+                                            :color="isRecording ? 'error' : 'deep-purple'" />
                                     </template>
                                 </v-tooltip>
                             </template>
@@ -165,15 +151,17 @@ marked.setOptions({
                         <div class="attachments-preview" v-if="stagedImagesUrl.length > 0 || stagedAudioUrl">
                             <div v-for="(img, index) in stagedImagesUrl" :key="index" class="image-preview">
                                 <img :src="img" class="preview-image" />
-                                <v-btn @click="removeImage(index)" class="remove-attachment-btn" icon="mdi-close" size="small" color="error" variant="text" />
+                                <v-btn @click="removeImage(index)" class="remove-attachment-btn" icon="mdi-close"
+                                    size="small" color="error" variant="text" />
                             </div>
-                            
+
                             <div v-if="stagedAudioUrl" class="audio-preview">
                                 <v-chip color="deep-purple-lighten-4" class="audio-chip">
                                     <v-icon start icon="mdi-microphone" size="small"></v-icon>
                                     新录音
                                 </v-chip>
-                                <v-btn @click="removeAudio" class="remove-attachment-btn" icon="mdi-close" size="small" color="error" variant="text" />
+                                <v-btn @click="removeAudio" class="remove-attachment-btn" icon="mdi-close" size="small"
+                                    color="error" variant="text" />
                             </div>
                         </div>
                     </div>
@@ -206,9 +194,9 @@ export default {
 
             status: {},
             statusText: '',
-            
+
             eventSource: null,
-            
+
             // Ctrl键长按相关变量
             ctrlKeyDown: false,
             ctrlKeyTimer: null,
@@ -228,18 +216,17 @@ export default {
                 this.sendMessage();
             }
         }.bind(this));
-        
+
         // 添加keyup事件监听
         document.addEventListener('keyup', this.handleInputKeyUp);
     },
 
     beforeUnmount() {
-        console.log("111")
         if (this.eventSource) {
             this.eventSource.cancel();
             console.log('SSE连接已断开');
         }
-        
+
         // 移除keyup事件监听
         document.removeEventListener('keyup', this.handleInputKeyUp);
     },
@@ -265,6 +252,9 @@ export default {
 
             this.eventSource = reader
 
+            let in_streaming = false
+            let message_obj = null
+
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) {
@@ -273,24 +263,27 @@ export default {
                 }
 
                 const chunk = decoder.decode(value, { stream: true });
-                console.log("!!!!", chunk);
 
-                if (chunk === '[HB]\n') {
+                // data: {"type": "plain", "data": "helloworld"}
+                let chunk_json = JSON.parse(chunk.replace('data: ', ''));
+
+                if (chunk_json.type === 'heartbeat') {
                     continue; // 心跳包
                 }
-                if (chunk === '[ERROR]\n') {
+                if (chunk_json.type === 'error') {
+                    console.error('Error received:', chunk_json.data);
                     continue;
                 }
 
-                if (chunk.startsWith('[IMAGE]')) {
-                    let img = chunk.replace('[IMAGE]', '');
+                if (chunk_json.type === 'image') {
+                    let img = chunk_json.data.replace('[IMAGE]', '');
                     let bot_resp = {
                         type: 'bot',
                         message: `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
                     }
                     this.messages.push(bot_resp);
-                } else if (chunk.startsWith('[RECORD]')) {
-                    let audio = chunk.replace('[RECORD]', '');
+                } else if (chunk_json.type === 'record') {
+                    let audio = chunk_json.data.replace('[RECORD]', '');
                     let bot_resp = {
                         type: 'bot',
                         message: `<audio controls class="audio-player">
@@ -299,12 +292,20 @@ export default {
                                   </audio>`
                     }
                     this.messages.push(bot_resp);
-                } else {
-                    let bot_resp = {
-                        type: 'bot',
-                        message: chunk
+                } else if (chunk_json.type === 'plain') {
+                    if (!in_streaming) {
+                        message_obj = {
+                            type: 'bot',
+                            message: ref(chunk_json.data),
+                        }
+                        this.messages.push(message_obj);
+                        in_streaming = true;
+                    } else {
+                        message_obj.message.value += chunk_json.data;
                     }
-                    this.messages.push(bot_resp);
+                } else if (chunk_json.type === 'end') {
+                    in_streaming = false;
+                    continue;
                 }
                 this.scrollToBottom();
             }
@@ -526,42 +527,6 @@ export default {
                     this.stagedAudioUrl = "";
 
                     this.loadingChat = false;
-
-                    // const reader = response.body.getReader();  // 获取流的 Reader
-                    // const decoder = new TextDecoder();
-
-                    // const readStream = async () => {
-                    //     const { done, value } = await reader.read();  // 读取流中的数据
-                    //     if (done) {
-                    //         console.log("Stream finished.");
-                    //         return;
-                    //     }
-
-                    //     const chunk = decoder.decode(value, { stream: true });
-                    //     // bot_resp.message.value += chunk;
-
-                    //     console.log("!!!!", chunk);
-                    //     if (chunk.startsWith('[IMAGE]')) {
-                    //         let img = chunk.replace('[IMAGE]', '');
-                    //         let bot_resp = {
-                    //             type: 'bot',
-                    //             message: `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
-                    //         }
-                    //         this.messages.push(bot_resp);
-                    //     } else {
-                    //         let bot_resp = {
-                    //             type: 'bot',
-                    //             message: chunk
-                    //         }
-
-                    //         this.messages.push(bot_resp);
-                    //     }
-
-                    //     this.scrollToBottom();
-                    //     readStream();  // 递归读取流
-                    // };
-
-                    // readStream();
                 })
                 .catch(err => {
                     console.error(err);
@@ -578,9 +543,9 @@ export default {
             if (e.keyCode === 17) { // Ctrl键
                 // 防止重复触发
                 if (this.ctrlKeyDown) return;
-                
+
                 this.ctrlKeyDown = true;
-                
+
                 // 设置定时器识别长按
                 this.ctrlKeyTimer = setTimeout(() => {
                     if (this.ctrlKeyDown && !this.isRecording) {
@@ -589,17 +554,17 @@ export default {
                 }, this.ctrlKeyLongPressThreshold);
             }
         },
-        
+
         handleInputKeyUp(e) {
             if (e.keyCode === 17) { // Ctrl键
                 this.ctrlKeyDown = false;
-                
+
                 // 清除定时器
                 if (this.ctrlKeyTimer) {
                     clearTimeout(this.ctrlKeyTimer);
                     this.ctrlKeyTimer = null;
                 }
-                
+
                 // 如果正在录音，停止录音
                 if (this.isRecording) {
                     this.stopRecording();
@@ -613,19 +578,41 @@ export default {
 <style>
 /* 基础动画 */
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
 
 @keyframes slideIn {
-    from { transform: translateX(20px); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+    from {
+        transform: translateX(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
 /* 聊天页面布局 */
@@ -828,7 +815,8 @@ export default {
     border-top-left-radius: 4px;
 }
 
-.user-avatar, .bot-avatar {
+.user-avatar,
+.bot-avatar {
     align-self: flex-end;
 }
 
@@ -881,7 +869,8 @@ export default {
     margin: 0 auto;
 }
 
-.send-btn, .record-btn {
+.send-btn,
+.record-btn {
     margin-left: 4px;
 }
 
@@ -895,7 +884,8 @@ export default {
     flex-wrap: wrap;
 }
 
-.image-preview, .audio-preview {
+.image-preview,
+.audio-preview {
     position: relative;
     display: inline-flex;
 }
@@ -1003,7 +993,7 @@ export default {
     margin: 16px 0;
 }
 
-.markdown-content th, 
+.markdown-content th,
 .markdown-content td {
     border: 1px solid #eee;
     padding: 8px 12px;

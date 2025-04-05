@@ -5,6 +5,7 @@ from typing import Union, AsyncGenerator
 from ..stage import Stage, register_stage, registered_stages
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core import logger
 from astrbot.core.message.components import Plain, Image, At, Reply, Record, File, Node
@@ -70,6 +71,9 @@ class ResultDecorateStage(Stage):
     ) -> Union[None, AsyncGenerator[None, None]]:
         result = event.get_result()
         if result is None or not result.chain:
+            return
+        if result.result_content_type == ResultContentType.STREAMING_RESULT:
+            # 流式结果暂时不进行处理
             return
 
         # 回复时检查内容安全

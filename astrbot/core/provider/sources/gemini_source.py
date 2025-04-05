@@ -338,6 +338,19 @@ class ProviderGoogleGenAI(Provider):
 
         return llm_response
 
+    async def text_chat_stream(
+        self,
+        prompt,
+        session_id=None,
+        image_urls=...,
+        func_tool=None,
+        contexts=...,
+        system_prompt=None,
+        tool_calls_result=None,
+        **kwargs,
+    ):
+        raise NotImplementedError("This method is not implemented yet.")
+
     def get_current_key(self) -> str:
         return self.client.api_key
 

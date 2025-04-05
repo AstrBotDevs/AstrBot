@@ -6,7 +6,7 @@ from typing import Union, AsyncGenerator
 from ..stage import register_stage, Stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
@@ -79,7 +79,14 @@ class RespondStage(Stage):
         if result is None:
             return
 
-        if len(result.chain) > 0:
+        if result.result_content_type == ResultContentType.STREAMING_RESULT:
+            # 流式结果直接交付平台适配器处理
+            logger.info(f"应用流式输出({event.get_platform_name()})")
+            await event._pre_send()
+            await event.send_streaming(result.async_stream)
+            await event._post_send()
+            return
+        elif len(result.chain) > 0:
             await event._pre_send()
 
             if self.enable_seg and (

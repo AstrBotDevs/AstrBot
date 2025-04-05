@@ -1,7 +1,7 @@
 import abc
 import asyncio
 from dataclasses import dataclass
-from typing import List, Union, Optional
+from typing import List, Union, Optional, AsyncGenerator
 
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
@@ -201,6 +201,15 @@ class AstrMessageEvent(abc.ABC):
         是否是管理员。
         """
         return self.role == "admin"
+
+    async def send_streaming(self, generator: AsyncGenerator[List[BaseMessageComponent], None]):
+        """发送流式消息到消息平台，使用异步生成器。
+        目前仅支持: telegram。
+        """
+        asyncio.create_task(
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        )
+        self._has_send_oper = True
 
     async def _pre_send(self):
         """调度器会在执行 send() 前调用该方法"""

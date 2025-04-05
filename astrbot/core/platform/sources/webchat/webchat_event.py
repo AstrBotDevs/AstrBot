@@ -16,16 +16,26 @@ class WebChatMessageEvent(AstrMessageEvent):
         os.makedirs(imgs_dir, exist_ok=True)
 
     @staticmethod
-    async def _send(message: MessageChain, session_id: str):
+    async def _send(message: MessageChain, session_id: str, streaming: bool = False):
         if not message:
-            web_chat_back_queue.put_nowait(None)
+            await web_chat_back_queue.put(
+                {"type": "end", "data": "", "streaming": False}
+            )
             return
 
         cid = session_id.split("!")[-1]
-
+        data = ""
         for comp in message.chain:
             if isinstance(comp, Plain):
-                web_chat_back_queue.put_nowait((comp.text, cid))
+                data = comp.text
+                await web_chat_back_queue.put(
+                    {
+                        "type": "plain",
+                        "cid": cid,
+                        "data": data,
+                        "streaming": streaming,
+                    }
+                )
             elif isinstance(comp, Image):
                 # save image to local
                 filename = str(uuid.uuid4()) + ".jpg"
@@ -46,7 +56,15 @@ class WebChatMessageEvent(AstrMessageEvent):
                     with open(path, "wb") as f:
                         with open(comp.file, "rb") as f2:
                             f.write(f2.read())
-                web_chat_back_queue.put_nowait((f"[IMAGE]{filename}", cid))
+                data = f"[IMAGE]{filename}"
+                await web_chat_back_queue.put(
+                    {
+                        "type": "image",
+                        "cid": cid,
+                        "data": data,
+                        "streaming": streaming,
+                    }
+                )
             elif isinstance(comp, Record):
                 # save record to local
                 filename = str(uuid.uuid4()) + ".wav"
@@ -62,11 +80,45 @@ class WebChatMessageEvent(AstrMessageEvent):
                     with open(path, "wb") as f:
                         with open(comp.file, "rb") as f2:
                             f.write(f2.read())
-                web_chat_back_queue.put_nowait((f"[RECORD]{filename}", cid))
+                data = f"[RECORD]{filename}"
+                await web_chat_back_queue.put(
+                    {
+                        "type": "record",
+                        "cid": cid,
+                        "data": data,
+                        "streaming": streaming,
+                    }
+                )
             else:
                 logger.debug(f"webchat 忽略: {comp.type}")
-        web_chat_back_queue.put_nowait(None)
+
+        return data
 
     async def send(self, message: MessageChain):
         await WebChatMessageEvent._send(message, session_id=self.session_id)
+        await web_chat_back_queue.put(
+            {
+                "type": "end",
+                "data": "",
+                "streaming": False,
+                "cid": self.session_id.split("!")[-1],
+            }
+        )
         await super().send(message)
+
+    async def send_streaming(self, generator):
+        final_data = ""
+        async for chain in generator:
+            final_data += await WebChatMessageEvent._send(
+                MessageChain(chain=chain), session_id=self.session_id, streaming=True
+            )
+
+        await web_chat_back_queue.put(
+            {
+                "type": "end",
+                "data": final_data,
+                "streaming": True,
+                "cid": self.session_id.split("!")[-1],
+            }
+        )
+        await super().send_streaming(generator)
