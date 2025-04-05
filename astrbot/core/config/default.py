@@ -98,6 +98,7 @@ DEFAULT_CONFIG = {
     "plugin_repo_mirror": "",
     "knowledge_db": {},
     "persona": [],
+    "timezone": "",
 }
 
 
@@ -1171,6 +1172,12 @@ CONFIG_METADATA_2 = {
                 "description": "HTTP 代理",
                 "type": "string",
                 "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`",
+            },
+            "timezone": {
+                "description": "时区",
+                "type": "string",
+                "obvious_hint": True,
+                "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab",
             },
             "log_level": {
                 "description": "控制台日志级别",
