@@ -24,7 +24,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
             if isinstance(segment, Comp.Plain):
                 segment.text = segment.text.strip()
                 await asyncio.get_event_loop().run_in_executor(
-                    None, client.reply_text, segment.text, self.message_obj.raw_message
+                    None, client.reply_markdown, "AstrBot", segment.text, self.message_obj.raw_message
                 )
             elif isinstance(segment, Comp.Image):
                 markdown_str = ""
