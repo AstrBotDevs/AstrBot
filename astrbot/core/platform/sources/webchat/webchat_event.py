@@ -3,7 +3,7 @@ import uuid
 import base64
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Plain, Image
+from astrbot.api.message_components import Plain, Image, Record
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core import web_chat_back_queue
 
@@ -47,6 +47,22 @@ class WebChatMessageEvent(AstrMessageEvent):
                         with open(comp.file, "rb") as f2:
                             f.write(f2.read())
                 web_chat_back_queue.put_nowait((f"[IMAGE]{filename}", cid))
+            elif isinstance(comp, Record):
+                # save record to local
+                filename = str(uuid.uuid4()) + ".wav"
+                path = os.path.join(imgs_dir, filename)
+                if comp.file and comp.file.startswith("file:///"):
+                    ph = comp.file[8:]
+                    with open(path, "wb") as f:
+                        with open(ph, "rb") as f2:
+                            f.write(f2.read())
+                elif comp.file and comp.file.startswith("http"):
+                    await download_image_by_url(comp.file, path=path)
+                else:
+                    with open(path, "wb") as f:
+                        with open(comp.file, "rb") as f2:
+                            f.write(f2.read())
+                web_chat_back_queue.put_nowait((f"[RECORD]{filename}", cid))
             else:
                 logger.debug(f"webchat 忽略: {comp.type}")
         web_chat_back_queue.put_nowait(None)
