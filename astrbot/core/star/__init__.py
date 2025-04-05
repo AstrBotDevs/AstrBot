@@ -29,4 +29,4 @@ class Star(CommandParserMixin):
         pass
 
 
-__all__ = ["Star", "StarMetadata", "PluginManager", "Context", "Provider"]
+__all__ = ["Star", "StarMetadata", "PluginManager", "Context", "Provider", "StarTools"]
