@@ -71,8 +71,8 @@ export const useCommonStore = defineStore({
 
               let data_json = JSON.parse(data)
               if (data_json.type === 'log') {
-                let log = data_json.data
-                this.log_cache.push(log);
+                // let log = data_json.data
+                this.log_cache.push(data_json);
                 if (this.log_cache.length > this.log_cache_max_len) {
                   this.log_cache.shift();
                 }
