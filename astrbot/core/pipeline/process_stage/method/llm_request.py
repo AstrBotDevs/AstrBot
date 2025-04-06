@@ -156,7 +156,6 @@ class LLMRequestSubStage(Stage):
                         )
                         async for llm_response in stream:
                             if llm_response.is_chunk:
-                                logger.debug(llm_response)
                                 if llm_response.result_chain:
                                     yield llm_response.result_chain # MessageChain
                                 else:

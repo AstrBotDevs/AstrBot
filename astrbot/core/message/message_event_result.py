@@ -111,6 +111,23 @@ class MessageChain:
         """获取纯文本消息。这个方法将获取 chain 中所有 Plain 组件的文本并拼接成一条消息。空格分隔。"""
         return " ".join([comp.text for comp in self.chain if isinstance(comp, Plain)])
 
+    def squash_plain(self):
+        """将消息链中的所有 Plain 消息段聚合到第一个 Plain 消息段中。"""
+        if not self.chain:
+            return
+        first_plain = None
+        to_delete = []
+        for i, comp in enumerate(self.chain):
+            if isinstance(comp, Plain):
+                if first_plain is None:
+                    first_plain = i
+                else:
+                    self.chain[first_plain].text += comp.text
+                    to_delete.append(i)
+        for i in reversed(to_delete):
+            self.chain.pop(i)
+        return self
+
 
 class EventResultType(enum.Enum):
     """用于描述事件处理的结果类型。
