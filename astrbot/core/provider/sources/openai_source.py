@@ -171,7 +171,7 @@ class ProviderOpenAIOfficial(Provider):
         if choice.message.content:
             # text completion
             completion_text = str(choice.message.content).strip()
-            llm_response.completion_text = completion_text
+            llm_response.result_chain = MessageChain().message(completion_text)
 
         if choice.message.tool_calls:
             # tools call (function calling)
