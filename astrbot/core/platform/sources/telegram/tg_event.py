@@ -9,7 +9,6 @@ from astrbot.api.message_components import (
     At,
     File,
     Record,
-    BaseMessageComponent,
 )
 from telegram.ext import ExtBot
 from astrbot.core.utils.io import download_file
@@ -110,15 +109,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
             payload["reply_to_message_id"] = message_thread_id
 
         delta = ""
+        current_content = ""
         message_id = None
         last_edit_time = 0  # 上次编辑消息的时间
         throttle_interval = 0.6  # 编辑消息的间隔时间 (秒)
 
         async for chain in generator:
-            logger.debug(f"streaming: {chain}")
-            if isinstance(chain, list):
+            if isinstance(chain, MessageChain):
                 # 处理消息链中的每个组件
-                for i in chain:
+                for i in chain.chain:
                     if isinstance(i, Plain):
                         delta += i.text
                     elif isinstance(i, Image):
@@ -144,6 +143,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if not message_id:
                     try:
                         msg = await self.client.send_message(text=delta, **payload)
+                        current_content = delta
                     except Exception as e:
                         logger.warning(f"发送消息失败(streaming): {e}")
                     message_id = msg.message_id
@@ -163,13 +163,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
                                 chat_id=payload["chat_id"],
                                 message_id=message_id,
                             )
+                            current_content = delta
                         except Exception as e:
                             logger.warning(f"编辑消息失败(streaming): {e}")
                         last_edit_time = (
                             asyncio.get_event_loop().time()
                         )  # 更新上次编辑的时间
 
-        if delta:
+        if delta and current_content != delta:
             await self.client.edit_message_text(
                 text=delta, chat_id=payload["chat_id"], message_id=message_id
             )

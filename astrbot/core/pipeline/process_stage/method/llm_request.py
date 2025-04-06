@@ -12,6 +12,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
+    MessageChain
 )
 from astrbot.core.message.components import Image
 from astrbot.core import logger
@@ -156,7 +157,10 @@ class LLMRequestSubStage(Stage):
                         async for llm_response in stream:
                             if llm_response.is_chunk:
                                 logger.debug(llm_response)
-                                yield llm_response.result_chain
+                                if llm_response.result_chain:
+                                    yield llm_response.result_chain # MessageChain
+                                else:
+                                    yield MessageChain().message(llm_response.completion_text)
                             else:
                                 final_llm_response = llm_response
                     else:

@@ -110,7 +110,7 @@ class WebChatMessageEvent(AstrMessageEvent):
         final_data = ""
         async for chain in generator:
             final_data += await WebChatMessageEvent._send(
-                MessageChain(chain=chain), session_id=self.session_id, streaming=True
+                chain, session_id=self.session_id, streaming=True
             )
 
         await web_chat_back_queue.put(

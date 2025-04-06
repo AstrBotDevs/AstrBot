@@ -12,6 +12,7 @@ from openai.types.chat.chat_completion import ChatCompletion
 from openai._exceptions import NotFoundError, UnprocessableEntityError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.message.message_event_result import MessageChain
 
 from astrbot.core.db import BaseDatabase
 from astrbot.api.provider import Provider, Personality
@@ -149,7 +150,7 @@ class ProviderOpenAIOfficial(Provider):
             # 处理文本内容
             if delta.content:
                 completion_text = delta.content
-                llm_response.result_chain = [Comp.Plain(completion_text)]
+                llm_response.result_chain = MessageChain(chain=[Comp.Plain(completion_text)])
                 yield llm_response
 
         final_completion = state.get_final_completion()

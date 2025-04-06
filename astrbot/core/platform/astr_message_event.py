@@ -202,7 +202,7 @@ class AstrMessageEvent(abc.ABC):
         """
         return self.role == "admin"
 
-    async def send_streaming(self, generator: AsyncGenerator[List[BaseMessageComponent], None]):
+    async def send_streaming(self, generator: AsyncGenerator[MessageChain, None]):
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram。
         """
