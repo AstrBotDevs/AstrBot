@@ -37,28 +37,33 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         stream_payload = {"state": 1, "id": None, "index": 0, "reset": False}
         last_edit_time = 0  # 上次编辑消息的时间
         throttle_interval = 1  # 编辑消息的间隔时间 (秒)
-        async for chain in generator:
-            source = self.message_obj.raw_message
-            if not self.send_buffer:
-                self.send_buffer = chain
-            else:
-                self.send_buffer.chain.extend(chain.chain)
+        try:
+            async for chain in generator:
+                source = self.message_obj.raw_message
+                if not self.send_buffer:
+                    self.send_buffer = chain
+                else:
+                    self.send_buffer.chain.extend(chain.chain)
+
+                if isinstance(source, botpy.message.C2CMessage):
+                    # 真流式传输
+                    current_time = asyncio.get_event_loop().time()
+                    time_since_last_edit = current_time - last_edit_time
+
+                    if time_since_last_edit >= throttle_interval:
+                        ret = await self._post_send(stream=stream_payload)
+                        stream_payload["index"] += 1
+                        stream_payload["id"] = ret["id"]
+                        last_edit_time = asyncio.get_event_loop().time()
 
             if isinstance(source, botpy.message.C2CMessage):
-                # 真流式传输
-                current_time = asyncio.get_event_loop().time()
-                time_since_last_edit = current_time - last_edit_time
+                # 结束流式对话，并且传输 buffer 中剩余的消息
+                stream_payload["state"] = 10
+                ret = await self._post_send(stream=stream_payload)
 
-                if time_since_last_edit >= throttle_interval:
-                    ret = await self._post_send(stream=stream_payload)
-                    stream_payload["index"] += 1
-                    stream_payload["id"] = ret["id"]
-                    last_edit_time = asyncio.get_event_loop().time()
-
-        if isinstance(source, botpy.message.C2CMessage):
-            # 结束流式对话，并且传输 buffer 中剩余的消息
-            stream_payload["state"] = 10
-            ret = await self._post_send(stream=stream_payload)
+        except Exception as e:
+            logger.error(f"发送流式消息时出错: {e}", exc_info=True)
+            self.send_buffer = None
 
         return await super().send_streaming(generator)
 
