@@ -49,7 +49,6 @@ def path_Mapping(mappings, srcPath: str)->str:
                     # Windows路径处理
                     srcPath = srcPath.replace("/", "\\")
                 else:
-                    logger.info(f"路径映射(src): {url} -> {srcPath}")
                     has_replaced_processed = False
                     if srcPath.startswith("."):
                         # 相对路径处理。如果是相对路径，可能是Linux路径，也可能是Windows路径
@@ -63,7 +62,6 @@ def path_Mapping(mappings, srcPath: str)->str:
                         elif sign == "\\":
                             srcPath = srcPath.replace("/", "\\")
                             has_replaced_processed = True
-                    logger.info(f"\thas_replaced_processed = {has_replaced_processed}")
                     if has_replaced_processed == False:
                         # 如果不是相对路径或不能处理，默认按照Linux路径处理
                         srcPath = srcPath.replace("\\", "/")
