@@ -115,17 +115,24 @@ class MessageChain:
         """将消息链中的所有 Plain 消息段聚合到第一个 Plain 消息段中。"""
         if not self.chain:
             return
+
+        new_chain = []
         first_plain = None
-        to_delete = []
-        for i, comp in enumerate(self.chain):
+        plain_texts = []
+
+        for comp in self.chain:
             if isinstance(comp, Plain):
                 if first_plain is None:
-                    first_plain = i
-                else:
-                    self.chain[first_plain].text += comp.text
-                    to_delete.append(i)
-        for i in reversed(to_delete):
-            self.chain.pop(i)
+                    first_plain = comp
+                    new_chain.append(comp)
+                plain_texts.append(comp.text)
+            else:
+                new_chain.append(comp)
+
+        if first_plain is not None:
+            first_plain.text = "".join(plain_texts)
+
+        self.chain = new_chain
         return self
 
 
