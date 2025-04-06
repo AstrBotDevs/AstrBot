@@ -12,7 +12,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
-    MessageChain
+    MessageChain,
 )
 from astrbot.core.message.components import Image
 from astrbot.core import logger
@@ -151,15 +151,15 @@ class LLMRequestSubStage(Stage):
                     final_llm_response = None
 
                     if self.streaming_response:
-                        stream = provider.text_chat_stream(
-                            **req.__dict__
-                        )
+                        stream = provider.text_chat_stream(**req.__dict__)
                         async for llm_response in stream:
                             if llm_response.is_chunk:
                                 if llm_response.result_chain:
-                                    yield llm_response.result_chain # MessageChain
+                                    yield llm_response.result_chain  # MessageChain
                                 else:
-                                    yield MessageChain().message(llm_response.completion_text)
+                                    yield MessageChain().message(
+                                        llm_response.completion_text
+                                    )
                             else:
                                 final_llm_response = llm_response
                     else:
@@ -210,6 +210,14 @@ class LLMRequestSubStage(Stage):
                 # 保存到历史记录
                 await self._save_to_history(event, req, final_llm_response)
 
+                # 流式输出完成后，将完整的LLM响应设置为事件结果
+                if bool(self.streaming_response):
+                    event.clear_result()
+                    async for _ in self._handle_llm_response(
+                        event, req, final_llm_response
+                    ):
+                        pass
+
             except BaseException as e:
                 logger.error(traceback.format_exc())
                 event.set_result(
@@ -227,9 +235,14 @@ class LLMRequestSubStage(Stage):
                 .set_result_content_type(ResultContentType.STREAMING_RESULT)
                 .set_async_stream(requesting(req))
             )
+            # 这里使用yield来暂停当前阶段，等待流式输出完成后继续处理
+            yield
 
     async def _handle_llm_response(
-        self, event: AstrMessageEvent, req: ProviderRequest, llm_response: LLMResponse
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        llm_response: LLMResponse,
     ) -> AsyncGenerator[None, None]:
         """处理 LLM 响应。
 
@@ -239,19 +252,29 @@ class LLMRequestSubStage(Stage):
         Yields:
             Iterator[bool]: 将 event 交付给下一个 stage
         """
+        is_stream = bool(self.streaming_response)
+
         if llm_response.role == "assistant":
             # text completion
             if llm_response.result_chain:
                 event.set_result(
                     MessageEventResult(
                         chain=llm_response.result_chain.chain
-                    ).set_result_content_type(ResultContentType.LLM_RESULT)
+                    ).set_result_content_type(
+                        ResultContentType.STREAMING_FINISH
+                        if is_stream
+                        else ResultContentType.LLM_RESULT
+                    )
                 )
             else:
                 event.set_result(
                     MessageEventResult()
                     .message(llm_response.completion_text)
-                    .set_result_content_type(ResultContentType.LLM_RESULT)
+                    .set_result_content_type(
+                        ResultContentType.STREAMING_FINISH
+                        if is_stream
+                        else ResultContentType.LLM_RESULT
+                    )
                 )
         elif llm_response.role == "err":
             event.set_result(

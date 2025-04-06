@@ -78,6 +78,8 @@ class RespondStage(Stage):
         result = event.get_result()
         if result is None:
             return
+        if result.result_content_type == ResultContentType.STREAMING_FINISH:
+            return
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
             # 流式结果直接交付平台适配器处理

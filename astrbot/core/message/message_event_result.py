@@ -157,6 +157,8 @@ class ResultContentType(enum.Enum):
     """普通的消息结果"""
     STREAMING_RESULT = enum.auto()
     """调用 LLM 产生的流式结果"""
+    STREAMING_FINISH= enum.auto()
+    """流式输出完成"""
 
 
 @dataclass

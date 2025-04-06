@@ -72,15 +72,18 @@ class ResultDecorateStage(Stage):
         result = event.get_result()
         if result is None or not result.chain:
             return
+
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
-            # 流式结果暂时不进行处理
             return
+
+        is_stream = result.result_content_type == ResultContentType.STREAMING_FINISH
 
         # 回复时检查内容安全
         if (
             self.content_safe_check_reply
             and self.content_safe_check_stage
             and result.is_llm_result()
+            and not is_stream  # 流式输出不检查内容安全
         ):
             text = ""
             for comp in result.chain:
@@ -100,6 +103,10 @@ class ResultDecorateStage(Stage):
                 logger.debug(
                     f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
                 )
+                if is_stream:
+                    logger.warning(
+                        "启用流式输出时，依赖发送消息前事件钩子的插件可能无法正常工作"
+                    )
                 await handler.handler(event)
                 if event.get_result() is None or not event.get_result().chain:
                     logger.debug(
@@ -113,6 +120,11 @@ class ResultDecorateStage(Stage):
                     f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
                 )
                 return
+
+        # 流式输出不执行下面的逻辑
+        if is_stream:
+            logger.info("流式输出已启用，跳过结果装饰阶段")
+            return
 
         # 需要再获取一次。插件可能直接对 chain 进行了替换。
         result = event.get_result()
