@@ -11,7 +11,7 @@ from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
 from ..register import register_provider_adapter
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entites import LLMResponse, ToolCallsResult
+from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 from .openai_source import ProviderOpenAIOfficial
 
 

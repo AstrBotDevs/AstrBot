@@ -3,7 +3,7 @@ import asyncio
 import functools
 from typing import List
 from .. import Provider, Personality
-from ..entites import LLMResponse
+from ..entities import LLMResponse
 from ..func_tool_manager import FuncCall
 from astrbot.core.db import BaseDatabase
 from ..register import register_provider_adapter

@@ -16,7 +16,7 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
 from .astrbot_message import AstrBotMessage, Group
 from .platform_metadata import PlatformMetadata

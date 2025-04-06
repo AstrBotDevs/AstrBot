@@ -17,7 +17,7 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.message.components import Image
 from astrbot.core import logger
 from astrbot.core.utils.metrics import Metric
-from astrbot.core.provider.entites import (
+from astrbot.core.provider.entities import (
     ProviderRequest,
     LLMResponse,
     ToolCallMessageSegment,

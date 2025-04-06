@@ -20,7 +20,7 @@ from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
 from typing import List, AsyncGenerator
 from ..register import register_provider_adapter
-from astrbot.core.provider.entites import LLMResponse
+from astrbot.core.provider.entities import LLMResponse
 
 
 @register_provider_adapter(
