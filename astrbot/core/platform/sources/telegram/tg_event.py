@@ -138,6 +138,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         path = await i.convert_to_file_path()
                         await self.client.send_voice(voice=path, **payload)
                         continue
+                    else:
+                        logger.warning(f"不支持的消息类型: {type(i)}")
+                        continue
 
                 # Plain
                 if not message_id:
@@ -170,9 +173,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             asyncio.get_event_loop().time()
                         )  # 更新上次编辑的时间
 
-        if delta and current_content != delta:
-            await self.client.edit_message_text(
-                text=delta, chat_id=payload["chat_id"], message_id=message_id
-            )
+        try:
+            if delta and current_content != delta:
+                await self.client.edit_message_text(
+                    text=delta, chat_id=payload["chat_id"], message_id=message_id
+                )
+        except Exception as e:
+            logger.warning(f"编辑消息失败(streaming): {e}")
 
         return await super().send_streaming(generator)
