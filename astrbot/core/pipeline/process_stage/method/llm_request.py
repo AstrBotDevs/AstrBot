@@ -64,10 +64,48 @@ class LLMRequestSubStage(Stage):
 
             if req.conversation:
                 all_contexts = json.loads(req.conversation.history)
-                # 对函数工具调用做过滤
-                req.contexts = [
-                    msg for msg in all_contexts if "_tool_call_history" not in msg
-                ]
+                req.contexts = []
+                i = 0
+                while i < len(all_contexts):
+                    current_msg = all_contexts[i]
+                    # 普通消息
+                    if "_tool_call_history" not in current_msg:
+                        req.contexts.append(current_msg)
+                        i += 1
+                        continue
+
+                    # 工具调用消息, 必须成对出现
+                    if (
+                        current_msg.get("role") == "assistant"
+                        and "tool_calls" in current_msg
+                    ):
+                        # 寻找tool响应
+                        assistant_msg = current_msg.copy()
+                        # 移除标记
+                        if "_tool_call_history" in assistant_msg:
+                            del assistant_msg["_tool_call_history"]
+
+                        related_tools = []
+                        j = i + 1
+                        while (
+                            j < len(all_contexts)
+                            and all_contexts[j].get("role") == "tool"
+                            and "_tool_call_history" in all_contexts[j]
+                        ):
+                            tool_msg = all_contexts[j].copy()
+                            del tool_msg["_tool_call_history"]
+                            related_tools.append(tool_msg)
+                            j += 1
+
+                        # 只添加成对的tool_call和tool响应
+                        if related_tools:
+                            req.contexts.append(assistant_msg)
+                            req.contexts.extend(related_tools)
+                        # 已处理的消息跳过
+                        i = j
+                    else:
+                        i += 1
+
         else:
             req = ProviderRequest(prompt="", image_urls=[])
             if self.provider_wake_prefix:
@@ -313,15 +351,28 @@ class LLMRequestSubStage(Stage):
 
         if llm_response.role == "assistant":
             # 文本回复
-            contexts = req.contexts
+            contexts = req.contexts.copy()
             contexts.append(await req.assemble_context())
 
             # 记录并标记函数调用结果
             if req.tool_calls_result:
                 tool_calls_messages = req.tool_calls_result.to_openai_messages()
+
+                # 对顺序的验证
+                assistant_msgs = []
+                tool_msgs = []
+
                 for message in tool_calls_messages:
                     message["_tool_call_history"] = True
-                contexts.extend(tool_calls_messages)
+
+                    if message.get("role") == "assistant":
+                        assistant_msgs.append(message)
+                    elif message.get("role") == "tool":
+                        tool_msgs.append(message)
+
+                # 先添加assistant再添加tool
+                contexts.extend(assistant_msgs)
+                contexts.extend(tool_msgs)
 
             contexts.append(
                 {"role": "assistant", "content": llm_response.completion_text}
