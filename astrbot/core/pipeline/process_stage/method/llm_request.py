@@ -58,12 +58,16 @@ class LLMRequestSubStage(Stage):
 
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
-            assert isinstance(req, ProviderRequest), (
-                "provider_request 必须是 ProviderRequest 类型。"
-            )
+            assert isinstance(
+                req, ProviderRequest
+            ), "provider_request 必须是 ProviderRequest 类型。"
 
             if req.conversation:
-                req.contexts = json.loads(req.conversation.history)
+                all_contexts = json.loads(req.conversation.history)
+                # 对函数工具调用做过滤
+                req.contexts = [
+                    msg for msg in all_contexts if "_tool_call_history" not in msg
+                ]
         else:
             req = ProviderRequest(prompt="", image_urls=[])
             if self.provider_wake_prefix:
@@ -312,9 +316,12 @@ class LLMRequestSubStage(Stage):
             contexts = req.contexts
             contexts.append(await req.assemble_context())
 
-            # tool calls result
+            # 记录并标记函数调用结果
             if req.tool_calls_result:
-                contexts.extend(req.tool_calls_result.to_openai_messages())
+                tool_calls_messages = req.tool_calls_result.to_openai_messages()
+                for message in tool_calls_messages:
+                    message["_tool_call_history"] = True
+                contexts.extend(tool_calls_messages)
 
             contexts.append(
                 {"role": "assistant", "content": llm_response.completion_text}
