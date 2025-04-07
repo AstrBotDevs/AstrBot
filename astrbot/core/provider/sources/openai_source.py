@@ -167,7 +167,14 @@ class ProviderOpenAIOfficial(Provider):
         for part in context_query:
             if "_no_save" in part:
                 del part["_no_save"]
-
+        context_query = [
+            msg for msg in context_query 
+            if not (
+                msg.get('role') == 'tool' 
+                or msg.get('tool_calls') 
+            )
+        ]
+        
         # tool calls result
         if tool_calls_result:
             context_query.extend(tool_calls_result.to_openai_messages())
