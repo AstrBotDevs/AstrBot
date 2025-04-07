@@ -232,6 +232,7 @@ class LLMRequestSubStage(Stage):
                 )
 
         if not self.streaming_response:
+            event.set_extra("tool_call_result", None)
             async for _ in requesting(req):
                 yield
         else:
@@ -242,6 +243,11 @@ class LLMRequestSubStage(Stage):
             )
             # 这里使用yield来暂停当前阶段，等待流式输出完成后继续处理
             yield
+
+            if event.get_extra("tool_call_result"):
+                event.set_result(event.get_extra("tool_call_result"))
+                event.set_extra("tool_call_result", None)
+                yield
 
     async def _handle_llm_response(
         self,
@@ -350,12 +356,8 @@ class LLMRequestSubStage(Stage):
                     logger.info(
                         f"从 MCP 服务 {func_tool.mcp_server_name} 调用工具函数：{func_tool.name}，参数：{func_tool_args}"
                     )
-                    client = req.func_tool.mcp_client_dict[
-                        func_tool.mcp_server_name
-                    ]
-                    res = await client.session.call_tool(
-                        func_tool.name, func_tool_args
-                    )
+                    client = req.func_tool.mcp_client_dict[func_tool.mcp_server_name]
+                    res = await client.session.call_tool(func_tool.name, func_tool_args)
                     if res:
                         # TODO content的类型可能包括list[TextContent | ImageContent | EmbeddedResource]，这里只处理了TextContent。
                         tool_call_result.append(
@@ -383,6 +385,9 @@ class LLMRequestSubStage(Stage):
                                 )
                             )
                         else:
+                            res = event.get_result()
+                            if res and res.chain:
+                                event.set_extra("tool_call_result", res)
                             yield  # 有生成器返回
                 event.clear_result()  # 清除上一个 handler 的结果
             except BaseException as e:
