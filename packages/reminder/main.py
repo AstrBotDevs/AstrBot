@@ -2,6 +2,7 @@ import os
 import json
 import datetime
 import uuid
+import zoneinfo
 import astrbot.api.star as star
 from astrbot.api.event import filter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -17,7 +18,15 @@ class Main(star.Star):
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        self.scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
+        self.timezone = self.context.get_config().get("timezone")
+        if not self.timezone:
+            self.timezone = None
+        try:
+             self.timezone = zoneinfo.ZoneInfo(self.timezone) if self.timezone else None
+        except Exception as e:
+            logger.error(f"时区设置错误: {e}, 使用本地时区")
+            self.timezone = None
+        self.scheduler = AsyncIOScheduler(timezone=self.timezone)
 
         # set and load config
         if not os.path.exists("data/astrbot-reminder.json"):
@@ -65,10 +74,10 @@ class Main(star.Star):
     def check_is_outdated(self, reminder: dict):
         """Check if the reminder is outdated."""
         if "datetime" in reminder:
-            return (
-                datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M")
-                < datetime.datetime.now()
-            )
+            reminder_time = datetime.datetime.strptime(
+                reminder["datetime"], "%Y-%m-%d %H:%M"
+            ).replace(tzinfo=self.timezone)
+            return reminder_time < datetime.datetime.now(self.timezone)
         return False
 
     async def _save_data(self):
@@ -171,12 +180,15 @@ class Main(star.Star):
         reminders = self.reminder_data.get(unified_msg_origin, [])
         if not reminders:
             return []
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(self.timezone)
         upcoming_reminders = [
             reminder
             for reminder in reminders
             if "datetime" not in reminder
-            or datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M") >= now
+            or datetime.datetime.strptime(
+                reminder["datetime"], "%Y-%m-%d %H:%M"
+            ).replace(tzinfo=self.timezone)
+            >= now
         ]
         return upcoming_reminders
 
