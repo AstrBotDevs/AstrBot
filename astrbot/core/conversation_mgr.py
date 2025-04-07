@@ -174,10 +174,13 @@ class ConversationManager:
         for record in history:
             if record["role"] == "user":
                 temp_contexts.append(f"User: {record['content']}")
-            elif record["role"] == "assistant":
-                temp_contexts.append(f"Assistant: {record['content']}")
-                contexts.insert(0, temp_contexts)
-                temp_contexts = []
+            elif record["role"] == "assistant":#排除tool_calls
+                if record.get("content") != None:
+                    temp_contexts.append(f"Assistant: {record['content']}")
+                    contexts.insert(0, temp_contexts)
+                    temp_contexts = []
+                else:
+                    continue
 
         # 展平 contexts 列表
         contexts = [item for sublist in contexts for item in sublist]
