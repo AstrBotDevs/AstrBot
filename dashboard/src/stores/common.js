@@ -62,14 +62,23 @@ export const useCommonStore = defineStore({
           }
 
           const text = decoder.decode(value);
-          const lines = text.split('\n');
+          const lines = text.split('\n\n');
           lines.forEach(line => {
             if (line.startsWith('data:')) {
               const data = line.substring(5).trim();
-
               // {"type":"log","data":"[2021-08-01 00:00:00] INFO: Hello, world!"}
-
-              let data_json = JSON.parse(data)
+              let data_json = {}
+              try {
+                data_json = JSON.parse(data);
+              } catch (e) {
+                console.error('Invalid JSON:', data);
+                data_json = {
+                  type: 'log',
+                  data: data,
+                  level: 'INFO',
+                  time: new Date().toISOString(),
+                }
+              }
               if (data_json.type === 'log') {
                 // let log = data_json.data
                 this.log_cache.push(data_json);
