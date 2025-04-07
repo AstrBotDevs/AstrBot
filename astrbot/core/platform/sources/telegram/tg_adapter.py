@@ -176,8 +176,8 @@ class TelegramPlatformAdapter(Platform):
 
                     command_dict[cmd_name] = description
 
-        commands_a = sorted(command_dict.keys())
-        commands = [BotCommand(cmd, command_dict[cmd]) for cmd in commands_a]
+        sorted_commands = sorted(command_dict.keys())
+        commands = [BotCommand(cmd, command_dict[cmd]) for cmd in sorted_commands]
         return commands
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
