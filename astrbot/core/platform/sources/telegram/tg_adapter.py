@@ -145,7 +145,10 @@ class TelegramPlatformAdapter(Platform):
                     isinstance(event_filter, CommandFilter)
                     and event_filter.command_name
                 ):
-                    if event_filter.parent_command_names:
+                    if (
+                        event_filter.parent_command_names
+                        and event_filter.parent_command_names != [""]
+                    ):
                         continue
                     cmd_name = event_filter.command_name
                 elif isinstance(event_filter, CommandGroupFilter):
