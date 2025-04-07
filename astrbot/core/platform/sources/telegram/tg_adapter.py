@@ -127,58 +127,54 @@ class TelegramPlatformAdapter(Platform):
 
     def collect_commands(self) -> list[BotCommand]:
         """从注册的处理器中收集所有指令"""
-
         command_dict = {}
         skip_commands = {"start"}
 
         for handler_md in star_handlers_registry._handlers:
             handler_metadata = handler_md[1]
-
             if not star_map[handler_metadata.handler_module_path].activated:
                 continue
-
             for event_filter in handler_metadata.event_filters:
-                cmd_name = None
-                is_group = False
+                cmd_info = self._extract_command_info(
+                    event_filter, handler_metadata, skip_commands
+                )
+                if cmd_info:
+                    cmd_name, description = cmd_info
+                    command_dict.setdefault(cmd_name, description)
 
-                if (
-                    isinstance(event_filter, CommandFilter)
-                    and event_filter.command_name
-                ):
-                    if (
-                        event_filter.parent_command_names
-                        and event_filter.parent_command_names != [""]
-                    ):
-                        continue
-                    cmd_name = event_filter.command_name
-                elif isinstance(event_filter, CommandGroupFilter):
-                    if event_filter.parent_group:
-                        continue
-                    cmd_name = event_filter.group_name
-                    is_group = True
+        commands_a = sorted(command_dict.keys())
+        return [BotCommand(cmd, command_dict[cmd]) for cmd in commands_a]
 
-                if (
-                    cmd_name
-                    and cmd_name not in skip_commands
-                    and cmd_name not in command_dict
-                ):
-                    if handler_metadata.desc:
-                        description = handler_metadata.desc
-                    else:
-                        description = (
-                            f"指令组: {cmd_name} (包含多个子指令)"
-                            if is_group
-                            else f"指令: {cmd_name}"
-                        )
+    @staticmethod
+    def _extract_command_info(
+        event_filter, handler_metadata, skip_commands: set
+    ) -> tuple[str, str] | None:
+        """从事件过滤器中提取指令信息"""
+        cmd_name = None
+        is_group = False
+        if isinstance(event_filter, CommandFilter) and event_filter.command_name:
+            if (
+                event_filter.parent_command_names
+                and event_filter.parent_command_names != [""]
+            ):
+                return None
+            cmd_name = event_filter.command_name
+        elif isinstance(event_filter, CommandGroupFilter):
+            if event_filter.parent_group:
+                return None
+            cmd_name = event_filter.group_name
+            is_group = True
 
-                    if len(description) > 30:
-                        description = description[:30] + "..."
+        if not cmd_name or cmd_name in skip_commands:
+            return None
 
-                    command_dict[cmd_name] = description
-
-        sorted_commands = sorted(command_dict.keys())
-        commands = [BotCommand(cmd, command_dict[cmd]) for cmd in sorted_commands]
-        return commands
+        # Build description.
+        description = handler_metadata.desc or (
+            f"指令组: {cmd_name} (包含多个子指令)" if is_group else f"指令: {cmd_name}"
+        )
+        if len(description) > 30:
+            description = description[:30] + "..."
+        return cmd_name, description
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
