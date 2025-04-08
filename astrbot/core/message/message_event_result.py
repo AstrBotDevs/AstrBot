@@ -1,6 +1,6 @@
 import enum
 
-from typing import List, Optional, Union
+from typing import List, Optional, Union, AsyncGenerator
 from dataclasses import dataclass, field
 from astrbot.core.message.components import (
     BaseMessageComponent,
@@ -111,6 +111,30 @@ class MessageChain:
         """获取纯文本消息。这个方法将获取 chain 中所有 Plain 组件的文本并拼接成一条消息。空格分隔。"""
         return " ".join([comp.text for comp in self.chain if isinstance(comp, Plain)])
 
+    def squash_plain(self):
+        """将消息链中的所有 Plain 消息段聚合到第一个 Plain 消息段中。"""
+        if not self.chain:
+            return
+
+        new_chain = []
+        first_plain = None
+        plain_texts = []
+
+        for comp in self.chain:
+            if isinstance(comp, Plain):
+                if first_plain is None:
+                    first_plain = comp
+                    new_chain.append(comp)
+                plain_texts.append(comp.text)
+            else:
+                new_chain.append(comp)
+
+        if first_plain is not None:
+            first_plain.text = "".join(plain_texts)
+
+        self.chain = new_chain
+        return self
+
 
 class EventResultType(enum.Enum):
     """用于描述事件处理的结果类型。
@@ -131,6 +155,10 @@ class ResultContentType(enum.Enum):
     """调用 LLM 产生的结果"""
     GENERAL_RESULT = enum.auto()
     """普通的消息结果"""
+    STREAMING_RESULT = enum.auto()
+    """调用 LLM 产生的流式结果"""
+    STREAMING_FINISH= enum.auto()
+    """流式输出完成"""
 
 
 @dataclass
@@ -152,6 +180,9 @@ class MessageEventResult(MessageChain):
         default_factory=lambda: ResultContentType.GENERAL_RESULT
     )
 
+    async_stream: Optional[AsyncGenerator] = None
+    """异步流"""
+
     def stop_event(self) -> "MessageEventResult":
         """终止事件传播。"""
         self.result_type = EventResultType.STOP
@@ -167,6 +198,11 @@ class MessageEventResult(MessageChain):
         是否终止事件传播。
         """
         return self.result_type == EventResultType.STOP
+
+    def set_async_stream(self, stream: AsyncGenerator) -> "MessageEventResult":
+        """设置异步流。"""
+        self.async_stream = stream
+        return self
 
     def set_result_content_type(self, typ: ResultContentType) -> "MessageEventResult":
         """设置事件处理的结果类型。

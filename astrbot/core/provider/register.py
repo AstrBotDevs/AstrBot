@@ -1,5 +1,5 @@
 from typing import List, Dict
-from .entites import ProviderMetaData, ProviderType
+from .entities import ProviderMetaData, ProviderType
 from astrbot.core import logger
 from .func_tool_manager import FuncCall
 

@@ -2,7 +2,7 @@ import astrbot.core.message.components as Comp
 
 from typing import List
 from .. import Provider, Personality
-from ..entites import LLMResponse
+from ..entities import LLMResponse
 from ..func_tool_manager import FuncCall
 from astrbot.core.db import BaseDatabase
 from ..register import register_provider_adapter
@@ -188,6 +188,33 @@ class ProviderDify(Provider):
         chain = await self.parse_dify_result(result)
 
         return LLMResponse(role="assistant", result_chain=chain)
+
+    async def text_chat_stream(
+        self,
+        prompt,
+        session_id=None,
+        image_urls=...,
+        func_tool=None,
+        contexts=...,
+        system_prompt=None,
+        tool_calls_result=None,
+        **kwargs,
+    ):
+        # raise NotImplementedError("This method is not implemented yet.")
+        # 调用 text_chat 模拟流式
+        llm_response = await self.text_chat(
+            prompt=prompt,
+            session_id=session_id,
+            image_urls=image_urls,
+            func_tool=func_tool,
+            contexts=contexts,
+            system_prompt=system_prompt,
+            tool_calls_result=tool_calls_result,
+        )
+        llm_response.is_chunk = True
+        yield llm_response
+        llm_response.is_chunk = False
+        yield llm_response
 
     async def parse_dify_result(self, chunk: dict | str) -> MessageChain:
         if isinstance(chunk, str):

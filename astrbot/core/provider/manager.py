@@ -2,7 +2,7 @@ import traceback
 import asyncio
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from .provider import Provider, STTProvider, TTSProvider, Personality
-from .entites import ProviderType
+from .entities import ProviderType
 from typing import List
 from astrbot.core.db import BaseDatabase
 from .register import provider_cls_map, llm_tools

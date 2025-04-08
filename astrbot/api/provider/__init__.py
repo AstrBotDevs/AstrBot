@@ -1,5 +1,5 @@
 from astrbot.core.provider import Provider, STTProvider, Personality
-from astrbot.core.provider.entites import (
+from astrbot.core.provider.entities import (
     ProviderRequest,
     ProviderType,
     ProviderMetaData,

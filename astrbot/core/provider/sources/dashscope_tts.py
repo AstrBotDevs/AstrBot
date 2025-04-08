@@ -3,7 +3,7 @@ import uuid
 import asyncio
 from dashscope.audio.tts_v2 import *
 from ..provider import TTSProvider
-from ..entites import ProviderType
+from ..entities import ProviderType
 from ..register import register_provider_adapter
 
 

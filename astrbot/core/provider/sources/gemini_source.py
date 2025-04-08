@@ -12,7 +12,7 @@ from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
 from typing import List
 from ..register import register_provider_adapter
-from astrbot.core.provider.entites import LLMResponse
+from astrbot.core.provider.entities import LLMResponse
 
 
 class SimpleGoogleGenAIClient:
@@ -78,6 +78,39 @@ class SimpleGoogleGenAIClient:
                 logger.error(f"Gemini 返回了非 json 数据: {text}")
                 raise Exception("Gemini 返回了非 json 数据： ")
 
+    async def stream_generate_content(
+        self,
+        contents: List[dict],
+        model: str = "gemini-1.5-flash",
+        system_instruction: str = "",
+        tools: dict = None,
+        modalities: List[str] = ["Text"],
+        safety_settings: List[dict] = [],
+    ):
+        payload = {}
+        if system_instruction:
+            payload["system_instruction"] = {"parts": {"text": system_instruction}}
+        if tools:
+            payload["tools"] = [tools]
+        payload["contents"] = contents
+        payload["generationConfig"] = {
+            "responseModalities": modalities,
+            "stream": True,
+        }
+        payload["safetySettings"] = [
+            {"category": s["category"], "threshold": s["threshold"]}
+            for s in safety_settings
+        ]
+        logger.debug(f"payload: {payload}")
+        request_url = (
+            f"{self.api_base}/v1beta/models/{model}:streamGenerateContent?key={self.api_key}"
+        )
+        async with self.client.post(
+            request_url, json=payload, timeout=self.timeout
+        ) as resp:
+            async for line in resp.content:
+                if line:
+                    yield line
 
 @register_provider_adapter(
     "googlegenai_chat_completion", "Google Gemini Chat Completion 提供商适配器"
@@ -337,6 +370,33 @@ class ProviderGoogleGenAI(Provider):
                     raise e
 
         return llm_response
+
+    async def text_chat_stream(
+        self,
+        prompt,
+        session_id=None,
+        image_urls=...,
+        func_tool=None,
+        contexts=...,
+        system_prompt=None,
+        tool_calls_result=None,
+        **kwargs,
+    ):
+        # raise NotImplementedError("This method is not implemented yet.")
+        # 调用 text_chat 模拟流式
+        llm_response = await self.text_chat(
+            prompt=prompt,
+            session_id=session_id,
+            image_urls=image_urls,
+            func_tool=func_tool,
+            contexts=contexts,
+            system_prompt=system_prompt,
+            tool_calls_result=tool_calls_result,
+        )
+        llm_response.is_chunk = True
+        yield llm_response
+        llm_response.is_chunk = False
+        yield llm_response
 
     def get_current_key(self) -> str:
         return self.client.api_key

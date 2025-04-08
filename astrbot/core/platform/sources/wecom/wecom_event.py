@@ -84,3 +84,16 @@ class WecomPlatformEvent(AstrMessageEvent):
                     )
 
         await super().send(message)
+
+    async def send_streaming(self, generator):
+        buffer = None
+        async for chain in generator:
+            if not buffer:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+        if not buffer:
+            return
+        buffer.squash_plain()
+        await self.send(buffer)
+        return await super().send_streaming(generator)
