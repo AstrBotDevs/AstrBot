@@ -24,7 +24,8 @@ const emit = defineEmits([
   'install',
   'uninstall',
   'toggle-activation',
-  'view-handlers'
+  'view-handlers',
+  'view-readme'
 ]);
 
 const open = (link: string | undefined) => {
@@ -69,6 +70,10 @@ const toggleActivation = () => {
 
 const viewHandlers = () => {
   emit('view-handlers', props.extension);
+};
+
+const viewReadme = () => {
+  emit('view-readme', props.extension);
 };
 </script>
 
@@ -182,6 +187,11 @@ const viewHandlers = () => {
             <v-btn prepend-icon="mdi-update" color="primary" variant="tonal" :disabled="!extension?.has_update "
               @click="updateExtension" :block="$vuetify.display.xs">
               更新到 {{ extension.online_version || extension.version }}
+            </v-btn>
+            
+            <v-btn prepend-icon="mdi-file-document-outline" color="info" variant="tonal" @click="viewReadme"
+              :block="$vuetify.display.xs">
+              查看文档
             </v-btn>
           </div>
         </v-card-text>
