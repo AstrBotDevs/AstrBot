@@ -22,7 +22,7 @@ class Main(star.Star):
         if not self.timezone:
             self.timezone = None
         try:
-             self.timezone = zoneinfo.ZoneInfo(self.timezone) if self.timezone else None
+            self.timezone = zoneinfo.ZoneInfo(self.timezone) if self.timezone else None
         except Exception as e:
             logger.error(f"时区设置错误: {e}, 使用本地时区")
             self.timezone = None

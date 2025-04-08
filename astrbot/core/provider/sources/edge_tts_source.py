@@ -4,7 +4,7 @@ import edge_tts
 import subprocess
 import asyncio
 from ..provider import TTSProvider
-from ..entites import ProviderType
+from ..entities import ProviderType
 from ..register import register_provider_adapter
 from astrbot.core import logger
 

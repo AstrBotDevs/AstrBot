@@ -7,7 +7,7 @@ from typing import Union, AsyncGenerator
 from ..stage import register_stage, Stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
@@ -19,7 +19,9 @@ from astrbot.core.utils.path_util import path_Mapping
 class RespondStage(Stage):
     # 组件类型到其非空判断函数的映射
     _component_validators = {
-        Comp.Plain: lambda comp: bool(comp.text and comp.text.strip()),  # 纯文本消息需要strip
+        Comp.Plain: lambda comp: bool(
+            comp.text and comp.text.strip()
+        ),  # 纯文本消息需要strip
         Comp.Face: lambda comp: comp.id is not None,  # QQ表情
         Comp.Record: lambda comp: bool(comp.file),  # 语音
         Comp.Video: lambda comp: bool(comp.file),  # 视频
@@ -32,13 +34,17 @@ class RespondStage(Stage):
         Comp.Share: lambda comp: bool(comp.url) and bool(comp.title),  # 分享
         Comp.Contact: lambda comp: True,  # 联系人(未完成)
         Comp.Location: lambda comp: bool(comp.lat and comp.lon),  # 位置
-        Comp.Music: lambda comp: bool(comp._type) and bool(comp.url) and bool(comp.audio),  # 音乐
+        Comp.Music: lambda comp: bool(comp._type)
+        and bool(comp.url)
+        and bool(comp.audio),  # 音乐
         Comp.Image: lambda comp: bool(comp.file),  # 图片
         Comp.Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
         Comp.RedBag: lambda comp: bool(comp.title),  # 红包
         Comp.Poke: lambda comp: comp.id != 0 and comp.qq != 0,  # 戳一戳
         Comp.Forward: lambda comp: bool(comp.id and comp.id.strip()),  # 转发
-        Comp.Node: lambda comp: bool(comp.name) and comp.uin != 0 and bool(comp.content),  # 一个转发节点
+        Comp.Node: lambda comp: bool(comp.name)
+        and comp.uin != 0
+        and bool(comp.content),  # 一个转发节点
         Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
         Comp.Xml: lambda comp: bool(comp.data and comp.data.strip()),  # XML
         Comp.Json: lambda comp: bool(comp.data),  # JSON
@@ -135,8 +141,17 @@ class RespondStage(Stage):
         result = event.get_result()
         if result is None:
             return
+        if result.result_content_type == ResultContentType.STREAMING_FINISH:
+            return
 
-        if len(result.chain) > 0:
+        if result.result_content_type == ResultContentType.STREAMING_RESULT:
+            # 流式结果直接交付平台适配器处理
+            logger.info(f"应用流式输出({event.get_platform_name()})")
+            await event._pre_send()
+            await event.send_streaming(result.async_stream)
+            await event._post_send()
+            return
+        elif len(result.chain) > 0:
             # 检查路径映射
             if mappings := self.platform_settings.get("path_mapping", []):
                 for idx, component in enumerate(result.chain):
@@ -144,7 +159,7 @@ class RespondStage(Stage):
                         # 支持 File 消息段的路径映射。
                         component.file = path_Mapping(mappings, component.file)
                         event.get_result().chain[idx] = component
-
+            
             await event._pre_send()
 
             # 检查消息链是否为空

@@ -3,7 +3,7 @@ import uuid
 import asyncio
 from dashscope.audio.tts_v2 import *
 from ..provider import TTSProvider
-from ..entites import ProviderType
+from ..entities import ProviderType
 from ..register import register_provider_adapter
 
 
@@ -20,7 +20,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         self.chosen_api_key: str = provider_config.get("api_key", "")
         self.voice: str = provider_config.get("dashscope_tts_voice", "loongstella")
         self.set_model(provider_config.get("model", None))
-        self.timeout_ms = float(provider_config.get("timeout", 20))*1000
+        self.timeout_ms = float(provider_config.get("timeout", 20)) * 1000
 
         dashscope.api_key = self.chosen_api_key
         self.synthesizer = SpeechSynthesizer(

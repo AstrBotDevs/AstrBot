@@ -3,10 +3,11 @@ import asyncio
 import functools
 from typing import List
 from .. import Provider, Personality
-from ..entites import LLMResponse
+from ..entities import LLMResponse
 from ..func_tool_manager import FuncCall
 from astrbot.core.db import BaseDatabase
 from ..register import register_provider_adapter
+from astrbot.core.message.message_event_result import MessageChain
 from .openai_source import ProviderOpenAIOfficial
 from astrbot.core import logger, sp
 from dashscope import Application
@@ -132,7 +133,9 @@ class ProviderDashscope(ProviderOpenAIOfficial):
             )
             return LLMResponse(
                 role="err",
-                completion_text=f"阿里云百炼请求失败: message={response.message} code={response.status_code}",
+                result_chain=MessageChain().message(
+                    f"阿里云百炼请求失败: message={response.message} code={response.status_code}"
+                ),
             )
 
         output_text = response.output.get("text", "")
@@ -141,11 +144,45 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         if self.output_reference and response.output.get("doc_references", None):
             ref_str = ""
             for ref in response.output.get("doc_references", []):
-                ref_title = ref.get("title", "") if ref.get("title") else ref.get("doc_name", "")
+                ref_title = (
+                    ref.get("title", "")
+                    if ref.get("title")
+                    else ref.get("doc_name", "")
+                )
                 ref_str += f"{ref['index_id']}. {ref_title}\n"
             output_text += f"\n\n回答来源:\n{ref_str}"
 
-        return LLMResponse(role="assistant", completion_text=output_text)
+        llm_response = LLMResponse("assistant")
+        llm_response.result_chain = MessageChain().message(output_text)
+
+        return llm_response
+
+    async def text_chat_stream(
+        self,
+        prompt,
+        session_id=None,
+        image_urls=...,
+        func_tool=None,
+        contexts=...,
+        system_prompt=None,
+        tool_calls_result=None,
+        **kwargs,
+    ):
+        # raise NotImplementedError("This method is not implemented yet.")
+        # 调用 text_chat 模拟流式
+        llm_response = await self.text_chat(
+            prompt=prompt,
+            session_id=session_id,
+            image_urls=image_urls,
+            func_tool=func_tool,
+            contexts=contexts,
+            system_prompt=system_prompt,
+            tool_calls_result=tool_calls_result,
+        )
+        llm_response.is_chunk = True
+        yield llm_response
+        llm_response.is_chunk = False
+        yield llm_response
 
     async def forget(self, session_id):
         return True
