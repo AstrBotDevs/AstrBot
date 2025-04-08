@@ -12,40 +12,71 @@ marked.setOptions({
     <v-card class="chat-page-card">
         <v-card-text class="chat-page-container">
             <div class="chat-layout">
-                <!-- 左侧对话列表面板 -->
+                <!-- 左侧对话列表面板 - 优化版 -->
                 <div class="sidebar-panel">
-                    <v-btn variant="tonal" rounded="xl" class="new-chat-btn" @click="newC" :disabled="!currCid">
-                        <v-icon class="mr-2">mdi-plus</v-icon>创建对话
-                    </v-btn>
-
-                    <v-card class="conversation-list-card" v-if="conversations.length > 0">
-                        <v-list density="compact" nav class="conversation-list"
-                            @update:selected="getConversationMessages">
-                            <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
-                                color="primary" rounded="xl" class="conversation-item">
-                                <v-list-item-title>新对话</v-list-item-title>
-                                <v-list-item-subtitle class="timestamp">{{ formatDate(item.updated_at)
-                                    }}</v-list-item-subtitle>
-                            </v-list-item>
-                        </v-list>
-                    </v-card>
-
-                    <div class="status-chips">
-                        <v-chip class="status-chip" color="primary"
-                            :append-icon="status?.llm_enabled ? 'mdi-check' : 'mdi-close'">
-                            LLM
-                        </v-chip>
-
-                        <v-chip class="status-chip" color="success"
-                            :append-icon="status?.stt_enabled ? 'mdi-check' : 'mdi-close'">
-                            语音转文本
-                        </v-chip>
+                    <div class="sidebar-header">
+                        <v-btn variant="elevated" rounded="lg" class="new-chat-btn" @click="newC" :disabled="!currCid"
+                            prepend-icon="mdi-plus">
+                            创建对话
+                        </v-btn>
                     </div>
 
-                    <v-btn variant="tonal" rounded="xl" class="delete-chat-btn" v-if="currCid"
-                        @click="deleteConversation(currCid)" color="error">
-                        <v-icon class="mr-2">mdi-delete</v-icon>删除此对话
-                    </v-btn>
+                    <div class="conversations-container">
+                        <div class="sidebar-section-title" v-if="conversations.length > 0">
+                            对话历史
+                        </div>
+
+                        <v-card class="conversation-list-card" v-if="conversations.length > 0" flat>
+                            <v-list density="compact" nav class="conversation-list"
+                                @update:selected="getConversationMessages">
+                                <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
+                                    color="primary" rounded="lg" class="conversation-item" active-color="primary">
+                                    <template v-slot:prepend>
+                                        <v-icon size="small" icon="mdi-message-text-outline"></v-icon>
+                                    </template>
+                                    <v-list-item-title class="conversation-title">新对话</v-list-item-title>
+                                    <v-list-item-subtitle class="timestamp">{{ formatDate(item.updated_at)
+                                        }}</v-list-item-subtitle>
+                                </v-list-item>
+                            </v-list>
+                        </v-card>
+                        
+                        <v-fade-transition>
+                            <div class="no-conversations" v-if="conversations.length === 0">
+                                <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
+                                <div class="no-conversations-text">暂无对话历史</div>
+                            </div>
+                        </v-fade-transition>
+                    </div>
+
+                    <div class="sidebar-footer">
+                        <div class="sidebar-section-title">
+                            系统状态
+                        </div>
+                        <div class="status-chips">
+                            <v-chip class="status-chip" :color="status?.llm_enabled ? 'primary' : 'grey-lighten-2'"
+                                variant="elevated" size="small">
+                                <template v-slot:prepend>
+                                    <v-icon :icon="status?.llm_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'" size="x-small"></v-icon>
+                                </template>
+                                LLM 服务
+                            </v-chip>
+
+                            <v-chip class="status-chip" :color="status?.stt_enabled ? 'success' : 'grey-lighten-2'"
+                                variant="elevated" size="small">
+                                <template v-slot:prepend>
+                                    <v-icon :icon="status?.stt_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'" size="x-small"></v-icon>
+                                </template>
+                                语音转文本
+                            </v-chip>
+                        </div>
+
+                        <v-btn variant="tonal" rounded="lg" class="delete-chat-btn" v-if="currCid"
+                            @click="deleteConversation(currCid)" color="error" density="comfortable" size="small">
+                            <v-icon start size="small">mdi-delete</v-icon>
+                            删除此对话
+                        </v-btn>
+                    </div>
                 </div>
 
                 <!-- 右侧聊天内容区域 -->
@@ -637,84 +668,140 @@ export default {
     gap: 24px;
 }
 
-/* 侧边栏样式 */
+/* 侧边栏样式 - 优化版 */
 .sidebar-panel {
-    max-width: 240px;
-    min-width: 200px;
+    max-width: 270px;
+    min-width: 240px;
     display: flex;
     flex-direction: column;
-    padding: 16px 8px;
-    border-right: 1px solid #f0f0f0;
+    padding: 0;
+    border-right: 1px solid rgba(0, 0, 0, 0.05);
+    background-color: #fcfcfc;
+    height: 100%;
+    position: relative;
+}
+
+.sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.conversations-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.sidebar-footer {
+    padding: 16px;
+    border-top: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.sidebar-section-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    padding-left: 4px;
 }
 
 .new-chat-btn {
-    margin-bottom: 16px;
-    min-width: 200px;
-    background-color: #f5f0ff !important;
-    color: #673ab7 !important;
+    width: 100%;
+    background-color: #673ab7 !important;
+    color: white !important;
     font-weight: 500;
-    box-shadow: none !important;
+    box-shadow: 0 2px 8px rgba(103, 58, 183, 0.25) !important;
     transition: all 0.2s ease;
+    text-transform: none;
+    letter-spacing: 0.25px;
 }
 
 .new-chat-btn:hover {
-    background-color: #ede7f6 !important;
+    background-color: #7e57c2 !important;
+    box-shadow: 0 4px 12px rgba(103, 58, 183, 0.3) !important;
     transform: translateY(-1px);
 }
 
 .conversation-list-card {
     border-radius: 12px;
     box-shadow: none !important;
-    border: 1px solid #f0f0f0;
-    background-color: #fafafa;
+    background-color: transparent;
 }
 
 .conversation-list {
-    max-height: 500px;
-    overflow-y: auto;
-    padding: 4px;
+    max-height: none;
+    overflow-y: visible;
+    padding: 0;
 }
 
 .conversation-item {
     margin-bottom: 4px;
     border-radius: 8px !important;
     transition: all 0.2s ease;
+    height: auto !important;
+    min-height: 56px;
+    padding: 8px 12px !important;
 }
 
 .conversation-item:hover {
-    background-color: #f5f0ff;
+    background-color: rgba(103, 58, 183, 0.05);
+}
+
+.conversation-title {
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.3;
+    margin-bottom: 2px;
 }
 
 .timestamp {
     font-size: 11px;
     color: #999;
-    margin-top: 4px;
+    line-height: 1;
 }
 
 .status-chips {
-    margin-top: 16px;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    margin-bottom: 16px;
 }
 
 .status-chip {
     font-size: 12px;
+    height: 24px !important;
 }
 
 .delete-chat-btn {
-    position: fixed;
-    bottom: 24px;
-    margin-bottom: 16px;
-    min-width: 200px;
-    background-color: #feecec !important;
+    width: 100%;
     color: #d32f2f !important;
     font-weight: 500;
     box-shadow: none !important;
+    margin-top: 8px;
+    text-transform: none;
+    letter-spacing: 0.25px;
+    font-size: 12px;
 }
 
 .delete-chat-btn:hover {
-    background-color: #ffebee !important;
+    background-color: rgba(211, 47, 47, 0.1) !important;
+}
+
+.no-conversations {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 150px;
+    opacity: 0.6;
+    gap: 12px;
+}
+
+.no-conversations-text {
+    font-size: 14px;
+    color: #999;
 }
 
 /* 聊天内容区域 */
