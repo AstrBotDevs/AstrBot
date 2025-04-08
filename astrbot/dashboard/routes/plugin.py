@@ -351,7 +351,7 @@ class PluginRoute(Route):
         
         readme_path = os.path.join(plugin_dir, "README.md")
         
-        if not readme_path:
+        if not os.path.isfile(readme_path):
             logger.warning(f"插件 {plugin_name} 没有README文件")
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
         
