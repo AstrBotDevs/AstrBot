@@ -43,6 +43,7 @@ class SimpleGoogleGenAIClient:
         system_instruction: str = "",
         tools: dict = None,
         modalities: List[str] = ["Text"],
+        safety_settings: List[dict] = [],
     ):
         payload = {}
         if system_instruction:
@@ -53,6 +54,10 @@ class SimpleGoogleGenAIClient:
         payload["generationConfig"] = {
             "responseModalities": modalities,
         }
+        payload["safetySettings"] = [
+            {"category": s["category"], "threshold": s["threshold"]}
+            for s in safety_settings
+        ]
         logger.debug(f"payload: {payload}")
         request_url = (
             f"{self.api_base}/v1beta/models/{model}:generateContent?key={self.api_key}"
@@ -106,6 +111,21 @@ class ProviderGoogleGenAI(Provider):
         )
         self.set_model(provider_config["model_config"]["model"])
 
+        safety_mapping = {
+            "harassment": "HARM_CATEGORY_HARASSMENT",
+            "hate_speech": "HARM_CATEGORY_HATE_SPEECH",
+            "sexually_explicit": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "dangerous_content": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        }
+
+        self.safety_settings = []
+        user_safety_config = self.provider_config.get("gm_safety_settings", {})
+        for config_key, harm_category in safety_mapping.items():
+            if threshold := user_safety_config.get(config_key):
+                self.safety_settings.append(
+                    {"category": harm_category, "threshold": threshold}
+                )
+
     async def get_models(self):
         return await self.client.models_list()
 
@@ -127,7 +147,7 @@ class ProviderGoogleGenAI(Provider):
             if message["role"] == "user":
                 if isinstance(message["content"], str):
                     if not message["content"]:
-                        message["content"] = "<empty_content>"
+                        message["content"] = ""
 
                     google_genai_conversation.append(
                         {"role": "user", "parts": [{"text": message["content"]}]}
@@ -138,7 +158,7 @@ class ProviderGoogleGenAI(Provider):
                     for part in message["content"]:
                         if part["type"] == "text":
                             if not part["text"]:
-                                part["text"] = "<empty_content>"
+                                part["text"] = ""
                             parts.append({"text": part["text"]})
                         elif part["type"] == "image_url":
                             parts.append(
@@ -156,7 +176,7 @@ class ProviderGoogleGenAI(Provider):
             elif message["role"] == "assistant":
                 if "content" in message:
                     if not message["content"]:
-                        message["content"] = "<empty_content>"
+                        message["content"] = ""
                     google_genai_conversation.append(
                         {"role": "model", "parts": [{"text": message["content"]}]}
                     )
@@ -205,6 +225,7 @@ class ProviderGoogleGenAI(Provider):
                 system_instruction=system_instruction,
                 tools=tool,
                 modalities=modalites,
+                safety_settings=self.safety_settings,
             )
             logger.debug(f"result: {result}")
 

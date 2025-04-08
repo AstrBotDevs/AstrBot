@@ -289,6 +289,16 @@ export default {
                         message: `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
                     }
                     this.messages.push(bot_resp);
+                } else if (chunk.startsWith('[RECORD]')) {
+                    let audio = chunk.replace('[RECORD]', '');
+                    let bot_resp = {
+                        type: 'bot',
+                        message: `<audio controls class="audio-player">
+                                    <source src="/api/chat/get_file?filename=${audio}" type="audio/wav">
+                                    您的浏览器不支持音频播放。
+                                  </audio>`
+                    }
+                    this.messages.push(bot_resp);
                 } else {
                     let bot_resp = {
                         type: 'bot',
@@ -406,6 +416,13 @@ export default {
                     if (message[i].message.startsWith('[IMAGE]')) {
                         let img = message[i].message.replace('[IMAGE]', '');
                         message[i].message = `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                    }
+                    if (message[i].message.startsWith('[RECORD]')) {
+                        let audio = message[i].message.replace('[RECORD]', '');
+                        message[i].message = `<audio controls class="audio-player">
+                                    <source src="/api/chat/get_file?filename=${audio}" type="audio/wav">
+                                    您的浏览器不支持音频播放。
+                                  </audio>`
                     }
                     if (message[i].image_url && message[i].image_url.length > 0) {
                         for (let j = 0; j < message[i].image_url.length; j++) {
@@ -846,7 +863,6 @@ export default {
 }
 
 .audio-player {
-    width: 100%;
     height: 36px;
     border-radius: 18px;
 }

@@ -63,14 +63,13 @@ import 'highlight.js/styles/github.css';
                         </v-row>
                     </div>
 
-                    
+
 
                     <div v-if="isListView" class="mt-4">
                         <h2>📦 全部插件</h2>
                         <v-col cols="12" md="12" style="padding: 0px;">
                             <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
-                                :loading="loading_" v-model:search="marketSearch"
-                                :filter-keys="filterKeys">
+                                :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys">
                                 <template v-slot:item.name="{ item }">
                                     <div class="d-flex align-center">
                                         <img v-if="item.logo" :src="item.logo"
@@ -86,7 +85,7 @@ import 'highlight.js/styles/github.css';
                                 </template>
                                 <template v-slot:item.author="{ item }">
                                     <span v-if="item?.social_link"><a :href="item?.social_link">{{ item.author
-                                            }}</a></span>
+                                    }}</a></span>
                                     <span v-else>{{ item.author }}</span>
                                 </template>
                                 <template v-slot:item.stars="{ item }">
@@ -100,14 +99,16 @@ import 'highlight.js/styles/github.css';
                                 <template v-slot:item.tags="{ item }">
                                     <span v-if="item.tags.length === 0">无</span>
                                     <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="small">{{ tag
-                                    }}</v-chip>
+                                        }}</v-chip>
                                 </template>
                                 <template v-slot:item.actions="{ item }">
-                                    <v-btn v-if="!item.installed" class="text-none mr-2" size="small" text="Read"
+                                    <v-btn v-if="!item.installed" class="text-none mr-2" size="small" 
                                         variant="flat" border
                                         @click="extension_url = item.repo; newExtension()">安装</v-btn>
-                                    <v-btn v-else class="text-none mr-2" size="small" text="Read" variant="flat" border
+                                    <v-btn v-else class="text-none mr-2" size="small" variant="flat" border
                                         disabled>已安装</v-btn>
+                                    <v-btn class="text-none mr-2" size="small" variant="flat" border 
+                                        @click="open(item.repo)">查看帮助</v-btn>
                                 </template>
                             </v-data-table>
                         </v-col>
@@ -186,7 +187,7 @@ import 'highlight.js/styles/github.css';
     </v-snackbar>
 
     <WaitingForRestart ref="wfr"></WaitingForRestart>
-    
+
     <!-- README Dialog -->
     <v-dialog v-model="readmeDialog.show" width="800" persistent>
         <v-card>
@@ -198,16 +199,13 @@ import 'highlight.js/styles/github.css';
             </v-card-title>
             <v-divider></v-divider>
             <v-card-text style="height: 70vh; overflow-y: auto;">
-                <v-btn 
-                    color="primary" 
-                    prepend-icon="mdi-open-in-new"
-                    @click="openReadmeInNewTab()" 
-                    class="mt-4"
-                >
+                <v-btn color="primary" prepend-icon="mdi-open-in-new" @click="openReadmeInNewTab()" class="mt-4">
                     在GitHub中查看文档
                 </v-btn>
-                <div v-if="readmeDialog.content" class="markdown-body" v-html="renderMarkdown(readmeDialog.content)"></div>
-                <div v-else-if="readmeDialog.error" class="d-flex flex-column align-center justify-center" style="height: 100%;">
+                <div v-if="readmeDialog.content" class="markdown-body" v-html="renderMarkdown(readmeDialog.content)">
+                </div>
+                <div v-else-if="readmeDialog.error" class="d-flex flex-column align-center justify-center"
+                    style="height: 100%;">
                     <v-icon size="64" color="error" class="mb-4">mdi-alert-circle-outline</v-icon>
                     <p class="text-body-1 text-center mb-4">{{ readmeDialog.error }}</p>
                 </div>
@@ -291,8 +289,8 @@ export default {
             const search = this.marketSearch.toLowerCase();
             return this.pluginMarketData.filter(plugin =>
                 this.filterKeys.some(key =>
-                plugin[key]?.toLowerCase().includes(search)
-            ));
+                    plugin[key]?.toLowerCase().includes(search)
+                ));
         },
         pinnedPlugins() {
             return this.pluginMarketData.filter(plugin => plugin?.pinned);
@@ -319,6 +317,12 @@ export default {
         });
     },
     methods: {
+        open(link) {
+            if (link) {
+                window.open(link, '_blank');
+            }
+        },
+
         jumpToPluginMarket() {
             window.open('https://soulter.github.io/AstrBot_Plugins_Collection/plugins.json', '_blank');
         },
@@ -387,21 +391,21 @@ export default {
         async getReadmeUrl(repoUrl) {
             // 去掉 repoUrl 末尾的斜杠
             repoUrl = repoUrl.replace(/\/+$/, '');
- 
+
             const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
             if (!match) {
                 throw new Error("无效的 GitHub 仓库地址");
             }
- 
+
             const owner = match[1];
             const repo = match[2];
- 
+
             const apiUrl = `https://api.github.com/repos/${owner}/${repo}`;
- 
+
             try {
                 const res = await fetch(apiUrl);
                 const data = await res.json();
- 
+
                 const branch = data?.default_branch || 'master';
                 return `${repoUrl}/blob/${branch}/README.md`;
             } catch (error) {
@@ -458,7 +462,7 @@ export default {
                     this.onLoadingDialogResult(1, res.data.message);
                     this.dialog = false;
                     this.getExtensions();
-                    
+
                     await this.showReadmeDialog(res);
                 }).catch((err) => {
                     this.loading_ = false;
@@ -523,7 +527,7 @@ export default {
             if (!content) return '';
             // Configure marked with highlight.js for syntax highlighting
             marked.setOptions({
-                highlight: function(code, lang) {
+                highlight: function (code, lang) {
                     if (lang && hljs.getLanguage(lang)) {
                         try {
                             return hljs.highlight(code, { language: lang }).value;
@@ -553,11 +557,11 @@ export default {
     color: #24292e;
 }
 
-.markdown-body h1, 
-.markdown-body h2, 
-.markdown-body h3, 
-.markdown-body h4, 
-.markdown-body h5, 
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
 .markdown-body h6 {
     margin-top: 24px;
     margin-bottom: 16px;

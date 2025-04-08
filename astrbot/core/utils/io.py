@@ -103,7 +103,7 @@ async def download_image_by_url(
                         with open(path, "wb") as f:
                             f.write(await resp.read())
                         return path
-    except aiohttp.client.ClientConnectorSSLError:
+    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()
         ssl_context.set_ciphers("DEFAULT")
@@ -152,7 +152,7 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                                 f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
                                 end="",
                             )
-    except aiohttp.client.ClientConnectorSSLError:
+    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()
         ssl_context.set_ciphers("DEFAULT")

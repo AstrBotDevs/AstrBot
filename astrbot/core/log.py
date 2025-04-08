@@ -108,11 +108,12 @@ class LogBroker:
         """
         self.subscribers.remove(q)
 
-    def publish(self, log_entry: str):
+    def publish(self, log_entry: dict):
         """发布新日志到所有订阅者, 使用非阻塞方式投递, 避免一个订阅者阻塞整个系统
 
         Args:
-            log_entry (str): 日志消息, 可以是字符串或字典
+            log_entry (dict): 日志消息, 包含日志级别和日志内容.
+                example: {"level": "INFO", "data": "This is a log message.", "time": "2023-10-01 12:00:00"}
         """
         self.log_cache.append(log_entry)
         for q in self.subscribers:
@@ -140,7 +141,11 @@ class LogQueueHandler(logging.Handler):
             record (logging.LogRecord): 日志记录对象, 包含日志信息
         """
         log_entry = self.format(record)
-        self.log_broker.publish(log_entry)
+        self.log_broker.publish({
+            "level": record.levelname,
+            "time": record.asctime,
+            "data": log_entry,
+        })
 
 
 class LogManager:

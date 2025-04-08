@@ -44,7 +44,7 @@ import axios from 'axios';
         </v-dialog>
       </div>
     </div>
-    <ConsoleDisplayer ref="consoleDisplayer" style="height: calc(100vh - 160px); " />
+    <ConsoleDisplayer ref="consoleDisplayer" style="height: calc(100vh - 220px); " />
   </div>
 </template>
 <script>

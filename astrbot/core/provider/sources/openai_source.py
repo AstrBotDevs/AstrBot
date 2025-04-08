@@ -221,8 +221,8 @@ class ProviderOpenAIOfficial(Provider):
                     payloads["messages"] = new_contexts
                 elif (
                     "Function calling is not enabled" in str(e)
-                    or ("tool" in str(e) and "support" in str(e).lower())
-                    or ("function" in str(e) and "support" in str(e).lower())
+                    or ("tool" in str(e).lower() and "support" in str(e).lower())
+                    or ("function" in str(e).lower() and "support" in str(e).lower())
                 ):
                     # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一，只能通过字符串匹配
                     logger.info(

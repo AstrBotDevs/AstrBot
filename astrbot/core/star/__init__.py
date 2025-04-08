@@ -4,12 +4,14 @@ from .context import Context
 from astrbot.core.provider import Provider
 from astrbot.core.utils.command_parser import CommandParserMixin
 from astrbot.core import html_renderer
+from astrbot.core.star.star_tools import StarTools
 
 
 class Star(CommandParserMixin):
     """所有插件（Star）的父类，所有插件都应该继承于这个类"""
 
     def __init__(self, context: Context):
+        StarTools.initialize(context)
         self.context = context
 
     async def text_to_image(self, text: str, return_url=True) -> str:
@@ -27,4 +29,4 @@ class Star(CommandParserMixin):
         pass
 
 
-__all__ = ["Star", "StarMetadata", "PluginManager", "Context", "Provider"]
+__all__ = ["Star", "StarMetadata", "PluginManager", "Context", "Provider", "StarTools"]
