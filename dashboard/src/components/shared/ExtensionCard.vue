@@ -28,10 +28,6 @@ const emit = defineEmits([
   'view-readme'
 ]);
 
-const open = (link: string | undefined) => {
-  window.open(link, '_blank');
-};
-
 const reveal = ref(false);
 
 // 操作函数
@@ -133,7 +129,7 @@ const viewReadme = () => {
     </v-card-text>
 
     <v-card-actions style="padding: 0px; margin-top: auto;">
-      <v-btn color="teal-accent-4" text="帮助" variant="text" @click="open(extension.repo)"></v-btn>
+      <v-btn color="teal-accent-4" text="查看文档" variant="text" @click="viewReadme"></v-btn>
       <v-btn v-if="!marketMode" color="teal-accent-4" text="操作" variant="text" @click="reveal = true"></v-btn>
       <v-btn v-if="marketMode && !extension?.installed" color="teal-accent-4" text="安装" variant="text"
         @click="emit('install', extension)"></v-btn>
@@ -187,11 +183,6 @@ const viewReadme = () => {
             <v-btn prepend-icon="mdi-update" color="primary" variant="tonal" :disabled="!extension?.has_update "
               @click="updateExtension" :block="$vuetify.display.xs">
               更新到 {{ extension.online_version || extension.version }}
-            </v-btn>
-            
-            <v-btn prepend-icon="mdi-file-document-outline" color="info" variant="tonal" @click="viewReadme"
-              :block="$vuetify.display.xs">
-              查看文档
             </v-btn>
           </div>
         </v-card-text>

@@ -321,26 +321,13 @@ class PluginRoute(Route):
             return Response().error(str(e)).__dict__
 
     async def get_plugin_readme(self):
-        """
-        获取插件的README文件内容
-        
-        请求参数:
-        - name: 插件名称
-        
-        返回:
-        - status: 'ok' 或 'error'
-        - data: { content: 'README内容' }
-        - message: 成功或错误信息
-        """
         plugin_name = request.args.get("name")
-
-        logger.info(f"正在获取插件 {plugin_name} 的README文件内容")
+        logger.debug(f"正在获取插件 {plugin_name} 的README文件内容")
         
         if not plugin_name:
             logger.warning("插件名称为空")
             return Response().error("插件名称不能为空").__dict__
         
-        # 查找插件
         plugin_found = False
         for plugin in self.plugin_manager.context.get_all_stars():
             if plugin.name == plugin_name:
@@ -351,37 +338,24 @@ class PluginRoute(Route):
             logger.warning(f"插件 {plugin_name} 不存在")
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
             
-        # 尝试找到README文件
         readme_content = None
         
-        # 先检查普通插件目录
         plugin_dir = os.path.join(self.plugin_manager.plugin_store_path, plugin_name)
             
         if not os.path.isdir(plugin_dir):
-            # 再检查保留插件目录
             plugin_dir = os.path.join(self.plugin_manager.reserved_plugin_path, plugin_name)
             
             if not os.path.isdir(plugin_dir):
                 logger.warning(f"无法找到插件目录: {plugin_dir}")
                 return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
         
-        # 尝试查找README文件（支持多种扩展名和大小写）
-        readme_filenames = ["README.md", "readme.md", "README.txt", "readme.txt", "README", "readme"]
-        readme_path = None
+        readme_path = os.path.join(plugin_dir, "README.md")
         
-        for filename in readme_filenames:
-            path = os.path.join(plugin_dir, filename)
-            if os.path.isfile(path):
-                readme_path = path
-                break
-        
-        # 如果没有找到README文件
         if not readme_path:
             logger.warning(f"插件 {plugin_name} 没有README文件")
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
         
         try:
-            # 读取README文件内容
             with open(readme_path, 'r', encoding='utf-8') as f:
                 readme_content = f.read()
             

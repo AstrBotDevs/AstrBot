@@ -94,7 +94,6 @@ import 'highlight.js/styles/github.css';
                                         :alt="`Stars for ${item.name}`"
                                         style="height: 20px;"
                                     />
-                                    <span v-else>无</span>
                                 </template>
                                 <template v-slot:item.tags="{ item }">
                                     <span v-if="item.tags.length === 0">无</span>
