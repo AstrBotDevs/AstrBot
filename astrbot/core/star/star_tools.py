@@ -147,7 +147,7 @@ class StarTools:
         cls._context.unregister_llm_tool(name)
 
     @classmethod
-    def get_data_dir(cls, plugin_name: Optional[str]) -> Path:
+    def get_data_dir(cls, plugin_name: Optional[str] = None) -> Path:
         """
         返回插件数据目录的绝对路径。
 
