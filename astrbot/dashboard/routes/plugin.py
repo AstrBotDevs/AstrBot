@@ -328,26 +328,21 @@ class PluginRoute(Route):
             logger.warning("插件名称为空")
             return Response().error("插件名称不能为空").__dict__
         
-        plugin_found = False
+        plugin_obj = None
         for plugin in self.plugin_manager.context.get_all_stars():
             if plugin.name == plugin_name:
-                plugin_found = True
+                plugin_obj = plugin
                 break
                 
-        if not plugin_found:
+        if not plugin_obj:
             logger.warning(f"插件 {plugin_name} 不存在")
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
             
-        readme_content = None
-        
-        plugin_dir = os.path.join(self.plugin_manager.plugin_store_path, plugin_name)
+        plugin_dir = os.path.join(self.plugin_manager.plugin_store_path, plugin_obj.root_dir_name)
             
         if not os.path.isdir(plugin_dir):
-            plugin_dir = os.path.join(self.plugin_manager.reserved_plugin_path, plugin_name)
-            
-            if not os.path.isdir(plugin_dir):
-                logger.warning(f"无法找到插件目录: {plugin_dir}")
-                return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
+            logger.warning(f"无法找到插件目录: {plugin_dir}")
+            return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
         
         readme_path = os.path.join(plugin_dir, "README.md")
         
