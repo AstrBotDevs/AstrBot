@@ -24,12 +24,9 @@ const emit = defineEmits([
   'install',
   'uninstall',
   'toggle-activation',
-  'view-handlers'
+  'view-handlers',
+  'view-readme'
 ]);
-
-const open = (link: string | undefined) => {
-  window.open(link, '_blank');
-};
 
 const reveal = ref(false);
 
@@ -69,6 +66,10 @@ const toggleActivation = () => {
 
 const viewHandlers = () => {
   emit('view-handlers', props.extension);
+};
+
+const viewReadme = () => {
+  emit('view-readme', props.extension);
 };
 </script>
 
@@ -128,7 +129,7 @@ const viewHandlers = () => {
     </v-card-text>
 
     <v-card-actions style="padding: 0px; margin-top: auto;">
-      <v-btn color="teal-accent-4" text="帮助" variant="text" @click="open(extension.repo)"></v-btn>
+      <v-btn color="teal-accent-4" text="查看文档" variant="text" @click="viewReadme"></v-btn>
       <v-btn v-if="!marketMode" color="teal-accent-4" text="操作" variant="text" @click="reveal = true"></v-btn>
       <v-btn v-if="marketMode && !extension?.installed" color="teal-accent-4" text="安装" variant="text"
         @click="emit('install', extension)"></v-btn>

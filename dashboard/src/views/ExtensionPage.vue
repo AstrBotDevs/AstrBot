@@ -3,6 +3,7 @@ import ExtensionCard from '@/components/shared/ExtensionCard.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
+import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
 import axios from 'axios';
 import { useCommonStore } from '@/stores/common';
 
@@ -34,6 +35,12 @@ const showPluginInfoDialog = ref(false);
 const selectedPlugin = ref({});
 const curr_namespace = ref("");
 const wfr = ref(null);
+
+const readmeDialog = reactive({
+  show: false,
+  pluginName: '',
+  repoUrl: null
+});
 
 const plugin_handler_info_headers = [
   { title: '行为类型', key: 'event_type_h' },
@@ -225,6 +232,12 @@ const reloadPlugin = async (plugin_name) => {
   }
 };
 
+const viewReadme = (plugin) => {
+  readmeDialog.pluginName = plugin.name;
+  readmeDialog.repoUrl = plugin.repo;
+  readmeDialog.show = true;
+};
+
 // 生命周期
 onMounted(async () => {
   await getExtensions();
@@ -279,7 +292,8 @@ onMounted(async () => {
         @update="updateExtension(extension.name)"
         @reload="reloadPlugin(extension.name)"
         @toggle-activation="extension.activated ? pluginOff(extension) : pluginOn(extension)"
-        @view-handlers="showPluginInfo(extension)">
+        @view-handlers="showPluginInfo(extension)"
+        @view-readme="viewReadme(extension)">
       </ExtensionCard>
     </v-col>
   </v-row>
@@ -365,4 +379,10 @@ onMounted(async () => {
   </v-snackbar>
 
   <WaitingForRestart ref="wfr"></WaitingForRestart>
+  
+  <ReadmeDialog
+    v-model:show="readmeDialog.show"
+    :plugin-name="readmeDialog.pluginName"
+    :repo-url="readmeDialog.repoUrl"
+  />
 </template>

@@ -88,6 +88,13 @@ import 'highlight.js/styles/github.css';
                                     }}</a></span>
                                     <span v-else>{{ item.author }}</span>
                                 </template>
+                                <template v-slot:item.stars="{ item }">
+                                    <img v-if="item.repo" 
+                                        :src="`https://img.shields.io/github/stars/${item.repo.split('/').slice(-2).join('/')}.svg`" 
+                                        :alt="`Stars for ${item.name}`"
+                                        style="height: 20px;"
+                                    />
+                                </template>
                                 <template v-slot:item.tags="{ item }">
                                     <span v-if="item.tags.length === 0">无</span>
                                     <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="small">{{ tag
@@ -262,6 +269,7 @@ export default {
                 { title: '名称', key: 'name', maxWidth: '150px' },
                 { title: '描述', key: 'desc', maxWidth: '250px' },
                 { title: '作者', key: 'author', maxWidth: '60px' },
+                { title: 'Star数', key: 'stars', maxWidth: '100px' },
                 { title: '标签', key: 'tags', maxWidth: '60px' },
                 { title: '操作', key: 'actions', sortable: false }
             ],
