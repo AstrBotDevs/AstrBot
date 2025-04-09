@@ -8,6 +8,7 @@ import astrbot.core.message.components as Comp
 
 from openai import AsyncOpenAI, AsyncAzureOpenAI
 from openai.types.chat.chat_completion import ChatCompletion
+
 # from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai._exceptions import NotFoundError, UnprocessableEntityError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
@@ -143,14 +144,19 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
-            state.handle_chunk(chunk)
+            try:
+                state.handle_chunk(chunk)
+            except Exception as e:
+                logger.warning("Saving chunk state error: " + str(e))
             if len(chunk.choices) == 0:
                 continue
             delta = chunk.choices[0].delta
             # 处理文本内容
             if delta.content:
                 completion_text = delta.content
-                llm_response.result_chain = MessageChain(chain=[Comp.Plain(completion_text)])
+                llm_response.result_chain = MessageChain(
+                    chain=[Comp.Plain(completion_text)]
+                )
                 yield llm_response
 
         final_completion = state.get_final_completion()

@@ -36,11 +36,11 @@ marked.setOptions({
                                     </template>
                                     <v-list-item-title class="conversation-title">新对话</v-list-item-title>
                                     <v-list-item-subtitle class="timestamp">{{ formatDate(item.updated_at)
-                                        }}</v-list-item-subtitle>
+                                    }}</v-list-item-subtitle>
                                 </v-list-item>
                             </v-list>
                         </v-card>
-                        
+
                         <v-fade-transition>
                             <div class="no-conversations" v-if="conversations.length === 0">
                                 <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
@@ -57,7 +57,8 @@ marked.setOptions({
                             <v-chip class="status-chip" :color="status?.llm_enabled ? 'primary' : 'grey-lighten-2'"
                                 variant="elevated" size="small">
                                 <template v-slot:prepend>
-                                    <v-icon :icon="status?.llm_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'" size="x-small"></v-icon>
+                                    <v-icon :icon="status?.llm_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
+                                        size="x-small"></v-icon>
                                 </template>
                                 LLM 服务
                             </v-chip>
@@ -65,7 +66,8 @@ marked.setOptions({
                             <v-chip class="status-chip" :color="status?.stt_enabled ? 'success' : 'grey-lighten-2'"
                                 variant="elevated" size="small">
                                 <template v-slot:prepend>
-                                    <v-icon :icon="status?.stt_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'" size="x-small"></v-icon>
+                                    <v-icon :icon="status?.stt_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
+                                        size="x-small"></v-icon>
                                 </template>
                                 语音转文本
                             </v-chip>
@@ -295,50 +297,66 @@ export default {
 
                 const chunk = decoder.decode(value, { stream: true });
 
-                // data: {"type": "plain", "data": "helloworld"}
-                let chunk_json = JSON.parse(chunk.replace('data: ', ''));
+                // 可能有多行
 
-                if (chunk_json.type === 'heartbeat') {
-                    continue; // 心跳包
-                }
-                if (chunk_json.type === 'error') {
-                    console.error('Error received:', chunk_json.data);
-                    continue;
-                }
+                let lines = chunk.split('\n\n');
 
-                if (chunk_json.type === 'image') {
-                    let img = chunk_json.data.replace('[IMAGE]', '');
-                    let bot_resp = {
-                        type: 'bot',
-                        message: `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                console.log('SSE数据:', lines);
+
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i].trim();
+
+                    if (!line) {
+                        continue;
                     }
-                    this.messages.push(bot_resp);
-                } else if (chunk_json.type === 'record') {
-                    let audio = chunk_json.data.replace('[RECORD]', '');
-                    let bot_resp = {
-                        type: 'bot',
-                        message: `<audio controls class="audio-player">
-                                    <source src="/api/chat/get_file?filename=${audio}" type="audio/wav">
-                                    您的浏览器不支持音频播放。
-                                  </audio>`
+
+                    console.log(line)
+
+                    // data: {"type": "plain", "data": "helloworld"}
+                    let chunk_json = JSON.parse(line.replace('data: ', ''));
+
+                    if (chunk_json.type === 'heartbeat') {
+                        continue; // 心跳包
                     }
-                    this.messages.push(bot_resp);
-                } else if (chunk_json.type === 'plain') {
-                    if (!in_streaming) {
-                        message_obj = {
+                    if (chunk_json.type === 'error') {
+                        console.error('Error received:', chunk_json.data);
+                        continue;
+                    }
+
+                    if (chunk_json.type === 'image') {
+                        let img = chunk_json.data.replace('[IMAGE]', '');
+                        let bot_resp = {
                             type: 'bot',
-                            message: ref(chunk_json.data),
+                            message: `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
                         }
-                        this.messages.push(message_obj);
-                        in_streaming = true;
-                    } else {
-                        message_obj.message.value += chunk_json.data;
+                        this.messages.push(bot_resp);
+                    } else if (chunk_json.type === 'record') {
+                        let audio = chunk_json.data.replace('[RECORD]', '');
+                        let bot_resp = {
+                            type: 'bot',
+                            message: `<audio controls class="audio-player">
+                    <source src="/api/chat/get_file?filename=${audio}" type="audio/wav">
+                    您的浏览器不支持音频播放。
+                  </audio>`
+                        }
+                        this.messages.push(bot_resp);
+                    } else if (chunk_json.type === 'plain') {
+                        if (!in_streaming) {
+                            message_obj = {
+                                type: 'bot',
+                                message: ref(chunk_json.data),
+                            }
+                            this.messages.push(message_obj);
+                            in_streaming = true;
+                        } else {
+                            message_obj.message.value += chunk_json.data;
+                        }
+                    } else if (chunk_json.type === 'end') {
+                        in_streaming = false;
+                        continue;
                     }
-                } else if (chunk_json.type === 'end') {
-                    in_streaming = false;
-                    continue;
+                    this.scrollToBottom();
                 }
-                this.scrollToBottom();
             }
         },
 

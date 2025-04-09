@@ -190,7 +190,7 @@ class ChatRoute(Route):
                         # 丢弃
                         continue
                     yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
-                    await asyncio.sleep(0.15)
+                    await asyncio.sleep(0.05)
 
                     if streaming and type != "end":
                         continue
