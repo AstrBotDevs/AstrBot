@@ -147,30 +147,46 @@ class StarTools:
         cls._context.unregister_llm_tool(name)
 
     @classmethod
-    def get_data_dir(cls) -> Path:
+    def get_data_dir(cls, plugin_name: Optional[str]) -> Path:
         """
-        为调用者创建并返回数据目录路径。
+        返回插件数据目录的绝对路径。
+
+        此方法会在 data/plugin_data 目录下为插件创建一个专属的数据目录。如果未提供插件名称，
+        会自动从调用栈中获取插件信息。
+
+        Args:
+            plugin_name: 可选的插件名称。如果为None，将自动检测调用者的插件名称。
 
         Returns:
-            Path: 数据目录的绝对路径
+            Path (Path): 插件数据目录的绝对路径，位于 data/plugin_data/{plugin_name}。
+
+        Raises:
+            RuntimeError: 当出现以下情况时抛出:
+                - 无法获取调用者模块信息
+                - 无法获取模块的元数据信息
+                - 创建目录失败（权限不足或其他IO错误）
         """
+        if not plugin_name:
+            frame = inspect.currentframe().f_back
+            module = inspect.getmodule(frame)
 
-        frame = inspect.currentframe().f_back
-        module = inspect.getmodule(frame)
+            if not module:
+                raise RuntimeError("无法获取调用者模块信息")
 
-        if not module:
-            raise RuntimeError("无法获取调用者模块信息")
+            metadata = star_map.get(module.__name__, None)
 
-        metadata = star_map.get(module.__name__, None)
+            if not metadata:
+                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
 
-        if not metadata:
-            raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
+            plugin_name = metadata.name
 
-        data_dir = Path("data/plugin_data") / metadata.name
+        data_dir = Path("data/plugin_data") / plugin_name
 
         try:
             data_dir.mkdir(parents=True, exist_ok=True)
-        except PermissionError:
-            raise RuntimeError(f"无法创建目录 {data_dir}：权限不足")
+        except OSError as e:
+            if isinstance(e, PermissionError):
+                raise RuntimeError(f"无法创建目录 {data_dir}：权限不足") from e
+            raise RuntimeError(f"无法创建目录 {data_dir}：{e!s}") from e
 
         return data_dir.resolve()
