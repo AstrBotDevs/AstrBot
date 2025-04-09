@@ -1,9 +1,9 @@
 import abc
 from typing import List
 from astrbot.core.db import BaseDatabase
-from typing import TypedDict
+from typing import TypedDict, AsyncGenerator
 from astrbot.core.provider.func_tool_manager import FuncCall
-from astrbot.core.provider.entites import LLMResponse, ToolCallsResult
+from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 from dataclasses import dataclass
 
 
@@ -108,7 +108,35 @@ class Provider(AbstractProvider):
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
         """
-        raise NotImplementedError()
+        ...
+
+    async def text_chat_stream(
+        self,
+        prompt: str,
+        session_id: str = None,
+        image_urls: List[str] = None,
+        func_tool: FuncCall = None,
+        contexts: List = None,
+        system_prompt: str = None,
+        tool_calls_result: ToolCallsResult = None,
+        **kwargs,
+    ) -> AsyncGenerator[LLMResponse, None]:
+        """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。
+
+        Args:
+            prompt: 提示词
+            session_id: 会话 ID(此属性已经被废弃)
+            image_urls: 图片 URL 列表
+            tools: Function-calling 工具
+            contexts: 上下文
+            tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
+            kwargs: 其他参数
+
+        Notes:
+            - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
+            - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
+        """
+        ...
 
     async def pop_record(self, context: List):
         """

@@ -161,42 +161,53 @@ class ChatRoute(Route):
         username = g.get("username", "guest")
 
         if username in self.curr_chat_sse:
-            return "[ERROR]\n"
+            return Response().error("Already connected").__dict__
 
         self.curr_chat_sse[username] = None
 
+        heartbeat = json.dumps({"type": "heartbeat", "data": "ping"})
+
         async def stream():
             try:
-                yield "[HB]\n"
+                yield f"data: {heartbeat}\n\n"  # 心跳包
                 while True:
                     try:
                         result = await asyncio.wait_for(
                             web_chat_back_queue.get(), timeout=10
                         )  # 设置超时时间为5秒
                     except asyncio.TimeoutError:
-                        yield "[HB]\n"  # 心跳包
+                        yield f"data: {heartbeat}\n\n"  # 心跳包
                         continue
 
                     if not result:
                         continue
-                    result_text, cid = result
+
+                    result_text = result["data"]
+                    type = result.get("type")
+                    cid = result.get("cid")
+                    streaming = result.get("streaming", False)
                     if cid != self.curr_user_cid.get(username):
                         # 丢弃
                         continue
-                    yield result_text + "\n"
+                    yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0.05)
 
-                    conversation = self.db.get_conversation_by_user_id(username, cid)
-                    try:
-                        history = json.loads(conversation.history)
-                    except BaseException as e:
-                        print(e)
-                        history = []
-                    history.append({"type": "bot", "message": result_text})
-                    self.db.update_conversation(
-                        username, cid, history=json.dumps(history)
-                    )
+                    if streaming and type != "end":
+                        continue
 
-                    await asyncio.sleep(0.5)
+                    if result_text:
+                        conversation = self.db.get_conversation_by_user_id(
+                            username, cid
+                        )
+                        try:
+                            history = json.loads(conversation.history)
+                        except BaseException as e:
+                            print(e)
+                            history = []
+                        history.append({"type": "bot", "message": result_text})
+                        self.db.update_conversation(
+                            username, cid, history=json.dumps(history)
+                        )
             except BaseException as _:
                 logger.debug(f"用户 {username} 断开聊天长连接。")
                 self.curr_chat_sse.pop(username)

@@ -2,7 +2,7 @@ import uuid
 import os
 from openai import AsyncOpenAI, NOT_GIVEN
 from ..provider import STTProvider
-from ..entites import ProviderType
+from ..entities import ProviderType
 from astrbot.core.utils.io import download_file
 from ..register import register_provider_adapter
 from astrbot.core import logger
