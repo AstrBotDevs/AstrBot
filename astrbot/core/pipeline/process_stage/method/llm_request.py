@@ -38,9 +38,10 @@ class LLMRequestSubStage(Stage):
         self.max_context_length = ctx.astrbot_config["provider_settings"][
             "max_context_length"
         ]  # int
-        self.dequeue_context_length = ctx.astrbot_config["provider_settings"][
-            "dequeue_context_length"
-        ]  # int
+        self.dequeue_context_length = min(
+            max(1,ctx.astrbot_config["provider_settings"]["dequeue_context_length"]),
+            self.max_context_length - 1
+        )  # int
         self.streaming_response = ctx.astrbot_config["provider_settings"][
             "streaming_response"
         ]  # bool
