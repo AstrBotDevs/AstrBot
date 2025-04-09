@@ -352,8 +352,6 @@ class LLMRequestSubStage(Stage):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
-            
-            
             try:
                 func_tool = req.func_tool.get_func(func_tool_name)
                 if func_tool.origin == "mcp":
