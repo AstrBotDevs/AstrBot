@@ -4,6 +4,9 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.api.platform import MessageMember, AstrBotMessage
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.context import Context
+from astrbot.core.star.star import star_map
+from pathlib import Path
+import inspect
 
 
 class StarTools:
@@ -142,3 +145,32 @@ class StarTools:
             name (str): 工具名称
         """
         cls._context.unregister_llm_tool(name)
+
+    @classmethod
+    def get_data_dir(cls) -> Path:
+        """
+        为调用者创建并返回数据目录路径。
+
+        Returns:
+            Path: 数据目录的绝对路径
+        """
+
+        frame = inspect.currentframe().f_back
+        module = inspect.getmodule(frame)
+
+        if not module:
+            raise RuntimeError("无法获取调用者模块信息")
+
+        metadata = star_map.get(module.__name__, None)
+
+        if not metadata:
+            raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
+
+        data_dir = Path("data/plugin_data") / metadata.name
+
+        try:
+            data_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            raise RuntimeError(f"无法创建目录 {data_dir}：权限不足")
+
+        return data_dir.resolve()
