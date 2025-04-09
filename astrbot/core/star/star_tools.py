@@ -1,3 +1,4 @@
+import inspect
 from typing import Union, Awaitable, List, Optional, ClassVar
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
@@ -6,7 +7,6 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
 from pathlib import Path
-import inspect
 
 
 class StarTools:
