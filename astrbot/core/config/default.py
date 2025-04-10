@@ -50,6 +50,7 @@ DEFAULT_CONFIG = {
         "default_personality": "default",
         "prompt_prefix": "",
         "max_context_length": -1,
+        "dequeue_context_length": 1,
         "streaming_response": False,
     },
     "provider_stt_settings": {
@@ -996,6 +997,11 @@ CONFIG_METADATA_2 = {
                         "description": "最多携带对话数量(条)",
                         "type": "int",
                         "hint": "超出这个数量时将丢弃最旧的部分，用户和AI的一轮聊天记为 1 条。-1 表示不限制，默认为不限制。",
+                    },
+                    "dequeue_context_length": {
+                        "description": "丢弃对话数量(条)",
+                        "type": "int",
+                        "hint": "超出 最多携带对话数量(条) 时，丢弃多少条记录，用户和AI的一轮聊天记为 1 条。适宜的配置，可以提高超长上下文对话 deepseek 命中缓存效果，理想情况下计费将降低到1/3以下",
                     },
                     "streaming_response": {
                         "description": "启用流式回复",
