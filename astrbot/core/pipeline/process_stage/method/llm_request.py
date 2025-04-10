@@ -67,7 +67,7 @@ class LLMRequestSubStage(Stage):
             ), "provider_request 必须是 ProviderRequest 类型。"
 
             if req.conversation:
-                all_contexts = json.load(req.conversation.history)
+                all_contexts = json.loads(req.conversation.history)
                 req.contexts = self._process_tool_message_pairs(
                     all_contexts, remove_tags=True
                 )
