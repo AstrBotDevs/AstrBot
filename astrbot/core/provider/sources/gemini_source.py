@@ -1,19 +1,23 @@
+import asyncio
 import base64
 import json
 import random
-import asyncio
-from google import genai
-from google.genai import types, errors
-import astrbot.core.message.components as Comp
-from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.io import download_image_by_url
-from astrbot.core.db import BaseDatabase
-from astrbot.api.provider import Provider, Personality
-from astrbot import logger
-from astrbot.core.provider.func_tool_manager import FuncCall
 from typing import Dict, List
-from ..register import register_provider_adapter
+
+from google import genai
+from google.genai import errors, types
+
+import astrbot.core.message.components as Comp
+from astrbot import logger
+from astrbot.api.provider import Personality, Provider
+from astrbot.core.db import BaseDatabase
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.func_tool_manager import FuncCall
+from astrbot.core.utils.io import download_image_by_url
+
+from ..register import register_provider_adapter
+
 
 @register_provider_adapter(
     "googlegenai_chat_completion", "Google Gemini Chat Completion 提供商适配器"
@@ -174,7 +178,7 @@ class ProviderGoogleGenAI(Provider):
                     )
                 )
 
-        logger.debug(f"gemini_contents: {gemini_contents}")
+        # logger.debug(f"gemini_contents: {gemini_contents}")
 
         return gemini_contents
 
@@ -218,7 +222,7 @@ class ProviderGoogleGenAI(Provider):
                     ),
                 ),
             )
-            logger.debug(f"gemini result: {result}")
+            # logger.debug(f"gemini result: {result}")
 
             if "Developer instruction is not enabled" in str(result):
                 logger.warning(f"{self.get_model()} 不支持 system prompt，已自动去除。")
@@ -302,7 +306,7 @@ class ProviderGoogleGenAI(Provider):
         keys = self.api_keys.copy()
         chosen_key = random.choice(keys)
 
-        for i in range(retry):
+        for _ in range(retry):
             try:
                 self.chosen_api_key = chosen_key
                 llm_response = await self._query(payloads, func_tool)
