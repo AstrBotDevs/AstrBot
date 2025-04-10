@@ -111,7 +111,8 @@ class Main(star.Star):
 {notice}"""
 
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
-
+    
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("llm")
     async def llm(self, event: AstrMessageEvent):
         """开启/关闭 LLM"""
@@ -125,6 +126,7 @@ class Main(star.Star):
             status = "开启"
         cfg.save_config()
         yield event.plain_result(f"{status} LLM 聊天功能。")
+
 
     @filter.command_group("tool")
     def tool(self):
@@ -178,6 +180,7 @@ class Main(star.Star):
             self.context.deactivate_llm_tool(tool.name)
         event.set_result(MessageEventResult().message("停用所有工具成功。"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("plugin")
     async def plugin(
         self, event: AstrMessageEvent, oper1: str = None, oper2: str = None
@@ -278,6 +281,7 @@ class Main(star.Star):
                 ret += "更多帮助信息请查看插件仓库 README。"
                 event.set_result(MessageEventResult().message(ret).use_t2i(False))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent):
         """开关文本转图片"""
@@ -291,6 +295,7 @@ class Main(star.Star):
         config.save_config()
         event.set_result(MessageEventResult().message("已开启文本转图片模式。"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("tts")
     async def tts(self, event: AstrMessageEvent):
         """开关文本转语音"""
@@ -304,6 +309,7 @@ class Main(star.Star):
         config.save_config()
         event.set_result(MessageEventResult().message("已开启文本转语音。"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("sid")
     async def sid(self, event: AstrMessageEvent):
         """获取会话 ID 和 管理员 ID"""
@@ -378,6 +384,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")
     async def provider(
         self, event: AstrMessageEvent, idx: Union[str, int] = None, idx2: int = None
@@ -531,6 +538,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         message.set_result(MessageEventResult().message(ret))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(
         self, message: AstrMessageEvent, idx_or_name: Union[int, str] = None
@@ -596,6 +604,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     )
                 )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("history")
     async def his(self, message: AstrMessageEvent, page: int = 1):
         """查看对话记录"""
@@ -642,6 +651,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("ls")
     async def convs(self, message: AstrMessageEvent, page: int = 1):
         """查看对话列表"""
@@ -781,6 +791,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 MessageEventResult().message("请输入群聊 ID。/groupnew 群聊ID。")
             )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("switch")
     async def switch_conv(self, message: AstrMessageEvent, index: int = None):
         """通过 /ls 前面的序号切换对话"""
@@ -842,6 +853,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 )
             )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("rename")
     async def rename_conv(self, message: AstrMessageEvent, new_name: str):
         """重命名对话"""
@@ -862,6 +874,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         )
         message.set_result(MessageEventResult().message("重命名对话成功。"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("del")
     async def del_conv(self, message: AstrMessageEvent):
         """删除当前对话"""
@@ -1061,6 +1074,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         await download_dashboard()
         yield event.plain_result("管理面板更新完成。")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("set")
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str):
         # session_id = event.get_session_id()
@@ -1076,6 +1090,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         yield event.plain_result(f"会话 {uid} 变量 {key} 存储成功。使用 /unset 移除。")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("unset")
     async def unset_variable(self, event: AstrMessageEvent, key: str):
         uid = event.unified_msg_origin
@@ -1090,6 +1105,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             sp.put("session_variables", session_vars)
             yield event.plain_result(f"会话 {uid} 变量 {key} 移除成功。")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("gewe_logout")
     async def gewe_logout(self, event: AstrMessageEvent):
         platforms = self.context.platform_manager.platform_insts
@@ -1100,6 +1116,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 yield event.plain_result("已登出 gewechat，请重启 AstrBot")
                 return
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("gewe_code")
     async def gewe_code(self, event: AstrMessageEvent, code: str):
         """保存 gewechat 验证码"""
@@ -1232,7 +1249,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 if mood_dialogs := persona["_mood_imitation_dialogs_processed"]:
                     req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
                     req.system_prompt += mood_dialogs
-                if (begin_dialogs := persona["_begin_dialogs_processed"]) and not req.contexts:
+                if begin_dialogs := persona["_begin_dialogs_processed"]:
                     req.contexts[:0] = begin_dialogs
 
         if quote and quote.message_str:
