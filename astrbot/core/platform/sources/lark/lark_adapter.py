@@ -70,8 +70,9 @@ class LarkPlatformAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            "lark",
-            "飞书机器人官方 API 适配器",
+            name="lark",
+            description="飞书机器人官方 API 适配器",
+            id=self.config.get("id"),
         )
 
     async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1):

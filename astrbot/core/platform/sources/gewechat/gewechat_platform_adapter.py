@@ -60,8 +60,9 @@ class GewechatPlatformAdapter(Platform):
     @override
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            "gewechat",
-            "基于 gewechat 的 Wechat 适配器",
+            name="gewechat",
+            description="基于 gewechat 的 Wechat 适配器",
+            id=self.config.get("id"),
         )
 
     async def terminate(self):

@@ -99,8 +99,9 @@ class QQOfficialWebhookPlatformAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            "qq_official_webhook",
-            "QQ 机器人官方 API 适配器",
+            name="qq_official_webhook",
+            description="QQ 机器人官方 API 适配器",
+            id=self.config.get("id"),
         )
 
     async def run(self):

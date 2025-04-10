@@ -108,8 +108,10 @@ class LLMRequestSubStage(Stage):
 
         # 执行请求 LLM 前事件钩子。
         # 装饰 system_prompt 等功能
+        # 获取当前平台ID
+        platform_id = event.get_platform_id()
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnLLMRequestEvent
+            EventType.OnLLMRequestEvent, platform_id=platform_id
         )
         for handler in handlers:
             try:
@@ -368,6 +370,15 @@ class LLMRequestSubStage(Stage):
                             )
                         )
                 else:
+                    # 获取处理器，过滤掉平台不兼容的处理器
+                    platform_id = event.get_platform_id()
+                    if not func_tool.handler.is_enabled_for_platform(platform_id):
+                        logger.debug(
+                            f"处理器 {func_tool_name} 在当前平台不兼容，跳过执行"
+                        )
+                        # 直接跳过，不添加任何消息到tool_call_result
+                        continue
+
                     logger.info(
                         f"调用工具函数：{func_tool_name}，参数：{func_tool_args}"
                     )

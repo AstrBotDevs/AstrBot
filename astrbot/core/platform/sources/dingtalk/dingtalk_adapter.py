@@ -73,8 +73,9 @@ class DingtalkPlatformAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            "dingtalk",
-            "钉钉机器人官方 API 适配器",
+            name="dingtalk",
+            description="钉钉机器人官方 API 适配器",
+            id=self.config.get("id"),
         )
 
     async def convert_msg(
