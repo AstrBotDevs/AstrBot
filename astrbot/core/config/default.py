@@ -248,6 +248,9 @@ CONFIG_METADATA_2 = {
                 "description": "平台设置",
                 "type": "object",
                 "items": {
+                    "plugin_enable": {
+                        "invisible": True,  # 隐藏插件启用配置
+                    },
                     "unique_session": {
                         "description": "会话隔离",
                         "type": "bool",

@@ -3,6 +3,7 @@ from ..context import PipelineContext
 from typing import Union, AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import StarHandlerMetadata
 from astrbot.core import logger
 
 
@@ -34,6 +35,8 @@ class PlatformCompatibilityStage(Stage):
 
         # 标记不兼容的处理器
         for handler in activated_handlers:
+            if not isinstance(handler, StarHandlerMetadata):
+                continue
             # 检查处理器是否在当前平台启用
             enabled = handler.is_enabled_for_platform(platform_id)
             if not enabled:
@@ -43,6 +46,7 @@ class PlatformCompatibilityStage(Stage):
                     f"[PlatformCompatibilityStage] 插件 {plugin_name} 在平台 {platform_id} 未启用，标记处理器 {handler.handler_name} 为平台不兼容"
                 )
                 # 设置处理器为平台不兼容状态
+                # TODO: 更好的标记方式
                 handler.platform_compatible = False
             else:
                 # 确保处理器为平台兼容状态
