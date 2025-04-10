@@ -39,8 +39,8 @@ class LLMRequestSubStage(Stage):
             "max_context_length"
         ]  # int
         self.dequeue_context_length = min(
-            max(1,ctx.astrbot_config["provider_settings"]["dequeue_context_length"]),
-            self.max_context_length - 1
+            max(1, ctx.astrbot_config["provider_settings"]["dequeue_context_length"]),
+            self.max_context_length - 1,
         )  # int
         self.streaming_response = ctx.astrbot_config["provider_settings"][
             "streaming_response"
@@ -141,7 +141,9 @@ class LLMRequestSubStage(Stage):
             and len(req.contexts) // 2 > self.max_context_length
         ):
             logger.debug("上下文长度超过限制，将截断。")
-            req.contexts = req.contexts[-(self.max_context_length - self.dequeue_context_length) * 2 :]
+            req.contexts = req.contexts[
+                -(self.max_context_length - self.dequeue_context_length) * 2 :
+            ]
 
         # session_id
         if not req.session_id:
@@ -376,9 +378,14 @@ class LLMRequestSubStage(Stage):
                 else:
                     # 获取处理器，过滤掉平台不兼容的处理器
                     platform_id = event.get_platform_id()
-                    if not func_tool.handler.is_enabled_for_platform(platform_id):
+                    star_md = star_map.get(func_tool.handler_module_path)
+                    if (
+                        star_md and
+                        platform_id in star_md.supported_platforms
+                        and not star_md.supported_platforms[platform_id]
+                    ):
                         logger.debug(
-                            f"处理器 {func_tool_name} 在当前平台不兼容，跳过执行"
+                            f"处理器 {func_tool_name}({star_md.name}) 在当前平台不兼容或者被禁用，跳过执行"
                         )
                         # 直接跳过，不添加任何消息到tool_call_result
                         continue
