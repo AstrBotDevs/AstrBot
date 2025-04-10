@@ -12,11 +12,12 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
+    MessageChain,
 )
 from astrbot.core.message.components import Image
 from astrbot.core import logger
 from astrbot.core.utils.metrics import Metric
-from astrbot.core.provider.entites import (
+from astrbot.core.provider.entities import (
     ProviderRequest,
     LLMResponse,
     ToolCallMessageSegment,
@@ -37,6 +38,9 @@ class LLMRequestSubStage(Stage):
         self.max_context_length = ctx.astrbot_config["provider_settings"][
             "max_context_length"
         ]  # int
+        self.streaming_response = ctx.astrbot_config["provider_settings"][
+            "streaming_response"
+        ]  # bool
 
         for bwp in self.bot_wake_prefixs:
             if self.provider_wake_prefix.startswith(bwp):
@@ -146,8 +150,10 @@ class LLMRequestSubStage(Stage):
 
         # 执行请求 LLM 前事件钩子。
         # 装饰 system_prompt 等功能
+        # 获取当前平台ID
+        platform_id = event.get_platform_id()
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnLLMRequestEvent
+            EventType.OnLLMRequestEvent, platform_id=platform_id
         )
         for handler in handlers:
             try:
@@ -179,70 +185,127 @@ class LLMRequestSubStage(Stage):
         if not req.session_id:
             req.session_id = event.unified_msg_origin
 
-        try:
-            need_loop = True
-            while need_loop:
-                need_loop = False
-                logger.debug(f"提供商请求 Payload: {req}")
-                llm_response = await provider.text_chat(**req.__dict__)  # 请求 LLM
+        async def requesting(req: ProviderRequest):
+            try:
+                need_loop = True
+                while need_loop:
+                    need_loop = False
+                    logger.debug(f"提供商请求 Payload: {req}")
 
-                # 执行 LLM 响应后的事件钩子。
-                handlers = star_handlers_registry.get_handlers_by_event_type(
-                    EventType.OnLLMResponseEvent
-                )
-                for handler in handlers:
-                    try:
-                        logger.debug(
-                            f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
-                        )
-                        await handler.handler(event, llm_response)
-                    except BaseException:
-                        logger.error(traceback.format_exc())
+                    final_llm_response = None
 
-                    if event.is_stopped():
-                        logger.info(
-                            f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
-                        )
-                        return
-
-                async for result in self._handle_llm_response(event, req, llm_response):
-                    if isinstance(result, ProviderRequest):
-                        # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
-                        req = result
-                        need_loop = True
+                    if self.streaming_response:
+                        stream = provider.text_chat_stream(**req.__dict__)
+                        async for llm_response in stream:
+                            if llm_response.is_chunk:
+                                if llm_response.result_chain:
+                                    yield llm_response.result_chain  # MessageChain
+                                else:
+                                    yield MessageChain().message(
+                                        llm_response.completion_text
+                                    )
+                            else:
+                                final_llm_response = llm_response
                     else:
-                        yield
+                        final_llm_response = await provider.text_chat(
+                            **req.__dict__
+                        )  # 请求 LLM
 
-            asyncio.create_task(
-                Metric.upload(
-                    llm_tick=1,
-                    model_name=provider.get_model(),
-                    provider_type=provider.meta().type,
+                    if not final_llm_response:
+                        raise Exception("LLM response is None.")
+
+                    # 执行 LLM 响应后的事件钩子。
+                    handlers = star_handlers_registry.get_handlers_by_event_type(
+                        EventType.OnLLMResponseEvent
+                    )
+                    for handler in handlers:
+                        try:
+                            logger.debug(
+                                f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
+                            )
+                            await handler.handler(event, final_llm_response)
+                        except BaseException:
+                            logger.error(traceback.format_exc())
+
+                        if event.is_stopped():
+                            logger.info(
+                                f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
+                            )
+                            return
+
+                    if self.streaming_response:
+                        # 流式输出的处理
+                        async for result in self._handle_llm_stream_response(
+                            event, req, final_llm_response
+                        ):
+                            if isinstance(result, ProviderRequest):
+                                # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
+                                req = result
+                                need_loop = True
+                            else:
+                                yield
+                    else:
+                        # 非流式输出的处理
+                        async for result in self._handle_llm_response(
+                            event, req, final_llm_response
+                        ):
+                            if isinstance(result, ProviderRequest):
+                                # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
+                                req = result
+                                need_loop = True
+                            else:
+                                yield
+
+                asyncio.create_task(
+                    Metric.upload(
+                        llm_tick=1,
+                        model_name=provider.get_model(),
+                        provider_type=provider.meta().type,
+                    )
                 )
-            )
 
-            # 保存到历史记录
-            await self._save_to_history(event, req, llm_response)
+                # 保存到历史记录
+                await self._save_to_history(event, req, final_llm_response)
 
-        except BaseException as e:
-            logger.error(traceback.format_exc())
+            except BaseException as e:
+                logger.error(traceback.format_exc())
+                event.set_result(
+                    MessageEventResult().message(
+                        f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}"
+                    )
+                )
+
+        if not self.streaming_response:
+            event.set_extra("tool_call_result", None)
+            async for _ in requesting(req):
+                yield
+        else:
             event.set_result(
-                MessageEventResult().message(
-                    f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}"
-                )
+                MessageEventResult()
+                .set_result_content_type(ResultContentType.STREAMING_RESULT)
+                .set_async_stream(requesting(req))
             )
-            return
+            # 这里使用yield来暂停当前阶段，等待流式输出完成后继续处理
+            yield
+
+            if event.get_extra("tool_call_result"):
+                event.set_result(event.get_extra("tool_call_result"))
+                event.set_extra("tool_call_result", None)
+                yield
 
     async def _handle_llm_response(
-        self, event: AstrMessageEvent, req: ProviderRequest, llm_response: LLMResponse
-    ) -> AsyncGenerator[None, None]:
-        """处理 LLM 响应。
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        llm_response: LLMResponse,
+    ) -> AsyncGenerator[Union[None, ProviderRequest], None]:
+        """处理非流式 LLM 响应。
 
         Returns:
-            bool: 是否需要继续调用 LLM
+            AsyncGenerator[Union[None, ProviderRequest], None]: 如果返回 ProviderRequest，表示需要再次调用 LLM
 
         Yields:
-            Iterator[bool]: 将 event 交付给下一个 stage
+            Iterator[Union[None, ProviderRequest]]: 将 event 交付给下一个 stage 或者返回 ProviderRequest 表示需要再次调用 LLM
         """
         if llm_response.role == "assistant":
             # text completion
@@ -265,83 +328,147 @@ class LLMRequestSubStage(Stage):
                 )
             )
         elif llm_response.role == "tool":
-            # function calling
-            tool_call_result: list[ToolCallMessageSegment] = []
-            logger.info(
-                f"触发 {len(llm_response.tools_call_name)} 个函数调用: {llm_response.tools_call_name}"
+            # 处理函数工具调用
+            async for result in self._handle_function_tools(event, req, llm_response):
+                yield result
+
+    async def _handle_llm_stream_response(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        llm_response: LLMResponse,
+    ) -> AsyncGenerator[Union[None, ProviderRequest], None]:
+        """处理流式 LLM 响应。
+
+        专门用于处理流式输出完成后的响应，与非流式响应处理分离。
+
+        Returns:
+            AsyncGenerator[Union[None, ProviderRequest], None]: 如果返回 ProviderRequest，表示需要再次调用 LLM
+
+        Yields:
+            Iterator[Union[None, ProviderRequest]]: 将 event 交付给下一个 stage 或者返回 ProviderRequest 表示需要再次调用 LLM
+        """
+        if llm_response.role == "assistant":
+            # text completion
+            if llm_response.result_chain:
+                event.set_result(
+                    MessageEventResult(
+                        chain=llm_response.result_chain.chain
+                    ).set_result_content_type(ResultContentType.STREAMING_FINISH)
+                )
+            else:
+                event.set_result(
+                    MessageEventResult()
+                    .message(llm_response.completion_text)
+                    .set_result_content_type(ResultContentType.STREAMING_FINISH)
+                )
+        elif llm_response.role == "err":
+            event.set_result(
+                MessageEventResult().message(
+                    f"AstrBot 请求失败。\n错误信息: {llm_response.completion_text}"
+                )
             )
-            for func_tool_name, func_tool_args, func_tool_id in zip(
-                llm_response.tools_call_name,
-                llm_response.tools_call_args,
-                llm_response.tools_call_ids,
-            ):
-                try:
-                    func_tool = req.func_tool.get_func(func_tool_name)
-                    if func_tool.origin == "mcp":
-                        logger.info(
-                            f"从 MCP 服务 {func_tool.mcp_server_name} 调用工具函数：{func_tool.name}，参数：{func_tool_args}"
+        elif llm_response.role == "tool":
+            # 处理函数工具调用
+            async for result in self._handle_function_tools(event, req, llm_response):
+                yield result
+
+    async def _handle_function_tools(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        llm_response: LLMResponse,
+    ) -> AsyncGenerator[Union[None, ProviderRequest], None]:
+        """处理函数工具调用。
+
+        Returns:
+            AsyncGenerator[Union[None, ProviderRequest], None]: 如果返回 ProviderRequest，表示需要再次调用 LLM
+        """
+        # function calling
+        tool_call_result: list[ToolCallMessageSegment] = []
+        logger.info(
+            f"触发 {len(llm_response.tools_call_name)} 个函数调用: {llm_response.tools_call_name}"
+        )
+        for func_tool_name, func_tool_args, func_tool_id in zip(
+            llm_response.tools_call_name,
+            llm_response.tools_call_args,
+            llm_response.tools_call_ids,
+        ):
+            try:
+                func_tool = req.func_tool.get_func(func_tool_name)
+                if func_tool.origin == "mcp":
+                    logger.info(
+                        f"从 MCP 服务 {func_tool.mcp_server_name} 调用工具函数：{func_tool.name}，参数：{func_tool_args}"
+                    )
+                    client = req.func_tool.mcp_client_dict[func_tool.mcp_server_name]
+                    res = await client.session.call_tool(func_tool.name, func_tool_args)
+                    if res:
+                        # TODO content的类型可能包括list[TextContent | ImageContent | EmbeddedResource]，这里只处理了TextContent。
+                        tool_call_result.append(
+                            ToolCallMessageSegment(
+                                role="tool",
+                                tool_call_id=func_tool_id,
+                                content=res.content[0].text,
+                            )
                         )
-                        client = req.func_tool.mcp_client_dict[
-                            func_tool.mcp_server_name
-                        ]
-                        res = await client.session.call_tool(
-                            func_tool.name, func_tool_args
+                else:
+                    # 获取处理器，过滤掉平台不兼容的处理器
+                    platform_id = event.get_platform_id()
+                    if not func_tool.handler.is_enabled_for_platform(platform_id):
+                        logger.debug(
+                            f"处理器 {func_tool_name} 在当前平台不兼容，跳过执行"
                         )
-                        if res:
-                            # TODO content的类型可能包括list[TextContent | ImageContent | EmbeddedResource]，这里只处理了TextContent。
+                        # 直接跳过，不添加任何消息到tool_call_result
+                        continue
+
+                    logger.info(
+                        f"调用工具函数：{func_tool_name}，参数：{func_tool_args}"
+                    )
+                    # 尝试调用工具函数
+                    wrapper = self._call_handler(
+                        self.ctx, event, func_tool.handler, **func_tool_args
+                    )
+                    async for resp in wrapper:
+                        if resp is not None:  # 有 return 返回
                             tool_call_result.append(
                                 ToolCallMessageSegment(
                                     role="tool",
                                     tool_call_id=func_tool_id,
-                                    content=res.content[0].text,
+                                    content=resp,
                                 )
                             )
-                    else:
-                        logger.info(
-                            f"调用工具函数：{func_tool_name}，参数：{func_tool_args}"
-                        )
-                        # 尝试调用工具函数
-                        wrapper = self._call_handler(
-                            self.ctx, event, func_tool.handler, **func_tool_args
-                        )
-                        async for resp in wrapper:
-                            if resp is not None:  # 有 return 返回
-                                tool_call_result.append(
-                                    ToolCallMessageSegment(
-                                        role="tool",
-                                        tool_call_id=func_tool_id,
-                                        content=resp,
-                                    )
-                                )
-                            else:
-                                yield  # 有生成器返回
-                    event.clear_result()  # 清除上一个 handler 的结果
-                except BaseException as e:
-                    logger.warning(traceback.format_exc())
-                    tool_call_result.append(
-                        ToolCallMessageSegment(
-                            role="tool",
-                            tool_call_id=func_tool_id,
-                            content=f"error: {str(e)}",
-                        )
+                        else:
+                            res = event.get_result()
+                            if res and res.chain:
+                                event.set_extra("tool_call_result", res)
+                            yield  # 有生成器返回
+                event.clear_result()  # 清除上一个 handler 的结果
+            except BaseException as e:
+                logger.warning(traceback.format_exc())
+                tool_call_result.append(
+                    ToolCallMessageSegment(
+                        role="tool",
+                        tool_call_id=func_tool_id,
+                        content=f"error: {str(e)}",
                     )
-            if tool_call_result:
-                # 函数调用结果
-                req.func_tool = None  # 暂时不支持递归工具调用
-                assistant_msg_seg = AssistantMessageSegment(
-                    role="assistant", tool_calls=llm_response.to_openai_tool_calls()
                 )
-                # 在多轮 Tool 调用的情况下，这里始终保持最新的 Tool 调用结果，减少上下文长度。
-                req.tool_calls_result = ToolCallsResult(
-                    tool_calls_info=assistant_msg_seg,
-                    tool_calls_result=tool_call_result,
+        if tool_call_result:
+            # 函数调用结果
+            req.func_tool = None  # 暂时不支持递归工具调用
+            assistant_msg_seg = AssistantMessageSegment(
+                role="assistant", tool_calls=llm_response.to_openai_tool_calls()
+            )
+            # 在多轮 Tool 调用的情况下，这里始终保持最新的 Tool 调用结果，减少上下文长度。
+            req.tool_calls_result = ToolCallsResult(
+                tool_calls_info=assistant_msg_seg,
+                tool_calls_result=tool_call_result,
+            )
+            yield req  # 再次执行 LLM 请求
+        else:
+            if llm_response.completion_text:
+                event.set_result(
+                    MessageEventResult().message(llm_response.completion_text)
                 )
-                yield req  # 再次执行 LLM 请求
-            else:
-                if llm_response.completion_text:
-                    event.set_result(
-                        MessageEventResult().message(llm_response.completion_text)
-                    )
 
     async def _save_to_history(
         self, event: AstrMessageEvent, req: ProviderRequest, llm_response: LLMResponse

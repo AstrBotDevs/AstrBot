@@ -22,7 +22,7 @@ import 'highlight.js/styles/github.css';
 
                 <v-card-title>
                     <div class="pl-2 pt-2 d-flex align-center pe-2">
-                        <h2>✨ 插件市场</h2>
+                        <h2>✨ 插件市场</h2>                    
                         <v-btn icon size="small" style="margin-left: 8px" variant="plain" @click="jumpToPluginMarket()">
                             <v-icon size="small">mdi-help</v-icon>
                             <v-tooltip activator="parent" location="start">
@@ -52,6 +52,7 @@ import 'highlight.js/styles/github.css';
 
                 <v-card-text>
 
+                    <small style="color: #bbb;">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small>
                     <div v-if="pinnedPlugins.length > 0" class="mt-4">
                         <h2>🥳 推荐</h2>
 
@@ -71,7 +72,7 @@ import 'highlight.js/styles/github.css';
                             <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
                                 :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys">
                                 <template v-slot:item.name="{ item }">
-                                    <div class="d-flex align-center">
+                                    <div class="d-flex align-center" style="overflow-x: scroll;">
                                         <img v-if="item.logo" :src="item.logo"
                                             style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
                                             alt="logo">
@@ -83,24 +84,43 @@ import 'highlight.js/styles/github.css';
                                     </div>
 
                                 </template>
+
+                                <template v-slot:item.desc="{ item }">
+                                    <div style="font-size: 13px;">
+                                        {{ item.desc }}
+                                    </div>
+                                </template>
                                 <template v-slot:item.author="{ item }">
-                                    <span v-if="item?.social_link"><a :href="item?.social_link">{{ item.author
+                                    <div style="font-size: 12px;">
+                                        <span v-if="item?.social_link"><a :href="item?.social_link">{{ item.author
                                     }}</a></span>
                                     <span v-else>{{ item.author }}</span>
+                                    </div>
+  
+                                </template>
+                                <template v-slot:item.stars="{ item }">
+                                    <a :href="item.repo">
+                                        <img v-if="item.repo" 
+                                        :src="`https://img.shields.io/github/stars/${item.repo.split('/').slice(-2).join('/')}.svg`" 
+                                        :alt="`Stars for ${item.name}`"
+                                        style="height: 20px;"
+                                    />
+                                    </a>
+                                    
                                 </template>
                                 <template v-slot:item.tags="{ item }">
                                     <span v-if="item.tags.length === 0">无</span>
-                                    <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="small">{{ tag
+                                    <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="x-small">{{ tag
                                         }}</v-chip>
                                 </template>
                                 <template v-slot:item.actions="{ item }">
-                                    <v-btn v-if="!item.installed" class="text-none mr-2" size="small" 
+                                    <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" 
                                         variant="flat" border
                                         @click="extension_url = item.repo; newExtension()">安装</v-btn>
-                                    <v-btn v-else class="text-none mr-2" size="small" variant="flat" border
+                                    <v-btn v-else class="text-none mr-2" size="x-small" variant="flat" border
                                         disabled>已安装</v-btn>
-                                    <v-btn class="text-none mr-2" size="small" variant="flat" border 
-                                        @click="open(item.repo)">查看帮助</v-btn>
+                                    <v-btn class="text-none mr-2" size="x-small" variant="flat" border 
+                                        @click="open(item.repo)">帮助</v-btn>
                                 </template>
                             </v-data-table>
                         </v-col>
@@ -259,10 +279,11 @@ export default {
             announcement: "",
             isListView: true,
             pluginMarketHeaders: [
-                { title: '名称', key: 'name', maxWidth: '150px' },
+                { title: '名称', key: 'name', maxWidth: '200px' },
                 { title: '描述', key: 'desc', maxWidth: '250px' },
-                { title: '作者', key: 'author', maxWidth: '60px' },
-                { title: '标签', key: 'tags', maxWidth: '60px' },
+                { title: '作者', key: 'author', maxWidth: '70px' },
+                { title: 'Star数', key: 'stars', maxWidth: '100px' },
+                { title: '标签', key: 'tags', maxWidth: '100px' },
                 { title: '操作', key: 'actions', sortable: false }
             ],
             marketSearch: "",

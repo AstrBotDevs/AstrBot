@@ -99,8 +99,9 @@ class QQOfficialWebhookPlatformAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            "qq_official_webhook",
-            "QQ 机器人官方 API 适配器",
+            name="qq_official_webhook",
+            description="QQ 机器人官方 API 适配器",
+            id=self.config.get("id"),
         )
 
     async def run(self):
@@ -116,5 +117,8 @@ class QQOfficialWebhookPlatformAdapter(Platform):
     async def terminate(self):
         self.webhook_helper.shutdown_event.set()
         await self.client.close()
-        await self.webhook_helper.server.shutdown()
+        try:
+            await self.webhook_helper.server.shutdown()
+        except Exception as _:
+            pass
         logger.info("QQ 机器人官方 API 适配器已经被优雅地关闭")

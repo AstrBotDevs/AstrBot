@@ -5,7 +5,7 @@ from .method.llm_request import LLMRequestSubStage
 from .method.star_request import StarRequestSubStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import StarHandlerMetadata
-from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core import logger
 
 

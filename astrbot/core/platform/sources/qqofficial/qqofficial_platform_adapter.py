@@ -126,8 +126,9 @@ class QQOfficialPlatformAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            "qq_official",
-            "QQ 机器人官方 API 适配器",
+            name="qq_official",
+            description="QQ 机器人官方 API 适配器",
+            id=self.config.get("id"),
         )
 
     @staticmethod

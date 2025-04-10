@@ -20,7 +20,7 @@ class LogRoute(Route):
                     message = await queue.get()
                     payload = {
                         "type": "log",
-                        **message # see astrbot/core/log.py
+                        **message,  # see astrbot/core/log.py
                     }
                     yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
             except asyncio.CancelledError:

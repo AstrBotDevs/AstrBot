@@ -1,7 +1,7 @@
 import abc
 import asyncio
 from dataclasses import dataclass
-from typing import List, Union, Optional
+from typing import List, Union, Optional, AsyncGenerator
 
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
@@ -16,7 +16,7 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
 from .astrbot_message import AstrBotMessage, Group
 from .platform_metadata import PlatformMetadata
@@ -80,6 +80,9 @@ class AstrMessageEvent(abc.ABC):
 
     def get_platform_name(self):
         return self.platform_meta.name
+
+    def get_platform_id(self):
+        return self.platform_meta.id
 
     def get_message_str(self) -> str:
         """
@@ -201,6 +204,15 @@ class AstrMessageEvent(abc.ABC):
         是否是管理员。
         """
         return self.role == "admin"
+
+    async def send_streaming(self, generator: AsyncGenerator[MessageChain, None]):
+        """发送流式消息到消息平台，使用异步生成器。
+        目前仅支持: telegram，qq official 私聊。
+        """
+        asyncio.create_task(
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        )
+        self._has_send_oper = True
 
     async def _pre_send(self):
         """调度器会在执行 send() 前调用该方法"""

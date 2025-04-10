@@ -50,6 +50,7 @@ DEFAULT_CONFIG = {
         "default_personality": "default",
         "prompt_prefix": "",
         "max_context_length": -1,
+        "streaming_response": False,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -247,6 +248,9 @@ CONFIG_METADATA_2 = {
                 "description": "平台设置",
                 "type": "object",
                 "items": {
+                    "plugin_enable": {
+                        "invisible": True,  # 隐藏插件启用配置
+                    },
                     "unique_session": {
                         "description": "会话隔离",
                         "type": "bool",
@@ -992,6 +996,11 @@ CONFIG_METADATA_2 = {
                         "description": "最多携带对话数量(条)",
                         "type": "int",
                         "hint": "超出这个数量时将丢弃最旧的部分，用户和AI的一轮聊天记为 1 条。-1 表示不限制，默认为不限制。",
+                    },
+                    "streaming_response": {
+                        "description": "启用流式回复",
+                        "type": "bool",
+                        "hint": "启用后，将会流式输出 LLM 的响应。目前仅支持 OpenAI API提供商 以及 Telegram、QQ Official 私聊 两个平台",
                     },
                 },
             },

@@ -179,7 +179,7 @@ class ConfigRoute(Route):
             await self._save_astrbot_configs(post_configs)
             return Response().ok(None, "保存成功~ 机器人正在重载配置。").__dict__
         except Exception as e:
-            logger.error(e)
+            logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
     async def post_plugin_configs(self):
