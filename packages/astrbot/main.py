@@ -1249,7 +1249,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 if mood_dialogs := persona["_mood_imitation_dialogs_processed"]:
                     req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
                     req.system_prompt += mood_dialogs
-                if begin_dialogs := persona["_begin_dialogs_processed"]:
+                if (begin_dialogs := persona["_begin_dialogs_processed"]) and not req.contexts:
                     req.contexts[:0] = begin_dialogs
 
         if quote and quote.message_str:
