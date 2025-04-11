@@ -348,16 +348,17 @@ class FuncCall:
         for f in self.func_list:
             if not f.active:
                 continue
-            _l.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": f.name,
-                        "parameters": f.parameters,
-                        "description": f.description,
-                    },
-                }
-            )
+            func_ = {
+                "type": "function",
+                "function": {
+                    "name": f.name,
+                    # "parameters": f.parameters,
+                    "description": f.description,
+                },
+            }
+            if f.parameters.get("properties"):
+                func_["function"]["parameters"] = f.parameters
+            _l.append(func_)
         return _l
 
     def get_func_desc_anthropic_style(self) -> list:

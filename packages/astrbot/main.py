@@ -880,8 +880,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
         provider = self.context.get_using_provider()
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
-            await provider.api_client.delete_chat_conv(message.unified_msg_origin)
-            provider.conversation_ids.pop(message.unified_msg_origin, None)
+            dify_cid = provider.conversation_ids.pop(message.unified_msg_origin, None)
+            if dify_cid:
+                await provider.api_client.delete_chat_conv(message.unified_msg_origin, dify_cid)
             message.set_result(
                 MessageEventResult().message(
                     "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
@@ -1232,7 +1233,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 if mood_dialogs := persona["_mood_imitation_dialogs_processed"]:
                     req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
                     req.system_prompt += mood_dialogs
-                if begin_dialogs := persona["_begin_dialogs_processed"]:
+                if (begin_dialogs := persona["_begin_dialogs_processed"]) and not req.contexts:
                     req.contexts[:0] = begin_dialogs
 
         if quote and quote.message_str:

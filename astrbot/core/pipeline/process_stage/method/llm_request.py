@@ -38,6 +38,10 @@ class LLMRequestSubStage(Stage):
         self.max_context_length = ctx.astrbot_config["provider_settings"][
             "max_context_length"
         ]  # int
+        self.dequeue_context_length = min(
+            max(1, ctx.astrbot_config["provider_settings"]["dequeue_context_length"]),
+            self.max_context_length - 1,
+        )  # int
         self.streaming_response = ctx.astrbot_config["provider_settings"][
             "streaming_response"
         ]  # bool
@@ -62,12 +66,16 @@ class LLMRequestSubStage(Stage):
 
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
-            assert isinstance(req, ProviderRequest), (
-                "provider_request 必须是 ProviderRequest 类型。"
-            )
+            assert isinstance(
+                req, ProviderRequest
+            ), "provider_request 必须是 ProviderRequest 类型。"
 
             if req.conversation:
-                req.contexts = json.loads(req.conversation.history)
+                all_contexts = json.loads(req.conversation.history)
+                req.contexts = self._process_tool_message_pairs(
+                    all_contexts, remove_tags=True
+                )
+
         else:
             req = ProviderRequest(prompt="", image_urls=[])
             if self.provider_wake_prefix:
@@ -108,8 +116,10 @@ class LLMRequestSubStage(Stage):
 
         # 执行请求 LLM 前事件钩子。
         # 装饰 system_prompt 等功能
+        # 获取当前平台ID
+        platform_id = event.get_platform_id()
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnLLMRequestEvent
+            EventType.OnLLMRequestEvent, platform_id=platform_id
         )
         for handler in handlers:
             try:
@@ -135,7 +145,9 @@ class LLMRequestSubStage(Stage):
             and len(req.contexts) // 2 > self.max_context_length
         ):
             logger.debug("上下文长度超过限制，将截断。")
-            req.contexts = req.contexts[-self.max_context_length * 2 :]
+            req.contexts = req.contexts[
+                -(self.max_context_length - self.dequeue_context_length) * 2 :
+            ]
 
         # session_id
         if not req.session_id:
@@ -368,6 +380,20 @@ class LLMRequestSubStage(Stage):
                             )
                         )
                 else:
+                    # 获取处理器，过滤掉平台不兼容的处理器
+                    platform_id = event.get_platform_id()
+                    star_md = star_map.get(func_tool.handler_module_path)
+                    if (
+                        star_md and
+                        platform_id in star_md.supported_platforms
+                        and not star_md.supported_platforms[platform_id]
+                    ):
+                        logger.debug(
+                            f"处理器 {func_tool_name}({star_md.name}) 在当前平台不兼容或者被禁用，跳过执行"
+                        )
+                        # 直接跳过，不添加任何消息到tool_call_result
+                        continue
+
                     logger.info(
                         f"调用工具函数：{func_tool_name}，参数：{func_tool_args}"
                     )
@@ -425,12 +451,22 @@ class LLMRequestSubStage(Stage):
 
         if llm_response.role == "assistant":
             # 文本回复
-            contexts = req.contexts
+            contexts = req.contexts.copy()
             contexts.append(await req.assemble_context())
 
-            # tool calls result
+            # 记录并标记函数调用结果
             if req.tool_calls_result:
-                contexts.extend(req.tool_calls_result.to_openai_messages())
+                tool_calls_messages = req.tool_calls_result.to_openai_messages()
+
+                # 添加标记
+                for message in tool_calls_messages:
+                    message["_tool_call_history"] = True
+
+                processed_tool_messages = self._process_tool_message_pairs(
+                    tool_calls_messages, remove_tags=False
+                )
+
+                contexts.extend(processed_tool_messages)
 
             contexts.append(
                 {"role": "assistant", "content": llm_response.completion_text}
@@ -441,3 +477,59 @@ class LLMRequestSubStage(Stage):
             await self.conv_manager.update_conversation(
                 event.unified_msg_origin, req.conversation.cid, history=contexts_to_save
             )
+
+    def _process_tool_message_pairs(self, messages, remove_tags=True):
+        """处理工具调用消息，确保assistant和tool消息成对出现
+
+        Args:
+            messages (list): 消息列表
+            remove_tags (bool): 是否移除_tool_call_history标记
+
+        Returns:
+            list: 处理后的消息列表，保证了assistant和对应tool消息的成对出现
+        """
+        result = []
+        i = 0
+
+        while i < len(messages):
+            current_msg = messages[i]
+
+            # 普通消息直接添加
+            if "_tool_call_history" not in current_msg:
+                result.append(current_msg.copy() if remove_tags else current_msg)
+                i += 1
+                continue
+
+            # 工具调用消息成对处理
+            if current_msg.get("role") == "assistant" and "tool_calls" in current_msg:
+                assistant_msg = current_msg.copy()
+
+                if remove_tags and "_tool_call_history" in assistant_msg:
+                    del assistant_msg["_tool_call_history"]
+
+                related_tools = []
+                j = i + 1
+                while (
+                    j < len(messages)
+                    and messages[j].get("role") == "tool"
+                    and "_tool_call_history" in messages[j]
+                ):
+                    tool_msg = messages[j].copy()
+
+                    if remove_tags:
+                        del tool_msg["_tool_call_history"]
+
+                    related_tools.append(tool_msg)
+                    j += 1
+
+                # 成对的时候添加到结果
+                if related_tools:
+                    result.append(assistant_msg)
+                    result.extend(related_tools)
+
+                i = j  # 跳过已处理
+            else:
+                # 单独的tool消息
+                i += 1
+
+        return result

@@ -102,7 +102,7 @@ class ProviderDify(Provider):
 
         try:
             match self.api_type:
-                case "chat" | "agent":
+                case "chat" | "agent" | "chatflow":
                     if not prompt:
                         prompt = "请描述这张图片。"
 

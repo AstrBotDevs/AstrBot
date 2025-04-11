@@ -39,8 +39,9 @@ class AiocqhttpAdapter(Platform):
         self.port = platform_config["ws_reverse_port"]
 
         self.metadata = PlatformMetadata(
-            "aiocqhttp",
-            "适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
+            name="aiocqhttp",
+            description="适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
+            id=self.config.get("id"),
         )
 
         self.bot = CQHttp(
@@ -109,7 +110,7 @@ class AiocqhttpAdapter(Platform):
         """OneBot V11 请求类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        abm.sender = MessageMember(user_id=event.user_id, nickname=event.user_id)
+        abm.sender = MessageMember(user_id=str(event.user_id), nickname=event.user_id)
         abm.type = MessageType.OTHER_MESSAGE
         if "group_id" in event and event["group_id"]:
             abm.type = MessageType.GROUP_MESSAGE
@@ -129,7 +130,7 @@ class AiocqhttpAdapter(Platform):
         """OneBot V11 通知类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        abm.sender = MessageMember(user_id=event.user_id, nickname=event.user_id)
+        abm.sender = MessageMember(user_id=str(event.user_id), nickname=event.user_id)
         abm.type = MessageType.OTHER_MESSAGE
         if "group_id" in event and event["group_id"]:
             abm.group_id = str(event.group_id)

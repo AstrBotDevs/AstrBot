@@ -198,7 +198,7 @@ class RespondStage(Stage):
             )
 
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnAfterMessageSentEvent
+            EventType.OnAfterMessageSentEvent, platform_id=event.get_platform_id()
         )
         for handler in handlers:
             try:
