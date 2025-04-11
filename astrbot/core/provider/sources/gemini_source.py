@@ -375,7 +375,10 @@ class ProviderGoogleGenAI(Provider):
         组装上下文。
         """
         if image_urls:
-            user_content = {"role": "user", "content": [{"type": "text", "text": text}]}
+            user_content = {
+                "role": "user",
+                "content": [{"type": "text", "text": text if text else "[图片]"}],
+            }
             for image_url in image_urls:
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)
