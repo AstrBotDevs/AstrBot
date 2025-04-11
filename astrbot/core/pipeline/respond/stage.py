@@ -12,6 +12,7 @@ from astrbot.core import logger
 from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
+from astrbot.core.utils.path_util import path_Mapping
 
 
 @register_stage
@@ -56,6 +57,8 @@ class RespondStage(Stage):
 
     async def initialize(self, ctx: PipelineContext):
         self.ctx = ctx
+        self.config = ctx.astrbot_config
+        self.platform_settings: dict = self.config.get("platform_settings", {})
 
         self.reply_with_mention = ctx.astrbot_config["platform_settings"][
             "reply_with_mention"
@@ -149,6 +152,14 @@ class RespondStage(Stage):
             await event._post_send()
             return
         elif len(result.chain) > 0:
+            # 检查路径映射
+            if mappings := self.platform_settings.get("path_mapping", []):
+                for idx, component in enumerate(result.chain):
+                    if isinstance(component, Comp.File) and component.file:
+                        # 支持 File 消息段的路径映射。
+                        component.file = path_Mapping(mappings, component.file)
+                        event.get_result().chain[idx] = component
+            
             await event._pre_send()
 
             # 检查消息链是否为空
