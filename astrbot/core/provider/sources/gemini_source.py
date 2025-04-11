@@ -5,7 +5,7 @@ import random
 from typing import Dict, List, Optional
 
 from google import genai
-from google.genai import errors, types
+from google.genai import types
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -87,7 +87,7 @@ class ProviderGoogleGenAI(Provider):
                 for m in models
                 if "generateContent" in m.supported_actions
             ]
-        except errors.APIError as e:
+        except Exception as e:
             raise Exception(f"获取模型列表失败: {e}")
 
     @staticmethod
@@ -186,9 +186,10 @@ class ProviderGoogleGenAI(Provider):
         if self.provider_config.get("gm_resp_image_modal", False):
             modalities.append("Image")
 
+        result: Optional[types.GenerateContentResponse] = None
         while True:
-            result: types.GenerateContentResponse = (
-                await self.client.models.generate_content(
+            try:
+                result = await self.client.models.generate_content(
                     model=self.get_model(),
                     contents=conversation,
                     config=types.GenerateContentConfig(
@@ -204,30 +205,36 @@ class ProviderGoogleGenAI(Provider):
                         ),
                     ),
                 )
-            )
 
-            result_str = str(result)
-            finish_reason = result.candidates[0].finish_reason
-            if "Developer instruction is not enabled" in result_str:
-                logger.warning(f"{self.get_model()} 不支持 system prompt，已自动去除。")
-                system_instruction = ""
+                if result.candidates[0].finish_reason == types.FinishReason.RECITATION:
+                    if temperature > 2:
+                        raise Exception("温度参数已超过最大值2，仍然发生recitation")
+                    temperature += 0.2
+                    logger.warning(
+                        f"发生了recitation，正在提高温度至{temperature:.1f}重试..."
+                    )
+                    continue
+
+                break
+
+            except Exception as e:
+                error_msg = str(e)
+                if "Developer instruction is not enabled" in error_msg:
+                    logger.warning(
+                        f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)"
+                    )
+                    system_instruction = None
+                elif "Function calling is not enabled" in error_msg:
+                    logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除")
+                    tool_list = None
+                elif "Multi-modal output is not supported" in error_msg:
+                    logger.warning(
+                        f"{self.get_model()} 不支持多模态输出，降级为文本模态"
+                    )
+                    modalities = ["Text"]
+                else:
+                    raise
                 continue
-            elif "Function calling is not enabled" in result_str:
-                logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除。")
-                tool_list = None
-                continue
-            elif "Multi-modal output is not supported" in result_str:
-                logger.warning(f"{self.get_model()} 不支持多模态输出，降级为文本模态。")
-                modalities = ["Text"]
-                continue
-            elif finish_reason == types.FinishReason.RECITATION:
-                logger.warning("发生了recitation，正在尝试加温重试...")
-                temperature += 0.2
-                logger.info(f"当前温度: {temperature}")
-                if temperature > 2:
-                    raise Exception("温度已到达(或超过)2")
-                continue
-            break
 
         llm_response = LLMResponse("assistant")
         result_parts: Optional[types.Part] = result.candidates[0].content.parts
