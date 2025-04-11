@@ -227,7 +227,11 @@ class ProviderGoogleGenAI(Provider):
                 elif "Function calling is not enabled" in error_msg:
                     logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除")
                     tool_list = None
-                elif "Multi-modal output is not supported" in error_msg:
+                elif (
+                    "Multi-modal output is not supported"
+                    or "Model does not support the requested response modalities"
+                    in error_msg
+                ):
                     logger.warning(
                         f"{self.get_model()} 不支持多模态输出，降级为文本模态"
                     )
