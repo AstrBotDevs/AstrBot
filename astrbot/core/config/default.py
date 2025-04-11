@@ -928,8 +928,8 @@ CONFIG_METADATA_2 = {
                     "dify_api_type": {
                         "description": "Dify 应用类型",
                         "type": "string",
-                        "hint": "Dify API 类型。根据 Dify 官网，目前支持 chat, agent, workflow 三种应用类型",
-                        "options": ["chat", "agent", "workflow"],
+                        "hint": "Dify API 类型。根据 Dify 官网，目前支持 chat, chatflow, agent, workflow 三种应用类型。",
+                        "options": ["chat", "chatflow", "agent", "workflow"],
                     },
                     "dify_workflow_output_key": {
                         "description": "Dify Workflow 输出变量名",
