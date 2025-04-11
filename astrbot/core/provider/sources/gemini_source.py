@@ -180,7 +180,7 @@ class ProviderGoogleGenAI(Provider):
             if message["role"] == "user":
                 if isinstance(message["content"], str):
                     if not message["content"]:
-                        message["content"] = ""
+                        message["content"] = " "
 
                     google_genai_conversation.append(
                         {"role": "user", "parts": [{"text": message["content"]}]}
@@ -209,7 +209,7 @@ class ProviderGoogleGenAI(Provider):
             elif message["role"] == "assistant":
                 if "content" in message:
                     if not message["content"]:
-                        message["content"] = ""
+                        message["content"] = " "
                     google_genai_conversation.append(
                         {"role": "model", "parts": [{"text": message["content"]}]}
                     )
