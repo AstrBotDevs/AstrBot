@@ -81,6 +81,9 @@ class AstrMessageEvent(abc.ABC):
     def get_platform_name(self):
         return self.platform_meta.name
 
+    def get_platform_id(self):
+        return self.platform_meta.id
+
     def get_message_str(self) -> str:
         """
         获取消息字符串。

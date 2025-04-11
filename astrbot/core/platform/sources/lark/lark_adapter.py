@@ -2,6 +2,7 @@ import base64
 import asyncio
 import json
 import re
+import uuid
 import astrbot.api.message_components as Comp
 
 from astrbot.api.platform import (
@@ -66,12 +67,47 @@ class LarkPlatformAdapter(Platform):
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
     ):
-        raise NotImplementedError("Lark 适配器不支持 send_by_session")
+        res = await LarkMessageEvent._convert_to_lark(message_chain, self.lark_api)
+        wrapped = {
+            "zh_cn": {
+                "title": "",
+                "content": res,
+            }
+        }
+
+        if session.message_type == MessageType.GROUP_MESSAGE:
+            id_type = "chat_id"
+            if "%" in session.session_id:
+                session.session_id = session.session_id.split("%")[1]
+        else:
+            id_type = "open_id"
+
+        request = (
+            CreateMessageRequest.builder()
+            .receive_id_type(id_type)
+            .request_body(
+                CreateMessageRequestBody.builder()
+                .receive_id(session.session_id)
+                .content(json.dumps(wrapped))
+                .msg_type("post")
+                .uuid(str(uuid.uuid4()))
+                .build()
+            )
+            .build()
+        )
+
+        response = await self.lark_api.im.v1.message.acreate(request)
+
+        if not response.success():
+            logger.error(f"发送飞书消息失败({response.code}): {response.msg}")
+
+        await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            "lark",
-            "飞书机器人官方 API 适配器",
+            name="lark",
+            description="飞书机器人官方 API 适配器",
+            id=self.config.get("id"),
         )
 
     async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1):
@@ -165,7 +201,10 @@ class LarkPlatformAdapter(Platform):
             else:
                 abm.session_id = abm.sender.user_id
         else:
-            abm.session_id = abm.sender.user_id
+            if abm.type == MessageType.GROUP_MESSAGE:
+                abm.session_id = f"{abm.sender.user_id}%{abm.group_id}"  # 也保留群组id
+            else:
+                abm.session_id = abm.sender.user_id
 
         logger.debug(abm)
         await self.handle_msg(abm)
