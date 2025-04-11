@@ -325,27 +325,25 @@ class ProviderGoogleGenAI(Provider):
 
         retry = 10
         keys = self.api_keys.copy()
-        chosen_key = random.choice(keys)
         temp = kwargs.get("temperature", 0.7)  # 暂定默认温度为0.7
 
         for _ in range(retry):
             try:
-                self.chosen_api_key = chosen_key
                 llm_response = await self._query(payloads, func_tool, temp)
                 break
             except Exception as e:
                 if "429" in str(e) or "API key not valid" in str(e):
-                    keys.remove(chosen_key)
+                    keys.remove(self.chosen_api_key)
                     if len(keys) > 0:
-                        chosen_key = random.choice(keys)
+                        self.set_key(random.choice(keys))
                         logger.info(
-                            f"检测到 Key 异常({str(e)})，正在尝试更换 API Key 重试... 当前 Key: {chosen_key[:12]}..."
+                            f"检测到 Key 异常({str(e)})，正在尝试更换 API Key 重试... 当前 Key: {self.chosen_api_key[:12]}..."
                         )
                         await asyncio.sleep(1)
                         continue
                     else:
                         logger.error(
-                            f"检测到 Key 异常({str(e)})，且已没有可用的 Key。 当前 Key: {chosen_key[:12]}..."
+                            f"检测到 Key 异常({str(e)})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}..."
                         )
                         raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
                 else:
@@ -391,6 +389,14 @@ class ProviderGoogleGenAI(Provider):
 
     def set_key(self, key):
         self.chosen_api_key = key
+        # 重新初始化客户端
+        self.client = genai.Client(
+            api_key=self.chosen_api_key,
+            http_options=types.HttpOptions(
+                base_url=self.api_base,
+                timeout=self.timeout * 1000,  # 毫秒
+            ),
+        ).aio
 
     async def assemble_context(self, text: str, image_urls: List[str] = None):
         """
