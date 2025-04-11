@@ -2,7 +2,7 @@ import asyncio
 import base64
 import json
 import random
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from google import genai
 from google.genai import errors, types
@@ -55,8 +55,8 @@ class ProviderGoogleGenAI(Provider):
         self.api_keys: List = provider_config.get("key", [])
         self.chosen_api_key: str = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout: int = provider_config.get("timeout", 180)
-        self.api_base: str = provider_config.get("api_base", None)
-        if self.api_base.endswith("/"):
+        self.api_base: Optional[str] = provider_config.get("api_base", None)
+        if self.api_base and self.api_base.endswith("/"):
             self.api_base = self.api_base[:-1]
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
@@ -90,70 +90,56 @@ class ProviderGoogleGenAI(Provider):
         except errors.APIError as e:
             raise Exception(f"获取模型列表失败: {e}")
 
-    def _prepare_conversation(
-        self,
-        payloads: Dict,
-    ) -> List[types.Content]:
+    @staticmethod
+    def _prepare_conversation(payloads: Dict) -> List[types.Content]:
         """准备 Gemini SDK 的 Content 列表"""
-        gemini_contents = []
+
+        def create_text_part(text: str) -> types.UserContent:
+            content_a = text if text else " "
+            if not text:
+                logger.warning("文本内容为空，已添加空格占位")
+            return types.UserContent(parts=[types.Part.from_text(text=content_a)])
+
+        def process_image_url(image_url_dict: dict) -> types.Part:
+            url = image_url_dict["url"]
+            mime_type = url.split(":")[1].split(";")[0]
+            image_bytes = base64.b64decode(url.split(",", 1)[1])
+            return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+
+        gemini_contents: List[types.Content] = []
         for message in payloads["messages"]:
-            role = message["role"]
-            content = message.get("content")
+            role, content = message["role"], message.get("content")
 
             if role == "user":
                 if isinstance(content, str):
-                    if content:
-                        gemini_contents.append(
-                            types.UserContent(
-                                parts=[types.Part.from_text(text=content)]
-                            )
-                        )
-                    else:
-                        logger.warning("文本内容为空，已添加空格占位")
-                        gemini_contents.append(
-                            types.UserContent(parts=[types.Part.from_text(text=" ")])
-                        )
-
+                    gemini_contents.append(create_text_part(content))
                 elif isinstance(content, list):
-                    parts = []
-                    for item in content:
-                        if item.get("type") == "text":
-                            text_content = item.get("text")
-                            if text_content:
-                                parts.append(types.Part.from_text(text=text_content))
-                            else:
-                                logger.warning("文本内容为空，已添加空格占位")
-                                parts.append(types.Part.from_text(text=" "))
-                        elif item.get("type") == "image_url":
-                            image_url_dict = item["image_url"]
-                            url = image_url_dict["url"]
-                            mime_part, base64_data = url.split(",", 1)
-                            mime_type = mime_part.split(":")[1].split(";")[0]
-                            image_bytes = base64.b64decode(base64_data)
-                            parts.append(
-                                types.Part.from_bytes(
-                                    data=image_bytes, mime_type=mime_type
-                                )
-                            )
+                    parts = [
+                        types.Part.from_text(text=item["text"] or " ")
+                        if item["type"] == "text"
+                        else process_image_url(item["image_url"])
+                        for item in content
+                    ]
                     gemini_contents.append(types.UserContent(parts=parts))
 
             elif role == "assistant":
                 if content:
                     gemini_contents.append(
-                        types.ModelContent(
-                            parts=[types.Part.from_text(text=message["content"])]
-                        )
+                        types.ModelContent(parts=[types.Part.from_text(text=content)])
                     )
                 elif "tool_calls" in message:
-                    parts = [
-                        {
-                            "name": tool_call["function"]["name"],
-                            "args": json.loads(tool_call["function"]["arguments"]),
-                        }
-                        for tool_call in message["tool_calls"]
-                    ]
-                    gemini_contents.append(
-                        types.ModelContent(parts=[types.Part.from_function_call(parts)])
+                    gemini_contents.extend(
+                        [
+                            types.ModelContent(
+                                parts=[
+                                    types.Part.from_function_call(
+                                        name=tool["function"]["name"],
+                                        args=json.loads(tool["function"]["arguments"]),
+                                    )
+                                ]
+                            )
+                            for tool in message["tool_calls"]
+                        ]
                     )
                 else:
                     logger.warning("assistant 角色的消息内容为空，已添加空格占位")
@@ -166,19 +152,15 @@ class ProviderGoogleGenAI(Provider):
                     types.UserContent(
                         parts=[
                             types.Part.from_function_response(
-                                {
+                                name=message["tool_call_id"],
+                                response={
                                     "name": message["tool_call_id"],
-                                    "response": {
-                                        "name": message["tool_call_id"],
-                                        "content": message["content"],
-                                    },
-                                }
+                                    "content": message["content"],
+                                },
                             )
                         ]
                     )
                 )
-
-        # logger.debug(f"gemini_contents: {gemini_contents}")
 
         return gemini_contents
 
@@ -186,12 +168,10 @@ class ProviderGoogleGenAI(Provider):
         self, payloads: dict, tools: FuncCall, temperature: float = 0.7
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
-        if tools:
-            t = tools.get_func_desc_google_genai_style()
-            tool = (
-                types.Tool(function_declarations=t["function_declarations"])
-                if t
-                else None
+        tool_list = []
+        if func_desc := tools.get_func_desc_google_genai_style() if tools else None:
+            tool_list.append(
+                types.Tool(function_declarations=func_desc["function_declarations"])
             )
 
         system_instruction = ""
@@ -202,27 +182,28 @@ class ProviderGoogleGenAI(Provider):
 
         conversation = self._prepare_conversation(payloads)
 
-        modalites = ["Text"]
+        modalities = ["Text"]
         if self.provider_config.get("gm_resp_image_modal", False):
-            modalites.append("Image")
+            modalities.append("Image")
 
-        loop = True
-        while loop:
-            loop = False
-            result = await self.client.models.generate_content(
-                model=self.get_model(),
-                contents=conversation,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=temperature,
-                    tools=[tool] if tool else None,
-                    safety_settings=self.safety_settings
-                    if self.safety_settings
-                    else None,
-                    automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                        disable=True
+        while True:
+            result: types.GenerateContentResponse = (
+                await self.client.models.generate_content(
+                    model=self.get_model(),
+                    contents=conversation,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        temperature=temperature,
+                        response_modalities=modalities,
+                        tools=tool_list,
+                        safety_settings=self.safety_settings
+                        if self.safety_settings
+                        else None,
+                        automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                            disable=True
+                        ),
                     ),
-                ),
+                )
             )
 
             result_str = str(result)
@@ -230,29 +211,27 @@ class ProviderGoogleGenAI(Provider):
             if "Developer instruction is not enabled" in result_str:
                 logger.warning(f"{self.get_model()} 不支持 system prompt，已自动去除。")
                 system_instruction = ""
-                loop = True
                 continue
             elif "Function calling is not enabled" in result_str:
                 logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除。")
-                tool = None
-                loop = True
+                tool_list = None
                 continue
             elif "Multi-modal output is not supported" in result_str:
                 logger.warning(f"{self.get_model()} 不支持多模态输出，降级为文本模态。")
-                modalites = ["Text"]
-                loop = True
+                modalities = ["Text"]
                 continue
             elif finish_reason == types.FinishReason.RECITATION:
                 logger.warning("发生了recitation，正在尝试加温重试...")
                 temperature += 0.2
                 logger.info(f"当前温度: {temperature}")
-                if temperature < 2:
-                    loop = True
-                else:
+                if temperature > 2:
                     raise Exception("温度已到达(或超过)2")
                 continue
+            break
 
         llm_response = LLMResponse("assistant")
+        result_parts: Optional[types.Part] = result.candidates[0].content.parts
+        finish_reason = result.candidates[0].finish_reason
 
         if finish_reason == types.FinishReason.SAFETY:
             raise Exception("模型生成内容未通过用户定义的内容安全检查")
@@ -265,18 +244,19 @@ class ProviderGoogleGenAI(Provider):
         }:
             raise Exception("模型生成内容违反Gemini平台政策")
 
-        if not result.candidates[0].content.parts:
+        if not result_parts:
             logger.debug(result.candidates)
             raise Exception("API 返回的内容为空。")
 
         llm_response.result_chain = self._process_content_parts(
-            result.candidates[0].content.parts, llm_response
+            result_parts, llm_response
         )
 
         return llm_response
 
+    @staticmethod
     def _process_content_parts(
-        self, parts: types.Part, llm_response: LLMResponse
+        parts: types.Part, llm_response: LLMResponse
     ) -> MessageChain:
         """处理内容部分并构建消息链"""
         chain = []
