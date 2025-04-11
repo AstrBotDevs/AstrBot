@@ -11,6 +11,7 @@ from botpy import Client
 from botpy.http import Route
 from astrbot.api import logger
 from botpy.types import message
+import random
 
 
 class QQOfficialMessageEvent(AstrMessageEvent):
@@ -68,7 +69,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return await super().send_streaming(generator)
 
     async def _post_send(self, stream: dict = None):
-        """QQ 官方 API 仅支持回复一次"""
         if not self.send_buffer:
             return
 
@@ -96,6 +96,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "content": plain_text,
             "msg_id": self.message_obj.message_id,
         }
+
+        if not isinstance(source, (botpy.message.Message,botpy.message.DirectMessage)):
+            payload["msg_seq"] = random.randint(1, 10000)
 
         match type(source):
             case botpy.message.GroupMessage:
