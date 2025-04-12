@@ -119,8 +119,11 @@ class ProviderGoogleGenAI(Provider):
         """准备查询配置"""
         if not modalities:
             modalities = ["Text"]
-            if self.provider_config.get("gm_resp_image_modal", False):
-                modalities.append("Image")
+
+        # 流式输出不支持图片模态
+        if self.provider_settings.get("streaming_response", False):
+            logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
+            modalities = ["Text"]
 
         tool_list = None
         if tools:
@@ -364,16 +367,6 @@ class ProviderGoogleGenAI(Provider):
 
             if chunk.candidates[0].content.parts and any(
                 part.function_call for part in chunk.candidates[0].content.parts
-            ):
-                llm_response = LLMResponse("assistant", is_chunk=False)
-                llm_response.result_chain = self._process_content_parts(
-                    chunk, llm_response
-                )
-                yield llm_response
-                break
-
-            if chunk.candidates[0].content.parts and any(
-                part.inline_data for part in chunk.candidates[0].content.parts
             ):
                 llm_response = LLMResponse("assistant", is_chunk=False)
                 llm_response.result_chain = self._process_content_parts(
