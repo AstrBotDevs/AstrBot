@@ -87,7 +87,10 @@ class ProviderOpenAIOfficial(Provider):
 
     async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
         if tools:
-            tool_list = tools.get_func_desc_openai_style()
+            omit_empty_param_field = "grok" not in payloads.get("model", "").lower()
+            tool_list = tools.get_func_desc_openai_style(
+                omit_empty_parameter_field=omit_empty_param_field
+            )
             if tool_list:
                 payloads["tools"] = tool_list
 
@@ -121,7 +124,10 @@ class ProviderOpenAIOfficial(Provider):
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
         if tools:
-            tool_list = tools.get_func_desc_openai_style()
+            omit_empty_param_field = "grok" not in payloads.get("model", "").lower()
+            tool_list = tools.get_func_desc_openai_style(
+                omit_empty_parameter_field=omit_empty_param_field
+            )
             if tool_list:
                 payloads["tools"] = tool_list
 

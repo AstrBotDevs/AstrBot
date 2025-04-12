@@ -339,7 +339,7 @@ class FuncCall:
             ]
             logger.info(f"已关闭 MCP 服务 {name}")
 
-    def get_func_desc_openai_style(self) -> list:
+    def get_func_desc_openai_style(self, omit_empty_parameter_field = True) -> list:
         """
         获得 OpenAI API 风格的**已经激活**的工具描述
         """
@@ -356,8 +356,10 @@ class FuncCall:
                     "description": f.description,
                 },
             }
-            if f.parameters.get("properties"):
-                func_["function"]["parameters"] = f.parameters
+            func_["function"]["parameters"] = f.parameters
+            if not f.parameters.get("properties") and omit_empty_parameter_field:
+                # 如果 properties 为空，并且 omit_empty_parameter_field 为 True，则删除 parameters 字段
+                del func_["function"]["parameters"]
             _l.append(func_)
         return _l
 
