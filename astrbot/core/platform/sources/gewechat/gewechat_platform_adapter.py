@@ -67,7 +67,10 @@ class GewechatPlatformAdapter(Platform):
 
     async def terminate(self):
         self.client.shutdown_event.set()
-        await self.client.server.shutdown()
+        try:
+            await self.client.server.shutdown()
+        except Exception as _:
+            pass
         logger.info("Gewechat 适配器已被优雅地关闭。")
 
     async def logout(self):

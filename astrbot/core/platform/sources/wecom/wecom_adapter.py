@@ -237,5 +237,8 @@ class WecomPlatformAdapter(Platform):
 
     async def terminate(self):
         self.server.shutdown_event.set()
-        await self.server.server.shutdown()
+        try:
+            await self.server.server.shutdown()
+        except Exception as _:
+            pass
         logger.info("企业微信 适配器已被优雅地关闭")
