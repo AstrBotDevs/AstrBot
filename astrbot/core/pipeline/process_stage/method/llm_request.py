@@ -146,7 +146,7 @@ class LLMRequestSubStage(Stage):
         ):
             logger.debug("上下文长度超过限制，将截断。")
             req.contexts = req.contexts[
-                -(self.max_context_length - self.dequeue_context_length) * 2 :
+                -(self.max_context_length - self.dequeue_context_length + 1) * 2 :
             ]
 
         # session_id
