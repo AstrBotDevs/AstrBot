@@ -240,6 +240,13 @@ class ProviderGoogleGenAI(Provider):
 
         chain = []
         part: types.Part
+
+        # 暂时这样Fallback
+        if all(
+            part.inline_data and part.inline_data.mime_type.startswith("image/")
+            for part in result_parts
+        ):
+            chain.append(Comp.Plain("这是图片"))
         for part in result_parts:
             if part.text:
                 chain.append(Comp.Plain(part.text))
@@ -300,7 +307,7 @@ class ProviderGoogleGenAI(Provider):
                     logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除")
                     tools = None
                 elif (
-                    "Multi-modal output is not supported"
+                    "Multi-modal output is not supported" in e.message
                     or "Model does not support the requested response modalities"
                     in e.message
                 ):
@@ -358,9 +365,21 @@ class ProviderGoogleGenAI(Provider):
             if chunk.candidates[0].content.parts and any(
                 part.function_call for part in chunk.candidates[0].content.parts
             ):
-                response = LLMResponse("assistant", is_chunk=False)
-                response.result_chain = self._process_content_parts(chunk, response)
-                yield response
+                llm_response = LLMResponse("assistant", is_chunk=False)
+                llm_response.result_chain = self._process_content_parts(
+                    chunk, llm_response
+                )
+                yield llm_response
+                break
+
+            if chunk.candidates[0].content.parts and any(
+                part.inline_data for part in chunk.candidates[0].content.parts
+            ):
+                llm_response = LLMResponse("assistant", is_chunk=False)
+                llm_response.result_chain = self._process_content_parts(
+                    chunk, llm_response
+                )
+                yield llm_response
                 break
 
             if chunk.text:
