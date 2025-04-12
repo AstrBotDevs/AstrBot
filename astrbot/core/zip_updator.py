@@ -105,16 +105,24 @@ class RepoZipUpdator:
         """
         比较两个版本号的大小。
         返回 1 表示 v1 > v2，返回 -1 表示 v1 < v2，返回 0 表示 v1 = v2。
+        支持任意长度的版本号，如v1.2.3或v3.5.3.1。
         """
         v1 = v1.replace("v", "")
         v2 = v2.replace("v", "")
-        v1 = v1.split(".")
-        v2 = v2.split(".")
+        v1_parts = v1.split(".")
+        v2_parts = v2.split(".")
 
-        for i in range(3):
-            if int(v1[i]) > int(v2[i]):
+        # 获取最长的版本号长度
+        length = max(len(v1_parts), len(v2_parts))
+
+        # 将短版本号补0以便比较
+        v1_parts.extend(["0"] * (length - len(v1_parts)))
+        v2_parts.extend(["0"] * (length - len(v2_parts)))
+
+        for i in range(length):
+            if int(v1_parts[i]) > int(v2_parts[i]):
                 return 1
-            elif int(v1[i]) < int(v2[i]):
+            elif int(v1_parts[i]) < int(v2_parts[i]):
                 return -1
         return 0
 
