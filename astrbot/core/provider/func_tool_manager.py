@@ -339,7 +339,7 @@ class FuncCall:
             ]
             logger.info(f"已关闭 MCP 服务 {name}")
 
-    def get_func_desc_openai_style(self, omit_empty_parameter_field = True) -> list:
+    def get_func_desc_openai_style(self, omit_empty_parameter_field = False) -> list:
         """
         获得 OpenAI API 风格的**已经激活**的工具描述
         """

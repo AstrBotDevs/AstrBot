@@ -21,7 +21,7 @@ class WebChatMessageEvent(AstrMessageEvent):
             await web_chat_back_queue.put(
                 {"type": "end", "data": "", "streaming": False}
             )
-            return
+            return ""
 
         cid = session_id.split("!")[-1]
         data = ""
