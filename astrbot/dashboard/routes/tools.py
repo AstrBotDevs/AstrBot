@@ -107,7 +107,7 @@ class ToolsRoute(Route):
             for key, value in server_data.items():
                 if key not in ["name", "active", "tools"]:  # 排除特殊字段
                     if key == "mcpServers":
-                        key_0 = list(server_data["mcpServers"].keys())[0]
+                        key_0 = list(server_data["mcpServers"].keys())[0] # 不考虑为空的情况
                         server_config = server_data["mcpServers"][key_0]
                     else:
                         server_config[key] = value
@@ -168,7 +168,7 @@ class ToolsRoute(Route):
             for key, value in server_data.items():
                 if key not in ["name", "active", "tools"]:  # 排除特殊字段
                     if key == "mcpServers":
-                        key_0 = list(server_data["mcpServers"].keys())[0]
+                        key_0 = list(server_data["mcpServers"].keys())[0] # 不考虑为空的情况
                         server_config = server_data["mcpServers"][key_0]
                     else:
                         server_config[key] = value

@@ -408,7 +408,7 @@ export default {
     setInterval(() => {
       this.getServers();
       this.getTools();
-    }, 5000); // 每10秒刷新一次服务器列表
+    }, 5000); // 每 5 秒刷新一次服务器列表
     
   },
 
