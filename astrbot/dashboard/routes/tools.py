@@ -106,7 +106,11 @@ class ToolsRoute(Route):
             # 复制所有配置字段
             for key, value in server_data.items():
                 if key not in ["name", "active", "tools"]:  # 排除特殊字段
-                    server_config[key] = value
+                    if key == "mcpServers":
+                        key_0 = list(server_data["mcpServers"].keys())[0] # 不考虑为空的情况
+                        server_config = server_data["mcpServers"][key_0]
+                    else:
+                        server_config[key] = value
                     has_valid_config = True
 
             if not has_valid_config:
@@ -163,7 +167,11 @@ class ToolsRoute(Route):
             # 复制所有配置字段
             for key, value in server_data.items():
                 if key not in ["name", "active", "tools"]:  # 排除特殊字段
-                    server_config[key] = value
+                    if key == "mcpServers":
+                        key_0 = list(server_data["mcpServers"].keys())[0] # 不考虑为空的情况
+                        server_config = server_data["mcpServers"][key_0]
+                    else:
+                        server_config[key] = value
                     only_update_active = False
 
             # 如果只更新活动状态，保留原始配置

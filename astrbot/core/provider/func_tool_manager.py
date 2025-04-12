@@ -95,7 +95,10 @@ class MCPClient:
             mcp_server_config (dict): Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
         """
         cfg = mcp_server_config.copy()
-        cfg.pop("active", None)
+        if "mcpServers" in cfg and len(cfg["mcpServers"]) > 0:
+            key_0 = list(cfg["mcpServers"].keys())[0]
+            cfg = cfg["mcpServers"][key_0]
+        cfg.pop("active", None) # Remove active flag from config
         server_params = mcp.StdioServerParameters(
             **cfg,
         )
@@ -260,6 +263,11 @@ class FuncCall:
                     if data["name"] in self.mcp_client_event:
                         self.mcp_client_event[data["name"]].set()
                         self.mcp_client_event.pop(data["name"], None)
+                        self.func_list = [
+                            f
+                            for f in self.func_list
+                            if not (f.origin == "mcp" and f.mcp_server_name == data["name"])
+                        ]
                 else:
                     for name in self.mcp_client_dict.keys():
                         # await self._terminate_mcp_client(name)
@@ -267,6 +275,11 @@ class FuncCall:
                         if name in self.mcp_client_event:
                             self.mcp_client_event[name].set()
                             self.mcp_client_event.pop(name, None)
+                    self.func_list = [
+                        f
+                        for f in self.func_list
+                        if f.origin != "mcp"
+                    ]
 
     async def _init_mcp_client_task_wrapper(
         self, name: str, cfg: dict, event: asyncio.Event

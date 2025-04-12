@@ -32,6 +32,7 @@
         <v-card-title class="d-flex align-center py-3 px-4">
           <v-icon color="primary" class="me-2">mdi-server</v-icon>
           <span class="text-h6">MCP 服务器</span>
+          <v-progress-circular indeterminate color="primary" size="24" style="margin-left: 16px;" v-show="loading"></v-progress-circular>
           <v-spacer></v-spacer>
           <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showMcpServerDialog = true">
             新增服务器
@@ -404,6 +405,11 @@ export default {
   mounted() {
     this.getServers();
     this.getTools();
+    setInterval(() => {
+      this.getServers();
+      this.getTools();
+    }, 5000); // 每 5 秒刷新一次服务器列表
+    
   },
 
   methods: {
@@ -420,12 +426,15 @@ export default {
     },
     
     getServers() {
+      this.loading = true
       axios.get('/api/tools/mcp/servers')
         .then(response => {
           this.mcpServers = response.data.data || [];
+          this.loading = false
         })
         .catch(error => {
           this.showError("获取 MCP 服务器列表失败: " + error.message);
+          this.loading = false
         });
     },
     
