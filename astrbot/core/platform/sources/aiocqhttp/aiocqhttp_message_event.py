@@ -1,5 +1,7 @@
 import asyncio
-import typing
+from typing import AsyncGenerator
+import re
+
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import Group, MessageMember
 from astrbot.api.message_components import Plain, Image, Record, At, Node, Nodes
@@ -82,17 +84,30 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def send_streaming(self, generator):
-        buffer = None
+    async def send_streaming(self, generator: AsyncGenerator):
+        buffer = ""
+        pattern = r"[^。？！~…]+[。？！~…]+"
+
         async for chain in generator:
-            if not buffer:
-                buffer = chain
-            else:
-                buffer.chain.extend(chain.chain)
-        if not buffer:
-            return
-        buffer.squash_plain()
-        await self.send(buffer)
+            if isinstance(chain, MessageChain):
+                for comp in chain.chain:
+                    if isinstance(comp, Plain):
+                        buffer += comp.text
+
+                        if any(p in buffer for p in "。？！~…"):
+                            while True:
+                                match = re.search(pattern, buffer)
+                                if not match:
+                                    break
+                                matched_text = match.group()
+                                await self.send(MessageChain([Plain(matched_text)]))
+                                buffer = buffer[match.end() :]
+                                await asyncio.sleep(0.5)  # 限速
+                    else:
+                        await self.send(MessageChain(chain=[comp]))
+
+        if buffer.strip():
+            await self.send(MessageChain([Plain(buffer)]))
         return await super().send_streaming(generator)
 
     async def get_group(self, group_id=None, **kwargs):
