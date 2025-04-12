@@ -148,6 +148,10 @@ class LLMRequestSubStage(Stage):
             req.contexts = req.contexts[
                 -(self.max_context_length - self.dequeue_context_length + 1) * 2 :
             ]
+            # 找到第一个role 为 user 的索引，确保上下文格式正确
+            index = next((i for i, item in enumerate(req.contexts) if item.get("role") == "user"), None)
+            if index is not None and index > 0:
+                req.contexts = req.contexts[index:]
 
         # session_id
         if not req.session_id:
