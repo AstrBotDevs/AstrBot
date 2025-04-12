@@ -152,9 +152,13 @@ class SimpleGewechatClient:
                 # at
                 # content = content.split('\u2005')[1]
                 content = re.sub(r"@[^\u2005]*\u2005", "", content)
+                abm.be_at_wxid = re.findall(r'<atuserlist><!\[CDATA\[.*?(?:,|\b)([^,]+?)(?=,|\]\]></atuserlist>)',d["MsgSource"])
+            
             abm.group_id = from_user_name
             # at
             msg_source = d["MsgSource"]
+
+            
             if (
                 f"<atuserlist><![CDATA[,{abm.self_id}]]>" in msg_source
                 or f"<atuserlist><![CDATA[{abm.self_id}]]>" in msg_source
