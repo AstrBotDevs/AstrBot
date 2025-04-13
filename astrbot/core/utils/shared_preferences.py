@@ -8,11 +8,12 @@ class SharedPreferences:
         self._data = self._load_preferences()
 
     def _load_preferences(self):
-        try:
-            with open(self.path, "r") as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            os.remove(self.path)
+        if os.path.exists(self.path):
+            try:
+                with open(self.path, "r") as f:
+                    return json.load(f)
+            except json.JSONDecodeError:
+                os.remove(self.path)
         return {}
 
     def _save_preferences(self):
