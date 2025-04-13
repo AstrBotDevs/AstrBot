@@ -217,7 +217,7 @@ class AstrMessageEvent(abc.ABC):
             matched_text = match.group()
             await self.send(MessageChain([Plain(matched_text)]))
             buffer = buffer[match.end() :]
-            await asyncio.sleep(0.8)  # 限速
+            await asyncio.sleep(1.5)  # 限速
         return buffer
 
     async def send_streaming(self, generator: AsyncGenerator[MessageChain, None]):

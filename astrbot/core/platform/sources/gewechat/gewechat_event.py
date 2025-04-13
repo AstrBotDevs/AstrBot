@@ -233,7 +233,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
                         await self.send(MessageChain(chain=[comp]))
-                        await asyncio.sleep(0.8)  # 限速
+                        await asyncio.sleep(1.5)  # 限速
 
         if buffer.strip():
             await self.send(MessageChain([Plain(buffer)]))
