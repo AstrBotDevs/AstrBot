@@ -121,7 +121,10 @@ class ProviderGoogleGenAI(Provider):
             modalities = ["Text"]
 
         # 流式输出不支持图片模态
-        if self.provider_settings.get("streaming_response", False):
+        if (
+            self.provider_settings.get("streaming_response", False)
+            and "Image" in modalities
+        ):
             logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
             modalities = ["Text"]
 
