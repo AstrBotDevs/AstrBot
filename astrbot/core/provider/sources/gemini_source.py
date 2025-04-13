@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import logging
 import random
 from typing import Dict, List, Optional, AsyncGenerator
 
@@ -18,6 +19,16 @@ from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.utils.io import download_image_by_url
 
 from ..register import register_provider_adapter
+
+
+class SuppressNonTextPartsWarning(logging.Filter):
+    """过滤 Gemini SDK 中的非文本部分警告"""
+
+    def filter(self, record):
+        return "there are non-text parts in the response" not in record.getMessage()
+
+
+logging.getLogger("google_genai.types").addFilter(SuppressNonTextPartsWarning())
 
 
 @register_provider_adapter(
