@@ -126,12 +126,14 @@ class ProviderGoogleGenAI(Provider):
             modalities = ["Text"]
 
         tool_list = None
-        if tools:
-            func_desc = tools.get_func_desc_google_genai_style()
-            if func_desc:
-                tool_list = [
-                    types.Tool(function_declarations=func_desc["function_declarations"])
-                ]
+        if self.provider_config.get("gm_native_coderunner", False):
+            if tools:
+                logger.warning("Gemini原生代码执行器已启用，函数工具将被忽略")
+            tool_list = [types.Tool(code_execution=types.ToolCodeExecution())]
+        elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
+            tool_list = [
+                types.Tool(function_declarations=func_desc["function_declarations"])
+            ]
 
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
@@ -252,6 +254,10 @@ class ProviderGoogleGenAI(Provider):
             chain.append(Comp.Plain("这是图片"))
         for part in result_parts:
             if part.text:
+                if part.executable_code:
+                    part.executable_code = None
+                if part.code_execution_result:
+                    part.code_execution_result = None
                 chain.append(Comp.Plain(part.text))
             elif part.function_call:
                 llm_response.role = "tool"
