@@ -1,12 +1,8 @@
 import asyncio
-import re
-from typing import AsyncGenerator
-
 import dingtalk_stream
 import astrbot.api.message_components as Comp
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot import logger
-from astrbot.core.message.components import Plain
 
 
 class DingtalkMessageEvent(AstrMessageEvent):
@@ -65,31 +61,15 @@ class DingtalkMessageEvent(AstrMessageEvent):
         await self.send_with_client(self.client, message)
         await super().send(message)
 
-    async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
-        while True:
-            match = re.search(pattern, buffer)
-            if not match:
-                break
-            matched_text = match.group()
-            await self.send(MessageChain([Plain(matched_text)]))
-            buffer = buffer[match.end() :]
-            await asyncio.sleep(0.5)  # 限速
-        return buffer
-
-    async def send_streaming(self, generator: AsyncGenerator):
-        buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
-
+    async def send_streaming(self, generator):
+        buffer = None
         async for chain in generator:
-            if isinstance(chain, MessageChain):
-                for comp in chain.chain:
-                    if isinstance(comp, Plain):
-                        buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
-                            buffer = await self.process_buffer(buffer, pattern)
-                    else:
-                        await self.send(MessageChain(chain=[comp]))
-
-        if buffer.strip():
-            await self.send(MessageChain([Plain(buffer)]))
+            if not buffer:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+        if not buffer:
+            return
+        buffer.squash_plain()
+        await self.send(buffer)
         return await super().send_streaming(generator)

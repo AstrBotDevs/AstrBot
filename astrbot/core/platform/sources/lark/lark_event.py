@@ -1,12 +1,9 @@
-import asyncio
 import json
-import re
 import uuid
 import base64
 import lark_oapi as lark
-
 from io import BytesIO
-from typing import List, AsyncGenerator
+from typing import List
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image as AstrBotImage, At
 from astrbot.core.utils.io import download_image_by_url
@@ -107,21 +104,15 @@ class LarkMessageEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def send_streaming(self, generator: AsyncGenerator):
-        buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
-
+    async def send_streaming(self, generator):
+        buffer = None
         async for chain in generator:
-            if isinstance(chain, MessageChain):
-                for comp in chain.chain:
-                    if isinstance(comp, Plain):
-                        buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
-                            buffer = await self.process_buffer(buffer, pattern)
-                    else:
-                        await self.send(MessageChain(chain=[comp]))
-                        await asyncio.sleep(0.8)  # 限速
-
-        if buffer.strip():
-            await self.send(MessageChain([Plain(buffer)]))
+            if not buffer:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+        if not buffer:
+            return
+        buffer.squash_plain()
+        await self.send(buffer)
         return await super().send_streaming(generator)
