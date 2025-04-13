@@ -37,9 +37,12 @@ class LarkMessageEvent(AstrMessageEvent):
                     image_file_path = await download_image_by_url(comp.file)
                     file_path = image_file_path
                 elif comp.file and comp.file.startswith("base64://"):
-                    base64_str = comp.file[9:]
+                    base64_str = comp.file.removeprefix("base64://")
                     image_data = base64.b64decode(base64_str)
-                    image_file = BytesIO(image_data).getvalue()
+                    # save as temp file
+                    file_path = f"data/temp/{uuid.uuid4()}_test.jpg"
+                    with open(file_path, "wb") as f:
+                        f.write(BytesIO(image_data).getvalue())
                 else:
                     file_path = comp.file
 
