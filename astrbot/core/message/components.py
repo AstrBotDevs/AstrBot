@@ -193,6 +193,7 @@ class Record(BaseMessageComponent):
             bs64_data = file_to_base64(self.file)
         else:
             raise Exception(f"not a valid file: {self.file}")
+        bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data
 
 
@@ -397,6 +398,7 @@ class Image(BaseMessageComponent):
             bs64_data = file_to_base64(url)
         else:
             raise Exception(f"not a valid file: {url}")
+        bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data
 
 

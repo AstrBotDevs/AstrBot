@@ -1,6 +1,8 @@
 import json
 import uuid
+import base64
 import lark_oapi as lark
+from io import BytesIO
 from typing import List
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image as AstrBotImage, At
@@ -27,22 +29,32 @@ class LarkMessageEvent(AstrMessageEvent):
                 _stage.append({"tag": "at", "user_id": comp.qq, "style": []})
             elif isinstance(comp, AstrBotImage):
                 file_path = ""
+                image_file = None
+
                 if comp.file and comp.file.startswith("file:///"):
                     file_path = comp.file.replace("file:///", "")
                 elif comp.file and comp.file.startswith("http"):
                     image_file_path = await download_image_by_url(comp.file)
                     file_path = image_file_path
                 elif comp.file and comp.file.startswith("base64://"):
-                    pass
+                    base64_str = comp.file.removeprefix("base64://")
+                    image_data = base64.b64decode(base64_str)
+                    # save as temp file
+                    file_path = f"data/temp/{uuid.uuid4()}_test.jpg"
+                    with open(file_path, "wb") as f:
+                        f.write(BytesIO(image_data).getvalue())
                 else:
                     file_path = comp.file
+
+                if image_file is None:
+                    image_file = open(file_path, "rb")
 
                 request = (
                     CreateImageRequest.builder()
                     .request_body(
                         CreateImageRequestBody.builder()
                         .image_type("message")
-                        .image(open(file_path, "rb"))
+                        .image(image_file)
                         .build()
                     )
                     .build()
@@ -51,7 +63,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 if not response.success():
                     logger.error(f"无法上传飞书图片({response.code}): {response.msg}")
                 image_key = response.data.image_key
-                print(image_key)
+                logger.debug(image_key)
                 ret.append(_stage)
                 ret.append([{"tag": "img", "image_key": image_key}])
                 _stage.clear()
