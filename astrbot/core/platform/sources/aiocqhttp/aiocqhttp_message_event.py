@@ -1,11 +1,10 @@
 import asyncio
-from typing import AsyncGenerator, List, Dict
 import re
-
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.platform import Group, MessageMember
-from astrbot.api.message_components import Plain, Image, Record, At, Node, Nodes
+from typing import AsyncGenerator, Dict, List
 from aiocqhttp import CQHttp
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.message_components import At, Image, Node, Nodes, Plain, Record
+from astrbot.api.platform import Group, MessageMember
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -84,17 +83,6 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
-        while True:
-            match = re.search(pattern, buffer)
-            if not match:
-                break
-            matched_text = match.group()
-            await self.send(MessageChain([Plain(matched_text)]))
-            buffer = buffer[match.end() :]
-            await asyncio.sleep(0.5)  # 限速
-        return buffer
-
     async def send_streaming(self, generator: AsyncGenerator):
         buffer = ""
         pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
@@ -108,6 +96,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
                         await self.send(MessageChain(chain=[comp]))
+                        await asyncio.sleep(0.8)  # 限速
 
         if buffer.strip():
             await self.send(MessageChain([Plain(buffer)]))

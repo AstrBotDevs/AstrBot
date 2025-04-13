@@ -4,8 +4,8 @@ import wave
 import uuid
 import traceback
 import os
-from typing import AsyncGenerator
 
+from typing import AsyncGenerator
 from astrbot.core.utils.io import save_temp_img, download_file
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 from astrbot.api import logger
@@ -220,17 +220,6 @@ class GewechatPlatformEvent(AstrMessageEvent):
             members=members,
         )
 
-    async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
-        while True:
-            match = re.search(pattern, buffer)
-            if not match:
-                break
-            matched_text = match.group()
-            await self.send(MessageChain([Plain(matched_text)]))
-            buffer = buffer[match.end() :]
-            await asyncio.sleep(0.5)  # 限速
-        return buffer
-
     async def send_streaming(self, generator: AsyncGenerator):
         buffer = ""
         pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
@@ -244,6 +233,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
                         await self.send(MessageChain(chain=[comp]))
+                        await asyncio.sleep(0.8)  # 限速
 
         if buffer.strip():
             await self.send(MessageChain([Plain(buffer)]))

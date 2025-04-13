@@ -1,5 +1,6 @@
 import abc
 import asyncio
+import re
 from dataclasses import dataclass
 from typing import List, Union, Optional, AsyncGenerator
 
@@ -204,6 +205,20 @@ class AstrMessageEvent(abc.ABC):
         是否是管理员。
         """
         return self.role == "admin"
+
+    async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
+        """
+        将消息缓冲区中的文本按指定正则表达式分割后发送至消息平台，作为不支持流式输出平台的Fallback。
+        """
+        while True:
+            match = re.search(pattern, buffer)
+            if not match:
+                break
+            matched_text = match.group()
+            await self.send(MessageChain([Plain(matched_text)]))
+            buffer = buffer[match.end() :]
+            await asyncio.sleep(0.8)  # 限速
+        return buffer
 
     async def send_streaming(self, generator: AsyncGenerator[MessageChain, None]):
         """发送流式消息到消息平台，使用异步生成器。
