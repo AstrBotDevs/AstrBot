@@ -84,25 +84,28 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
         await super().send(message)
 
+    async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
+        while True:
+            match = re.search(pattern, buffer)
+            if not match:
+                break
+            matched_text = match.group()
+            await self.send(MessageChain([Plain(matched_text)]))
+            buffer = buffer[match.end() :]
+            await asyncio.sleep(0.5)  # 限速
+        return buffer
+
     async def send_streaming(self, generator: AsyncGenerator):
         buffer = ""
-        pattern = r"[^。？！~…]+[。？！~…]+"
+        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
                     if isinstance(comp, Plain):
                         buffer += comp.text
-
                         if any(p in buffer for p in "。？！~…"):
-                            while True:
-                                match = re.search(pattern, buffer)
-                                if not match:
-                                    break
-                                matched_text = match.group()
-                                await self.send(MessageChain([Plain(matched_text)]))
-                                buffer = buffer[match.end() :]
-                                await asyncio.sleep(0.5)  # 限速
+                            buffer = await self.process_buffer(buffer, pattern)
                     else:
                         await self.send(MessageChain(chain=[comp]))
 
