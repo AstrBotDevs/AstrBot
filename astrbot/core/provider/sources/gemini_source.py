@@ -268,10 +268,6 @@ class ProviderGoogleGenAI(Provider):
             chain.append(Comp.Plain("这是图片"))
         for part in result_parts:
             if part.text:
-                if part.executable_code:
-                    part.executable_code = None
-                if part.code_execution_result:
-                    part.code_execution_result = None
                 chain.append(Comp.Plain(part.text))
             elif part.function_call:
                 llm_response.role = "tool"
@@ -401,9 +397,12 @@ class ProviderGoogleGenAI(Provider):
 
             if chunk.candidates[0].finish_reason:
                 llm_response = LLMResponse("assistant", is_chunk=False)
-                llm_response.result_chain = self._process_content_parts(
-                    chunk, llm_response
-                )
+                if not chunk.candidates[0].content.parts:
+                    llm_response.result_chain = MessageChain(chain=[Comp.Plain(" ")])
+                else:
+                    llm_response.result_chain = self._process_content_parts(
+                        chunk, llm_response
+                    )
                 yield llm_response
                 break
 
