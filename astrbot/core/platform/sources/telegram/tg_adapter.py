@@ -1,4 +1,5 @@
 import asyncio
+import re
 import sys
 import uuid
 
@@ -118,8 +119,6 @@ class TelegramPlatformAdapter(Platform):
 
             if commands:
                 await self.client.set_my_commands(commands)
-                for cmd in commands:
-                    logger.debug(f"已注册指令: /{cmd.command} - {cmd.description}")
 
         except Exception as e:
             logger.error(f"向 Telegram 注册指令时发生错误: {e!s}")
@@ -165,6 +164,10 @@ class TelegramPlatformAdapter(Platform):
             is_group = True
 
         if not cmd_name or cmd_name in skip_commands:
+            return None
+
+        if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
+            logger.warning(f"跳过无法注册的命令: {cmd_name}")
             return None
 
         # Build description.
