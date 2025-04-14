@@ -97,7 +97,7 @@ DEFAULT_CONFIG = {
     "wake_prefix": ["/"],
     "log_level": "INFO",
     "pip_install_arg": "",
-    "plugin_repo_mirror": "",
+    "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
     "knowledge_db": {},
     "persona": [],
     "timezone": "",
@@ -1216,16 +1216,10 @@ CONFIG_METADATA_2 = {
                 "type": "string",
                 "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。",
             },
-            "plugin_repo_mirror": {
-                "description": "插件仓库镜像",
+            "pypi_index_url": {
+                "description": "PyPI 软件仓库地址",
                 "type": "string",
-                "hint": "已废弃，请使用管理面板->设置页的代理地址选择",
-                "obvious_hint": True,
-                "options": [
-                    "default",
-                    "https://ghp.ci/",
-                    "https://github-mirror.us.kg/",
-                ],
+                "hint": "安装 Python 依赖时请求的 PyPI 软件仓库地址。默认为 https://mirrors.aliyun.com/pypi/simple/",
             },
         },
     },

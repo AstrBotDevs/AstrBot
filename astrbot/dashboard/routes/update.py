@@ -136,10 +136,11 @@ class UpdateRoute(Route):
 
         data = await request.json
         package = data.get("package", "")
+        mirror = data.get("mirror", None)
         if not package:
             return Response().error("缺少参数 package 或不合法。").__dict__
         try:
-            pip_installer.install(package)
+            pip_installer.install(package, mirror=mirror)
             return Response().ok(None, "安装成功。").__dict__
         except Exception as e:
             logger.error(f"/api/update_pip: {traceback.format_exc()}")
