@@ -505,7 +505,7 @@ class ProviderOpenAIOfficial(Provider):
     async def assemble_context(self, text: str, image_urls: List[str] = None) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         if image_urls:
-            user_content = {"role": "user", "content": [{"type": "text", "text": text}]}
+            user_content = {"role": "user", "content": [{"type": "text", "text": text if text else "[图片]"}]}
             for image_url in image_urls:
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)

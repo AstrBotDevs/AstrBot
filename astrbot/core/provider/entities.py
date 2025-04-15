@@ -155,7 +155,7 @@ class ProviderRequest:
         if self.image_urls:
             user_content = {
                 "role": "user",
-                "content": [{"type": "text", "text": self.prompt}],
+                "content": [{"type": "text", "text": self.prompt if self.prompt else "[图片]"}],
             }
             for image_url in self.image_urls:
                 if image_url.startswith("http"):
