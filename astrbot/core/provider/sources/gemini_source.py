@@ -273,7 +273,10 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.role = "tool"
                 llm_response.tools_call_name.append(part.function_call.name)
                 llm_response.tools_call_args.append(part.function_call.args)
-                llm_response.tools_call_ids.append(part.function_call.id)
+                # gemini 返回的 function_call.id 可能为 None
+                llm_response.tools_call_ids.append(
+                    part.function_call.id or part.function_call.name
+                )
             elif part.inline_data and part.inline_data.mime_type.startswith("image/"):
                 chain.append(Comp.Image.fromBytes(part.inline_data.data))
         return MessageChain(chain=chain)
