@@ -249,9 +249,13 @@ class ProviderGoogleGenAI(Provider):
             types.FinishReason.PROHIBITED_CONTENT,
             types.FinishReason.SPII,
             types.FinishReason.BLOCKLIST,
-            types.FinishReason.IMAGE_SAFETY,
         }:
             raise Exception("模型生成内容违反Gemini平台政策")
+
+        # 防止旧版本SDK不存在IMAGE_SAFETY
+        if hasattr(types.FinishReason, "IMAGE_SAFETY"):
+            if finish_reason == types.FinishReason.IMAGE_SAFETY:
+                raise Exception("模型生成内容违反Gemini平台政策")
 
         if not result_parts:
             logger.debug(result.candidates)
