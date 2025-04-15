@@ -2,18 +2,15 @@ import os
 import ssl
 import shutil
 import socket
-import time
 import aiohttp
 import base64
 import zipfile
 import uuid
 import psutil
-
 import certifi
-
 from typing import Union
-
 from PIL import Image
+from astrbot.core import Time
 
 
 def on_error(func, path, exc_info):
@@ -56,13 +53,13 @@ def save_temp_img(img: Union[Image.Image, str]) -> str:
             path = os.path.join("data/temp", f)
             if os.path.isfile(path):
                 ctime = os.path.getctime(path)
-                if time.time() - ctime > 3600 * 12:
+                if Time.time() - ctime > 3600 * 12:
                     os.remove(path)
     except Exception as e:
         print(f"清除临时文件失败: {e}")
 
     # 获得时间戳
-    timestamp = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    timestamp = f"{int(Time.time())}_{uuid.uuid4().hex[:8]}"
     p = f"data/temp/{timestamp}.jpg"
 
     if isinstance(img, Image.Image):
@@ -135,7 +132,7 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                     raise Exception(f"下载文件失败: {resp.status}")
                 total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
-                start_time = time.time()
+                start_time = Time.time()
                 if show_progress:
                     print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
                 with open(path, "wb") as f:
@@ -146,7 +143,7 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                         f.write(chunk)
                         downloaded_size += len(chunk)
                         if show_progress:
-                            elapsed_time = time.time() - start_time
+                            elapsed_time = Time.time() - start_time
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
                                 f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
@@ -160,7 +157,7 @@ async def download_file(url: str, path: str, show_progress: bool = False):
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
-                start_time = time.time()
+                start_time = Time.time()
                 if show_progress:
                     print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
                 with open(path, "wb") as f:
@@ -171,7 +168,7 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                         f.write(chunk)
                         downloaded_size += len(chunk)
                         if show_progress:
-                            elapsed_time = time.time() - start_time
+                            elapsed_time = Time.time() - start_time
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
                                 f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",

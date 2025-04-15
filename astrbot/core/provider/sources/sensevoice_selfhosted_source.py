@@ -5,7 +5,6 @@ LastEditTime: 2025-02-25 14:06:30
 """
 
 import asyncio
-from datetime import datetime
 import os
 import re
 from funasr_onnx import SenseVoiceSmall
@@ -15,6 +14,7 @@ from ..entities import ProviderType
 from astrbot.core.utils.io import download_file
 from ..register import register_provider_adapter
 from astrbot.core import logger
+from astrbot.core import Time
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 
 
@@ -45,7 +45,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         logger.info("SenseVoice 模型加载完成。")
 
     async def get_timestamped_path(self) -> str:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = Time.format_datetime(fmt="%Y%m%d_%H%M%S")
         return os.path.join("data", "temp", f"{timestamp}")
 
     async def _is_silk_file(self, file_path):

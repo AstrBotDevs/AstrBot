@@ -1,5 +1,4 @@
 import os
-import time
 import asyncio
 import logging
 import uuid
@@ -16,6 +15,7 @@ from astrbot.api.event import MessageChain
 from .aiocqhttp_message_event import *  # noqa: F403
 from astrbot.api.message_components import *  # noqa: F403
 from astrbot.api import logger
+from astrbot.core import Time
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
@@ -121,7 +121,7 @@ class AiocqhttpAdapter(Platform):
             abm.session_id = str(abm.sender.user_id) + "_" + str(event.group_id)
         abm.message_str = ""
         abm.message = []
-        abm.timestamp = int(time.time())
+        abm.timestamp = int(Time.time())
         abm.message_id = uuid.uuid4().hex
         abm.raw_message = event
         return abm
@@ -150,12 +150,14 @@ class AiocqhttpAdapter(Platform):
         abm.message_str = ""
         abm.message = []
         abm.raw_message = event
-        abm.timestamp = int(time.time())
+        abm.timestamp = int(Time.time())
         abm.message_id = uuid.uuid4().hex
 
         if "sub_type" in event:
             if event["sub_type"] == "poke" and "target_id" in event:
-                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))  # noqa: F405
+                abm.message.append(
+                    Poke(qq=str(event["target_id"]), type="poke")
+                )  # noqa: F405
 
         return abm
 
@@ -279,7 +281,7 @@ class AiocqhttpAdapter(Platform):
                 a = ComponentTypes[t](**m["data"])  # noqa: F405
                 abm.message.append(a)
 
-        abm.timestamp = int(time.time())
+        abm.timestamp = int(Time.time())
         abm.message_str = message_str
         abm.raw_message = event
 

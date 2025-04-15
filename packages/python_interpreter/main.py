@@ -6,7 +6,6 @@ import uuid
 import asyncio
 import re
 import aiodocker
-import time
 import astrbot.api.star as star
 from collections import defaultdict
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -15,6 +14,7 @@ from astrbot.api.event import filter
 from astrbot.api.provider import ProviderRequest
 from astrbot.api.message_components import Image, File
 from astrbot.core.utils.io import download_image_by_url, download_file
+from astrbot.core import Time
 
 PROMPT = """
 ## Task
@@ -261,10 +261,12 @@ class Main(star.Star):
     async def pi_mirror(self, event: AstrMessageEvent, url: str = ""):
         """Docker 镜像地址"""
         if not url:
-            yield event.plain_result(f"""当前 Docker 镜像地址: {self.config["sandbox"]["docker_mirror"]}。
+            yield event.plain_result(
+                f"""当前 Docker 镜像地址: {self.config["sandbox"]["docker_mirror"]}。
 使用 `pi mirror <url>` 来设置 Docker 镜像地址。
 您所设置的 Docker 镜像地址将会自动加在 Docker 镜像名前。如: `soulter/astrbot-code-interpreter-sandbox` -> `cjie.eu.org/soulter/astrbot-code-interpreter-sandbox`。
-""")
+"""
+            )
         else:
             self.config["sandbox"]["docker_mirror"] = url
             self._save_config()
@@ -287,7 +289,7 @@ class Main(star.Star):
     async def pi_file(self, event: AstrMessageEvent):
         """在规定秒数(60s)内上传一个文件"""
         uid = event.get_sender_id()
-        self.user_waiting[uid] = time.time()
+        self.user_waiting[uid] = Time.time()
         tip = "文件"
         yield event.plain_result(f"代码执行器: 请在 60s 内上传一个{tip}。")
         await asyncio.sleep(60)

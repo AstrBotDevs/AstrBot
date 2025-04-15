@@ -13,6 +13,7 @@ from astrbot.api.message_components import (
 from telegram.ext import ExtBot
 from astrbot.core.utils.io import download_file
 from astrbot import logger
+from astrbot.core import Time
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -150,11 +151,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     except Exception as e:
                         logger.warning(f"发送消息失败(streaming): {e!s}")
                     message_id = msg.message_id
-                    last_edit_time = (
-                        asyncio.get_event_loop().time()
-                    )  # 记录初始消息发送时间
+                    last_edit_time = Time.time()  # 记录初始消息发送时间
                 else:
-                    current_time = asyncio.get_event_loop().time()
+                    current_time = Time.time()
                     time_since_last_edit = current_time - last_edit_time
 
                     # 如果距离上次编辑的时间 >= 设定的间隔，等待一段时间
@@ -169,9 +168,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             current_content = delta
                         except Exception as e:
                             logger.warning(f"编辑消息失败(streaming): {e!s}")
-                        last_edit_time = (
-                            asyncio.get_event_loop().time()
-                        )  # 更新上次编辑的时间
+                        last_edit_time = Time.time()  # 更新上次编辑的时间
 
         try:
             if delta and current_content != delta:
@@ -183,14 +180,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         text=markdown_text,
                         chat_id=payload["chat_id"],
                         message_id=message_id,
-                        parse_mode="MarkdownV2"
+                        parse_mode="MarkdownV2",
                     )
                 except Exception as e:
                     logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
                     await self.client.edit_message_text(
-                        text=delta,
-                        chat_id=payload["chat_id"],
-                        message_id=message_id
+                        text=delta, chat_id=payload["chat_id"], message_id=message_id
                     )
         except Exception as e:
             logger.warning(f"编辑消息失败(streaming): {e!s}")

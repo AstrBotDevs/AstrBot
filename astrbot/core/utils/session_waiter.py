@@ -4,12 +4,12 @@
 
 import abc
 import asyncio
-import time
 import functools
 import copy
 import astrbot.core.message.components as Comp
 from typing import Dict, Any, Callable, Awaitable, List
 from astrbot.core.platform import AstrMessageEvent
+from astrbot.core import Time
 
 USER_SESSIONS: Dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
 FILTERS: List["SessionFilter"] = []  # 存储 SessionFilter 实例
@@ -47,7 +47,7 @@ class SessionController:
             当 reset_timeout 设置为 True 时, 代表重置超时时间, timeout 必须 > 0, 如果 <= 0 则立即结束会话。
             当 reset_timeout 设置为 False 时, 代表继续维持原来的超时时间, 新 timeout = 原来剩余的timeout + timeout (可以 < 0)
         """
-        new_ts = time.time()
+        new_ts = Time.time()
 
         if reset_timeout:
             if timeout <= 0:

@@ -147,7 +147,7 @@ async def test_do_update(
     global VERSION
     test_client = app.test_client()
     os.makedirs("data/astrbot_release", exist_ok=True)
-    core_lifecycle_td.astrbot_updator.MAIN_PATH = "data/astrbot_release"
+    core_lifecycle_td.astrbot_updater.MAIN_PATH = "data/astrbot_release"
     VERSION = "114.514.1919810"
     response = await test_client.post(
         "/api/update/do", headers=header, json={"version": "latest"}

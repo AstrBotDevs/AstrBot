@@ -1,18 +1,16 @@
 import asyncio
 import base64
-import datetime
 import os
 import re
 import threading
-
 import aiohttp
 import anyio
 import quart
-
 from astrbot.api import logger, sp
 from astrbot.api.message_components import Plain, Image, At, Record, Video
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.utils.io import download_image_by_url
+from astrbot.core import Time
 from .downloader import GeweDownloader
 
 try:
@@ -122,12 +120,12 @@ class SimpleGewechatClient:
 
         if "CreateTime" in d:
             # 得到系统 UTF+8 的 ts
-            tz_offset = datetime.timedelta(hours=8)
-            tz = datetime.timezone(tz_offset)
-            ts = datetime.datetime.now(tz).timestamp()
+            timestamp = Time.timestamp()
             create_time = d["CreateTime"]
-            if create_time < ts - 30:
-                logger.warning(f"消息时间戳过旧: {create_time}，当前时间戳: {ts}")
+            if create_time < timestamp - 30:
+                logger.warning(
+                    f"消息时间戳过旧: {create_time}，当前时间戳: {timestamp}"
+                )
                 return
 
         abm = AstrBotMessage()

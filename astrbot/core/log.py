@@ -28,6 +28,7 @@ import os
 from collections import deque
 from asyncio import Queue
 from typing import List
+from astrbot.core import Time
 
 # 日志缓存大小
 CACHED_SIZE = 200
@@ -156,6 +157,13 @@ class LogManager:
     提供了获取默认日志记录器logger和设置队列处理器的方法
     """
 
+    class TimeFilter(logging.Filter):
+        """时间过滤器类, 用于设置日志使用统一的时间"""
+
+        def filter(self, record):
+            record.asctime = Time.format_datetime(fmt="%H:%M:%S")
+            return True
+
     @classmethod
     def GetLogger(cls, log_name: str = "default"):
         """获取指定名称的日志记录器logger
@@ -218,6 +226,7 @@ class LogManager:
         logger.addFilter(PluginFilter())  # 添加插件过滤器
         logger.addFilter(FileNameFilter())  # 添加文件名过滤器
         logger.addFilter(LevelNameFilter())  # 添加级别名称过滤器
+        logger.addFilter(cls.TimeFilter())  # 添加时间过滤器
         logger.setLevel(logging.DEBUG)  # 设置日志级别为DEBUG
         logger.addHandler(console_handler)  # 添加处理器到logger
 
@@ -242,4 +251,5 @@ class LogManager:
                     "[%(asctime)s] [%(short_levelname)s] %(plugin_tag)s[%(filename)s:%(lineno)d]: %(message)s"
                 )
             )
+        handler.addFilter(cls.TimeFilter())
         logger.addHandler(handler)

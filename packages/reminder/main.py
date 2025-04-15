@@ -1,13 +1,12 @@
 import os
 import json
-import datetime
 import uuid
-import zoneinfo
 import astrbot.api.star as star
 from astrbot.api.event import filter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import llm_tool, logger
+from astrbot.core import Time
 
 
 @star.register(
@@ -18,15 +17,7 @@ class Main(star.Star):
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        self.timezone = self.context.get_config().get("timezone")
-        if not self.timezone:
-            self.timezone = None
-        try:
-            self.timezone = zoneinfo.ZoneInfo(self.timezone) if self.timezone else None
-        except Exception as e:
-            logger.error(f"时区设置错误: {e}, 使用本地时区")
-            self.timezone = None
-        self.scheduler = AsyncIOScheduler(timezone=self.timezone)
+        self.scheduler = AsyncIOScheduler(timezone=Time.get_timezone())
 
         # set and load config
         if not os.path.exists("data/astrbot-reminder.json"):
@@ -56,7 +47,7 @@ class Main(star.Star):
                         id=id_,
                         trigger="date",
                         args=[group, reminder],
-                        run_date=datetime.datetime.strptime(
+                        run_date=Time.parse_datetime(
                             reminder["datetime"], "%Y-%m-%d %H:%M"
                         ),
                         misfire_grace_time=60,
@@ -74,10 +65,10 @@ class Main(star.Star):
     def check_is_outdated(self, reminder: dict):
         """Check if the reminder is outdated."""
         if "datetime" in reminder:
-            reminder_time = datetime.datetime.strptime(
+            reminder_time = Time.parse_datetime(
                 reminder["datetime"], "%Y-%m-%d %H:%M"
-            ).replace(tzinfo=self.timezone)
-            return reminder_time < datetime.datetime.now(self.timezone)
+            ).replace(Time.get_timezone())
+            return reminder_time < Time.now()
         return False
 
     async def _save_data(self):
@@ -149,9 +140,7 @@ class Main(star.Star):
         else:
             d = {"text": text, "datetime": datetime_str, "id": str(uuid.uuid4())}
             self.reminder_data[event.unified_msg_origin].append(d)
-            datetime_scheduled = datetime.datetime.strptime(
-                datetime_str, "%Y-%m-%d %H:%M"
-            )
+            datetime_scheduled = Time.parse_datetime(datetime_str, "%Y-%m-%d %H:%M")
             self.scheduler.add_job(
                 self._reminder_callback,
                 "date",
@@ -180,14 +169,14 @@ class Main(star.Star):
         reminders = self.reminder_data.get(unified_msg_origin, [])
         if not reminders:
             return []
-        now = datetime.datetime.now(self.timezone)
+        now = Time.now()
         upcoming_reminders = [
             reminder
             for reminder in reminders
             if "datetime" not in reminder
-            or datetime.datetime.strptime(
-                reminder["datetime"], "%Y-%m-%d %H:%M"
-            ).replace(tzinfo=self.timezone)
+            or Time.parse_datetime(reminder["datetime"], "%Y-%m-%d %H:%M").replace(
+                tzinfo=Time.get_timezone()
+            )
             >= now
         ]
         return upcoming_reminders
