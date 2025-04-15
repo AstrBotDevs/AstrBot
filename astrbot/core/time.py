@@ -13,6 +13,7 @@ class Time:
 
     DateTime = datetime.datetime
     TimeDelta = datetime.timedelta
+    ZoneInfo = zoneinfo.ZoneInfo
 
     _initialized = False
     _timezone = None
@@ -42,7 +43,7 @@ class Time:
         cls._initialized = True
 
     @classmethod
-    def now(cls):
+    def now(cls) -> datetime.datetime:
         """
         获取当前时间
 
@@ -136,23 +137,46 @@ class Time:
         )
 
     @classmethod
-    def measure_time(cls, start_time: Optional[float] = None, unit: str = "s") -> float:
+    def measure_time(
+        cls,
+        start_time: Union[float, datetime.datetime, None] = None,
+        end_time: Union[float, datetime.datetime, None] = None,
+        unit: str = "s",
+    ) -> float:
         """
-        测量指定时间到现在经过的时间，支持不同时间单位
+        计算两个时间点之间的时间差，支持不同时间单位
 
         Args:
-            start_time (Optional[float], optional): 开始的时间戳(秒). 如果为None则返回当前时间戳.
-            unit (str, optional): 返回时间的单位, 可选值: 's'(秒), 'ms'(毫秒), 默认为's'
+            start_time (Union[float, datetime.datetime, None]): 第一个时间点（时间戳或datetime对象）
+                如果为None，则返回当前时间戳
+            end_time (Union[float, datetime.datetime, None]): 第二个时间点（时间戳或datetime对象）
+                如果为None，则使用当前时间
+            unit (str): 返回时间的单位, 可选值: 's'(秒), 'ms'(毫秒), 默认为's'
 
         Returns:
-            float: 经过的时间(按指定单位)或当前时间戳(秒)
+            float: 两个时间点之间的时间差，单位由unit参数指定；
+                如果start_time为None，则返回当前时间戳
         """
         if start_time is None:
             return cls.timestamp()
+
+        timestamp1 = (
+            start_time if isinstance(start_time, float) else start_time.timestamp()
+        )
+
+        if end_time is None:
+            timestamp2 = cls.timestamp()
+        else:
+            timestamp2 = (
+                end_time if isinstance(end_time, float) else end_time.timestamp()
+            )
+
+        time_diff = timestamp2 - timestamp1
+
         if unit == "s":
-            return cls.timestamp() - start_time
+            return time_diff
         elif unit == "ms":
-            return cls.timestamp_ms() - start_time
+            return time_diff * 1000
         else:
             raise ValueError("无效的时间单位, 可选值: 's'(秒), 'ms'(毫秒)")
 
