@@ -3,7 +3,7 @@ import psutil
 import threading
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 from quart import request
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase

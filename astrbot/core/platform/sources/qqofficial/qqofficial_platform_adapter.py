@@ -7,7 +7,7 @@ import botpy.message
 import botpy.types
 import botpy.types.message
 import os
-from astrbot.core import Time
+from astrbot.core.time import Time
 
 from botpy import Client
 from astrbot.api.platform import (

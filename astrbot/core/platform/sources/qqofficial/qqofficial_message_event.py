@@ -4,7 +4,7 @@ import botpy.types
 import botpy.types.message
 import asyncio
 from astrbot.core.utils.io import file_to_base64, download_image_by_url
-from astrbot.core import Time
+from astrbot.core.time import Time
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image

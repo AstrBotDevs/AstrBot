@@ -6,7 +6,7 @@ from astrbot.api.platform import MessageType
 from astrbot.api.provider import ProviderRequest
 from astrbot.api.message_components import Plain, Image
 from astrbot import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 from collections import defaultdict
 
 """

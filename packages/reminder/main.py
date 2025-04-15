@@ -6,7 +6,7 @@ from astrbot.api.event import filter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import llm_tool, logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 
 
 @star.register(

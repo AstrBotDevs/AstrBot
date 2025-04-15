@@ -12,7 +12,7 @@ from astrbot.core.platform import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.message.components import Plain, Image, Record  # noqa: F403
 from astrbot import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 from astrbot.core import web_chat_queue
 from .webchat_event import WebChatMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion

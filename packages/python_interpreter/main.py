@@ -14,7 +14,7 @@ from astrbot.api.event import filter
 from astrbot.api.provider import ProviderRequest
 from astrbot.api.message_components import Image, File
 from astrbot.core.utils.io import download_image_by_url, download_file
-from astrbot.core import Time
+from astrbot.core.time import Time
 
 PROMPT = """
 ## Task

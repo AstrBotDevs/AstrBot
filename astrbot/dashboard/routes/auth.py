@@ -2,7 +2,7 @@ import jwt
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core import WEBUI_SK, DEMO_MODE
-from astrbot.core import Time
+from astrbot.core.time import Time
 from astrbot import logger
 
 

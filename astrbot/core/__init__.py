@@ -4,7 +4,6 @@ from .log import LogManager, LogBroker  # noqa
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.pip_installer import PipInstaller
-from astrbot.core.time import Time
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.config.default import DB_PATH
 from astrbot.core.config import AstrBotConfig
@@ -33,5 +32,7 @@ web_chat_back_queue = asyncio.Queue(maxsize=32)
 WEBUI_SK = "Advanced_System_for_Text_Response_and_Bot_Operations_Tool"
 DEMO_MODE = os.getenv("DEMO_MODE", False)
 
-# 初始化时间
+# 初始化时间工具
+from astrbot.core.time import Time
+
 Time.initialize(astrbot_config.get("timezone", None))

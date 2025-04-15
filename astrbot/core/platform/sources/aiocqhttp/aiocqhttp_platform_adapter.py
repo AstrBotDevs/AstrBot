@@ -15,7 +15,7 @@ from astrbot.api.event import MessageChain
 from .aiocqhttp_message_event import *  # noqa: F403
 from astrbot.api.message_components import *  # noqa: F403
 from astrbot.api import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter

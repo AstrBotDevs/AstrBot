@@ -13,7 +13,7 @@ from astrbot.api.message_components import (
 from telegram.ext import ExtBot
 from astrbot.core.utils.io import download_file
 from astrbot import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 
 
 class TelegramPlatformEvent(AstrMessageEvent):

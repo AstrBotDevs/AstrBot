@@ -9,7 +9,7 @@ import copy
 import astrbot.core.message.components as Comp
 from typing import Dict, Any, Callable, Awaitable, List
 from astrbot.core.platform import AstrMessageEvent
-from astrbot.core import Time
+from astrbot.core.time import Time
 
 USER_SESSIONS: Dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
 FILTERS: List["SessionFilter"] = []  # 存储 SessionFilter 实例

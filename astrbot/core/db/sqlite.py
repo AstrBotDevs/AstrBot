@@ -1,7 +1,7 @@
 import sqlite3
 import os
 from astrbot.core.db.po import Platform, Stats, LLMHistory, ATRIVision, Conversation
-from astrbot.core import Time
+from astrbot.core.time import Time
 from . import BaseDatabase
 from typing import Tuple, List, Dict, Any
 

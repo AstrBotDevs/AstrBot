@@ -14,7 +14,7 @@ from ..entities import ProviderType
 from astrbot.core.utils.io import download_file
 from ..register import register_provider_adapter
 from astrbot.core import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 
 

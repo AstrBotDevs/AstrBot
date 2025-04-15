@@ -4,7 +4,7 @@ import shutil
 
 from ..updater import RepoZipUpdater
 from astrbot.core.utils.io import remove_dir, on_error
-from ..star.star import StarMetadata
+from .star import StarMetadata
 from astrbot.core import logger
 
 

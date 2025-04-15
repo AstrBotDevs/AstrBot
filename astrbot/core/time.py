@@ -3,7 +3,6 @@ import time
 import asyncio
 import zoneinfo
 from typing import Optional, Union
-from astrbot.core import logger
 
 
 class Time:
@@ -27,7 +26,6 @@ class Time:
             timezone_str (str): 时区字符串, 例如 "Asia/Shanghai"
         """
         if cls._initialized:
-            logger.debug("Time 已初始化, 跳过重复初始化")
             return
 
         if not timezone_str:
@@ -35,9 +33,7 @@ class Time:
         else:
             try:
                 cls._timezone = zoneinfo.ZoneInfo(timezone_str)
-                logger.info(f"Time: 时区设置为 {timezone_str}")
             except zoneinfo.ZoneInfoNotFoundError:
-                logger.error(f"Time: 无效的时区字符串 {timezone_str}, 使用默认时区")
                 cls._timezone = None
 
         cls._initialized = True

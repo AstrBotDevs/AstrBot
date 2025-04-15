@@ -7,7 +7,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 from astrbot.core.message.components import Plain, Image, At, Reply, Record, File, Node
 from astrbot.core import html_renderer
 from astrbot.core.star.star_handler import star_handlers_registry, EventType

@@ -10,7 +10,7 @@ from astrbot.api import logger, sp
 from astrbot.api.message_components import Plain, Image, At, Record, Video
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.utils.io import download_image_by_url
-from astrbot.core import Time
+from astrbot.core.time import Time
 from .downloader import GeweDownloader
 
 try:

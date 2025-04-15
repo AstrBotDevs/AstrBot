@@ -6,7 +6,7 @@ from astrbot.api.platform import MessageMember, AstrBotMessage
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
-from astrbot.core import Time
+from astrbot.core.time import Time
 from pathlib import Path
 
 

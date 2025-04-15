@@ -28,7 +28,7 @@ import os
 from collections import deque
 from asyncio import Queue
 from typing import List
-from astrbot.core import Time
+from astrbot.core.time import Time
 
 # 日志缓存大小
 CACHED_SIZE = 200

@@ -10,7 +10,7 @@ import psutil
 import certifi
 from typing import Union
 from PIL import Image
-from astrbot.core import Time
+from astrbot.core.time import Time
 
 
 def on_error(func, path, exc_info):

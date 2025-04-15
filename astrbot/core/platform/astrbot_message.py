@@ -1,7 +1,7 @@
 from typing import List
 from dataclasses import dataclass
 from astrbot.core.message.components import BaseMessageComponent
-from astrbot.core import Time
+from astrbot.core.time import Time
 from .message_type import MessageType
 
 

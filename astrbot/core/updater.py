@@ -3,7 +3,7 @@ import psutil
 import sys
 from .zip_updater import ReleaseInfo, RepoZipUpdater
 from astrbot.core import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.io import download_file
 

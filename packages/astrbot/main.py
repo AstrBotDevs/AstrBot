@@ -21,7 +21,7 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.config.default import VERSION
 from .long_term_memory import LongTermMemory
 from astrbot.core import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 from astrbot.api.message_components import Plain, Image, Reply
 from typing import Union
 

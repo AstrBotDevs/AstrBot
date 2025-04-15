@@ -5,7 +5,7 @@ from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 from astrbot.core.config.astrbot_config import RateLimitStrategy
 
 

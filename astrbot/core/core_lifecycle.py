@@ -26,7 +26,7 @@ from astrbot.core import LogBroker
 from astrbot.core.db import BaseDatabase
 from astrbot.core.updater import AstrBotUpdater
 from astrbot.core import logger
-from astrbot.core import Time
+from astrbot.core.time import Time
 from astrbot.core.config.default import VERSION
 from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 from astrbot.core.conversation_mgr import ConversationManager
