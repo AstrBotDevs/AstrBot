@@ -29,7 +29,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 # convert to base64
                 bs64 = await segment.convert_to_base64()
                 d["data"] = {
-                    "file": bs64,
+                    "file": f"base64://{bs64}",
                 }
             elif isinstance(segment, At):
                 d["data"] = {
