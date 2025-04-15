@@ -64,7 +64,6 @@ class Metric:
         except Exception as e:
             logger.error(f"保存指标到数据库失败: {e}")
             pass
-        print(f"上传指标: {payload}")
 
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
