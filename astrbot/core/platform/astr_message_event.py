@@ -220,9 +220,12 @@ class AstrMessageEvent(abc.ABC):
             await asyncio.sleep(1.5)  # 限速
         return buffer
 
-    async def send_streaming(self, generator: AsyncGenerator[MessageChain, None]):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
+        Fallback仅支持 aiocqhttp, gewechat。
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)

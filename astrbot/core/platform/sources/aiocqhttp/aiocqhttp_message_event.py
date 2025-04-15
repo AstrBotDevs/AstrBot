@@ -83,7 +83,22 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def send_streaming(self, generator: AsyncGenerator):
+    async def send_streaming(
+        self, generator: AsyncGenerator, use_fallback: bool = False
+    ):
+        if not use_fallback:
+            buffer = None
+            async for chain in generator:
+                if not buffer:
+                    buffer = chain
+                else:
+                    buffer.chain.extend(chain.chain)
+            if not buffer:
+                return
+            buffer.squash_plain()
+            await self.send(buffer)
+            return await super().send_streaming(generator, use_fallback)
+
         buffer = ""
         pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
 
@@ -100,7 +115,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
         if buffer.strip():
             await self.send(MessageChain([Plain(buffer)]))
-        return await super().send_streaming(generator)
+        return await super().send_streaming(generator, use_fallback)
 
     async def get_group(self, group_id=None, **kwargs):
         if isinstance(group_id, str) and group_id.isdigit():
