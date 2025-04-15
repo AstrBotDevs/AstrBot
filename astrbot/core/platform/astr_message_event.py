@@ -1,5 +1,7 @@
 import abc
 import asyncio
+import hashlib
+import uuid
 from dataclasses import dataclass
 from typing import List, Union, Optional, AsyncGenerator
 
@@ -384,8 +386,13 @@ class AstrMessageEvent(abc.ABC):
         Args:
             message (MessageChain): 消息链，具体使用方式请参考文档。
         """
+        # Leverage BLAKE2 hash function to generate a non-reversible hash of the sender ID for privacy.
+        hash_obj = hashlib.blake2b(self.get_sender_id().encode("utf-8"), digest_size=16)
+        sid = str(uuid.UUID(bytes=hash_obj.digest()))
         asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+            Metric.upload(
+                msg_event_tick=1, adapter_name=self.platform_meta.name, sid=sid
+            )
         )
         self._has_send_oper = True
 
