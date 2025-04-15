@@ -296,6 +296,7 @@ class StarTools:
 
         @classmethod
         def measure_time(
+            cls,
             start_time: Union[float, Time.DateTime, None] = None,
             end_time: Union[float, Time.DateTime, None] = None,
             unit: str = "s",

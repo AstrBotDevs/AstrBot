@@ -74,7 +74,7 @@ class RateLimitStage(Stage):
                         logger.info(
                             f"会话 {session_id} 被限流。根据限流策略，此会话处理将被暂停 {stall_duration:.2f} 秒。"
                         )
-                        await Time.async_sleep(stall_duration)
+                        await asyncio.sleep(stall_duration)
                     case RateLimitStrategy.DISCARD.value:
                         # event.set_result(MessageEventResult().message(f"会话 {session_id} 被限流。根据限流策略，此请求已被丢弃，直到您的限额于 {stall_duration:.2f} 秒后重置。"))
                         logger.info(

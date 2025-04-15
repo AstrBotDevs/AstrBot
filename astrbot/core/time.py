@@ -10,9 +10,13 @@ class Time:
     时间类, 为Core与插件提供统一的时间接口
     """
 
+    # 类型
     DateTime = datetime.datetime
     TimeDelta = datetime.timedelta
     ZoneInfo = zoneinfo.ZoneInfo
+
+    # 函数
+    sleep = time.sleep
 
     _initialized = False
     _timezone = None
@@ -81,7 +85,7 @@ class Time:
         Returns:
             int: 当前时间戳(毫秒)
         """
-        return int(cls.timestamp() * 1000) if cls._timezone else int(time.time() * 1000)
+        return int(cls.timestamp() * 1000)
 
     @classmethod
     def format_datetime(
@@ -102,18 +106,23 @@ class Time:
         return dt.strftime(fmt)
 
     @classmethod
-    def parse_datetime(cls, datetime_str: str, fmt: str = "%Y-%m-%d %H:%M:%S"):
+    def parse_datetime(
+        cls, datetime_str: str, fmt: str = "%Y-%m-%d %H:%M:%S"
+    ) -> datetime.datetime:
         """
-        从字符串解析为datetime对象
+        从字符串解析为datetime对象，应用类中设置的时区
 
         Args:
             datetime_str (str): 时间字符串
             fmt (str): 格式化字符串
 
         Returns:
-            datetime.datetime: 解析后的datetime对象
+            datetime.datetime: 解析后的datetime对象，带有设置的时区
         """
-        return cls.DateTime.strptime(datetime_str, fmt)
+        dt = cls.DateTime.strptime(datetime_str, fmt)
+        if cls._timezone:
+            dt = dt.replace(tzinfo=cls._timezone)
+        return dt
 
     @classmethod
     def fromtimestamp(cls, timestamp: float) -> datetime.datetime:
@@ -199,25 +208,6 @@ class Time:
         return cls._timezone if cls._timezone else None
 
     @classmethod
-    def from_timestamp(cls, timestamp: float, unit: str = "s") -> datetime.datetime:
-        """
-        从时间戳创建datetime对象
-
-        Args:
-            timestamp (float): 时间戳
-            unit (str, optional): 时间单位, 可选值: 's'(秒), 'ms'(毫秒), 默认为's'
-
-        Returns:
-            datetime.datetime: 创建的datetime对象
-        """
-        if unit == "s":
-            return datetime.datetime.fromtimestamp(timestamp)
-        elif unit == "ms":
-            return datetime.datetime.fromtimestamp(timestamp / 1000)
-        else:
-            raise ValueError("无效的时间单位, 可选值: 's'(秒), 'ms'(毫秒)")
-
-    @classmethod
     def utcnow(cls) -> datetime.datetime:
         """
         获取当前UTC时间
@@ -226,26 +216,6 @@ class Time:
             datetime.datetime: 当前UTC时间
         """
         return datetime.datetime.now(datetime.timezone.utc)
-
-    @classmethod
-    def sleep(cls, seconds: float) -> None:
-        """
-        同步休眠指定的秒数
-
-        Args:
-            seconds (float): 休眠的秒数
-        """
-        time.sleep(seconds)
-
-    @classmethod
-    async def async_sleep(cls, seconds: float) -> None:
-        """
-        异步休眠指定的秒数
-
-        Args:
-            seconds (float): 休眠的秒数
-        """
-        await asyncio.sleep(seconds)
 
     @classmethod
     def timedelta(
