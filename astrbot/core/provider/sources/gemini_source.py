@@ -332,6 +332,7 @@ class ProviderGoogleGenAI(Provider):
                     "Multi-modal output is not supported" in e.message
                     or "Model does not support the requested response modalities"
                     in e.message
+                    or "only supports text output" in e.message
                 ):
                     logger.warning(
                         f"{self.get_model()} 不支持多模态输出，降级为文本模态"
