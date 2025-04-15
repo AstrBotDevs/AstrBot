@@ -38,6 +38,7 @@ DEFAULT_CONFIG = {
         "no_permission_reply": True,
         "empty_mention_waiting": True,
         "friend_message_needs_wake_prefix": False,
+        "ignore_bot_self_message": False,
     },
     "provider": [],
     "provider_settings": {
@@ -286,6 +287,11 @@ CONFIG_METADATA_2 = {
                         "description": "私聊消息是否需要唤醒前缀",
                         "type": "bool",
                         "hint": "启用后，私聊消息需要唤醒前缀才会被处理，同群聊一样。",
+                    },
+                    "ignore_bot_self_message": {
+                        "description": "是否忽略机器人自身的消息",
+                        "type": "bool",
+                        "hint": "某些平台如 gewechat 会将自身账号在其他 APP 端发送的消息也当做消息事件下发导致给自己发消息时唤醒机器人",
                     },
                     "segmented_reply": {
                         "description": "分段回复",
