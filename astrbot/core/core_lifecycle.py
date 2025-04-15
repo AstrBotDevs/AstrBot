@@ -106,7 +106,7 @@ class AstrBotCoreLifecycle:
         await self.pipeline_scheduler.initialize()
 
         # 初始化更新器
-        self.astrbot_updator = AstrBotUpdator(self.astrbot_config["plugin_repo_mirror"])
+        self.astrbot_updator = AstrBotUpdator()
 
         # 初始化事件总线
         self.event_bus = EventBus(self.event_queue, self.pipeline_scheduler)

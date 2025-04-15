@@ -98,7 +98,7 @@ DEFAULT_CONFIG = {
     "wake_prefix": ["/"],
     "log_level": "INFO",
     "pip_install_arg": "",
-    "plugin_repo_mirror": "",
+    "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
     "knowledge_db": {},
     "persona": [],
     "timezone": "",
@@ -529,6 +529,7 @@ CONFIG_METADATA_2 = {
                             "model": "gemini-2.0-flash-exp",
                         },
                         "gm_resp_image_modal": False,
+                        "gm_native_coderunner": False,
                         "gm_safety_settings": {
                             "harassment": "BLOCK_MEDIUM_AND_ABOVE",
                             "hate_speech": "BLOCK_MEDIUM_AND_ABOVE",
@@ -704,6 +705,12 @@ CONFIG_METADATA_2 = {
                         "description": "启用图片模态",
                         "type": "bool",
                         "hint": "启用后，将支持返回图片内容。需要模型支持，否则会报错。具体支持模型请查看 Google Gemini 官方网站。温馨提示，如果您需要生成图片，请关闭 `启用群员识别` 配置获得更好的效果。",
+                    },
+                    "gm_native_coderunner": {
+                        "description": "启用原生代码执行器",
+                        "type": "bool",
+                        "hint": "启用后所有函数工具将全部失效",
+                        "obvious_hint": True,
                     },
                     "gm_safety_settings": {
                         "description": "安全过滤器",
@@ -1222,16 +1229,10 @@ CONFIG_METADATA_2 = {
                 "type": "string",
                 "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。",
             },
-            "plugin_repo_mirror": {
-                "description": "插件仓库镜像",
+            "pypi_index_url": {
+                "description": "PyPI 软件仓库地址",
                 "type": "string",
-                "hint": "已废弃，请使用管理面板->设置页的代理地址选择",
-                "obvious_hint": True,
-                "options": [
-                    "default",
-                    "https://ghp.ci/",
-                    "https://github-mirror.us.kg/",
-                ],
+                "hint": "安装 Python 依赖时请求的 PyPI 软件仓库地址。默认为 https://mirrors.aliyun.com/pypi/simple/",
             },
         },
     },

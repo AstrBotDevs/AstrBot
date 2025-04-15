@@ -28,7 +28,7 @@ from .filter.permission import PermissionTypeFilter, PermissionType
 
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig):
-        self.updator = PluginUpdator(config["plugin_repo_mirror"])
+        self.updator = PluginUpdator()
 
         self.context = context
         self.context._star_manager = self

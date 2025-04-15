@@ -27,8 +27,8 @@ import axios from 'axios';
             </v-card-title>
             <v-card-text>
               <v-text-field v-model="pipInstallPayload.package" label="*库名，如 llmtuner" variant="outlined"></v-text-field>
-              <v-text-field v-model="pipInstallPayload.mirror" label="镜像站链接（可选）" variant="outlined"></v-text-field>
-              <small>如果不填镜像站链接，默认使用阿里云镜像：https://mirrors.aliyun.com/pypi/simple/</small>
+              <v-text-field v-model="pipInstallPayload.mirror" label="强制 PyPI 软件仓库链接（可选）" variant="outlined"></v-text-field>
+              <small>强制 PyPI 软件仓库链接 > 配置项 `PyPI 软件仓库地址`</small>
               <div>
                 <small>{{ status }}</small>
               </div>

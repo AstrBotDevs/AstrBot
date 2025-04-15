@@ -1,10 +1,42 @@
 import aiohttp
 import sys
+import os
+import socket
+import uuid
 from astrbot.core.config import VERSION
 from astrbot.core import db_helper, logger
 
 
 class Metric:
+    _iid_cache = None
+
+    @staticmethod
+    def get_installation_id():
+        """获取或创建一个唯一的安装ID"""
+        if Metric._iid_cache is not None:
+            return Metric._iid_cache
+
+        config_dir = os.path.join(os.path.expanduser("~"), ".astrbot")
+        id_file = os.path.join(config_dir, ".installation_id")
+
+        if os.path.exists(id_file):
+            try:
+                with open(id_file, "r") as f:
+                    Metric._iid_cache = f.read().strip()
+                    return Metric._iid_cache
+            except Exception:
+                pass
+        try:
+            os.makedirs(config_dir, exist_ok=True)
+            installation_id = str(uuid.uuid4())
+            with open(id_file, "w") as f:
+                f.write(installation_id)
+            Metric._iid_cache = installation_id
+            return installation_id
+        except Exception:
+            Metric._iid_cache = "null"
+            return "null"
+
     @staticmethod
     async def upload(**kwargs):
         """
@@ -17,6 +49,14 @@ class Metric:
         kwargs["os"] = sys.platform
         payload = {"metrics_data": kwargs}
         try:
+            kwargs["hn"] = socket.gethostname()
+        except Exception:
+            pass
+        try:
+            kwargs["iid"] = Metric.get_installation_id()
+        except Exception:
+            pass
+        try:
             if "adapter_name" in kwargs:
                 db_helper.insert_platform_metrics({kwargs["adapter_name"]: 1})
             if "llm_name" in kwargs:
@@ -24,6 +64,7 @@ class Metric:
         except Exception as e:
             logger.error(f"保存指标到数据库失败: {e}")
             pass
+        print(f"上传指标: {payload}")
 
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:

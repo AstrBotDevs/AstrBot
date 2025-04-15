@@ -23,7 +23,10 @@ db_helper = SQLiteDatabase(DB_PATH)
 sp = (
     SharedPreferences()
 )  # 简单的偏好设置存储, 这里后续应该存储到数据库中, 一些部分可以存储到配置中
-pip_installer = PipInstaller(astrbot_config.get("pip_install_arg", ""))
+pip_installer = PipInstaller(
+    astrbot_config.get("pip_install_arg", ""),
+    astrbot_config.get("pypi_index_url", None),
+)
 web_chat_queue = asyncio.Queue(maxsize=32)
 web_chat_back_queue = asyncio.Queue(maxsize=32)
 WEBUI_SK = "Advanced_System_for_Text_Response_and_Bot_Operations_Tool"
