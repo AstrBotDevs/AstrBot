@@ -304,7 +304,7 @@
                 <v-col v-for="(server, index) in filteredMarketplaceServers" :key="index" cols="12" md="6" lg="4">
                   <v-card class="marketplace-card hover-elevation" height="100%">
                     <v-card-title class="d-flex align-center pb-1 pt-3">
-                      <span class="text-h6 text-truncate" :title="server.name">
+                      <span class="text-h4 text-truncate" :title="server.name">
                         {{ server.name_h }}({{ server.name }})
                       </span>
                       <v-btn
