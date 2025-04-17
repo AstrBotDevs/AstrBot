@@ -151,9 +151,9 @@ class ResultDecorateStage(Stage):
                                 # 不分段回复
                                 new_chain.append(comp)
                                 continue
-                            split_response = []
-                            for line in comp.text.split("\n"):
-                                split_response.extend(re.findall(self.regex, line))
+                            split_response = re.findall(
+                                self.regex, comp.text, re.DOTALL | re.MULTILINE
+                            )
                             if not split_response:
                                 new_chain.append(comp)
                                 continue
