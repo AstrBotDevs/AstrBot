@@ -55,9 +55,11 @@
             <v-card-title class="d-flex align-center py-3 px-4">
               <v-icon color="primary" class="me-2">mdi-server</v-icon>
               <span class="text-h6">MCP 服务器</span>
-              <v-progress-circular indeterminate color="primary" size="24" style="margin-left: 16px;" v-show="loading"></v-progress-circular>
               <v-spacer></v-spacer>
-              <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showMcpServerDialog = true">
+              <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="getServers" :loading="loading">
+                刷新
+              </v-btn>
+              <v-btn color="primary" style="margin-left: 8px;" prepend-icon="mdi-plus" variant="tonal" @click="showMcpServerDialog = true">
                 新增服务器
               </v-btn>
             </v-card-title>
@@ -77,7 +79,21 @@
                   <v-card class="server-card hover-elevation" :color="server.active ? '' : 'grey-lighten-4'">
                     <div class="server-status-indicator" :class="{'active': server.active}"></div>
                     <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
-                      <span class="text-h4 text-truncate" :title="server.name">{{ server.name }}</span>
+                      <div>
+                        <span class="text-h4 text-truncate" :title="server.name">{{ server.name }}</span>
+
+                        <v-tooltip location="top">
+                          <template v-slot:activator="{ props }">
+                            <btn class="text-caption text-medium-emphasis" v-if="server.errlogs" v-bind="props">
+                              <v-icon size="small" color="error" class="ms-1">mdi-alert-circle</v-icon>
+                              异常
+                            </btn>
+                          </template>
+                          <pre>{{ server.errlogs }}</pre>
+                        </v-tooltip>
+
+                      </div>
+                      
                       <v-tooltip location="top">
                         <template v-slot:activator="{ props }">
                           <v-switch color="primary" hide-details density="compact" v-model="server.active"
@@ -672,11 +688,13 @@ export default {
       axios.get('/api/tools/mcp/servers')
         .then(response => {
           this.mcpServers = response.data.data || [];
-          this.loading = false
         })
         .catch(error => {
           this.showError("获取 MCP 服务器列表失败: " + error.message);
-          this.loading = false
+        }).finally(() => {
+          setTimeout(() => {
+            this.loading = false;
+          }, 500);
         });
     },
     
@@ -775,9 +793,14 @@ export default {
       const configCopy = { ...server };
       
       // 移除基本字段，只保留配置相关字段
-      delete configCopy.name;
-      delete configCopy.active;
-      delete configCopy.tools;
+      try {
+        delete configCopy.name;
+        delete configCopy.active;
+        delete configCopy.tools;
+        delete configCopy.errlogs;
+      } catch (e) {
+        console.error("Error removing basic fields: ", e);
+      }
       
       // 设置当前服务器的基本信息
       this.currentServer = {

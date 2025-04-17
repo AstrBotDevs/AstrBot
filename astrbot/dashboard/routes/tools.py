@@ -80,6 +80,7 @@ class ToolsRoute(Route):
                 ) in self.tool_mgr.mcp_client_dict.items():
                     if name_key == name:
                         server_info["tools"] = [tool.name for tool in mcp_client.tools]
+                        server_info["errlogs"] = mcp_client.server_errlogs
                         break
                 else:
                     server_info["tools"] = []
@@ -107,7 +108,7 @@ class ToolsRoute(Route):
 
             # 复制所有配置字段
             for key, value in server_data.items():
-                if key not in ["name", "active", "tools"]:  # 排除特殊字段
+                if key not in ["name", "active", "tools", "errlogs"]:  # 排除特殊字段
                     if key == "mcpServers":
                         key_0 = list(server_data["mcpServers"].keys())[
                             0
@@ -129,7 +130,7 @@ class ToolsRoute(Route):
 
             if self.save_mcp_config(config):
                 # 动态初始化新MCP客户端
-                self.tool_mgr.mcp_service_queue.put_nowait(
+                await self.tool_mgr.mcp_service_queue.put(
                     {
                         "type": "init",
                         "name": name,
@@ -170,7 +171,7 @@ class ToolsRoute(Route):
 
             # 复制所有配置字段
             for key, value in server_data.items():
-                if key not in ["name", "active", "tools"]:  # 排除特殊字段
+                if key not in ["name", "active", "tools", "errlogs"]:  # 排除特殊字段
                     if key == "mcpServers":
                         key_0 = list(server_data["mcpServers"].keys())[
                             0
@@ -208,7 +209,7 @@ class ToolsRoute(Route):
                         )
                     else:
                         # 客户端不存在，初始化
-                        self.tool_mgr.mcp_service_queue.put_nowait(
+                        await self.tool_mgr.mcp_service_queue.put(
                             {
                                 "type": "init",
                                 "name": name,
