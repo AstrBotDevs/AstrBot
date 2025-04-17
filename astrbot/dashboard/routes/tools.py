@@ -267,7 +267,12 @@ class ToolsRoute(Route):
             return Response().error(f"删除 MCP 服务器失败: {str(e)}").__dict__
 
     async def get_mcp_markets(self):
-        BASE_URL = "https://api.soulter.top/astrbot/mcpservers"
+        page = request.args.get("page", 1, type=int)
+        page_size = request.args.get("page_size", 10, type=int)
+        BASE_URL = "https://api.soulter.top/astrbot/mcpservers?page={}&page_size={}".format(
+            page,
+            page_size,
+        )
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(f"{BASE_URL}") as response:
@@ -282,3 +287,4 @@ class ToolsRoute(Route):
                         )
         except Exception as _:
             logger.error(traceback.format_exc())
+        return Response().error("获取市场数据失败").__dict__

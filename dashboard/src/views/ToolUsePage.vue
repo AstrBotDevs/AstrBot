@@ -277,8 +277,9 @@
                 class="mx-2"
                 style="max-width: 300px"
                 clearable
+                @update:model-value="searchMarketplaceServers"
               ></v-text-field>
-              <v-btn color="primary" prepend-icon="mdi-refresh" variant="text" @click="fetchMarketplaceServers" :loading="marketplaceLoading">
+              <v-btn color="primary" prepend-icon="mdi-refresh" variant="text" @click="fetchMarketplaceServers(1)" :loading="marketplaceLoading">
                 刷新
               </v-btn>
             </v-card-title>
@@ -293,25 +294,29 @@
               </div>
 
               <!-- 无数据 -->
-              <div v-else-if="marketplaceServers.length === 0" class="text-center pa-8">
+              <div v-else-if="filteredMarketplaceServers.length === 0" class="text-center pa-8">
                 <v-icon size="64" color="grey-lighten-1">mdi-store-off</v-icon>
                 <p class="text-grey mt-4">暂无可用的 MCP 服务器</p>
               </div>
 
               <!-- 服务器列表 -->
               <v-row v-else>
-                <v-col v-for="(server, index) in marketplaceServers" :key="index" cols="12" md="6" lg="4">
+                <v-col v-for="(server, index) in filteredMarketplaceServers" :key="index" cols="12" md="6" lg="4">
                   <v-card class="marketplace-card hover-elevation" height="100%">
                     <v-card-title class="d-flex align-center pb-1 pt-3">
                       <span class="text-h6 text-truncate" :title="server.name">
                         {{ server.name_h }}({{ server.name }})
                       </span>
+                      <v-btn
+                        icon="mdi-open-in-new"
+                        variant="text"
+                        color="primary"
+                        class="ms-auto"
+                        @click.stop="openurl(server.origin)"
+                      ></v-btn>
                     </v-card-title>
                     
                     <v-card-text>
-                      <!-- <p class="text-body-2 mb-3 text-truncate-2" :title="server.AbstractCN">
-                        {{ server.AbstractCN || server.Abstract || '暂无描述' }}
-                      </p> -->
 
                       <div class="d-flex align-center mb-2">
                         <v-icon size="small" color="grey" class="me-2">mdi-tools</v-icon>
@@ -348,6 +353,18 @@
                   </v-card>
                 </v-col>
               </v-row>
+              
+              <!-- 分页控件 -->
+              <div class="d-flex justify-center mt-4">
+                <v-pagination
+                  v-if="!marketplaceLoading && totalMarketPages > 1"
+                  v-model="currentMarketPage"
+                  :length="totalMarketPages"
+                  total-visible="7"
+                  rounded
+                  @update:model-value="changePage"
+                ></v-pagination>
+              </div>
             </v-card-text>
           </v-card>
         </v-window-item>
@@ -618,6 +635,12 @@ export default {
       marketplaceSearch: '',
       selectedMarketplaceServer: null,
       selectedServerConfigDisplay: '',
+      
+      // 分页相关
+      currentMarketPage: 1,
+      marketPageSize: 9, // 每页显示9个服务器，适合3列布局
+      totalMarketPages: 1,
+      totalMarketItems: 0,
     }
   },
 
@@ -654,6 +677,11 @@ export default {
         
         return '未设置配置';
       }
+    },
+
+    // 过滤后的市场服务器
+    filteredMarketplaceServers() {
+      return this.marketplaceServers;
     },
   },
 
@@ -860,17 +888,52 @@ export default {
     // MCP 市场相关方法
     
     // 获取市场服务器列表
-    fetchMarketplaceServers() {
+    fetchMarketplaceServers(page = 1) {
       this.marketplaceLoading = true;
-      axios.get('/api/tools/mcp/market')
+      
+      // 构建请求参数
+      const params = {
+        page: page,
+        page_size: this.marketPageSize
+      };
+      
+      // 如果有搜索关键词，添加到请求参数
+      if (this.marketplaceSearch.trim()) {
+        params.search = this.marketplaceSearch.trim();
+      }
+      
+      axios.get('/api/tools/mcp/market', { params })
         .then(response => {
           this.marketplaceServers = response.data.data.mcpservers || [];
+          
+          // 更新分页信息
+          if (response.data.data.pagination) {
+            this.totalMarketItems = response.data.data.pagination.total || 0;
+            this.totalMarketPages = response.data.data.pagination.totalPages || 1;
+            this.currentMarketPage = response.data.data.pagination.currentPage || 1;
+          } else {
+            // 如果后端没有返回分页信息，根据返回的数据量估算
+            this.totalMarketPages = Math.ceil(this.marketplaceServers.length / this.marketPageSize) || 1;
+          }
+          
           this.marketplaceLoading = false;
         })
         .catch(error => {
           this.showError("获取 MCP 市场服务器列表失败: " + error.message);
           this.marketplaceLoading = false;
         });
+    },
+    
+    // 搜索市场服务器
+    searchMarketplaceServers() {
+      // 重置到第一页，然后获取结果
+      this.currentMarketPage = 1;
+      this.fetchMarketplaceServers(1);
+    },
+    
+    // 切换分页
+    changePage(page) {
+      this.fetchMarketplaceServers(page);
     },
     
     // 显示服务器详情
