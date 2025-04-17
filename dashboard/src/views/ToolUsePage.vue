@@ -85,8 +85,8 @@
                         <v-tooltip location="top">
                           <template v-slot:activator="{ props }">
                             <btn class="text-caption text-medium-emphasis" v-if="server.errlogs" v-bind="props">
-                              <v-icon size="small" color="error" class="ms-1">mdi-alert-circle</v-icon>
-                              异常
+                              <v-icon size="small" class="ms-1">mdi-information</v-icon>
+                              日志
                             </btn>
                           </template>
                           <pre>{{ server.errlogs }}</pre>
