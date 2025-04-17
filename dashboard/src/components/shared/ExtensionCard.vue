@@ -81,7 +81,7 @@ const viewReadme = () => {
       <div class="flex-grow-1">
         <div>{{ extension.author }} /</div>
 
-        <p class="text-h3 font-weight-black" :class="{ 'text-h4': $vuetify.display.xs }">
+        <p class="text-h4 font-weight-black" :class="{ 'text-h4': $vuetify.display.xs }">
           {{ extension.name }}
           <v-tooltip location="top" v-if="extension?.has_update && !marketMode">
             <template v-slot:activator="{ props: tooltipProps }">

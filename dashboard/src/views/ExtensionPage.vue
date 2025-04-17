@@ -402,7 +402,7 @@ onMounted(async () => {
             已安装的插件
           </v-card-title>
           <v-card-subtitle class="text-subtitle-1 mt-1 text-medium-emphasis">
-            管理您已经安装的所有机器人插件
+            管理已经安装的所有插件
           </v-card-subtitle>
         </v-card-item>
 
