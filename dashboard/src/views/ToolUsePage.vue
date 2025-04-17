@@ -427,6 +427,7 @@
                 使用模板
               </v-btn>
             </div>
+            <small>⚠ 某些 MCP 服务器可能需要按照其要求在 `env` 中填充 `API_KEY` 或 `TOKEN` 等信息，请注意检查是否填写。</small>
             
             <div class="monaco-container">
               <VueMonacoEditor
@@ -1057,6 +1058,7 @@ export default {
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 4px;
   height: 300px;
+  margin-top: 4px;
   overflow: hidden;
 }
 
