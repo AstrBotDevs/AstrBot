@@ -1,3 +1,5 @@
+from collections.abc import Awaitable
+from typing import Any
 import aiohttp
 import sys
 import os
@@ -38,7 +40,7 @@ class Metric:
             return "null"
 
     @staticmethod
-    async def upload(**kwargs) -> None:
+    async def upload(**kwargs) -> Awaitable[Any] | None:
         """
         上传相关非敏感的指标以更好地了解 AstrBot 的使用情况。上传的指标不会包含任何有关消息文本、用户信息等敏感信息。
 
@@ -51,11 +53,11 @@ class Metric:
         try:
             kwargs["hn"] = socket.gethostname()
         except Exception:
-            pass
+            logger.error("获取主机名失败")
         try:
             kwargs["iid"] = Metric.get_installation_id()
         except Exception:
-            pass
+            logger.error("获取安装ID失败")
         try:
             if "adapter_name" in kwargs:
                 db_helper.insert_platform_metrics({kwargs["adapter_name"]: 1})
@@ -63,12 +65,12 @@ class Metric:
                 db_helper.insert_llm_metrics({kwargs["llm_name"]: 1})
         except Exception as e:
             logger.error(f"保存指标到数据库失败: {e}")
-            pass
+            logger.error("请检查数据库连接")
 
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(base_url, json=payload, timeout=3) as response:
                     if response.status != 200:
-                        pass
-        except Exception:
-            pass
+                        logger.error(f"上传指标失败，状态码: {response.status}")
+        except Exception as e:
+            logger.error(f"上传指标时发生错误: {e}")

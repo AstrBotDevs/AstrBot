@@ -38,7 +38,7 @@ class Platform(abc.ABC):
 
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
-    ) -> Awaitable[Any]:
+    ) -> Awaitable[Any] | None:
         """
         通过会话发送消息。该方法旨在让插件能够直接通过**可持久化的会话数据**发送消息，而不需要保存 event 对象。
 

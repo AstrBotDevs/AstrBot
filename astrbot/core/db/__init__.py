@@ -1,6 +1,7 @@
 import abc
 from dataclasses import dataclass
 # from typing import list, dict, Any, tuple # 这些大写开头的类型自 Python 3.9 起已弃用
+from tkinter import N
 from typing import Any
 from astrbot.core.db.po import Stats, LLMHistory, ATRIVision, Conversation
 
@@ -139,11 +140,11 @@ class BaseDatabase(abc.ABC):
         self,
         page: int = 1,
         page_size: int = 20,
-        platforms: list[str] = None,
-        message_types: list[str] = None,
-        search_query: str = None,
-        exclude_ids: list[str] = None,
-        exclude_platforms: list[str] = None,
+        platforms: list[str] | None = None,
+        message_types: list[str] | None= None,
+        search_query: str | None = None,
+        exclude_ids: list[str] | None = None,
+        exclude_platforms: list[str] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """获取筛选后的对话列表
 
