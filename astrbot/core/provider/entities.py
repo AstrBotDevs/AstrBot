@@ -1,6 +1,7 @@
 import enum
 import base64
 import json
+from typing import Any
 # from tkinter import N
 from astrbot.core.utils.io import download_image_by_url
 from astrbot import logger
@@ -25,13 +26,13 @@ class ProviderType(enum.Enum):
 @dataclass
 class ProviderMetaData:
     type: str
+    # cls_type: type = None 
+    cls_type: str | None = None
     """提供商适配器名称，如 openai, ollama"""
     desc: str = ""
     """提供商适配器描述."""
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
-    # cls_type: type = None
-    cls_type: str | None = None
-
+    """提供商类型"""
     default_config_tmpl: dict | None = None
     """平台的默认配置模板"""
     provider_display_name: str | None = None

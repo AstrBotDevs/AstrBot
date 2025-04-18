@@ -1,7 +1,8 @@
 import abc
 # from typing import List # 此类型自 Python 3.9 起已弃用；请改用 "list"
 from astrbot.core.db import BaseDatabase
-from typing import TypedDict, AsyncGenerator
+from typing import TypedDict
+from collections.abc import AsyncGenerator
 from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 from dataclasses import dataclass
@@ -54,8 +55,8 @@ class Provider(AbstractProvider):
         provider_config: dict,
         provider_settings: dict,
         persistant_history: bool = True,
-        db_helper: BaseDatabase = None,
-        default_persona: Personality = None,
+        db_helper: BaseDatabase | None = None,
+        default_persona: Personality | None = None,
     ) -> None:
         super().__init__(provider_config)
 
@@ -114,7 +115,7 @@ class Provider(AbstractProvider):
         self,
         prompt: str,
         session_id: str | None = None,
-        image_urls: list[str] = None,
+        image_urls: list[str] | None = None,
         func_tool: FuncCall | None = None,
         contexts: list | None = None,
         system_prompt: str | None = None,

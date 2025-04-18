@@ -36,7 +36,7 @@ def register_provider_adapter(
             if "id" not in default_config_tmpl:
                 default_config_tmpl["id"] = provider_type_name
 
-        pm = ProviderMetaData(
+        pm: ProviderMetaData = ProviderMetaData(
             type=provider_type_name,
             desc=desc,
             provider_type=provider_type,
