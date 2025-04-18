@@ -87,7 +87,9 @@ class ProviderManager:
             self.selected_default_persona = Personality(
                 prompt="You are a helpful and friendly assistant.",
                 name="default",
-                _begin_dialogs_processed=[],
+                begin_dialogs=[],
+                mood_imitation_dialogs=[],
+                _begin_dialogs_processed=[{}],
                 _mood_imitation_dialogs_processed="",
             )
             self.personas.append(self.selected_default_persona)
