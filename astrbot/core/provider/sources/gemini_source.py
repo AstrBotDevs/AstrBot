@@ -143,18 +143,18 @@ class ProviderGoogleGenAI(Provider):
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
 
-        if native_coderunner or native_search:
-            if tools:
-                logger.warning("Gemini原生工具已启用，函数工具将被忽略")
-            tool_list = []
-            if native_coderunner:
-                tool_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
+        if native_coderunner:
+            tool_list = [types.Tool(code_execution=types.ToolCodeExecution())]
             if native_search:
-                tool_list.append(types.Tool(google_search=types.GoogleSearch()))
+                logger.warning("已启用代码执行工具，搜索工具将被忽略")
+            if tools:
+                logger.warning("已启用代码执行工具，函数工具将被忽略")
+        elif native_search:
+            tool_list = [types.Tool(google_search=types.GoogleSearch())]
+            if tools:
+                logger.warning("已启用搜索工具，函数工具将被忽略")
         elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
-            tool_list = [
-                types.Tool(function_declarations=func_desc["function_declarations"])
-            ]
+            tool_list = [types.Tool(function_declarations=func_desc["function_declarations"])]
 
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
