@@ -101,7 +101,7 @@ class PlatformManager:
             )
         )
 
-    async def _task_wrapper(self, task: asyncio.Task):
+    async def _task_wrapper(self, task: asyncio.Task) -> None:
         try:
             await task
         except asyncio.CancelledError:
@@ -112,7 +112,7 @@ class PlatformManager:
                 logger.error(f"|    {line}")
             logger.error("-------")
 
-    async def reload(self, platform_config: dict):
+    async def reload(self, platform_config: dict) -> None:
         await self.terminate_platform(platform_config["id"])
         if platform_config["enable"]:
             await self.load_platform(platform_config)

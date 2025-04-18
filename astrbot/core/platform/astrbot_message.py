@@ -10,7 +10,7 @@ from .message_type import MessageType
 @dataclass
 class MessageMember:
     user_id: str  # 发送者id
-    nickname: str = None
+    nickname: str | None = None
 
     def __str__(self):
         # 使用 f-string 来构建返回的字符串表示形式
@@ -70,3 +70,8 @@ class AstrBotMessage(BaseModel):
 
     def __str__(self) -> str:
         return str(self.__dict__)
+
+
+__all__ = [
+    "MessageType",
+]
