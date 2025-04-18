@@ -128,7 +128,7 @@ class MCPClient:
         )
         await self.session.initialize()
 
-    async def list_tools_and_save(self) -> mcp.listToolsResult:
+    async def list_tools_and_save(self) -> mcp.ListToolsResult:
         """list all tools from the server and save them to self.tools"""
         response = await self.session.list_tools()
         logger.debug(f"MCP server {self.name} list tools response: {response}")

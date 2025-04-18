@@ -49,7 +49,7 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     def get_llm_history(
-        self, session_id: str = None, provider_type: str = None
+        self, session_id: str | None = None, provider_type: str | None = None
     ) -> list[LLMHistory]:
         """获取 LLM 历史记录, 如果 session_id 为 None, 返回所有"""
         raise NotImplementedError

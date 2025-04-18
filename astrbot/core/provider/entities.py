@@ -46,7 +46,7 @@ class ToolCallMessageSegment:
     content: str
     role: str = "tool"
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, str]:
         return {
             "tool_call_id": self.tool_call_id,
             "content": self.content,
