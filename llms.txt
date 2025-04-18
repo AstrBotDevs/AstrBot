@@ -1,0 +1,6 @@
+This is AstrBot github repo
+please read this before you start coding
+
+// Current directory is the root of the repo
+// python version: 3.10.17
+
