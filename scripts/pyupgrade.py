@@ -5,6 +5,7 @@
 """
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -14,17 +15,14 @@ def main():
     script_dir = Path(__file__).resolve().parent
     
     # 确定 astrbot/ 文件夹的位置
-    astrbot_dir = script_dir / "astrbot"
-    
-    if not astrbot_dir.exists() or not astrbot_dir.is_dir():
-        # 如果 astrbot 不在当前目录，尝试查找父目录
-        astrbot_dir = script_dir.parent / "astrbot"
-        if not astrbot_dir.exists() or not astrbot_dir.is_dir():
-            print(f"错误: 无法找到 astrbot 文件夹，请检查路径。")
-            sys.exit(1)
-    
-    print(f"开始处理 {astrbot_dir} 目录下的 Python 文件...")
-    
+    astrbot_dir = script_dir.parent / "astrbot"
+
+    if not shutil.which("pyupgrade"):
+        print("请确保已安装 pyupgrade。")
+        print("可以使用以下命令安装:")
+        print("uv tool install pyupgrade")
+        sys.exit(1)
+
     # 计数器，记录处理的文件数量
     processed_count = 0
     
@@ -54,7 +52,7 @@ def main():
     
     print(f"\n处理完成! 共处理了 {processed_count} 个 Python 文件。")
     print("如果您没有看到任何文件被处理，请确认您已安装 pyupgrade：")
-    print("pip install pyupgrade")
+    print("uv tool install pyupgrade")
 
 if __name__ == "__main__":
     main()
