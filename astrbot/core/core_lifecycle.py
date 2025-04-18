@@ -52,7 +52,7 @@ class AstrBotCoreLifecycle:
         os.environ["http_proxy"] = self.astrbot_config["http_proxy"]
         os.environ["no_proxy"] = "localhost"
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """
         初始化 AstrBot 核心生命周期管理类, 负责初始化各个组件, 包括 ProviderManager、PlatformManager、KnowledgeDBManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
         """

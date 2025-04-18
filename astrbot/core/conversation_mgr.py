@@ -5,6 +5,7 @@ AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json �
 在一个会话中可以建立多个对话, 并且支持对话的切换和删除
 """
 
+from typing import Any
 import uuid
 import json
 import asyncio
@@ -157,7 +158,7 @@ class ConversationManager:
 
     async def get_human_readable_context(
         self, unified_msg_origin, conversation_id, page=1, page_size=10
-    ):
+    ) -> tuple[list[Any], int]:
         """获取人类可读的上下文
 
         Args:
@@ -169,8 +170,8 @@ class ConversationManager:
         conversation: Conversation = await self.get_conversation(unified_msg_origin, conversation_id)
         history = json.loads(conversation.history)
 
-        contexts = []
-        temp_contexts = []
+        contexts: list[Any] = []
+        temp_contexts: list[Any] = []
         for record in history:
             if record["role"] == "user":
                 temp_contexts.append(f"User: {record['content']}")
@@ -178,21 +179,21 @@ class ConversationManager:
                 if "content" in record and record["content"]:
                     temp_contexts.append(f"Assistant: {record['content']}")
                 elif "tool_calls" in record:
-                    tool_calls_str = json.dumps(
+                    tool_calls_str: str = json.dumps(
                         record["tool_calls"], ensure_ascii=False
                     )
                     temp_contexts.append(f"Assistant: [函数调用] {tool_calls_str}")
                 else:
                     temp_contexts.append("Assistant: [未知的内容]")
                 contexts.insert(0, temp_contexts)
-                temp_contexts = []
+                temp_contexts: list[Any] = []
 
         # 展平 contexts 列表
-        contexts = [item for sublist in contexts for item in sublist]
+        contexts: list[Any] = [item for sublist in contexts for item in sublist]
 
         # 计算分页
-        paged_contexts = contexts[(page - 1) * page_size : page * page_size]
-        total_pages = len(contexts) // page_size
+        paged_contexts: list[Any] = contexts[(page - 1) * page_size : page * page_size]
+        total_pages: int = len(contexts) // page_size
         if len(contexts) % page_size != 0:
             total_pages += 1
 

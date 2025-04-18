@@ -148,7 +148,7 @@ class SessionWaiter:
         self.session_controller.stop(error)
 
     @classmethod
-    async def trigger(cls, session_id: str, event: AstrMessageEvent):
+    async def trigger(cls, session_id: str, event: AstrMessageEvent) -> None:
         """外部输入触发会话处理"""
         session = USER_SESSIONS.get(session_id, None)
         if not session or session.session_controller.future.done():
@@ -179,7 +179,7 @@ def session_waiter(timeout: int = 30, record_history_chains: bool = False):
         @functools.wraps(func)
         async def wrapper(
             event: AstrMessageEvent,
-            session_filter: SessionFilter = None,
+            session_filter: SessionFilter | None = None,
             *args,
             **kwargs,
         ):
