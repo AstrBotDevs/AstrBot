@@ -14,6 +14,7 @@ dependencies = [
     "beautifulsoup4>=4.13.3",
     "certifi>=2025.1.31",
     "chardet~=5.1.0",
+    "click>=8.1.8",
     "colorlog>=6.9.0",
     "cryptography>=44.0.2",
     "dashscope>=1.22.2",
@@ -44,6 +45,10 @@ dependencies = [
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
+
+
+[project.scripts]
+astrbot = "astrbot.cli.__main__:cli"
 
 [tool.ruff]
 exclude = [

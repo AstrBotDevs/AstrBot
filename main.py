@@ -4,7 +4,7 @@ import sys
 import mimetypes
 from astrbot.core.initial_loader import InitialLoader
 from astrbot.core import db_helper
-from astrbot.core import logger, LogManager, LogBroker
+from astrbot.core import logger, LogManager, LogBroker # core包忘记显式导出后面这两个类了
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
@@ -81,3 +81,4 @@ if __name__ == "__main__":
 
     core_lifecycle = InitialLoader(db, log_broker)
     asyncio.run(core_lifecycle.start())
+

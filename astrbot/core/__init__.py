@@ -31,3 +31,19 @@ web_chat_queue = asyncio.Queue(maxsize=32)
 web_chat_back_queue = asyncio.Queue(maxsize=32)
 WEBUI_SK = "Advanced_System_for_Text_Response_and_Bot_Operations_Tool"
 DEMO_MODE = os.getenv("DEMO_MODE", False)
+
+__all__ = [
+    "astrbot_config",
+    "db_helper",
+    "sp",
+    "pip_installer",
+    "web_chat_queue",
+    "web_chat_back_queue",
+    "t2i_base_url",
+    "html_renderer",
+    "logger",
+    "DEMO_MODE",
+    "WEBUI_SK",
+    "LogBroker",
+    "LogManager",
+]
