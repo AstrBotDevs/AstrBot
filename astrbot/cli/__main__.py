@@ -11,7 +11,6 @@ except ImportError:
 
 
 # utils
-
 def _get_astrbot_root(path: str | None) -> Path:
     """获取astrbot根目录"""
     match path:
