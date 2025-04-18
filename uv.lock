@@ -245,6 +245,11 @@ dependencies = [
     { name = "wechatpy" },
 ]
 
+[package.optional-dependencies]
+dev = [
+    { name = "pyupgrade" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiocqhttp", specifier = ">=1.4.4" },
@@ -277,6 +282,7 @@ requires-dist = [
     { name = "pydantic", specifier = "~=2.10.3" },
     { name = "pyjwt", specifier = ">=2.10.1" },
     { name = "python-telegram-bot", specifier = ">=22.0" },
+    { name = "pyupgrade", marker = "extra == 'dev'", specifier = ">=3.19.1" },
     { name = "qq-botpy", specifier = ">=1.2.1" },
     { name = "quart", specifier = ">=0.20.0" },
     { name = "readability-lxml", specifier = ">=0.8.1" },
@@ -284,6 +290,7 @@ requires-dist = [
     { name = "telegramify-markdown", specifier = ">=0.5.0" },
     { name = "wechatpy", specifier = ">=1.8.18" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "async-timeout"
@@ -1730,6 +1737,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pyupgrade"
+version = "3.19.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tokenize-rt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/35/3a/efa8e75cf84d53f1b3f0113387ab120ef460396a4068e41b6cf18a3d216d/pyupgrade-3.19.1.tar.gz", hash = "sha256:d10e8c5f54b8327211828769e98d95d95e4715de632a3414f1eef3f51357b9e2", size = 45116 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/43/c6c1ff945c7900613f6e6ef2a8688639a247d62eb0ffa9935c599f69c08e/pyupgrade-3.19.1-py2.py3-none-any.whl", hash = "sha256:8c5b0bfacae5ff30fa136a53eb7f22c34ba007450d4099e9da8089dabb9e67c9", size = 62412 },
+]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1976,6 +1995,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c5/a7/2350b24d8939d4f56f31f09dbcf0ef13c4c3cab9c4d91b01d933447d3170/telegramify_markdown-0.5.1.tar.gz", hash = "sha256:a2c4ca337219607dce13883bdc30bf4faf07bf37e3f748594e8b10e1b5708fae", size = 35700 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/80/14/859fb616d12ebc472c5cb6ff65c0021e8f81c3e614d3ada2b3ce60d3f655/telegramify_markdown-0.5.1-py3-none-any.whl", hash = "sha256:a757b9a0f0d681ba7e29638deabc8decc634626bee359d95effaa505a86b756d", size = 32062 },
+]
+
+[[package]]
+name = "tokenize-rt"
+version = "6.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6b/0a/5854d8ced8c1e00193d1353d13db82d7f813f99bd5dcb776ce3e2a4c0d19/tokenize_rt-6.1.0.tar.gz", hash = "sha256:e8ee836616c0877ab7c7b54776d2fefcc3bde714449a206762425ae114b53c86", size = 5506 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/87/ba/576aac29b10dfa49a6ce650001d1bb31f81e734660555eaf144bfe5b8995/tokenize_rt-6.1.0-py2.py3-none-any.whl", hash = "sha256:d706141cdec4aa5f358945abe36b911b8cbdc844545da99e811250c0cee9b6fc", size = 6015 },
 ]
 
 [[package]]

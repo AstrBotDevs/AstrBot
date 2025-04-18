@@ -115,7 +115,7 @@ class AstrBotCoreLifecycle:
         self.start_time = int(time.time())
 
         # 初始化当前任务列表
-        self.curr_tasks: List[asyncio.Task] = []
+        self.curr_tasks: list[asyncio.Task] = []
 
         # 根据配置实例化各个平台适配器
         await self.platform_manager.initialize()
@@ -220,7 +220,7 @@ class AstrBotCoreLifecycle:
             target=self.astrbot_updator._reboot, name="restart", daemon=True
         ).start()
 
-    def load_platform(self) -> List[asyncio.Task]:
+    def load_platform(self) -> list[asyncio.Task]:
         """加载平台实例并返回所有平台实例的异步任务列表"""
         tasks = []
         platform_insts = self.platform_manager.get_insts()

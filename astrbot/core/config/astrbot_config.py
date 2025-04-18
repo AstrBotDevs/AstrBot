@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import os
 import json
 import logging
@@ -45,7 +44,7 @@ class AstrBotConfig(dict):
             with open(config_path, "w", encoding="utf-8-sig") as f:
                 json.dump(default_config, f, indent=4, ensure_ascii=False)
 
-        with open(config_path, "r", encoding="utf-8-sig") as f:
+        with open(config_path, encoding="utf-8-sig") as f:
             conf_str = f.read()
             if conf_str.startswith("/ufeff"):  # remove BOM
                 conf_str = conf_str.encode("utf8")[3:].decode("utf8")

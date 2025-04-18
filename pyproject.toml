@@ -51,6 +51,11 @@ build-backend = "hatchling.build"
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
 
+[project.optional-dependencies]
+dev = [
+    "pyupgrade>=3.19.1",
+]
+
 [tool.ruff]
 exclude = [
   "astrbot/core/utils/t2i/local_strategy.py",
