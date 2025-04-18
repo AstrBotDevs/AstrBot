@@ -38,7 +38,7 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         )
 
         self.chosen_api_key = None
-        self.api_keys: List = provider_config.get("key", [])
+        self.api_keys: list = provider_config.get("key", [])
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
         self.timeout = provider_config.get("timeout", 120)
@@ -102,7 +102,7 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = [],
+        image_urls: list[str] = [],
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
@@ -189,7 +189,7 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         llm_response.is_chunk = False
         yield llm_response
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None):
+    async def assemble_context(self, text: str, image_urls: list[str] = None):
         """组装上下文，支持文本和图片"""
         if not image_urls:
             return {"role": "user", "content": text}

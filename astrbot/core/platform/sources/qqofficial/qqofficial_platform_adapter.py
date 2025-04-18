@@ -33,7 +33,7 @@ for handler in logging.root.handlers[:]:
 
 # QQ 机器人官方框架
 class botClient(Client):
-    def set_platform(self, platform: "QQOfficialPlatformAdapter"):
+    def set_platform(self, platform: QQOfficialPlatformAdapter):
         self.platform = platform
 
     # 收到群消息
@@ -133,7 +133,7 @@ class QQOfficialPlatformAdapter(Platform):
 
     @staticmethod
     def _parse_from_qqofficial(
-        message: Union[botpy.message.Message, botpy.message.GroupMessage],
+        message: botpy.message.Message | botpy.message.GroupMessage,
         message_type: MessageType,
     ):
         abm = AstrBotMessage()
@@ -142,7 +142,7 @@ class QQOfficialPlatformAdapter(Platform):
         abm.raw_message = message
         abm.message_id = message.id
         abm.tag = "qq_official"
-        msg: List[BaseMessageComponent] = []
+        msg: list[BaseMessageComponent] = []
 
         if isinstance(message, botpy.message.GroupMessage) or isinstance(
             message, botpy.message.C2CMessage

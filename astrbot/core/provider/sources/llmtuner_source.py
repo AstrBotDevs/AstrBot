@@ -48,7 +48,7 @@ class LLMTunerModelLoader(Provider):
             + os.path.basename(self.adapter_model_path)
         )
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None):
+    async def assemble_context(self, text: str, image_urls: list[str] = None):
         """
         组装上下文。
         """
@@ -58,9 +58,9 @@ class LLMTunerModelLoader(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = None,
+        image_urls: list[str] = None,
         func_tool: FuncCall = None,
-        contexts: List = [],
+        contexts: list = [],
         system_prompt: str = None,
         **kwargs,
     ) -> LLMResponse:

@@ -3,12 +3,14 @@ import abc
 import inspect
 import traceback
 from astrbot.api import logger
-from typing import List, AsyncGenerator, Union, Awaitable
+from typing import List, Union
+
+from collections.abc import AsyncGenerator, Awaitable
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from .context import PipelineContext
 from astrbot.core.message.message_event_result import MessageEventResult, CommandResult
 
-registered_stages: List[Stage] = []  # 维护了所有已注册的 Stage 实现类
+registered_stages: list[Stage] = []  # 维护了所有已注册的 Stage 实现类
 
 
 def register_stage(cls):
@@ -32,7 +34,7 @@ class Stage(abc.ABC):
     @abc.abstractmethod
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None]:
         """处理事件
 
         Args:
@@ -49,7 +51,7 @@ class Stage(abc.ABC):
         handler: Awaitable,
         *args,
         **kwargs,
-    ) -> AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[None]:
         """执行事件处理函数并处理其返回结果
 
         该方法负责调用处理函数并处理不同类型的返回值。它支持两种类型的处理函数:

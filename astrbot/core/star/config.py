@@ -7,7 +7,7 @@ import os
 import json
 
 
-def load_config(namespace: str) -> Union[dict, bool]:
+def load_config(namespace: str) -> dict | bool:
     """
     从配置文件中加载配置。
     namespace: str, 配置的唯一识别符，也就是配置文件的名字。
@@ -16,7 +16,7 @@ def load_config(namespace: str) -> Union[dict, bool]:
     path = f"data/config/{namespace}.json"
     if not os.path.exists(path):
         return False
-    with open(path, "r", encoding="utf-8-sig") as f:
+    with open(path, encoding="utf-8-sig") as f:
         ret = {}
         data = json.load(f)
         for k in data:
@@ -47,7 +47,7 @@ def put_config(namespace: str, name: str, key: str, value, description: str):
     if not os.path.exists(path):
         with open(path, "w", encoding="utf-8-sig") as f:
             f.write("{}")
-    with open(path, "r", encoding="utf-8-sig") as f:
+    with open(path, encoding="utf-8-sig") as f:
         d = json.load(f)
     assert isinstance(d, dict)
     if key not in d:
@@ -74,7 +74,7 @@ def update_config(namespace: str, key: str, value):
     path = f"data/config/{namespace}.json"
     if not os.path.exists(path):
         raise FileNotFoundError(f"配置文件 {namespace}.json 不存在。")
-    with open(path, "r", encoding="utf-8-sig") as f:
+    with open(path, encoding="utf-8-sig") as f:
         d = json.load(f)
     assert isinstance(d, dict)
     if key not in d:

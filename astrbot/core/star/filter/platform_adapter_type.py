@@ -28,7 +28,7 @@ ADAPTER_NAME_2_TYPE = {
 
 
 class PlatformAdapterTypeFilter(HandlerFilter):
-    def __init__(self, platform_adapter_type_or_str: Union[PlatformAdapterType, str]):
+    def __init__(self, platform_adapter_type_or_str: PlatformAdapterType | str):
         self.type_or_str = platform_adapter_type_or_str
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:

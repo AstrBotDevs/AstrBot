@@ -407,4 +407,3 @@ class AstrMessageEvent(abc.ABC):
         - aiocqhttp(OneBotv11)
         """
         ...
-          

@@ -11,7 +11,7 @@ from .sources.webchat.webchat_adapter import WebChatAdapter
 
 class PlatformManager:
     def __init__(self, config: AstrBotConfig, event_queue: Queue):
-        self.platform_insts: List[Platform] = []
+        self.platform_insts: list[Platform] = []
         """加载的 Platform 的实例"""
 
         self._inst_map = {}

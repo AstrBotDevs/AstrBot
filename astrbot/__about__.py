@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from .core.config.default import VERSION
 __version__ = VERSION # 建议版本放这里，方便统一管理 具体怎么怎么规范，决定权归你们
 

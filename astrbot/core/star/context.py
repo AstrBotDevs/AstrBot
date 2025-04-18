@@ -15,7 +15,7 @@ from .star import star_registry, StarMetadata, star_map
 from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
-from typing import Awaitable
+from collections.abc import Awaitable
 from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.star.filter.platform_adapter_type import (
@@ -43,7 +43,7 @@ class Context:
     platform_manager: PlatformManager = None
 
     # back compatibility
-    _register_tasks: List[Awaitable] = []
+    _register_tasks: list[Awaitable] = []
     _star_manager = None
 
     def __init__(
@@ -70,7 +70,7 @@ class Context:
             if star.name == star_name:
                 return star
 
-    def get_all_stars(self) -> List[StarMetadata]:
+    def get_all_stars(self) -> list[StarMetadata]:
         """获取当前载入的所有插件 Metadata 的列表"""
         return star_registry
 
@@ -132,15 +132,15 @@ class Context:
                 return provider
         return None
 
-    def get_all_providers(self) -> List[Provider]:
+    def get_all_providers(self) -> list[Provider]:
         """获取所有用于文本生成任务的 LLM Provider(Chat_Completion 类型)。"""
         return self.provider_manager.provider_insts
 
-    def get_all_tts_providers(self) -> List[TTSProvider]:
+    def get_all_tts_providers(self) -> list[TTSProvider]:
         """获取所有用于 TTS 任务的 Provider。"""
         return self.provider_manager.tts_provider_insts
 
-    def get_all_stt_providers(self) -> List[STTProvider]:
+    def get_all_stt_providers(self) -> list[STTProvider]:
         """获取所有用于 STT 任务的 Provider。"""
         return self.provider_manager.stt_provider_insts
 
@@ -178,7 +178,7 @@ class Context:
         """
         return self._event_queue
 
-    def get_platform(self, platform_type: Union[PlatformAdapterType, str]) -> Platform:
+    def get_platform(self, platform_type: PlatformAdapterType | str) -> Platform:
         """
         获取指定类型的平台适配器。
         """
@@ -195,7 +195,7 @@ class Context:
                     return platform
 
     async def send_message(
-        self, session: Union[str, MessageSesion], message_chain: MessageChain
+        self, session: str | MessageSesion, message_chain: MessageChain
     ) -> bool:
         """
         根据 session(unified_msg_origin) 主动发送消息。

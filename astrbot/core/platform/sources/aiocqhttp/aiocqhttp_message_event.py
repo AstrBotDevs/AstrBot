@@ -108,7 +108,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             group_id=group_id,
         )
 
-        members: typing.List[typing.Dict] = await self.bot.call_action(
+        members: list[dict] = await self.bot.call_action(
             "get_group_member_list",
             group_id=group_id,
         )

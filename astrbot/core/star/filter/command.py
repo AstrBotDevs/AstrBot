@@ -17,14 +17,14 @@ class CommandFilter(HandlerFilter):
         command_name: str,
         alias: set = None,
         handler_md: StarHandlerMetadata = None,
-        parent_command_names: List[str] = [""],
+        parent_command_names: list[str] = [""],
     ):
         self.command_name = command_name
         self.alias = alias if alias else set()
         self.parent_command_names = parent_command_names
         if handler_md:
             self.init_handler_md(handler_md)
-        self.custom_filter_list: List[CustomFilter] = []
+        self.custom_filter_list: list[CustomFilter] = []
 
     def print_types(self):
         result = ""
@@ -64,14 +64,14 @@ class CommandFilter(HandlerFilter):
         return True
 
     def validate_and_convert_params(
-        self, params: List[Any], param_type: Dict[str, Type]
-    ) -> Dict[str, Any]:
+        self, params: list[Any], param_type: dict[str, type]
+    ) -> dict[str, Any]:
         """将参数列表 params 根据 param_type 转换为参数字典。"""
         result = {}
         for i, (param_name, param_type_or_default_val) in enumerate(param_type.items()):
             if i >= len(params):
                 if (
-                    isinstance(param_type_or_default_val, Type)
+                    isinstance(param_type_or_default_val, type)
                     or param_type_or_default_val is inspect.Parameter.empty
                 ):
                     # 是类型

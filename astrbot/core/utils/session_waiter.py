@@ -8,7 +8,9 @@ import time
 import functools
 import copy
 import astrbot.core.message.components as Comp
-from typing import Any, Callable
+from typing import Any
+
+from collections.abc import Callable
 from collections.abc import Awaitable
 from astrbot.core.platform import AstrMessageEvent
 

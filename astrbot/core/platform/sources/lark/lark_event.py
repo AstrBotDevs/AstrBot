@@ -19,7 +19,7 @@ class LarkMessageEvent(AstrMessageEvent):
         self.bot = bot
 
     @staticmethod
-    async def _convert_to_lark(message: MessageChain, lark_client: lark.Client) -> List:
+    async def _convert_to_lark(message: MessageChain, lark_client: lark.Client) -> list:
         ret = []
         _stage = []
         for comp in message.chain:

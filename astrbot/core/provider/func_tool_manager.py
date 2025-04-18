@@ -236,7 +236,7 @@ class FuncCall:
             return
 
         mcp_server_json_obj: dict[str, dict] = json.load(
-            open(mcp_json_file, "r", encoding="utf-8")
+            open(mcp_json_file, encoding="utf-8")
         )["mcpServers"]
 
         for name in mcp_server_json_obj.keys():
