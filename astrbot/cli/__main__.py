@@ -179,9 +179,9 @@ def version() -> None:
     click.echo(f"AstrBot version: {__version__}")
 
 
-@cli.command(name="help")
+@cli.command()
 @click.argument("command_name", required=False, type=str)
-def help_cmd(command_name: str | None) -> None:
+def help(command_name: str | None) -> None:
     """Show help information for commands
     
     If COMMAND_NAME is provided, show detailed help for that command.
