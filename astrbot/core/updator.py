@@ -60,10 +60,10 @@ class AstrBotUpdator(RepoZipUpdator):
         """检查更新"""
         return await super().check_update(self.ASTRBOT_RELEASE_API, VERSION)
 
-    async def get_releases(self) -> list:
+    async def get_releases(self) -> list[dict]:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
-    async def update(self, reboot=False, latest=True, version=None, proxy=""):
+    async def update(self, version: str = "" , reboot=False, latest=True, proxy=""):
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
 

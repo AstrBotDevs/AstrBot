@@ -1,7 +1,8 @@
 import enum
 import base64
 import json
-from typing import Any
+from typing import Any, overload
+from typing_extensions import override
 # from tkinter import N
 from astrbot.core.utils.io import download_image_by_url
 from astrbot import logger
@@ -95,7 +96,7 @@ class ToolCallsResult:
 class ProviderRequest:
     prompt: str
     """提示词"""
-    session_id: str = ""
+    session_id: str | None = ""
     """会话 ID"""
     image_urls: list[str] | None = None
     """图片 URL 列表"""
@@ -113,9 +114,11 @@ class ProviderRequest:
     tool_calls_result: ToolCallsResult | None = None
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
 
+    @override
     def __repr__(self):
         return f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, image_urls={self.image_urls}, func_tool={self.func_tool}, contexts={self._print_friendly_context()}, system_prompt={self.system_prompt.strip()}, tool_calls_result={self.tool_calls_result})"
 
+    @override
     def __str__(self):
         return self.__repr__()
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+from mcp import ClientSession, stdio_client
 from mcp.types import ListToolsResult
 import textwrap
 import os
@@ -85,10 +86,10 @@ class FuncTool:
 class MCPClient:
     def __init__(self):
         # Initialize session and client objects
-        self.session: mcp.ClientSession | None = None
+        self.session: mcp.ClientSession | None 
         self.exit_stack = AsyncExitStack()
 
-        self.name = None
+        self.name: str | None = None
         self.active: bool = True
         self.tools: list[mcp.Tool] = []
         self.server_errlogs: list[str] = []
@@ -113,7 +114,7 @@ class MCPClient:
             self.server_errlogs.append(msg)
 
         stdio_transport = await self.exit_stack.enter_async_context(
-            mcp.stdio_client(
+            stdio_client(
                 server_params,
                 errlog=LogPipe(
                     level=logging.ERROR,
@@ -125,7 +126,7 @@ class MCPClient:
         )
         self.stdio, self.write = stdio_transport
         self.session = await self.exit_stack.enter_async_context(
-            mcp.ClientSession(self.stdio, self.write)
+            ClientSession(self.stdio, self.write)
         )
         await self.session.initialize()
 

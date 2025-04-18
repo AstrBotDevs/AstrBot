@@ -1,9 +1,10 @@
 import abc
 import asyncio
 import hashlib
+from typing_extensions import override
 import uuid
 from dataclasses import dataclass
-from typing import List, Union, Optional, AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
@@ -30,11 +31,12 @@ class MessageSesion:
     message_type: MessageType
     session_id: str
 
-    def __str__(self):
+    @override
+    def __str__(self) -> str:
         return f"{self.platform_name}:{self.message_type.value}:{self.session_id}"
 
     @staticmethod
-    def from_str(session_str: str):
+    def from_str(session_str: str) -> "MessageSesion":
         platform_name, message_type, session_id = session_str.split(":")
         return MessageSesion(platform_name, MessageType(message_type), session_id)
 
@@ -127,7 +129,7 @@ class AstrMessageEvent(abc.ABC):
         """
         return self._outline_chain(self.message_obj.message)
 
-    def get_messages(self) -> List[BaseMessageComponent]:
+    def get_messages(self) -> list[BaseMessageComponent]:
         """
         获取消息链。
         """
@@ -222,7 +224,7 @@ class AstrMessageEvent(abc.ABC):
     async def _post_send(self):
         """调度器会在执行 send() 后调用该方法"""
 
-    def set_result(self, result: Union[MessageEventResult, str]):
+    def set_result(self, result: MessageEventResult | str ):
         """设置消息事件的结果。
 
         Note:
@@ -323,7 +325,7 @@ class AstrMessageEvent(abc.ABC):
             return MessageEventResult().url_image(url_or_path)
         return MessageEventResult().file_image(url_or_path)
 
-    def chain_result(self, chain: List[BaseMessageComponent]) -> MessageEventResult:
+    def chain_result(self, chain: list[BaseMessageComponent]) -> MessageEventResult:
         """
         创建一个空的消息事件结果，包含指定的消息链。
         """
@@ -337,11 +339,11 @@ class AstrMessageEvent(abc.ABC):
         self,
         prompt: str,
         func_tool_manager=None,
-        session_id: str = None,
-        image_urls: List[str] = [],
-        contexts: List = [],
+        session_id: str | None = None,
+        image_urls: list[str] = [],
+        contexts: list = [],
         system_prompt: str = "",
-        conversation: Conversation = None,
+        conversation: Conversation | None= None,
     ) -> ProviderRequest:
         """
         创建一个 LLM 请求。
@@ -396,7 +398,7 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def get_group(self, group_id: str = None, **kwargs) -> Optional[Group]:
+    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 
         适配情况:
@@ -405,3 +407,4 @@ class AstrMessageEvent(abc.ABC):
         - aiocqhttp(OneBotv11)
         """
         ...
+          

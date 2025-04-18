@@ -23,12 +23,10 @@ SOFTWARE.
 """
 
 import base64
-from calendar import c
 import json
 import os
-from tkinter import N
 import uuid
-import typing as T
+from typing import Literal
 from enum import Enum
 from pydantic import BaseModel
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
@@ -70,7 +68,7 @@ class BaseMessageComponent(BaseModel):
     type: ComponentType
 
     def toString(self):
-        output = f"[CQ:{self.type.lower()}"
+        output = f"[CQ:{self.type.value.lower()}"
         for k, v in self.__dict__.items():
             if k == "type" or v is None:
                 continue
@@ -97,7 +95,7 @@ class BaseMessageComponent(BaseModel):
             if k == "_type":
                 k = "type"
             data[k] = v
-        return {"type": self.type.lower(), "data": data}
+        return {"type": self.type.value.lower(), "data": data}
 
 
 class Plain(BaseMessageComponent):
@@ -465,11 +463,11 @@ class Node(BaseMessageComponent):
     id: int | None = 0  # 忽略
     name: str | None = ""  # qq昵称
     uin: int | None = 0  # qq号
-    content: T.Optional[T.Union[str, list, dict]] = ""  # 子消息段列表
-    seq: T.Optional[T.Union[str, list]] = ""  # 忽略
+    content: str | list | dict | None = ""  # 子消息段列表
+    seq: str | list | None = ""  # 忽略
     time: int | None = 0
 
-    def __init__(self, content: T.Union[str, list, dict, "Node", T.List["Node"]], **_):
+    def __init__(self, content: str | list | dict | "Node" | list["Node"], **_):
         if isinstance(content, list):
             _content = None
             if all(isinstance(item, Node) for item in content):
