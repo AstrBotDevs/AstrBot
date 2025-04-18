@@ -1,8 +1,6 @@
 import threading
 import os
 from logging import Logger
-from typing import Union , Optional
-
 class LogPipe(threading.Thread):
     def __init__(
         self,
