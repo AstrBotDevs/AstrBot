@@ -3,7 +3,8 @@ import base64
 import json
 import logging
 import random
-from typing import Dict, List, Optional, AsyncGenerator
+from typing import Dict, List, Optional
+from collections.abc import AsyncGenerator
 
 from google import genai
 from google.genai import types
@@ -154,7 +155,9 @@ class ProviderGoogleGenAI(Provider):
             if tools:
                 logger.warning("已启用搜索工具，函数工具将被忽略")
         elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
-            tool_list = [types.Tool(function_declarations=func_desc["function_declarations"])]
+            tool_list = [
+                types.Tool(function_declarations=func_desc["function_declarations"])
+            ]
 
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
@@ -167,8 +170,7 @@ class ProviderGoogleGenAI(Provider):
             ),
         )
 
-    @staticmethod
-    def _prepare_conversation(payloads: Dict) -> List[types.Content]:
+    def _prepare_conversation(self, payloads: Dict) -> List[types.Content]:
         """准备 Gemini SDK 的 Content 列表"""
 
         def create_text_part(text: str) -> types.UserContent:
@@ -184,6 +186,12 @@ class ProviderGoogleGenAI(Provider):
             return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
         gemini_contents: List[types.Content] = []
+        native_tool_enabled = any(
+            [
+                self.provider_config.get("gm_native_coderunner", False),
+                self.provider_config.get("gm_native_search", False),
+            ]
+        )
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -204,7 +212,7 @@ class ProviderGoogleGenAI(Provider):
                     gemini_contents.append(
                         types.ModelContent(parts=[types.Part.from_text(text=content)])
                     )
-                elif "tool_calls" in message:
+                elif "tool_calls" in message and not native_tool_enabled:
                     gemini_contents.extend(
                         [
                             types.ModelContent(
@@ -220,11 +228,15 @@ class ProviderGoogleGenAI(Provider):
                     )
                 else:
                     logger.warning("assistant 角色的消息内容为空，已添加空格占位")
+                    if native_tool_enabled:
+                        logger.warning(
+                            "检测到启用Gemini原生工具，且上下文中存在函数调用，建议使用 /reset 重置上下文"
+                        )
                     gemini_contents.append(
                         types.ModelContent(parts=[types.Part.from_text(text=" ")])
                     )
 
-            elif role == "tool":
+            elif role == "tool" and not native_tool_enabled:
                 gemini_contents.append(
                     types.UserContent(
                         parts=[
