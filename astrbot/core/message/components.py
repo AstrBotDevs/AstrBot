@@ -26,7 +26,6 @@ import base64
 import json
 import os
 import uuid
-from typing import Literal
 from enum import Enum
 from pydantic import BaseModel
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
@@ -439,13 +438,15 @@ class RedBag(BaseMessageComponent):
 
 
 class Poke(BaseMessageComponent):
-    type: str = ""
+    type: ComponentType = ComponentType.Poke
     id: int | None = 0
     qq: int | None = 0
 
-    def __init__(self, type: str, **_):
-        type = f"Poke:{type}"
-        super().__init__(type=type, **_)
+    def __init__(self, type: str = "", **_):
+        if type:
+            # 向后兼容，如果传入了字符串类型，转换为注释信息
+            _.update({"poke_type": type})
+        super().__init__(**_)
 
 
 class Forward(BaseMessageComponent):
@@ -508,7 +509,7 @@ class Xml(BaseMessageComponent):
 
 class Json(BaseMessageComponent):
     type: ComponentType = ComponentType.Json
-    data: T.Union[str, dict]
+    data: str| dict
     resid: int | None = 0
 
     def __init__(self, data, **_):
