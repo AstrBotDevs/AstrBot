@@ -1,6 +1,15 @@
-This is AstrBot github repo
-please read this before you start coding
+# AstrBot 项目指南
 
-// Current directory is the root of the repo
-// python version: 3.10.17
+> 在开始编码前请阅读此文档
 
+这是AstrBot GitHub仓库的项目指南文档。
+
+## 环境信息
+
+- [Python版本]: 3.10.17
+- 包管理: uv项目
+- 容器化: Docker项目
+
+## 注意事项
+
+- 请不要编写您不确定的代码
