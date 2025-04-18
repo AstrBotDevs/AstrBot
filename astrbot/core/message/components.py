@@ -22,9 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+
 import base64
 import json
 import os
+from typing_extensions import Self
 import uuid
 from enum import Enum
 from pydantic import BaseModel
@@ -468,7 +470,8 @@ class Node(BaseMessageComponent):
     seq: str | list | None = ""  # 忽略
     time: int | None = 0
 
-    def __init__(self, content: str | list | dict | "Node" | list["Node"], **_):
+
+    def __init__(self, content: str | list | dict | list["Node"] | Self , **_ ):
         if isinstance(content, list):
             _content = None
             if all(isinstance(item, Node) for item in content):
