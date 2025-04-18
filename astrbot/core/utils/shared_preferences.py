@@ -3,7 +3,7 @@ import os
 
 
 class SharedPreferences:
-    def __init__(self, path="data/shared_preferences.json"):
+    def __init__(self, path: str = "data/shared_preferences.json"):
         self.path = path
         self._data = self._load_preferences()
 

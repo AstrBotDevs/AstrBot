@@ -1,7 +1,8 @@
 import json
+from typing import Any
 from astrbot.core import logger
 from aiohttp import ClientSession
-from typing import Dict, List, Any, AsyncGenerator
+from collections.abc import AsyncGenerator
 
 
 class DifyAPIClient:
@@ -15,14 +16,14 @@ class DifyAPIClient:
 
     async def chat_messages(
         self,
-        inputs: Dict,
+        inputs: dict,
         query: str,
         user: str,
         response_mode: str = "streaming",
         conversation_id: str = "",
-        files: List[Dict[str, Any]] = [],
+        files: list[dict[str, Any]] = [],
         timeout: float = 60,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         url = f"{self.api_base}/chat-messages"
         payload = locals()
         payload.pop("self")
@@ -64,7 +65,7 @@ class DifyAPIClient:
         inputs: Dict,
         user: str,
         response_mode: str = "streaming",
-        files: List[Dict[str, Any]] = [],
+        files: list[Dict[str, Any]] = [],
         timeout: float = 60,
     ):
         url = f"{self.api_base}/workflows/run"
@@ -107,8 +108,8 @@ class DifyAPIClient:
         self,
         file_path: str,
         user: str,
-    ) -> Dict[str, Any]:
-        url = f"{self.api_base}/files/upload"
+    ) -> dict[str, Any]:
+        url: str = f"{self.api_base}/files/upload"
         payload = {
             "user": user,
             "file": open(file_path, "rb"),

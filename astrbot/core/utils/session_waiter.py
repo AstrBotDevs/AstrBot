@@ -8,11 +8,12 @@ import time
 import functools
 import copy
 import astrbot.core.message.components as Comp
-from typing import Dict, Any, Callable, Awaitable, List
+from typing import Any, Callable
+from collections.abc import Awaitable
 from astrbot.core.platform import AstrMessageEvent
 
-USER_SESSIONS: Dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
-FILTERS: List["SessionFilter"] = []  # 存储 SessionFilter 实例
+USER_SESSIONS: dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
+FILTERS: list["SessionFilter"] = []  # 存储 SessionFilter 实例
 
 
 class SessionController:
@@ -22,16 +23,16 @@ class SessionController:
 
     def __init__(self):
         self.future = asyncio.Future()
-        self.current_event: asyncio.Event = None
+        self.current_event: asyncio.Event | None = None
         """当前正在等待的所用的异步事件"""
-        self.ts: float = None
+        self.ts: float | None = None
         """上次保持(keep)开始时的时间"""
-        self.timeout: float | int = None
+        self.timeout: float | int | None = None
         """上次保持(keep)开始时的超时时间"""
 
-        self.history_chains: List[List[Comp.BaseMessageComponent]] = []
+        self.history_chains: list[list[Comp.BaseMessageComponent]] = []
 
-    def stop(self, error: Exception = None):
+    def stop(self, error: Exception | None = None) -> None:
         """立即结束这个会话"""
         if not self.future.done():
             if error:
@@ -39,7 +40,7 @@ class SessionController:
             else:
                 self.future.set_result(None)
 
-    def keep(self, timeout: float | int = 0, reset_timeout=False):
+    def keep(self, timeout: float | int = 0, reset_timeout: bool = False) -> None:
         """保持这个会话
 
         Args:
@@ -81,7 +82,7 @@ class SessionController:
             pass  # 避免报错
         # finally:
 
-    def get_history_chains(self) -> List[List[Comp.BaseMessageComponent]]:
+    def get_history_chains(self) -> list[list[Comp.BaseMessageComponent]]:
         """获取历史消息链"""
         return self.history_chains
 
