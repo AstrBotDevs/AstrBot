@@ -5,9 +5,10 @@
 import traceback
 import asyncio
 import json
-from typing import Union, AsyncGenerator
+# from typing import Union # Union 被弃用 需要改为 xxx | yyy , AsyncGenerator 被弃用 需要改为 collections.abc.AsyncGenerator
+from collections.abc import AsyncGenerator
 from ...context import PipelineContext
-from ..stage import Stage
+from astrbot.core.pipeline.stage import Stage # pyright 警告修复
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
@@ -57,8 +58,8 @@ class LLMRequestSubStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent, _nested: bool = False
-    ) -> Union[None, AsyncGenerator[None, None]]:
-        req: ProviderRequest = None
+    ) -> None | AsyncGenerator[None, None]:
+        req: ProviderRequest | None = None
 
         provider = self.ctx.plugin_manager.context.get_using_provider()
         if provider is None:
@@ -270,14 +271,14 @@ class LLMRequestSubStage(Stage):
         event: AstrMessageEvent,
         req: ProviderRequest,
         llm_response: LLMResponse,
-    ) -> AsyncGenerator[Union[None, ProviderRequest], None]:
+    ) -> AsyncGenerator[None | ProviderRequest, None]:
         """处理非流式 LLM 响应。
 
         Returns:
-            AsyncGenerator[Union[None, ProviderRequest], None]: 如果返回 ProviderRequest，表示需要再次调用 LLM
+            AsyncGenerator[None | ProviderRequest, None]: 如果返回 ProviderRequest，表示需要再次调用 LLM
 
         Yields:
-            Iterator[Union[None, ProviderRequest]]: 将 event 交付给下一个 stage 或者返回 ProviderRequest 表示需要再次调用 LLM
+            Iterator[None | ProviderRequest]: 将 event 交付给下一个 stage 或者返回 ProviderRequest 表示需要再次调用 LLM
         """
         if llm_response.role == "assistant":
             # text completion
@@ -309,16 +310,16 @@ class LLMRequestSubStage(Stage):
         event: AstrMessageEvent,
         req: ProviderRequest,
         llm_response: LLMResponse,
-    ) -> AsyncGenerator[Union[None, ProviderRequest], None]:
+    ) -> AsyncGenerator[None | ProviderRequest, None]:
         """处理流式 LLM 响应。
 
         专门用于处理流式输出完成后的响应，与非流式响应处理分离。
 
         Returns:
-            AsyncGenerator[Union[None, ProviderRequest], None]: 如果返回 ProviderRequest，表示需要再次调用 LLM
+            AsyncGenerator[None | ProviderRequest, None]: 如果返回 ProviderRequest，表示需要再次调用 LLM
 
         Yields:
-            Iterator[Union[None, ProviderRequest]]: 将 event 交付给下一个 stage 或者返回 ProviderRequest 表示需要再次调用 LLM
+            Iterator[None | ProviderRequest]: 将 event 交付给下一个 stage 或者返回 ProviderRequest 表示需要再次调用 LLM
         """
         if llm_response.role == "assistant":
             # text completion
@@ -350,11 +351,11 @@ class LLMRequestSubStage(Stage):
         event: AstrMessageEvent,
         req: ProviderRequest,
         llm_response: LLMResponse,
-    ) -> AsyncGenerator[Union[None, ProviderRequest], None]:
+    ) -> AsyncGenerator[None | ProviderRequest, None]:
         """处理函数工具调用。
 
         Returns:
-            AsyncGenerator[Union[None, ProviderRequest], None]: 如果返回 ProviderRequest，表示需要再次调用 LLM
+            AsyncGenerator[None | ProviderRequest, None]: 如果返回 ProviderRequest，表示需要再次调用 LLM
         """
         # function calling
         tool_call_result: list[ToolCallMessageSegment] = []

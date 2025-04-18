@@ -1,7 +1,7 @@
 """指标数据"""
 
 from dataclasses import dataclass, field
-from typing import List
+# from typing import List # 此类型自 Python 3.9 起已弃用；请改用 "list"
 
 
 @dataclass
@@ -42,9 +42,9 @@ class Command:
 
 @dataclass
 class Stats:
-    platform: List[Platform] = field(default_factory=list)
-    command: List[Command] = field(default_factory=list)
-    llm: List[Provider] = field(default_factory=list)
+    platform: list[Platform] = field(default_factory=list)
+    command: list[Command] = field(default_factory=list)
+    llm: list[Provider] = field(default_factory=list)
 
 
 @dataclass
@@ -64,7 +64,7 @@ class ATRIVision:
     url_or_path: str
     caption: str
     is_meme: bool
-    keywords: List[str]
+    keywords: list[str]
     platform_name: str
     session_id: str
     sender_nickname: str

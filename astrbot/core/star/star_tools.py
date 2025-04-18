@@ -1,5 +1,7 @@
+from collections.abc import Awaitable
 import inspect
-from typing import Union, Awaitable, List, Optional, ClassVar
+# from typing import Union, Awaitable, List, Optional,
+from typing import ClassVar
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.api.platform import MessageMember, AstrBotMessage
@@ -15,7 +17,7 @@ class StarTools:
     这些方法封装了一些常用操作，使插件开发更加简单便捷!
     """
 
-    _context: ClassVar[Optional[Context]] = None
+    _context: ClassVar[Context | None ] = None
 
     @classmethod
     def initialize(cls, context: Context) -> None:
@@ -29,7 +31,7 @@ class StarTools:
 
     @classmethod
     async def send_message(
-        cls, session: Union[str, MessageSesion], message_chain: MessageChain
+        cls, session: str | MessageSesion , message_chain: MessageChain
     ) -> bool:
         """
         根据session(unified_msg_origin)主动发送消息
@@ -57,7 +59,7 @@ class StarTools:
         session_id: str,
         message_id: str,
         sender: MessageMember,
-        message: List[BaseMessageComponent],
+        message: list[BaseMessageComponent],
         message_str: str,
         raw_message: object,
         group_id: str = "",
@@ -147,7 +149,7 @@ class StarTools:
         cls._context.unregister_llm_tool(name)
 
     @classmethod
-    def get_data_dir(cls, plugin_name: Optional[str] = None) -> Path:
+    def get_data_dir(cls, plugin_name: str| None = None) -> Path:
         """
         返回插件数据目录的绝对路径。
 

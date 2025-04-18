@@ -1,11 +1,12 @@
-from typing import List, Dict
+# from typing import List, Dict #  # 这些大写开头的类型自 Python 3.9 起已弃用
 from .entities import ProviderMetaData, ProviderType
+
 from astrbot.core import logger
 from .func_tool_manager import FuncCall
 
-provider_registry: List[ProviderMetaData] = []
+provider_registry: list[ProviderMetaData] = []
 """维护了通过装饰器注册的 Provider"""
-provider_cls_map: Dict[str, ProviderMetaData] = {}
+provider_cls_map: dict[str, ProviderMetaData] = {}
 """维护了 Provider 类型名称和 ProviderMetadata 的映射"""
 
 llm_tools = FuncCall()
@@ -15,8 +16,8 @@ def register_provider_adapter(
     provider_type_name: str,
     desc: str,
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION,
-    default_config_tmpl: dict = None,
-    provider_display_name: str = None,
+    default_config_tmpl: dict | None = None,
+    provider_display_name: str | None = None,
 ):
     """用于注册平台适配器的带参装饰器"""
 

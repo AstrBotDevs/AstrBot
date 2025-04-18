@@ -16,7 +16,8 @@ class KeywordsStrategy(ContentSafetyStrategy):
         #             json.loads(base64.b64decode(f.read()).decode("utf-8"))["keywords"]
         #         )
 
-    def check(self, content: str) -> bool:
+    # fix : boot -> tuple[bool, str]
+    def check(self, content: str) -> tuple[bool, str]:
         for keyword in self.keywords:
             if re.search(keyword, content):
                 return False, "内容安全检查不通过，匹配到敏感词。"

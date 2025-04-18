@@ -1,4 +1,9 @@
 from .star import StarMetadata
+# 导入链中检测到循环导入
+#   c:\Users\light\Documents\GitHub\AstrBot\astrbot\core\star\__init__.py
+#   c:\Users\light\Documents\GitHub\AstrBot\astrbot\core\star\star_manager.py
+
+
 from .star_manager import PluginManager
 from .context import Context
 from astrbot.core.provider import Provider

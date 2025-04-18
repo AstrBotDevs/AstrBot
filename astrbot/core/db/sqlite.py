@@ -3,7 +3,9 @@ import os
 import time
 from astrbot.core.db.po import Platform, Stats, LLMHistory, ATRIVision, Conversation
 from . import BaseDatabase
-from typing import Tuple, List, Dict, Any
+# from typing import tuple, list, dict # 这些大写开头的类型自 Python 3.9 起已弃用
+from typing import Any
+
 
 
 class SQLiteDatabase(BaseDatabase):
@@ -56,7 +58,7 @@ class SQLiteDatabase(BaseDatabase):
         conn.text_factory = str
         return conn
 
-    def _exec_sql(self, sql: str, params: Tuple = None):
+    def _exec_sql(self, sql: str, params: tuple | None = None):
         conn = self.conn
         try:
             c = self.conn.cursor()
@@ -73,7 +75,7 @@ class SQLiteDatabase(BaseDatabase):
 
         conn.commit()
 
-    def insert_platform_metrics(self, metrics: dict):
+    def insert_platform_metrics(self, metrics: dict) -> None:
         for k, v in metrics.items():
             self._exec_sql(
                 """
@@ -82,10 +84,10 @@ class SQLiteDatabase(BaseDatabase):
                 (k, v, int(time.time())),
             )
 
-    def insert_plugin_metrics(self, metrics: dict):
+    def insert_plugin_metrics(self, metrics: dict) -> None:
         pass
 
-    def insert_command_metrics(self, metrics: dict):
+    def insert_command_metrics(self, metrics: dict) -> None:
         for k, v in metrics.items():
             self._exec_sql(
                 """
@@ -94,7 +96,7 @@ class SQLiteDatabase(BaseDatabase):
                 (k, v, int(time.time())),
             )
 
-    def insert_llm_metrics(self, metrics: dict):
+    def insert_llm_metrics(self, metrics: dict) -> None:
         for k, v in metrics.items():
             self._exec_sql(
                 """
@@ -103,7 +105,7 @@ class SQLiteDatabase(BaseDatabase):
                 (k, v, int(time.time())),
             )
 
-    def update_llm_history(self, session_id: str, content: str, provider_type: str):
+    def update_llm_history(self, session_id: str, content: str, provider_type: str) -> None:
         res = self.get_llm_history(session_id, provider_type)
         if res:
             self._exec_sql(
@@ -121,8 +123,8 @@ class SQLiteDatabase(BaseDatabase):
             )
 
     def get_llm_history(
-        self, session_id: str = None, provider_type: str = None
-    ) -> Tuple:
+        self, session_id: str | None = None, provider_type: str | None = None
+    ) -> list[LLMHistory]:  # 修改返回类型tuple 为 list[LLMHistory]
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -257,7 +259,7 @@ class SQLiteDatabase(BaseDatabase):
 
         return Conversation(*res)
 
-    def new_conversation(self, user_id: str, cid: str):
+    def new_conversation(self, user_id: str, cid: str) -> None:
         history = "[]"
         updated_at = int(time.time())
         created_at = updated_at
@@ -268,7 +270,7 @@ class SQLiteDatabase(BaseDatabase):
             (user_id, cid, history, updated_at, created_at),
         )
 
-    def get_conversations(self, user_id: str) -> Tuple:
+    def get_conversations(self, user_id: str) -> tuple:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -349,7 +351,7 @@ class SQLiteDatabase(BaseDatabase):
             ),
         )
 
-    def get_atri_vision_data(self) -> Tuple:
+    def get_atri_vision_data(self) -> tuple:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -391,7 +393,7 @@ class SQLiteDatabase(BaseDatabase):
 
     def get_all_conversations(
         self, page: int = 1, page_size: int = 20
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """获取所有对话，支持分页，按更新时间降序排序"""
         try:
             c = self.conn.cursor()
@@ -452,12 +454,12 @@ class SQLiteDatabase(BaseDatabase):
         self,
         page: int = 1,
         page_size: int = 20,
-        platforms: List[str] = None,
-        message_types: List[str] = None,
-        search_query: str = None,
-        exclude_ids: List[str] = None,
-        exclude_platforms: List[str] = None,
-    ) -> Tuple[List[Dict[str, Any]], int]:
+        platforms: list[str] | None = None,
+        message_types: list[str] | None = None,
+        search_query: str | None = None,
+        exclude_ids: list[str] | None = None,
+        exclude_platforms: list[str] | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
         """获取筛选后的对话列表"""
         try:
             c = self.conn.cursor()

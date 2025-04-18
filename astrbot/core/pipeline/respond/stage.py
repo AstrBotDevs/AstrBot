@@ -159,7 +159,7 @@ class RespondStage(Stage):
                         # 支持 File 消息段的路径映射。
                         component.file = path_Mapping(mappings, component.file)
                         event.get_result().chain[idx] = component
-            
+
             await event._pre_send()
 
             # 检查消息链是否为空

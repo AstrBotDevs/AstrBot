@@ -1,10 +1,11 @@
 import enum
 import base64
 import json
+# from tkinter import N
 from astrbot.core.utils.io import download_image_by_url
 from astrbot import logger
 from dataclasses import dataclass, field
-from typing import List, Dict, Type
+# from typing import List, Dict  # 这些大写开头的类型自 Python 3.9 起已弃用
 from .func_tool_manager import FuncCall
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_message_tool_call import (
@@ -14,7 +15,7 @@ from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
 import astrbot.core.message.components as Comp
 
-
+# fix Providertype - > ProviderType
 class ProviderType(enum.Enum):
     CHAT_COMPLETION = "chat_completion"
     SPEECH_TO_TEXT = "speech_to_text"
@@ -28,11 +29,12 @@ class ProviderMetaData:
     desc: str = ""
     """提供商适配器描述."""
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
-    cls_type: Type = None
+    # cls_type: type = None
+    cls_type: str | None = None
 
-    default_config_tmpl: dict = None
+    default_config_tmpl: dict | None = None
     """平台的默认配置模板"""
-    provider_display_name: str = None
+    provider_display_name: str | None = None
     """显示在 WebUI 配置页中的提供商名称，如空则是 type"""
 
 
@@ -56,8 +58,8 @@ class ToolCallMessageSegment:
 class AssistantMessageSegment:
     """OpenAI 格式的上下文中 role 为 assistant 的消息段。参考: https://platform.openai.com/docs/guides/function-calling"""
 
-    content: str = None
-    tool_calls: List[ChatCompletionMessageToolCall | Dict] = None
+    content: str | None= None
+    tool_calls: list[ChatCompletionMessageToolCall | dict] | None  = None
     role: str = "assistant"
 
     def to_dict(self):
@@ -77,10 +79,10 @@ class ToolCallsResult:
 
     tool_calls_info: AssistantMessageSegment
     """函数调用的信息"""
-    tool_calls_result: List[ToolCallMessageSegment]
+    tool_calls_result: list[ToolCallMessageSegment]
     """函数调用的结果"""
 
-    def to_openai_messages(self) -> List[Dict]:
+    def to_openai_messages(self) -> list[dict]:
         ret = [
             self.tool_calls_info.to_dict(),
             *[item.to_dict() for item in self.tool_calls_result],
@@ -94,19 +96,20 @@ class ProviderRequest:
     """提示词"""
     session_id: str = ""
     """会话 ID"""
-    image_urls: List[str] = None
+    image_urls: list[str] | None = None
     """图片 URL 列表"""
-    func_tool: FuncCall = None
+    func_tool: FuncCall | None = None
     """可用的函数工具"""
-    contexts: List = None
+    contexts: list | None = None
     """上下文。格式与 openai 的上下文格式一致：
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages
     """
     system_prompt: str = ""
     """系统提示词"""
-    conversation: Conversation = None
+    conversation: Conversation | None = None
+    """会话对象"""
 
-    tool_calls_result: ToolCallsResult = None
+    tool_calls_result: ToolCallsResult | None = None
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
 
     def __repr__(self):
@@ -150,7 +153,7 @@ class ProviderRequest:
 
         return result_parts
 
-    async def assemble_context(self) -> Dict:
+    async def assemble_context(self) -> dict:
         """将请求(prompt 和 image_urls)包装成 OpenAI 的消息格式。"""
         if self.image_urls:
             user_content = {
@@ -190,17 +193,17 @@ class ProviderRequest:
 class LLMResponse:
     role: str
     """角色, assistant, tool, err"""
-    result_chain: MessageChain = None
+    result_chain: MessageChain | None = None
     """返回的消息链"""
-    tools_call_args: List[Dict[str, any]] = field(default_factory=list)
+    tools_call_args: list[dict[str, any]] = field(default_factory=list)
     """工具调用参数"""
-    tools_call_name: List[str] = field(default_factory=list)
+    tools_call_name: list[str] = field(default_factory=list)
     """工具调用名称"""
-    tools_call_ids: List[str] = field(default_factory=list)
+    tools_call_ids: list[str] = field(default_factory=list)
     """工具调用 ID"""
 
-    raw_completion: ChatCompletion = None
-    _new_record: Dict[str, any] = None
+    raw_completion: ChatCompletion | None = None
+    _new_record: dict[str, any] | None = None
 
     _completion_text: str = ""
 
@@ -211,12 +214,12 @@ class LLMResponse:
         self,
         role: str,
         completion_text: str = "",
-        result_chain: MessageChain = None,
-        tools_call_args: List[Dict[str, any]] = None,
-        tools_call_name: List[str] = None,
-        tools_call_ids: List[str] = None,
-        raw_completion: ChatCompletion = None,
-        _new_record: Dict[str, any] = None,
+        result_chain: MessageChain | None = None,
+        tools_call_args: list[dict[str, any]] = None,
+        tools_call_name: list[str] | None = None,
+        tools_call_ids: list[str] | None = None,
+        raw_completion: ChatCompletion | None = None,
+        _new_record: dict[str, any] | None = None,
         is_chunk: bool = False,
     ):
         """初始化 LLMResponse
@@ -225,8 +228,8 @@ class LLMResponse:
             role (str): 角色, assistant, tool, err
             completion_text (str, optional): 返回的结果文本，已经过时，推荐使用 result_chain. Defaults to "".
             result_chain (MessageChain, optional): 返回的消息链. Defaults to None.
-            tools_call_args (List[Dict[str, any]], optional): 工具调用参数. Defaults to None.
-            tools_call_name (List[str], optional): 工具调用名称. Defaults to None.
+            tools_call_args (list[dict[str, any]], optional): 工具调用参数. Defaults to None.
+            tools_call_name (list[str], optional): 工具调用名称. Defaults to None.
             raw_completion (ChatCompletion, optional): 原始响应, OpenAI 格式. Defaults to None.
         """
         if tools_call_args is None:
@@ -247,13 +250,13 @@ class LLMResponse:
         self.is_chunk = is_chunk
 
     @property
-    def completion_text(self):
+    def completion_text(self) -> str:
         if self.result_chain:
             return self.result_chain.get_plain_text()
         return self._completion_text
 
     @completion_text.setter
-    def completion_text(self, value):
+    def completion_text(self, value) -> None:
         if self.result_chain:
             self.result_chain.chain = [
                 comp
@@ -264,7 +267,7 @@ class LLMResponse:
         else:
             self._completion_text = value
 
-    def to_openai_tool_calls(self) -> List[Dict]:
+    def to_openai_tool_calls(self) -> list[dict]:
         """将工具调用信息转换为 OpenAI 格式"""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):

@@ -12,7 +12,7 @@ import yaml
 import logging
 import asyncio
 from types import ModuleType
-from typing import List
+# from typing import List # 此类型自 Python 3.9 起已弃用；请改用 "list"
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core import logger, sp, pip_installer
 from .context import Context
@@ -93,7 +93,7 @@ class PluginManager:
                     )
         return modules
 
-    def _get_plugin_modules(self) -> List[dict]:
+    def _get_plugin_modules(self) -> list[dict]:
         plugins = []
         if os.path.exists(self.plugin_store_path):
             plugins.extend(self._get_modules(self.plugin_store_path))
@@ -104,7 +104,7 @@ class PluginManager:
             plugins.extend(_p)
         return plugins
 
-    def _check_plugin_dept_update(self, target_plugin: str = None):
+    def _check_plugin_dept_update(self, target_plugin: str | None = None):
         """检查插件的依赖
         如果 target_plugin 为 None，则检查所有插件的依赖
         """
@@ -189,8 +189,8 @@ class PluginManager:
 
     def _purge_modules(
         self,
-        module_patterns: list[str] = None,
-        root_dir_name: str = None,
+        module_patterns: list[str] | None = None,
+        root_dir_name: str | None = None,
         is_reserved: bool = False,
     ):
         """从 sys.modules 中移除指定的模块

@@ -1,4 +1,5 @@
-from typing import Union, AsyncGenerator
+# from typing import Union, AsyncGenerator Union -> |  AsyncGenerator 在 collections.abc.AsyncGenerator
+from collections.abc import AsyncGenerator
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -14,13 +15,13 @@ class ContentSafetyCheckStage(Stage):
     当前只会检查文本的。
     """
 
-    async def initialize(self, ctx: PipelineContext):
+    async def initialize(self, ctx: PipelineContext) -> None:
         config = ctx.astrbot_config["content_safety"]
         self.strategy_selector = StrategySelector(config)
 
     async def process(
-        self, event: AstrMessageEvent, check_text: str = None
-    ) -> Union[None, AsyncGenerator[None, None]]:
+        self, event: AstrMessageEvent, check_text: str | None = None
+    ) -> None | AsyncGenerator[None, None]:
         """检查内容安全"""
         text = check_text if check_text else event.get_message_str()
         ok, info = self.strategy_selector.check(text)

@@ -1,7 +1,11 @@
 import enum
 
-from typing import List, Optional, Union, AsyncGenerator
+# from typing import List, Optional, Union, AsyncGenerator # 这些类型自 Python 3.9 起已弃用；请改用 "list" ...
+# Optional 被弃用 需要改为 xxx | None , Union 被弃用 需要改为 xxx | yyy
+from collections.abc import AsyncGenerator # typing.AsyncGenerator 被弃用，需改为 collections.abc.AsyncGenerator
+
 from dataclasses import dataclass, field
+from typing import TypeAlias
 from astrbot.core.message.components import (
     BaseMessageComponent,
     Plain,
@@ -22,8 +26,8 @@ class MessageChain:
         `use_t2i_` (bool): 用于标记是否使用文本转图片服务。默认为 None，即跟随用户的设置。当设置为 True 时，将会使用文本转图片服务。
     """
 
-    chain: List[BaseMessageComponent] = field(default_factory=list)
-    use_t2i_: Optional[bool] = None  # None 为跟随用户设置
+    chain: list[BaseMessageComponent] = field(default_factory=list)
+    use_t2i_: bool | None = None  # None 为跟随用户设置
 
     def message(self, message: str):
         """添加一条文本消息到消息链 `chain` 中。
@@ -37,7 +41,7 @@ class MessageChain:
         self.chain.append(Plain(message))
         return self
 
-    def at(self, name: str, qq: Union[str, int]):
+    def at(self, name: str, qq: str | int):
         """添加一条 At 消息到消息链 `chain` 中。
 
         Example:
@@ -172,15 +176,15 @@ class MessageEventResult(MessageChain):
         `result_type` (EventResultType): 事件处理的结果类型。
     """
 
-    result_type: Optional[EventResultType] = field(
+    result_type: EventResultType | None = field(
         default_factory=lambda: EventResultType.CONTINUE
     )
 
-    result_content_type: Optional[ResultContentType] = field(
+    result_content_type: ResultContentType | None = field(
         default_factory=lambda: ResultContentType.GENERAL_RESULT
     )
 
-    async_stream: Optional[AsyncGenerator] = None
+    async_stream: AsyncGenerator | None = None
     """异步流"""
 
     def stop_event(self) -> "MessageEventResult":
@@ -219,4 +223,4 @@ class MessageEventResult(MessageChain):
 
 
 # 为了兼容旧版代码，保留 CommandResult 的别名
-CommandResult = MessageEventResult
+CommandResult: TypeAlias = MessageEventResult

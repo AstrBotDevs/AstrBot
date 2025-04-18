@@ -22,18 +22,19 @@ function:
 """
 
 import logging
+from logging import Logger
 import colorlog
 import asyncio
 import os
 import sys
 from collections import deque
 from asyncio import Queue
-from typing import List
+# from typing import List # 此类型自 Python 3.9 起已弃用；请改用 "list"
 
 # 日志缓存大小
 CACHED_SIZE = 200
 # 日志颜色配置
-log_color_config = {
+log_color_config: dict[str, str] = {
     "DEBUG": "green",
     "INFO": "bold_cyan",
     "WARNING": "bold_yellow",
@@ -44,7 +45,7 @@ log_color_config = {
 }
 
 
-def is_plugin_path(pathname):
+def is_plugin_path(pathname) -> bool:
     """检查文件路径是否来自插件目录
 
     Args:
@@ -60,7 +61,7 @@ def is_plugin_path(pathname):
     return ("data/plugins" in norm_path) or ("packages/" in norm_path)
 
 
-def get_short_level_name(level_name):
+def get_short_level_name(level_name) -> str | None:
     """将日志级别名称转换为四个字母的缩写
 
     Args:
@@ -69,7 +70,7 @@ def get_short_level_name(level_name):
     Returns:
         str: 四个字母的日志级别缩写
     """
-    level_map = {
+    level_map: dict[str, str] = {
         "DEBUG": "DBUG",
         "INFO": "INFO",
         "WARNING": "WARN",
@@ -85,9 +86,9 @@ class LogBroker:
     发布-订阅模式
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.log_cache = deque(maxlen=CACHED_SIZE)  # 环形缓冲区, 保存最近的日志
-        self.subscribers: List[Queue] = []  # 订阅者列表
+        self.subscribers: list[Queue] = []  # 订阅者列表
 
     def register(self) -> Queue:
         """注册新的订阅者, 并给每个订阅者返回一个带有日志缓存的队列
@@ -101,7 +102,7 @@ class LogBroker:
         self.subscribers.append(q)
         return q
 
-    def unregister(self, q: Queue):
+    def unregister(self, q: Queue) -> None:
         """取消订阅
 
         Args:
@@ -109,7 +110,7 @@ class LogBroker:
         """
         self.subscribers.remove(q)
 
-    def publish(self, log_entry: dict):
+    def publish(self, log_entry: dict) -> None:
         """发布新日志到所有订阅者, 使用非阻塞方式投递, 避免一个订阅者阻塞整个系统
 
         Args:
@@ -130,11 +131,11 @@ class LogQueueHandler(logging.Handler):
     继承自 logging.Handler
     """
 
-    def __init__(self, log_broker: LogBroker):
+    def __init__(self, log_broker: LogBroker) -> None:
         super().__init__()
         self.log_broker = log_broker
 
-    def emit(self, record):
+    def emit(self, record) -> None:
         """日志处理的入口方法, 接受一个日志记录, 转换为字符串后由 LogBroker 发布
         这个方法会在每次日志记录时被调用
 
@@ -158,7 +159,7 @@ class LogManager:
     """
 
     @classmethod
-    def GetLogger(cls, log_name: str = "default"):
+    def GetLogger(cls, log_name: str = "default") -> Logger:
         """获取指定名称的日志记录器logger
 
         Args:
@@ -227,7 +228,7 @@ class LogManager:
         return logger
 
     @classmethod
-    def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker):
+    def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker) -> None:
         """设置队列处理器, 用于将日志消息发送到 LogBroker
 
         Args:

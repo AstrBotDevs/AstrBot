@@ -5,10 +5,11 @@ import os
 import asyncio
 import copy
 import logging
-
-from typing import Dict, List, Awaitable, Literal, Any
+# Dict, List, Awaitable , Optional已经弃用，改用 dict, list
+from typing import  Literal, Any
+from collections.abc import Awaitable
 from dataclasses import dataclass
-from typing import Optional
+
 from contextlib import AsyncExitStack
 from astrbot import logger
 from astrbot.core.utils.log_pipe import LogPipe
@@ -20,7 +21,7 @@ except (ModuleNotFoundError, ImportError):
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
-SUPPORTED_TYPES = [
+SUPPORTED_TYPES: list[str] = [
     "string",
     "number",
     "object",
@@ -36,7 +37,7 @@ class FuncTool:
     """
 
     name: str
-    parameters: Dict
+    parameters: dict
     description: str
     handler: Awaitable = None
     """处理函数, 当 origin 为 mcp 时，这个为空"""
@@ -57,7 +58,7 @@ class FuncTool:
     mcp_client: MCPClient = None
     """MCP 客户端，当 origin 为 mcp 时有效"""
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description}, active={self.active}, origin={self.origin})"
 
     async def execute(self, **args) -> Any:
@@ -83,13 +84,13 @@ class FuncTool:
 class MCPClient:
     def __init__(self):
         # Initialize session and client objects
-        self.session: Optional[mcp.ClientSession] = None
+        self.session: mcp.ClientSession | None = None
         self.exit_stack = AsyncExitStack()
 
         self.name = None
         self.active: bool = True
-        self.tools: List[mcp.Tool] = []
-        self.server_errlogs: List[str] = []
+        self.tools: list[mcp.Tool] = []
+        self.server_errlogs: list[str] = []
 
     async def connect_to_server(self, mcp_server_config: dict, name: str):
         """Connect to an MCP server
@@ -127,8 +128,8 @@ class MCPClient:
         )
         await self.session.initialize()
 
-    async def list_tools_and_save(self) -> mcp.ListToolsResult:
-        """List all tools from the server and save them to self.tools"""
+    async def list_tools_and_save(self) -> mcp.listToolsResult:
+        """list all tools from the server and save them to self.tools"""
         response = await self.session.list_tools()
         logger.debug(f"MCP server {self.name} list tools response: {response}")
         self.tools = response.tools
@@ -141,13 +142,13 @@ class MCPClient:
 
 class FuncCall:
     def __init__(self) -> None:
-        self.func_list: List[FuncTool] = []
+        self.func_list: list[FuncTool] = []
         """内部加载的 func tools"""
-        self.mcp_client_dict: Dict[str, MCPClient] = {}
+        self.mcp_client_dict: dict[str, MCPClient] = {}
         """MCP 服务列表"""
         self.mcp_service_queue = asyncio.Queue()
         """用于外部控制 MCP 服务的启停"""
-        self.mcp_client_event: Dict[str, asyncio.Event] = {}
+        self.mcp_client_event: dict[str, asyncio.Event] = {}
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -232,7 +233,7 @@ class FuncCall:
             logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
             return
 
-        mcp_server_json_obj: Dict[str, Dict] = json.load(
+        mcp_server_json_obj: dict[str, dict] = json.load(
             open(mcp_json_file, "r", encoding="utf-8")
         )["mcpServers"]
 
@@ -417,7 +418,7 @@ class FuncCall:
             tools.append(tool)
         return tools
 
-    def get_func_desc_google_genai_style(self) -> Dict:
+    def get_func_desc_google_genai_style(self) -> dict:
         declarations = {}
         tools = []
         for f in self.func_list:

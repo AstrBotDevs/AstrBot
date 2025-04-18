@@ -1,21 +1,21 @@
 import abc
-from typing import List
+# from typing import List # 此类型自 Python 3.9 起已弃用；请改用 "list"
 from astrbot.core.db import BaseDatabase
 from typing import TypedDict, AsyncGenerator
 from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 from dataclasses import dataclass
 
-
+#  `TypedDict` 类只能包含类型注解
 class Personality(TypedDict):
-    prompt: str = ""
-    name: str = ""
-    begin_dialogs: List[str] = []
-    mood_imitation_dialogs: List[str] = []
+    prompt: str
+    name: str
+    begin_dialogs: list[str]
+    mood_imitation_dialogs: list[str]
 
     # cache
-    _begin_dialogs_processed: List[dict] = []
-    _mood_imitation_dialogs_processed: str = ""
+    _begin_dialogs_processed: list[dict]
+    _mood_imitation_dialogs_processed: str
 
 
 @dataclass
@@ -31,7 +31,7 @@ class AbstractProvider(abc.ABC):
         self.model_name = ""
         self.provider_config = provider_config
 
-    def set_model(self, model_name: str):
+    def set_model(self, model_name: str) -> None:
         """设置当前使用的模型名称"""
         self.model_name = model_name
 
@@ -68,7 +68,7 @@ class Provider(AbstractProvider):
     def get_current_key(self) -> str:
         raise NotImplementedError()
 
-    def get_keys(self) -> List[str]:
+    def get_keys(self) -> list[str]:
         """获得提供商 Key"""
         return self.provider_config.get("key", [])
 
@@ -77,7 +77,7 @@ class Provider(AbstractProvider):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_models(self) -> List[str]:
+    def get_models(self) -> list[str]:
         """获得支持的模型列表"""
         raise NotImplementedError()
 
@@ -85,12 +85,12 @@ class Provider(AbstractProvider):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: List[str] = None,
-        func_tool: FuncCall = None,
-        contexts: List = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        session_id: str | None = None,
+        image_urls: list[str] | None = None,
+        func_tool: FuncCall | None = None,
+        contexts: list | None = None,
+        system_prompt: str | None = None,
+        tool_calls_result: ToolCallsResult | None = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -113,12 +113,12 @@ class Provider(AbstractProvider):
     async def text_chat_stream(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: List[str] = None,
-        func_tool: FuncCall = None,
-        contexts: List = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        session_id: str | None = None,
+        image_urls: list[str] = None,
+        func_tool: FuncCall | None = None,
+        contexts: list | None = None,
+        system_prompt: str | None = None,
+        tool_calls_result: ToolCallsResult | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。
@@ -138,7 +138,7 @@ class Provider(AbstractProvider):
         """
         ...
 
-    async def pop_record(self, context: List):
+    async def pop_record(self, context: list) -> None:
         """
         弹出 context 第一条非系统提示词对话记录
         """
