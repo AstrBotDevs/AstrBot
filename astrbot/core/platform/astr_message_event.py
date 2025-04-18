@@ -69,7 +69,7 @@ class AstrMessageEvent(abc.ABC):
         )
         self.unified_msg_origin = str(self.session)
         """统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
-        self._result: MessageEventResult = None
+        self._result: MessageEventResult | None = None
         """消息事件的结果"""
 
         self._has_send_oper = False
@@ -92,7 +92,7 @@ class AstrMessageEvent(abc.ABC):
         """
         return self.message_str
 
-    def _outline_chain(self, chain: List[BaseMessageComponent]) -> str:
+    def _outline_chain(self, chain: list[BaseMessageComponent]) -> str:
         outline = ""
         for i in chain:
             if isinstance(i, Plain):
