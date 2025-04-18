@@ -9,9 +9,11 @@
 - [Python版本]: 3.10.17
 - 包管理: uv项目
 - 容器化: Docker项目
-- mcp服务器：https://modelcontextprotocol.io/llms-full.txt
 - 代码风格: PEP8
 
 ## 注意事项
 
 - 请不要编写您不确定的代码
+
+## 参考资料
+- mcp服务器：https://modelcontextprotocol.io/llms-full.txt
