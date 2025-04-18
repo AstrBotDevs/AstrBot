@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+from mcp.types import ListToolsResult
 import textwrap
 import os
 import asyncio
@@ -38,7 +39,7 @@ class FuncTool:
 
     name: str
     parameters: dict
-    description: str
+    description: str | None
     handler: Awaitable = None
     """处理函数, 当 origin 为 mcp 时，这个为空"""
     handler_module_path: str = None
@@ -130,12 +131,12 @@ class MCPClient:
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
         """list all tools from the server and save them to self.tools"""
-        response = await self.session.list_tools()
+        response: ListToolsResult = await self.session.list_tools()
         logger.debug(f"MCP server {self.name} list tools response: {response}")
         self.tools = response.tools
         return response
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Clean up resources"""
         await self.exit_stack.aclose()
 
@@ -197,7 +198,7 @@ class FuncCall:
                 self.func_list.pop(i)
                 break
 
-    def get_func(self, name) -> FuncTool:
+    def get_func(self, name) -> FuncTool | None:
         for f in self.func_list:
             if f.name == name:
                 return f

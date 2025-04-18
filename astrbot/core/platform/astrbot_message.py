@@ -1,6 +1,8 @@
+from pickle import NONE
 import time
-from typing import List
 from dataclasses import dataclass
+
+from pydantic import BaseModel
 from astrbot.core.message.components import BaseMessageComponent
 from .message_type import MessageType
 
@@ -22,15 +24,15 @@ class MessageMember:
 class Group:
     group_id: str
     """群号"""
-    group_name: str = None
+    group_name: str | None = None
     """群名称"""
-    group_avatar: str = None
+    group_avatar: str | None = None
     """群头像"""
-    group_owner: str = None
+    group_owner: str | None = None
     """群主 id"""
-    group_admins: List[str] = None
+    group_admins: list[str] | None = None
     """群管理员 id"""
-    members: List[MessageMember] = None
+    members: list[MessageMember] | None = None
     """所有群成员"""
 
     def __str__(self):
@@ -46,7 +48,7 @@ class Group:
         )
 
 
-class AstrBotMessage:
+class AstrBotMessage(BaseModel):
     """
     AstrBot 的消息对象
     """
@@ -57,12 +59,13 @@ class AstrBotMessage:
     message_id: str  # 消息id
     group_id: str = ""  # 群组id，如果为私聊，则为空
     sender: MessageMember  # 发送者
-    message: List[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
+    message: list[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
     message_str: str  # 最直观的纯文本消息字符串
     raw_message: object
     timestamp: int  # 消息时间戳
 
     def __init__(self) -> None:
+        super().__init__()
         self.timestamp = int(time.time())
 
     def __str__(self) -> str:
