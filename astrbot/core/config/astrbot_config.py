@@ -1,6 +1,4 @@
-from astrbot.core.types import ConfigValue
-
-
+# -*- coding: utf-8 -*-
 import os
 import json
 import logging

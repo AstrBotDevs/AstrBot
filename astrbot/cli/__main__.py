@@ -18,7 +18,7 @@ def _get_astrbot_root(path: str | None) -> Path:
         case None:
             match ASTRBOT_ROOT := os.getenv("ASTRBOT_ROOT"):
                 case None:
-                    astrbot_root = Path.home() / ".astrbot"
+                    astrbot_root = Path.cwd() / "data"
                 case _:
                     astrbot_root = Path(ASTRBOT_ROOT).resolve()
         case str():
@@ -66,9 +66,9 @@ def _check_astrbot_root(astrbot_root: Path) -> None:
 async def _check_dashboard(astrbot_root: Path ) -> None:
     """检查是否安装了dashboard"""
     try:
-        from ..core.utils.io import get_dashboard_version, download_dashboard , get_path
+        from ..core.utils.io import get_dashboard_version, download_dashboard 
     except ImportError:
-        from astrbot.core.utils.io import get_dashboard_version, download_dashboard , get_path
+        from astrbot.core.utils.io import get_dashboard_version, download_dashboard 
     
     try:
         # 添加 create=True 参数以确保在初始化时不会抛出异常
@@ -79,14 +79,15 @@ async def _check_dashboard(astrbot_root: Path ) -> None:
             case str():
                 if dashboard_version == f"v{__version__}":
                     click.echo("无需更新")
-                try:
-                    version = dashboard_version.split("v")[1]
-                    click.echo(f"管理面板版本: {version}")
-                    # 确保使用 create=True 参数
-                    await download_dashboard(path=get_path("dashboard.zip", create=True), extract_path=str(astrbot_root))
-                except Exception as e:
-                    click.echo(f"下载管理面板失败: {e}")
-                    return
+                else:
+                    try:
+                        version = dashboard_version.split("v")[1]
+                        click.echo(f"管理面板版本: {version}")
+                        # 确保使用 create=True 参数
+                        await download_dashboard(path="data/dashboard.zip", extract_path=str(astrbot_root))
+                    except Exception as e:
+                        click.echo(f"下载管理面板失败: {e}")
+                        return
     except FileNotFoundError:
         click.echo("初始化管理面板目录...")
         # 初始化模式下，下载到指定位置

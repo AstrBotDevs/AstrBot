@@ -10,9 +10,6 @@ import uuid
 import psutil
 
 import certifi
-
-from typing import Union
-
 from PIL import Image
 
 
@@ -48,7 +45,7 @@ def port_checker(port: int, host: str = "localhost"):
         return False
 
 
-def save_temp_img(img: Union[Image.Image, str]) -> str:
+def save_temp_img(img: Image.Image | str ) -> str:
     os.makedirs("data/temp", exist_ok=True)
     # 获得文件创建时间，清除超过 12 小时的
     try:
@@ -209,7 +206,7 @@ async def get_dashboard_version():
     return None
 
 
-# 更好控制
+# 更
 async def download_dashboard(path: str = "data/dashboard.zip" , extract_path: str = "data"):
     """下载管理面板文件"""
     dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
