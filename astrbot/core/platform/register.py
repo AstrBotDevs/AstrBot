@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from typing import Any
 from .platform_metadata import PlatformMetadata
 from astrbot.core import logger
 

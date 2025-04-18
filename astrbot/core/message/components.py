@@ -28,7 +28,7 @@ import os
 import uuid
 import typing as T
 from enum import Enum
-from pydantic.v1 import BaseModel
+from pydantic import BaseModel
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
 
 
@@ -99,11 +99,11 @@ class BaseMessageComponent(BaseModel):
 
 
 class Plain(BaseMessageComponent):
-    type: ComponentType = "Plain"
+    type: ComponentType = ComponentType.Plain
     text: str
-    convert: T.Optional[bool] = True  # 若为 False 则直接发送未转换 CQ 码的消息
+    convert: bool | None = True  # 若为 False 则直接发送未转换 CQ 码的消息
 
-    def __init__(self, text: str, convert: bool = True, **_):
+    def __init__(self, text: str, convert: bool | None = True, **_):
         super().__init__(text=text, convert=convert, **_)
 
     def toString(self):  # 没有 [CQ:plain] 这种东西，所以直接导出纯文本
@@ -115,7 +115,7 @@ class Plain(BaseMessageComponent):
 
 
 class Face(BaseMessageComponent):
-    type: ComponentType = "Face"
+    type: ComponentType = ComponentType.Face
     id: int
 
     def __init__(self, **_):
@@ -123,7 +123,7 @@ class Face(BaseMessageComponent):
 
 
 class Record(BaseMessageComponent):
-    type: ComponentType = "Record"
+    type: ComponentType = ComponentType.Record
     file: T.Optional[str] = ""
     magic: T.Optional[bool] = False
     url: T.Optional[str] = ""
