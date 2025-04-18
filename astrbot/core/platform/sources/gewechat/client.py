@@ -197,7 +197,8 @@ class SimpleGewechatClient:
             else:
                 user_real_name = self.userrealnames[abm.group_id][user_id]
         else:
-            user_real_name = d.get("PushContent", "unknown : ").split(" : ")[0]
+            info = (await self.get_user_or_group_info(user_id))["data"][0]
+            user_real_name = info["nickName"]
 
         abm.sender = MessageMember(user_id, user_real_name)
         abm.raw_message = d
