@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image, Record
@@ -33,14 +34,31 @@ class WecomPlatformEvent(AstrMessageEvent):
     ):
         pass
 
+    async def split_plain(self, plain: str) -> list[str]:
+        """将长文本分割成多个小文本, 每个小文本长度不超过 2048 字符
+
+        Args:
+            plain (str): 要分割的长文本
+        Returns:
+            list[str]: 分割后的文本列表
+        """
+        if len(plain) <= 2048:
+            return [plain]
+        else:
+            return [plain[i : i + 2048] for i in range(0, len(plain), 2048)]
+
     async def send(self, message: MessageChain):
         message_obj = self.message_obj
 
         for comp in message.chain:
             if isinstance(comp, Plain):
-                self.client.message.send_text(
-                    message_obj.self_id, message_obj.session_id, comp.text
-                )
+                # Split long text messages if needed
+                plain_chunks = await self.split_plain(comp.text)
+                for chunk in plain_chunks:
+                    self.client.message.send_text(
+                        message_obj.self_id, message_obj.session_id, chunk
+                    )
+                    await asyncio.sleep(0.5)  # Avoid sending too fast
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
 
