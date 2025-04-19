@@ -3,7 +3,6 @@ import base64
 import json
 import logging
 import random
-from typing import Dict, List, Optional
 from collections.abc import AsyncGenerator
 
 from google import genai
@@ -65,11 +64,11 @@ class ProviderGoogleGenAI(Provider):
             db_helper,
             default_persona,
         )
-        self.api_keys: List = provider_config.get("key", [])
+        self.api_keys: list = provider_config.get("key", [])
         self.chosen_api_key: str = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout: int = int(provider_config.get("timeout", 180))
 
-        self.api_base: Optional[str] = provider_config.get("api_base", None)
+        self.api_base: str | None = provider_config.get("api_base", None)
         if self.api_base and self.api_base.endswith("/"):
             self.api_base = self.api_base[:-1]
 
@@ -99,7 +98,7 @@ class ProviderGoogleGenAI(Provider):
             and threshold_str in self.THRESHOLD_MAPPING
         ]
 
-    async def _handle_api_error(self, e: APIError, keys: List[str]) -> bool:
+    async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
         """处理API错误，返回是否需要重试"""
         if e.code == 429 or "API key not valid" in e.message:
             keys.remove(self.chosen_api_key)
@@ -123,10 +122,10 @@ class ProviderGoogleGenAI(Provider):
 
     async def _prepare_query_config(
         self,
-        tools: Optional[FuncCall] = None,
-        system_instruction: Optional[str] = None,
-        temperature: Optional[float] = 0.7,
-        modalities: Optional[List[str]] = None,
+        tools: FuncCall | None = None,
+        system_instruction: str | None = None,
+        temperature: float | None = 0.7,
+        modalities: list[str] | None = None,
     ) -> types.GenerateContentConfig:
         """准备查询配置"""
         if not modalities:
@@ -170,7 +169,7 @@ class ProviderGoogleGenAI(Provider):
             ),
         )
 
-    def _prepare_conversation(self, payloads: Dict) -> List[types.Content]:
+    def _prepare_conversation(self, payloads: dict) -> list[types.Content]:
         """准备 Gemini SDK 的 Content 列表"""
 
         def create_text_part(text: str) -> types.UserContent:
@@ -185,7 +184,7 @@ class ProviderGoogleGenAI(Provider):
             image_bytes = base64.b64decode(url.split(",", 1)[1])
             return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
-        gemini_contents: List[types.Content] = []
+        gemini_contents: list[types.Content] = []
         native_tool_enabled = any(
             [
                 self.provider_config.get("gm_native_coderunner", False),
@@ -259,7 +258,7 @@ class ProviderGoogleGenAI(Provider):
     ) -> MessageChain:
         """处理内容部分并构建消息链"""
         finish_reason = result.candidates[0].finish_reason
-        result_parts: Optional[types.Part] = result.candidates[0].content.parts
+        result_parts: types.Part | None = result.candidates[0].content.parts
 
         if finish_reason == types.FinishReason.SAFETY:
             raise Exception("模型生成内容未通过用户定义的内容安全检查")
@@ -319,7 +318,7 @@ class ProviderGoogleGenAI(Provider):
 
         conversation = self._prepare_conversation(payloads)
 
-        result: Optional[types.GenerateContentResponse] = None
+        result: types.GenerateContentResponse | None = None
         while True:
             try:
                 config = await self._prepare_query_config(
@@ -437,7 +436,7 @@ class ProviderGoogleGenAI(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = None,
+        image_urls: list[str] = None,
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
@@ -478,7 +477,7 @@ class ProviderGoogleGenAI(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = [],
+        image_urls: list[str] = [],
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
@@ -531,14 +530,14 @@ class ProviderGoogleGenAI(Provider):
     def get_current_key(self) -> str:
         return self.chosen_api_key
 
-    def get_keys(self) -> List[str]:
+    def get_keys(self) -> list[str]:
         return self.api_keys
 
     def set_key(self, key):
         self.chosen_api_key = key
         self._init_client()
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None):
+    async def assemble_context(self, text: str, image_urls: list[str] = None):
         """
         组装上下文。
         """

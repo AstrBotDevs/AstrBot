@@ -1,6 +1,8 @@
 import abc
 import uuid
-from typing import Awaitable, Any
+from typing import Any
+
+from collections.abc import Awaitable
 from asyncio import Queue
 from .platform_metadata import PlatformMetadata
 from .astr_message_event import AstrMessageEvent

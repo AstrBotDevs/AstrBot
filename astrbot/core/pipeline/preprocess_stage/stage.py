@@ -1,6 +1,7 @@
 import traceback
 import asyncio
-from typing import Union, AsyncGenerator
+
+from collections.abc import AsyncGenerator
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -20,7 +21,7 @@ class PreProcessStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         """在处理事件之前的预处理"""
         # 路径映射
         if mappings := self.platform_settings.get("path_mapping", []):

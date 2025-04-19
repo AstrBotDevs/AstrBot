@@ -1,7 +1,8 @@
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot import logger
-from typing import Union, AsyncGenerator
+
+from collections.abc import AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
 from astrbot.core.message.components import At
@@ -42,7 +43,7 @@ class WakingCheckStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         if (
             self.ignore_bot_self_message
             and event.get_self_id() == event.get_sender_id()

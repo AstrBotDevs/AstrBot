@@ -5,7 +5,8 @@
 import traceback
 import asyncio
 import json
-from typing import Union, AsyncGenerator
+
+from collections.abc import AsyncGenerator
 from ...context import PipelineContext
 from ..stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -57,7 +58,7 @@ class LLMRequestSubStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent, _nested: bool = False
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         req: ProviderRequest = None
 
         provider = self.ctx.plugin_manager.context.get_using_provider()
@@ -270,7 +271,7 @@ class LLMRequestSubStage(Stage):
         event: AstrMessageEvent,
         req: ProviderRequest,
         llm_response: LLMResponse,
-    ) -> AsyncGenerator[Union[None, ProviderRequest], None]:
+    ) -> AsyncGenerator[None | ProviderRequest, None]:
         """处理非流式 LLM 响应。
 
         Returns:
@@ -309,7 +310,7 @@ class LLMRequestSubStage(Stage):
         event: AstrMessageEvent,
         req: ProviderRequest,
         llm_response: LLMResponse,
-    ) -> AsyncGenerator[Union[None, ProviderRequest], None]:
+    ) -> AsyncGenerator[None | ProviderRequest, None]:
         """处理流式 LLM 响应。
 
         专门用于处理流式输出完成后的响应，与非流式响应处理分离。
@@ -350,7 +351,7 @@ class LLMRequestSubStage(Stage):
         event: AstrMessageEvent,
         req: ProviderRequest,
         llm_response: LLMResponse,
-    ) -> AsyncGenerator[Union[None, ProviderRequest], None]:
+    ) -> AsyncGenerator[None | ProviderRequest, None]:
         """处理函数工具调用。
 
         Returns:

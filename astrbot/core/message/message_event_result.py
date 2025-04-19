@@ -1,6 +1,7 @@
 import enum
 
-from typing import List, Optional, Union, AsyncGenerator
+
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from astrbot.core.message.components import (
     BaseMessageComponent,
@@ -22,8 +23,8 @@ class MessageChain:
         `use_t2i_` (bool): 用于标记是否使用文本转图片服务。默认为 None，即跟随用户的设置。当设置为 True 时，将会使用文本转图片服务。
     """
 
-    chain: List[BaseMessageComponent] = field(default_factory=list)
-    use_t2i_: Optional[bool] = None  # None 为跟随用户设置
+    chain: list[BaseMessageComponent] = field(default_factory=list)
+    use_t2i_: bool | None = None  # None 为跟随用户设置
 
     def message(self, message: str):
         """添加一条文本消息到消息链 `chain` 中。
@@ -37,7 +38,7 @@ class MessageChain:
         self.chain.append(Plain(message))
         return self
 
-    def at(self, name: str, qq: Union[str, int]):
+    def at(self, name: str, qq: str | int):
         """添加一条 At 消息到消息链 `chain` 中。
 
         Example:
@@ -172,15 +173,15 @@ class MessageEventResult(MessageChain):
         `result_type` (EventResultType): 事件处理的结果类型。
     """
 
-    result_type: Optional[EventResultType] = field(
+    result_type: EventResultType | None = field(
         default_factory=lambda: EventResultType.CONTINUE
     )
 
-    result_content_type: Optional[ResultContentType] = field(
+    result_content_type: ResultContentType | None = field(
         default_factory=lambda: ResultContentType.GENERAL_RESULT
     )
 
-    async_stream: Optional[AsyncGenerator] = None
+    async_stream: AsyncGenerator | None = None
     """异步流"""
 
     def stop_event(self) -> "MessageEventResult":

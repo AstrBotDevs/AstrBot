@@ -1,6 +1,7 @@
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
-from typing import Union, AsyncGenerator
+
+from collections.abc import AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata
@@ -24,7 +25,7 @@ class PlatformCompatibilityStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         # 获取当前平台ID
         platform_id = event.get_platform_id()
 

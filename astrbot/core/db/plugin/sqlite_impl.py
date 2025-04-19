@@ -26,7 +26,7 @@ class SQLitePluginStorage(PluginStorage):
         """
         os.makedirs(os.path.dirname(DBPATH), exist_ok=True)
         if cls._instance is None:
-            cls._instance = super(SQLitePluginStorage, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance.db_path = DBPATH
         return cls._instance
 

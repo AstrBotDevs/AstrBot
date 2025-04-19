@@ -1,10 +1,9 @@
-from typing import List, Dict, Type
 from .platform_metadata import PlatformMetadata
 from astrbot.core import logger
 
-platform_registry: List[PlatformMetadata] = []
+platform_registry: list[PlatformMetadata] = []
 """维护了通过装饰器注册的平台适配器"""
-platform_cls_map: Dict[str, Type] = {}
+platform_cls_map: dict[str, type] = {}
 """维护了平台适配器名称和适配器类的映射"""
 
 

@@ -1,13 +1,12 @@
 import chromadb
 import uuid
-from typing import List, Dict
 from astrbot.api import logger
 from ..embedding.openai_source import SimpleOpenAIEmbedding
 from . import Store
 
 
 class ChromaVectorStore(Store):
-    def __init__(self, name: str, embedding_cfg: Dict) -> None:
+    def __init__(self, name: str, embedding_cfg: dict) -> None:
         self.chroma_client = chromadb.PersistentClient(
             path="data/long_term_memory_chroma.db"
         )
@@ -20,7 +19,7 @@ class ChromaVectorStore(Store):
                 api_base=embedding_cfg.get("base_url", None),
             )
 
-    async def save(self, text: str, metadata: Dict = None):
+    async def save(self, text: str, metadata: dict = None):
         logger.debug(f"Saving text: {text}")
         embedding = await self.embedding.get_embedding(text)
 
@@ -32,8 +31,8 @@ class ChromaVectorStore(Store):
         )
 
     async def query(
-        self, query: str, top_n=3, metadata_filter: Dict = None
-    ) -> List[str]:
+        self, query: str, top_n=3, metadata_filter: dict = None
+    ) -> list[str]:
         embedding = await self.embedding.get_embedding(query)
 
         results = self.collection.query(

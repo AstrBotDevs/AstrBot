@@ -1,7 +1,6 @@
 from astrbot.core.db import BaseDatabase
 from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
-from typing import List
 from ..register import register_provider_adapter
 from astrbot.core.provider.entities import LLMResponse
 from .openai_source import ProviderOpenAIOfficial
@@ -29,7 +28,7 @@ class ProviderZhipu(ProviderOpenAIOfficial):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = None,
+        image_urls: list[str] = None,
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,

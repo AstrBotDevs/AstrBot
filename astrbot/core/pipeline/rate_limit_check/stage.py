@@ -1,7 +1,9 @@
 import asyncio
 from datetime import datetime, timedelta
 from collections import defaultdict, deque
-from typing import DefaultDict, Deque, Union, AsyncGenerator
+from typing import DefaultDict, Deque
+
+from collections.abc import AsyncGenerator
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -43,7 +45,7 @@ class RateLimitStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         """
         检查并处理限流逻辑。如果触发限流，流水线会 stall 并在窗口期后自动恢复。
 
