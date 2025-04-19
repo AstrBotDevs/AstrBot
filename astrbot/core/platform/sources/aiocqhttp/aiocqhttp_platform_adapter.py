@@ -79,19 +79,22 @@ class AiocqhttpAdapter(Platform):
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
     ):
-        ret = await AiocqhttpMessageEvent._parse_onebot_json(message_chain)
-        match session.message_type.value:
-            case MessageType.GROUP_MESSAGE.value:
-                if "_" in session.session_id:
-                    # 独立会话
-                    _, group_id = session.session_id.split("_")
-                    await self.bot.send_group_msg(group_id=group_id, message=ret)
-                else:
-                    await self.bot.send_group_msg(
-                        group_id=session.session_id, message=ret
-                    )
-            case MessageType.FRIEND_MESSAGE.value:
-                await self.bot.send_private_msg(user_id=session.session_id, message=ret)
+        try:
+            ret = await AiocqhttpMessageEvent._parse_onebot_json(message_chain)
+            match session.message_type.value:
+                case MessageType.GROUP_MESSAGE.value:
+                    if "_" in session.session_id:
+                        # 独立会话
+                        _, group_id = session.session_id.split("_")
+                        await self.bot.send_group_msg(group_id=group_id, message=ret)
+                    else:
+                        await self.bot.send_group_msg(
+                            group_id=session.session_id, message=ret
+                        )
+                case MessageType.FRIEND_MESSAGE.value:
+                    await self.bot.send_private_msg(user_id=session.session_id, message=ret)
+        except Exception as e:
+            logger.error(f"发送消息时出现错误: {e!s}")
         await super().send_by_session(session, message_chain)
 
     async def convert_message(self, event: Event) -> AstrBotMessage:

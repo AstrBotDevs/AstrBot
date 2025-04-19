@@ -95,30 +95,36 @@ class WebChatMessageEvent(AstrMessageEvent):
         return data
 
     async def send(self, message: MessageChain):
-        await WebChatMessageEvent._send(message, session_id=self.session_id)
-        await web_chat_back_queue.put(
-            {
-                "type": "end",
-                "data": "",
-                "streaming": False,
-                "cid": self.session_id.split("!")[-1],
-            }
-        )
+        try:
+            await WebChatMessageEvent._send(message, session_id=self.session_id)
+            await web_chat_back_queue.put(
+                {
+                    "type": "end",
+                    "data": "",
+                    "streaming": False,
+                    "cid": self.session_id.split("!")[-1],
+                }
+            )
+        except Exception as e:
+            logger.error(f"发送消息时出现错误: {e!s}")
         await super().send(message)
 
     async def send_streaming(self, generator):
         final_data = ""
-        async for chain in generator:
-            final_data += await WebChatMessageEvent._send(
-                chain, session_id=self.session_id, streaming=True
-            )
+        try:
+            async for chain in generator:
+                final_data += await WebChatMessageEvent._send(
+                    chain, session_id=self.session_id, streaming=True
+                )
 
-        await web_chat_back_queue.put(
-            {
-                "type": "end",
-                "data": final_data,
-                "streaming": True,
-                "cid": self.session_id.split("!")[-1],
-            }
-        )
+            await web_chat_back_queue.put(
+                {
+                    "type": "end",
+                    "data": final_data,
+                    "streaming": True,
+                    "cid": self.session_id.split("!")[-1],
+                }
+            )
+        except Exception as e:
+            logger.error(f"发送消息时出现错误: {e!s}")
         await super().send_streaming(generator)

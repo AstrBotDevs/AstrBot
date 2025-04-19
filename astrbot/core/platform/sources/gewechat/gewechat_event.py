@@ -187,7 +187,10 @@ class GewechatPlatformEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain):
         to_wxid = self.message_obj.raw_message.get("to_wxid", None)
-        await GewechatPlatformEvent.send_with_client(message, to_wxid, self.client)
+        try:
+            await GewechatPlatformEvent.send_with_client(message, to_wxid, self.client)
+        except Exception as e:
+            logger.error(f"发送消息时出现错误: {e!s}")
         await super().send(message)
 
     async def get_group(self, group_id=None, **kwargs):
