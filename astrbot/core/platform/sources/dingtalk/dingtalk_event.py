@@ -58,7 +58,10 @@ class DingtalkMessageEvent(AstrMessageEvent):
                 logger.debug(f"send image: {ret}")
 
     async def send(self, message: MessageChain):
-        await self.send_with_client(self.client, message)
+        try:
+            await self.send_with_client(self.client, message)
+        except Exception as e:
+            logger.error(f"发送消息时出现错误: {e!s}")
         await super().send(message)
 
     async def send_streaming(self, generator):

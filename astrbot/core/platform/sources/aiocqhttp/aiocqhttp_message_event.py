@@ -1,9 +1,13 @@
 import asyncio
 import typing
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.platform import Group, MessageMember
-from astrbot.api.message_components import Plain, Image, Record, At, Node, Nodes
+
 from aiocqhttp import CQHttp
+from aiocqhttp.exceptions import ApiNotAvailable
+
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.message_components import At, Image, Node, Nodes, Plain, Record
+from astrbot.api.platform import Group, MessageMember
+from astrbot.core import logger
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -51,34 +55,43 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 send_one_by_one = True
                 break
 
-        if send_one_by_one:
-            for seg in message.chain:
-                if isinstance(seg, (Node, Nodes)):
-                    # 合并转发消息
+        try:
+            if send_one_by_one:
+                for seg in message.chain:
+                    if isinstance(seg, (Node, Nodes)):
+                        # 合并转发消息
 
-                    if isinstance(seg, Node):
-                        nodes = Nodes([seg])
-                        seg = nodes
+                        if isinstance(seg, Node):
+                            nodes = Nodes([seg])
+                            seg = nodes
 
-                    payload = seg.toDict()
-                    if self.get_group_id():
-                        payload["group_id"] = self.get_group_id()
-                        await self.bot.call_action("send_group_forward_msg", **payload)
+                        payload = seg.toDict()
+                        if self.get_group_id():
+                            payload["group_id"] = self.get_group_id()
+                            await self.bot.call_action(
+                                "send_group_forward_msg", **payload
+                            )
+                        else:
+                            payload["user_id"] = self.get_sender_id()
+                            await self.bot.call_action(
+                                "send_private_forward_msg", **payload
+                            )
                     else:
-                        payload["user_id"] = self.get_sender_id()
-                        await self.bot.call_action(
-                            "send_private_forward_msg", **payload
+                        await self.bot.send(
+                            self.message_obj.raw_message,
+                            await AiocqhttpMessageEvent._parse_onebot_json(
+                                MessageChain([seg])
+                            ),
                         )
-                else:
-                    await self.bot.send(
-                        self.message_obj.raw_message,
-                        await AiocqhttpMessageEvent._parse_onebot_json(
-                            MessageChain([seg])
-                        ),
-                    )
-                    await asyncio.sleep(0.5)
-        else:
-            await self.bot.send(self.message_obj.raw_message, ret)
+                        await asyncio.sleep(0.5)
+            else:
+                await self.bot.send(self.message_obj.raw_message, ret)
+        except ApiNotAvailable as e:
+            logger.error(
+                f"OneBot API 不可用，可能是与 OneBot 实现的连接已断开: {e!s}"
+            )
+        except Exception as e:
+            logger.error(f"发送消息时出现错误: {e!s}")
 
         await super().send(message)
 
@@ -92,7 +105,14 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         if not buffer:
             return
         buffer.squash_plain()
-        await self.send(buffer)
+        try:
+            await self.send(buffer)
+        except ApiNotAvailable as e:
+            logger.error(
+                f"OneBot API 不可用，可能是与 OneBot 实现的连接已断开: {e!s}"
+            )
+        except Exception as e:
+            logger.error(f"发送消息时出现错误: {e!s}")
         return await super().send_streaming(generator)
 
     async def get_group(self, group_id=None, **kwargs):

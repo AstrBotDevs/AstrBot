@@ -85,10 +85,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_voice(voice=path, **payload)
 
     async def send(self, message: MessageChain):
-        if self.get_message_type() == MessageType.GROUP_MESSAGE:
-            await self.send_with_client(self.client, message, self.message_obj.group_id)
-        else:
-            await self.send_with_client(self.client, message, self.get_sender_id())
+        try:
+            if self.get_message_type() == MessageType.GROUP_MESSAGE:
+                await self.send_with_client(self.client, message, self.message_obj.group_id)
+            else:
+                await self.send_with_client(self.client, message, self.get_sender_id())
+        except Exception as e:
+            logger.error(f"发送消息时出现错误: {e!s}")
         await super().send(message)
 
     async def send_streaming(self, generator):
