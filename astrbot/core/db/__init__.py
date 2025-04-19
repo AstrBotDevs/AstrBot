@@ -1,7 +1,6 @@
 import abc
 from dataclasses import dataclass
 # from typing import list, dict, Any, tuple # 这些大写开头的类型自 Python 3.9 起已弃用
-from tkinter import N
 from typing import Any
 from astrbot.core.db.po import Stats, LLMHistory, ATRIVision, Conversation
 
