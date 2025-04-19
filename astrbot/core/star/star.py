@@ -3,9 +3,8 @@ from __future__ import annotations
 from types import ModuleType
 # from typing import List, Dict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
-from astrbot.core.config import AstrBotConfig  # 循环导入问题
+from astrbot.core.config import AstrBotConfig 
 
 star_registry: list[StarMetadata] = []
 star_map: dict[str, StarMetadata] = {}
