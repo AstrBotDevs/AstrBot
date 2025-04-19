@@ -2,16 +2,11 @@
 如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
 """
 
-from ..types import ConfigValue
-
-
 VERSION = "3.5.3.2"
 DB_PATH = "data/data_v3.db"
 
-
-# region DEFAULT_CONFIG
 # 默认配置
-DEFAULT_CONFIG: dict[str, ConfigValue] = {
+DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
         "unique_session": False,
@@ -110,14 +105,8 @@ DEFAULT_CONFIG: dict[str, ConfigValue] = {
 }
 
 
-
-
-
-
-
-# region CONFIG_METADATA_2
 # 配置项的中文描述、值类型
-CONFIG_METADATA_2: dict[str, ConfigValue] = {
+CONFIG_METADATA_2 = {
     "platform_group": {
         "name": "消息平台",
         "metadata": {
@@ -1256,12 +1245,7 @@ CONFIG_METADATA_2: dict[str, ConfigValue] = {
     },
 }
 
-
-
-
-
-# DEFAULT_VALUE_MAP
-DEFAULT_VALUE_MAP: dict[str, ConfigValue] = {
+DEFAULT_VALUE_MAP = {
     "int": 0,
     "float": 0.0,
     "bool": False,
