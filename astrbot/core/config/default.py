@@ -61,6 +61,7 @@ DEFAULT_CONFIG = {
     "provider_tts_settings": {
         "enable": False,
         "provider_id": "",
+        "dual_output": False,
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
@@ -1101,6 +1102,12 @@ CONFIG_METADATA_2 = {
                         "description": "提供商 ID，不填则默认第一个TTS提供商",
                         "type": "string",
                         "hint": "文本转语音提供商 ID。如果不填写将使用载入的第一个提供商。",
+                    },
+                    "dual_output": {
+                        "description": "启用语音和文字双输出",
+                        "type": "bool",
+                        "hint": "启用后，Bot 将同时输出语音和文字消息。",
+                        "obvious_hint": True,
                     },
                 },
             },
