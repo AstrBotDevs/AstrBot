@@ -483,7 +483,7 @@ class Node(BaseMessageComponent):
             content = _content
         elif isinstance(content, Node):
             content = content.toDict()
-        super().__init__(content=content, **_)
+        super().__init__(type=ComponentType.Node)
 
     def toString(self):
         # logger.warn("Protocol: node doesn't support stringify")
@@ -495,7 +495,7 @@ class Nodes(BaseMessageComponent):
     nodes: list[Node]
 
     def __init__(self, nodes: list[Node], **_):
-        super().__init__(nodes=nodes, **_)
+        super().__init__(type=ComponentType.Nodes)
 
     def toDict(self):
         return {"messages": [node.toDict() for node in self.nodes]}
@@ -518,7 +518,7 @@ class Json(BaseMessageComponent):
     def __init__(self, data, **_):
         if isinstance(data, dict):
             data = json.dumps(data)
-        super().__init__(data=data, **_)
+        super().__init__(type=ComponentType.Json)
 
 
 class CardImage(BaseMessageComponent):
@@ -566,7 +566,7 @@ class File(BaseMessageComponent):
     file: str | None = ""  # url（本地路径）
 
     def __init__(self, name: str, file: str):
-        super().__init__(name=name, file=file)
+        super().__init__(type=ComponentType.File)
 
 
 class WechatEmoji(BaseMessageComponent):
