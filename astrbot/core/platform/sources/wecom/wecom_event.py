@@ -45,7 +45,30 @@ class WecomPlatformEvent(AstrMessageEvent):
         if len(plain) <= 2048:
             return [plain]
         else:
-            return [plain[i : i + 2048] for i in range(0, len(plain), 2048)]
+            result = []
+            start = 0
+            while start < len(plain):
+                # 剩下的字符串长度<2048时结束
+                if start + 2048 >= len(plain):
+                    result.append(plain[start:])
+                    break
+                
+                # 向前搜索分割标点符号
+                end = min(start + 2048, len(plain))
+                cut_position = end
+                for i in range(end, start, -1):
+                    if i < len(plain) and plain[i-1] in ["。", "！", "？", ".", "!", "?", "\n", ";", "；"]:
+                        cut_position = i
+                        break
+                
+                # 没找到合适的位置分割, 直接切分
+                if cut_position == end and end < len(plain):
+                    cut_position = end
+                
+                result.append(plain[start:cut_position])
+                start = cut_position
+
+            return result
 
     async def send(self, message: MessageChain):
         message_obj = self.message_obj
