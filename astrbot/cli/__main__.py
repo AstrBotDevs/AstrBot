@@ -38,7 +38,7 @@ def _get_astrbot_root(path: str | None) -> Path:
     return astrbot_root
 
 
-# 通过类型来验证先后，必须先gey获取Path对象才能对该目录进行检查
+# 通过类型来验证先后，必须先获取Path对象才能对该目录进行检查
 def _check_astrbot_root(astrbot_root: Path) -> None:
     """验证"""
     dot_astrbot = astrbot_root / ".astrbot"
