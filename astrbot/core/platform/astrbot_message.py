@@ -1,7 +1,6 @@
 import time
 from dataclasses import dataclass
 
-from pydantic import BaseModel
 from astrbot.core.message.components import BaseMessageComponent
 from .message_type import MessageType
 
@@ -47,7 +46,7 @@ class Group:
         )
 
 
-class AstrBotMessage(BaseModel):
+class AstrBotMessage():
     """
     AstrBot 的消息对象
     """
