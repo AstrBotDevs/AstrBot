@@ -12,7 +12,7 @@ from ..filter.platform_adapter_type import (
 from ..filter.permission import PermissionTypeFilter, PermissionType
 from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
 from ..filter.regex import RegexFilter
-from typing import Awaitable
+from collections.abc import Awaitable
 from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
 

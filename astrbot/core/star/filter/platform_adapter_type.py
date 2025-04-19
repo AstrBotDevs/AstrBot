@@ -2,7 +2,6 @@ import enum
 from . import HandlerFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.config import AstrBotConfig
-from typing import Union
 
 
 class PlatformAdapterType(enum.Flag):
@@ -28,7 +27,7 @@ ADAPTER_NAME_2_TYPE = {
 
 
 class PlatformAdapterTypeFilter(HandlerFilter):
-    def __init__(self, platform_adapter_type_or_str: Union[PlatformAdapterType, str]):
+    def __init__(self, platform_adapter_type_or_str: PlatformAdapterType | str):
         self.type_or_str = platform_adapter_type_or_str
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:

@@ -1,4 +1,3 @@
-import sys
 import uuid
 import asyncio
 import quart
@@ -24,10 +23,7 @@ from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.enterprise import parse_message
 from .wecom_event import WecomPlatformEvent
 
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
+from typing import override
 
 
 class WecomServer:

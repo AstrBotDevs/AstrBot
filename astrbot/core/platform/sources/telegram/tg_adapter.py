@@ -1,6 +1,5 @@
 import asyncio
 import re
-import sys
 import uuid
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -28,10 +27,7 @@ from astrbot.core.star.star_handler import star_handlers_registry
 
 from .tg_event import TelegramPlatformEvent
 
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
+from typing import override
 
 
 @register_platform_adapter("telegram", "telegram 适配器")

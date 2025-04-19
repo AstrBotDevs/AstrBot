@@ -19,7 +19,8 @@ from astrbot.core.db import BaseDatabase
 from astrbot.api.provider import Provider, Personality
 from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
-from typing import List, AsyncGenerator
+
+from collections.abc import AsyncGenerator
 from ..register import register_provider_adapter
 from astrbot.core.provider.entities import LLMResponse
 
@@ -44,7 +45,7 @@ class ProviderOpenAIOfficial(Provider):
             default_persona,
         )
         self.chosen_api_key = None
-        self.api_keys: List = provider_config.get("key", [])
+        self.api_keys: list = provider_config.get("key", [])
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
@@ -122,7 +123,7 @@ class ProviderOpenAIOfficial(Provider):
 
     async def _query_stream(
         self, payloads: dict, tools: FuncCall
-    ) -> AsyncGenerator[LLMResponse, None]:
+    ) -> AsyncGenerator[LLMResponse]:
         """流式查询API，逐步返回结果"""
         if tools:
             model = payloads.get("model", "").lower()
@@ -221,7 +222,7 @@ class ProviderOpenAIOfficial(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = [],
+        image_urls: list[str] = [],
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
@@ -256,7 +257,7 @@ class ProviderOpenAIOfficial(Provider):
         context_query: list,
         func_tool: FuncCall,
         chosen_key: str,
-        available_api_keys: List[str],
+        available_api_keys: list[str],
         retry_cnt: int,
         max_retries: int,
     ) -> tuple:
@@ -339,7 +340,7 @@ class ProviderOpenAIOfficial(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = [],
+        image_urls: list[str] = [],
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
@@ -405,13 +406,13 @@ class ProviderOpenAIOfficial(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = [],
+        image_urls: list[str] = [],
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
         tool_calls_result=None,
         **kwargs,
-    ) -> AsyncGenerator[LLMResponse, None]:
+    ) -> AsyncGenerator[LLMResponse]:
         """流式对话，与服务商交互并逐步返回结果"""
         payloads, context_query, func_tool = await self._prepare_chat_payload(
             prompt,
@@ -467,7 +468,7 @@ class ProviderOpenAIOfficial(Provider):
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             raise e
 
-    async def _remove_image_from_context(self, contexts: List):
+    async def _remove_image_from_context(self, contexts: list):
         """
         从上下文中删除所有带有 image 的记录
         """
@@ -496,13 +497,13 @@ class ProviderOpenAIOfficial(Provider):
     def get_current_key(self) -> str:
         return self.client.api_key
 
-    def get_keys(self) -> List[str]:
+    def get_keys(self) -> list[str]:
         return self.api_keys
 
     def set_key(self, key):
         self.client.api_key = key
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None) -> dict:
+    async def assemble_context(self, text: str, image_urls: list[str] = None) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         if image_urls:
             user_content = {"role": "user", "content": [{"type": "text", "text": text if text else "[图片]"}]}

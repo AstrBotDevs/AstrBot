@@ -175,7 +175,7 @@ class ChatRoute(Route):
                         result = await asyncio.wait_for(
                             web_chat_back_queue.get(), timeout=10
                         )  # 设置超时时间为5秒
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         yield f"data: {heartbeat}\n\n"  # 心跳包
                         continue
 

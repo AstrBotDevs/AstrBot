@@ -3,7 +3,6 @@ import asyncio
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from .provider import Provider, STTProvider, TTSProvider, Personality
 from .entities import ProviderType
-from typing import List
 from astrbot.core.db import BaseDatabase
 from .register import provider_cls_map, llm_tools
 from astrbot.core import logger, sp
@@ -11,7 +10,7 @@ from astrbot.core import logger, sp
 
 class ProviderManager:
     def __init__(self, config: AstrBotConfig, db_helper: BaseDatabase):
-        self.providers_config: List = config["provider"]
+        self.providers_config: list = config["provider"]
         self.provider_settings: dict = config["provider_settings"]
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
@@ -30,7 +29,7 @@ class ProviderManager:
         self.default_persona_name = self.provider_settings.get(
             "default_personality", "default"
         )
-        self.personas: List[Personality] = []
+        self.personas: list[Personality] = []
         self.selected_default_persona = None
         for persona in self.persona_configs:
             begin_dialogs = persona.get("begin_dialogs", [])
@@ -92,11 +91,11 @@ class ProviderManager:
             )
             self.personas.append(self.selected_default_persona)
 
-        self.provider_insts: List[Provider] = []
+        self.provider_insts: list[Provider] = []
         """加载的 Provider 的实例"""
-        self.stt_provider_insts: List[STTProvider] = []
+        self.stt_provider_insts: list[STTProvider] = []
         """加载的 Speech To Text Provider 的实例"""
-        self.tts_provider_insts: List[TTSProvider] = []
+        self.tts_provider_insts: list[TTSProvider] = []
         """加载的 Text To Speech Provider 的实例"""
         self.inst_map = {}
         """Provider 实例映射. key: provider_id, value: Provider 实例"""

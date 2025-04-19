@@ -1,4 +1,3 @@
-import sys
 import asyncio
 import os
 
@@ -10,10 +9,7 @@ from .gewechat_event import GewechatPlatformEvent
 from .client import SimpleGewechatClient
 from astrbot import logger
 
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
+from typing import override
 
 
 @register_platform_adapter("gewechat", "基于 gewechat 的 Wechat 适配器")

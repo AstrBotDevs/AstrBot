@@ -3,7 +3,8 @@ import asyncio
 import math
 import traceback
 import astrbot.core.message.components as Comp
-from typing import Union, AsyncGenerator
+
+from collections.abc import AsyncGenerator
 from ..stage import register_stage, Stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -137,7 +138,7 @@ class RespondStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None]:
         result = event.get_result()
         if result is None:
             return
@@ -159,7 +160,7 @@ class RespondStage(Stage):
                         # 支持 File 消息段的路径映射。
                         component.file = path_Mapping(mappings, component.file)
                         event.get_result().chain[idx] = component
-            
+
             await event._pre_send()
 
             # 检查消息链是否为空
