@@ -55,7 +55,7 @@ class ProviderGoogleGenAI(Provider):
         provider_settings: dict,
         db_helper: BaseDatabase,
         persistant_history=True,
-        default_persona: Personality = None,
+        default_persona: Personality | None = None,
     ) -> None:
         super().__init__(
             provider_config,
