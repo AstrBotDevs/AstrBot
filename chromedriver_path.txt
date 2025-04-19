@@ -1,1 +1,0 @@
-C:\Users\light\.wdm\drivers\chromedriver\win64\135.0.7049.95\chromedriver-win32/chromedriver.exe
