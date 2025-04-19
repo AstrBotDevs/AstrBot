@@ -105,7 +105,7 @@ class Plain(BaseMessageComponent):
     convert: bool | None = True  # 若为 False 则直接发送未转换 CQ 码的消息
 
     def __init__(self, text: str, convert: bool | None = True, **_):
-        super().__init__(text=text, convert=convert, **_)
+        super().__init__(type=ComponentType.Plain)
 
     def toString(self):  # 没有 [CQ:plain] 这种东西，所以直接导出纯文本
         if not self.convert:
@@ -139,7 +139,7 @@ class Record(BaseMessageComponent):
             if k == "url":
                 pass
                 # Protocol.warn(f"go-cqhttp doesn't support send {self.type} by {k}")
-        super().__init__(file=file, **_)
+        super().__init__(type=ComponentType.Record)
 
     @staticmethod
     def fromFileSystem(path, **_):
