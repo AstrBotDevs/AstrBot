@@ -33,7 +33,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         else:
             self.send_buffer.chain.extend(message.chain)
 
-    async def send_streaming(self, generator):
+    async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊"""
         stream_payload = {"state": 1, "id": None, "index": 0, "reset": False}
         last_edit_time = 0  # 上次编辑消息的时间
@@ -66,7 +66,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.error(f"发送流式消息时出错: {e}", exc_info=True)
             self.send_buffer = None
 
-        return await super().send_streaming(generator)
+        return await super().send_streaming(generator, use_fallback)
 
     async def _post_send(self, stream: dict = None):
         if not self.send_buffer:
@@ -97,7 +97,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "msg_id": self.message_obj.message_id,
         }
 
-        if not isinstance(source, (botpy.message.Message,botpy.message.DirectMessage)):
+        if not isinstance(source, (botpy.message.Message, botpy.message.DirectMessage)):
             payload["msg_seq"] = random.randint(1, 10000)
 
         match type(source):

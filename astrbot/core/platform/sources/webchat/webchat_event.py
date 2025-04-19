@@ -106,7 +106,7 @@ class WebChatMessageEvent(AstrMessageEvent):
         )
         await super().send(message)
 
-    async def send_streaming(self, generator):
+    async def send_streaming(self, generator, use_fallback: bool = False):
         final_data = ""
         async for chain in generator:
             final_data += await WebChatMessageEvent._send(
@@ -121,4 +121,4 @@ class WebChatMessageEvent(AstrMessageEvent):
                 "cid": self.session_id.split("!")[-1],
             }
         )
-        await super().send_streaming(generator)
+        await super().send_streaming(generator, use_fallback)

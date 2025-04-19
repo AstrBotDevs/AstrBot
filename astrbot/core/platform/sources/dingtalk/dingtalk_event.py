@@ -61,7 +61,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
         await self.send_with_client(self.client, message)
         await super().send(message)
 
-    async def send_streaming(self, generator):
+    async def send_streaming(self, generator, use_fallback: bool = False):
         buffer = None
         async for chain in generator:
             if not buffer:
@@ -72,4 +72,4 @@ class DingtalkMessageEvent(AstrMessageEvent):
             return
         buffer.squash_plain()
         await self.send(buffer)
-        return await super().send_streaming(generator)
+        return await super().send_streaming(generator, use_fallback)
