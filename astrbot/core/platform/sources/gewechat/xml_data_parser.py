@@ -62,9 +62,14 @@ class GeweDataParser:
                         try:
                             logger.debug("gewechat: Reference message is nested")
                             refer_root = eT.fromstring(refermsg_content.text)
-                            refermsg_content_title = refer_root.find("appmsg").find("title")
-                            logger.debug(f"gewechat: Reference message nesting: {refermsg_content_title.text}")
-                            replied_content = refermsg_content_title.text
+                            img=refer_root.find("img")
+                            if img is not None:
+                                replied_content = "[图片]"
+                            else:
+                                app_msg=refer_root.find("appmsg")
+                                refermsg_content_title = app_msg.find("title")
+                                logger.debug(f"gewechat: Reference message nesting: {refermsg_content_title.text}")
+                                replied_content = refermsg_content_title.text
                         except Exception as e:
                             logger.error(f"gewechat: nested failed, {e}")
                             # 处理异常情况
