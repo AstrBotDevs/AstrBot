@@ -4,6 +4,7 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
+from typing_extensions import override
 
 from google import genai
 from google.genai import types
@@ -24,6 +25,7 @@ from ..register import register_provider_adapter
 class SuppressNonTextPartsWarning(logging.Filter):
     """过滤 Gemini SDK 中的非文本部分警告"""
 
+    @override
     def filter(self, record):
         return "there are non-text parts in the response" not in record.getMessage()
 
