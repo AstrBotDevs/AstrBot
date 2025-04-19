@@ -10,7 +10,6 @@ from astrbot.core.message.message_event_result import (
     CommandResult,
     EventResultType,
 )
-from astrbot.core.platform import AstrMessageEvent
 
 # star register
 from astrbot.core.star.register import (
@@ -51,3 +50,36 @@ from astrbot.core.platform import (
 from astrbot.core.platform.register import register_platform_adapter
 
 from .message_components import *
+
+__all__ = [
+    "logger",
+    "html_renderer",
+    "AstrBotConfig",
+    "AstrBotMessage",
+    "MessageEventResult",
+    "MessageChain",
+    "CommandResult",
+    "EventResultType",
+    "Context",
+    "Star",
+    "Provider",
+    "Personality",
+    "ProviderMetaData",
+    "EventMessageTypeFilter",
+    "EventMessageType",
+    "AstrMessageEvent",
+    "Platform",
+    "AstrBotMessage",
+    "MessageMember",
+    "MessageType",
+    "PlatformMetadata",
+    "register_platform_adapter",
+    "command",
+    "command_group",
+    "event_message_type",
+    "regex",
+    "platform_adapter_type",
+    "llm_tool",
+    "PlatformAdapterTypeFilter",
+    "PlatformAdapterType",
+]
