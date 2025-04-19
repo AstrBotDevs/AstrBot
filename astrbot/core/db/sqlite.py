@@ -1,7 +1,7 @@
 import sqlite3
 import os
-import time
 from astrbot.core.db.po import Platform, Stats, LLMHistory, ATRIVision, Conversation
+from astrbot.core.time import Time
 from . import BaseDatabase
 from typing import Tuple, List, Dict, Any
 
@@ -79,7 +79,7 @@ class SQLiteDatabase(BaseDatabase):
                 """
                 INSERT INTO platform(name, count, timestamp) VALUES (?, ?, ?)
                 """,
-                (k, v, int(time.time())),
+                (k, v, int(Time.time())),
             )
 
     def insert_plugin_metrics(self, metrics: dict):
@@ -91,7 +91,7 @@ class SQLiteDatabase(BaseDatabase):
                 """
                 INSERT INTO command(name, count, timestamp) VALUES (?, ?, ?)
                 """,
-                (k, v, int(time.time())),
+                (k, v, int(Time.time())),
             )
 
     def insert_llm_metrics(self, metrics: dict):
@@ -100,7 +100,7 @@ class SQLiteDatabase(BaseDatabase):
                 """
                 INSERT INTO llm(name, count, timestamp) VALUES (?, ?, ?)
                 """,
-                (k, v, int(time.time())),
+                (k, v, int(Time.time())),
             )
 
     def update_llm_history(self, session_id: str, content: str, provider_type: str):
@@ -154,7 +154,7 @@ class SQLiteDatabase(BaseDatabase):
 
     def get_base_stats(self, offset_sec: int = 86400) -> Stats:
         """获取 offset_sec 秒前到现在的基础统计数据"""
-        where_clause = f" WHERE timestamp >= {int(time.time()) - offset_sec}"
+        where_clause = f" WHERE timestamp >= {int(Time.time()) - offset_sec}"
 
         try:
             c = self.conn.cursor()
@@ -213,7 +213,7 @@ class SQLiteDatabase(BaseDatabase):
 
     def get_grouped_base_stats(self, offset_sec: int = 86400) -> Stats:
         """获取 offset_sec 秒前到现在的基础统计数据(合并)"""
-        where_clause = f" WHERE timestamp >= {int(time.time()) - offset_sec}"
+        where_clause = f" WHERE timestamp >= {int(Time.time()) - offset_sec}"
 
         try:
             c = self.conn.cursor()
@@ -259,7 +259,7 @@ class SQLiteDatabase(BaseDatabase):
 
     def new_conversation(self, user_id: str, cid: str):
         history = "[]"
-        updated_at = int(time.time())
+        updated_at = int(Time.time())
         created_at = updated_at
         self._exec_sql(
             """
@@ -297,7 +297,7 @@ class SQLiteDatabase(BaseDatabase):
 
     def update_conversation(self, user_id: str, cid: str, history: str):
         """更新对话，并且同时更新时间"""
-        updated_at = int(time.time())
+        updated_at = int(Time.time())
         self._exec_sql(
             """
             UPDATE webchat_conversation SET history = ?, updated_at = ? WHERE user_id = ? AND cid = ?
@@ -330,7 +330,7 @@ class SQLiteDatabase(BaseDatabase):
         )
 
     def insert_atri_vision_data(self, vision: ATRIVision):
-        ts = int(time.time())
+        ts = int(Time.time())
         keywords = ",".join(vision.keywords)
         self._exec_sql(
             """
@@ -400,9 +400,11 @@ class SQLiteDatabase(BaseDatabase):
 
         try:
             # 获取总记录数
-            c.execute("""
+            c.execute(
+                """
                 SELECT COUNT(*) FROM webchat_conversation
-            """)
+            """
+            )
             total_count = c.fetchone()[0]
 
             # 计算偏移量

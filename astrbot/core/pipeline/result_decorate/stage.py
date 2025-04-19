@@ -1,4 +1,3 @@
-import time
 import re
 import traceback
 from typing import Union, AsyncGenerator
@@ -8,6 +7,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core import logger
+from astrbot.core.time import Time
 from astrbot.core.message.components import Plain, Image, At, Reply, Record, File, Node
 from astrbot.core import html_renderer
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
@@ -172,7 +172,9 @@ class ResultDecorateStage(Stage):
                 self.ctx.astrbot_config["provider_tts_settings"]["enable"]
                 and result.is_llm_result()
             ):
-                tts_provider = self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
+                tts_provider = (
+                    self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
+                )
                 new_chain = []
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
@@ -208,7 +210,7 @@ class ResultDecorateStage(Stage):
                     else:
                         break
                 if plain_str and len(plain_str) > self.t2i_word_threshold:
-                    render_start = time.time()
+                    render_start = Time.time()
                     try:
                         url = await html_renderer.render_t2i(
                             plain_str, return_url=True, use_network=self.t2i_use_network
@@ -216,7 +218,7 @@ class ResultDecorateStage(Stage):
                     except BaseException:
                         logger.error("文本转图片失败，使用文本发送。")
                         return
-                    if time.time() - render_start > 3:
+                    if Time.time() - render_start > 3:
                         logger.warning(
                             "文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。"
                         )

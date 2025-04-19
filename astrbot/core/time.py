@@ -1,0 +1,313 @@
+import datetime
+import time
+import asyncio
+import zoneinfo
+from typing import Optional, Union
+
+
+class Time:
+    """
+    时间类, 为Core与插件提供统一的时间接口
+    """
+
+    # 类型
+    DateTime = datetime.datetime
+    TimeDelta = datetime.timedelta
+    ZoneInfo = zoneinfo.ZoneInfo
+
+    # 函数
+    sleep = time.sleep
+
+    _initialized = False
+    _timezone = None
+
+    @classmethod
+    def initialize(cls, timezone_str: Optional[str] = None) -> None:
+        """
+        初始化时间
+
+        Args:
+            timezone_str (str): 时区字符串, 例如 "Asia/Shanghai"
+        """
+        if cls._initialized:
+            return
+
+        if not timezone_str:
+            cls._timezone = None
+        else:
+            try:
+                cls._timezone = zoneinfo.ZoneInfo(timezone_str)
+            except zoneinfo.ZoneInfoNotFoundError:
+                cls._timezone = None
+
+        cls._initialized = True
+
+    @classmethod
+    def now(cls) -> datetime.datetime:
+        """
+        获取当前时间
+
+        Returns:
+
+            datetime: 当前时间
+        """
+        return (
+            datetime.datetime.now(cls._timezone)
+            if cls._timezone
+            else datetime.datetime.now()
+        )
+
+    @classmethod
+    def time(cls) -> float:
+        """
+        获取当前时间
+
+        Returns:
+            float: 当前时间
+        """
+        return cls.timestamp() if cls._timezone else time.time()
+
+    @classmethod
+    def timestamp(cls) -> float:
+        """
+        获取当前时间戳(秒)
+
+        Returns:
+            float: 当前时间戳(秒)
+        """
+        return cls.now().timestamp() if cls._timezone else time.time()
+
+    @classmethod
+    def timestamp_ms(cls) -> int:
+        """
+        获取当前时间戳(毫秒)
+
+        Returns:
+            int: 当前时间戳(毫秒)
+        """
+        return int(cls.timestamp() * 1000)
+
+    @classmethod
+    def format_datetime(
+        cls, dt: Optional[datetime.datetime] = None, fmt: str = "%Y-%m-%d %H:%M:%S"
+    ) -> str:
+        """
+        格式化时间为字符串
+
+        Args:
+            dt (datetime): 时间对象, 默认为当前时间
+            fmt (str): 格式化字符串, 默认为 "%Y-%m-%d %H:%M:%S"
+
+        Returns:
+            str: 格式化后的时间字符串
+        """
+        if dt is None:
+            dt = cls.now()
+        return dt.strftime(fmt)
+
+    @classmethod
+    def parse_datetime(
+        cls, datetime_str: str, fmt: str = "%Y-%m-%d %H:%M:%S"
+    ) -> datetime.datetime:
+        """
+        从字符串解析为datetime对象，应用类中设置的时区
+
+        Args:
+            datetime_str (str): 时间字符串
+            fmt (str): 格式化字符串
+
+        Returns:
+            datetime.datetime: 解析后的datetime对象，带有设置的时区
+        """
+        dt = cls.DateTime.strptime(datetime_str, fmt)
+        if cls._timezone:
+            dt = dt.replace(tzinfo=cls._timezone)
+        return dt
+
+    @classmethod
+    def fromtimestamp(cls, timestamp: float) -> datetime.datetime:
+        """
+        从时间戳创建datetime对象
+
+        Args:
+            timestamp (float): 时间戳
+
+        Returns:
+            datetime.datetime: 创建的datetime对象
+        """
+        return (
+            datetime.datetime.fromtimestamp(timestamp, cls._timezone)
+            if cls._timezone
+            else datetime.datetime.fromtimestamp(timestamp)
+        )
+
+    @classmethod
+    def measure_time(
+        cls,
+        start_time: Union[float, datetime.datetime, None] = None,
+        end_time: Union[float, datetime.datetime, None] = None,
+        unit: str = "s",
+    ) -> float:
+        """
+        计算两个时间点之间的时间差，支持不同时间单位
+
+        Args:
+            start_time (Union[float, datetime.datetime, None]): 第一个时间点（时间戳或datetime对象）
+                如果为None，则返回当前时间戳
+            end_time (Union[float, datetime.datetime, None]): 第二个时间点（时间戳或datetime对象）
+                如果为None，则使用当前时间
+            unit (str): 返回时间的单位, 可选值: 's'(秒), 'ms'(毫秒), 默认为's'
+
+        Returns:
+            float: 两个时间点之间的时间差，单位由unit参数指定；
+                如果start_time为None，则返回当前时间戳
+        """
+        if start_time is None:
+            return cls.timestamp()
+
+        timestamp1 = (
+            start_time if isinstance(start_time, float) else start_time.timestamp()
+        )
+
+        if end_time is None:
+            timestamp2 = cls.timestamp()
+        else:
+            timestamp2 = (
+                end_time if isinstance(end_time, float) else end_time.timestamp()
+            )
+
+        time_diff = timestamp2 - timestamp1
+
+        if unit == "s":
+            return time_diff
+        elif unit == "ms":
+            return time_diff * 1000
+        else:
+            raise ValueError("无效的时间单位, 可选值: 's'(秒), 'ms'(毫秒)")
+
+    @classmethod
+    def get_timezone_str(cls) -> Optional[str]:
+        """
+        获取当前时区字符串
+
+        Returns:
+            Optional[str]: 当前时区字符串, 如果未设置则返回None
+        """
+        if cls._timezone:
+            return str(cls._timezone)
+        return None
+
+    @classmethod
+    def get_timezone(cls) -> Optional[zoneinfo.ZoneInfo]:
+        """
+        获取当前时区对象
+
+        Returns:
+            Optional[zoneinfo.ZoneInfo]: 当前时区对象, 如果未设置则返回None
+        """
+        return cls._timezone if cls._timezone else None
+
+    @classmethod
+    def utcnow(cls) -> datetime.datetime:
+        """
+        获取当前UTC时间
+
+        Returns:
+            datetime.datetime: 当前UTC时间
+        """
+        return datetime.datetime.now(datetime.timezone.utc)
+
+    @classmethod
+    def timedelta(
+        cls,
+        days: float = 0,
+        seconds: float = 0,
+        microseconds: float = 0,
+        milliseconds: float = 0,
+        minutes: float = 0,
+        hours: float = 0,
+        weeks: float = 0,
+    ) -> datetime.timedelta:
+        """
+        创建时间间隔对象
+
+        Args:
+            days (float): 天数
+            seconds (float): 秒数
+            microseconds (float): 微秒数
+            milliseconds (float): 毫秒数
+            minutes (float): 分钟数
+            hours (float): 小时数
+            weeks (float): 周数
+
+        Returns:
+            datetime.timedelta: 创建的时间间隔对象
+        """
+        return datetime.timedelta(
+            days=days,
+            seconds=seconds,
+            microseconds=microseconds,
+            milliseconds=milliseconds,
+            minutes=minutes,
+            hours=hours,
+            weeks=weeks,
+        )
+
+    @classmethod
+    def add_time(
+        cls, dt: datetime.datetime, delta: Union[datetime.timedelta, float]
+    ) -> datetime.datetime:
+        """
+        在时间上添加时间间隔
+
+        Args:
+            dt (datetime.datetime): 原始时间
+            delta (Union[datetime.timedelta, float]): 要添加的时间间隔(timedelta对象或秒数)
+
+        Returns:
+            datetime.datetime: 添加时间间隔后的新时间
+        """
+        if isinstance(delta, float) or isinstance(delta, int):
+            delta = datetime.timedelta(seconds=delta)
+        return dt + delta
+
+    @classmethod
+    def subtract_time(
+        cls, dt: datetime.datetime, delta: Union[datetime.timedelta, float]
+    ) -> datetime.datetime:
+        """
+        从时间中减去时间间隔
+
+        Args:
+            dt (datetime.datetime): 原始时间
+            delta (Union[datetime.timedelta, float]): 要减去的时间间隔(timedelta对象或秒数)
+
+        Returns:
+            datetime.datetime: 减去时间间隔后的新时间
+        """
+        if isinstance(delta, float) or isinstance(delta, int):
+            delta = datetime.timedelta(seconds=delta)
+        return dt - delta
+
+    @classmethod
+    def time_diff(
+        cls, dt1: datetime.datetime, dt2: datetime.datetime, unit: str = "s"
+    ) -> float:
+        """
+        计算两个时间点之间的差值
+
+        Args:
+            dt1 (datetime.datetime): 第一个时间点
+            dt2 (datetime.datetime): 第二个时间点
+            unit (str): 返回的时间单位，'s'表示秒，'ms'表示毫秒
+
+        Returns:
+            float: 两个时间点之间的差值，单位由unit参数指定
+        """
+        diff_seconds = (dt1 - dt2).total_seconds()
+        if unit == "s":
+            return diff_seconds
+        elif unit == "ms":
+            return diff_seconds * 1000
+        else:
+            raise ValueError("无效的时间单位，可选值: 's'(秒), 'ms'(毫秒)")

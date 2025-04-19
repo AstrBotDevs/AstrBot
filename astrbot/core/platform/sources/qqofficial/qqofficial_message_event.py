@@ -4,6 +4,7 @@ import botpy.types
 import botpy.types.message
 import asyncio
 from astrbot.core.utils.io import file_to_base64, download_image_by_url
+from astrbot.core.time import Time
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image
@@ -48,14 +49,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
                 if isinstance(source, botpy.message.C2CMessage):
                     # 真流式传输
-                    current_time = asyncio.get_event_loop().time()
+                    current_time = Time.timestamp()
                     time_since_last_edit = current_time - last_edit_time
 
                     if time_since_last_edit >= throttle_interval:
                         ret = await self._post_send(stream=stream_payload)
                         stream_payload["index"] += 1
                         stream_payload["id"] = ret["id"]
-                        last_edit_time = asyncio.get_event_loop().time()
+                        last_edit_time = Time.timestamp()
 
             if isinstance(source, botpy.message.C2CMessage):
                 # 结束流式对话，并且传输 buffer 中剩余的消息
@@ -97,7 +98,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "msg_id": self.message_obj.message_id,
         }
 
-        if not isinstance(source, (botpy.message.Message,botpy.message.DirectMessage)):
+        if not isinstance(source, (botpy.message.Message, botpy.message.DirectMessage)):
             payload["msg_seq"] = random.randint(1, 10000)
 
         match type(source):

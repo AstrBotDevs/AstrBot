@@ -1,8 +1,8 @@
 import jwt
-import datetime
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core import WEBUI_SK, DEMO_MODE
+from astrbot.core.time import Time
 from astrbot import logger
 
 
@@ -72,7 +72,7 @@ class AuthRoute(Route):
     def generate_jwt(self, username):
         payload = {
             "username": username,
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(days=30),
+            "exp": Time.utcnow() + Time.timedelta(days=30),
         }
         token = jwt.encode(payload, WEBUI_SK, algorithm="HS256")
         return token

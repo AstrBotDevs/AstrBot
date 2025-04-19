@@ -1,5 +1,4 @@
 import aiohttp
-import datetime
 import builtins
 import traceback
 import re
@@ -22,6 +21,7 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.config.default import VERSION
 from .long_term_memory import LongTermMemory
 from astrbot.core import logger
+from astrbot.core.time import Time
 from astrbot.api.message_components import Plain, Image, Reply
 from typing import Union
 
@@ -39,12 +39,6 @@ class Main(star.Star):
         self.prompt_prefix = cfg["provider_settings"]["prompt_prefix"]
         self.identifier = cfg["provider_settings"]["identifier"]
         self.enable_datetime = cfg["provider_settings"]["datetime_system_prompt"]
-        self.timezone = cfg.get("timezone")
-        if not self.timezone:
-            # 系统默认时区
-            self.timezone = None
-        else:
-            logger.info(f"Timezone set to: {self.timezone}")
         self.ltm = None
         if (
             self.context.get_config()["provider_ltm_settings"]["group_icl_enable"]
@@ -654,8 +648,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
             data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
             idx = 1
             for conv in data["data"]:
-                ts_h = datetime.datetime.fromtimestamp(conv["updated_at"]).strftime(
-                    "%m-%d %H:%M"
+                ts_h = Time.format_datetime(
+                    Time.fromtimestamp(conv["updated_at"]), "%m-%d %H:%M"
                 )
                 ret += f"{idx}. {conv['name']}({conv['id'][:4]})\n  上次更新:{ts_h}\n"
                 idx += 1
@@ -703,7 +697,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     "name"
                 ]
             title = _titles.get(conv.cid, "新对话")
-            ret += f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+            ret += f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {Time.format_datetime(Time.fromtimestamp(conv.updated_at), '%m-%d %H:%M')}\n"
             global_index += 1
 
         ret += "---\n"
@@ -882,7 +876,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
             assert isinstance(provider, ProviderDify)
             dify_cid = provider.conversation_ids.pop(message.unified_msg_origin, None)
             if dify_cid:
-                await provider.api_client.delete_chat_conv(message.unified_msg_origin, dify_cid)
+                await provider.api_client.delete_chat_conv(
+                    message.unified_msg_origin, dify_cid
+                )
             message.set_result(
                 MessageEventResult().message(
                     "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
@@ -1200,18 +1196,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         # 启用附加时间戳
         if self.enable_datetime:
-            current_time = None
-            if self.timezone:
-                # 启用时区
-                try:
-                    now = datetime.datetime.now(zoneinfo.ZoneInfo(self.timezone))
-                    current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
-                except Exception as e:
-                    logger.error(f"时区设置错误: {e}, 使用本地时区")
-            if not current_time:
-                current_time = (
-                    datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
-                )
+            current_time = Time.format_datetime("%Y-%m-%d %H:%M (%Z)")
             req.system_prompt += f"\nCurrent datetime: {current_time}\n"
 
         if req.conversation:
@@ -1233,7 +1218,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 if mood_dialogs := persona["_mood_imitation_dialogs_processed"]:
                     req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
                     req.system_prompt += mood_dialogs
-                if (begin_dialogs := persona["_begin_dialogs_processed"]) and not req.contexts:
+                if (
+                    begin_dialogs := persona["_begin_dialogs_processed"]
+                ) and not req.contexts:
                     req.contexts[:0] = begin_dialogs
 
         if quote and quote.message_str:

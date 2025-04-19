@@ -1,4 +1,3 @@
-import datetime
 import uuid
 import random
 import astrbot.api.star as star
@@ -7,6 +6,7 @@ from astrbot.api.platform import MessageType
 from astrbot.api.provider import ProviderRequest
 from astrbot.api.message_components import Plain, Image
 from astrbot import logger
+from astrbot.core.time import Time
 from collections import defaultdict
 
 """
@@ -88,7 +88,7 @@ class LongTermMemory:
     async def handle_message(self, event: AstrMessageEvent):
         """仅支持群聊"""
         if event.get_message_type() == MessageType.GROUP_MESSAGE:
-            datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
+            datetime_str = Time.format_datetime("%H:%M:%S")
 
             final_message = f"[{event.message_obj.sender.nickname}/{datetime_str}]: "
 
@@ -123,7 +123,9 @@ class LongTermMemory:
             prompt = req.prompt
             req.prompt = f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
             req.prompt += f"\nNow, a new message is coming: `{prompt}`. Please react to it. Only output your response and do not output any other information."
-            req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
+            req.contexts = (
+                []
+            )  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
         else:
             req.system_prompt += (
                 "You are now in a chatroom. The chat history is as follows: \n"
@@ -135,7 +137,7 @@ class LongTermMemory:
             return
 
         if event.get_result() and event.get_result().is_llm_result():
-            final_message = f"[AstrBot/{datetime.datetime.now().strftime('%H:%M:%S')}]: {event.get_result().get_plain_text()}"
+            final_message = f"[AstrBot/{Time.format_datetime('%H:%M:%S')}]: {event.get_result().get_plain_text()}"
             logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
             self.session_chats[event.unified_msg_origin].append(final_message)
             if len(self.session_chats[event.unified_msg_origin]) > self.max_cnt:

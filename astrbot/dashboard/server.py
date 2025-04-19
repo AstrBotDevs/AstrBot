@@ -39,7 +39,7 @@ class AstrBotDashboard:
         logging.getLogger(self.app.name).removeHandler(default_handler)
         self.context = RouteContext(self.config, self.app)
         self.ur = UpdateRoute(
-            self.context, core_lifecycle.astrbot_updator, core_lifecycle
+            self.context, core_lifecycle.astrbot_updater, core_lifecycle
         )
         self.sr = StatRoute(self.context, db, core_lifecycle)
         self.pr = PluginRoute(
