@@ -464,7 +464,7 @@ class ProviderGoogleGenAI(Provider):
 
         retry = 10
         keys = self.api_keys.copy()
-        temp = kwargs.get("temperature", 0.7)  # 暂定默认温度为0.7
+        temp = model_config.get("temperature", 0.7)  # 暂定默认温度为0.7
 
         for _ in range(retry):
             try:
@@ -505,7 +505,7 @@ class ProviderGoogleGenAI(Provider):
 
         retry = 10
         keys = self.api_keys.copy()
-        temp = kwargs.get("temperature", 0.7)  # 暂定默认温度为0.7
+        temp = model_config.get("temperature", 0.7)  # 暂定默认温度为0.7
 
         for _ in range(retry):
             try:
