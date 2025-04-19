@@ -484,11 +484,11 @@ class ProviderGoogleGenAI(Provider):
     async def text_chat_stream(
         self,
         prompt: str,
-        session_id: str = None,
+        session_id: str | None = None,
         image_urls: list[str] = [],
-        func_tool: FuncCall = None,
-        contexts=[],
-        system_prompt=None,
+        func_tool: FuncCall | None = None,
+        contexts: list = [],
+        system_prompt: str | None = None,
         tool_calls_result=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
@@ -545,7 +545,7 @@ class ProviderGoogleGenAI(Provider):
         self.chosen_api_key = key
         self._init_client()
 
-    async def assemble_context(self, text: str, image_urls: list[str] = None):
+    async def assemble_context(self, text: str, image_urls: list[str] | None = None):
         """
         组装上下文。
         """

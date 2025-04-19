@@ -168,7 +168,12 @@ def run(path: str | None = None) -> None:
     db = db_helper
 
     core_lifecycle = InitialLoader(db, log_broker)
-    asyncio.run(core_lifecycle.start())
+    try:
+        asyncio.run(core_lifecycle.start())
+    except KeyboardInterrupt:
+        click.echo("接收到退出信号，正在关闭AstrBot...")
+    except Exception as e:
+        click.echo(f"运行时出现错误: {e}")
 
 
 

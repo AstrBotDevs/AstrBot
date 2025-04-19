@@ -1,4 +1,5 @@
 import os
+from typing_extensions import override
 from llmtuner.chat import ChatModel
 from .. import Provider
 from ..entities import LLMResponse
@@ -47,7 +48,7 @@ class LLMTunerModelLoader(Provider):
             + os.path.basename(self.adapter_model_path)
         )
 
-    async def assemble_context(self, text: str, image_urls: list[str] = None):
+    async def assemble_context(self, text: str, image_urls: list[str] | None = None):
         """
         组装上下文。
         """
@@ -56,11 +57,11 @@ class LLMTunerModelLoader(Provider):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: list[str] = None,
-        func_tool: FuncCall = None,
+        session_id: str | None = None,
+        image_urls: list[str] | None = None,
+        func_tool: FuncCall | None = None,
         contexts: list = [],
-        system_prompt: str = None,
+        system_prompt: str | None = None,
         **kwargs,
     ) -> LLMResponse:
         system_prompt = ""
@@ -121,11 +122,14 @@ class LLMTunerModelLoader(Provider):
         llm_response.is_chunk = False
         yield llm_response
 
-    async def get_current_key(self):
+    @override
+    async def get_current_key(self) -> str:
         return "none"
 
+    @override
     async def set_key(self, key):
         pass
 
-    async def get_models(self):
+    @override
+    async def get_models(self) -> list[str]:
         return [self.get_model()]

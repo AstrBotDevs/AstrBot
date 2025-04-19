@@ -62,10 +62,10 @@ class DifyAPIClient:
 
     async def workflow_run(
         self,
-        inputs: Dict,
+        inputs: dict,
         user: str,
         response_mode: str = "streaming",
-        files: list[Dict[str, Any]] = [],
+        files: list[dict[str, Any]] = [],
         timeout: float = 60,
     ):
         url = f"{self.api_base}/workflows/run"
