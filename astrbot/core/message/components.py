@@ -22,14 +22,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
 import base64
 import json
 import os
-from typing_extensions import Self
 import uuid
+import typing as T
 from enum import Enum
-from pydantic import BaseModel
+from pydantic.v1 import BaseModel
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
 
 
@@ -69,7 +68,7 @@ class BaseMessageComponent(BaseModel):
     type: ComponentType
 
     def toString(self):
-        output = f"[CQ:{self.type.value.lower()}"
+        output = f"[CQ:{self.type.lower()}"
         for k, v in self.__dict__.items():
             if k == "type" or v is None:
                 continue
@@ -77,7 +76,7 @@ class BaseMessageComponent(BaseModel):
                 k = "type"
             if isinstance(v, bool):
                 v = 1 if v else 0
-            output += ",{}={}".format(
+            output += ",%s=%s" % (
                 k,
                 str(v)
                 .replace("&", "&amp;")
@@ -96,16 +95,16 @@ class BaseMessageComponent(BaseModel):
             if k == "_type":
                 k = "type"
             data[k] = v
-        return {"type": self.type.value.lower(), "data": data}
+        return {"type": self.type.lower(), "data": data}
 
 
 class Plain(BaseMessageComponent):
-    type: ComponentType = ComponentType.Plain
+    type: ComponentType = "Plain"
     text: str
-    convert: bool | None = True  # 若为 False 则直接发送未转换 CQ 码的消息
+    convert: T.Optional[bool] = True  # 若为 False 则直接发送未转换 CQ 码的消息
 
-    def __init__(self, text: str, convert: bool | None = True, **_):
-        super().__init__(type=ComponentType.Plain)
+    def __init__(self, text: str, convert: bool = True, **_):
+        super().__init__(text=text, convert=convert, **_)
 
     def toString(self):  # 没有 [CQ:plain] 这种东西，所以直接导出纯文本
         if not self.convert:
@@ -116,7 +115,7 @@ class Plain(BaseMessageComponent):
 
 
 class Face(BaseMessageComponent):
-    type: ComponentType = ComponentType.Face
+    type: ComponentType = "Face"
     id: int
 
     def __init__(self, **_):
@@ -124,22 +123,22 @@ class Face(BaseMessageComponent):
 
 
 class Record(BaseMessageComponent):
-    type: ComponentType = ComponentType.Record
-    file: str | None = ""
-    magic: bool | None = False
-    url: str | None = ""
-    cache: bool | None = True
-    proxy: bool | None = True
-    timeout: int | None = 0
+    type: ComponentType = "Record"
+    file: T.Optional[str] = ""
+    magic: T.Optional[bool] = False
+    url: T.Optional[str] = ""
+    cache: T.Optional[bool] = True
+    proxy: T.Optional[bool] = True
+    timeout: T.Optional[int] = 0
     # 额外
-    path: str | None
+    path: T.Optional[str]
 
-    def __init__(self, file: str | None , **_):
+    def __init__(self, file: T.Optional[str], **_):
         for k in _.keys():
             if k == "url":
                 pass
                 # Protocol.warn(f"go-cqhttp doesn't support send {self.type} by {k}")
-        super().__init__(type=ComponentType.Record)
+        super().__init__(file=file, **_)
 
     @staticmethod
     def fromFileSystem(path, **_):
@@ -199,12 +198,12 @@ class Record(BaseMessageComponent):
 
 
 class Video(BaseMessageComponent):
-    type: ComponentType = ComponentType.Video
+    type: ComponentType = "Video"
     file: str
-    cover: str | None = ""
-    c: int | None = 2
+    cover: T.Optional[str] = ""
+    c: T.Optional[int] = 2
     # 额外
-    path: str | None = ""
+    path: T.Optional[str] = ""
 
     def __init__(self, file: str, **_):
         # for k in _.keys():
@@ -224,90 +223,90 @@ class Video(BaseMessageComponent):
 
 
 class At(BaseMessageComponent):
-    type: ComponentType = ComponentType.At
-    qq: str | int  # 此处str为all时代表所有人
-    name: str | None = ""
+    type: ComponentType = "At"
+    qq: T.Union[int, str]  # 此处str为all时代表所有人
+    name: T.Optional[str] = ""
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
 class AtAll(At):
-    qq: str | int = "all"
+    qq: str = "all"
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
 class RPS(BaseMessageComponent):  # TODO
-    type: ComponentType = ComponentType.RPS
+    type: ComponentType = "RPS"
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
 class Dice(BaseMessageComponent):  # TODO
-    type: ComponentType = ComponentType.Dice
+    type: ComponentType = "Dice"
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
 class Shake(BaseMessageComponent):  # TODO
-    type: ComponentType = ComponentType.Shake
+    type: ComponentType = "Shake"
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
 class Anonymous(BaseMessageComponent):  # TODO
-    type: ComponentType = ComponentType.Anonymous
-    ignore: bool | None = False
+    type: ComponentType = "Anonymous"
+    ignore: T.Optional[bool] = False
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
 class Share(BaseMessageComponent):
-    type: ComponentType = ComponentType.Share
+    type: ComponentType = "Share"
     url: str
     title: str
-    content: str | None = ""
-    image: str | None = ""
+    content: T.Optional[str] = ""
+    image: T.Optional[str] = ""
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
 class Contact(BaseMessageComponent):  # TODO
-    type: ComponentType = ComponentType.Contact
+    type: ComponentType = "Contact"
     _type: str  # type 字段冲突
-    id: int | None = 0
+    id: T.Optional[int] = 0
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
 class Location(BaseMessageComponent):  # TODO
-    type: ComponentType = ComponentType.Location
+    type: ComponentType = "Location"
     lat: float
     lon: float
-    title: str | None = ""
-    content: str | None = ""
+    title: T.Optional[str] = ""
+    content: T.Optional[str] = ""
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
 class Music(BaseMessageComponent):
-    type: ComponentType = ComponentType.Music
+    type: ComponentType = "Music"
     _type: str
-    id: int | None = 0
-    url: str | None = ""
-    audio: str | None = ""
-    title: str | None = ""
-    content: str | None = ""
-    image: str | None = ""
+    id: T.Optional[int] = 0
+    url: T.Optional[str] = ""
+    audio: T.Optional[str] = ""
+    title: T.Optional[str] = ""
+    content: T.Optional[str] = ""
+    image: T.Optional[str] = ""
 
     def __init__(self, **_):
         # for k in _.keys():
@@ -317,19 +316,19 @@ class Music(BaseMessageComponent):
 
 
 class Image(BaseMessageComponent):
-    type: ComponentType = ComponentType.Image
-    file: str | None = ""
-    _type: str | None = ""
-    subType: int | None = 0
-    url: str | None = ""
-    cache: bool | None = True
-    id: int | None = 40000
-    c: int | None = 2
+    type: ComponentType = "Image"
+    file: T.Optional[str] = ""
+    _type: T.Optional[str] = ""
+    subType: T.Optional[int] = 0
+    url: T.Optional[str] = ""
+    cache: T.Optional[bool] = True
+    id: T.Optional[int] = 40000
+    c: T.Optional[int] = 2
     # 额外
-    path: str | None = ""
-    file_unique: str | None = ""  # 某些平台可能有图片缓存的唯一标识
+    path: T.Optional[str] = ""
+    file_unique: T.Optional[str] = ""  # 某些平台可能有图片缓存的唯一标识
 
-    def __init__(self, file: str | None, **_):
+    def __init__(self, file: T.Optional[str], **_):
         super().__init__(file=file, **_)
 
     @staticmethod
@@ -404,27 +403,27 @@ class Image(BaseMessageComponent):
 
 
 class Reply(BaseMessageComponent):
-    type: ComponentType = ComponentType.Reply
-    id: str | int
+    type: ComponentType = "Reply"
+    id: T.Union[str, int]
     """所引用的消息 ID"""
-    chain: list["BaseMessageComponent"] | None = []
+    chain: T.Optional[T.List["BaseMessageComponent"]] = []
     """引用的消息段列表"""
-    sender_id: int | None | str | None = 0
+    sender_id: T.Optional[int] | T.Optional[str] = 0
     """引用的消息发送者 ID"""
-    sender_nickname: str | None = ""
+    sender_nickname: T.Optional[str] = ""
     """引用的消息发送者昵称"""
-    time: int | None = 0
+    time: T.Optional[int] = 0
     """引用的消息发送时间"""
-    message_str: str | None = ""
+    message_str: T.Optional[str] = ""
     """解析后的纯文本消息字符串"""
-    sender_str: str | None = ""
+    sender_str: T.Optional[str] = ""
     """被引用的消息纯文本"""
 
-    text: str | None = ""
+    text: T.Optional[str] = ""
     """deprecated"""
-    qq: int | None = 0
+    qq: T.Optional[int] = 0
     """deprecated"""
-    seq: int | None = 0
+    seq: T.Optional[int] = 0
     """deprecated"""
 
     def __init__(self, **_):
@@ -432,7 +431,7 @@ class Reply(BaseMessageComponent):
 
 
 class RedBag(BaseMessageComponent):
-    type: ComponentType = ComponentType.RedBag
+    type: ComponentType = "RedBag"
     title: str
 
     def __init__(self, **_):
@@ -440,19 +439,17 @@ class RedBag(BaseMessageComponent):
 
 
 class Poke(BaseMessageComponent):
-    type: ComponentType = ComponentType.Poke
-    id: int | None = 0
-    qq: int | None = 0
+    type: str = ""
+    id: T.Optional[int] = 0
+    qq: T.Optional[int] = 0
 
-    def __init__(self, type: str = "", **_):
-        if type:
-            # 向后兼容，如果传入了字符串类型，转换为注释信息
-            _.update({"poke_type": type})
-        super().__init__(**_)
+    def __init__(self, type: str, **_):
+        type = f"Poke:{type}"
+        super().__init__(type=type, **_)
 
 
 class Forward(BaseMessageComponent):
-    type: ComponentType = ComponentType.Forward
+    type: ComponentType = "Forward"
     id: str
 
     def __init__(self, **_):
@@ -462,16 +459,15 @@ class Forward(BaseMessageComponent):
 class Node(BaseMessageComponent):
     """群合并转发消息"""
 
-    type: ComponentType = ComponentType.Node
-    id: int | None = 0  # 忽略
-    name: str | None = ""  # qq昵称
-    uin: int | None = 0  # qq号
-    content: str | list | dict | None = ""  # 子消息段列表
-    seq: str | list | None = ""  # 忽略
-    time: int | None = 0
+    type: ComponentType = "Node"
+    id: T.Optional[int] = 0  # 忽略
+    name: T.Optional[str] = ""  # qq昵称
+    uin: T.Optional[int] = 0  # qq号
+    content: T.Optional[T.Union[str, list, dict]] = ""  # 子消息段列表
+    seq: T.Optional[T.Union[str, list]] = ""  # 忽略
+    time: T.Optional[int] = 0
 
-
-    def __init__(self, content: str | list | dict | list["Node"] | Self , **_ ):
+    def __init__(self, content: T.Union[str, list, dict, "Node", T.List["Node"]], **_):
         if isinstance(content, list):
             _content = None
             if all(isinstance(item, Node) for item in content):
@@ -483,7 +479,7 @@ class Node(BaseMessageComponent):
             content = _content
         elif isinstance(content, Node):
             content = content.toDict()
-        super().__init__(type=ComponentType.Node)
+        super().__init__(content=content, **_)
 
     def toString(self):
         # logger.warn("Protocol: node doesn't support stringify")
@@ -491,46 +487,46 @@ class Node(BaseMessageComponent):
 
 
 class Nodes(BaseMessageComponent):
-    type: ComponentType = ComponentType.Nodes
-    nodes: list[Node]
+    type: ComponentType = "Nodes"
+    nodes: T.List[Node]
 
-    def __init__(self, nodes: list[Node], **_):
-        super().__init__(type=ComponentType.Nodes)
+    def __init__(self, nodes: T.List[Node], **_):
+        super().__init__(nodes=nodes, **_)
 
     def toDict(self):
         return {"messages": [node.toDict() for node in self.nodes]}
 
 
 class Xml(BaseMessageComponent):
-    type: ComponentType = ComponentType.Xml
+    type: ComponentType = "Xml"
     data: str
-    resid: int | None = 0
+    resid: T.Optional[int] = 0
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
 class Json(BaseMessageComponent):
-    type: ComponentType = ComponentType.Json
-    data: str| dict
-    resid: int | None = 0
+    type: ComponentType = "Json"
+    data: T.Union[str, dict]
+    resid: T.Optional[int] = 0
 
     def __init__(self, data, **_):
         if isinstance(data, dict):
             data = json.dumps(data)
-        super().__init__(type=ComponentType.Json)
+        super().__init__(data=data, **_)
 
 
 class CardImage(BaseMessageComponent):
-    type: ComponentType = ComponentType.CardImage
+    type: ComponentType = "CardImage"
     file: str
-    cache: bool | None = True
-    minwidth: int | None = 400
-    minheight: int | None = 400
-    maxwidth: int | None = 500
-    maxheight: int | None = 500
-    source: str | None = ""
-    icon: str | None = ""
+    cache: T.Optional[bool] = True
+    minwidth: T.Optional[int] = 400
+    minheight: T.Optional[int] = 400
+    maxwidth: T.Optional[int] = 500
+    maxheight: T.Optional[int] = 500
+    source: T.Optional[str] = ""
+    icon: T.Optional[str] = ""
 
     def __init__(self, **_):
         super().__init__(**_)
@@ -541,7 +537,7 @@ class CardImage(BaseMessageComponent):
 
 
 class TTS(BaseMessageComponent):
-    type: ComponentType = ComponentType.TTS
+    type: ComponentType = "TTS"
     text: str
 
     def __init__(self, **_):
@@ -549,7 +545,7 @@ class TTS(BaseMessageComponent):
 
 
 class Unknown(BaseMessageComponent):
-    type: ComponentType = ComponentType.Unknown
+    type: ComponentType = "Unknown"
     text: str
 
     def toString(self):
@@ -561,19 +557,19 @@ class File(BaseMessageComponent):
     目前此消息段只适配了 Napcat。
     """
 
-    type: ComponentType = ComponentType.File
-    name: str | None = ""  # 名字
-    file: str | None = ""  # url（本地路径）
+    type: ComponentType = "File"
+    name: T.Optional[str] = ""  # 名字
+    file: T.Optional[str] = ""  # url（本地路径）
 
     def __init__(self, name: str, file: str):
-        super().__init__(type=ComponentType.File)
+        super().__init__(name=name, file=file)
 
 
 class WechatEmoji(BaseMessageComponent):
-    type: ComponentType = ComponentType.WechatEmoji
-    md5: str | None = ""
-    md5_len: int | None = 0
-    cdnurl: str | None = ""
+    type: ComponentType = "WechatEmoji"
+    md5: T.Optional[str] = ""
+    md5_len: T.Optional[int] = 0
+    cdnurl: T.Optional[str] = ""
 
     def __init__(self, **_):
         super().__init__(**_)
@@ -609,38 +605,3 @@ ComponentTypes = {
     "file": File,
     "WechatEmoji": WechatEmoji,
 }
-
-# 显式导出
-__all__ = [
-    "ComponentType",
-    "BaseMessageComponent",
-    "Plain",
-    "Face",
-    "Record",
-    "Video",
-    "At",
-    "AtAll",
-    "RPS",
-    "Dice",
-    "Shake",
-    "Anonymous",
-    "Share",
-    "Contact",
-    "Location",
-    "Music",
-    "Image",
-    "Reply",
-    "RedBag",
-    "Poke",
-    "Forward",
-    "Node",
-    "Nodes",
-    "Xml",
-    "Json",
-    "CardImage",
-    "TTS",
-    "Unknown",
-    "File",
-    "WechatEmoji",
-    "ComponentTypes",
-]
