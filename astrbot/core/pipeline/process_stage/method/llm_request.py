@@ -66,9 +66,9 @@ class LLMRequestSubStage(Stage):
 
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
-            assert isinstance(
-                req, ProviderRequest
-            ), "provider_request 必须是 ProviderRequest 类型。"
+            assert isinstance(req, ProviderRequest), (
+                "provider_request 必须是 ProviderRequest 类型。"
+            )
 
             if req.conversation:
                 all_contexts = json.loads(req.conversation.history)
@@ -117,9 +117,15 @@ class LLMRequestSubStage(Stage):
         # 执行请求 LLM 前事件钩子。
         # 装饰 system_prompt 等功能
         # 获取当前平台ID
-        platform_id = event.get_platform_id()
+        # 构建群聊标识符
+        group_id = None
+        if event.get_group_id():
+            group_id = f"{event.get_platform_name()}:{event.get_group_id()}"
+
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnLLMRequestEvent, platform_id=platform_id
+            EventType.OnAfterMessageSentEvent,
+            platform_id=event.get_platform_id(),
+            group_id=group_id,
         )
         for handler in handlers:
             try:
@@ -149,7 +155,14 @@ class LLMRequestSubStage(Stage):
                 -(self.max_context_length - self.dequeue_context_length + 1) * 2 :
             ]
             # 找到第一个role 为 user 的索引，确保上下文格式正确
-            index = next((i for i, item in enumerate(req.contexts) if item.get("role") == "user"), None)
+            index = next(
+                (
+                    i
+                    for i, item in enumerate(req.contexts)
+                    if item.get("role") == "user"
+                ),
+                None,
+            )
             if index is not None and index > 0:
                 req.contexts = req.contexts[index:]
 
@@ -388,8 +401,8 @@ class LLMRequestSubStage(Stage):
                     platform_id = event.get_platform_id()
                     star_md = star_map.get(func_tool.handler_module_path)
                     if (
-                        star_md and
-                        platform_id in star_md.supported_platforms
+                        star_md
+                        and platform_id in star_md.supported_platforms
                         and not star_md.supported_platforms[platform_id]
                     ):
                         logger.debug(

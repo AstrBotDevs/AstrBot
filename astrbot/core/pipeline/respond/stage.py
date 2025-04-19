@@ -159,7 +159,7 @@ class RespondStage(Stage):
                         # 支持 File 消息段的路径映射。
                         component.file = path_Mapping(mappings, component.file)
                         event.get_result().chain[idx] = component
-            
+
             await event._pre_send()
 
             # 检查消息链是否为空
@@ -209,8 +209,15 @@ class RespondStage(Stage):
                 f"AstrBot -> {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}"
             )
 
+        # 构建群聊标识符
+        group_id = None
+        if event.get_group_id():
+            group_id = f"{event.get_platform_name()}:{event.get_group_id()}"
+
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnAfterMessageSentEvent, platform_id=event.get_platform_id()
+            EventType.OnAfterMessageSentEvent,
+            platform_id=event.get_platform_id(),
+            group_id=group_id,
         )
         for handler in handlers:
             try:
