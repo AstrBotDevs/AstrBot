@@ -3,8 +3,7 @@ import json
 import logging
 import enum
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
-# from typing import Dict 此类型自 Python 3.9 起已弃用；请改用 "dict"
-from ..types import ConfigValue
+from typing import Dict
 
 ASTRBOT_CONFIG_PATH = "data/cmd_config.json"
 logger = logging.getLogger("astrbot")
@@ -27,8 +26,8 @@ class AstrBotConfig(dict):
         self,
         config_path: str = ASTRBOT_CONFIG_PATH,
         default_config: dict = DEFAULT_CONFIG,
-        schema: dict | None = None,
-    ) -> None:
+        schema: dict = None,
+    ):
         super().__init__()
 
         # 调用父类的 __setattr__ 方法，防止保存配置时将此属性写入配置文件
@@ -37,32 +36,32 @@ class AstrBotConfig(dict):
         object.__setattr__(self, "schema", schema)
 
         if schema:
-            default_config: dict = self._config_schema_to_default_config(schema)
+            default_config = self._config_schema_to_default_config(schema)
 
         if not self.check_exist():
             """不存在时载入默认配置"""
             with open(config_path, "w", encoding="utf-8-sig") as f:
                 json.dump(default_config, f, indent=4, ensure_ascii=False)
 
-        with open(config_path, encoding="utf-8-sig") as f:
+        with open(config_path, "r", encoding="utf-8-sig") as f:
             conf_str = f.read()
             if conf_str.startswith("/ufeff"):  # remove BOM
                 conf_str = conf_str.encode("utf8")[3:].decode("utf8")
             conf = json.loads(conf_str)
 
         # 检查配置完整性，并插入
-        has_new: bool = self.check_config_integrity(default_config, conf)
+        has_new = self.check_config_integrity(default_config, conf)
         self.update(conf)
         if has_new:
             self.save_config()
 
         self.update(conf)
 
-    def _config_schema_to_default_config(self, schema: dict[str , ConfigValue ]) -> dict[str , ConfigValue ]:
+    def _config_schema_to_default_config(self, schema: dict) -> dict:
         """将 Schema 转换成 Config"""
         conf = {}
 
-        def _parse_schema(schema: dict[str , ConfigValue], conf: dict[str , ConfigValue ]):
+        def _parse_schema(schema: dict, conf: dict):
             for k, v in schema.items():
                 if v["type"] not in DEFAULT_VALUE_MAP:
                     raise TypeError(
@@ -83,7 +82,7 @@ class AstrBotConfig(dict):
 
         return conf
 
-    def check_config_integrity(self, refer_conf: dict, conf: dict[str, str | None], path="") -> bool:
+    def check_config_integrity(self, refer_conf: Dict, conf: Dict, path=""):
         """检查配置完整性，如果有新的配置项则返回 True"""
         has_new = False
         for key, value in refer_conf.items():
@@ -103,7 +102,7 @@ class AstrBotConfig(dict):
                     )
         return has_new
 
-    def save_config(self, replace_config: dict | None= None):
+    def save_config(self, replace_config: Dict = None):
         """将配置写入文件
 
         如果传入 replace_config，则将配置替换为 replace_config
