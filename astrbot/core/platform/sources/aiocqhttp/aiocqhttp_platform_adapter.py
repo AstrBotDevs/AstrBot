@@ -320,7 +320,7 @@ class AiocqhttpAdapter(Platform):
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
-            session_id=message.session_id,
+            session_id=getattr(message, "session_id", "114514"),
             bot=self.bot,
         )
 
