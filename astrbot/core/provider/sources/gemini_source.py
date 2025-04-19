@@ -172,7 +172,6 @@ class ProviderGoogleGenAI(Provider):
         )
 
 
-    @staticmethod
     def _prepare_conversation(payloads: dict) -> list[types.Content]:
 
         """准备 Gemini SDK 的 Content 列表"""
