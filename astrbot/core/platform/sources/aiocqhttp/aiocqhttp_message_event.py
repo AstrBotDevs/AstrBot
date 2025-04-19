@@ -1,5 +1,4 @@
 import asyncio
-import typing
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import Group, MessageMember
 from astrbot.api.message_components import Plain, Image, Record, At, Node, Nodes

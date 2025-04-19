@@ -1,4 +1,3 @@
-import typing
 import traceback
 from .route import Route, Response, RouteContext
 from quart import request

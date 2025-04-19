@@ -3,7 +3,6 @@ import abc
 import inspect
 import traceback
 from astrbot.api import logger
-from typing import List, Union
 
 from collections.abc import AsyncGenerator, Awaitable
 from astrbot.core.platform.astr_message_event import AstrMessageEvent

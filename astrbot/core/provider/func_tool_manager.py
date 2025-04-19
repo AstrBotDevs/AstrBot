@@ -86,7 +86,7 @@ class FuncTool:
 class MCPClient:
     def __init__(self):
         # Initialize session and client objects
-        self.session: mcp.ClientSession | None 
+        self.session: mcp.ClientSession | None
         self.exit_stack = AsyncExitStack()
 
         self.name: str | None = None

@@ -1,6 +1,5 @@
 import os
 from llmtuner.chat import ChatModel
-from typing import List
 from .. import Provider
 from ..entities import LLMResponse
 from ..func_tool_manager import FuncCall

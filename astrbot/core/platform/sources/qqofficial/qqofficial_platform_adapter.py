@@ -19,7 +19,6 @@ from astrbot.api.platform import (
 )
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from typing import Union, List
 from astrbot.api.message_components import Image, Plain, At
 from astrbot.core.platform.astr_message_event import MessageSesion
 from .qqofficial_message_event import QQOfficialMessageEvent

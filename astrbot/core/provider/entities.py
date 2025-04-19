@@ -1,7 +1,6 @@
 import enum
 import base64
 import json
-from typing import Any, overload
 from typing_extensions import override
 # from tkinter import N
 from astrbot.core.utils.io import download_image_by_url
@@ -27,7 +26,7 @@ class ProviderType(enum.Enum):
 @dataclass
 class ProviderMetaData:
     type: str
-    # cls_type: type = None 
+    # cls_type: type = None
     cls_type: str | None = None
     """提供商适配器名称，如 openai, ollama"""
     desc: str = ""

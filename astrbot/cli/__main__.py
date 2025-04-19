@@ -65,10 +65,10 @@ def _check_astrbot_root(astrbot_root: Path) -> None:
 async def _check_dashboard(astrbot_root: Path ) -> None:
     """检查是否安装了dashboard"""
     try:
-        from ..core.utils.io import get_dashboard_version, download_dashboard 
+        from ..core.utils.io import get_dashboard_version, download_dashboard
     except ImportError:
-        from astrbot.core.utils.io import get_dashboard_version, download_dashboard 
-    
+        from astrbot.core.utils.io import get_dashboard_version, download_dashboard
+
     try:
         # 添加 create=True 参数以确保在初始化时不会抛出异常
         dashboard_version = await get_dashboard_version()
@@ -157,7 +157,7 @@ def run(path: str | None = None) -> None:
         from astrbot.core.log import LogBroker
         from astrbot.core import db_helper
         from astrbot.core.initial_loader import InitialLoader
-    
+
     astrbot_root = _get_astrbot_root(path)
 
     _check_astrbot_root(astrbot_root)

@@ -1,6 +1,5 @@
 import chromadb
 import uuid
-from typing import List, Dict
 from astrbot.api import logger
 from ..embedding.openai_source import SimpleOpenAIEmbedding
 from . import Store

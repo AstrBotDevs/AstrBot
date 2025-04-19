@@ -3,7 +3,6 @@ import asyncio
 import math
 import traceback
 import astrbot.core.message.components as Comp
-from typing import Union
 
 from collections.abc import AsyncGenerator
 from ..stage import register_stage, Stage

@@ -1,4 +1,3 @@
-from typing import List
 from mimetypes import guess_type
 
 from anthropic import AsyncAnthropic

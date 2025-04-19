@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import List, Union
 from . import HandlerFilter
 from .command import CommandFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent

@@ -1,6 +1,5 @@
 import astrbot.core.message.components as Comp
 
-from typing import List
 from .. import Provider, Personality
 from ..entities import LLMResponse
 from ..func_tool_manager import FuncCall

@@ -1,7 +1,6 @@
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot import logger
-from typing import Union
 
 from collections.abc import AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent

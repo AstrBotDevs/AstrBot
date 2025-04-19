@@ -4,7 +4,7 @@
 
 from ...context import PipelineContext
 from ..stage import Stage
-from typing import Dict, Any, List, Union
+from typing import Any
 
 from collections.abc import AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent

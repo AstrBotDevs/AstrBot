@@ -1,6 +1,6 @@
 import re
 import inspect
-from typing import List, Any, Type, Dict
+from typing import Any
 from . import HandlerFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.config import AstrBotConfig

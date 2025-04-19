@@ -300,7 +300,7 @@ class Location(BaseMessageComponent):  # TODO
 
 
 class Music(BaseMessageComponent):
-    type: ComponentType = ComponentType.Music   
+    type: ComponentType = ComponentType.Music
     _type: str
     id: int | None = 0
     url: str | None = ""

@@ -2,7 +2,6 @@ import traceback
 import asyncio
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from .platform import Platform
-from typing import List
 from asyncio import Queue
 from .register import platform_cls_map
 from astrbot.core import logger

@@ -1,7 +1,6 @@
 import time
 import re
 import traceback
-from typing import Union
 
 from collections.abc import AsyncGenerator
 from ..stage import Stage, register_stage, registered_stages

@@ -19,7 +19,6 @@ from astrbot.core.db import BaseDatabase
 from astrbot.api.provider import Provider, Personality
 from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
-from typing import List
 
 from collections.abc import AsyncGenerator
 from ..register import register_provider_adapter

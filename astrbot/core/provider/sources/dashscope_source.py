@@ -1,7 +1,6 @@
 import re
 import asyncio
 import functools
-from typing import List
 from .. import Provider, Personality
 from ..entities import LLMResponse
 from ..func_tool_manager import FuncCall

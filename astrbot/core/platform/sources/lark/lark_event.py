@@ -3,7 +3,6 @@ import uuid
 import base64
 import lark_oapi as lark
 from io import BytesIO
-from typing import List
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image as AstrBotImage, At
 from astrbot.core.utils.io import download_image_by_url
