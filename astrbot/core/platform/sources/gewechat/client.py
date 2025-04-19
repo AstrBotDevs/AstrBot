@@ -252,6 +252,9 @@ class SimpleGewechatClient:
                 abm_data = data_parser.parse_mutil_49()
                 if abm_data:
                     abm.message.append(abm_data)
+                    abm.message_str = abm_data.message_str
+                    abm.message.append(Plain(abm_data.message_str))
+                    abm.message[-2].message_str = abm.message[-2].sender_str
             case 51:  # 帐号消息同步?
                 logger.info("消息类型(51)：帐号消息同步？")
             case 10000:  # 被踢出群聊/更换群主/修改群名称
