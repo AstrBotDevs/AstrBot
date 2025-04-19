@@ -62,6 +62,8 @@ class AstrBotMessage:
     raw_message: object
     timestamp: int  # 消息时间戳
 
+    be_at_wxid: List[str] # gewechat用的群组内at信息，用于机器人获取被at的wxid
+
     def __init__(self) -> None:
         self.timestamp = int(time.time())
 
