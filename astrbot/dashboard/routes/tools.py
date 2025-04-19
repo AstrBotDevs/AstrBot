@@ -41,7 +41,7 @@ class ToolsRoute(Route):
             return DEFAULT_MCP_CONFIG
 
         try:
-            with open(self.mcp_config_path, "r", encoding="utf-8") as f:
+            with open(self.mcp_config_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"加载 MCP 配置失败: {e}")

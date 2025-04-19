@@ -21,7 +21,7 @@ class Metric:
 
         if os.path.exists(id_file):
             try:
-                with open(id_file, "r") as f:
+                with open(id_file) as f:
                     Metric._iid_cache = f.read().strip()
                     return Metric._iid_cache
             except Exception:

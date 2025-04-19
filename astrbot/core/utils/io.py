@@ -11,7 +11,6 @@ import psutil
 
 import certifi
 
-from typing import Union
 
 from PIL import Image
 
@@ -48,7 +47,7 @@ def port_checker(port: int, host: str = "localhost"):
         return False
 
 
-def save_temp_img(img: Union[Image.Image, str]) -> str:
+def save_temp_img(img: Image.Image | str) -> str:
     os.makedirs("data/temp", exist_ok=True)
     # 获得文件创建时间，清除超过 12 小时的
     try:
@@ -203,7 +202,7 @@ def get_local_ip_addresses():
 async def get_dashboard_version():
     if os.path.exists("data/dist"):
         if os.path.exists("data/dist/assets/version"):
-            with open("data/dist/assets/version", "r") as f:
+            with open("data/dist/assets/version") as f:
                 v = f.read().strip()
                 return v
     return None

@@ -48,7 +48,7 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     def get_llm_history(
         self, session_id: str = None, provider_type: str = None
-    ) -> List[LLMHistory]:
+    ) -> list[LLMHistory]:
         """获取 LLM 历史记录, 如果 session_id 为 None, 返回所有"""
         raise NotImplementedError
 
@@ -73,7 +73,7 @@ class BaseDatabase(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_atri_vision_data(self) -> List[ATRIVision]:
+    def get_atri_vision_data(self) -> list[ATRIVision]:
         """获取 ATRI 视觉数据"""
         raise NotImplementedError
 
@@ -95,7 +95,7 @@ class BaseDatabase(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_conversations(self, user_id: str) -> List[Conversation]:
+    def get_conversations(self, user_id: str) -> list[Conversation]:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -121,7 +121,7 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     def get_all_conversations(
         self, page: int = 1, page_size: int = 20
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """获取所有对话，支持分页
 
         Args:
@@ -138,12 +138,12 @@ class BaseDatabase(abc.ABC):
         self,
         page: int = 1,
         page_size: int = 20,
-        platforms: List[str] = None,
-        message_types: List[str] = None,
+        platforms: list[str] = None,
+        message_types: list[str] = None,
         search_query: str = None,
-        exclude_ids: List[str] = None,
-        exclude_platforms: List[str] = None,
-    ) -> Tuple[List[Dict[str, Any]], int]:
+        exclude_ids: list[str] = None,
+        exclude_platforms: list[str] = None,
+    ) -> tuple[list[dict[str, Any]], int]:
         """获取筛选后的对话列表
 
         Args:

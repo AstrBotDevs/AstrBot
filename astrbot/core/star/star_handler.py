@@ -2,7 +2,9 @@ from __future__ import annotations
 import enum
 import heapq
 from dataclasses import dataclass, field
-from typing import Awaitable, List, Dict, TypeVar, Generic
+from typing import TypeVar, Generic
+
+from collections.abc import Awaitable
 from .filter import HandlerFilter
 from .star import star_map
 
@@ -12,7 +14,7 @@ T = TypeVar("T", bound="StarHandlerMetadata")
 class StarHandlerRegistry(Generic[T]):
     """用于存储所有的 Star Handler"""
 
-    star_handlers_map: Dict[str, StarHandlerMetadata] = {}
+    star_handlers_map: dict[str, StarHandlerMetadata] = {}
     """用于快速查找。key 是 handler_full_name"""
     _handlers = []
 
@@ -31,7 +33,7 @@ class StarHandlerRegistry(Generic[T]):
 
     def get_handlers_by_event_type(
         self, event_type: EventType, only_activated=True, platform_id=None
-    ) -> List[StarHandlerMetadata]:
+    ) -> list[StarHandlerMetadata]:
         """通过事件类型获取 Handler
 
         Args:
@@ -68,7 +70,7 @@ class StarHandlerRegistry(Generic[T]):
 
     def get_handlers_by_module_name(
         self, module_name: str
-    ) -> List[StarHandlerMetadata]:
+    ) -> list[StarHandlerMetadata]:
         """通过模块名获取 Handler"""
         return [
             handler
@@ -140,7 +142,7 @@ class StarHandlerMetadata:
     handler: Awaitable
     """Handler 的函数对象，应当是一个异步函数"""
 
-    event_filters: List[HandlerFilter]
+    event_filters: list[HandlerFilter]
     """一个适配器消息事件过滤器，用于描述这个 Handler 能够处理、应该处理的适配器消息事件"""
 
     desc: str = ""

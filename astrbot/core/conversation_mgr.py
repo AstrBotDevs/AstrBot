@@ -9,7 +9,6 @@ import uuid
 import json
 import asyncio
 from astrbot.core import sp
-from typing import Dict, List
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation
 
@@ -19,7 +18,7 @@ class ConversationManager:
 
     def __init__(self, db_helper: BaseDatabase):
         # session_conversations 字典记录会话ID-对话ID 映射关系
-        self.session_conversations: Dict[str, str] = sp.get("session_conversation", {})
+        self.session_conversations: dict[str, str] = sp.get("session_conversation", {})
         self.db = db_helper
         self.save_interval = 60  # 每 60 秒保存一次
         self._start_periodic_save()
@@ -100,7 +99,7 @@ class ConversationManager:
         """
         return self.db.get_conversation_by_user_id(unified_msg_origin, conversation_id)
 
-    async def get_conversations(self, unified_msg_origin: str) -> List[Conversation]:
+    async def get_conversations(self, unified_msg_origin: str) -> list[Conversation]:
         """获取会话的所有对话
 
         Args:
@@ -111,7 +110,7 @@ class ConversationManager:
         return self.db.get_conversations(unified_msg_origin)
 
     async def update_conversation(
-        self, unified_msg_origin: str, conversation_id: str, history: List[Dict]
+        self, unified_msg_origin: str, conversation_id: str, history: list[dict]
     ):
         """更新会话的对话
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import List, Union
 from . import HandlerFilter
 from .command import CommandFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -18,19 +17,19 @@ class CommandGroupFilter(HandlerFilter):
     ):
         self.group_name = group_name
         self.alias = alias if alias else set()
-        self.sub_command_filters: List[Union[CommandFilter, CommandGroupFilter]] = []
-        self.custom_filter_list: List[CustomFilter] = []
+        self.sub_command_filters: list[CommandFilter | CommandGroupFilter] = []
+        self.custom_filter_list: list[CustomFilter] = []
         self.parent_group = parent_group
 
     def add_sub_command_filter(
-        self, sub_command_filter: Union[CommandFilter, CommandGroupFilter]
+        self, sub_command_filter: CommandFilter | CommandGroupFilter
     ):
         self.sub_command_filters.append(sub_command_filter)
 
     def add_custom_filter(self, custom_filter: CustomFilter):
         self.custom_filter_list.append(custom_filter)
 
-    def get_complete_command_names(self) -> List[str]:
+    def get_complete_command_names(self) -> list[str]:
         """遍历父节点获取完整的指令名。
 
         新版本 v3.4.29 采用预编译指令，不再从指令组递归遍历子指令，因此这个方法是返回包括别名在内的整个指令名列表。"""
@@ -52,7 +51,7 @@ class CommandGroupFilter(HandlerFilter):
     # 以树的形式打印出来
     def print_cmd_tree(
         self,
-        sub_command_filters: List[Union[CommandFilter, CommandGroupFilter]],
+        sub_command_filters: list[CommandFilter | CommandGroupFilter],
         prefix: str = "",
         event: AstrMessageEvent = None,
         cfg: AstrBotConfig = None,

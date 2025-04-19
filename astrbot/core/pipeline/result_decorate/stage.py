@@ -1,7 +1,8 @@
 import time
 import re
 import traceback
-from typing import Union, AsyncGenerator
+
+from collections.abc import AsyncGenerator
 from ..stage import Stage, register_stage, registered_stages
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -68,7 +69,7 @@ class ResultDecorateStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         result = event.get_result()
         if result is None or not result.chain:
             return

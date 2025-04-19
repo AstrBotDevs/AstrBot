@@ -408,7 +408,7 @@ class SimpleGewechatClient:
 
             # 需要验证码
             if os.path.exists("data/temp/gewe_code"):
-                with open("data/temp/gewe_code", "r") as f:
+                with open("data/temp/gewe_code") as f:
                     code = f.read().strip()
                     if not code:
                         logger.warning(

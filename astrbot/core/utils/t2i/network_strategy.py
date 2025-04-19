@@ -67,7 +67,7 @@ class NetworkRenderStrategy(RenderStrategy):
         返回图像的文件路径
         """
         with open(
-            os.path.join(self.TEMPLATE_PATH, "base.html"), "r", encoding="utf-8"
+            os.path.join(self.TEMPLATE_PATH, "base.html"), encoding="utf-8"
         ) as f:
             tmpl_str = f.read()
         assert tmpl_str

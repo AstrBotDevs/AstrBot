@@ -1,4 +1,3 @@
-import typing
 import traceback
 from .route import Route, Response, RouteContext
 from quart import request
@@ -34,7 +33,7 @@ def try_cast(value: str, type_: str):
 
 def validate_config(
     data, schema: dict, is_core: bool
-) -> typing.Tuple[typing.List[str], typing.Dict]:
+) -> tuple[list[str], dict]:
     errors = []
 
     def validate(data: dict, metadata: dict = schema, path=""):

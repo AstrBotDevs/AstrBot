@@ -12,7 +12,6 @@ import yaml
 import logging
 import asyncio
 from types import ModuleType
-from typing import List
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core import logger, sp, pip_installer
 from .context import Context
@@ -93,7 +92,7 @@ class PluginManager:
                     )
         return modules
 
-    def _get_plugin_modules(self) -> List[dict]:
+    def _get_plugin_modules(self) -> list[dict]:
         plugins = []
         if os.path.exists(self.plugin_store_path):
             plugins.extend(self._get_modules(self.plugin_store_path))
@@ -139,7 +138,7 @@ class PluginManager:
 
         if os.path.exists(os.path.join(plugin_path, "metadata.yaml")):
             with open(
-                os.path.join(plugin_path, "metadata.yaml"), "r", encoding="utf-8"
+                os.path.join(plugin_path, "metadata.yaml"), encoding="utf-8"
             ) as f:
                 metadata = yaml.safe_load(f)
         elif plugin_obj:
@@ -364,7 +363,7 @@ class PluginManager:
                 )
                 if os.path.exists(plugin_schema_path):
                     # 加载插件配置
-                    with open(plugin_schema_path, "r", encoding="utf-8") as f:
+                    with open(plugin_schema_path, encoding="utf-8") as f:
                         plugin_config = AstrBotConfig(
                             config_path=os.path.join(
                                 self.plugin_config_path, f"{root_dir_name}_config.json"
@@ -582,7 +581,7 @@ class PluginManager:
 
         if os.path.exists(readme_path):
             try:
-                with open(readme_path, "r", encoding="utf-8") as f:
+                with open(readme_path, encoding="utf-8") as f:
                     readme_content = f.read()
             except Exception as e:
                 logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")
@@ -777,7 +776,7 @@ class PluginManager:
 
         if os.path.exists(readme_path):
             try:
-                with open(readme_path, "r", encoding="utf-8") as f:
+                with open(readme_path, encoding="utf-8") as f:
                     readme_content = f.read()
             except Exception as e:
                 logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")

@@ -355,7 +355,7 @@ class PluginRoute(Route):
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
 
         try:
-            with open(readme_path, "r", encoding="utf-8") as f:
+            with open(readme_path, encoding="utf-8") as f:
                 readme_content = f.read()
 
             return (

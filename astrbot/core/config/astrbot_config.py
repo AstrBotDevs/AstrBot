@@ -3,7 +3,6 @@ import json
 import logging
 import enum
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
-from typing import Dict
 
 ASTRBOT_CONFIG_PATH = "data/cmd_config.json"
 logger = logging.getLogger("astrbot")
@@ -43,7 +42,7 @@ class AstrBotConfig(dict):
             with open(config_path, "w", encoding="utf-8-sig") as f:
                 json.dump(default_config, f, indent=4, ensure_ascii=False)
 
-        with open(config_path, "r", encoding="utf-8-sig") as f:
+        with open(config_path, encoding="utf-8-sig") as f:
             conf_str = f.read()
             if conf_str.startswith("/ufeff"):  # remove BOM
                 conf_str = conf_str.encode("utf8")[3:].decode("utf8")
@@ -82,7 +81,7 @@ class AstrBotConfig(dict):
 
         return conf
 
-    def check_config_integrity(self, refer_conf: Dict, conf: Dict, path=""):
+    def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
         """检查配置完整性，如果有新的配置项则返回 True"""
         has_new = False
         for key, value in refer_conf.items():
@@ -102,7 +101,7 @@ class AstrBotConfig(dict):
                     )
         return has_new
 
-    def save_config(self, replace_config: Dict = None):
+    def save_config(self, replace_config: dict = None):
         """将配置写入文件
 
         如果传入 replace_config，则将配置替换为 replace_config
