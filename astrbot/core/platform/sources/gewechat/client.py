@@ -197,7 +197,8 @@ class SimpleGewechatClient:
             else:
                 user_real_name = self.userrealnames[abm.group_id][user_id]
         else:
-            user_real_name = d.get("PushContent", "unknown : ").split(" : ")[0]
+            info = (await self.get_user_or_group_info(user_id))["data"][0]
+            user_real_name = info["nickName"]
 
         abm.sender = MessageMember(user_id, user_real_name)
         abm.raw_message = d
@@ -251,6 +252,9 @@ class SimpleGewechatClient:
                 abm_data = data_parser.parse_mutil_49()
                 if abm_data:
                     abm.message.append(abm_data)
+                    abm.message_str = abm_data.message_str
+                    abm.message.append(Plain(abm_data.message_str))
+                    abm.message[-2].message_str = abm.message[-2].sender_str
             case 51:  # 帐号消息同步?
                 logger.info("消息类型(51)：帐号消息同步？")
             case 10000:  # 被踢出群聊/更换群主/修改群名称

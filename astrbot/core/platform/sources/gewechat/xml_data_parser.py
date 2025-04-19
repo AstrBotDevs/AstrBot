@@ -57,7 +57,25 @@ class GeweDataParser:
                 if displayname is not None:
                     replied_nickname = displayname.text
                 if refermsg_content is not None:
-                    replied_content = refermsg_content.text
+                    # 处理引用嵌套，包括嵌套公众号消息
+                    if refermsg_content.text.startswith("<msg>") or refermsg_content.text.startswith("<?xml"):
+                        try:
+                            logger.debug("gewechat: Reference message is nested")
+                            refer_root = eT.fromstring(refermsg_content.text)
+                            img=refer_root.find("img")
+                            if img is not None:
+                                replied_content = "[图片]"
+                            else:
+                                app_msg=refer_root.find("appmsg")
+                                refermsg_content_title = app_msg.find("title")
+                                logger.debug(f"gewechat: Reference message nesting: {refermsg_content_title.text}")
+                                replied_content = refermsg_content_title.text
+                        except Exception as e:
+                            logger.error(f"gewechat: nested failed, {e}")
+                            # 处理异常情况
+                            replied_content = refermsg_content.text
+                    else:
+                        replied_content = refermsg_content.text
 
                 # 提取引用者说的内容
             title = root.find(".//appmsg/title")
