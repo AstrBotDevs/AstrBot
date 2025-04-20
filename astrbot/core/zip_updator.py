@@ -8,6 +8,7 @@ import certifi
 
 from astrbot.core.utils.io import on_error, download_file
 from astrbot.core import logger
+from astrbot.core.utils.version_comparator import VersionComparator
 
 
 class ReleaseInfo:
@@ -102,31 +103,10 @@ class RepoZipUpdator:
         raise NotImplementedError()
 
     def compare_version(self, v1: str, v2: str) -> int:
-        """
-        比较两个版本号的大小。
-        返回 1 表示 v1 > v2，返回 -1 表示 v1 < v2，返回 0 表示 v1 = v2。
-        支持任意长度的版本号，如v1.2.3或v3.5.3.1。
-        """
-        v1 = v1.replace("v", "")
-        v2 = v2.replace("v", "")
-        v1_parts = v1.split(".")
-        v2_parts = v2.split(".")
+        """Semver 版本比较"""
+        return VersionComparator.compare_version(v1, v2)
 
-        # 获取最长的版本号长度
-        length = max(len(v1_parts), len(v2_parts))
-
-        # 将短版本号补0以便比较
-        v1_parts.extend(["0"] * (length - len(v1_parts)))
-        v2_parts.extend(["0"] * (length - len(v2_parts)))
-
-        for i in range(length):
-            if int(v1_parts[i]) > int(v2_parts[i]):
-                return 1
-            elif int(v1_parts[i]) < int(v2_parts[i]):
-                return -1
-        return 0
-
-    async def check_update(self, url: str, current_version: str) -> ReleaseInfo:
+    async def check_update(self, url: str, current_version: str) -> ReleaseInfo | None:
         update_data = await self.fetch_release_info(url)
         tag_name = update_data[0]["tag_name"]
 
