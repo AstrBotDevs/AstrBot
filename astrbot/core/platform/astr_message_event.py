@@ -1,5 +1,6 @@
 import abc
 import asyncio
+import re
 import hashlib
 import uuid
 from dataclasses import dataclass
@@ -207,9 +208,26 @@ class AstrMessageEvent(abc.ABC):
         """
         return self.role == "admin"
 
-    async def send_streaming(self, generator: AsyncGenerator[MessageChain, None]):
+    async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
+        """
+        将消息缓冲区中的文本按指定正则表达式分割后发送至消息平台，作为不支持流式输出平台的Fallback。
+        """
+        while True:
+            match = re.search(pattern, buffer)
+            if not match:
+                break
+            matched_text = match.group()
+            await self.send(MessageChain([Plain(matched_text)]))
+            buffer = buffer[match.end() :]
+            await asyncio.sleep(1.5)  # 限速
+        return buffer
+
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
+        Fallback仅支持 aiocqhttp, gewechat。
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)

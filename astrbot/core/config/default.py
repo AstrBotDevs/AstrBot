@@ -53,6 +53,7 @@ DEFAULT_CONFIG = {
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
+        "streaming_segmented": False,
         "max_retries": 3,
         "retry_delay": 1.0,
     },
@@ -63,6 +64,7 @@ DEFAULT_CONFIG = {
     "provider_tts_settings": {
         "enable": False,
         "provider_id": "",
+        "dual_output": False,
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
@@ -1030,6 +1032,11 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "启用后，将会流式输出 LLM 的响应。目前仅支持 OpenAI API提供商 以及 Telegram、QQ Official 私聊 两个平台",
                     },
+                    "streaming_segmented": {
+                        "description": "不支持流式回复的平台分段输出",
+                        "type": "bool",
+                        "hint": "启用后，若平台不支持流式回复，会分段输出。目前仅支持 aiocqhttp 和 gewechat 两个平台，不支持或无需使用流式分段输出的平台会静默忽略此选项",
+                    },
                     "max_retries": {
                         "description": "最大重试次数",
                         "type": "int",
@@ -1038,8 +1045,7 @@ CONFIG_METADATA_2 = {
                     "retry_delay": {
                         "description": "重试延迟时间",
                         "type": "float",
-                        "hint": "当 LLM 请求失败时, 重试延迟时间。单位为秒。",
-                    },
+                        "hint": "当 LLM 请求失败时, 重试延迟时间。单位为秒。",                    
                 },
             },
             "persona": {
@@ -1113,6 +1119,12 @@ CONFIG_METADATA_2 = {
                         "description": "提供商 ID，不填则默认第一个TTS提供商",
                         "type": "string",
                         "hint": "文本转语音提供商 ID。如果不填写将使用载入的第一个提供商。",
+                    },
+                    "dual_output": {
+                        "description": "启用语音和文字双输出",
+                        "type": "bool",
+                        "hint": "启用后，Bot 将同时输出语音和文字消息。",
+                        "obvious_hint": True,
                     },
                 },
             },

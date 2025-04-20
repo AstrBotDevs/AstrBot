@@ -146,9 +146,12 @@ class RespondStage(Stage):
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
             # 流式结果直接交付平台适配器处理
+            use_fallback = self.config.get("provider_settings", {}).get(
+                "streaming_segmented", False
+            )
             logger.info(f"应用流式输出({event.get_platform_name()})")
             await event._pre_send()
-            await event.send_streaming(result.async_stream)
+            await event.send_streaming(result.async_stream, use_fallback)
             await event._post_send()
             return
         elif len(result.chain) > 0:
@@ -159,7 +162,7 @@ class RespondStage(Stage):
                         # 支持 File 消息段的路径映射。
                         component.file = path_Mapping(mappings, component.file)
                         event.get_result().chain[idx] = component
-            
+
             await event._pre_send()
 
             # 检查消息链是否为空

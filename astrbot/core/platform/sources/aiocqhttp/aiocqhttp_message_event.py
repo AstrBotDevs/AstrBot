@@ -1,9 +1,10 @@
 import asyncio
-import typing
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.platform import Group, MessageMember
-from astrbot.api.message_components import Plain, Image, Record, At, Node, Nodes
+import re
+from typing import AsyncGenerator, Dict, List
 from aiocqhttp import CQHttp
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.message_components import At, Image, Node, Nodes, Plain, Record
+from astrbot.api.platform import Group, MessageMember
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -82,18 +83,39 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def send_streaming(self, generator):
-        buffer = None
-        async for chain in generator:
+    async def send_streaming(
+        self, generator: AsyncGenerator, use_fallback: bool = False
+    ):
+        if not use_fallback:
+            buffer = None
+            async for chain in generator:
+                if not buffer:
+                    buffer = chain
+                else:
+                    buffer.chain.extend(chain.chain)
             if not buffer:
-                buffer = chain
-            else:
-                buffer.chain.extend(chain.chain)
-        if not buffer:
-            return
-        buffer.squash_plain()
-        await self.send(buffer)
-        return await super().send_streaming(generator)
+                return
+            buffer.squash_plain()
+            await self.send(buffer)
+            return await super().send_streaming(generator, use_fallback)
+
+        buffer = ""
+        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+
+        async for chain in generator:
+            if isinstance(chain, MessageChain):
+                for comp in chain.chain:
+                    if isinstance(comp, Plain):
+                        buffer += comp.text
+                        if any(p in buffer for p in "。？！~…"):
+                            buffer = await self.process_buffer(buffer, pattern)
+                    else:
+                        await self.send(MessageChain(chain=[comp]))
+                        await asyncio.sleep(1.5)  # 限速
+
+        if buffer.strip():
+            await self.send(MessageChain([Plain(buffer)]))
+        return await super().send_streaming(generator, use_fallback)
 
     async def get_group(self, group_id=None, **kwargs):
         if isinstance(group_id, str) and group_id.isdigit():
@@ -108,7 +130,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             group_id=group_id,
         )
 
-        members: typing.List[typing.Dict] = await self.bot.call_action(
+        members: List[Dict] = await self.bot.call_action(
             "get_group_member_list",
             group_id=group_id,
         )

@@ -184,6 +184,8 @@ class ResultDecorateStage(Stage):
                                 new_chain.append(
                                     Record(file=audio_path, url=audio_path)
                                 )
+                                if(self.ctx.astrbot_config["provider_tts_settings"]["dual_output"]):
+                                    new_chain.append(comp)
                             else:
                                 logger.error(
                                     f"由于 TTS 音频文件没找到，消息段转语音失败: {comp.text}"
