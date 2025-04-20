@@ -253,12 +253,12 @@ class SimpleGewechatClient:
                 logger.info("消息类型(48)：地理位置")
             case 49:  # 公众号/文件/小程序/引用/转账/红包/视频号/群聊邀请
                 data_parser = GeweDataParser(content, abm.group_id == "")
-                abm_data = data_parser.parse_mutil_49()
-                if abm_data:
-                    abm.message.append(abm_data)
-                    abm.message_str = abm_data.message_str
-                    abm.message.append(Plain(abm_data.message_str))
-                    abm.message[-2].message_str = abm.message[-2].sender_str
+                segments = data_parser.parse_mutil_49()
+                if segments:
+                    abm.message.extend(segments)
+                    for seg in segments:
+                        if isinstance(seg, Plain):
+                            abm.message_str += seg.text
             case 51:  # 帐号消息同步?
                 logger.info("消息类型(51)：帐号消息同步？")
             case 10000:  # 被踢出群聊/更换群主/修改群名称

@@ -407,17 +407,15 @@ class Reply(BaseMessageComponent):
     id: T.Union[str, int]
     """所引用的消息 ID"""
     chain: T.Optional[T.List["BaseMessageComponent"]] = []
-    """引用的消息段列表"""
+    """被引用的消息段列表"""
     sender_id: T.Optional[int] | T.Optional[str] = 0
-    """引用的消息发送者 ID"""
+    """被引用的消息对应的发送者的 ID"""
     sender_nickname: T.Optional[str] = ""
-    """引用的消息发送者昵称"""
+    """被引用的消息对应的发送者的昵称"""
     time: T.Optional[int] = 0
-    """引用的消息发送时间"""
+    """被引用的消息发送时间"""
     message_str: T.Optional[str] = ""
-    """解析后的纯文本消息字符串"""
-    sender_str: T.Optional[str] = ""
-    """被引用的消息纯文本"""
+    """被引用的消息解析后的纯文本消息字符串"""
 
     text: T.Optional[str] = ""
     """deprecated"""
