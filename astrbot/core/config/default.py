@@ -52,8 +52,6 @@ DEFAULT_CONFIG = {
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
-        "max_retries": 3,
-        "retry_delay": 1.0,
     },
     "provider_stt_settings": {
         "enable": False,
