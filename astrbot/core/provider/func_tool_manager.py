@@ -487,7 +487,7 @@ class FuncCall:
             {
                 "name": f.name,
                 "description": f.description,
-                **({"parameters": convert_schema(f.parameters)} if convert_schema(f.parameters) else {})
+                **({"parameters": convert_schema(f.parameters)})
             }
             for f in self.func_list if f.active
         ]
