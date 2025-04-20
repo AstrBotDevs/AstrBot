@@ -197,8 +197,12 @@ class SimpleGewechatClient:
             else:
                 user_real_name = self.userrealnames[abm.group_id][user_id]
         else:
-            info = (await self.get_user_or_group_info(user_id))["data"][0]
-            user_real_name = info["nickName"]
+            try:
+                info = (await self.get_user_or_group_info(user_id))["data"][0]
+                user_real_name = info["nickName"]
+            except Exception as e:
+                logger.debug(f"获取用户 {user_id} 昵称失败: {e}")
+                user_real_name = user_id
 
         abm.sender = MessageMember(user_id, user_real_name)
         abm.raw_message = d
