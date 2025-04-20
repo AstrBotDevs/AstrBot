@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import botpy
 import logging
-import time
 import asyncio
 import botpy.message
 import botpy.types
 import botpy.types.message
 import os
+from astrbot.core.time import Time
 
 from botpy import Client
 from astrbot.api.platform import (
@@ -138,7 +138,7 @@ class QQOfficialPlatformAdapter(Platform):
     ):
         abm = AstrBotMessage()
         abm.type = message_type
-        abm.timestamp = int(time.time())
+        abm.timestamp = int(Time.time())
         abm.raw_message = message
         abm.message_id = message.id
         abm.tag = "qq_official"

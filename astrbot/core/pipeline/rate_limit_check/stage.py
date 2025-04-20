@@ -1,11 +1,11 @@
 import asyncio
-from datetime import datetime, timedelta
 from collections import defaultdict, deque
 from typing import DefaultDict, Deque, Union, AsyncGenerator
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core import logger
+from astrbot.core.time import Time
 from astrbot.core.config.astrbot_config import RateLimitStrategy
 
 
@@ -20,12 +20,14 @@ class RateLimitStage(Stage):
 
     def __init__(self):
         # 存储每个会话的请求时间队列
-        self.event_timestamps: DefaultDict[str, Deque[datetime]] = defaultdict(deque)
+        self.event_timestamps: DefaultDict[str, Deque[Time.DateTime]] = defaultdict(
+            deque
+        )
         # 为每个会话设置一个锁，避免并发冲突
         self.locks: DefaultDict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         # 限流参数
         self.rate_limit_count: int = 0
-        self.rate_limit_time: timedelta = timedelta(0)
+        self.rate_limit_time: Time.TimeDelta = Time.timedelta(0)
 
     async def initialize(self, ctx: PipelineContext) -> None:
         """
@@ -34,7 +36,7 @@ class RateLimitStage(Stage):
         self.rate_limit_count = ctx.astrbot_config["platform_settings"]["rate_limit"][
             "count"
         ]
-        self.rate_limit_time = timedelta(
+        self.rate_limit_time = Time.timedelta(
             seconds=ctx.astrbot_config["platform_settings"]["rate_limit"]["time"]
         )
         self.rl_strategy = ctx.astrbot_config["platform_settings"]["rate_limit"][
@@ -55,7 +57,7 @@ class RateLimitStage(Stage):
             MessageEventResult: 继续或停止事件处理的结果。
         """
         session_id = event.session_id
-        now = datetime.now()
+        now = Time.now()
 
         async with self.locks[session_id]:  # 确保同一会话不会并发修改队列
             timestamps = self.event_timestamps[session_id]
@@ -81,21 +83,21 @@ class RateLimitStage(Stage):
                         return event.stop_event()
 
                 self._remove_expired_timestamps(
-                    timestamps, now + timedelta(seconds=stall_duration)
+                    timestamps, now + Time.timedelta(seconds=stall_duration)
                 )
 
             timestamps.append(now)
 
     def _remove_expired_timestamps(
-        self, timestamps: Deque[datetime], now: datetime
+        self, timestamps: Deque[Time.DateTime], now: Time.DateTime
     ) -> None:
         """
         移除时间窗口外的时间戳。
 
         Args:
-            timestamps (Deque[datetime]): 当前会话的时间戳队列。
-            now (datetime): 当前时间，用于计算过期时间。
+            timestamps (Deque[Time.DateTime]): 当前会话的时间戳队列。
+            now (Time.DateTime): 当前时间，用于计算过期时间。
         """
-        expiry_threshold: datetime = now - self.rate_limit_time
+        expiry_threshold: Time.DateTime = now - self.rate_limit_time
         while timestamps and timestamps[0] < expiry_threshold:
             timestamps.popleft()

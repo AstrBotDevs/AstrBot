@@ -26,7 +26,7 @@ class ReleaseInfo:
         return f"\n{self.body}\n\n版本: {self.version} | 发布于: {self.published_at}"
 
 
-class RepoZipUpdator:
+class RepoZipUpdater:
     def __init__(self, repo_mirror: str = "") -> None:
         self.repo_mirror = repo_mirror
         self.rm_on_error = on_error

@@ -1,9 +1,9 @@
 import traceback
 import psutil
-import time
 import threading
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
+from astrbot.core.time import Time
 from quart import request
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
@@ -56,7 +56,7 @@ class StatRoute(Route):
         offset_sec = int(offset_sec)
         try:
             stat = self.db_helper.get_base_stats(offset_sec)
-            now = int(time.time())
+            now = int(Time.time())
             start_time = now - offset_sec
             message_time_based_stats = []
 
@@ -100,7 +100,7 @@ class StatRoute(Route):
                     "plugins": plugin_info,
                     "message_time_series": message_time_based_stats,
                     "running": self.format_sec(
-                        int(time.time()) - self.core_lifecycle.start_time
+                        int(Time.time()) - self.core_lifecycle.start_time
                     ),
                     "memory": {
                         "process": psutil.Process().memory_info().rss >> 20,

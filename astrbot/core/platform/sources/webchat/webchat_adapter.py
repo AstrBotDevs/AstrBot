@@ -1,4 +1,3 @@
-import time
 import asyncio
 import uuid
 import os
@@ -13,6 +12,7 @@ from astrbot.core.platform import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.message.components import Plain, Image, Record  # noqa: F403
 from astrbot import logger
+from astrbot.core.time import Time
 from astrbot.core import web_chat_queue
 from .webchat_event import WebChatMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
@@ -93,7 +93,7 @@ class WebChatAdapter(Platform):
         logger.debug(f"WebChatAdapter: {abm.message}")
 
         message_str = payload["message"]
-        abm.timestamp = int(time.time())
+        abm.timestamp = int(Time.time())
         abm.message_str = message_str
         abm.raw_message = data
         return abm

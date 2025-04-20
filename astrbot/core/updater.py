@@ -1,15 +1,15 @@
 import os
 import psutil
 import sys
-import time
-from .zip_updator import ReleaseInfo, RepoZipUpdator
+from .zip_updater import ReleaseInfo, RepoZipUpdater
 from astrbot.core import logger
+from astrbot.core.time import Time
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.io import download_file
 
 
-class AstrBotUpdator(RepoZipUpdator):
-    """AstrBot 更新器，继承自 RepoZipUpdator 类
+class AstrBotUpdater(RepoZipUpdater):
+    """AstrBot 更新器，继承自 RepoZipUpdater 类
     该类用于处理 AstrBot 的更新操作
     功能包括检查更新、下载更新文件、解压缩更新文件等
     """
@@ -47,7 +47,7 @@ class AstrBotUpdator(RepoZipUpdator):
         在指定的延迟后，终止所有子进程并重新启动程序
         """
         py = sys.executable
-        time.sleep(delay)
+        Time.sleep(delay)
         self.terminate_child_processes()
         py = py.replace(" ", "\\ ")
         try:

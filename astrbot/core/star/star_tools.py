@@ -6,6 +6,7 @@ from astrbot.api.platform import MessageMember, AstrBotMessage
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
+from astrbot.core.time import Time
 from pathlib import Path
 
 
@@ -14,6 +15,8 @@ class StarTools:
     提供给插件使用的便捷工具函数集合
     这些方法封装了一些常用操作，使插件开发更加简单便捷!
     """
+
+    Time = Time
 
     _context: ClassVar[Optional[Context]] = None
 
@@ -190,3 +193,126 @@ class StarTools:
             raise RuntimeError(f"无法创建目录 {data_dir}：{e!s}") from e
 
         return data_dir.resolve()
+
+    class TimeTools:
+        """
+        时间工具类，提供各种时间相关的便捷方法
+        """
+
+        @classmethod
+        def now(cls) -> float:
+            """
+            获取当前时间的时间戳(秒)
+
+            Returns:
+                float: 当前时间的时间戳
+            """
+            return Time.timestamp()
+
+        @classmethod
+        def get_timestamp(cls, unit: str = "s") -> Union[float, int]:
+            """
+            获取当前时间戳，可选单位
+
+            Args:
+                unit (str): 时间单位，可选值: 's'(秒), 'ms'(毫秒)，默认为's'
+
+            Returns:
+                Union[float, int]: 当前时间戳，单位由unit参数指定
+            """
+            if unit == "s":
+                return Time.timestamp()
+            elif unit == "ms":
+                return Time.timestamp_ms()
+            else:
+                raise ValueError("无效的时间单位，可选值: 's'(秒), 'ms'(毫秒)")
+
+        @classmethod
+        def get_datetime(cls) -> Time.DateTime:
+            """
+            获取当前datetime对象
+
+            Returns:
+                Time.DateTime: 当前时间的datetime对象
+            """
+            return Time.now()
+
+        @classmethod
+        def get_datetime_str(cls, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+            """
+            获取当前时间的格式化字符串
+
+            Args:
+                fmt (str): 格式化字符串，默认为 "%Y-%m-%d %H:%M:%S"
+
+            Returns:
+                str: 格式化后的时间字符串
+            """
+            return Time.format_datetime(fmt=fmt)
+
+        @classmethod
+        def get_timezone(cls) -> Optional[Time.ZoneInfo]:
+            """
+            获取当前时区对象
+
+            Returns:
+                Optional[Time.ZoneInfo]: 当前时区对象，如果未设置则返回None
+            """
+            return Time.get_timezone()
+
+        @classmethod
+        def parse_time(
+            cls, time_str: str, fmt: str = "%Y-%m-%d %H:%M:%S"
+        ) -> Time.DateTime:
+            """
+            将时间字符串解析为datetime对象
+
+            Args:
+                time_str (str): 时间字符串
+                fmt (str): 格式化字符串，默认为 "%Y-%m-%d %H:%M:%S"
+
+            Returns:
+                Time.DateTime: 解析后的datetime对象
+            """
+            return Time.parse_datetime(time_str, fmt)
+
+        @classmethod
+        def format_time(
+            cls, dt: Optional[Time.DateTime] = None, fmt: str = "%Y-%m-%d %H:%M:%S"
+        ) -> str:
+            """
+            将datetime对象格式化为字符串
+
+            Args:
+                dt (Time.DateTime, optional): 时间对象，默认为当前时间
+                fmt (str): 格式化字符串，默认为 "%Y-%m-%d %H:%M:%S"
+
+            Returns:
+                str: 格式化后的时间字符串
+            """
+            return (
+                Time.format_datetime(dt, fmt) if dt else Time.format_datetime(fmt=fmt)
+            )
+
+        @classmethod
+        def measure_time(
+            cls,
+            start_time: Union[float, Time.DateTime, None] = None,
+            end_time: Union[float, Time.DateTime, None] = None,
+            unit: str = "s",
+        ) -> float:
+            """
+            计算两个时间点之间的时间差，支持不同时间单位
+
+            Args:
+                start_time (Union[float, Time.DateTime, None], optional): 第一个时间点（时间戳或datetime对象）
+                    如果为None，则返回当前时间戳
+                end_time (Union[float, Time.DateTime, None], optional): 第二个时间点（时间戳或datetime对象）
+                    如果为None，则使用当前时间
+                unit (str, optional): 返回时间的单位, 可选值: 's'(秒), 'ms'(毫秒), 默认为's'.
+
+            Returns:
+                float: 计算得到的时间差，单位由unit参数指定
+                    如果start_time为None, 则返回当前时间戳
+            """
+            return Time.measure_time(start_time, end_time, unit)

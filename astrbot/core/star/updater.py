@@ -2,13 +2,13 @@ import os
 import zipfile
 import shutil
 
-from ..updator import RepoZipUpdator
+from ..updater import RepoZipUpdater
 from astrbot.core.utils.io import remove_dir, on_error
-from ..star.star import StarMetadata
+from .star import StarMetadata
 from astrbot.core import logger
 
 
-class PluginUpdator(RepoZipUpdator):
+class PluginUpdater(RepoZipUpdater):
     def __init__(self, repo_mirror: str = "") -> None:
         super().__init__(repo_mirror)
         self.plugin_store_path = os.path.abspath(
