@@ -45,6 +45,10 @@ class LLMRequestSubStage(Stage):
         self.streaming_response = ctx.astrbot_config["provider_settings"][
             "streaming_response"
         ]  # bool
+        self.max_retries = ctx.astrbot_config["provider_settings"].get("max_retries", 3)
+        self.retry_delay = ctx.astrbot_config["provider_settings"].get(
+            "retry_delay", 1.0
+        )
 
         for bwp in self.bot_wake_prefixs:
             if self.provider_wake_prefix.startswith(bwp):
@@ -149,7 +153,14 @@ class LLMRequestSubStage(Stage):
                 -(self.max_context_length - self.dequeue_context_length + 1) * 2 :
             ]
             # 找到第一个role 为 user 的索引，确保上下文格式正确
-            index = next((i for i, item in enumerate(req.contexts) if item.get("role") == "user"), None)
+            index = next(
+                (
+                    i
+                    for i, item in enumerate(req.contexts)
+                    if item.get("role") == "user"
+                ),
+                None,
+            )
             if index is not None and index > 0:
                 req.contexts = req.contexts[index:]
 
@@ -158,94 +169,132 @@ class LLMRequestSubStage(Stage):
             req.session_id = event.unified_msg_origin
 
         async def requesting(req: ProviderRequest):
-            try:
-                need_loop = True
-                while need_loop:
-                    need_loop = False
-                    logger.debug(f"提供商请求 Payload: {req}")
+            retry_count = 0
+            while True:
+                try:
+                    need_loop = True
+                    while need_loop:
+                        need_loop = False
+                        logger.debug(f"提供商请求 Payload: {req}")
 
-                    final_llm_response = None
+                        final_llm_response = None
 
-                    if self.streaming_response:
-                        stream = provider.text_chat_stream(**req.__dict__)
-                        async for llm_response in stream:
-                            if llm_response.is_chunk:
-                                if llm_response.result_chain:
-                                    yield llm_response.result_chain  # MessageChain
+                        if self.streaming_response:
+                            stream = provider.text_chat_stream(**req.__dict__)
+                            async for llm_response in stream:
+                                if llm_response.is_chunk:
+                                    if llm_response.result_chain:
+                                        yield llm_response.result_chain  # MessageChain
+                                    else:
+                                        yield MessageChain().message(
+                                            llm_response.completion_text
+                                        )
                                 else:
-                                    yield MessageChain().message(
-                                        llm_response.completion_text
-                                    )
-                            else:
-                                final_llm_response = llm_response
-                    else:
-                        final_llm_response = await provider.text_chat(
-                            **req.__dict__
-                        )  # 请求 LLM
+                                    final_llm_response = llm_response
+                        else:
+                            final_llm_response = await provider.text_chat(
+                                **req.__dict__
+                            )  # 请求 LLM
 
-                    if not final_llm_response:
-                        raise Exception("LLM response is None.")
+                        if not final_llm_response:
+                            raise Exception("LLM response is None.")
 
-                    # 执行 LLM 响应后的事件钩子。
-                    handlers = star_handlers_registry.get_handlers_by_event_type(
-                        EventType.OnLLMResponseEvent
+                        # 执行 LLM 响应后的事件钩子。
+                        handlers = star_handlers_registry.get_handlers_by_event_type(
+                            EventType.OnLLMResponseEvent
+                        )
+                        for handler in handlers:
+                            try:
+                                logger.debug(
+                                    f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
+                                )
+                                await handler.handler(event, final_llm_response)
+                            except BaseException:
+                                logger.error(traceback.format_exc())
+
+                            if event.is_stopped():
+                                logger.info(
+                                    f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
+                                )
+                                return
+
+                        # ==========================================
+                        #              执行函数调用
+                        # ==========================================
+                        if self.streaming_response:
+                            # 流式输出的处理
+                            async for result in self._handle_llm_stream_response(
+                                event, req, final_llm_response
+                            ):
+                                if isinstance(result, ProviderRequest):
+                                    # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
+                                    req = result
+                                    need_loop = True
+                                else:
+                                    yield
+                        else:
+                            # 非流式输出的处理
+                            async for result in self._handle_llm_response(
+                                event, req, final_llm_response
+                            ):
+                                if isinstance(result, ProviderRequest):
+                                    # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
+                                    req = result
+                                    need_loop = True
+                                else:
+                                    yield
+
+                    # ==========================================
+                    #          请求后上传相关非敏感指标
+                    # ==========================================
+                    asyncio.create_task(
+                        Metric.upload(
+                            llm_tick=1,
+                            model_name=provider.get_model(),
+                            provider_type=provider.meta().type,
+                        )
                     )
-                    for handler in handlers:
-                        try:
-                            logger.debug(
-                                f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
-                            )
-                            await handler.handler(event, final_llm_response)
-                        except BaseException:
-                            logger.error(traceback.format_exc())
 
-                        if event.is_stopped():
+                    # 保存到历史记录
+                    await self._save_to_history(event, req, final_llm_response)
+                    break
+
+                # ==========================================
+                #             请求错误时进行重试
+                # ==========================================
+                except Exception as e:
+                    retry_count += 1
+                    logger.error(
+                        f"LLM请求失败 (尝试 {retry_count}/{self.max_retries}): {type(e).__name__} : {str(e)}"
+                    )
+                    logger.error(traceback.format_exc())
+
+                    # 是否继续重试
+                    if retry_count < self.max_retries:
+                        should_retry = any(
+                            err in str(e).lower()
+                            for err in [
+                                "timeout",
+                                "connection",
+                                "rate limit",
+                                "server error",
+                                "500",
+                                "503",
+                            ]
+                        )
+
+                        if should_retry:
                             logger.info(
-                                f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
+                                f"将在 {self.retry_delay} 秒后重试 LLM 请求 ＞﹏＜"
                             )
-                            return
+                            await asyncio.sleep(self.retry_delay)
+                            continue
 
-                    if self.streaming_response:
-                        # 流式输出的处理
-                        async for result in self._handle_llm_stream_response(
-                            event, req, final_llm_response
-                        ):
-                            if isinstance(result, ProviderRequest):
-                                # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
-                                req = result
-                                need_loop = True
-                            else:
-                                yield
-                    else:
-                        # 非流式输出的处理
-                        async for result in self._handle_llm_response(
-                            event, req, final_llm_response
-                        ):
-                            if isinstance(result, ProviderRequest):
-                                # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
-                                req = result
-                                need_loop = True
-                            else:
-                                yield
-
-                asyncio.create_task(
-                    Metric.upload(
-                        llm_tick=1,
-                        model_name=provider.get_model(),
-                        provider_type=provider.meta().type,
+                    # 是重试也解决不了的错误或次数用尽时
+                    logger.error(
+                        f"LLM 请求失败, 重试次数({retry_count - 1})用尽: {type(e).__name__} : {str(e)}"
                     )
-                )
-
-                # 保存到历史记录
-                await self._save_to_history(event, req, final_llm_response)
-
-            except BaseException as e:
-                logger.error(traceback.format_exc())
-                event.set_result(
-                    MessageEventResult().message(
-                        f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}"
-                    )
-                )
+                    break
 
         if not self.streaming_response:
             event.set_extra("tool_call_result", None)
@@ -388,8 +437,8 @@ class LLMRequestSubStage(Stage):
                     platform_id = event.get_platform_id()
                     star_md = star_map.get(func_tool.handler_module_path)
                     if (
-                        star_md and
-                        platform_id in star_md.supported_platforms
+                        star_md
+                        and platform_id in star_md.supported_platforms
                         and not star_md.supported_platforms[platform_id]
                     ):
                         logger.debug(
