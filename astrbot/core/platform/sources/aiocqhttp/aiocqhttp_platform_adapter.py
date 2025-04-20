@@ -3,6 +3,7 @@ import time
 import asyncio
 import logging
 import uuid
+import re
 from typing import Awaitable, Any
 from aiocqhttp import CQHttp, Event
 from astrbot.api.platform import (
@@ -159,6 +160,14 @@ class AiocqhttpAdapter(Platform):
 
         return abm
 
+    def _is_url_or_ip(self,text: str) -> bool:
+        """
+        判断一个字符串是否为网址（http/https 开头）或 IP 地址。
+        """
+        url_pattern = r"^(?:http|https)://.+$"
+        ip_pattern = r"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+        return bool(re.match(url_pattern, text) or re.match(ip_pattern, text))
+
     async def _convert_handle_message_event(
         self, event: Event, get_reply=True
     ) -> AstrBotMessage:
@@ -202,13 +211,30 @@ class AiocqhttpAdapter(Platform):
             return
 
         # 按消息段类型类型适配
-        for m in event.message:
+        for idx, m in enumerate(event.message):
             t = m["type"]
             a = None
             if t == "text":
-                message_str += m["data"]["text"].strip()
-                a = ComponentTypes[t](**m["data"])  # noqa: F405
-                abm.message.append(a)
+                should_append_new = True # 是否需要正常处理的标签
+                # 合并相邻文本段的情况
+                if idx > 0 and event.message[idx - 1]["type"] == "text":
+                    prev_text = event.message[idx - 1]["data"]["text"]
+                    curr_text = m["data"]["text"].strip()
+
+                    # 处理网址或IP地址的特殊情况，处理两端文本中间为url时的情况
+                    if (prev_text.endswith(" ") and self._is_url_or_ip(curr_text)) or \
+                       (idx > 1 and m["data"]["text"].startswith(" ") and self._is_url_or_ip(prev_text.strip())):
+                        # 合并到前一个文本段
+                        message_str += " " + curr_text
+                        event.message[idx - 1]["data"]["text"] = message_str
+                        a = ComponentTypes[t](**event.message[idx - 1]["data"])
+                        abm.message[-1] = a
+                        should_append_new = False
+                # 如果不需要合并，添加为新的消息段
+                if should_append_new:
+                    message_str += m["data"]["text"].strip()
+                    a = ComponentTypes[t](**m["data"])
+                    abm.message.append(a)
 
             elif t == "file":
                 if m["data"].get("url") and m["data"].get("url").startswith("http"):
