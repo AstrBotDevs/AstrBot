@@ -1,5 +1,6 @@
 import os
 import json
+import aiohttp
 import traceback
 from .route import Route, Response, RouteContext
 from quart import request
@@ -20,6 +21,7 @@ class ToolsRoute(Route):
             "/tools/mcp/add": ("POST", self.add_mcp_server),
             "/tools/mcp/update": ("POST", self.update_mcp_server),
             "/tools/mcp/delete": ("POST", self.delete_mcp_server),
+            "/tools/mcp/market": ("GET", self.get_mcp_markets),
         }
         self.register_routes()
         self.tool_mgr = self.core_lifecycle.provider_manager.llm_tools
@@ -78,6 +80,7 @@ class ToolsRoute(Route):
                 ) in self.tool_mgr.mcp_client_dict.items():
                     if name_key == name:
                         server_info["tools"] = [tool.name for tool in mcp_client.tools]
+                        server_info["errlogs"] = mcp_client.server_errlogs
                         break
                 else:
                     server_info["tools"] = []
@@ -105,9 +108,11 @@ class ToolsRoute(Route):
 
             # 复制所有配置字段
             for key, value in server_data.items():
-                if key not in ["name", "active", "tools"]:  # 排除特殊字段
+                if key not in ["name", "active", "tools", "errlogs"]:  # 排除特殊字段
                     if key == "mcpServers":
-                        key_0 = list(server_data["mcpServers"].keys())[0] # 不考虑为空的情况
+                        key_0 = list(server_data["mcpServers"].keys())[
+                            0
+                        ]  # 不考虑为空的情况
                         server_config = server_data["mcpServers"][key_0]
                     else:
                         server_config[key] = value
@@ -125,7 +130,7 @@ class ToolsRoute(Route):
 
             if self.save_mcp_config(config):
                 # 动态初始化新MCP客户端
-                self.tool_mgr.mcp_service_queue.put_nowait(
+                await self.tool_mgr.mcp_service_queue.put(
                     {
                         "type": "init",
                         "name": name,
@@ -166,9 +171,11 @@ class ToolsRoute(Route):
 
             # 复制所有配置字段
             for key, value in server_data.items():
-                if key not in ["name", "active", "tools"]:  # 排除特殊字段
+                if key not in ["name", "active", "tools", "errlogs"]:  # 排除特殊字段
                     if key == "mcpServers":
-                        key_0 = list(server_data["mcpServers"].keys())[0] # 不考虑为空的情况
+                        key_0 = list(server_data["mcpServers"].keys())[
+                            0
+                        ]  # 不考虑为空的情况
                         server_config = server_data["mcpServers"][key_0]
                     else:
                         server_config[key] = value
@@ -202,7 +209,7 @@ class ToolsRoute(Route):
                         )
                     else:
                         # 客户端不存在，初始化
-                        self.tool_mgr.mcp_service_queue.put_nowait(
+                        await self.tool_mgr.mcp_service_queue.put(
                             {
                                 "type": "init",
                                 "name": name,
@@ -258,3 +265,26 @@ class ToolsRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"删除 MCP 服务器失败: {str(e)}").__dict__
+
+    async def get_mcp_markets(self):
+        page = request.args.get("page", 1, type=int)
+        page_size = request.args.get("page_size", 10, type=int)
+        BASE_URL = "https://api.soulter.top/astrbot/mcpservers?page={}&page_size={}".format(
+            page,
+            page_size,
+        )
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{BASE_URL}") as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return Response().ok(data["data"]).__dict__
+                    else:
+                        return (
+                            Response()
+                            .error(f"获取市场数据失败: HTTP {response.status}")
+                            .__dict__
+                        )
+        except Exception as _:
+            logger.error(traceback.format_exc())
+        return Response().error("获取市场数据失败").__dict__

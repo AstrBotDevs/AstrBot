@@ -21,16 +21,15 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         self.voice: str = provider_config.get("dashscope_tts_voice", "loongstella")
         self.set_model(provider_config.get("model", None))
         self.timeout_ms = float(provider_config.get("timeout", 20)) * 1000
-
         dashscope.api_key = self.chosen_api_key
+
+    async def get_audio(self, text: str) -> str:
+        path = f"data/temp/dashscope_tts_{uuid.uuid4()}.wav"
         self.synthesizer = SpeechSynthesizer(
             model=self.get_model(),
             voice=self.voice,
             format=AudioFormat.WAV_24000HZ_MONO_16BIT,
         )
-
-    async def get_audio(self, text: str) -> str:
-        path = f"data/temp/dashscope_tts_{uuid.uuid4()}.wav"
         audio = await asyncio.get_event_loop().run_in_executor(
             None, self.synthesizer.call, text, self.timeout_ms
         )

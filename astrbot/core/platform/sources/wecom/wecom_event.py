@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image, Record
@@ -33,14 +34,54 @@ class WecomPlatformEvent(AstrMessageEvent):
     ):
         pass
 
+    async def split_plain(self, plain: str) -> list[str]:
+        """将长文本分割成多个小文本, 每个小文本长度不超过 2048 字符
+
+        Args:
+            plain (str): 要分割的长文本
+        Returns:
+            list[str]: 分割后的文本列表
+        """
+        if len(plain) <= 2048:
+            return [plain]
+        else:
+            result = []
+            start = 0
+            while start < len(plain):
+                # 剩下的字符串长度<2048时结束
+                if start + 2048 >= len(plain):
+                    result.append(plain[start:])
+                    break
+                
+                # 向前搜索分割标点符号
+                end = min(start + 2048, len(plain))
+                cut_position = end
+                for i in range(end, start, -1):
+                    if i < len(plain) and plain[i-1] in ["。", "！", "？", ".", "!", "?", "\n", ";", "；"]:
+                        cut_position = i
+                        break
+                
+                # 没找到合适的位置分割, 直接切分
+                if cut_position == end and end < len(plain):
+                    cut_position = end
+                
+                result.append(plain[start:cut_position])
+                start = cut_position
+
+            return result
+
     async def send(self, message: MessageChain):
         message_obj = self.message_obj
 
         for comp in message.chain:
             if isinstance(comp, Plain):
-                self.client.message.send_text(
-                    message_obj.self_id, message_obj.session_id, comp.text
-                )
+                # Split long text messages if needed
+                plain_chunks = await self.split_plain(comp.text)
+                for chunk in plain_chunks:
+                    self.client.message.send_text(
+                        message_obj.self_id, message_obj.session_id, chunk
+                    )
+                    await asyncio.sleep(0.5)  # Avoid sending too fast
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
 
@@ -85,7 +126,7 @@ class WecomPlatformEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def send_streaming(self, generator):
+    async def send_streaming(self, generator, use_fallback: bool = False):
         buffer = None
         async for chain in generator:
             if not buffer:
@@ -96,4 +137,4 @@ class WecomPlatformEvent(AstrMessageEvent):
             return
         buffer.squash_plain()
         await self.send(buffer)
-        return await super().send_streaming(generator)
+        return await super().send_streaming(generator, use_fallback)

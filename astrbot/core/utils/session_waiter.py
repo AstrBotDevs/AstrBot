@@ -97,8 +97,8 @@ class SessionFilter:
 
 class DefaultSessionFilter(SessionFilter):
     def filter(self, event: AstrMessageEvent) -> str:
-        """默认实现，返回发送者的 ID 作为会话标识符"""
-        return event.get_sender_id()
+        """默认实现，返回统一消息来源字符串作为会话标识符"""
+        return event.unified_msg_origin
 
 
 class SessionWaiter:

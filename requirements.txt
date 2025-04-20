@@ -30,3 +30,4 @@ mcp
 certifi
 pip
 telegramify-markdown
+google-genai

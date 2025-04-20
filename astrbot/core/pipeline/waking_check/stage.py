@@ -35,10 +35,21 @@ class WakingCheckStage(Stage):
         self.friend_message_needs_wake_prefix = self.ctx.astrbot_config[
             "platform_settings"
         ].get("friend_message_needs_wake_prefix", False)
+        # 是否忽略机器人自己发送的消息
+        self.ignore_bot_self_message = self.ctx.astrbot_config["platform_settings"].get(
+            "ignore_bot_self_message", False
+        )
 
     async def process(
         self, event: AstrMessageEvent
     ) -> Union[None, AsyncGenerator[None, None]]:
+        if (
+            self.ignore_bot_self_message
+            and event.get_self_id() == event.get_sender_id()
+        ):
+            # 忽略机器人自己发送的消息
+            event.stop_event()
+            return
         # 设置 sender 身份
         event.message_str = event.message_str.strip()
         for admin_id in self.ctx.astrbot_config["admins_id"]:

@@ -92,7 +92,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             await self.send_with_client(self.client, message, self.get_sender_id())
         await super().send(message)
 
-    async def send_streaming(self, generator):
+    async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None
 
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
@@ -190,4 +190,4 @@ class TelegramPlatformEvent(AstrMessageEvent):
         except Exception as e:
             logger.warning(f"编辑消息失败(streaming): {e!s}")
 
-        return await super().send_streaming(generator)
+        return await super().send_streaming(generator, use_fallback)
