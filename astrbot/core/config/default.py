@@ -38,6 +38,7 @@ DEFAULT_CONFIG = {
         "no_permission_reply": True,
         "empty_mention_waiting": True,
         "friend_message_needs_wake_prefix": False,
+        "ignore_bot_self_message": False,
     },
     "provider": [],
     "provider_settings": {
@@ -289,6 +290,11 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "启用后，私聊消息需要唤醒前缀才会被处理，同群聊一样。",
                     },
+                    "ignore_bot_self_message": {
+                        "description": "是否忽略机器人自身的消息",
+                        "type": "bool",
+                        "hint": "某些平台如 gewechat 会将自身账号在其他 APP 端发送的消息也当做消息事件下发导致给自己发消息时唤醒机器人",
+                    },
                     "segmented_reply": {
                         "description": "分段回复",
                         "type": "object",
@@ -530,6 +536,8 @@ CONFIG_METADATA_2 = {
                             "model": "gemini-2.0-flash-exp",
                         },
                         "gm_resp_image_modal": False,
+                        "gm_native_search": False,
+                        "gm_native_coderunner": False,
                         "gm_safety_settings": {
                             "harassment": "BLOCK_MEDIUM_AND_ABOVE",
                             "hate_speech": "BLOCK_MEDIUM_AND_ABOVE",
@@ -705,6 +713,18 @@ CONFIG_METADATA_2 = {
                         "description": "启用图片模态",
                         "type": "bool",
                         "hint": "启用后，将支持返回图片内容。需要模型支持，否则会报错。具体支持模型请查看 Google Gemini 官方网站。温馨提示，如果您需要生成图片，请关闭 `启用群员识别` 配置获得更好的效果。",
+                    },
+                    "gm_native_search": {
+                        "description": "启用原生搜索功能",
+                        "type": "bool",
+                        "hint": "启用后所有函数工具将全部失效，免费次数限制请查阅官方文档",
+                        "obvious_hint": True,
+                    },
+                    "gm_native_coderunner": {
+                        "description": "启用原生代码执行器",
+                        "type": "bool",
+                        "hint": "启用后所有函数工具将全部失效",
+                        "obvious_hint": True,
                     },
                     "gm_safety_settings": {
                         "description": "安全过滤器",
