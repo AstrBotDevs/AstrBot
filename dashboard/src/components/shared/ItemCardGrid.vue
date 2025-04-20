@@ -10,7 +10,7 @@
     <v-row v-else>
       <v-col v-for="(item, index) in items" :key="index" cols="12" md="6" lg="4" xl="3">
         <v-card class="item-card hover-elevation" :color="getItemEnabled(item) ? '' : 'grey-lighten-4'">
-          <div class="item-status-indicator" :class="{'active': getItemEnabled(item)}"></div>
+          <!-- <div class="item-status-indicator" :class="{'active': getItemEnabled(item)}"></div> -->
           <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
             <span class="text-h4 text-truncate" :title="getItemTitle(item)">{{ getItemTitle(item) }}</span>
             <v-tooltip location="top">
@@ -112,19 +112,6 @@ export default {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-}
-
-.item-status-indicator {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 4px;
-  background-color: #e0e0e0;
-}
-
-.item-status-indicator.active {
-  background-color: #4CAF50;
 }
 
 .hover-elevation:hover {

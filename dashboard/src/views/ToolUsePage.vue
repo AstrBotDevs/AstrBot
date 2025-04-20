@@ -8,16 +8,11 @@
             <v-icon size="x-large" color="primary" class="me-2">mdi-function-variant</v-icon>函数工具管理
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4 d-flex align-center">
-            管理 MCP 服务器和查看可用的函数工具 
+            管理 MCP 服务器和查看可用的函数工具
             <v-tooltip location="top">
               <template v-slot:activator="{ props }">
-                <v-icon 
-                  v-bind="props"
-                  size="small" 
-                  color="primary" 
-                  class="ms-1 cursor-pointer"
-                  @click="openurl('https://astrbot.app/use/function-calling.html')"
-                >
+                <v-icon v-bind="props" size="small" color="primary" class="ms-1 cursor-pointer"
+                  @click="openurl('https://astrbot.app/use/function-calling.html')">
                   mdi-information
                 </v-icon>
               </template>
@@ -28,12 +23,7 @@
       </v-row>
 
       <!-- 标签页切换 -->
-      <v-tabs
-        v-model="activeTab"
-        color="primary"
-        class="mb-4"
-        show-arrows
-      >
+      <v-tabs v-model="activeTab" color="primary" class="mb-4" show-arrows>
         <v-tab value="local" class="font-weight-medium">
           <v-icon start>mdi-server</v-icon>
           本地服务器
@@ -59,7 +49,8 @@
               <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="getServers" :loading="loading">
                 刷新
               </v-btn>
-              <v-btn color="primary" style="margin-left: 8px;" prepend-icon="mdi-plus" variant="tonal" @click="showMcpServerDialog = true">
+              <v-btn color="primary" style="margin-left: 8px;" prepend-icon="mdi-plus" variant="tonal"
+                @click="showMcpServerDialog = true">
                 新增服务器
               </v-btn>
             </v-card-title>
@@ -67,84 +58,39 @@
             <v-divider></v-divider>
 
             <v-card-text class="px-4 py-3">
-              <v-row v-if="mcpServers.length === 0">
-                <v-col cols="12" class="text-center pa-8">
-                  <v-icon size="64" color="grey-lighten-1">mdi-server-off</v-icon>
-                  <p class="text-grey mt-4">暂无 MCP 服务器，点击"新增服务器"添加</p>
-                </v-col>
-              </v-row>
 
-              <v-row v-else>
-                <v-col v-for="(server, index) in mcpServers" :key="index" cols="12" md="6" lg="4" xl="3">
-                  <v-card class="server-card hover-elevation" :color="server.active ? '' : 'grey-lighten-4'">
-                    <div class="server-status-indicator" :class="{'active': server.active}"></div>
-                    <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
-                      <div>
-                        <span class="text-h4 text-truncate" :title="server.name">{{ server.name }}</span>
+              <item-card-grid :items="mcpServers || []" title-field="name" enabled-field="active"
+                empty-icon="mdi-server-off" empty-text="暂无 MCP 服务器，点击 新增服务器 添加" @toggle-enabled="platformStatusChange"
+                @delete="deleteServer" @edit="editServer">
+                <template v-slot:item-details="{ item }">
 
-                        <v-tooltip location="top">
-                          <template v-slot:activator="{ props }">
-                            <btn class="text-caption text-medium-emphasis" v-if="server.errlogs" v-bind="props">
-                              <v-icon size="small" class="ms-1">mdi-information</v-icon>
-                              日志
-                            </btn>
-                          </template>
-                          <pre>{{ server.errlogs }}</pre>
-                        </v-tooltip>
+                  <div class="d-flex align-center mb-2">
+                    <v-icon size="small" color="grey" class="me-2">mdi-file-code</v-icon>
+                    <span class="text-caption text-medium-emphasis text-truncate" :title="getServerConfigSummary(item)">
+                      {{ getServerConfigSummary(item) }}
+                    </span>
+                  </div>
 
-                      </div>
-                      
-                      <v-tooltip location="top">
-                        <template v-slot:activator="{ props }">
-                          <v-switch color="primary" hide-details density="compact" v-model="server.active"
-                            v-bind="props" @update:modelValue="updateServerStatus(server)"></v-switch>
-                        </template>
-                        <span>{{ server.active ? '已启用' : '已禁用' }}</span>
-                      </v-tooltip>
-                    </v-card-title>
-                    
-                    <v-card-text>
-                      <div class="d-flex align-center mb-2">
-                        <v-icon size="small" color="grey" class="me-2">mdi-file-code</v-icon>
-                        <span class="text-caption text-medium-emphasis text-truncate" :title="getServerConfigSummary(server)">
-                          {{ getServerConfigSummary(server) }}
-                        </span>
-                      </div>
-                      
-                      <div v-if="server.tools && server.tools.length > 0">
-                        <div class="d-flex align-center mb-1">
-                          <v-icon size="small" color="grey" class="me-2">mdi-tools</v-icon>
-                          <span class="text-caption text-medium-emphasis">可用工具 ({{ server.tools.length }})</span>
-                        </div>
-                        <v-chip-group class="tool-chips">
-                          <v-chip v-for="(tool, idx) in server.tools" :key="idx" size="x-small" 
-                                  density="compact" color="info" class="text-caption">
-                            {{ tool }}
-                          </v-chip>
-                        </v-chip-group>
-                      </div>
-                      <div v-else class="text-caption text-medium-emphasis mt-2">
-                        <v-icon size="small" color="warning" class="me-1">mdi-alert-circle</v-icon>
-                        无可用工具
-                      </div>
-                    </v-card-text>
-                    
-                    <v-divider></v-divider>
-                    
-                    <v-card-actions class="pa-2">
-                      <v-spacer></v-spacer>
-                      <v-btn variant="text" size="small" color="error" prepend-icon="mdi-delete" 
-                             @click="deleteServer(server.name)">
-                        删除
-                      </v-btn>
-                      <v-btn variant="text" size="small" color="primary" prepend-icon="mdi-pencil" 
-                             @click="editServer(server)">
-                        编辑
-                      </v-btn>
-                    </v-card-actions>
-                  </v-card>
-                </v-col>
-              </v-row>
+                  <div v-if="item.tools && item.tools.length > 0">
+                    <div class="d-flex align-center mb-1">
+                      <v-icon size="small" color="grey" class="me-2">mdi-tools</v-icon>
+                      <span class="text-caption text-medium-emphasis">可用工具 ({{ item.tools.length }})</span>
+                    </div>
+                    <v-chip-group class="tool-chips">
+                      <v-chip v-for="(tool, idx) in item.tools" :key="idx" size="x-small" density="compact" color="info"
+                        class="text-caption">
+                        {{ tool }}
+                      </v-chip>
+                    </v-chip-group>
+                  </div>
+                  <div v-else class="text-caption text-medium-emphasis mt-2">
+                    <v-icon size="small" color="warning" class="me-1">mdi-alert-circle</v-icon>
+                    无可用工具
+                  </div>
+
+                </template>
+              </item-card-grid>
+
             </v-card-text>
           </v-card>
 
@@ -169,27 +115,14 @@
                   <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
                   <p class="text-grey mt-4">没有可用的函数工具</p>
                 </div>
-                
+
                 <div v-else>
-                  <v-text-field
-                    v-model="toolSearch"
-                    prepend-inner-icon="mdi-magnify"
-                    label="搜索函数工具"
-                    variant="outlined"
-                    density="compact"
-                    class="mb-4"
-                    hide-details
-                    clearable
-                  ></v-text-field>
+                  <v-text-field v-model="toolSearch" prepend-inner-icon="mdi-magnify" label="搜索函数工具" variant="outlined"
+                    density="compact" class="mb-4" hide-details clearable></v-text-field>
 
                   <v-expansion-panels v-model="openedPanel" multiple>
-                    <v-expansion-panel
-                      v-for="(tool, index) in filteredTools"
-                      :key="index"
-                      :value="index"
-                      class="mb-2 tool-panel"
-                      rounded="lg"
-                    >
+                    <v-expansion-panel v-for="(tool, index) in filteredTools" :key="index" :value="index"
+                      class="mb-2 tool-panel" rounded="lg">
                       <v-expansion-panel-title>
                         <v-row no-gutters align="center">
                           <v-col cols="3">
@@ -197,8 +130,8 @@
                               <v-icon color="primary" class="me-2" size="small">
                                 {{ tool.function.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
                               </v-icon>
-                              <span class="text-body-1 text-high-emphasis font-weight-medium text-truncate" 
-                                    :title="tool.function.name">
+                              <span class="text-body-1 text-high-emphasis font-weight-medium text-truncate"
+                                :title="tool.function.name">
                                 {{ formatToolName(tool.function.name) }}
                               </span>
                             </div>
@@ -208,7 +141,7 @@
                           </v-col>
                         </v-row>
                       </v-expansion-panel-title>
-                      
+
                       <v-expansion-panel-text>
                         <v-card flat>
                           <v-card-text>
@@ -217,13 +150,13 @@
                               功能描述
                             </p>
                             <p class="text-body-2 ml-6 mb-4">{{ tool.function.description }}</p>
-                            
+
                             <template v-if="tool.function.parameters && tool.function.parameters.properties">
                               <p class="text-body-1 font-weight-medium mb-3">
                                 <v-icon color="primary" size="small" class="me-1">mdi-code-json</v-icon>
                                 参数列表
                               </p>
-                              
+
                               <v-table density="compact" class="params-table mt-1">
                                 <thead>
                                   <tr>
@@ -233,7 +166,8 @@
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  <tr v-for="(param, paramName) in tool.function.parameters.properties" :key="paramName">
+                                  <tr v-for="(param, paramName) in tool.function.parameters.properties"
+                                    :key="paramName">
                                     <td class="font-weight-medium">{{ paramName }}</td>
                                     <td>
                                       <v-chip size="x-small" color="primary" text class="text-caption">
@@ -267,19 +201,11 @@
               <v-icon color="primary" class="me-2">mdi-store</v-icon>
               <span class="text-h6">MCP 服务器市场</span>
               <v-spacer></v-spacer>
-              <v-text-field
-                v-model="marketplaceSearch"
-                prepend-inner-icon="mdi-magnify"
-                label="搜索服务器"
-                variant="outlined"
-                density="compact"
-                hide-details
-                class="mx-2"
-                style="max-width: 300px"
-                clearable
-                @update:model-value="searchMarketplaceServers"
-              ></v-text-field>
-              <v-btn color="primary" prepend-icon="mdi-refresh" variant="text" @click="fetchMarketplaceServers(1)" :loading="marketplaceLoading">
+              <v-text-field v-model="marketplaceSearch" prepend-inner-icon="mdi-magnify" label="搜索服务器"
+                variant="outlined" density="compact" hide-details class="mx-2" style="max-width: 300px" clearable
+                @update:model-value="searchMarketplaceServers"></v-text-field>
+              <v-btn color="primary" prepend-icon="mdi-refresh" variant="text" @click="fetchMarketplaceServers(1)"
+                :loading="marketplaceLoading">
                 刷新
               </v-btn>
             </v-card-title>
@@ -299,7 +225,6 @@
                 <p class="text-grey mt-4">暂无可用的 MCP 服务器</p>
               </div>
 
-              <!-- 服务器列表 -->
               <v-row v-else>
                 <v-col v-for="(server, index) in filteredMarketplaceServers" :key="index" cols="12" md="6" lg="4">
                   <v-card class="marketplace-card hover-elevation" height="100%">
@@ -307,15 +232,10 @@
                       <span class="text-h4 text-truncate" :title="server.name">
                         {{ server.name_h }}({{ server.name }})
                       </span>
-                      <v-btn
-                        icon="mdi-open-in-new"
-                        variant="text"
-                        color="primary"
-                        class="ms-auto"
-                        @click.stop="openurl(server.origin)"
-                      ></v-btn>
+                      <v-btn icon="mdi-open-in-new" variant="text" color="primary" class="ms-auto"
+                        @click.stop="openurl(server.origin)"></v-btn>
                     </v-card-title>
-                    
+
                     <v-card-text>
 
                       <div class="d-flex align-center mb-2">
@@ -326,8 +246,8 @@
                       </div>
 
                       <v-chip-group class="tool-chips mb-2" v-if="server.tools && server.tools.length > 0">
-                        <v-chip v-for="(tool, idx) in server.tools" :key="idx" size="x-small" 
-                                density="compact" color="info" class="text-caption">
+                        <v-chip v-for="(tool, idx) in server.tools" :key="idx" size="x-small" density="compact"
+                          color="info" class="text-caption">
                           {{ tool.name }}
                         </v-chip>
                       </v-chip-group>
@@ -336,34 +256,28 @@
                         无可用工具信息
                       </div>
                     </v-card-text>
-                    
+
                     <v-divider></v-divider>
-                    
+
                     <v-card-actions class="pa-2">
                       <v-spacer></v-spacer>
-                      <v-btn variant="text" size="small" color="info" prepend-icon="mdi-information-outline" 
-                             @click="showServerDetail(server)">
+                      <v-btn variant="text" size="small" color="info" prepend-icon="mdi-information-outline"
+                        @click="showServerDetail(server)">
                         详情
                       </v-btn>
-                      <v-btn variant="text" size="small" color="primary" prepend-icon="mdi-plus" 
-                             @click="importServerConfig(server)">
+                      <v-btn variant="text" size="small" color="primary" prepend-icon="mdi-plus"
+                        @click="importServerConfig(server)">
                         导入
                       </v-btn>
                     </v-card-actions>
                   </v-card>
                 </v-col>
               </v-row>
-              
+
               <!-- 分页控件 -->
               <div class="d-flex justify-center mt-4">
-                <v-pagination
-                  v-if="!marketplaceLoading && totalMarketPages > 1"
-                  v-model="currentMarketPage"
-                  :length="totalMarketPages"
-                  total-visible="7"
-                  rounded
-                  @update:model-value="changePage"
-                ></v-pagination>
+                <v-pagination v-if="!marketplaceLoading && totalMarketPages > 1" v-model="currentMarketPage"
+                  :length="totalMarketPages" total-visible="7" rounded @update:model-value="changePage"></v-pagination>
               </div>
             </v-card-text>
           </v-card>
@@ -378,26 +292,14 @@
           <v-icon color="white" class="me-2">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
           <span>{{ isEditMode ? '编辑' : '新增' }} MCP 服务器</span>
         </v-card-title>
-        
+
         <v-card-text class="py-4">
           <v-form @submit.prevent="saveServer" ref="form">
-            <v-text-field
-              v-model="currentServer.name"
-              label="服务器名称"
-              variant="outlined"
-              :rules="[v => !!v || '名称是必填项']"
-              required
-              class="mb-3"
-            ></v-text-field>
-            
-            <v-switch
-              v-model="currentServer.active"
-              label="启用服务器"
-              color="primary"
-              hide-details
-              class="mb-3"
-            ></v-switch>
-            
+            <v-text-field v-model="currentServer.name" label="服务器名称" variant="outlined" :rules="[v => !!v || '名称是必填项']"
+              required class="mb-3"></v-text-field>
+
+            <v-switch v-model="currentServer.active" label="启用服务器" color="primary" hide-details class="mb-3"></v-switch>
+
             <div class="mb-2 d-flex align-center">
               <span class="text-subtitle-1">服务器配置</span>
               <v-tooltip location="top">
@@ -411,66 +313,51 @@
                   <p class="mb-1"><code>env</code>: 环境变量对象 (例如 {"api_key": "abc"})</p>
                   <p class="mb-1"><code>cwd</code>: 工作目录路径 (例如 /path/to/server)</p>
                   <p class="mb-1"><code>encoding</code>: 输出编码 (默认 utf-8)</p>
-                  <p class="mb-1"><code>encoding_error_handler</code>: The text encoding error handler. Defaults to strict.</p>
+                  <p class="mb-1"><code>encoding_error_handler</code>: The text encoding error handler. Defaults to
+                    strict.
+                  </p>
                   <p class="mb-1">其他字段请参考 MCP 文档</p>
                   <p class="mb-1">⚠️ 如果您使用 Docker 部署 AstrBot, 请务必将 MCP 服务器装在 AstrBot 挂载好的 data 目录下</p>
                 </div>
               </v-tooltip>
               <v-spacer></v-spacer>
-              <v-btn 
-                size="small" 
-                color="info" 
-                variant="text" 
-                @click="setConfigTemplate"
-                class="me-1"
-              >
+              <v-btn size="small" color="info" variant="text" @click="setConfigTemplate" class="me-1">
                 使用模板
               </v-btn>
             </div>
             <small>1. 某些 MCP 服务器可能需要按照其要求在 env 中填充 `API_KEY` 或 `TOKEN` 等信息，请注意检查是否填写。</small>
             <br>
             <small>2. 当配置中带有 url 参数时，将使用 SSE 的方式连接到服务器。</small>
-            
+
             <div class="monaco-container">
-              <VueMonacoEditor
-                v-model:value="serverConfigJson"
-                theme="vs-dark"
-                language="json"
-                :options="{
-                  minimap: {
-                    enabled: false
-                  },
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  lineNumbers: 'on',
-                  roundedSelection: true,
-                  tabSize: 2
-                }"
-                @change="validateJson"
-              />
+              <VueMonacoEditor v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
+                minimap: {
+                  enabled: false
+                },
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                lineNumbers: 'on',
+                roundedSelection: true,
+                tabSize: 2
+              }" @change="validateJson" />
             </div>
 
             <div v-if="jsonError" class="mt-2 text-error">
               <v-icon color="error" size="small" class="me-1">mdi-alert-circle</v-icon>
               <span>{{ jsonError }}</span>
             </div>
-            
+
           </v-form>
         </v-card-text>
-        
+
         <v-divider></v-divider>
-        
+
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="closeServerDialog" :disabled="loading">
             取消
           </v-btn>
-          <v-btn 
-            color="primary" 
-            @click="saveServer" 
-            :loading="loading"
-            :disabled="!isServerFormValid"
-          >
+          <v-btn color="primary" @click="saveServer" :loading="loading" :disabled="!isServerFormValid">
             保存
           </v-btn>
         </v-card-actions>
@@ -488,57 +375,44 @@
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </v-card-title>
-        
+
         <v-card-text v-if="selectedMarketplaceServer" class="py-4">
           <h2 class="text-h5 mb-3">{{ selectedMarketplaceServer.name }}</h2>
-          
-          <!-- <v-alert color="info" variant="tonal" class="mb-3">
-            {{ selectedMarketplaceServer.AbstractCN || selectedMarketplaceServer.Abstract || '暂无描述' }}
-          </v-alert> -->
-          
+
           <div class="mb-4">
             <h3 class="text-subtitle-1 font-weight-bold mb-2">安装配置</h3>
             <div class="monaco-container" style="height: 200px">
-              <VueMonacoEditor
-                v-model:value="selectedServerConfigDisplay"
-                theme="vs-dark"
-                language="json"
-                :options="{
-                  readOnly: true,
-                  minimap: {
-                    enabled: false
-                  },
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  lineNumbers: 'on',
-                  tabSize: 2
-                }"
-              />
+              <VueMonacoEditor v-model:value="selectedServerConfigDisplay" theme="vs-dark" language="json" :options="{
+                readOnly: true,
+                minimap: {
+                  enabled: false
+                },
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                lineNumbers: 'on',
+                tabSize: 2
+              }" />
             </div>
           </div>
-          
+
           <div v-if="selectedMarketplaceServer.tools && selectedMarketplaceServer.tools.length > 0">
             <h3 class="text-subtitle-1 font-weight-bold mb-2">
               可用工具
               <v-chip color="info" size="small" class="ml-1">{{ selectedMarketplaceServer.tools.length }}</v-chip>
             </h3>
-            
+
             <v-expansion-panels>
-              <v-expansion-panel
-                v-for="(tool, index) in selectedMarketplaceServer.tools"
-                :key="index"
-                class="mb-2"
-              >
+              <v-expansion-panel v-for="(tool, index) in selectedMarketplaceServer.tools" :key="index" class="mb-2">
                 <v-expansion-panel-title>
                   <div class="d-flex align-center">
                     <v-icon color="primary" class="me-2" size="small">mdi-function-variant</v-icon>
                     <span class="font-weight-medium">{{ tool.name }}</span>
                   </div>
                 </v-expansion-panel-title>
-                
+
                 <v-expansion-panel-text>
                   <p class="mb-3">{{ tool.description }}</p>
-                  
+
                   <template v-if="tool.inputSchema && tool.inputSchema.properties">
                     <h4 class="text-subtitle-2 mb-2">参数列表</h4>
                     <v-table density="compact">
@@ -559,8 +433,8 @@
                             </v-chip>
                           </td>
                           <td>
-                            <v-icon v-if="tool.inputSchema.required && tool.inputSchema.required.includes(paramName)" 
-                                   color="error" size="small">
+                            <v-icon v-if="tool.inputSchema.required && tool.inputSchema.required.includes(paramName)"
+                              color="error" size="small">
                               mdi-check
                             </v-icon>
                             <span v-else>否</span>
@@ -575,9 +449,9 @@
             </v-expansion-panels>
           </div>
         </v-card-text>
-        
+
         <v-divider></v-divider>
-        
+
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showServerDetailDialog = false">
@@ -602,12 +476,13 @@
 import axios from 'axios';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-
+import ItemCardGrid from '@/components/shared/ItemCardGrid.vue';
 export default {
   name: 'ToolUsePage',
   components: {
     AstrBotConfig,
-    VueMonacoEditor
+    VueMonacoEditor,
+    ItemCardGrid
   },
   data() {
     return {
@@ -631,14 +506,14 @@ export default {
       save_message_success: "success",
       toolSearch: '',
       openedPanel: [], // 存储打开的面板索引
-      
+
       // MCP 市场相关
       marketplaceServers: [],
       marketplaceLoading: false,
       marketplaceSearch: '',
       selectedMarketplaceServer: null,
       selectedServerConfigDisplay: '',
-      
+
       // 分页相关
       currentMarketPage: 1,
       marketPageSize: 9, // 每页显示9个服务器，适合3列布局
@@ -650,10 +525,10 @@ export default {
   computed: {
     filteredTools() {
       if (!this.toolSearch) return this.tools;
-      
+
       const searchTerm = this.toolSearch.toLowerCase();
-      return this.tools.filter(tool => 
-        tool.function.name.toLowerCase().includes(searchTerm) || 
+      return this.tools.filter(tool =>
+        tool.function.name.toLowerCase().includes(searchTerm) ||
         tool.function.description.toLowerCase().includes(searchTerm)
       );
     },
@@ -668,16 +543,16 @@ export default {
         if (server.command) {
           return `${server.command} ${(server.args || []).join(' ')}`;
         }
-        
+
         // 如果没有command字段，尝试显示其他有意义的配置信息
-        const configKeys = Object.keys(server).filter(key => 
+        const configKeys = Object.keys(server).filter(key =>
           !['name', 'active', 'tools'].includes(key)
         );
-        
+
         if (configKeys.length > 0) {
           return `配置: ${configKeys.join(', ')}`;
         }
-        
+
         return '未设置配置';
       }
     },
@@ -692,19 +567,19 @@ export default {
     this.getServers();
     this.getTools();
     this.fetchMarketplaceServers();
-    
+
     // 定期刷新本地服务器列表
     setInterval(() => {
       this.getServers();
       this.getTools();
-    }, 5000); 
+    }, 5000);
   },
 
   methods: {
     openurl(url) {
       window.open(url, '_blank');
     },
-    
+
     formatToolName(name) {
       if (name.includes(':')) {
         // MCP 工具通常命名为 mcp:server:tool
@@ -713,7 +588,7 @@ export default {
       }
       return name;
     },
-    
+
     getServers() {
       this.loading = true
       axios.get('/api/tools/mcp/servers')
@@ -728,7 +603,7 @@ export default {
           }, 500);
         });
     },
-    
+
     getTools() {
       axios.get('/api/config/llmtools')
         .then(response => {
@@ -738,14 +613,14 @@ export default {
           this.showError("获取函数工具列表失败: " + error.message);
         });
     },
-    
+
     validateJson() {
       try {
         if (!this.serverConfigJson.trim()) {
           this.jsonError = '配置不能为空';
           return false;
         }
-        
+
         JSON.parse(this.serverConfigJson);
         this.jsonError = null;
         return true;
@@ -754,7 +629,7 @@ export default {
         return false;
       }
     },
-    
+
     setConfigTemplate() {
       // 设置一个基本的配置模板
       const template = {
@@ -762,30 +637,30 @@ export default {
         args: ["-m", "your_module"],
         // 可以添加其他 MCP 支持的配置项
       };
-      
+
       this.serverConfigJson = JSON.stringify(template, null, 2);
     },
-    
+
     saveServer() {
       if (!this.validateJson()) {
         return;
       }
-      
+
       this.loading = true;
-      
+
       // 解析JSON配置并与基本信息合并
       try {
         const configObj = JSON.parse(this.serverConfigJson);
-        
+
         // 创建要发送的完整配置对象
         const serverData = {
           name: this.currentServer.name,
           active: this.currentServer.active,
           ...configObj
         };
-        
+
         const endpoint = this.isEditMode ? '/api/tools/mcp/update' : '/api/tools/mcp/add';
-        
+
         axios.post(endpoint, serverData)
           .then(response => {
             this.loading = false;
@@ -804,8 +679,9 @@ export default {
         this.showError(`JSON 解析错误: ${e.message}`);
       }
     },
-    
-    deleteServer(serverName) {
+
+    deleteServer(server) {
+      let serverName = server.name || server;
       if (confirm(`确定要删除服务器 ${serverName} 吗?`)) {
         axios.post('/api/tools/mcp/delete', { name: serverName })
           .then(response => {
@@ -818,11 +694,11 @@ export default {
           });
       }
     },
-    
+
     editServer(server) {
       // 创建一个不包含基本字段的配置对象副本
       const configCopy = { ...server };
-      
+
       // 移除基本字段，只保留配置相关字段
       try {
         delete configCopy.name;
@@ -832,21 +708,21 @@ export default {
       } catch (e) {
         console.error("Error removing basic fields: ", e);
       }
-      
+
       // 设置当前服务器的基本信息
       this.currentServer = {
         name: server.name,
         active: server.active,
         tools: server.tools || []
       };
-      
+
       // 将剩余配置转换为JSON字符串
       this.serverConfigJson = JSON.stringify(configCopy, null, 2);
-      
+
       this.isEditMode = true;
       this.showMcpServerDialog = true;
     },
-    
+
     updateServerStatus(server) {
       axios.post('/api/tools/mcp/update', server)
         .then(response => {
@@ -859,12 +735,12 @@ export default {
           server.active = !server.active;
         });
     },
-    
+
     closeServerDialog() {
       this.showMcpServerDialog = false;
       this.resetForm();
     },
-    
+
     resetForm() {
       this.currentServer = {
         name: '',
@@ -875,40 +751,40 @@ export default {
       this.jsonError = null;
       this.isEditMode = false;
     },
-    
+
     showSuccess(message) {
       this.save_message = message;
       this.save_message_success = "success";
       this.save_message_snack = true;
     },
-    
+
     showError(message) {
       this.save_message = message;
       this.save_message_success = "error";
       this.save_message_snack = true;
     },
-    
+
     // MCP 市场相关方法
-    
+
     // 获取市场服务器列表
     fetchMarketplaceServers(page = 1) {
       this.marketplaceLoading = true;
-      
+
       // 构建请求参数
       const params = {
         page: page,
         page_size: this.marketPageSize
       };
-      
+
       // 如果有搜索关键词，添加到请求参数
       if (this.marketplaceSearch.trim()) {
         params.search = this.marketplaceSearch.trim();
       }
-      
+
       axios.get('/api/tools/mcp/market', { params })
         .then(response => {
           this.marketplaceServers = response.data.data.mcpservers || [];
-          
+
           // 更新分页信息
           if (response.data.data.pagination) {
             this.totalMarketItems = response.data.data.pagination.total || 0;
@@ -918,7 +794,7 @@ export default {
             // 如果后端没有返回分页信息，根据返回的数据量估算
             this.totalMarketPages = Math.ceil(this.marketplaceServers.length / this.marketPageSize) || 1;
           }
-          
+
           this.marketplaceLoading = false;
         })
         .catch(error => {
@@ -926,23 +802,23 @@ export default {
           this.marketplaceLoading = false;
         });
     },
-    
+
     // 搜索市场服务器
     searchMarketplaceServers() {
       // 重置到第一页，然后获取结果
       this.currentMarketPage = 1;
       this.fetchMarketplaceServers(1);
     },
-    
+
     // 切换分页
     changePage(page) {
       this.fetchMarketplaceServers(page);
     },
-    
+
     // 显示服务器详情
     showServerDetail(server) {
       this.selectedMarketplaceServer = server;
-      
+
       // 格式化服务器配置的显示
       try {
         if (server.config) {
@@ -954,10 +830,10 @@ export default {
       } catch (e) {
         this.selectedServerConfigDisplay = '// 配置解析错误: ' + e.message;
       }
-      
+
       this.showServerDetailDialog = true;
     },
-    
+
     // 导入服务器配置
     importServerConfig(server) {
       try {
@@ -966,34 +842,34 @@ export default {
           this.showError('此服务器没有可用配置');
           return;
         }
-        
+
         const configs = JSON.parse(server.config);
         if (!configs || !configs[0] || !configs[0].mcpServers) {
           this.showError('服务器配置格式不正确');
           return;
         }
-        
+
         // 找到服务器名称和配置
         const serverName = server.name;
         const serverConfig = configs[0]
-        
+
         // 设置表单数据
         this.currentServer = {
           name: serverName,
           active: true,
           tools: []
         };
-        
+
         // 设置配置JSON
         this.serverConfigJson = JSON.stringify(serverConfig, null, 2);
-        
+
         // 关闭详情对话框(如果打开的话)
         this.showServerDetailDialog = false;
-        
+
         // 打开添加服务器对话框
         this.isEditMode = false;
         this.showMcpServerDialog = true;
-        
+
       } catch (e) {
         this.showError('导入配置失败: ' + e.message);
       }
@@ -1006,31 +882,6 @@ export default {
 .tools-page {
   padding: 20px;
   padding-top: 8px;
-}
-
-.server-card {
-  position: relative;
-  border-radius: 8px;
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-
-.server-status-indicator {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 4px;
-  background-color: #e0e0e0;
-}
-
-.server-status-indicator.active {
-  background-color: #4CAF50;
-}
-
-.hover-elevation:hover {
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
 }
 
 .tool-chips {
