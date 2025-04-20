@@ -15,6 +15,7 @@ from astrbot.core.utils.log_pipe import LogPipe
 
 try:
     import mcp
+    from mcp.client.sse import sse_client
 except (ModuleNotFoundError, ImportError):
     logger.warning("警告: 缺少依赖库 'mcp'，将无法使用 MCP 服务。")
 
@@ -92,7 +93,9 @@ class MCPClient:
         self.server_errlogs: List[str] = []
 
     async def connect_to_server(self, mcp_server_config: dict, name: str):
-        """Connect to an MCP server
+        """连接到 MCP 服务器
+
+        如果 `url` 参数存在，则使用 SSE 的方式连接到 MCP 服务。
 
         Args:
             mcp_server_config (dict): Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
@@ -102,29 +105,44 @@ class MCPClient:
             key_0 = list(cfg["mcpServers"].keys())[0]
             cfg = cfg["mcpServers"][key_0]
         cfg.pop("active", None)  # Remove active flag from config
-        server_params = mcp.StdioServerParameters(
-            **cfg,
-        )
 
-        def callback(msg: str):
-            # 处理 MCP 服务的错误日志
-            self.server_errlogs.append(msg)
+        if "url" in cfg:
+            # SSE transport method
+            self._streams_context = sse_client(url=cfg["url"])
+            streams = await self._streams_context.__aenter__()
 
-        stdio_transport = await self.exit_stack.enter_async_context(
-            mcp.stdio_client(
-                server_params,
-                errlog=LogPipe(
-                    level=logging.ERROR,
-                    logger=logger,
-                    identifier=f"MCPServer-{name}",
-                    callback=callback,
+            # Create a new client session
+            # self.session = await self._session_context.__aenter__()
+            self.session = await self.exit_stack.enter_async_context(
+                mcp.ClientSession(*streams)
+            )
+
+        else:
+            server_params = mcp.StdioServerParameters(
+                **cfg,
+            )
+
+            def callback(msg: str):
+                # 处理 MCP 服务的错误日志
+                self.server_errlogs.append(msg)
+
+            stdio_transport = await self.exit_stack.enter_async_context(
+                mcp.stdio_client(
+                    server_params,
+                    errlog=LogPipe(
+                        level=logging.ERROR,
+                        logger=logger,
+                        identifier=f"MCPServer-{name}",
+                        callback=callback,
+                    ),
                 ),
-            ),
-        )
-        self.stdio, self.write = stdio_transport
-        self.session = await self.exit_stack.enter_async_context(
-            mcp.ClientSession(self.stdio, self.write)
-        )
+            )
+
+            # Create a new client session
+            self.session = await self.exit_stack.enter_async_context(
+                mcp.ClientSession(*stdio_transport)
+            )
+
         await self.session.initialize()
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
