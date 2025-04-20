@@ -210,7 +210,7 @@ class AiocqhttpAdapter(Platform):
                 for m in m_group:
                     message_str += m["data"]["text"]
                 message_str = message_str.strip()
-                a = ComponentTypes[t](**m["data"])
+                a = ComponentTypes[t](text = message_str) # noqa: F405
                 abm.message.append(a)
 
             elif t == "file":
