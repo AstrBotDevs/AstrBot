@@ -33,6 +33,10 @@ from typing import Union
     version="4.0.0",
 )
 class Main(star.Star):
+
+    SCENE_MAP = {1: "group_unique_on", 2: "group_unique_off", 3: "private"}
+    SCENE_NAMES = {1: "群聊+会话隔离开启", 2: "群聊+会话隔离关闭", 3: "私聊"}
+
     def __init__(self, context: star.Context) -> None:
         self.context = context
         cfg = context.get_config()
@@ -488,14 +492,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         ]
         is_group = bool(message.get_group_id())
 
-        scene_key = ""
-        if is_group:
-            if is_unique_session:
-                scene_key = "group_unique_on"
-            else:
-                scene_key = "group_unique_off"
-        else:
-            scene_key = "private"
+        scene_key = self.get_scene_key(is_group, is_unique_session)
 
         alter_cmd_cfg = sp.get("alter_cmd", {})
         plugin_config = alter_cmd_cfg.get("astrbot", {})
@@ -506,18 +503,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
         )
 
         if required_perm == "admin" and message.role != "admin":
-            scene_names = {
-                "group_unique_on": "群聊+会话隔离开启",
-                "group_unique_off": "群聊+会话隔离关闭",
-                "private": "私聊",
-            }
-
             message.set_result(
                 MessageEventResult().message(
-                    f"""
-                    在{scene_names[scene_key]}场景下，reset命令需要管理员权限，
-                    您 (ID {message.get_sender_id()}) 不是管理员，无法执行此操作。
-                    """
+                    f"在{self.SCENE_NAMES.get(scene_key, scene_key)}场景下，reset命令需要管理员权限，"
+                    f"您 (ID {message.get_sender_id()}) 不是管理员，无法执行此操作。"
                 )
             )
             return
@@ -1353,7 +1342,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             scene_num = token.get(3)
             perm_type = token.get(4)
 
-            if not scene_num.isdigit() or int(scene_num) < 1 or int(scene_num) > 4:
+            if not scene_num.isdigit() or int(scene_num) < 1 or int(scene_num) > 3:
                 yield event.plain_result("场景编号必须是1-3之间的数字")
                 return
 
@@ -1362,31 +1351,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 return
 
             scene_num = int(scene_num)
-            scene_map = {
-                1: "group_unique_on",
-                2: "group_unique_off",
-                3: "private",
-            }
+            scene_key = self.SCENE_MAP[scene_num]
 
-            scene_key = scene_map[scene_num]
-
-            alter_cmd_cfg = sp.get("alter_cmd", {})
-            plugin_ = alter_cmd_cfg.get("astrbot", {})
-            reset_cfg = plugin_.get("reset", {})
-
-            reset_cfg[scene_key] = perm_type
-            plugin_["reset"] = reset_cfg
-            alter_cmd_cfg["astrbot"] = plugin_
-            sp.put("alter_cmd", alter_cmd_cfg)
-
-            scene_names = {
-                1: "群聊+会话隔离开启",
-                2: "群聊+会话隔离关闭",
-                3: "私聊",
-            }
+            self.update_reset_permission(scene_key, perm_type)
 
             yield event.plain_result(
-                f"已将 reset 命令在{scene_names[scene_num]}场景下的权限设为{perm_type}"
+                f"已将 reset 命令在{self.SCENE_NAMES[scene_num]}场景下的权限设为{perm_type}"
             )
             return
 
@@ -1444,3 +1414,29 @@ UID: {user_id} 此 ID 可用于设置管理员。
             )
 
         yield event.plain_result(f"已将 {cmd_name} 设置为 {cmd_type} 指令")
+
+    def update_reset_permission(self, scene_key: str, perm_type: str):
+        """更新reset命令在特定场景下的权限设置
+
+        Args:
+            scene_key (str): 场景编号，1-3
+            perm_type (str): 权限类型，admin或member
+        """
+        alter_cmd_cfg = sp.get("alter_cmd", {})
+        plugin_cfg = alter_cmd_cfg.get("astrbot", {})
+        reset_cfg = plugin_cfg.get("reset", {})
+        reset_cfg[scene_key] = perm_type
+        plugin_cfg["reset"] = reset_cfg
+        alter_cmd_cfg["astrbot"] = plugin_cfg
+        sp.put("alter_cmd", alter_cmd_cfg)
+
+    def get_scene_key(self, is_group: bool, is_unique_session: bool) -> str:
+        """根据群聊状态和会话隔离状态获取对应的场景键
+
+        Args:
+            is_group (bool): 是否为群聊
+            is_unique_session (bool): 是否开启会话隔离
+        """
+        if is_group:
+            return "group_unique_on" if is_unique_session else "group_unique_off"
+        return "private"
