@@ -486,6 +486,7 @@ export default {
   },
   data() {
     return {
+      refreshInterval: null,
       activeTab: 'local', // 当前激活的标签页
       mcpServers: [],
       tools: [],
@@ -575,8 +576,10 @@ export default {
   },
 
   unmounted() {
-    // 清除定时器
-    clearInterval(this.refreshInterval);
+    // 清除定时器 if it exists
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+    }
   },
 
   methods: {
