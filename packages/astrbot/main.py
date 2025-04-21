@@ -479,14 +479,45 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent):
         """重置 LLM 会话"""
+
+        # ==============================
+        #       读取当前情况和配置
+        # ==============================
         is_unique_session = self.context.get_config()["platform_settings"][
             "unique_session"
         ]
-        if message.get_group_id() and not is_unique_session and message.role != "admin":
-            # 群聊，没开独立会话，发送人不是管理员
+        is_group = bool(message.get_group_id())
+
+        scene_key = ""
+        if is_group:
+            if is_unique_session:
+                scene_key = "group_unique_on"
+            else:
+                scene_key = "group_unique_off"
+        else:
+            scene_key = "private"
+
+        alter_cmd_cfg = sp.get("alter_cmd", {})
+        plugin_config = alter_cmd_cfg.get("astrbot", {})
+        reset_cfg = plugin_config.get("reset", {})
+
+        required_perm = reset_cfg.get(
+            scene_key, "admin" if is_group and not is_unique_session else "member"
+        )
+
+        if required_perm == "admin" and message.role != "admin":
+            scene_names = {
+                "group_unique_on": "群聊+会话隔离开启",
+                "group_unique_off": "群聊+会话隔离关闭",
+                "private": "私聊",
+            }
+
             message.set_result(
                 MessageEventResult().message(
-                    f"会话处于群聊，并且未开启独立会话，并且您 (ID {message.get_sender_id()}) 不是管理员，因此没有权限重置当前对话。"
+                    f"""
+                    在{scene_names[scene_key]}场景下，reset命令需要管理员权限，
+                    您 (ID {message.get_sender_id()}) 不是管理员，无法执行此操作。
+                    """
                 )
             )
             return
@@ -882,7 +913,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
             assert isinstance(provider, ProviderDify)
             dify_cid = provider.conversation_ids.pop(message.unified_msg_origin, None)
             if dify_cid:
-                await provider.api_client.delete_chat_conv(message.unified_msg_origin, dify_cid)
+                await provider.api_client.delete_chat_conv(
+                    message.unified_msg_origin, dify_cid
+                )
             message.set_result(
                 MessageEventResult().message(
                     "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
@@ -1233,7 +1266,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 if mood_dialogs := persona["_mood_imitation_dialogs_processed"]:
                     req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
                     req.system_prompt += mood_dialogs
-                if (begin_dialogs := persona["_begin_dialogs_processed"]) and not req.contexts:
+                if (
+                    begin_dialogs := persona["_begin_dialogs_processed"]
+                ) and not req.contexts:
                     req.contexts[:0] = begin_dialogs
 
         if quote and quote.message_str:
@@ -1265,12 +1300,76 @@ UID: {user_id} 此 ID 可用于设置管理员。
         token = self.parse_commands(event.message_str)
         if token.len < 2:
             yield event.plain_result(
-                "可设置所有其他指令是否需要管理员权限。\n格式: /alter_cmd <cmd_name> <admin/member>\n 例如: /alter_cmd provider admin 将 provider 设置为管理员指令"
+                "可设置所有其他指令是否需要管理员权限。\n格式: /alter_cmd <cmd_name> <admin/member>\n 例如: /alter_cmd provider admin 将 provider 设置为管理员指令\n /alter_cmd reset config 打开reset权限配置"
             )
             return
 
         cmd_name = token.get(1)
         cmd_type = token.get(2)
+
+        # ============================
+        #    对reset权限进行特殊处理
+        # ============================
+        if cmd_name == "reset" and cmd_type == "config":
+            alter_cmd_cfg = sp.get("alter_cmd", {})
+            plugin_ = alter_cmd_cfg.get("astrbot", {})
+            reset_cfg = plugin_.get("reset", {})
+
+            group_unique_on = reset_cfg.get("group_unique_on", "admin")
+            group_unique_off = reset_cfg.get("group_unique_off", "admin")
+            private = reset_cfg.get("private", "member")
+
+            config_menu = f"""reset命令权限细粒度配置
+                当前配置：
+                1. 群聊+会话隔离开: {group_unique_on}
+                2. 群聊+会话隔离关: {group_unique_off}
+                3. 私聊: {private}
+                修改指令格式：
+                /alter_cmd reset scene <场景编号> <admin/member>
+                例如: /alter_cmd reset scene 2 member"""
+            yield event.plain_result(config_menu)
+            return
+
+        if cmd_name == "reset" and cmd_type == "scene" and token.len >= 4:
+            scene_num = token.get(3)
+            perm_type = token.get(4)
+
+            if not scene_num.isdigit() or int(scene_num) < 1 or int(scene_num) > 4:
+                yield event.plain_result("场景编号必须是1-3之间的数字")
+                return
+
+            if perm_type not in ["admin", "member"]:
+                yield event.plain_result("权限类型错误，只能是admin或member")
+                return
+
+            scene_num = int(scene_num)
+            scene_map = {
+                1: "group_unique_on",
+                2: "group_unique_off",
+                3: "private",
+            }
+
+            scene_key = scene_map[scene_num]
+
+            alter_cmd_cfg = sp.get("alter_cmd", {})
+            plugin_ = alter_cmd_cfg.get("astrbot", {})
+            reset_cfg = plugin_.get("reset", {})
+
+            reset_cfg[scene_key] = perm_type
+            plugin_["reset"] = reset_cfg
+            alter_cmd_cfg["astrbot"] = plugin_
+            sp.put("alter_cmd", alter_cmd_cfg)
+
+            scene_names = {
+                1: "群聊+会话隔离开启",
+                2: "群聊+会话隔离关闭",
+                3: "私聊",
+            }
+
+            yield event.plain_result(
+                f"已将 reset 命令在{scene_names[scene_num]}场景下的权限设为{perm_type}"
+            )
+            return
 
         if cmd_type not in ["admin", "member"]:
             yield event.plain_result("指令类型错误，可选类型有 admin, member")
