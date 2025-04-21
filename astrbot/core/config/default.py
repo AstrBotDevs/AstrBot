@@ -1045,7 +1045,8 @@ CONFIG_METADATA_2 = {
                     "retry_delay": {
                         "description": "重试延迟时间",
                         "type": "float",
-                        "hint": "当 LLM 请求失败时, 重试延迟时间。单位为秒。",                    
+                        "hint": "当 LLM 请求失败时, 重试延迟时间。单位为秒。",
+                    },
                 },
             },
             "persona": {

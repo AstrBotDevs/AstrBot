@@ -168,81 +168,125 @@ class LLMRequestSubStage(Stage):
         if not req.session_id:
             req.session_id = event.unified_msg_origin
 
-        async def requesting(req: ProviderRequest):
+        async def _execute_single_request(
+            self, req: ProviderRequest, event: AstrMessageEvent, provider
+        ):
+            """
+            执行单次LLM请求并处理响应
+
+            Args:
+                req (ProviderRequest): 供应商请求对象
+                event (AstrMessageEvent): Astr事件对象
+                provider (_type_): 大模型供应商对象
+            """
+            logger.debug(f"提供商请求 Payload: {req.__dict__}")
+            final_llm_response = None
+
+            # ===================================
+            #            执行LLm请求
+            # ===================================
+            if self.streaming_response:
+                stream = provider.text_chat_stream(**req.__dict__)
+                async for llm_response in stream:
+                    if llm_response.is_chunk:
+                        if llm_response.result_chain:
+                            yield llm_response.result_chain
+                        else:
+                            yield MessageChain().message(llm_response.completion_text)
+                    else:
+                        final_llm_response = llm_response
+            else:
+                final_llm_response = await provider.text_chat(
+                    **req.__dict__
+                )  # 请求 LLM
+
+            if not final_llm_response:
+                yield ("error", None, False)
+                return
+
+            # ======================================
+            #       执行 LLM 响应后的事件钩子
+            # ======================================
+            handlers = star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnLLMResponseEvent
+            )
+            for handler in handlers:
+                try:
+                    logger.debug(
+                        f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
+                    )
+                    await handler.handler(event, final_llm_response)
+                except BaseException:
+                    logger.error(traceback.format_exc())
+
+                if event.is_stopped():
+                    logger.info(
+                        f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
+                    )
+                    yield (None, None, False)
+                    return
+
+            # ==========================================
+            #              执行函数调用
+            # ==========================================
+            if self.streaming_response:
+                async for result in self._handle_llm_stream_response(
+                    event, req, final_llm_response
+                ):
+                    if isinstance(result, ProviderRequest):
+                        yield (result, True)  # 返回新的请求和需要重新请求的标志
+                    else:
+                        yield result
+            else:
+                async for result in self._handle_llm_response(
+                    event, req, final_llm_response
+                ):
+                    if isinstance(result, ProviderRequest):
+                        yield (result, True)  # 返回新的请求和需要重新请求的标志
+                    else:
+                        yield result
+
+            yield (final_llm_response, False)  # 返回最终响应和不需要重新请求的标志
+
+        async def requesting(req: ProviderRequest, event: AstrMessageEvent):
+            provider = self.ctx.plugin_manager.context.get_using_provider()
+            if not provider:
+                return
+
             retry_count = 0
+            final_llm_response = None
+
             while True:
                 try:
                     need_loop = True
                     while need_loop:
                         need_loop = False
-                        logger.debug(f"提供商请求 Payload: {req}")
-
-                        final_llm_response = None
-
-                        if self.streaming_response:
-                            stream = provider.text_chat_stream(**req.__dict__)
-                            async for llm_response in stream:
-                                if llm_response.is_chunk:
-                                    if llm_response.result_chain:
-                                        yield llm_response.result_chain  # MessageChain
-                                    else:
-                                        yield MessageChain().message(
-                                            llm_response.completion_text
-                                        )
-                                else:
-                                    final_llm_response = llm_response
-                        else:
-                            final_llm_response = await provider.text_chat(
-                                **req.__dict__
-                            )  # 请求 LLM
-
-                        if not final_llm_response:
-                            raise Exception("LLM response is None.")
-
-                        # 执行 LLM 响应后的事件钩子。
-                        handlers = star_handlers_registry.get_handlers_by_event_type(
-                            EventType.OnLLMResponseEvent
+                        result_generator = _execute_single_request(
+                            self, req, event, provider
                         )
-                        for handler in handlers:
-                            try:
-                                logger.debug(
-                                    f"hook(on_llm_response) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
-                                )
-                                await handler.handler(event, final_llm_response)
-                            except BaseException:
-                                logger.error(traceback.format_exc())
+                        next_req = None
 
-                            if event.is_stopped():
-                                logger.info(
-                                    f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
-                                )
-                                return
+                        async for result in result_generator:
+                            if isinstance(result, tuple) and len(result) >= 2:
+                                if len(result) == 3 and result[0] == "error":
+                                    raise Exception("LLM 返回了空响应(≧﹏ ≦)")
+                                elif len(result) == 2:
+                                    next_req, need_loop = result
+                                    if need_loop:
+                                        # 如果需要重新请求，则更新 req
+                                        req = next_req
+                                        break
+                                else:
+                                    next_req, need_loop = result[0], result[1]
+                                    if need_loop:
+                                        # 如果需要重新请求，则更新 req
+                                        req = next_req
+                                        break
+                            else:
+                                yield result
 
-                        # ==========================================
-                        #              执行函数调用
-                        # ==========================================
-                        if self.streaming_response:
-                            # 流式输出的处理
-                            async for result in self._handle_llm_stream_response(
-                                event, req, final_llm_response
-                            ):
-                                if isinstance(result, ProviderRequest):
-                                    # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
-                                    req = result
-                                    need_loop = True
-                                else:
-                                    yield
-                        else:
-                            # 非流式输出的处理
-                            async for result in self._handle_llm_response(
-                                event, req, final_llm_response
-                            ):
-                                if isinstance(result, ProviderRequest):
-                                    # 有函数工具调用并且返回了结果，我们需要再次请求 LLM
-                                    req = result
-                                    need_loop = True
-                                else:
-                                    yield
+                        if not need_loop and isinstance(next_req, LLMResponse):
+                            final_llm_response = next_req
 
                     # ==========================================
                     #          请求后上传相关非敏感指标
@@ -298,13 +342,13 @@ class LLMRequestSubStage(Stage):
 
         if not self.streaming_response:
             event.set_extra("tool_call_result", None)
-            async for _ in requesting(req):
+            async for _ in requesting(req, event):
                 yield
         else:
             event.set_result(
                 MessageEventResult()
                 .set_result_content_type(ResultContentType.STREAMING_RESULT)
-                .set_async_stream(requesting(req))
+                .set_async_stream(requesting(req, event))
             )
             # 这里使用yield来暂停当前阶段，等待流式输出完成后继续处理
             yield
