@@ -167,7 +167,7 @@ class TelegramPlatformAdapter(Platform):
             return None
 
         if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
-            logger.warning(f"跳过无法注册的命令: {cmd_name}")
+            logger.debug(f"跳过无法注册的命令: {cmd_name}")
             return None
 
         # Build description.
