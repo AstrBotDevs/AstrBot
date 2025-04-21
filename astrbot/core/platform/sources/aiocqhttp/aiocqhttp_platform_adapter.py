@@ -206,11 +206,9 @@ class AiocqhttpAdapter(Platform):
         for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):
             a = None
             if t == "text":
-                # 合并相邻文本段的情况
-                for m in m_group:
-                    message_str += m["data"]["text"]
-                message_str = message_str.strip()
-                a = ComponentTypes[t](text = message_str) # noqa: F405
+                # 合并相邻文本段
+                message_str = "".join(m["data"]["text"] for m in m_group).strip()
+                a = ComponentTypes[t](text=message_str)  # noqa: F405
                 abm.message.append(a)
 
             elif t == "file":
