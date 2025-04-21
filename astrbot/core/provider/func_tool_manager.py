@@ -435,28 +435,64 @@ class FuncCall:
             tools.append(tool)
         return tools
 
-    def get_func_desc_google_genai_style(self) -> Dict:
+    def get_func_desc_google_genai_style(self) -> dict:
+        """
+        获得 Google GenAI API 风格的**已经激活**的工具描述
+        """
+
+        # Gemini API 支持的数据类型和格式
+        supported_types = {"string", "number", "integer", "boolean", "array", "object", "null"}
+        supported_formats = {
+            "string": {"enum", "date-time"},
+            "integer": {"int32", "int64"},
+            "number": {"float", "double"}
+        }
+
+        def convert_schema(schema: dict) -> dict:
+            """转换 schema 为 Gemini API 格式"""
+            result = {}
+
+            if "type" in schema and schema["type"] in supported_types:
+                result["type"] = schema["type"]
+                if ("format" in schema and
+                        schema["format"] in supported_formats.get(result["type"], set())):
+                    result["format"] = schema["format"]
+            else:
+                # 暂时指定默认为null
+                result["type"] = "null"
+
+            support_fields = {"title", "description", "enum", "minimum", "maximum",
+                              "maxItems", "minItems", "nullable", "required"}
+            result.update({k: schema[k] for k in support_fields if k in schema})
+
+            if "properties" in schema:
+                properties = {}
+                for key, value in schema["properties"].items():
+                    prop_value = convert_schema(value)
+                    if "default" in prop_value:
+                        del prop_value["default"]
+                    properties[key] = prop_value
+
+                if properties:  # 只在有非空属性时添加
+                    result["properties"] = properties
+
+            if "items" in schema:
+                result["items"] = convert_schema(schema["items"])
+            if "anyOf" in schema:
+                result["anyOf"] = [convert_schema(s) for s in schema["anyOf"]]
+
+            return result
+
+        tools = [
+            {
+                "name": f.name,
+                "description": f.description,
+                **({"parameters": convert_schema(f.parameters)})
+            }
+            for f in self.func_list if f.active
+        ]
+
         declarations = {}
-        tools = []
-        for f in self.func_list:
-            if not f.active:
-                continue
-
-            func_declaration = {"name": f.name, "description": f.description}
-
-            # 检查并添加非空的properties参数
-            params = f.parameters if isinstance(f.parameters, dict) else {}
-            params = copy.deepcopy(params)
-            if params.get("properties", {}):
-                properties = params["properties"]
-                for key, value in properties.items():
-                    if "default" in value:
-                        del value["default"]
-                params["properties"] = properties
-                func_declaration["parameters"] = params
-
-            tools.append(func_declaration)
-
         if tools:
             declarations["function_declarations"] = tools
         return declarations
