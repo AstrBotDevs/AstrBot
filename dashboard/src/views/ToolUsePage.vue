@@ -60,7 +60,7 @@
             <v-card-text class="px-4 py-3">
 
               <item-card-grid :items="mcpServers || []" title-field="name" enabled-field="active"
-                empty-icon="mdi-server-off" empty-text="暂无 MCP 服务器，点击 新增服务器 添加" @toggle-enabled="platformStatusChange"
+                empty-icon="mdi-server-off" empty-text="暂无 MCP 服务器，点击 新增服务器 添加" @toggle-enabled="updateServerStatus"
                 @delete="deleteServer" @edit="editServer">
                 <template v-slot:item-details="{ item }">
 
@@ -568,11 +568,15 @@ export default {
     this.getTools();
     this.fetchMarketplaceServers();
 
-    // 定期刷新本地服务器列表
-    setInterval(() => {
+    this.refreshInterval = setInterval(() => {
       this.getServers();
       this.getTools();
     }, 5000);
+  },
+
+  unmounted() {
+    // 清除定时器
+    clearInterval(this.refreshInterval);
   },
 
   methods: {
@@ -724,6 +728,8 @@ export default {
     },
 
     updateServerStatus(server) {
+      // 切换服务器状态
+      server.active = !server.active;
       axios.post('/api/tools/mcp/update', server)
         .then(response => {
           this.getServers();
