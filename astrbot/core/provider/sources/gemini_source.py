@@ -260,6 +260,20 @@ class ProviderGoogleGenAI(Provider):
                     )
                 )
 
+        # 保证偶数索引为用户消息，奇数索引为模型消息
+        content_num = len(gemini_contents)
+        for i in range(content_num):
+            expected_type = types.UserContent if i % 2 == 0 else types.ModelContent
+            if not isinstance(gemini_contents[i], expected_type):
+                for j in range(i + 1, content_num):
+                    if isinstance(gemini_contents[j], expected_type):
+                        logger.debug(f"交换索引 {i} 与 {j}")
+                        gemini_contents[i], gemini_contents[j] = (
+                            gemini_contents[j],
+                            gemini_contents[i],
+                        )
+                        break
+
         return gemini_contents
 
     @staticmethod
