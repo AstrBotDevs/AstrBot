@@ -38,6 +38,7 @@ dependencies = [
     "silk-python>=0.2.6",
     "telegramify-markdown>=0.5.0",
     "wechatpy>=1.8.18",
+    "pysocks>=1.7.1",  # 添加PySocks依赖，用于SOCKS代理支持
 ]
 
 [tool.ruff]

@@ -31,3 +31,4 @@ certifi
 pip
 telegramify-markdown
 google-genai
+pysocks

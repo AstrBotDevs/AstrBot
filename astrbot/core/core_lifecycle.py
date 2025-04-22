@@ -14,6 +14,11 @@ import asyncio
 import time
 import threading
 import os
+import socket
+try:
+    import socks  # PySocks提供的SOCKS代理功能
+except ImportError:
+    socks = None  # 如果未安装PySocks，则设为None
 from .event_bus import EventBus
 from . import astrbot_config
 from asyncio import Queue
@@ -47,10 +52,55 @@ class AstrBotCoreLifecycle:
         self.astrbot_config = astrbot_config  # 初始化配置
         self.db = db  # 初始化数据库
 
-        # 根据环境变量设置代理
-        os.environ["https_proxy"] = self.astrbot_config["http_proxy"]
-        os.environ["http_proxy"] = self.astrbot_config["http_proxy"]
-        os.environ["no_proxy"] = "localhost"
+        # 根据配置设置代理
+        proxy = self.astrbot_config["proxy"]
+        if proxy:
+            # 检查是否是SOCKS代理
+            if proxy.startswith('socks'):
+                if socks is None:
+                    logger.warning("检测到SOCKS代理配置，但未正确安装PySocks。请使用 pip install pysocks")
+                else:
+                    # 使用PySocks设置SOCKS代理
+                    try:
+                        proxy_parts = proxy.split('://')
+                        if len(proxy_parts) != 2:
+                            logger.error(f"代理URL格式错误: {proxy}")
+                        else:
+                            proxy_type_str, proxy_addr = proxy_parts
+                            # 确定代理类型
+                            if proxy_type_str == 'socks5':
+                                proxy_type = socks.SOCKS5
+                            elif proxy_type_str == 'socks4':
+                                proxy_type = socks.SOCKS4
+                            else:
+                                proxy_type = socks.SOCKS5
+                                logger.warning(f"未知的SOCKS类型: {proxy_type_str}，默认使用SOCKS5")
+                            
+                            # 解析代理地址和端口
+                            if ':' in proxy_addr:
+                                proxy_host, proxy_port_str = proxy_addr.split(':')
+                                try:
+                                    proxy_port = int(proxy_port_str)
+                                    # 设置默认socket为SOCKS代理
+                                    socks.set_default_proxy(proxy_type, proxy_host, proxy_port)
+                                    socket.socket = socks.socksocket
+                                    
+                                    # 同时设置环境变量以支持不使用PySocks的库
+                                    os.environ["ALL_PROXY"] = proxy
+                                except ValueError:
+                                    logger.error(f"代理端口无效: {proxy_port_str}")
+                            else:
+                                logger.error(f"代理地址格式错误: {proxy_addr}")
+                    except Exception as e:
+                        logger.error(f"设置SOCKS代理时出错: {e}")
+            else:
+                # HTTP代理设置
+                os.environ["HTTP_PROXY"] = proxy
+                os.environ["HTTPS_PROXY"] = proxy
+                os.environ["http_proxy"] = proxy
+                os.environ["https_proxy"] = proxy  
+        # 设置不使用代理的本地地址
+        os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
 
     async def initialize(self):
         """
