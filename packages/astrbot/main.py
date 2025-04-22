@@ -35,7 +35,29 @@ from typing import Union
 class Main(star.Star):
 
     SCENE_MAP = {1: "group_unique_on", 2: "group_unique_off", 3: "private"}
-    SCENE_NAMES = {1: "群聊+会话隔离开启", 2: "群聊+会话隔离关闭", 3: "私聊"}
+class RstScene(Enum):
+    GROUP_UNIQUE_ON = ("group_unique_on", "群聊+会话隔离开启")
+    GROUP_UNIQUE_OFF = ("group_unique_off", "群聊+会话隔离关闭")
+    PRIVATE = ("private", "私聊")
+
+    @property
+    def key(self) -> str:
+        return self.value[0]
+
+    @property
+    def name(self) -> str:
+        return self.value[1]
+
+    @classmethod
+    def from_index(cls, index: int) -> "RstScene":
+        mapping = {1: cls.GROUP_UNIQUE_ON, 2: cls.GROUP_UNIQUE_OFF, 3: cls.PRIVATE}
+        return mapping[index]
+
+    @classmethod
+    def get_scene(cls, is_group: bool, is_unique_session: bool) -> "RstScene":
+        if is_group:
+            return cls.GROUP_UNIQUE_ON if is_unique_session else cls.GROUP_UNIQUE_OFF
+        return cls.PRIVATE
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
