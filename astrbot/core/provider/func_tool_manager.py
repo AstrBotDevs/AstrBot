@@ -3,7 +3,6 @@ import json
 import textwrap
 import os
 import asyncio
-import copy
 import logging
 
 from typing import Dict, List, Awaitable, Literal, Any
@@ -360,7 +359,7 @@ class FuncCall:
                 self.func_list.append(func_tool)
 
             logger.info(f"已连接 MCP 服务 {name}, Tools: {tool_names}")
-            return True
+            return
         except Exception as e:
             import traceback
 
@@ -369,7 +368,7 @@ class FuncCall:
             # 发生错误时确保客户端被清理
             if name in self.mcp_client_dict:
                 await self._terminate_mcp_client(name)
-            return False
+            return
 
     async def _terminate_mcp_client(self, name: str) -> None:
         """关闭并清理MCP客户端"""
@@ -441,11 +440,19 @@ class FuncCall:
         """
 
         # Gemini API 支持的数据类型和格式
-        supported_types = {"string", "number", "integer", "boolean", "array", "object", "null"}
+        supported_types = {
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "array",
+            "object",
+            "null",
+        }
         supported_formats = {
             "string": {"enum", "date-time"},
             "integer": {"int32", "int64"},
-            "number": {"float", "double"}
+            "number": {"float", "double"},
         }
 
         def convert_schema(schema: dict) -> dict:
@@ -454,15 +461,25 @@ class FuncCall:
 
             if "type" in schema and schema["type"] in supported_types:
                 result["type"] = schema["type"]
-                if ("format" in schema and
-                        schema["format"] in supported_formats.get(result["type"], set())):
+                if "format" in schema and schema["format"] in supported_formats.get(
+                    result["type"], set()
+                ):
                     result["format"] = schema["format"]
             else:
                 # 暂时指定默认为null
                 result["type"] = "null"
 
-            support_fields = {"title", "description", "enum", "minimum", "maximum",
-                              "maxItems", "minItems", "nullable", "required"}
+            support_fields = {
+                "title",
+                "description",
+                "enum",
+                "minimum",
+                "maximum",
+                "maxItems",
+                "minItems",
+                "nullable",
+                "required",
+            }
             result.update({k: schema[k] for k in support_fields if k in schema})
 
             if "properties" in schema:
@@ -487,9 +504,10 @@ class FuncCall:
             {
                 "name": f.name,
                 "description": f.description,
-                **({"parameters": convert_schema(f.parameters)})
+                **({"parameters": convert_schema(f.parameters)}),
             }
-            for f in self.func_list if f.active
+            for f in self.func_list
+            if f.active
         ]
 
         declarations = {}
