@@ -309,7 +309,6 @@ class Main(star.Star):
         config.save_config()
         event.set_result(MessageEventResult().message("已开启文本转语音。"))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("sid")
     async def sid(self, event: AstrMessageEvent):
         """获取会话 ID 和 管理员 ID"""
