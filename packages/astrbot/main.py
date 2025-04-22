@@ -24,17 +24,9 @@ from .long_term_memory import LongTermMemory
 from astrbot.core import logger
 from astrbot.api.message_components import Plain, Image, Reply
 from typing import Union
+from enum import Enum
 
 
-@star.register(
-    name="astrbot",
-    desc="AstrBot 基础指令结合 + 拓展功能",
-    author="Soulter",
-    version="4.0.0",
-)
-class Main(star.Star):
-
-    SCENE_MAP = {1: "group_unique_on", 2: "group_unique_off", 3: "private"}
 class RstScene(Enum):
     GROUP_UNIQUE_ON = ("group_unique_on", "群聊+会话隔离开启")
     GROUP_UNIQUE_OFF = ("group_unique_off", "群聊+会话隔离关闭")
@@ -58,6 +50,15 @@ class RstScene(Enum):
         if is_group:
             return cls.GROUP_UNIQUE_ON if is_unique_session else cls.GROUP_UNIQUE_OFF
         return cls.PRIVATE
+
+
+@star.register(
+    name="astrbot",
+    desc="AstrBot 基础指令结合 + 拓展功能",
+    author="Soulter",
+    version="4.0.0",
+)
+class Main(star.Star):
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
@@ -514,20 +515,20 @@ UID: {user_id} 此 ID 可用于设置管理员。
         ]
         is_group = bool(message.get_group_id())
 
-        scene_key = self.get_scene_key(is_group, is_unique_session)
+        scene = RstScene.get_scene(is_group, is_unique_session)
 
         alter_cmd_cfg = sp.get("alter_cmd", {})
         plugin_config = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_config.get("reset", {})
 
         required_perm = reset_cfg.get(
-            scene_key, "admin" if is_group and not is_unique_session else "member"
+            scene.key, "admin" if is_group and not is_unique_session else "member"
         )
 
         if required_perm == "admin" and message.role != "admin":
             message.set_result(
                 MessageEventResult().message(
-                    f"在{self.SCENE_NAMES.get(scene_key, scene_key)}场景下，reset命令需要管理员权限，"
+                    f"在{scene.name}场景下，reset命令需要管理员权限，"
                     f"您 (ID {message.get_sender_id()}) 不是管理员，无法执行此操作。"
                 )
             )
@@ -1373,12 +1374,13 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 return
 
             scene_num = int(scene_num)
-            scene_key = self.SCENE_MAP[scene_num]
+            scene = RstScene.from_index(scene_num)
+            scene_key = scene.key
 
             self.update_reset_permission(scene_key, perm_type)
 
             yield event.plain_result(
-                f"已将 reset 命令在{self.SCENE_NAMES[scene_num]}场景下的权限设为{perm_type}"
+                f"已将 reset 命令在{scene.name}场景下的权限设为{perm_type}"
             )
             return
 
@@ -1451,14 +1453,3 @@ UID: {user_id} 此 ID 可用于设置管理员。
         plugin_cfg["reset"] = reset_cfg
         alter_cmd_cfg["astrbot"] = plugin_cfg
         sp.put("alter_cmd", alter_cmd_cfg)
-
-    def get_scene_key(self, is_group: bool, is_unique_session: bool) -> str:
-        """根据群聊状态和会话隔离状态获取对应的场景键
-
-        Args:
-            is_group (bool): 是否为群聊
-            is_unique_session (bool): 是否开启会话隔离
-        """
-        if is_group:
-            return "group_unique_on" if is_unique_session else "group_unique_off"
-        return "private"
