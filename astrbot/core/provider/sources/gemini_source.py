@@ -266,6 +266,9 @@ class ProviderGoogleGenAI(Provider):
                 else:
                     gemini_contents.append(types.UserContent(parts=parts))
 
+        if gemini_contents and isinstance(gemini_contents[0], types.ModelContent):
+            gemini_contents.pop()
+
         return gemini_contents
 
     @staticmethod
