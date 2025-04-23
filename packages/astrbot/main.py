@@ -180,7 +180,6 @@ class Main(star.Star):
             self.context.deactivate_llm_tool(tool.name)
         event.set_result(MessageEventResult().message("停用所有工具成功。"))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("plugin")
     async def plugin(
         self, event: AstrMessageEvent, oper1: str = None, oper2: str = None
@@ -383,7 +382,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")
     async def provider(
         self, event: AstrMessageEvent, idx: Union[str, int] = None, idx2: int = None
@@ -603,7 +601,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     )
                 )
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("history")
     async def his(self, message: AstrMessageEvent, page: int = 1):
         """查看对话记录"""
@@ -650,7 +647,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("ls")
     async def convs(self, message: AstrMessageEvent, page: int = 1):
         """查看对话列表"""
@@ -790,7 +786,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 MessageEventResult().message("请输入群聊 ID。/groupnew 群聊ID。")
             )
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("switch")
     async def switch_conv(self, message: AstrMessageEvent, index: int = None):
         """通过 /ls 前面的序号切换对话"""
@@ -852,7 +847,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 )
             )
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("rename")
     async def rename_conv(self, message: AstrMessageEvent, new_name: str):
         """重命名对话"""
@@ -873,7 +867,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
         )
         message.set_result(MessageEventResult().message("重命名对话成功。"))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("del")
     async def del_conv(self, message: AstrMessageEvent):
         """删除当前对话"""
@@ -1073,7 +1066,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
         await download_dashboard()
         yield event.plain_result("管理面板更新完成。")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("set")
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str):
         # session_id = event.get_session_id()
@@ -1089,7 +1081,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         yield event.plain_result(f"会话 {uid} 变量 {key} 存储成功。使用 /unset 移除。")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("unset")
     async def unset_variable(self, event: AstrMessageEvent, key: str):
         uid = event.unified_msg_origin
