@@ -228,14 +228,15 @@ class StarTools:
                 raise ValueError("无效的时间单位，可选值: 's'(秒), 'ms'(毫秒)")
 
         @classmethod
-        def get_datetime(cls) -> Time.DateTime:
+        def get_datetime(cls, with_timezone=False) -> Time.DateTime:
             """
-            获取当前datetime对象
+            获取当前datetime对象, 默认不考虑时区
 
             Returns:
                 Time.DateTime: 当前时间的datetime对象
+                with_timezone (bool): 是否考虑时区，默认为False
             """
-            return Time.now()
+            return Time.now(with_timezone=with_timezone)
 
         @classmethod
         def get_datetime_str(cls, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:

@@ -43,7 +43,7 @@ class Time:
         cls._initialized = True
 
     @classmethod
-    def now(cls) -> datetime.datetime:
+    def now(cls, with_timezone=False) -> datetime.datetime:
         """
         获取当前时间
 
@@ -51,36 +51,40 @@ class Time:
 
             datetime: 当前时间
         """
-        return (
-            datetime.datetime.now(cls._timezone)
-            if cls._timezone
-            else datetime.datetime.now()
-        )
+
+        if with_timezone:
+            return (
+                datetime.datetime.now(cls._timezone)
+                if cls._timezone
+                else datetime.datetime.now()
+            )
+        else:
+            return datetime.datetime.now(datetime.timezone.utc)
 
     @classmethod
     def time(cls) -> float:
         """
-        获取当前时间
+        获取时间戳(UTC)
 
         Returns:
-            float: 当前时间
+            float: 时间戳
         """
-        return cls.timestamp() if cls._timezone else time.time()
+        return time.time()
 
     @classmethod
     def timestamp(cls) -> float:
         """
-        获取当前时间戳(秒)
+        获取当前时间戳(UTC)(秒)
 
         Returns:
             float: 当前时间戳(秒)
         """
-        return cls.now().timestamp() if cls._timezone else time.time()
+        return time.time()
 
     @classmethod
     def timestamp_ms(cls) -> int:
         """
-        获取当前时间戳(毫秒)
+        获取当前时间戳(UTC)(毫秒)
 
         Returns:
             int: 当前时间戳(毫秒)
@@ -92,7 +96,7 @@ class Time:
         cls, dt: Optional[datetime.datetime] = None, fmt: str = "%Y-%m-%d %H:%M:%S"
     ) -> str:
         """
-        格式化时间为字符串
+        格式化时间为字符串, 默认format后使用用户时区, 如果dt的时区不一致则转换为用户时区
 
         Args:
             dt (datetime): 时间对象, 默认为当前时间
@@ -102,7 +106,10 @@ class Time:
             str: 格式化后的时间字符串
         """
         if dt is None:
-            dt = cls.now()
+            dt = cls.now(with_timezone=True)
+        elif cls._timezone and dt.tzinfo != cls._timezone:
+            dt = dt.astimezone(cls._timezone)
+
         return dt.strftime(fmt)
 
     @classmethod
