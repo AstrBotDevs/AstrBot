@@ -775,12 +775,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
         return
 
     @filter.command("new")
-    async def new_conv(self, message: AstrMessageEvent, clean: bool = True):
+    async def new_conv(self, message: AstrMessageEvent):
         """
         创建新对话
-
-        Args:
-            clean(bool): 是否清理当前对话的上下文, 默认为 True.
         """
         provider = self.context.get_using_provider()
         if provider and provider.meta().type == "dify":
@@ -794,19 +791,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
         cid = await self.context.conversation_manager.new_conversation(
             message.unified_msg_origin
         )
-
-        # 判断是否清理上下文
-        if clean:
-            await self.context.conversation_manager.update_conversation(
-                message.unified_msg_origin, cid, []
-            )
-
-            # 长期记忆
-            if self.ltm:
-                try:
-                    await self.ltm.remove_session(event=message)
-                except Exception as e:
-                    logger.error(f"清理聊天增强记录失败: {e}")
 
         message.set_result(
             MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})。")
