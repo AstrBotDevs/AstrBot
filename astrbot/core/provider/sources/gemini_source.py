@@ -182,17 +182,23 @@ class ProviderGoogleGenAI(Provider):
     def _prepare_conversation(self, payloads: Dict) -> List[types.Content]:
         """准备 Gemini SDK 的 Content 列表"""
 
-        def create_text_part(text: str) -> types.UserContent:
+        def create_text_part(text: str) -> types.Part:
             content_a = text if text else " "
             if not text:
                 logger.warning("文本内容为空，已添加空格占位")
-            return types.UserContent(parts=[types.Part.from_text(text=content_a)])
+            return types.Part.from_text(text=content_a)
 
         def process_image_url(image_url_dict: dict) -> types.Part:
             url = image_url_dict["url"]
             mime_type = url.split(":")[1].split(";")[0]
             image_bytes = base64.b64decode(url.split(",", 1)[1])
             return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+
+        def append_or_extend(contents: list[types.Content], part: list[types.Part], content_cls: type[types.Content]) -> None:
+            if contents and isinstance(contents[-1], content_cls):
+                contents[-1].parts.extend(part)
+            else:
+                contents.append(content_cls(parts=part))
 
         gemini_contents: List[types.Content] = []
         native_tool_enabled = any(
@@ -205,60 +211,53 @@ class ProviderGoogleGenAI(Provider):
             role, content = message["role"], message.get("content")
 
             if role == "user":
-                if isinstance(content, str):
-                    gemini_contents.append(create_text_part(content))
-                elif isinstance(content, list):
+                if isinstance(content, list):
                     parts = [
                         types.Part.from_text(text=item["text"] or " ")
                         if item["type"] == "text"
                         else process_image_url(item["image_url"])
                         for item in content
                     ]
-                    gemini_contents.append(types.UserContent(parts=parts))
+                else:
+                    parts = [create_text_part(content)]
+                append_or_extend(gemini_contents, parts, types.UserContent)
 
             elif role == "assistant":
                 if content:
-                    gemini_contents.append(
-                        types.ModelContent(parts=[types.Part.from_text(text=content)])
-                    )
-                elif "tool_calls" in message and not native_tool_enabled:
-                    gemini_contents.extend(
-                        [
-                            types.ModelContent(
-                                parts=[
-                                    types.Part.from_function_call(
-                                        name=tool["function"]["name"],
-                                        args=json.loads(tool["function"]["arguments"]),
-                                    )
-                                ]
-                            )
-                            for tool in message["tool_calls"]
-                        ]
-                    )
+                    parts = [types.Part.from_text(text=content)]
+                    append_or_extend(gemini_contents, parts, types.ModelContent)
+                elif not native_tool_enabled and "tool_calls" in message :
+                    parts = [
+                        types.Part.from_function_call(
+                            name=tool["function"]["name"],
+                            args=json.loads(tool["function"]["arguments"]),
+                        )
+                        for tool in message["tool_calls"]
+                    ]
+                    append_or_extend(gemini_contents, parts, types.ModelContent)
                 else:
                     logger.warning("assistant 角色的消息内容为空，已添加空格占位")
-                    if native_tool_enabled:
+                    if native_tool_enabled and "tool_calls" in message:
                         logger.warning(
                             "检测到启用Gemini原生工具，且上下文中存在函数调用，建议使用 /reset 重置上下文"
                         )
-                    gemini_contents.append(
-                        types.ModelContent(parts=[types.Part.from_text(text=" ")])
-                    )
+                    parts = [types.Part.from_text(text=" ")]
+                    append_or_extend(gemini_contents, parts, types.ModelContent)
 
             elif role == "tool" and not native_tool_enabled:
-                gemini_contents.append(
-                    types.UserContent(
-                        parts=[
-                            types.Part.from_function_response(
-                                name=message["tool_call_id"],
-                                response={
-                                    "name": message["tool_call_id"],
-                                    "content": message["content"],
-                                },
-                            )
-                        ]
+                parts = [
+                    types.Part.from_function_response(
+                        name=message["tool_call_id"],
+                        response={
+                            "name": message["tool_call_id"],
+                            "content": message["content"],
+                        },
                     )
-                )
+                ]
+                append_or_extend(gemini_contents, parts, types.UserContent)
+
+        if gemini_contents and isinstance(gemini_contents[0], types.ModelContent):
+            gemini_contents.pop()
 
         return gemini_contents
 
