@@ -327,7 +327,7 @@ class ProviderOpenAIOfficial(Provider):
                 logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
 
             if "Connection error." in str(e):
-                proxy = os.environ.get("proxy", None)
+                proxy = os.environ.get("http_proxy", None)
                 if proxy:
                     logger.error(
                         f"可能为代理原因，请检查代理是否正常。当前代理: {proxy}"
