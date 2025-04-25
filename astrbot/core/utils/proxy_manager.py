@@ -1,9 +1,7 @@
 import os
 import socket
-import logging
 from typing import Optional
-
-logger = logging.getLogger("astrbot")
+from astrbot.core import logger
 
 try:
     import socks  # PySocks提供的SOCKS代理功能
