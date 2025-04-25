@@ -42,7 +42,7 @@ class ProxyManager:
         self.current_proxy = proxy_url
         
         # 检查是否是SOCKS代理
-        if proxy_url.startswith('socks'):
+        if proxy_url.lower().startswith('socks'):
             return self._setup_socks_proxy(proxy_url)
         else:
             return self._setup_http_proxy(proxy_url)
