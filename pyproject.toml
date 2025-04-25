@@ -21,6 +21,7 @@ dependencies = [
     "docstring-parser>=0.16",
     "google-genai>=1.10.0",
     "googlesearch-python>=1.3.0",
+    "httpx[socks]>=0.28.1",
     "lark-oapi>=1.4.12",
     "lxml-html-clean>=0.4.1",
     "mcp>=1.5.0",
@@ -38,7 +39,7 @@ dependencies = [
     "silk-python>=0.2.6",
     "telegramify-markdown>=0.5.0",
     "wechatpy>=1.8.18",
-    "pysocks>=1.7.1",  # 添加PySocks依赖，用于SOCKS代理支持
+    "pysocks>=1.7.1",
 ]
 
 [tool.ruff]

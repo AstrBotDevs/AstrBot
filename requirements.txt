@@ -32,3 +32,4 @@ pip
 telegramify-markdown
 google-genai
 pysocks
+httpx[socks]

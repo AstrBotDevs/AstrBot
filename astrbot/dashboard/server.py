@@ -87,13 +87,16 @@ class AstrBotDashboard:
         跨平台检测端口是否被占用
         """
         try:
-            # 创建 IPv4 TCP Socket
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # 获取未经socks代理的socket类
+            direct_socket = self.core_lifecycle.proxy_manager.get_direct_socket()
+            
+            # 创建不受代理影响的原始socket
+            sock = direct_socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            # 设置超时时间
             sock.settimeout(2)
             result = sock.connect_ex(("127.0.0.1", port))
             sock.close()
+            
             # result 为 0 表示端口被占用
             return result == 0
         except Exception as e:
