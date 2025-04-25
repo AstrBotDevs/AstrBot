@@ -143,18 +143,25 @@ class SimpleGewechatClient:
         content = d["Content"]["string"]  # 消息内容
 
         at_me = False
+        at_wxids = []
         if "@chatroom" in from_user_name:
             abm.type = MessageType.GROUP_MESSAGE
             _t = content.split(":\n")
             user_id = _t[0]
             content = _t[1]
+            # at
+            msg_source = d["MsgSource"]
             if "\u2005" in content:
                 # at
                 # content = content.split('\u2005')[1]
                 content = re.sub(r"@[^\u2005]*\u2005", "", content)
+                at_wxids = re.findall(
+                    r"<atuserlist><!\[CDATA\[.*?(?:,|\b)([^,]+?)(?=,|\]\]></atuserlist>)",
+                    msg_source,
+                )
+
             abm.group_id = from_user_name
-            # at
-            msg_source = d["MsgSource"]
+
             if (
                 f"<atuserlist><![CDATA[,{abm.self_id}]]>" in msg_source
                 or f"<atuserlist><![CDATA[{abm.self_id}]]>" in msg_source
@@ -172,8 +179,6 @@ class SimpleGewechatClient:
             return None
 
         abm.message = []
-        if at_me:
-            abm.message.insert(0, At(qq=abm.self_id))
 
         # 解析用户真实名字
         user_real_name = "unknown"
@@ -198,6 +203,13 @@ class SimpleGewechatClient:
                 user_real_name = self.userrealnames[abm.group_id][user_id]
         else:
             user_real_name = d.get("PushContent", "unknown : ").split(" : ")[0]
+
+        if at_me:
+            abm.message.insert(0, At(qq=abm.self_id, name=self.nickname))
+        for wxid in at_wxids:
+            # 群聊里 At 其他人的列表
+            _username = self.userrealnames.get(abm.group_id, {}).get(wxid, wxid)
+            abm.message.append(At(qq=wxid, name=_username))
 
         abm.sender = MessageMember(user_id, user_real_name)
         abm.raw_message = d

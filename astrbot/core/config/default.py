@@ -186,6 +186,9 @@ CONFIG_METADATA_2 = {
                         "start_message": "Hello, I'm AstrBot!",
                         "telegram_api_base_url": "https://api.telegram.org/bot",
                         "telegram_file_base_url": "https://api.telegram.org/file/bot",
+                        "telegram_command_register": True,
+                        "telegram_command_auto_refresh": True,
+                        "telegram_command_register_interval": 300
                     },
                 },
                 "items": {
@@ -193,6 +196,21 @@ CONFIG_METADATA_2 = {
                         "description": "Bot Token",
                         "type": "string",
                         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
+                    },
+                    "telegram_command_register": {
+                        "description": "Telegram 命令注册",
+                        "type": "bool",
+                        "hint": "启用后，AstrBot 将会自动注册 Telegram 命令。",
+                    },
+                    "telegram_command_auto_refresh": {
+                        "description": "Telegram 命令自动刷新",
+                        "type": "bool",
+                        "hint": "启用后，AstrBot 将会在运行时自动刷新 Telegram 命令。(单独设置此项无效)",
+                    },
+                    "telegram_command_register_interval": {
+                        "description": "Telegram 命令自动刷新间隔",
+                        "type": "int",
+                        "hint": "Telegram 命令自动刷新间隔，单位为秒。",
                     },
                     "id": {
                         "description": "ID",

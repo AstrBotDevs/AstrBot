@@ -58,6 +58,10 @@ class TelegramPlatformAdapter(Platform):
 
         self.base_url = base_url
 
+        self.enable_command_register = self.config.get("telegram_command_register", True)
+        self.enable_command_refresh = self.config.get("telegram_command_auto_refresh", True)
+        self.last_command_hash = None
+
         self.application = (
             ApplicationBuilder()
             .token(self.config["telegram_token"])
@@ -95,17 +99,19 @@ class TelegramPlatformAdapter(Platform):
     async def run(self):
         await self.application.initialize()
         await self.application.start()
-        await self.register_commands()
 
-        # TODO 使用更优雅的方式重新注册命令
-        self.scheduler.add_job(
-            self.register_commands,
-            "interval",
-            minutes=5,
-            id="telegram_command_register",
-            misfire_grace_time=60,
-        )
-        self.scheduler.start()
+        if self.enable_command_register:
+            await self.register_commands()
+
+        if self.enable_command_refresh and self.enable_command_register:
+            self.scheduler.add_job(
+                self.register_commands,
+                "interval",
+                seconds=self.config.get("telegram_command_register_interval", 300),
+                id="telegram_command_register",
+                misfire_grace_time=60,
+            )
+            self.scheduler.start()
 
         queue = self.application.updater.start_polling()
         logger.info("Telegram Platform Adapter is running.")
@@ -114,10 +120,14 @@ class TelegramPlatformAdapter(Platform):
     async def register_commands(self):
         """收集所有注册的指令并注册到 Telegram"""
         try:
-            await self.client.delete_my_commands()
             commands = self.collect_commands()
 
             if commands:
+                current_hash = hash(tuple((cmd.command, cmd.description) for cmd in commands))
+                if current_hash == self.last_command_hash:
+                    return
+                self.last_command_hash = current_hash
+                await self.client.delete_my_commands()
                 await self.client.set_my_commands(commands)
 
         except Exception as e:
@@ -342,7 +352,9 @@ class TelegramPlatformAdapter(Platform):
                 self.scheduler.shutdown()
 
             await self.application.stop()
-            await self.client.delete_my_commands()
+
+            if self.enable_command_register:
+                await self.client.delete_my_commands()
 
             # 保险起见先判断是否存在updater对象
             if self.application.updater is not None:
