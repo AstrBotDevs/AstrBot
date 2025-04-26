@@ -14,7 +14,7 @@ from astrbot.core.message.message_event_result import (
     ResultContentType,
     MessageChain,
 )
-from astrbot.core.message.components import Image
+from astrbot.core.message.components import Image, Record
 from astrbot.core import logger
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.provider.entities import (
@@ -77,16 +77,33 @@ class LLMRequestSubStage(Stage):
                 )
 
         else:
-            req = ProviderRequest(prompt="", image_urls=[])
+            req = ProviderRequest(prompt="", image_urls=[], audio_urls=[])
             if self.provider_wake_prefix:
                 if not event.message_str.startswith(self.provider_wake_prefix):
                     return
             req.prompt = event.message_str[len(self.provider_wake_prefix) :]
             req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
+            
+            # 处理消息中的图片和音频
+            has_audio = False
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     image_path = await comp.convert_to_file_path()
                     req.image_urls.append(image_path)
+                elif isinstance(comp, Record):
+                    # 处理音频消息
+                    audio_path = await comp.convert_to_file_path()
+                    logger.info(f"检测到音频消息，路径: {audio_path}")
+                    has_audio = True
+                    if hasattr(req, "audio_urls"):
+                        req.audio_urls.append(audio_path)
+                    else:
+                        # 为了兼容性，如果ProviderRequest没有audio_urls属性
+                        req.audio_urls = [audio_path]
+            
+            # 如果只有音频没有文本，添加默认文本
+            if not req.prompt and has_audio:
+                req.prompt = "[用户发送的音频将其视为文本输入与其进行聊天]"
 
             # 获取对话上下文
             conversation_id = await self.conv_manager.get_curr_conversation_id(

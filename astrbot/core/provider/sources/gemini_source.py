@@ -3,6 +3,8 @@ import base64
 import json
 import logging
 import random
+import os
+import mimetypes
 from typing import Dict, List, Optional
 from collections.abc import AsyncGenerator
 
@@ -193,6 +195,12 @@ class ProviderGoogleGenAI(Provider):
             mime_type = url.split(":")[1].split(";")[0]
             image_bytes = base64.b64decode(url.split(",", 1)[1])
             return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+            
+        def process_inline_data(inline_data_dict: dict) -> types.Part:
+            """处理内联数据，如音频"""  # TODO: 处理视频？
+            mime_type = inline_data_dict["mime_type"]
+            data = inline_data_dict.get("data", "")
+            return types.Part.from_bytes(data=data, mime_type=mime_type)
 
         def append_or_extend(contents: list[types.Content], part: list[types.Part], content_cls: type[types.Content]) -> None:
             if contents and isinstance(contents[-1], content_cls):
@@ -212,12 +220,15 @@ class ProviderGoogleGenAI(Provider):
 
             if role == "user":
                 if isinstance(content, list):
-                    parts = [
-                        types.Part.from_text(text=item["text"] or " ")
-                        if item["type"] == "text"
-                        else process_image_url(item["image_url"])
-                        for item in content
-                    ]
+                    parts = []
+                    for item in content:
+                        if item["type"] == "text":
+                            parts.append(types.Part.from_text(text=item["text"] or " "))
+                        elif item["type"] == "image_url":
+                            parts.append(process_image_url(item["image_url"]))
+                        elif item["type"] == "inline_data":
+                            # 处理内联数据，如音频
+                            parts.append(process_inline_data(item["inline_data"]))
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -447,13 +458,14 @@ class ProviderGoogleGenAI(Provider):
         prompt: str,
         session_id: str = None,
         image_urls: List[str] = None,
+        audio_urls: List[str] = None,
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
         tool_calls_result=None,
         **kwargs,
     ) -> LLMResponse:
-        new_record = await self.assemble_context(prompt, image_urls)
+        new_record = await self.assemble_context(prompt, image_urls, audio_urls)
         context_query = [*contexts, new_record]
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
@@ -486,14 +498,15 @@ class ProviderGoogleGenAI(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = [],
+        image_urls: List[str] = None,
+        audio_urls: List[str] = None,
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
         tool_calls_result=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
-        new_record = await self.assemble_context(prompt, image_urls)
+        new_record = await self.assemble_context(prompt, image_urls, audio_urls)
         context_query = [*contexts, new_record]
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
@@ -545,30 +558,55 @@ class ProviderGoogleGenAI(Provider):
         self.chosen_api_key = key
         self._init_client()
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None):
+    async def assemble_context(self, text: str, image_urls: List[str] = None, audio_urls: List[str] = None):
         """
         组装上下文。
         """
-        if image_urls:
+        has_media = (image_urls and len(image_urls) > 0) or (audio_urls and len(audio_urls) > 0)
+        
+        if has_media:
             user_content = {
                 "role": "user",
-                "content": [{"type": "text", "text": text if text else "[图片]"}],
+                "content": [{"type": "text", "text": text if text else "[媒体内容]"}],
             }
-            for image_url in image_urls:
-                if image_url.startswith("http"):
-                    image_path = await download_image_by_url(image_url)
-                    image_data = await self.encode_image_bs64(image_path)
-                elif image_url.startswith("file:///"):
-                    image_path = image_url.replace("file:///", "")
-                    image_data = await self.encode_image_bs64(image_path)
-                else:
-                    image_data = await self.encode_image_bs64(image_url)
-                if not image_data:
-                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                    continue
-                user_content["content"].append(
-                    {"type": "image_url", "image_url": {"url": image_data}}
-                )
+            
+            # 处理图片
+            if image_urls:
+                for image_url in image_urls:
+                    if image_url.startswith("http"):
+                        image_path = await download_image_by_url(image_url)
+                        image_data = await self.encode_image_bs64(image_path)
+                    elif image_url.startswith("file:///"):
+                        image_path = image_url.replace("file:///", "")
+                        image_data = await self.encode_image_bs64(image_path)
+                    else:
+                        image_data = await self.encode_image_bs64(image_url)
+                    if not image_data:
+                        logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                        continue
+                    user_content["content"].append(
+                        {"type": "image_url", "image_url": {"url": image_data}}
+                    )
+                    
+            # 处理音频
+            if audio_urls:
+                for audio_url in audio_urls:
+                    audio_bytes, mime_type = await self.encode_audio_data(audio_url)
+                    if not audio_bytes or not mime_type:
+                        logger.warning(f"音频 {audio_url} 处理失败，将忽略。")
+                        continue
+                    
+                    # 添加音频数据
+                    user_content["content"].append(
+                        {
+                            "type": "inline_data", 
+                            "inline_data": {
+                                "mime_type": mime_type,
+                                "data": audio_bytes
+                            }
+                        }
+                    )
+            
             return user_content
         else:
             return {"role": "user", "content": text}
@@ -583,6 +621,42 @@ class ProviderGoogleGenAI(Provider):
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
         return ""
+
+    async def encode_audio_data(self, audio_url: str) -> tuple:
+        """
+        读取音频文件并返回二进制数据
+        
+        Returns:
+            tuple: (音频二进制数据, MIME类型)
+        """
+        try:
+            # 直接读取文件二进制数据
+            with open(audio_url, "rb") as f:
+                audio_bytes = f.read()
+                
+                # 推断 MIME 类型
+                mime_type = mimetypes.guess_type(audio_url)[0]
+                if not mime_type:
+                    # 根据文件扩展名确定 MIME 类型
+                    extension = os.path.splitext(audio_url)[1].lower()
+                    if extension == '.wav':
+                        mime_type = 'audio/wav'
+                    elif extension == '.mp3':
+                        mime_type = 'audio/mpeg'
+                    elif extension == '.ogg':
+                        mime_type = 'audio/ogg'
+                    elif extension == '.flac':
+                        mime_type = 'audio/flac'
+                    elif extension == '.m4a':
+                        mime_type = 'audio/mp4'
+                    else:
+                        mime_type = 'audio/wav'  # 默认
+                
+                logger.info(f"音频文件处理成功: {audio_url}，mime类型: {mime_type}，大小: {len(audio_bytes)} 字节")
+                return audio_bytes, mime_type
+        except Exception as e:
+            logger.error(f"音频文件处理失败: {e}")
+            return None, None
 
     async def terminate(self):
         logger.info("Google GenAI 适配器已终止。")
