@@ -174,9 +174,10 @@ class SimpleGewechatClient:
             user_id = from_user_name
 
         # 检查消息是否由自己发送，若是则忽略
-        if user_id == abm.self_id:
-            logger.info("忽略自己发送的消息")
-            return None
+        # 已经有可配置项专门配置是否需要响应自己的消息，因此这里注释掉。
+        # if user_id == abm.self_id:
+        #     logger.info("忽略自己发送的消息")
+        #     return None
 
         abm.message = []
 
