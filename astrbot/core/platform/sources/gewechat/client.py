@@ -203,7 +203,12 @@ class SimpleGewechatClient:
             else:
                 user_real_name = self.userrealnames[abm.group_id][user_id]
         else:
-            user_real_name = d.get("PushContent", "unknown : ").split(" : ")[0]
+            try:
+                info = (await self.get_user_or_group_info(user_id))["data"][0]
+                user_real_name = info["nickName"]
+            except Exception as e:
+                logger.debug(f"获取用户 {user_id} 昵称失败: {e}")
+                user_real_name = user_id
 
         if at_me:
             abm.message.insert(0, At(qq=abm.self_id, name=self.nickname))
@@ -261,9 +266,12 @@ class SimpleGewechatClient:
                 logger.info("消息类型(48)：地理位置")
             case 49:  # 公众号/文件/小程序/引用/转账/红包/视频号/群聊邀请
                 data_parser = GeweDataParser(content, abm.group_id == "")
-                abm_data = data_parser.parse_mutil_49()
-                if abm_data:
-                    abm.message.append(abm_data)
+                segments = data_parser.parse_mutil_49()
+                if segments:
+                    abm.message.extend(segments)
+                    for seg in segments:
+                        if isinstance(seg, Plain):
+                            abm.message_str += seg.text
             case 51:  # 帐号消息同步?
                 logger.info("消息类型(51)：帐号消息同步？")
             case 10000:  # 被踢出群聊/更换群主/修改群名称
