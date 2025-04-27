@@ -95,11 +95,7 @@ class LLMRequestSubStage(Stage):
                     audio_path = await comp.convert_to_file_path()
                     logger.info(f"检测到音频消息，路径: {audio_path}")
                     has_audio = True
-                    if hasattr(req, "audio_urls"):
-                        req.audio_urls.append(audio_path)
-                    else:
-                        # 为了兼容性，如果ProviderRequest没有audio_urls属性
-                        req.audio_urls = [audio_path]
+                    req.audio_urls.append(audio_path)
             
             # 如果只有音频没有文本，添加默认文本
             if not req.prompt and has_audio:
