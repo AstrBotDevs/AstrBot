@@ -1234,6 +1234,12 @@ CONFIG_METADATA_2 = {
                 "items": {"type": "string"},
                 "hint": "管理员 ID 列表，管理员可以使用一些特权命令，如 `update`, `plugin` 等。ID 可以通过 `/sid` 指令获得。回车添加，可添加多个。",
             },
+            "http_proxy": {
+                "description": "HTTP 代理",
+                "type": "string",
+                "obvious_hint": True,
+                "hint": "该配置将在下版本弃用，请配置`网络代理(proxy)`。启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`",
+            },
             "proxy": {
                 "description": "网络代理",
                 "type": "string",
