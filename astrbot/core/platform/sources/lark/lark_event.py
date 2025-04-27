@@ -3,7 +3,6 @@ import uuid
 import base64
 import lark_oapi as lark
 from io import BytesIO
-from typing import List
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image as AstrBotImage, At
 from astrbot.core.utils.io import download_image_by_url
@@ -17,6 +16,15 @@ class LarkMessageEvent(AstrMessageEvent):
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+        self.thinking_message_id = None  # 用于存储临时消息的ID
+
+    @staticmethod
+    def _create_card_content(text: str) -> dict:
+        """创建卡片消息内容"""
+        return {
+            "config": {"wide_screen_mode": True},
+            "elements": [{"tag": "div", "text": {"content": text, "tag": "lark_md"}}],
+        }
 
     @staticmethod
     async def _convert_to_lark(message: MessageChain, lark_client: lark.Client) -> List:
@@ -74,33 +82,77 @@ class LarkMessageEvent(AstrMessageEvent):
             ret.append(_stage)
         return ret
 
-    async def send(self, message: MessageChain):
-        res = await LarkMessageEvent._convert_to_lark(message, self.bot)
-        wrapped = {
-            "zh_cn": {
-                "title": "",
-                "content": res,
-            }
-        }
+    @staticmethod
+    def _extract_message_text(res: List) -> str:
+        """从消息链中提取文本内容"""
+        if not res:
+            return "处理完成"
 
+        text_parts = []
+        for part in res:
+            if not part:
+                continue
+            for item in part:
+                if isinstance(item, dict):
+                    if item.get("tag") == "text":
+                        text_parts.append(item.get("text", ""))
+                    elif item.get("tag") == "md":
+                        text_parts.append(item.get("text", ""))
+
+        return " ".join(text_parts) if text_parts else "处理完成"
+
+    async def _update_message(self, content: str) -> bool:
+        """更新消息内容"""
+        card_content = self._create_card_content(content)
+        request = (
+            PatchMessageRequest.builder()
+            .message_id(self.thinking_message_id)
+            .request_body(
+                PatchMessageRequestBody.builder()
+                .content(json.dumps(card_content))
+                .build()
+            )
+            .build()
+        )
+        response = self.bot.im.v1.message.patch(request)
+        if not response.success():
+            logger.error(f"更新消息失败({response.code}): {response.msg}")
+        return response.success()
+
+    async def _send_new_message(self, content: str) -> bool:
+        """发送新消息"""
+        card_content = self._create_card_content(content)
         request = (
             ReplyMessageRequest.builder()
             .message_id(self.message_obj.message_id)
             .request_body(
                 ReplyMessageRequestBody.builder()
-                .content(json.dumps(wrapped))
-                .msg_type("post")
+                .content(json.dumps(card_content))
+                .msg_type("interactive")
                 .uuid(str(uuid.uuid4()))
                 .reply_in_thread(False)
                 .build()
             )
             .build()
         )
-
         response = await self.bot.im.v1.message.areply(request)
+        if response.success():
+            self.thinking_message_id = response.data.message_id
+        else:
+            logger.error(f"发送新消息失败({response.code}): {response.msg}")
+        return response.success()
 
-        if not response.success():
-            logger.error(f"回复飞书消息失败({response.code}): {response.msg}")
+    async def send(self, message: MessageChain):
+        res = await LarkMessageEvent._convert_to_lark(message, self.bot)
+        message_text = self._extract_message_text(res)
+
+        if self.thinking_message_id:
+            success = await self._update_message(message_text)
+        else:
+            success = await self._send_new_message(message_text)
+
+        if not success:
+            logger.error("发送飞书消息失败")
 
         await super().send(message)
 

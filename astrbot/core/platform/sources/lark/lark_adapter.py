@@ -110,6 +110,46 @@ class LarkPlatformAdapter(Platform):
             id=self.config.get("id"),
         )
 
+    async def _send_thinking_message(self, message_id: str) -> tuple[bool, str]:
+        """发送临时消息
+
+        Args:
+            message_id: 原始消息ID
+
+        Returns:
+            tuple[bool, str]: (是否成功, 临时消息ID)
+        """
+        temp_message = {
+            "config": {"wide_screen_mode": True},
+            "elements": [
+                {
+                    "tag": "div",
+                    "text": {"content": "让我想一想哦🤔🤔...", "tag": "lark_md"},
+                }
+            ],
+        }
+
+        request = (
+            ReplyMessageRequest.builder()
+            .message_id(message_id)
+            .request_body(
+                ReplyMessageRequestBody.builder()
+                .content(json.dumps(temp_message))
+                .msg_type("interactive")
+                .uuid(str(uuid.uuid4()))
+                .reply_in_thread(False)
+                .build()
+            )
+            .build()
+        )
+
+        response = await self.lark_api.im.v1.message.areply(request)
+        if not response.success():
+            logger.error(f"发送 thinking 消息失败({response.code}): {response.msg}")
+            return False, ""
+
+        return True, response.data.message_id
+
     async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1):
         message = event.event.message
         abm = AstrBotMessage()
@@ -126,11 +166,13 @@ class LarkPlatformAdapter(Platform):
         abm.message_str = ""
 
         at_list = {}
+        is_at_bot = False  # 标记是否@了机器人
         if message.mentions:
             for m in message.mentions:
                 at_list[m.key] = Comp.At(qq=m.id.open_id, name=m.name)
                 if m.name == self.bot_name:
                     abm.self_id = m.id.open_id
+                    is_at_bot = True  # 标记@了机器人
 
         content_json_b = json.loads(message.content)
 
@@ -207,7 +249,25 @@ class LarkPlatformAdapter(Platform):
                 abm.session_id = abm.sender.user_id
 
         logger.debug(abm)
-        await self.handle_msg(abm)
+
+        # 创建事件对象
+        event = LarkMessageEvent(
+            message_str=abm.message_str,
+            message_obj=abm,
+            platform_meta=self.meta(),
+            session_id=abm.session_id,
+            bot=self.lark_api,
+        )
+
+        # 只有在私聊消息或者群聊中@了机器人的消息才发送 thinking 消息
+        if abm.type == MessageType.FRIEND_MESSAGE or is_at_bot:
+            success, thinking_message_id = await self._send_thinking_message(
+                message.message_id
+            )
+            if success:
+                event.thinking_message_id = thinking_message_id
+
+        self._event_queue.put_nowait(event)
 
     async def handle_msg(self, abm: AstrBotMessage):
         event = LarkMessageEvent(
@@ -217,7 +277,6 @@ class LarkPlatformAdapter(Platform):
             session_id=abm.session_id,
             bot=self.lark_api,
         )
-
         self._event_queue.put_nowait(event)
 
     async def run(self):
