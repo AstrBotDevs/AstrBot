@@ -51,8 +51,13 @@ class AstrBotCoreLifecycle:
         # 初始化代理管理器
         self.proxy_manager = ProxyManager()
         
-        # 从配置中获取代理设置并应用
-        proxy_url = self.astrbot_config["proxy"]
+        # 从配置中获取代理设置并应用，优先使用新的 proxy 字段，如果为空则尝试使用旧的 http_proxy 字段
+        proxy_url = self.astrbot_config.get("proxy", "")
+        if not proxy_url:
+            # 兼容旧版本的 http_proxy 配置
+            proxy_url = self.astrbot_config.get("http_proxy", "")
+            if proxy_url:
+                logger.warning(f"检测到旧版本代理配置(http_proxy)，已自动兼容。建议更新配置文件，重新设置网络代理（proxy）以适应新版本。")
         self.proxy_manager.setup_proxy(proxy_url)
         
         # 设置不使用代理的本地地址
