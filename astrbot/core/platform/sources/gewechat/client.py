@@ -3,6 +3,7 @@ import base64
 import datetime
 import os
 import re
+import uuid
 import threading
 
 import aiohttp
@@ -63,7 +64,7 @@ class SimpleGewechatClient:
             "/astrbot-gewechat/callback", view_func=self._callback, methods=["POST"]
         )
         self.server.add_url_rule(
-            "/astrbot-gewechat/file/<file_id>",
+            "/astrbot-gewechat/file/<file_token>",
             view_func=self._handle_file,
             methods=["GET"],
         )
@@ -80,6 +81,9 @@ class SimpleGewechatClient:
         self.userrealnames = {}
 
         self.shutdown_event = asyncio.Event()
+
+        self.staged_files = {}
+        """存储了允许外部访问的文件列表。auth_token: file_path。通过 register_file 方法注册。"""
 
     async def get_token_id(self):
         """获取 Gewechat Token。"""
@@ -302,9 +306,31 @@ class SimpleGewechatClient:
 
         return quart.jsonify({"r": "AstrBot ACK"})
 
-    async def _handle_file(self, file_id):
-        file_path = f"data/temp/{file_id}"
-        return await quart.send_file(file_path)
+    async def _register_file(self, file_path: str) -> str:
+        """向 AstrBot 回调服务器 注册一个允许外部访问的文件。
+
+        Args:
+            file_path (str): 文件路径。
+        Returns:
+            str: 返回一个 auth_token，文件路径为 file_path。通过 /astrbot-gewechat/file/auth_token 得到文件。
+        """
+        if not os.path.exists(file_path):
+            raise Exception(f"文件不存在: {file_path}")
+
+        file_token = str(uuid.uuid4())
+        self.staged_files[file_token] = file_path
+        return file_token
+
+    async def _handle_file(self, file_token):
+        if file_token not in self.staged_files:
+            logger.warning(f"请求的文件 {file_token} 不存在。")
+            return quart.abort(404)
+        if not os.path.exists(self.staged_files[file_token]):
+            logger.warning(f"请求的文件 {self.staged_files[file_token]} 不存在。")
+            return quart.abort(404)
+        file_token = self.staged_files[file_token]
+        self.staged_files.pop(file_token, None)
+        return await quart.send_file(file_token)
 
     async def _set_callback_url(self):
         logger.info("设置回调，请等待...")
@@ -454,17 +480,18 @@ class SimpleGewechatClient:
                             "此次登录需要安全验证码，请在管理面板聊天页输入 /gewe_code 验证码 来验证，如 /gewe_code 123456"
                         )
                     else:
-                        status = json_blob["data"]["status"]
-                        nickname = json_blob["data"].get("nickName", "")
-                        if status == 1:
-                            logger.info(f"等待确认...{nickname}")
-                        elif status == 2:
-                            logger.info(f"绿泡泡平台登录成功: {nickname}")
-                            break
-                        elif status == 0:
-                            logger.info("等待扫码...")
-                        else:
-                            logger.warning(f"未知状态: {status}")
+                        if "status" in json_blob["data"]:
+                            status = json_blob["data"]["status"]
+                            nickname = json_blob["data"].get("nickName", "")
+                            if status == 1:
+                                logger.info(f"等待确认...{nickname}")
+                            elif status == 2:
+                                logger.info(f"绿泡泡平台登录成功: {nickname}")
+                                break
+                            elif status == 0:
+                                logger.info("等待扫码...")
+                            else:
+                                logger.warning(f"未知状态: {status}")
             await asyncio.sleep(5)
 
         if appid:
