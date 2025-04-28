@@ -46,7 +46,10 @@ class AiocqhttpAdapter(Platform):
         )
 
         self.bot = CQHttp(
-            use_ws_reverse=True, import_name="aiocqhttp", api_timeout_sec=180
+            use_ws_reverse=True,
+            import_name="aiocqhttp",
+            api_timeout_sec=180,
+            access_token=platform_config["ws_reverse_token"],
         )
 
         @self.bot.on_request()
