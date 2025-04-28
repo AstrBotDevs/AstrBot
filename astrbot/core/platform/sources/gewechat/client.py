@@ -328,9 +328,9 @@ class SimpleGewechatClient:
         if not os.path.exists(self.staged_files[file_token]):
             logger.warning(f"请求的文件 {self.staged_files[file_token]} 不存在。")
             return quart.abort(404)
-        file_token = self.staged_files[file_token]
+        file_path = self.staged_files[file_token]
         self.staged_files.pop(file_token, None)
-        return await quart.send_file(file_token)
+        return await quart.send_file(file_path)
 
     async def _set_callback_url(self):
         logger.info("设置回调，请等待...")
