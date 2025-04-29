@@ -67,13 +67,32 @@ class ProxyManager:
                 proxy_type = socks.SOCKS5
                 logger.warning(f"未知的SOCKS类型: {proxy_type_str}，默认使用SOCKS5")
             
+            # 解析用户名密码和代理地址
+            username = None
+            password = None
+            if '@' in proxy_addr:
+                auth_info, proxy_addr = proxy_addr.split('@')
+                if ':' in auth_info:
+                    username, password = auth_info.split(':', 1)
+                    logger.debug(f"检测到代理认证信息，用户名: {username}")
+                else:
+                    username = auth_info
+                    password = None
+                    logger.debug(f"检测到代理认证信息，仅用户名: {username}")
+            
             # 解析代理地址和端口
             if ':' in proxy_addr:
                 proxy_host, proxy_port_str = proxy_addr.split(':')
                 try:
                     proxy_port = int(proxy_port_str)
                     # 设置默认socket为SOCKS代理
-                    socks.set_default_proxy(proxy_type, proxy_host, proxy_port)
+                    socks.set_default_proxy(
+                        proxy_type, 
+                        proxy_host, 
+                        proxy_port,
+                        username=username,
+                        password=password
+                    )
                     socket.socket = socks.socksocket
                     self.is_socks_proxy = True
                     
