@@ -140,6 +140,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
+                        "ws_reverse_token": "",
                     },
                     "gewechat(微信)": {
                         "id": "gwchat",
@@ -188,7 +189,7 @@ CONFIG_METADATA_2 = {
                         "telegram_file_base_url": "https://api.telegram.org/file/bot",
                         "telegram_command_register": True,
                         "telegram_command_auto_refresh": True,
-                        "telegram_command_register_interval": 300
+                        "telegram_command_register_interval": 300,
                     },
                 },
                 "items": {
@@ -257,6 +258,11 @@ CONFIG_METADATA_2 = {
                         "description": "反向 Websocket 端口",
                         "type": "int",
                         "hint": "aiocqhttp 适配器的反向 Websocket 端口。",
+                    },
+                    "ws_reverse_token": {
+                        "description": "反向 Websocket Token",
+                        "type": "string",
+                        "hint": "aiocqhttp 适配器的反向 Websocket Token。未设置则不启用 Token 验证。",
                     },
                     "lark_bot_name": {
                         "description": "飞书机器人的名字",
