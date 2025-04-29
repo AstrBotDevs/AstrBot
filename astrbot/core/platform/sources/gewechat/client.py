@@ -85,6 +85,8 @@ class SimpleGewechatClient:
         self.staged_files = {}
         """存储了允许外部访问的文件列表。auth_token: file_path。通过 register_file 方法注册。"""
 
+        self.lock = asyncio.Lock()
+
     async def get_token_id(self):
         """获取 Gewechat Token。"""
         async with aiohttp.ClientSession() as session:
