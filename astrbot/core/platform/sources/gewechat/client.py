@@ -314,23 +314,25 @@ class SimpleGewechatClient:
         Returns:
             str: 返回一个 auth_token，文件路径为 file_path。通过 /astrbot-gewechat/file/auth_token 得到文件。
         """
-        if not os.path.exists(file_path):
-            raise Exception(f"文件不存在: {file_path}")
+        async with self.lock:
+            if not os.path.exists(file_path):
+                raise Exception(f"文件不存在: {file_path}")
 
-        file_token = str(uuid.uuid4())
-        self.staged_files[file_token] = file_path
-        return file_token
+            file_token = str(uuid.uuid4())
+            self.staged_files[file_token] = file_path
+            return file_token
 
     async def _handle_file(self, file_token):
-        if file_token not in self.staged_files:
-            logger.warning(f"请求的文件 {file_token} 不存在。")
-            return quart.abort(404)
-        if not os.path.exists(self.staged_files[file_token]):
-            logger.warning(f"请求的文件 {self.staged_files[file_token]} 不存在。")
-            return quart.abort(404)
-        file_path = self.staged_files[file_token]
-        self.staged_files.pop(file_token, None)
-        return await quart.send_file(file_path)
+        async with self.lock:
+            if file_token not in self.staged_files:
+                logger.warning(f"请求的文件 {file_token} 不存在。")
+                return quart.abort(404)
+            if not os.path.exists(self.staged_files[file_token]):
+                logger.warning(f"请求的文件 {self.staged_files[file_token]} 不存在。")
+                return quart.abort(404)
+            file_path = self.staged_files[file_token]
+            self.staged_files.pop(file_token, None)
+            return await quart.send_file(file_path)
 
     async def _set_callback_url(self):
         logger.info("设置回调，请等待...")
