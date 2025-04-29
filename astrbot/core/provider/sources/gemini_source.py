@@ -196,11 +196,27 @@ class ProviderGoogleGenAI(Provider):
             image_bytes = base64.b64decode(url.split(",", 1)[1])
             return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
             
-        def process_inline_data(inline_data_dict: dict) -> types.Part:
-            """处理内联数据，如音频"""  # TODO: 处理视频？
-            mime_type = inline_data_dict["mime_type"]
-            data = inline_data_dict.get("data", "")
-            return types.Part.from_bytes(data=data, mime_type=mime_type)
+        def process_input_audio(input_audio_dict: dict) -> types.Part:
+            """处理音频数据"""
+            audio_base64 = input_audio_dict.get("data", "")
+            audio_format = input_audio_dict.get("format", "")
+            
+            # 将 base64 字符串解码为二进制数据
+            audio_bytes = base64.b64decode(audio_base64)
+            
+            # 根据音频格式确定 MIME 类型
+            mime_type_map = {
+                "wav": "audio/wav",
+                "mp3": "audio/mp3",
+                "aiff": "audio/aiff",
+                "aac": "audio/aac",
+                "ogg": "audio/ogg",
+                "flac": "audio/flac",
+            }
+            mime_type = mime_type_map.get(audio_format, "audio/wav")
+            
+            logger.debug(f"处理 OpenAI 格式音频数据，格式: {audio_format}, MIME类型: {mime_type}")
+            return types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
 
         def append_or_extend(contents: list[types.Content], part: list[types.Part], content_cls: type[types.Content]) -> None:
             if contents and isinstance(contents[-1], content_cls):
@@ -226,9 +242,8 @@ class ProviderGoogleGenAI(Provider):
                             parts.append(types.Part.from_text(text=item["text"] or " "))
                         elif item["type"] == "image_url":
                             parts.append(process_image_url(item["image_url"]))
-                        elif item["type"] == "inline_data":
-                            # 处理内联数据，如音频
-                            parts.append(process_inline_data(item["inline_data"]))
+                        elif item["type"] == "input_audio":
+                            parts.append(process_input_audio(item["input_audio"]))
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -560,7 +575,7 @@ class ProviderGoogleGenAI(Provider):
 
     async def assemble_context(self, text: str, image_urls: List[str] = None, audio_urls: List[str] = None):
         """
-        组装上下文。
+        组装上下文。将用户输入（文本、图片和音频）组装成 OpenAI 格式的上下文数据。
         """
         has_media = (image_urls and len(image_urls) > 0) or (audio_urls and len(audio_urls) > 0)
         
@@ -586,26 +601,22 @@ class ProviderGoogleGenAI(Provider):
                         continue
                     user_content["content"].append(
                         {"type": "image_url", "image_url": {"url": image_data}}
-                    )
-                    
+                    )       
             # 处理音频
             if audio_urls:
                 for audio_url in audio_urls:
-                    audio_bytes, mime_type = await self.encode_audio_data(audio_url)
-                    if not audio_bytes or not mime_type:
-                        logger.warning(f"音频 {audio_url} 处理失败，将忽略。")
-                        continue
-                    
-                    # 添加音频数据
-                    user_content["content"].append(
-                        {
-                            "type": "inline_data", 
-                            "inline_data": {
-                                "mime_type": mime_type,
-                                "data": audio_bytes
-                            }
-                        }
-                    )
+                    try:
+                        audio_base64, audio_format = await self.encode_audio_bs64(audio_url)
+                        if audio_base64 and audio_format:
+                            user_content["content"].append({
+                                "type": "input_audio",
+                                "input_audio": {
+                                    "data": audio_base64,
+                                    "format": audio_format
+                                }
+                            })
+                    except Exception as e:
+                        logger.error(f"音频文件处理失败: {audio_url}, 错误: {e}")
             
             return user_content
         else:
@@ -622,40 +633,25 @@ class ProviderGoogleGenAI(Provider):
             return "data:image/jpeg;base64," + image_bs64
         return ""
 
-    async def encode_audio_data(self, audio_url: str) -> tuple:
+    async def encode_audio_bs64(self, audio_url: str) -> tuple:
         """
-        读取音频文件并返回二进制数据
-        
-        Returns:
-            tuple: (音频二进制数据, MIME类型)
+        将音频文件转换为 base64 编码
         """
         try:
-            # 直接读取文件二进制数据
+            # 读取音频文件并编码为 base64
             with open(audio_url, "rb") as f:
                 audio_bytes = f.read()
-                
-                # 推断 MIME 类型
-                mime_type = mimetypes.guess_type(audio_url)[0]
-                if not mime_type:
-                    # 根据文件扩展名确定 MIME 类型
-                    extension = os.path.splitext(audio_url)[1].lower()
-                    if extension == '.wav':
-                        mime_type = 'audio/wav'
-                    elif extension == '.mp3':
-                        mime_type = 'audio/mpeg'
-                    elif extension == '.ogg':
-                        mime_type = 'audio/ogg'
-                    elif extension == '.flac':
-                        mime_type = 'audio/flac'
-                    elif extension == '.m4a':
-                        mime_type = 'audio/mp4'
-                    else:
-                        mime_type = 'audio/wav'  # 默认
-                
-                logger.info(f"音频文件处理成功: {audio_url}，mime类型: {mime_type}，大小: {len(audio_bytes)} 字节")
-                return audio_bytes, mime_type
+                audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+            
+            # 确定音频格式
+            extension = os.path.splitext(audio_url)[1].lower()
+            # 移除扩展名前面的点号
+            audio_format = extension[1:] if extension.startswith('.') else extension
+            
+            logger.info(f"音频文件转换成功: {audio_url}，格式: {audio_format}，大小: {len(audio_bytes)} 字节")
+            return audio_base64, audio_format
         except Exception as e:
-            logger.error(f"音频文件处理失败: {e}")
+            logger.error(f"音频文件转换失败: {audio_url}, 错误: {e}")
             return None, None
 
     async def terminate(self):
