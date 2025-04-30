@@ -49,7 +49,9 @@ class AiocqhttpAdapter(Platform):
             use_ws_reverse=True,
             import_name="aiocqhttp",
             api_timeout_sec=180,
-            access_token=platform_config["ws_reverse_token"],
+            access_token=platform_config.get(
+                "ws_reverse_token"
+            ),  # 以防旧版本配置不存在
         )
 
         @self.bot.on_request()
