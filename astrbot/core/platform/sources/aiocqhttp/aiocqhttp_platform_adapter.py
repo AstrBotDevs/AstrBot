@@ -1,4 +1,3 @@
-import os
 import time
 import asyncio
 import logging
@@ -21,7 +20,6 @@ from .aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 from aiocqhttp.exceptions import ActionFailed
-from astrbot.core.utils.io import download_file
 
 
 @register_platform_adapter(
@@ -242,8 +240,8 @@ class AiocqhttpAdapter(Platform):
                                     action="get_private_file_url",
                                     file_id=event.message[0]["data"]["file_id"],
                                 )
-                            if ret and "data" in ret and "url" in ret["data"]:
-                                file_url = ret["data"]["url"]  # https
+                            if ret and "url" in ret:
+                                file_url = ret["url"]  # https
                                 a = File(name="", file=file_url)
                                 abm.message.append(a)
                             else:
