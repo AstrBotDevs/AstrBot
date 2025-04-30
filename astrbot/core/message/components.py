@@ -26,9 +26,11 @@ import base64
 import json
 import os
 import uuid
+import asyncio
 import typing as T
 from enum import Enum
 from pydantic.v1 import BaseModel
+from astrbot.core import logger
 from astrbot.core.utils.io import download_image_by_url, file_to_base64, download_file
 
 
@@ -557,11 +559,86 @@ class File(BaseMessageComponent):
 
     type: ComponentType = "File"
     name: T.Optional[str] = ""  # 名字
-    file: T.Optional[str] = ""  # url 或者本地路径
+    _file: T.Optional[str] = ""  # 本地路径
+    url: T.Optional[str] = ""  # url
+    _downloaded: bool = False  # 是否已经下载
 
-    def __init__(self, name: str, file: str):
-        super().__init__(name=name, file=file)
+    def __init__(self, name: str = "", file: str = "", url: str = ""):
+        super().__init__(name=name, _file=file, url=url)
 
+    @property
+    def file(self) -> str:
+        """
+        获取文件路径，如果文件不存在但有URL，则同步下载文件
+
+        Returns:
+            str: 文件路径
+        """
+        if self._file and os.path.exists(self._file):
+            return self._file
+
+        if self.url and not self._downloaded:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    logger.warning(
+                        "不可以在异步上下文中同步等待下载! 请使用 await get_file() 代替"
+                    )
+                    return ""
+                else:
+                    # 等待下载完成
+                    loop.run_until_complete(self._download_file())
+
+                    if self._file and os.path.exists(self._file):
+                        return self._file
+            except Exception as e:
+                logger.error(f"文件下载失败: {e}")
+
+        return ""
+
+    @file.setter
+    def file(self, value: str):
+        """
+        向前兼容, 设置file属性, 传入的参数可能是文件路径或URL
+
+        Args:
+            value (str): 文件路径或URL
+        """
+        if value.startswith("http://") or value.startswith("https://"):
+            self.url = value
+        else:
+            self._file = value
+
+    async def get_file(self) -> str:
+        """
+        异步获取文件
+        To 插件开发者: 请注意在使用后清理下载的文件, 以免占用过多空间
+
+        Returns:
+            str: 文件路径
+        """
+        if self._file and os.path.exists(self._file):
+            return self._file
+
+        if self.url:
+            await self._download_file()
+            return self._file
+
+        return ""
+
+    async def _download_file(self):
+        """下载文件"""
+        if self._downloaded:
+            return
+
+        os.makedirs("data/download", exist_ok=True)
+        filename = self.name or f"{uuid.uuid4().hex}"
+        file_path = f"data/download/{filename}"
+
+        await download_file(self.url, file_path)
+
+        self._file = file_path
+        self._downloaded = True
 
 
 class WechatEmoji(BaseMessageComponent):

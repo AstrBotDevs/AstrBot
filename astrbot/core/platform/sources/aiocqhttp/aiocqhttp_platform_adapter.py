@@ -163,7 +163,9 @@ class AiocqhttpAdapter(Platform):
 
         if "sub_type" in event:
             if event["sub_type"] == "poke" and "target_id" in event:
-                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))  # noqa: F405
+                abm.message.append(
+                    Poke(qq=str(event["target_id"]), type="poke")
+                )  # noqa: F405
 
         return abm
 
@@ -224,7 +226,7 @@ class AiocqhttpAdapter(Platform):
                         # Lagrange
                         logger.info("guessing lagrange")
                         file_name = m["data"].get("file_name", "file")
-                        abm.message.append(File(name=file_name, file=m["data"]["url"]))
+                        abm.message.append(File(name=file_name, url=m["data"]["url"]))
                     else:
                         try:
                             # Napcat
@@ -242,7 +244,7 @@ class AiocqhttpAdapter(Platform):
                                 )
                             if ret and "url" in ret:
                                 file_url = ret["url"]  # https
-                                a = File(name="", file=file_url)
+                                a = File(name="", url=file_url)
                                 abm.message.append(a)
                             else:
                                 logger.error(f"获取文件失败: {ret}")
