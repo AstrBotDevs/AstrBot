@@ -362,7 +362,7 @@ class ProviderOpenAIOfficial(Provider):
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
 
-        e = None
+        last_exception = None
         retry_cnt = 0
         for retry_cnt in range(max_retries):
             try:
@@ -376,6 +376,7 @@ class ProviderOpenAIOfficial(Provider):
                 payloads["messages"] = new_contexts
                 context_query = new_contexts
             except Exception as e:
+                last_exception = e
                 (
                     success,
                     chosen_key,
@@ -398,7 +399,9 @@ class ProviderOpenAIOfficial(Provider):
 
         if retry_cnt == max_retries - 1:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
-            raise e
+            if last_exception is None:
+                raise Exception("未知错误")
+            raise last_exception
         return llm_response
 
     async def text_chat_stream(
@@ -428,7 +431,7 @@ class ProviderOpenAIOfficial(Provider):
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
 
-        e = None
+        last_exception = None
         retry_cnt = 0
         for retry_cnt in range(max_retries):
             try:
@@ -443,6 +446,7 @@ class ProviderOpenAIOfficial(Provider):
                 payloads["messages"] = new_contexts
                 context_query = new_contexts
             except Exception as e:
+                last_exception = e
                 (
                     success,
                     chosen_key,
@@ -465,7 +469,9 @@ class ProviderOpenAIOfficial(Provider):
 
         if retry_cnt == max_retries - 1:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
-            raise e
+            if last_exception is None:
+                raise Exception("未知错误")
+            raise last_exception
 
     async def _remove_image_from_context(self, contexts: List):
         """
@@ -505,7 +511,10 @@ class ProviderOpenAIOfficial(Provider):
     async def assemble_context(self, text: str, image_urls: List[str] = None) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         if image_urls:
-            user_content = {"role": "user", "content": [{"type": "text", "text": text if text else "[图片]"}]}
+            user_content = {
+                "role": "user",
+                "content": [{"type": "text", "text": text if text else "[图片]"}],
+            }
             for image_url in image_urls:
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)

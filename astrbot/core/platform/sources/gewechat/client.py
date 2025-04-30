@@ -143,18 +143,25 @@ class SimpleGewechatClient:
         content = d["Content"]["string"]  # 消息内容
 
         at_me = False
+        at_wxids = []
         if "@chatroom" in from_user_name:
             abm.type = MessageType.GROUP_MESSAGE
             _t = content.split(":\n")
             user_id = _t[0]
             content = _t[1]
+            # at
+            msg_source = d["MsgSource"]
             if "\u2005" in content:
                 # at
                 # content = content.split('\u2005')[1]
                 content = re.sub(r"@[^\u2005]*\u2005", "", content)
+                at_wxids = re.findall(
+                    r"<atuserlist><!\[CDATA\[.*?(?:,|\b)([^,]+?)(?=,|\]\]></atuserlist>)",
+                    msg_source,
+                )
+
             abm.group_id = from_user_name
-            # at
-            msg_source = d["MsgSource"]
+
             if (
                 f"<atuserlist><![CDATA[,{abm.self_id}]]>" in msg_source
                 or f"<atuserlist><![CDATA[{abm.self_id}]]>" in msg_source
@@ -167,13 +174,12 @@ class SimpleGewechatClient:
             user_id = from_user_name
 
         # 检查消息是否由自己发送，若是则忽略
-        if user_id == abm.self_id:
-            logger.info("忽略自己发送的消息")
-            return None
+        # 已经有可配置项专门配置是否需要响应自己的消息，因此这里注释掉。
+        # if user_id == abm.self_id:
+        #     logger.info("忽略自己发送的消息")
+        #     return None
 
         abm.message = []
-        if at_me:
-            abm.message.insert(0, At(qq=abm.self_id))
 
         # 解析用户真实名字
         user_real_name = "unknown"
@@ -197,7 +203,19 @@ class SimpleGewechatClient:
             else:
                 user_real_name = self.userrealnames[abm.group_id][user_id]
         else:
-            user_real_name = d.get("PushContent", "unknown : ").split(" : ")[0]
+            try:
+                info = (await self.get_user_or_group_info(user_id))["data"][0]
+                user_real_name = info["nickName"]
+            except Exception as e:
+                logger.debug(f"获取用户 {user_id} 昵称失败: {e}")
+                user_real_name = user_id
+
+        if at_me:
+            abm.message.insert(0, At(qq=abm.self_id, name=self.nickname))
+        for wxid in at_wxids:
+            # 群聊里 At 其他人的列表
+            _username = self.userrealnames.get(abm.group_id, {}).get(wxid, wxid)
+            abm.message.append(At(qq=wxid, name=_username))
 
         abm.sender = MessageMember(user_id, user_real_name)
         abm.raw_message = d
@@ -248,9 +266,12 @@ class SimpleGewechatClient:
                 logger.info("消息类型(48)：地理位置")
             case 49:  # 公众号/文件/小程序/引用/转账/红包/视频号/群聊邀请
                 data_parser = GeweDataParser(content, abm.group_id == "")
-                abm_data = data_parser.parse_mutil_49()
-                if abm_data:
-                    abm.message.append(abm_data)
+                segments = data_parser.parse_mutil_49()
+                if segments:
+                    abm.message.extend(segments)
+                    for seg in segments:
+                        if isinstance(seg, Plain):
+                            abm.message_str += seg.text
             case 51:  # 帐号消息同步?
                 logger.info("消息类型(51)：帐号消息同步？")
             case 10000:  # 被踢出群聊/更换群主/修改群名称
