@@ -29,7 +29,7 @@ import uuid
 import typing as T
 from enum import Enum
 from pydantic.v1 import BaseModel
-from astrbot.core.utils.io import download_image_by_url, file_to_base64
+from astrbot.core.utils.io import download_image_by_url, file_to_base64, download_file
 
 
 class ComponentType(Enum):
@@ -552,15 +552,16 @@ class Unknown(BaseMessageComponent):
 
 class File(BaseMessageComponent):
     """
-    目前此消息段只适配了 Napcat。
+    文件消息段
     """
 
     type: ComponentType = "File"
     name: T.Optional[str] = ""  # 名字
-    file: T.Optional[str] = ""  # url（本地路径）
+    file: T.Optional[str] = ""  # url 或者本地路径
 
     def __init__(self, name: str, file: str):
         super().__init__(name=name, file=file)
+
 
 
 class WechatEmoji(BaseMessageComponent):
