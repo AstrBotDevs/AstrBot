@@ -83,7 +83,7 @@ class LLMRequestSubStage(Stage):
                     return
             req.prompt = event.message_str[len(self.provider_wake_prefix) :]
             req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
-            
+
             # 处理消息中的图片和音频
             has_audio = False
             for comp in event.message_obj.message:
@@ -96,7 +96,7 @@ class LLMRequestSubStage(Stage):
                     logger.info(f"检测到音频消息，路径: {audio_path}")
                     has_audio = True
                     req.audio_urls.append(audio_path)
-            
+
             # 如果只有音频没有文本，添加默认文本
             if not req.prompt and has_audio:
                 req.prompt = "[用户发送的音频将其视为文本输入与其进行聊天]"

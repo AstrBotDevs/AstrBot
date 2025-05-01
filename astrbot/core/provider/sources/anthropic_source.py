@@ -107,6 +107,8 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         contexts=[],
         system_prompt=None,
         tool_calls_result: ToolCallsResult = None,
+        audio_urls: List[str] = None,
+        video_urls: List[str] = None,
         **kwargs,
     ) -> LLMResponse:
         if not prompt:

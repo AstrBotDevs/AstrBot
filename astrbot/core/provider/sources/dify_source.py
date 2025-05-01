@@ -64,6 +64,9 @@ class ProviderDify(Provider):
         func_tool: FuncCall = None,
         contexts: List = None,
         system_prompt: str = None,
+        tool_calls_result=None,
+        audio_urls=None,
+        video_urls=None,
         **kwargs,
     ) -> LLMResponse:
         result = ""
