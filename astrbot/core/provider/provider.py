@@ -91,6 +91,8 @@ class Provider(AbstractProvider):
         contexts: List = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult = None,
+        audio_urls: List[str] = None,
+        video_urls: List[str] = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -98,10 +100,12 @@ class Provider(AbstractProvider):
         Args:
             prompt: 提示词
             session_id: 会话 ID(此属性已经被废弃)
-            image_urls: 图片 URL 列表
+            image_urls: 图片 URL 列表，需要模型支持。
             tools: Function-calling 工具
             contexts: 上下文
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
+            audio_urls: 传给模型的音频 URL 列表，需要模型支持。
+            video_urls: 传给模型的视频 URL 列表，需要模型支持。
             kwargs: 其他参数
 
         Notes:
@@ -119,6 +123,8 @@ class Provider(AbstractProvider):
         contexts: List = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult = None,
+        audio_urls: List[str] = None,
+        video_urls: List[str] = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。

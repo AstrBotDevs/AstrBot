@@ -96,6 +96,8 @@ class ProviderRequest:
     """会话 ID"""
     image_urls: List[str] = None
     """图片 URL 列表"""
+    audio_urls: List[str] = None
+    """音频 URL 列表"""
     func_tool: FuncCall = None
     """可用的函数工具"""
     contexts: List = None

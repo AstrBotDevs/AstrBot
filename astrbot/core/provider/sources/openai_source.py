@@ -226,6 +226,8 @@ class ProviderOpenAIOfficial(Provider):
         contexts=[],
         system_prompt=None,
         tool_calls_result=None,
+        audio_urls: List[str] = None,
+        video_urls: List[str] = None,
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
@@ -344,6 +346,8 @@ class ProviderOpenAIOfficial(Provider):
         contexts=[],
         system_prompt=None,
         tool_calls_result=None,
+        audio_urls: List[str] = None,
+        video_urls: List[str] = None,
         **kwargs,
     ) -> LLMResponse:
         payloads, context_query, func_tool = await self._prepare_chat_payload(
@@ -354,6 +358,8 @@ class ProviderOpenAIOfficial(Provider):
             contexts,
             system_prompt,
             tool_calls_result,
+            audio_urls,
+            video_urls,
             **kwargs,
         )
 
@@ -413,6 +419,8 @@ class ProviderOpenAIOfficial(Provider):
         contexts=[],
         system_prompt=None,
         tool_calls_result=None,
+        audio_urls: List[str] = None,
+        video_urls: List[str] = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""

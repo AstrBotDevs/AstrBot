@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import random
+import os
 from typing import Dict, List, Optional
 from collections.abc import AsyncGenerator
 
@@ -162,13 +163,17 @@ class ProviderGoogleGenAI(Provider):
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=temperature,
-            max_output_tokens=payloads.get("max_tokens") or payloads.get("maxOutputTokens"),
+            max_output_tokens=payloads.get("max_tokens")
+            or payloads.get("maxOutputTokens"),
             top_p=payloads.get("top_p") or payloads.get("topP"),
             top_k=payloads.get("top_k") or payloads.get("topK"),
-            frequency_penalty=payloads.get("frequency_penalty") or payloads.get("frequencyPenalty"),
-            presence_penalty=payloads.get("presence_penalty") or payloads.get("presencePenalty"),
+            frequency_penalty=payloads.get("frequency_penalty")
+            or payloads.get("frequencyPenalty"),
+            presence_penalty=payloads.get("presence_penalty")
+            or payloads.get("presencePenalty"),
             stop_sequences=payloads.get("stop") or payloads.get("stopSequences"),
-            response_logprobs=payloads.get("response_logprobs") or payloads.get("responseLogprobs"),
+            response_logprobs=payloads.get("response_logprobs")
+            or payloads.get("responseLogprobs"),
             logprobs=payloads.get("logprobs"),
             seed=payloads.get("seed"),
             response_modalities=modalities,
@@ -194,7 +199,35 @@ class ProviderGoogleGenAI(Provider):
             image_bytes = base64.b64decode(url.split(",", 1)[1])
             return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
-        def append_or_extend(contents: list[types.Content], part: list[types.Part], content_cls: type[types.Content]) -> None:
+        def process_input_audio(input_audio_dict: dict) -> types.Part:
+            """处理音频数据"""
+            audio_base64 = input_audio_dict.get("data", "")
+            audio_format = input_audio_dict.get("format", "")
+
+            # 将 base64 字符串解码为二进制数据
+            audio_bytes = base64.b64decode(audio_base64)
+
+            # 根据音频格式确定 MIME 类型
+            mime_type_map = {
+                "wav": "audio/wav",
+                "mp3": "audio/mp3",
+                "aiff": "audio/aiff",
+                "aac": "audio/aac",
+                "ogg": "audio/ogg",
+                "flac": "audio/flac",
+            }
+            mime_type = mime_type_map.get(audio_format, "audio/wav")
+
+            logger.debug(
+                f"处理 OpenAI 格式音频数据，格式: {audio_format}, MIME类型: {mime_type}"
+            )
+            return types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+
+        def append_or_extend(
+            contents: list[types.Content],
+            part: list[types.Part],
+            content_cls: type[types.Content],
+        ) -> None:
             if contents and isinstance(contents[-1], content_cls):
                 contents[-1].parts.extend(part)
             else:
@@ -212,12 +245,14 @@ class ProviderGoogleGenAI(Provider):
 
             if role == "user":
                 if isinstance(content, list):
-                    parts = [
-                        types.Part.from_text(text=item["text"] or " ")
-                        if item["type"] == "text"
-                        else process_image_url(item["image_url"])
-                        for item in content
-                    ]
+                    parts = []
+                    for item in content:
+                        if item["type"] == "text":
+                            parts.append(types.Part.from_text(text=item["text"] or " "))
+                        elif item["type"] == "image_url":
+                            parts.append(process_image_url(item["image_url"]))
+                        elif item["type"] == "input_audio":
+                            parts.append(process_input_audio(item["input_audio"]))
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -226,7 +261,7 @@ class ProviderGoogleGenAI(Provider):
                 if content:
                     parts = [types.Part.from_text(text=content)]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
-                elif not native_tool_enabled and "tool_calls" in message :
+                elif not native_tool_enabled and "tool_calls" in message:
                     parts = [
                         types.Part.from_function_call(
                             name=tool["function"]["name"],
@@ -312,9 +347,7 @@ class ProviderGoogleGenAI(Provider):
                 chain.append(Comp.Image.fromBytes(part.inline_data.data))
         return MessageChain(chain=chain)
 
-    async def _query(
-        self, payloads: dict, tools: FuncCall
-    ) -> LLMResponse:
+    async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
         """非流式请求 Gemini API"""
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
@@ -326,7 +359,7 @@ class ProviderGoogleGenAI(Provider):
             modalities.append("Image")
 
         conversation = self._prepare_conversation(payloads)
-        temperature=payloads.get("temperature", 0.7)
+        temperature = payloads.get("temperature", 0.7)
 
         result: Optional[types.GenerateContentResponse] = None
         while True:
@@ -451,9 +484,11 @@ class ProviderGoogleGenAI(Provider):
         contexts=[],
         system_prompt=None,
         tool_calls_result=None,
+        audio_urls: List[str] = None,
+        video_urls: List[str] = None,
         **kwargs,
     ) -> LLMResponse:
-        new_record = await self.assemble_context(prompt, image_urls)
+        new_record = await self.assemble_context(prompt, image_urls, audio_urls)
         context_query = [*contexts, new_record]
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
@@ -486,14 +521,16 @@ class ProviderGoogleGenAI(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = [],
+        image_urls: List[str] = None,
         func_tool: FuncCall = None,
         contexts=[],
         system_prompt=None,
         tool_calls_result=None,
+        audio_urls: List[str] = None,
+        video_urls: List[str] = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
-        new_record = await self.assemble_context(prompt, image_urls)
+        new_record = await self.assemble_context(prompt, image_urls, audio_urls)
         context_query = [*contexts, new_record]
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
@@ -545,30 +582,59 @@ class ProviderGoogleGenAI(Provider):
         self.chosen_api_key = key
         self._init_client()
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None):
+    async def assemble_context(
+        self, text: str, image_urls: List[str] = None, audio_urls: List[str] = None
+    ):
         """
-        组装上下文。
+        组装上下文。将用户输入（文本、图片和音频）组装成 OpenAI 格式的上下文数据。
         """
-        if image_urls:
+        has_media = (image_urls and len(image_urls) > 0) or (
+            audio_urls and len(audio_urls) > 0
+        )
+
+        if has_media:
             user_content = {
                 "role": "user",
-                "content": [{"type": "text", "text": text if text else "[图片]"}],
+                "content": [{"type": "text", "text": text if text else "[媒体内容]"}],
             }
-            for image_url in image_urls:
-                if image_url.startswith("http"):
-                    image_path = await download_image_by_url(image_url)
-                    image_data = await self.encode_image_bs64(image_path)
-                elif image_url.startswith("file:///"):
-                    image_path = image_url.replace("file:///", "")
-                    image_data = await self.encode_image_bs64(image_path)
-                else:
-                    image_data = await self.encode_image_bs64(image_url)
-                if not image_data:
-                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                    continue
-                user_content["content"].append(
-                    {"type": "image_url", "image_url": {"url": image_data}}
-                )
+
+            # 处理图片
+            if image_urls:
+                for image_url in image_urls:
+                    if image_url.startswith("http"):
+                        image_path = await download_image_by_url(image_url)
+                        image_data = await self.encode_image_bs64(image_path)
+                    elif image_url.startswith("file:///"):
+                        image_path = image_url.replace("file:///", "")
+                        image_data = await self.encode_image_bs64(image_path)
+                    else:
+                        image_data = await self.encode_image_bs64(image_url)
+                    if not image_data:
+                        logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                        continue
+                    user_content["content"].append(
+                        {"type": "image_url", "image_url": {"url": image_data}}
+                    )
+            # 处理音频
+            if audio_urls:
+                for audio_url in audio_urls:
+                    try:
+                        audio_base64, audio_format = await self.encode_audio_bs64(
+                            audio_url
+                        )
+                        if audio_base64 and audio_format:
+                            user_content["content"].append(
+                                {
+                                    "type": "input_audio",
+                                    "input_audio": {
+                                        "data": audio_base64,
+                                        "format": audio_format,
+                                    },
+                                }
+                            )
+                    except Exception as e:
+                        logger.error(f"音频文件处理失败: {audio_url}, 错误: {e}")
+
             return user_content
         else:
             return {"role": "user", "content": text}
@@ -583,6 +649,29 @@ class ProviderGoogleGenAI(Provider):
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
         return ""
+
+    async def encode_audio_bs64(self, audio_url: str) -> tuple:
+        """
+        将音频文件转换为 base64 编码
+        """
+        try:
+            # 读取音频文件并编码为 base64
+            with open(audio_url, "rb") as f:
+                audio_bytes = f.read()
+                audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+
+            # 确定音频格式
+            extension = os.path.splitext(audio_url)[1].lower()
+            # 移除扩展名前面的点号
+            audio_format = extension[1:] if extension.startswith(".") else extension
+
+            logger.info(
+                f"音频文件转换成功: {audio_url}，格式: {audio_format}，大小: {len(audio_bytes)} 字节"
+            )
+            return audio_base64, audio_format
+        except Exception as e:
+            logger.error(f"音频文件转换失败: {audio_url}, 错误: {e}")
+            return None, None
 
     async def terminate(self):
         logger.info("Google GenAI 适配器已终止。")
