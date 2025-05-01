@@ -57,7 +57,7 @@ def _check_astrbot_root(astrbot_root: Path) -> None:
         click.echo(f"AstrBot root directory exists: {astrbot_root}")
         if not dot_astrbot.exists():
             click.echo(
-                "如果你确认这是astrbot_root,你需要在当前目录下创建一个 .astrbot 文件标记该目录为 AstrBot 的数据目录。"
+                "如果你确认这是 Astrbot root directory, 你需要在当前目录下创建一个 .astrbot 文件标记该目录为 AstrBot 的数据目录。"
             )
             if click.confirm(
                 f"请检查当前目录是否正确，确认正确请回车: {astrbot_root}",
@@ -132,7 +132,7 @@ def cli() -> None:
 
 # region init
 @cli.command()
-@click.option("--path", "-p", help="astrbot 数据目录")
+@click.option("--path", "-p", help="AstrBot 数据目录")
 @click.option("--force", "-f", is_flag=True, help="强制初始化")
 def init(path: str | None, force: bool) -> None:
     """Initialize AstrBot"""
@@ -173,7 +173,7 @@ def init(path: str | None, force: bool) -> None:
 
 # region run
 @cli.command()
-@click.option("--path", "-p", help="astrbot 数据目录")
+@click.option("--path", "-p", help="AstrBot 数据目录")
 def run(path: str | None = None) -> None:
     """Run AstrBot"""
     # 解析为绝对路径
@@ -199,7 +199,7 @@ def run(path: str | None = None) -> None:
     try:
         asyncio.run(core_lifecycle.start())
     except KeyboardInterrupt:
-        click.echo("接收到退出信号，正在关闭AstrBot...")
+        click.echo("接收到退出信号，正在关闭 AstrBot...")
     except Exception as e:
         click.echo(f"运行时出现错误: {e}")
 
