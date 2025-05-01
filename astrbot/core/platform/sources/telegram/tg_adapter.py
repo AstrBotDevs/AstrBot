@@ -58,8 +58,12 @@ class TelegramPlatformAdapter(Platform):
 
         self.base_url = base_url
 
-        self.enable_command_register = self.config.get("telegram_command_register", True)
-        self.enable_command_refresh = self.config.get("telegram_command_auto_refresh", True)
+        self.enable_command_register = self.config.get(
+            "telegram_command_register", True
+        )
+        self.enable_command_refresh = self.config.get(
+            "telegram_command_auto_refresh", True
+        )
         self.last_command_hash = None
 
         self.application = (
@@ -123,7 +127,9 @@ class TelegramPlatformAdapter(Platform):
             commands = self.collect_commands()
 
             if commands:
-                current_hash = hash(tuple((cmd.command, cmd.description) for cmd in commands))
+                current_hash = hash(
+                    tuple((cmd.command, cmd.description) for cmd in commands)
+                )
                 if current_hash == self.last_command_hash:
                     return
                 self.last_command_hash = current_hash
