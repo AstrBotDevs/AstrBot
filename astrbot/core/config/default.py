@@ -569,7 +569,6 @@ CONFIG_METADATA_2 = {
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
                         "gm_thinking_config": {
-                            "enable": False,
                             "budget": 0,
                         },
                     },
@@ -809,15 +808,10 @@ CONFIG_METADATA_2 = {
                         "description": "Gemini思考设置",
                         "type": "object",
                         "items": {
-                            "enable": {
-                                "description": "启用思考",
-                                "type": "bool",
-                                "hint": "启用后，模型将在可用时输出思考过程",
-                            },
                             "budget": {
                                 "description": "思考预算",
                                 "type": "int",
-                                "hint": "模型应该生成的思考Token的数量",
+                                "hint": "模型应该生成的思考Token的数量，设为0关闭思考。除gemini-2.5-flash外的模型会静默忽略此参数。",
                             },
                         },
                     },

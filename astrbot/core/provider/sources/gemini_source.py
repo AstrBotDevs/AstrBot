@@ -179,13 +179,17 @@ class ProviderGoogleGenAI(Provider):
             tools=tool_list,
             safety_settings=self.safety_settings if self.safety_settings else None,
             thinking_config=types.ThinkingConfig(
-                include_thoughts=self.provider_config.get("gm_thinking_config", {}).get(
-                    "enable", False
+                thinking_budget=min(
+                    int(
+                        self.provider_config.get("gm_thinking_config", {}).get(
+                            "budget", 0
+                        )
+                    ),
+                    24576,
                 ),
-                thinking_budget=self.provider_config.get("gm_thinking_config", {}).get(
-                    "budget", 0
-                ),
-            ),
+            )
+            if "gemini-2.5-flash" in self.get_model()
+            else None,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True
             ),
