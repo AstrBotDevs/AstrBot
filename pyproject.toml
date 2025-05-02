@@ -40,6 +40,13 @@ dependencies = [
     "wechatpy>=1.8.18",
 ]
 
+[project.scripts]
+astrbot = "astrbot.cli.__main__:cli"
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+
 [tool.ruff]
 exclude = [
   "astrbot/core/utils/t2i/local_strategy.py",

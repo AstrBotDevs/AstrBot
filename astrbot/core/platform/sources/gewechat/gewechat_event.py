@@ -83,15 +83,9 @@ class GewechatPlatformEvent(AstrMessageEvent):
 
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
-
-                # 检查 record_path 是否在 data/temp 目录中
-                temp_directory = os.path.abspath("data/temp")
-                if os.path.commonpath([temp_directory, img_path]) != temp_directory:
-                    with open(img_path, "rb") as f:
-                        img_path = save_temp_img(f.read())
-
-                file_id = os.path.basename(img_path)
-                img_url = f"{client.file_server_url}/{file_id}"
+                # 为了安全，向 AstrBot 回调服务注册可被 gewechat 访问的文件，并获得文件 token
+                token = await client._register_file(img_path)
+                img_url = f"{client.file_server_url}/{token}"
                 logger.debug(f"gewe callback img url: {img_url}")
                 await client.post_image(to_wxid, img_url)
             elif isinstance(comp, Video):
@@ -110,20 +104,29 @@ class GewechatPlatformEvent(AstrMessageEvent):
 
                     video_url = comp.file
                     # 根据 url 下载视频
-                    video_filename = f"{uuid.uuid4()}.mp4"
-                    video_path = f"data/temp/{video_filename}"
-                    await download_file(video_url, video_path)
+                    if video_url.startswith("http"):
+                        video_filename = f"{uuid.uuid4()}.mp4"
+                        video_path = f"data/temp/{video_filename}"
+                        await download_file(video_url, video_path)
+                    else:
+                        video_path = video_url
+
+                    video_token = await client._register_file(video_path)
+                    video_callback_url = f"{client.file_server_url}/{video_token}"
 
                     # 获取视频第一帧
-                    thumb_path = f"data/temp/{uuid.uuid4()}.jpg"
+                    thumb_path = f"data/temp/gewechat_video_thumb_{uuid.uuid4()}.jpg"
+
+                    video_path = video_path.replace(" ", "\\ ")
                     try:
                         ff = FFmpeg()
-                        command = f'-i "{video_path}" -ss 0 -vframes 1 "{thumb_path}"'
+                        command = f"-i {video_path} -ss 0 -vframes 1 {thumb_path}"
                         ff.options(command)
-                        thumb_file_id = os.path.basename(thumb_path)
-                        thumb_url = f"{client.file_server_url}/{thumb_file_id}"
+                        thumb_token = await client._register_file(thumb_path)
+                        thumb_url = f"{client.file_server_url}/{thumb_token}"
                     except Exception as e:
                         logger.error(f"获取视频第一帧失败: {e}")
+
                     # 获取视频时长
                     try:
                         from pyffmpeg import FFprobe
@@ -138,15 +141,12 @@ class GewechatPlatformEvent(AstrMessageEvent):
                         logger.error(f"获取时长失败: {e}")
                         video_duration = 10
 
-                    file_id = os.path.basename(video_path)
-                    video_url = f"{client.file_server_url}/{file_id}"
+                    # 发送视频
                     await client.post_video(
-                        to_wxid, video_url, thumb_url, video_duration
+                        to_wxid, video_callback_url, thumb_url, video_duration
                     )
 
-                    # 删除临时视频和缩略图文件
-                    if os.path.exists(video_path):
-                        os.remove(video_path)
+                    # 删除临时缩略图文件
                     if os.path.exists(thumb_path):
                         os.remove(thumb_path)
             elif isinstance(comp, Record):
@@ -163,8 +163,8 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 logger.info("Silk 语音文件格式转换至: " + record_path)
                 if duration == 0:
                     duration = get_wav_duration(record_path)
-                file_id = os.path.basename(silk_path)
-                record_url = f"{client.file_server_url}/{file_id}"
+                token = await client._register_file(silk_path)
+                record_url = f"{client.file_server_url}/{token}"
                 logger.debug(f"gewe callback record url: {record_url}")
                 await client.post_voice(to_wxid, record_url, duration * 1000)
             elif isinstance(comp, File):
@@ -177,10 +177,10 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 else:
                     file_path = file_path
 
-                file_id = os.path.basename(file_path)
-                file_url = f"{client.file_server_url}/{file_id}"
+                token = await client._register_file(file_path)
+                file_url = f"{client.file_server_url}/{token}"
                 logger.debug(f"gewe callback file url: {file_url}")
-                await client.post_file(to_wxid, file_url, file_id)
+                await client.post_file(to_wxid, file_url, file_name)
             elif isinstance(comp, Emoji):
                 await client.post_emoji(to_wxid, comp.md5, comp.md5_len, comp.cdnurl)
             elif isinstance(comp, At):

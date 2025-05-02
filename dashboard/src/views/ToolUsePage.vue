@@ -560,7 +560,16 @@ export default {
 
     // 过滤后的市场服务器
     filteredMarketplaceServers() {
-      return this.marketplaceServers;
+      if (!this.marketplaceSearch.trim()) {
+        return this.marketplaceServers;
+      }
+      
+      const searchTerm = this.marketplaceSearch.toLowerCase();
+      return this.marketplaceServers.filter(server => 
+        server.name.toLowerCase().includes(searchTerm) || 
+        (server.name_h && server.name_h.toLowerCase().includes(searchTerm)) ||
+        (server.description && server.description.toLowerCase().includes(searchTerm))
+      );
     },
   },
 
