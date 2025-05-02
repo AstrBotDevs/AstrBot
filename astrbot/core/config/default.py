@@ -568,6 +568,10 @@ CONFIG_METADATA_2 = {
                             "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
+                        "gm_thinking_config": {
+                            "enable": False,
+                            "budget": 0,
+                        },
                     },
                     "DeepSeek": {
                         "id": "deepseek_default",
@@ -798,6 +802,22 @@ CONFIG_METADATA_2 = {
                                     "BLOCK_MEDIUM_AND_ABOVE",
                                     "BLOCK_LOW_AND_ABOVE",
                                 ],
+                            },
+                        },
+                    },
+                    "gm_thinking_config": {
+                        "description": "Gemini思考设置",
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "description": "启用思考",
+                                "type": "bool",
+                                "hint": "启用后，模型将在可用时输出思考过程",
+                            },
+                            "budget": {
+                                "description": "思考预算",
+                                "type": "int",
+                                "hint": "模型应该生成的思考Token的数量",
                             },
                         },
                     },
