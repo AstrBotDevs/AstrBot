@@ -10,6 +10,7 @@ from astrbot.core.utils.dify_api_client import DifyAPIClient
 from astrbot.core.utils.io import download_image_by_url, download_file
 from astrbot.core import logger, sp
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 @register_provider_adapter("dify", "Dify APP 适配器。")
@@ -227,7 +228,7 @@ class ProviderDify(Provider):
                     return Comp.Image(file=item["url"], url=item["url"])
                 case "audio":
                     # 仅支持 wav
-                    path = f"data/temp/{item['filename']}.wav"
+                    path = str(get_astrbot_root() / f"temp/{item['filename']}.wav")
                     await download_file(item["url"], path)
                     return Comp.Image(file=item["url"], url=item["url"])
                 case "video":

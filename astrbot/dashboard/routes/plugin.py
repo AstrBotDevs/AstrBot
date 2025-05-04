@@ -17,6 +17,7 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star_handler import EventType
 from astrbot.core import DEMO_MODE
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 class PluginRoute(Route):
@@ -237,7 +238,7 @@ class PluginRoute(Route):
             file = await request.files
             file = file["file"]
             logger.info(f"正在安装用户上传的插件 {file.filename}")
-            file_path = f"data/temp/{file.filename}"
+            file_path = str(get_astrbot_root() / f"temp/{file.filename}")
             await file.save(file_path)
             plugin_info = await self.plugin_manager.install_plugin_from_file(file_path)
             # self.core_lifecycle.restart()

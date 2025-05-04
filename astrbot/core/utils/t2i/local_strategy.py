@@ -10,6 +10,7 @@ from astrbot.core.config import VERSION
 from . import RenderStrategy
 from PIL import ImageFont, Image, ImageDraw
 from astrbot.core.utils.io import save_temp_img
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 class FontManager:
@@ -25,7 +26,7 @@ class FontManager:
         
         # 首先尝试加载自定义字体
         try:
-            font = ImageFont.truetype("data/font.ttf", size)
+            font = ImageFont.truetype(str(get_astrbot_root() / "font.ttf"), size)
             cls._font_cache[size] = font
             return font
         except Exception:

@@ -25,6 +25,7 @@ from astrbot.core import logger
 from astrbot.api.message_components import Plain, Image, Reply
 from typing import Union
 from enum import Enum
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 class RstScene(Enum):
@@ -1159,7 +1160,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("gewe_code")
     async def gewe_code(self, event: AstrMessageEvent, code: str):
         """保存 gewechat 验证码"""
-        with open("data/temp/gewe_code", "w", encoding="utf-8") as f:
+        with open(str(get_astrbot_root() / "temp/gewe_code"), "w", encoding="utf-8") as f:
             f.write(code)
         yield event.plain_result("验证码已保存。")
 

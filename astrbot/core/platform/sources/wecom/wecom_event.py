@@ -6,6 +6,7 @@ from astrbot.api.message_components import Plain, Image, Record
 from wechatpy.enterprise import WeChatClient
 
 from astrbot.api import logger
+from astrbot.core.utils.path_util import get_astrbot_root
 
 try:
     import pydub
@@ -103,7 +104,7 @@ class WecomPlatformEvent(AstrMessageEvent):
             elif isinstance(comp, Record):
                 record_path = await comp.convert_to_file_path()
                 # 转成amr
-                record_path_amr = f"data/temp/{uuid.uuid4()}.amr"
+                record_path_amr = str(get_astrbot_root() / f"temp/{uuid.uuid4()}.amr")
                 pydub.AudioSegment.from_wav(record_path).export(
                     record_path_amr, format="amr"
                 )

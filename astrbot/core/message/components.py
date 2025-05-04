@@ -32,6 +32,7 @@ from enum import Enum
 from pydantic.v1 import BaseModel
 from astrbot.core import logger
 from astrbot.core.utils.io import download_image_by_url, file_to_base64, download_file
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 class ComponentType(Enum):
@@ -167,7 +168,7 @@ class Record(BaseMessageComponent):
         elif self.file and self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            file_path = f"data/temp/{uuid.uuid4()}.jpg"
+            file_path = str(get_astrbot_root() / "temp" / f"{uuid.uuid4()}.jpg")
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(file_path)
@@ -371,7 +372,7 @@ class Image(BaseMessageComponent):
         elif url and url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            image_file_path = f"data/temp/{uuid.uuid4()}.jpg"
+            image_file_path = str(get_astrbot_root() / "temp" / f"{uuid.uuid4()}.jpg")
             with open(image_file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(image_file_path)
@@ -631,9 +632,9 @@ class File(BaseMessageComponent):
         if self._downloaded:
             return
 
-        os.makedirs("data/download", exist_ok=True)
         filename = self.name or f"{uuid.uuid4().hex}"
-        file_path = f"data/download/{filename}"
+        file_path = str(get_astrbot_root() / "download" / filename)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
         await download_file(self.url, file_path)
 

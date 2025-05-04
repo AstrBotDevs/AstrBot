@@ -4,6 +4,7 @@ import urllib.parse
 from ..provider import TTSProvider
 from ..entities import ProviderType
 from ..register import register_provider_adapter
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 @register_provider_adapter(
@@ -23,7 +24,7 @@ class ProviderGSVITTS(TTSProvider):
         self.emotion = provider_config.get("emotion")
 
     async def get_audio(self, text: str) -> str:
-        path = f"data/temp/gsvi_tts_{uuid.uuid4()}.wav"
+        path = str(get_astrbot_root() / f"temp/gsvi_tts_{uuid.uuid4()}.wav")
         params = {"text": text}
 
         if self.character:

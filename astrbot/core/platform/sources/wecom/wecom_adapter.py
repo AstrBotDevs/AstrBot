@@ -16,6 +16,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.api.platform import register_platform_adapter
 from astrbot.core import logger
 from requests import Response
+from astrbot.core.utils.path_util import get_astrbot_root
 
 from wechatpy.enterprise.crypto import WeChatCrypto
 from wechatpy.enterprise import WeChatClient
@@ -191,14 +192,14 @@ class WecomPlatformAdapter(Platform):
             resp: Response = await asyncio.get_event_loop().run_in_executor(
                 None, self.client.media.download, msg.media_id
             )
-            path = f"data/temp/wecom_{msg.media_id}.amr"
+            path = str(get_astrbot_root() / f"temp/wecom_{msg.media_id}.amr")
             with open(path, "wb") as f:
                 f.write(resp.content)
 
             try:
                 from pydub import AudioSegment
 
-                path_wav = f"data/temp/wecom_{msg.media_id}.wav"
+                path_wav = str(get_astrbot_root() / f"temp/wecom_{msg.media_id}.wav")
                 audio = AudioSegment.from_file(path)
                 audio.export(path_wav, format="wav")
             except Exception as e:

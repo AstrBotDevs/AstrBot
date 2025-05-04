@@ -12,6 +12,7 @@ from astrbot.api.message_components import (
 )
 from telegram.ext import ExtBot
 from astrbot.core.utils.io import download_file
+from astrbot.core.utils.path_util import get_astrbot_root
 from astrbot import logger
 
 
@@ -75,7 +76,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_photo(photo=image_path, **payload)
             elif isinstance(i, File):
                 if i.file.startswith("https://"):
-                    path = "data/temp/" + i.name
+                    path = str(get_astrbot_root() / "temp" / i.name)
                     await download_file(i.file, path)
                     i.file = path
 
@@ -126,7 +127,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         continue
                     elif isinstance(i, File):
                         if i.file.startswith("https://"):
-                            path = "data/temp/" + i.name
+                            path = str(get_astrbot_root() / "temp" / i.name)
                             await download_file(i.file, path)
                             i.file = path
 

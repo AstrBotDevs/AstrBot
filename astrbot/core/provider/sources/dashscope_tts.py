@@ -5,6 +5,7 @@ from dashscope.audio.tts_v2 import *
 from ..provider import TTSProvider
 from ..entities import ProviderType
 from ..register import register_provider_adapter
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 @register_provider_adapter(
@@ -24,7 +25,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         dashscope.api_key = self.chosen_api_key
 
     async def get_audio(self, text: str) -> str:
-        path = f"data/temp/dashscope_tts_{uuid.uuid4()}.wav"
+        path = str(get_astrbot_root() / f"temp/dashscope_tts_{uuid.uuid4()}.wav")
         self.synthesizer = SpeechSynthesizer(
             model=self.get_model(),
             voice=self.voice,

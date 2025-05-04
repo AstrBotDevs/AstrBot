@@ -19,6 +19,7 @@ from ...register import register_platform_adapter
 from astrbot import logger
 from dingtalk_stream import AckMessage
 from astrbot.core.utils.io import download_file
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 class MyEventHandler(dingtalk_stream.EventHandler):
@@ -152,7 +153,7 @@ class DingtalkPlatformAdapter(Platform):
             "downloadCode": download_code,
             "robotCode": robot_code,
         }
-        f_path = f"data/dingtalk_file_{uuid.uuid4()}.{ext}"
+        f_path = str(get_astrbot_root() / f"dingtalk_file_{uuid.uuid4()}.{ext}")
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 "https://api.dingtalk.com/v1.0/robot/messageFiles/download",

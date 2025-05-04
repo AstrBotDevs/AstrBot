@@ -17,6 +17,7 @@ from astrbot.core import web_chat_queue
 from .webchat_event import WebChatMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 class QueueListener:
@@ -40,7 +41,7 @@ class WebChatAdapter(Platform):
         self.config = platform_config
         self.settings = platform_settings
         self.unique_session = platform_settings["unique_session"]
-        self.imgs_dir = "data/webchat/imgs"
+        self.imgs_dir = str(get_astrbot_root() / "webchat/imgs")
 
         self.metadata = PlatformMetadata(
             name="webchat", description="webchat", id=self.config.get("id")

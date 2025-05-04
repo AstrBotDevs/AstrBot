@@ -14,6 +14,7 @@ import certifi
 from typing import Union
 
 from PIL import Image
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 def on_error(func, path, exc_info):
@@ -49,11 +50,11 @@ def port_checker(port: int, host: str = "localhost"):
 
 
 def save_temp_img(img: Union[Image.Image, str]) -> str:
-    os.makedirs("data/temp", exist_ok=True)
+    os.makedirs(str(get_astrbot_root() / "temp"), exist_ok=True)
     # 获得文件创建时间，清除超过 12 小时的
     try:
-        for f in os.listdir("data/temp"):
-            path = os.path.join("data/temp", f)
+        for f in os.listdir(str(get_astrbot_root() / "temp")):
+            path = os.path.join(str(get_astrbot_root() / "temp"), f)
             if os.path.isfile(path):
                 ctime = os.path.getctime(path)
                 if time.time() - ctime > 3600 * 12:
@@ -63,7 +64,7 @@ def save_temp_img(img: Union[Image.Image, str]) -> str:
 
     # 获得时间戳
     timestamp = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
-    p = f"data/temp/{timestamp}.jpg"
+    p = str(get_astrbot_root() / f"temp/{timestamp}.jpg")
 
     if isinstance(img, Image.Image):
         img.save(p)
@@ -201,9 +202,9 @@ def get_local_ip_addresses():
 
 
 async def get_dashboard_version():
-    if os.path.exists("data/dist"):
-        if os.path.exists("data/dist/assets/version"):
-            with open("data/dist/assets/version", "r") as f:
+    if os.path.exists(str(get_astrbot_root() / "dist")):
+        if os.path.exists(str(get_astrbot_root() / "dist/assets/version")):
+            with open(str(get_astrbot_root() / "dist/assets/version"), "r") as f:
                 v = f.read().strip()
                 return v
     return None

@@ -8,6 +8,7 @@ import os
 from typing import AsyncGenerator
 from astrbot.core.utils.io import save_temp_img, download_file
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
+from astrbot.core.utils.path_util import get_astrbot_root
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata, Group, MessageMember
@@ -106,7 +107,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     # 根据 url 下载视频
                     if video_url.startswith("http"):
                         video_filename = f"{uuid.uuid4()}.mp4"
-                        video_path = f"data/temp/{video_filename}"
+                        video_path = str(get_astrbot_root() / "temp" / video_filename)
                         await download_file(video_url, video_path)
                     else:
                         video_path = video_url
@@ -115,7 +116,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     video_callback_url = f"{client.file_server_url}/{video_token}"
 
                     # 获取视频第一帧
-                    thumb_path = f"data/temp/gewechat_video_thumb_{uuid.uuid4()}.jpg"
+                    thumb_path = str(get_astrbot_root() / "temp" / f"gewechat_video_thumb_{uuid.uuid4()}.jpg")
 
                     video_path = video_path.replace(" ", "\\ ")
                     try:
@@ -154,7 +155,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 record_url = comp.file
                 record_path = await comp.convert_to_file_path()
 
-                silk_path = f"data/temp/{uuid.uuid4()}.silk"
+                silk_path = str(get_astrbot_root() / "temp" / f"{uuid.uuid4()}.silk")
                 try:
                     duration = await wav_to_tencent_silk(record_path, silk_path)
                 except Exception as e:
@@ -173,7 +174,7 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 if file_path.startswith("file:///"):
                     file_path = file_path[8:]
                 elif file_path.startswith("http"):
-                    await download_file(file_path, f"data/temp/{file_name}")
+                    await download_file(file_path, str(get_astrbot_root() / "temp" / file_name))
                 else:
                     file_path = file_path
 

@@ -14,6 +14,7 @@ from astrbot.api import logger, sp
 from astrbot.api.message_components import Plain, Image, At, Record, Video
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.path_util import get_astrbot_root
 from .downloader import GeweDownloader
 
 try:
@@ -250,7 +251,7 @@ class SimpleGewechatClient:
                 # 语音消息
                 if "ImgBuf" in d and "buffer" in d["ImgBuf"]:
                     voice_data = base64.b64decode(d["ImgBuf"]["buffer"])
-                    file_path = f"data/temp/gewe_voice_{abm.message_id}.silk"
+                    file_path = str(get_astrbot_root() / "temp" / f"gewe_voice_{abm.message_id}.silk")
 
                     async with await anyio.open_file(file_path, "wb") as f:
                         await f.write(voice_data)
@@ -458,8 +459,8 @@ class SimpleGewechatClient:
             retry_cnt -= 1
 
             # 需要验证码
-            if os.path.exists("data/temp/gewe_code"):
-                with open("data/temp/gewe_code", "r") as f:
+            if os.path.exists(get_astrbot_root() / "temp" / "gewe_code"):
+                with open(get_astrbot_root() / "temp" / "gewe_code", "r") as f:
                     code = f.read().strip()
                     if not code:
                         logger.warning(
@@ -470,7 +471,7 @@ class SimpleGewechatClient:
                     payload["captchCode"] = code
                     logger.info(f"使用验证码: {code}")
                     try:
-                        os.remove("data/temp/gewe_code")
+                        os.remove(get_astrbot_root() / "temp" / "gewe_code")
                     except Exception:
                         logger.warning("删除验证码文件 data/temp/gewe_code 失败。")
 

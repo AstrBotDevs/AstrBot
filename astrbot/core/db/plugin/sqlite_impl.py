@@ -4,7 +4,9 @@ import os
 from typing import Any
 from .plugin_storage import PluginStorage
 
-DBPATH = "data/plugin_data/sqlite/plugin_data.db"
+from astrbot.core.utils.path_util import get_astrbot_root
+
+DBPATH = str(get_astrbot_root() / "plugin_data/sqlite/plugin_data.db")
 
 
 class SQLitePluginStorage(PluginStorage):

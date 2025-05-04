@@ -7,6 +7,7 @@ from astrbot.core.utils.io import download_file
 from ..register import register_provider_adapter
 from astrbot.core import logger
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+from astrbot.core.utils.path_util import get_astrbot_root
 
 
 @register_provider_adapter(
@@ -50,7 +51,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
                 is_tencent = True
 
             name = str(uuid.uuid4())
-            path = os.path.join("data/temp", name)
+            path = str(get_astrbot_root() / "temp" / name)
             await download_file(audio_url, path)
             audio_url = path
 
@@ -61,7 +62,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             is_silk = await self._is_silk_file(audio_url)
             if is_silk:
                 logger.info("Converting silk file to wav ...")
-                output_path = os.path.join("data/temp", str(uuid.uuid4()) + ".wav")
+                output_path = str(get_astrbot_root() / "temp" / f"{uuid.uuid4()}.wav")
                 await tencent_silk_to_wav(audio_url, output_path)
                 audio_url = output_path
 

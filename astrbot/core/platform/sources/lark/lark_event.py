@@ -7,6 +7,7 @@ from typing import List
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image as AstrBotImage, At
 from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.path_util import get_astrbot_root
 from lark_oapi.api.im.v1 import *
 from astrbot import logger
 
@@ -40,7 +41,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     base64_str = comp.file.removeprefix("base64://")
                     image_data = base64.b64decode(base64_str)
                     # save as temp file
-                    file_path = f"data/temp/{uuid.uuid4()}_test.jpg"
+                    file_path = str(get_astrbot_root() / "temp" / f"{uuid.uuid4()}_test.jpg")
                     with open(file_path, "wb") as f:
                         f.write(BytesIO(image_data).getvalue())
                 else:
