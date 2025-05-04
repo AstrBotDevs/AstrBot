@@ -83,7 +83,7 @@ class Main(star.Star):
 
     async def _save_data(self):
         """Save the reminder data."""
-        with open("data/astrbot-reminder.json", "w", encoding="utf-8") as f:
+        with open(str(get_astrbot_root() / "astrbot-reminder.json"), "w", encoding="utf-8") as f:
             json.dump(self.reminder_data, f, ensure_ascii=False)
 
     def _parse_cron_expr(self, cron_expr: str):

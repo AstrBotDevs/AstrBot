@@ -29,6 +29,7 @@ import sys
 from collections import deque
 from asyncio import Queue
 from typing import List
+from astrbot.core.utils.path_util import get_astrbot_root
 
 # 日志缓存大小
 CACHED_SIZE = 200
@@ -57,7 +58,9 @@ def is_plugin_path(pathname):
         return False
 
     norm_path = os.path.normpath(pathname)
-    return ("data/plugins" in norm_path) or ("packages/" in norm_path)
+    return ("data/plugins" in norm_path) or ("packages/" in norm_path) or (
+        str(get_astrbot_root() / "plugins") in norm_path
+    )
 
 
 def get_short_level_name(level_name):
