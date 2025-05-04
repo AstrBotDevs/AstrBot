@@ -8,7 +8,7 @@ import asyncio
 from ..utils import _check_dashboard, _init_astrbot_root
 
 
-async def run_astrbot(path: str | None = None):
+async def run_astrbot(path: str, reload: bool):
     """异步运行 AstrBot 的主函数"""
     from astrbot.core import logger, LogManager, LogBroker, db_helper
     from astrbot.core.initial_loader import InitialLoader
@@ -24,15 +24,20 @@ async def run_astrbot(path: str | None = None):
 
     core_lifecycle = InitialLoader(db, log_broker)
 
+    if reload:
+        click.echo("启用插件自动重载")
+        os.environ["ASTROBOT_RELOAD"] = "1"
+
     await core_lifecycle.start()
 
 
 @click.option("--path", "-p", help="AstrBot 数据目录")
+@click.option("--reload", "-r", is_flag=True, help="插件自动重载")
 @click.command()
-def run(path) -> None:
+def run(path: str, reload: bool) -> None:
     """运行 AstrBot"""
     try:
-        asyncio.run(run_astrbot(path))
+        asyncio.run(run_astrbot(path, reload))
     except KeyboardInterrupt:
         click.echo("AstrBot 已关闭...")
     except Exception as e:

@@ -8,6 +8,8 @@ import os
 import sys
 import json
 import traceback
+from pathlib import Path
+
 import yaml
 import logging
 import asyncio
@@ -24,6 +26,13 @@ from .star_handler import star_handlers_registry
 from astrbot.core.provider.register import llm_tools
 
 from .filter.permission import PermissionTypeFilter, PermissionType
+from astrbot.core.utils.path_util import get_astrbot_root
+
+try:
+    from watchfiles import awatch, Change, PythonFilter
+except ImportError:
+    if os.getenv("ASTROBOT_RELOAD", "0") == "1":
+        logger.warning("未安装 watchfiles，无法实现插件的热重载。")
 
 
 class PluginManager:
@@ -34,17 +43,9 @@ class PluginManager:
         self.context._star_manager = self
 
         self.config = config
-        self.plugin_store_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "../../../data/plugins"
-            )
-        )
+        self.plugin_store_path = str((get_astrbot_root() / "plugins").resolve())
         """存储插件的路径。即 data/plugins"""
-        self.plugin_config_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "../../../data/config"
-            )
-        )
+        self.plugin_config_path = str((get_astrbot_root() / "config").resolve())
         """存储插件配置的路径。data/config"""
         self.reserved_plugin_path = os.path.abspath(
             os.path.join(
@@ -56,6 +57,51 @@ class PluginManager:
         """插件配置 Schema 文件名"""
 
         self.failed_plugin_info = ""
+        if os.getenv("ASTROBOT_RELOAD", "0") == "1":
+            asyncio.create_task(self._watch_plugins_changes())
+
+    async def _watch_plugins_changes(self):
+        """监视插件文件变化"""
+        try:
+            async for changes in awatch(
+                self.plugin_store_path,
+                self.reserved_plugin_path,
+                watch_filter=PythonFilter(),
+                recursive=True,
+            ):
+                # 处理文件变化
+                await self._handle_file_changes(changes)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"插件热重载监视任务异常: {str(e)}")
+            logger.error(traceback.format_exc())
+
+    async def _handle_file_changes(self, changes):
+        """处理文件变化"""
+        plugins_to_check = [
+            (
+                (Path(self.reserved_plugin_path) / star.root_dir_name).resolve()
+                if star.reserved
+                else (Path(self.plugin_store_path) / star.root_dir_name).resolve(),
+                star.name,
+            )
+            for star in star_registry
+            if star.activated
+        ]
+        reloaded_plugins = set()
+        for change in changes:
+            _, file_path = change
+            file_path = Path(file_path)
+            for plugin_dir_path, plugin_name in plugins_to_check:
+                if (
+                    plugin_dir_path in file_path.parents
+                    and plugin_name not in reloaded_plugins
+                ):
+                    logger.info(f"检测到插件 {plugin_name} 文件变化，正在重载...")
+                    await self.reload(plugin_name)
+                    reloaded_plugins.add(plugin_name)
+                    break
 
     def _get_classes(self, arg: ModuleType):
         """获取指定模块（可以理解为一个 python 文件）下所有的类"""
