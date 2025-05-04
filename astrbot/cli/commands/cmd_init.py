@@ -4,7 +4,7 @@ import shutil
 
 import click
 from pathlib import Path
-from ..utils import _init_astrbot_root, _check_dashboard
+from ..utils import init_astrbot_root, check_dashboard
 
 
 @click.command()
@@ -25,5 +25,5 @@ def init(path: str | None, force: bool) -> None:
             shutil.rmtree(astrbot_root, ignore_errors=True)
 
     click.echo(f"AstrBot root directory: {astrbot_root}")
-    _init_astrbot_root(astrbot_root)
-    asyncio.run(_check_dashboard(astrbot_root))
+    init_astrbot_root(astrbot_root)
+    asyncio.run(check_dashboard(astrbot_root))

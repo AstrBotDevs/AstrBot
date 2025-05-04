@@ -1,9 +1,10 @@
 from pathlib import Path
+
 import click
 from astrbot.core.config.default import VERSION
 
 
-def _init_astrbot_root(astrbot_root: Path) -> None:
+def init_astrbot_root(astrbot_root: Path) -> None:
     """初始化 AstrBot 根目录"""
     dot_astrbot = astrbot_root / ".astrbot"
 
@@ -33,7 +34,7 @@ def _init_astrbot_root(astrbot_root: Path) -> None:
         click.echo(f"{'Created' if not path.exists() else 'Directory exists'}: {path}")
 
 
-async def _check_dashboard(astrbot_root: Path) -> None:
+async def check_dashboard(astrbot_root: Path) -> None:
     """检查是否安装了dashboard"""
     try:
         from ..core.utils.io import get_dashboard_version, download_dashboard

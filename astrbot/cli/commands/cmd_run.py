@@ -5,7 +5,7 @@ import click
 import asyncio
 
 
-from ..utils import _check_dashboard, _init_astrbot_root
+from ..utils import check_dashboard, init_astrbot_root
 
 
 async def run_astrbot(path: str, reload: bool):
@@ -15,8 +15,8 @@ async def run_astrbot(path: str, reload: bool):
 
     astrbot_root = Path(path).resolve() if path else (Path.cwd() / "data").resolve()
     os.environ["ASTRBOT_ROOT"] = str(astrbot_root)
-    _init_astrbot_root(astrbot_root)
-    await _check_dashboard(astrbot_root)
+    init_astrbot_root(astrbot_root)
+    await check_dashboard(astrbot_root)
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)

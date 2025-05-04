@@ -3,6 +3,7 @@ import sys
 from astrbot.core.config.default import VERSION
 from .commands.cmd_init import init
 from .commands.cmd_run import run
+from .commands.cmd_plug import plug
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -49,6 +50,7 @@ def help(command_name: str | None) -> None:
 cli.add_command(init)
 cli.add_command(run)
 cli.add_command(help)
+cli.add_command(plug)
 
 if __name__ == "__main__":
     cli()
