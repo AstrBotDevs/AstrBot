@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+
 import psutil
 import sys
 import time
@@ -50,8 +52,12 @@ class AstrBotUpdator(RepoZipUpdator):
         time.sleep(delay)
         self.terminate_child_processes()
         py = py.replace(" ", "\\ ")
+
         try:
-            os.execl(py, py, *sys.argv)
+            if "astrbot" in Path(sys.argv[0]).name:  # 兼容cli
+                os.execl(py, py, "-m", "astrbot.cli.__main__", *sys.argv[1:])
+            else:
+                os.execl(py, py, *sys.argv)
         except Exception as e:
             logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
             raise e
