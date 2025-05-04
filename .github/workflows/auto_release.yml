@@ -37,7 +37,7 @@ jobs:
   build-and-publish-to-pypi:
     # 构建并发布到 PyPI
     runs-on: ubuntu-latest
-    needs: build
+    needs: build-and-publish-to-github-release
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
