@@ -4,34 +4,15 @@ import click
 from astrbot.core.config.default import VERSION
 
 
-def init_astrbot_root(astrbot_root: Path) -> None:
-    """初始化 AstrBot 根目录"""
-    dot_astrbot = astrbot_root / ".astrbot"
-
-    if not dot_astrbot.exists():
-        click.echo(
-            "如果你确认这是 Astrbot root directory, 你需要在当前目录下创建一个 .astrbot 文件标记该目录为 AstrBot 的数据目录。"
-        )
-        if click.confirm(
-            f"请检查当前目录是否正确，确认正确请回车: {astrbot_root}",
-            default=True,
-            abort=True,
-        ):
-            dot_astrbot.touch()
-            click.echo(f"Created {dot_astrbot}")
-    else:
-        click.echo(f"Welcome back! AstrBot root directory: {astrbot_root}")
-
-    paths = {
-        "root": astrbot_root,
-        "config": astrbot_root / "config",
-        "plugins": astrbot_root / "plugins",
-        "temp": astrbot_root / "temp",
-    }
-
-    for name, path in paths.items():
-        path.mkdir(parents=True, exist_ok=True)
-        click.echo(f"{'Created' if not path.exists() else 'Directory exists'}: {path}")
+def check_astrbot_root(path: str | Path) -> bool:
+    """检查路径是否为 AstrBot 根目录"""
+    if not isinstance(path, Path):
+        path = Path(path)
+    if not path.exists() or not path.is_dir():
+        return False
+    if not (path / ".astrbot").exists():
+        return False
+    return True
 
 
 async def check_dashboard(astrbot_root: Path) -> None:

@@ -3,7 +3,13 @@ from pathlib import Path
 
 import click
 import shutil
-from ..utils import get_git_repo, build_plug_list, manage_plugin, PluginStatus
+from ..utils import (
+    get_git_repo,
+    build_plug_list,
+    manage_plugin,
+    PluginStatus,
+    check_astrbot_root,
+)
 from astrbot.core.utils.path_util import get_astrbot_root
 
 
@@ -35,9 +41,16 @@ def display_plugins(plugins, title=None, color=None):
 def new(name: str, path: str | None):
     """创建新插件"""
     if path:
-        plug_path = Path(path) / "plugins" / name
+        base_path = Path(path)
     else:
-        plug_path = get_astrbot_root() / "plugins" / name
+        base_path = get_astrbot_root()
+
+    if not check_astrbot_root(base_path):
+        raise click.ClickException(
+            f"{base_path}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+        )
+
+    plug_path = base_path / "plugins" / name
 
     if plug_path.exists():
         raise click.ClickException(f"插件 {name} 已存在")
@@ -91,9 +104,16 @@ def new(name: str, path: str | None):
 def list(online: bool, path: str | None):
     """列出插件"""
     if path:
-        plug_path = Path(path) / "plugins"
+        base_path = Path(path)
     else:
-        plug_path = get_astrbot_root() / "plugins"
+        base_path = get_astrbot_root()
+
+    if not check_astrbot_root(base_path):
+        raise click.ClickException(
+            f"{base_path}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+        )
+
+    plug_path = base_path / "plugins"
 
     plugins = build_plug_list(plug_path)
 
@@ -126,14 +146,21 @@ def list(online: bool, path: str | None):
 
 @plug.command()
 @click.argument("name")
-@click.option("--proxy", help="代理服务器地址", default="")
+@click.option("--proxy", help="代理服务器地址")
 @click.option("--path", "-p", help="AstrBot 数据目录")
-def install(name: str, proxy: str, path: str | None):
+def install(name: str, proxy: str | None, path: str | None):
     """安装插件"""
     if path:
-        plug_path = Path(path) / "plugins"
+        base_path = Path(path)
     else:
-        plug_path = get_astrbot_root() / "plugins"
+        base_path = get_astrbot_root()
+
+    if not check_astrbot_root(base_path):
+        raise click.ClickException(
+            f"{base_path}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+        )
+
+    plug_path = base_path / "plugins"
 
     plugins = build_plug_list(plug_path)
     plugin = next(
@@ -157,9 +184,16 @@ def install(name: str, proxy: str, path: str | None):
 def remove(name: str, path: str | None):
     """卸载插件"""
     if path:
-        plug_path = Path(path) / "plugins"
+        base_path = Path(path)
     else:
-        plug_path = get_astrbot_root() / "plugins"
+        base_path = get_astrbot_root()
+
+    if not check_astrbot_root(base_path):
+        raise click.ClickException(
+            f"{base_path}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+        )
+
+    plug_path = base_path / "plugins"
 
     plugins = build_plug_list(plug_path)
     plugin = next((p for p in plugins if p["name"] == name), None)
@@ -180,14 +214,21 @@ def remove(name: str, path: str | None):
 
 @plug.command()
 @click.argument("name", required=False)
-@click.option("--proxy", help="代理服务器地址", default="")
+@click.option("--proxy", help="代理服务器地址")
 @click.option("--path", "-p", help="AstrBot 数据目录")
-def update(name: str, proxy: str, path: str | None):
+def update(name: str, proxy: str | None, path: str | None):
     """更新插件"""
     if path:
-        plug_path = Path(path) / "plugins"
+        base_path = Path(path)
     else:
-        plug_path = get_astrbot_root() / "plugins"
+        base_path = get_astrbot_root()
+
+    if not check_astrbot_root(base_path):
+        raise click.ClickException(
+            f"{base_path}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+        )
+
+    plug_path = base_path / "plugins"
 
     plugins = build_plug_list(plug_path)
 
@@ -227,9 +268,16 @@ def update(name: str, proxy: str, path: str | None):
 def search(query: str, path: str | None):
     """搜索插件"""
     if path:
-        plug_path = Path(path) / "plugins"
+        base_path = Path(path)
     else:
-        plug_path = get_astrbot_root() / "plugins"
+        base_path = get_astrbot_root()
+
+    if not check_astrbot_root(base_path):
+        raise click.ClickException(
+            f"{base_path}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+        )
+
+    plug_path = base_path / "plugins"
 
     plugins = build_plug_list(plug_path)
 

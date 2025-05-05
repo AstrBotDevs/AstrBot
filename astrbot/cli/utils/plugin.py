@@ -21,7 +21,7 @@ class PluginStatus(str, Enum):
 
 
 def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
-    """从 Git 仓库下载代码到指定路径"""
+    """从 Git 仓库下载代码并解压到指定路径"""
     temp_dir = Path(tempfile.mkdtemp())
     try:
         # 解析仓库信息
@@ -87,6 +87,7 @@ def build_plug_list(plugins_dir: Path) -> list:
             - author: 插件作者
             - repo: 插件仓库地址
             - status: 插件状态 [已安装/需更新/未安装/未发布]
+            - local_path: 本地插件路径
     """
     # 获取本地插件信息
     result = []
@@ -231,7 +232,7 @@ def manage_plugin(
     if is_update and backup_path.exists():
         shutil.rmtree(backup_path)
     if is_update:
-        shutil.copytree(target_path, backup_path)
+        shutil.move(target_path, backup_path)
 
     try:
         click.echo(

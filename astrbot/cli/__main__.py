@@ -1,9 +1,7 @@
 import click
 import sys
 from astrbot.core.config.default import VERSION
-from .commands.cmd_init import init
-from .commands.cmd_run import run
-from .commands.cmd_plug import plug
+from .commands import init, plug, run
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.

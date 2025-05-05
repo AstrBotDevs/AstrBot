@@ -5,17 +5,22 @@ import click
 import asyncio
 
 
-from ..utils import check_dashboard, init_astrbot_root
+from ..utils import check_dashboard, check_astrbot_root
 
 
 async def run_astrbot(path: str, reload: bool):
     """异步运行 AstrBot 的主函数"""
-    from astrbot.core import logger, LogManager, LogBroker, db_helper
-    from astrbot.core.initial_loader import InitialLoader
 
     astrbot_root = Path(path).resolve() if path else (Path.cwd() / "data").resolve()
     os.environ["ASTRBOT_ROOT"] = str(astrbot_root)
-    init_astrbot_root(astrbot_root)
+    if not check_astrbot_root(astrbot_root):
+        raise click.ClickException(
+            f"{astrbot_root}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+        )
+
+    from astrbot.core import logger, LogManager, LogBroker, db_helper
+    from astrbot.core.initial_loader import InitialLoader
+
     await check_dashboard(astrbot_root)
 
     log_broker = LogBroker()
@@ -34,7 +39,7 @@ async def run_astrbot(path: str, reload: bool):
 @click.option("--path", "-p", help="AstrBot 数据目录")
 @click.option("--reload", "-r", is_flag=True, help="插件自动重载")
 @click.command()
-def run(path: str, reload: bool) -> None:
+def run(path: str | None, reload: bool) -> None:
     """运行 AstrBot"""
     try:
         asyncio.run(run_astrbot(path, reload))

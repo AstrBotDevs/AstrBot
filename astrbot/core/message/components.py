@@ -633,8 +633,9 @@ class File(BaseMessageComponent):
             return
 
         filename = self.name or f"{uuid.uuid4().hex}"
-        file_path = str(get_astrbot_root() / "download" / filename)
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        download_dir = get_astrbot_root() / "download"
+        os.makedirs(download_dir, exist_ok=True)
+        file_path = str(download_dir / filename)
 
         await download_file(self.url, file_path)
 
