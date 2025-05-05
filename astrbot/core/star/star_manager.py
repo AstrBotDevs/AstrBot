@@ -29,7 +29,7 @@ from .filter.permission import PermissionTypeFilter, PermissionType
 from astrbot.core.utils.path_util import get_astrbot_root
 
 try:
-    from watchfiles import awatch, Change, PythonFilter
+    from watchfiles import awatch, PythonFilter
 except ImportError:
     if os.getenv("ASTROBOT_RELOAD", "0") == "1":
         logger.warning("未安装 watchfiles，无法实现插件的热重载。")

@@ -31,3 +31,5 @@ certifi
 pip
 telegramify-markdown
 google-genai
+click
+watchfiles
