@@ -48,9 +48,11 @@ class GeweDataParser:
             url = root.find(".//url")
             title = root.find(".//title")
 
-            if url is not None and title is not None:
-                logger.debug(f"gewechat: Official Accounts: {url.text} {title.text}")
-                return [Share(url=url.text, title=title.text)]
+            if url is not None and title is not None and url.text is not None and title.text is not None and url.text.strip() != "" and title.text.strip() != "":
+                clean_url = url.text.strip()
+                clean_title = title.text.strip()
+                logger.debug(f"gewechat: Official Accounts: {clean_url} {clean_title}")
+                return [Share(url=clean_url, title=clean_title)]
             else:
                 return None
         except Exception as e:
