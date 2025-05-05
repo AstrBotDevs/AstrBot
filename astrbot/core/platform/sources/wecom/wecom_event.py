@@ -100,8 +100,26 @@ class WecomPlatformEvent(AstrMessageEvent):
                     for chunk in plain_chunks:
                         kf_message_api.send_text(user_id, self.get_self_id(), chunk)
                         await asyncio.sleep(0.5)  # Avoid sending too fast
+                elif isinstance(comp, Image):
+                    img_path = await comp.convert_to_file_path()
+
+                    with open(img_path, "rb") as f:
+                        try:
+                            response = self.client.media.upload("image", f)
+                        except Exception as e:
+                            logger.error(f"微信客服上传图片失败: {e}")
+                            await self.send(
+                                MessageChain().message(f"微信客服上传图片失败: {e}")
+                            )
+                            return
+                        logger.debug(f"微信客服上传图片返回: {response}")
+                        kf_message_api.send_image(
+                            user_id,
+                            self.get_self_id(),
+                            response["media_id"],
+                        )
                 else:
-                    logger.warning("没有实现的回复消息类型。")
+                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
         else:
             # 企业微信应用
             for comp in message.chain:
@@ -125,7 +143,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 MessageChain().message(f"企业微信上传图片失败: {e}")
                             )
                             return
-                        logger.info(f"企业微信上传图片返回: {response}")
+                        logger.debug(f"企业微信上传图片返回: {response}")
                         self.client.message.send_image(
                             message_obj.self_id,
                             message_obj.session_id,
@@ -154,6 +172,8 @@ class WecomPlatformEvent(AstrMessageEvent):
                             message_obj.session_id,
                             response["media_id"],
                         )
+                else:
+                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
 
         await super().send(message)
 

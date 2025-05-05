@@ -293,18 +293,28 @@ class WecomPlatformAdapter(Platform):
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
         msgtype = msg.get("msgtype", None)
+        external_userid = msg.get("external_userid", None)
         abm = AstrBotMessage()
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None # 方便处理
         abm.self_id = msg["open_kfid"]
+        abm.sender = MessageMember(external_userid, external_userid)
+        abm.session_id = external_userid
+        abm.type = MessageType.FRIEND_MESSAGE
         if msgtype == "text":
-            external_userid = msg.get("external_userid", None)
             text = msg.get("text", {}).get("content", "").strip()
             abm.message = [Plain(text=text)]
-            abm.sender = MessageMember(external_userid, external_userid)
             abm.message_str = text
-            abm.session_id = external_userid
-            abm.type = MessageType.FRIEND_MESSAGE
+        elif msgtype == "image":
+            media_id = msg.get("image", {}).get("media_id", "")
+            resp: Response = await asyncio.get_event_loop().run_in_executor(
+                None, self.client.media.download, media_id
+            )
+            path = f"data/temp/wechat_kf_{media_id}.jpg"
+            with open(path, "wb") as f:
+                f.write(resp.content)
+            abm.message = [Image(file=path, url=path)]
+            abm.message_str = "[图片]"
         else:
             logger.warning(f"未实现的微信客服消息事件: {msg}")
             return
