@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+import os
 
 import httpx
 import yaml
@@ -91,15 +92,16 @@ def build_plug_list(plugins_dir: Path) -> list:
     """
     # 获取本地插件信息
     result = []
-    if plugins_dir.exists():
-        for plugin_dir in plugins_dir.iterdir():
-            if not plugin_dir.is_dir():
+    if os.path.exists(plugins_dir):
+        for plugin_name in os.listdir(plugins_dir):
+            plugin_dir = os.path.join(plugins_dir, plugin_name)
+            if not os.path.isdir(plugin_dir):
                 continue
 
             metadata = {}
             # 优先从 metadata.yaml 读取
-            yaml_path = plugin_dir / "metadata.yaml"
-            if yaml_path.exists():
+            yaml_path = os.path.join(plugin_dir, "metadata.yaml")
+            if os.path.exists(yaml_path):
                 try:
                     with open(yaml_path, "r", encoding="utf-8") as f:
                         metadata = yaml.safe_load(f)
@@ -112,11 +114,13 @@ def build_plug_list(plugins_dir: Path) -> list:
                 k in metadata for k in ["name", "desc", "version", "author", "repo"]
             ):
                 # 检查 main.py 或与目录同名的 py 文件
-                py_file = plugin_dir / "main.py"
-                if not py_file.exists():
-                    py_file = plugin_dir / f"{plugin_dir.name}.py"
+                py_file = os.path.join(plugin_dir, "main.py")
+                if not os.path.exists(py_file):
+                    py_file = os.path.join(
+                        plugin_dir, f"{os.path.basename(plugin_dir)}.py"
+                    )
 
-                if py_file.exists():
+                if os.path.exists(py_file):
                     try:
                         with open(py_file, "r", encoding="utf-8") as f:
                             content = f.read()
