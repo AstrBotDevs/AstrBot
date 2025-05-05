@@ -136,16 +136,17 @@ class WecomPlatformAdapter(Platform):
             self.config["corpid"].strip(),
             self.config["secret"].strip(),
         )
-        # inject
-        self.wechat_kf_api = WeChatKF(client=self.client)
-        self.wechat_kf_message_api = WeChatKFMessage(self.client)
-        self.client.kf = self.wechat_kf_api
-        self.client.kf_message = self.wechat_kf_message_api
-
-        self.client.API_BASE_URL = self.api_base_url
 
         # 微信客服
         self.kf_name = self.config.get("kf_name", None)
+        if self.kf_name:
+            # inject
+            self.wechat_kf_api = WeChatKF(client=self.client)
+            self.wechat_kf_message_api = WeChatKFMessage(self.client)
+            self.client.kf = self.wechat_kf_api
+            self.client.kf_message = self.wechat_kf_message_api
+
+            self.client.API_BASE_URL = self.api_base_url
 
         async def callback(msg: BaseMessage):
             if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":

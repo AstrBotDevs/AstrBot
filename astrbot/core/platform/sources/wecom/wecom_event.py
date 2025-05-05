@@ -84,26 +84,26 @@ class WecomPlatformEvent(AstrMessageEvent):
     async def send(self, message: MessageChain):
         message_obj = self.message_obj
 
-        is_wechat_kf = hasattr(self.message_obj.raw_message, "_wechat_kf_flag")
+        is_wechat_kf = hasattr(self.client, "kf_message")
         if is_wechat_kf:
+            # 微信客服
             kf_message_api = getattr(self.client, "kf_message", None)
             if not kf_message_api:
                 logger.warning("未找到微信客服发送消息方法。")
                 return
             assert isinstance(kf_message_api, WeChatKFMessage)
+            user_id = self.get_sender_id()
             for comp in message.chain:
                 if isinstance(comp, Plain):
                     # Split long text messages if needed
                     plain_chunks = await self.split_plain(comp.text)
                     for chunk in plain_chunks:
-                        # self.client.message.send_text(
-                        #     message_obj.self_id, message_obj.session_id, chunk
-                        # )
-                        # kf_message_api.send_text()
+                        kf_message_api.send_text(user_id, self.get_self_id(), chunk)
                         await asyncio.sleep(0.5)  # Avoid sending too fast
                 else:
                     logger.warning("没有实现的回复消息类型。")
         else:
+            # 企业微信应用
             for comp in message.chain:
                 if isinstance(comp, Plain):
                     # Split long text messages if needed
