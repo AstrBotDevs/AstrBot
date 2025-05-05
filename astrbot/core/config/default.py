@@ -159,6 +159,7 @@ CONFIG_METADATA_2 = {
                         "secret": "",
                         "token": "",
                         "encoding_aes_key": "",
+                        "kf_name": "",
                         "api_base_url": "https://qyapi.weixin.qq.com/cgi-bin/",
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
@@ -193,6 +194,11 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "kf_name": {
+                      "description": "微信客服账号名",
+                      "type": "string",
+                      "hint": "可选。微信客服账号名(不是 ID)。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取"
+                    },
                     "telegram_token": {
                         "description": "Bot Token",
                         "type": "string",
@@ -237,7 +243,7 @@ CONFIG_METADATA_2 = {
                     "secret": {
                         "description": "secret",
                         "type": "string",
-                        "hint": "必填项。QQ 官方机器人平台的 secret。如何获取请参考文档。",
+                        "hint": "必填项。",
                     },
                     "enable_group_c2c": {
                         "description": "启用消息列表单聊",
