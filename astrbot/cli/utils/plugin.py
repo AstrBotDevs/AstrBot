@@ -142,13 +142,13 @@ def build_plug_list(plugins_dir: Path) -> list:
             if metadata:
                 result.append(
                     {
-                        "name": metadata.get("name", ""),
-                        "desc": metadata.get("desc", ""),
+                        "name": str(metadata.get("name", "")),
+                        "desc": str(metadata.get("desc", "")),
                         "version": str(metadata.get("version", "")),
-                        "author": metadata.get("author", ""),
-                        "repo": metadata.get("repo", ""),
+                        "author": str(metadata.get("author", "")),
+                        "repo": str(metadata.get("repo", "")),
                         "status": PluginStatus.INSTALLED,
-                        "local_path": plugin_dir,
+                        "local_path": str(plugin_dir),
                     }
                 )
 
@@ -162,11 +162,11 @@ def build_plug_list(plugins_dir: Path) -> list:
             for plugin_id, plugin_info in data.items():
                 online_plugins.append(
                     {
-                        "name": plugin_id,
-                        "desc": plugin_info.get("desc", ""),
+                        "name": str(plugin_id),
+                        "desc": str(plugin_info.get("desc", "")),
                         "version": str(plugin_info.get("version", "")),
-                        "author": plugin_info.get("author", ""),
-                        "repo": plugin_info.get("repo", ""),
+                        "author": str(plugin_info.get("author", "")),
+                        "repo": str(plugin_info.get("repo", "")),
                         "status": PluginStatus.NOT_INSTALLED,
                         "local_path": None,
                     }
@@ -218,7 +218,7 @@ def manage_plugin(
 
     # 如果是更新且有本地路径，直接使用本地路径
     if is_update and plugin.get("local_path"):
-        target_path = plugin["local_path"]
+        target_path = Path(plugin["local_path"])
     else:
         target_path = plugins_dir / plugin_name
 

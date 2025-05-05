@@ -1,3 +1,14 @@
+"""
+astrbot plugin tools
+简称apt
+        ————2025年5月5日anka道
+
+我真是闲的才把这句加进来。
+        ————2025年5月5日Raven注
+"""
+
+import datetime
+import json
 import re
 from pathlib import Path
 
@@ -19,6 +30,72 @@ def plug():
     pass
 
 
+def _get_cache_path(base_path: Path) -> Path:
+    """获取缓存文件路径"""
+    return base_path / "plugins_cache.json"
+
+
+def _get_lock_path(base_path: Path) -> Path:
+    """获取锁文件路径"""
+    return base_path / "plugins_cache.lock"
+
+
+def _acquire_lock(lock_path: Path) -> None:
+    """尝试获取锁文件"""
+    try:
+        lock_path.touch(exist_ok=False)
+    except FileExistsError:
+        raise click.ClickException(
+            f"无法获取锁文件 {lock_path}，如果确定没有其他实例正在运行，请删除该文件"
+        )
+
+
+def _release_lock(lock_path: Path) -> None:
+    """释放锁文件"""
+    try:
+        lock_path.unlink(missing_ok=True)
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        click.echo(f"警告：无法删除锁文件 {lock_path}: {e!s}，请手动删除", err=True)
+
+
+def _get_cached_plugins(base_path: Path, rebuild: bool = False) -> list:  # type: ignore
+    """获取缓存的插件列表，需要时重新构建"""
+    cache_path = _get_cache_path(base_path)
+    lock_path = _get_lock_path(base_path)
+
+    def _build_and_save_cache() -> list:
+        """构建并保存插件缓存"""
+        plugins = build_plug_list(base_path / "plugins")
+        cache_data_a = {
+            "timestamp": datetime.datetime.now().timestamp(),
+            "plugins": plugins,
+        }
+        with cache_path.open("w", encoding="utf-8") as fa:
+            json.dump(cache_data_a, fa, ensure_ascii=False, indent=2)
+        return plugins
+
+    _acquire_lock(lock_path)
+    try:
+        if rebuild or not cache_path.exists():
+            return _build_and_save_cache()
+
+        try:
+            with cache_path.open("r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+                formatted_time = datetime.datetime.fromtimestamp(
+                    cache_data["timestamp"]
+                ).strftime("%Y-%m-%d")
+                click.echo(f"正在使用缓存的插件列表，构建日期: {formatted_time}")
+                return cache_data["plugins"]
+        except Exception as e:
+            click.echo(f"读取缓存时出错: {e!s}。正在重新构建缓存...", err=True)
+            return _build_and_save_cache()
+    finally:
+        _release_lock(lock_path)
+
+
 def display_plugins(plugins, title=None, color=None):
     if title:
         click.echo(click.style(title, fg=color, bold=True))
@@ -29,10 +106,9 @@ def display_plugins(plugins, title=None, color=None):
     for p in plugins:
         desc = p["desc"][:30] + ("..." if len(p["desc"]) > 30 else "")
         click.echo(
-            f"{p['name']:<20} {p['version']:<10} {p['status'].value:<10} "
+            f"{p['name']:<20} {p['version']:<10} {p['status']:<10} "
             f"{p['author']:<15} {desc:<30}"
         )
-    click.echo()
 
 
 @plug.command()
@@ -64,11 +140,13 @@ def new(name: str, path: str | None):
     if not repo.startswith("http"):
         raise click.ClickException("仓库地址必须以 http 开头")
 
+    click.echo("下载插件模板...")
     get_git_repo(
         "https://github.com/Soulter/helloworld",
         plug_path,
     )
 
+    click.echo("重写插件信息...")
     # 重写 metadata.yaml
     with open(plug_path / "metadata.yaml", "w", encoding="utf-8") as f:
         f.write(
@@ -95,11 +173,15 @@ def new(name: str, path: str | None):
     with open(plug_path / "main.py", "w", encoding="utf-8") as f:
         f.write(new_content)
 
+    # 刷新缓存
+    click.echo("刷新本地插件缓存...")
+    _get_cached_plugins(base_path, rebuild=True)
+
     click.echo(f"插件 {name} 创建成功")
 
 
 @plug.command()
-@click.option("--online", "-o", is_flag=True, help="列出未安装的插件")
+@click.option("--all", "-a", is_flag=True, help="列出未安装的插件")
 @click.option("--path", "-p", help="AstrBot 数据目录")
 def list(online: bool, path: str | None):
     """列出插件"""
@@ -113,9 +195,7 @@ def list(online: bool, path: str | None):
             f"{base_path}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
         )
 
-    plug_path = base_path / "plugins"
-
-    plugins = build_plug_list(plug_path)
+    plugins = _get_cached_plugins(base_path)
 
     # 未发布的插件
     not_published_plugins = [
@@ -162,7 +242,7 @@ def install(name: str, proxy: str | None, path: str | None):
 
     plug_path = base_path / "plugins"
 
-    plugins = build_plug_list(plug_path)
+    plugins = _get_cached_plugins(base_path, rebuild=True)
     plugin = next(
         (
             p
@@ -193,9 +273,7 @@ def remove(name: str, path: str | None):
             f"{base_path}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
         )
 
-    plug_path = base_path / "plugins"
-
-    plugins = build_plug_list(plug_path)
+    plugins = _get_cached_plugins(base_path)
     plugin = next((p for p in plugins if p["name"] == name), None)
 
     if not plugin or not plugin.get("local_path"):
@@ -213,10 +291,29 @@ def remove(name: str, path: str | None):
 
 
 @plug.command()
+@click.option("--path", "-p", help="AstrBot 数据目录")
+def update(path: str | None):
+    """刷新插件列表缓存"""
+    if path:
+        base_path = Path(path)
+    else:
+        base_path = get_astrbot_root()
+
+    if not check_astrbot_root(base_path):
+        raise click.ClickException(
+            f"{base_path} 不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+        )
+
+    click.echo("正在更新插件缓存...")
+    _get_cached_plugins(base_path, rebuild=True)
+    click.echo("插件缓存更新完成")
+
+
+@plug.command()
 @click.argument("name", required=False)
 @click.option("--proxy", help="代理服务器地址")
 @click.option("--path", "-p", help="AstrBot 数据目录")
-def update(name: str, proxy: str | None, path: str | None):
+def upgrade(name: str, proxy: str | None, path: str | None):
     """更新插件"""
     if path:
         base_path = Path(path)
@@ -230,7 +327,7 @@ def update(name: str, proxy: str | None, path: str | None):
 
     plug_path = base_path / "plugins"
 
-    plugins = build_plug_list(plug_path)
+    plugins = _get_cached_plugins(base_path)
 
     if name:
         plugin = next(
@@ -277,9 +374,7 @@ def search(query: str, path: str | None):
             f"{base_path}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
         )
 
-    plug_path = base_path / "plugins"
-
-    plugins = build_plug_list(plug_path)
+    plugins = _get_cached_plugins(base_path)
 
     matched_plugins = [
         p
