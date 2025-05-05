@@ -2,6 +2,7 @@ from pathlib import Path
 
 import click
 from astrbot.core.config.default import VERSION
+from astrbot.core.utils.version_comparator import VersionComparator
 
 
 def check_astrbot_root(path: str | Path) -> bool:
@@ -17,10 +18,7 @@ def check_astrbot_root(path: str | Path) -> bool:
 
 async def check_dashboard(astrbot_root: Path) -> None:
     """检查是否安装了dashboard"""
-    try:
-        from ..core.utils.io import get_dashboard_version, download_dashboard
-    except ImportError:
-        from astrbot.core.utils.io import get_dashboard_version, download_dashboard
+    from astrbot.core.utils.io import get_dashboard_version, download_dashboard
 
     try:
         dashboard_version = await get_dashboard_version()
@@ -39,8 +37,9 @@ async def check_dashboard(astrbot_root: Path) -> None:
                     click.echo("管理面板安装完成")
 
             case str():
-                if dashboard_version == f"v{VERSION}":
-                    click.echo("无需更新")
+                if VersionComparator.compare_version(VERSION, dashboard_version) <= 0:
+                    click.echo("管理面板已是最新版本")
+                    return
                 else:
                     try:
                         version = dashboard_version.split("v")[1]

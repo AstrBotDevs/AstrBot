@@ -7,6 +7,7 @@ from astrbot.core import db_helper
 from astrbot.core import logger, LogManager, LogBroker
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+from astrbot.core.utils.version_comparator import VersionComparator
 
 # add parent path to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -43,7 +44,7 @@ async def check_dashboard_files():
     v = await get_dashboard_version()
     if v is not None:
         # has file
-        if v == f"v{VERSION}":
+        if VersionComparator.compare_version(VERSION, v) <= 0:
             logger.info("管理面板文件已是最新。")
         else:
             logger.warning(
