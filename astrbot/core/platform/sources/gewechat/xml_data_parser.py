@@ -5,6 +5,7 @@ from astrbot.api.message_components import (
     Reply,
     Plain,
     BaseMessageComponent,
+    Share,
 )
 
 
@@ -24,6 +25,8 @@ class GeweDataParser:
         match appmsg_type.text:
             case "57":
                 return self.parse_reply()
+            case "5":
+                return self.parse_officialAccounts()
 
     def parse_emoji(self) -> Emoji | None:
         try:
@@ -38,6 +41,20 @@ class GeweDataParser:
 
         except Exception as e:
             logger.error(f"gewechat: parse_emoji failed, {e}")
+
+    def parse_officialAccounts(self) -> list[Share] | None:
+        try:
+            root = self._format_to_xml()
+            url = root.find(".//url")
+            title = root.find(".//title")
+
+            if url is not None and title is not None:
+                logger.debug(f"gewechat: Official Accounts: {url.text} {title.text}")
+                return [Share(url=url.text, title=title.text)]
+            else:
+                return None
+        except Exception as e:
+            logger.error(f"gewechat: parse_officialAccounts failed, {e}")
 
     def parse_reply(self) -> list[Reply, Plain] | None:
         """解析引用消息
@@ -80,10 +97,14 @@ class GeweDataParser:
                             else:
                                 app_msg = refer_root.find("appmsg")
                                 refermsg_content_title = app_msg.find("title")
+                                refermsg_content_type = app_msg.find("type")
                                 logger.debug(
                                     f"gewechat: Reference message nesting: {refermsg_content_title.text}"
                                 )
-                                replied_content = refermsg_content_title.text
+                                if refermsg_content_type.text == "51":
+                                    replied_content = "[视频号]"
+                                else:
+                                    replied_content = refermsg_content_title.text
                         except Exception as e:
                             logger.error(f"gewechat: nested failed, {e}")
                             # 处理异常情况
