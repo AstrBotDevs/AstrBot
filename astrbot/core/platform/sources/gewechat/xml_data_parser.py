@@ -43,6 +43,11 @@ class GeweDataParser:
             logger.error(f"gewechat: parse_emoji failed, {e}")
 
     def parse_officialAccounts(self) -> list[Share] | None:
+        """解析公众号消息
+
+        Returns:
+            list[Share]: 一个包含 Share 消息对象的列表。
+        """
         try:
             root = self._format_to_xml()
             url = root.find(".//url")
