@@ -252,7 +252,7 @@ def manage_plugin(
     if is_update and backup_path.exists():
         shutil.rmtree(backup_path)
     if is_update:
-        shutil.move(target_path, backup_path)
+        shutil.copytree(target_path, backup_path)
 
     try:
         click.echo(

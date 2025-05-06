@@ -374,7 +374,6 @@ class Image(BaseMessageComponent):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-            os.makedirs(temp_dir, exist_ok=True)
             image_file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
             with open(image_file_path, "wb") as f:
                 f.write(image_bytes)
