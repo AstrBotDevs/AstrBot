@@ -1,4 +1,3 @@
-import os
 import time
 import asyncio
 import logging
@@ -21,7 +20,6 @@ from .aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 from aiocqhttp.exceptions import ActionFailed
-from astrbot.core.utils.io import download_file
 
 
 @register_platform_adapter(
@@ -46,7 +44,12 @@ class AiocqhttpAdapter(Platform):
         )
 
         self.bot = CQHttp(
-            use_ws_reverse=True, import_name="aiocqhttp", api_timeout_sec=180
+            use_ws_reverse=True,
+            import_name="aiocqhttp",
+            api_timeout_sec=180,
+            access_token=platform_config.get(
+                "ws_reverse_token"
+            ),  # 以防旧版本配置不存在
         )
 
         @self.bot.on_request()
@@ -120,6 +123,12 @@ class AiocqhttpAdapter(Platform):
             abm.type = MessageType.FRIEND_MESSAGE
         if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
             abm.session_id = str(abm.sender.user_id) + "_" + str(event.group_id)
+        else:
+            abm.session_id = (
+                str(event.group_id)
+                if abm.type == MessageType.GROUP_MESSAGE
+                else abm.sender.user_id
+            )
         abm.message_str = ""
         abm.message = []
         abm.timestamp = int(time.time())
@@ -156,7 +165,9 @@ class AiocqhttpAdapter(Platform):
 
         if "sub_type" in event:
             if event["sub_type"] == "poke" and "target_id" in event:
-                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))  # noqa: F405
+                abm.message.append(
+                    Poke(qq=str(event["target_id"]), type="poke")
+                )  # noqa: F405
 
         return abm
 
@@ -216,32 +227,30 @@ class AiocqhttpAdapter(Platform):
                     if m["data"].get("url") and m["data"].get("url").startswith("http"):
                         # Lagrange
                         logger.info("guessing lagrange")
-
                         file_name = m["data"].get("file_name", "file")
-                        path = os.path.join("data/temp", file_name)
-                        await download_file(m["data"]["url"], path)
-
-                        m["data"] = {"file": path, "name": file_name}
-                        a = ComponentTypes[t](**m["data"])  # noqa: F405
-                        abm.message.append(a)
-
+                        abm.message.append(File(name=file_name, url=m["data"]["url"]))
                     else:
                         try:
-                            # Napcat, LLBot
-                            ret = await self.bot.call_action(
-                                action="get_file",
-                                file_id=event.message[0]["data"]["file_id"],
-                            )
-                            if not ret.get("file", None):
-                                raise ValueError(f"无法解析文件响应: {ret}")
-                            if not os.path.exists(ret["file"]):
-                                raise FileNotFoundError(
-                                    f"文件不存在或者权限问题: {ret['file']}。如果您使用 Docker 部署了 AstrBot 或者消息协议端(Napcat等),请先映射路径。如果路径在 /root 目录下，请用 sudo 打开 AstrBot"
+                            # Napcat
+                            ret = None
+                            if abm.type == MessageType.GROUP_MESSAGE:
+                                ret = await self.bot.call_action(
+                                    action="get_group_file_url",
+                                    file_id=event.message[0]["data"]["file_id"],
+                                    group_id=event.group_id,
                                 )
+                            elif abm.type == MessageType.FRIEND_MESSAGE:
+                                ret = await self.bot.call_action(
+                                    action="get_private_file_url",
+                                    file_id=event.message[0]["data"]["file_id"],
+                                )
+                            if ret and "url" in ret:
+                                file_url = ret["url"]  # https
+                                a = File(name="", url=file_url)
+                                abm.message.append(a)
+                            else:
+                                logger.error(f"获取文件失败: {ret}")
 
-                            m["data"] = {"file": ret["file"], "name": ret["file_name"]}
-                            a = ComponentTypes[t](**m["data"])  # noqa: F405
-                            abm.message.append(a)
                         except ActionFailed as e:
                             logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
                         except BaseException as e:

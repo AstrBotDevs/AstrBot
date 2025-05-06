@@ -162,18 +162,34 @@ class ProviderGoogleGenAI(Provider):
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=temperature,
-            max_output_tokens=payloads.get("max_tokens") or payloads.get("maxOutputTokens"),
+            max_output_tokens=payloads.get("max_tokens")
+            or payloads.get("maxOutputTokens"),
             top_p=payloads.get("top_p") or payloads.get("topP"),
             top_k=payloads.get("top_k") or payloads.get("topK"),
-            frequency_penalty=payloads.get("frequency_penalty") or payloads.get("frequencyPenalty"),
-            presence_penalty=payloads.get("presence_penalty") or payloads.get("presencePenalty"),
+            frequency_penalty=payloads.get("frequency_penalty")
+            or payloads.get("frequencyPenalty"),
+            presence_penalty=payloads.get("presence_penalty")
+            or payloads.get("presencePenalty"),
             stop_sequences=payloads.get("stop") or payloads.get("stopSequences"),
-            response_logprobs=payloads.get("response_logprobs") or payloads.get("responseLogprobs"),
+            response_logprobs=payloads.get("response_logprobs")
+            or payloads.get("responseLogprobs"),
             logprobs=payloads.get("logprobs"),
             seed=payloads.get("seed"),
             response_modalities=modalities,
             tools=tool_list,
             safety_settings=self.safety_settings if self.safety_settings else None,
+            thinking_config=types.ThinkingConfig(
+                thinking_budget=min(
+                    int(
+                        self.provider_config.get("gm_thinking_config", {}).get(
+                            "budget", 0
+                        )
+                    ),
+                    24576,
+                ),
+            )
+            if "gemini-2.5-flash" in self.get_model()
+            else None,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True
             ),
@@ -194,7 +210,11 @@ class ProviderGoogleGenAI(Provider):
             image_bytes = base64.b64decode(url.split(",", 1)[1])
             return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
-        def append_or_extend(contents: list[types.Content], part: list[types.Part], content_cls: type[types.Content]) -> None:
+        def append_or_extend(
+            contents: list[types.Content],
+            part: list[types.Part],
+            content_cls: type[types.Content],
+        ) -> None:
             if contents and isinstance(contents[-1], content_cls):
                 contents[-1].parts.extend(part)
             else:
@@ -226,7 +246,7 @@ class ProviderGoogleGenAI(Provider):
                 if content:
                     parts = [types.Part.from_text(text=content)]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
-                elif not native_tool_enabled and "tool_calls" in message :
+                elif not native_tool_enabled and "tool_calls" in message:
                     parts = [
                         types.Part.from_function_call(
                             name=tool["function"]["name"],
@@ -312,9 +332,7 @@ class ProviderGoogleGenAI(Provider):
                 chain.append(Comp.Image.fromBytes(part.inline_data.data))
         return MessageChain(chain=chain)
 
-    async def _query(
-        self, payloads: dict, tools: FuncCall
-    ) -> LLMResponse:
+    async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
         """非流式请求 Gemini API"""
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
@@ -326,7 +344,7 @@ class ProviderGoogleGenAI(Provider):
             modalities.append("Image")
 
         conversation = self._prepare_conversation(payloads)
-        temperature=payloads.get("temperature", 0.7)
+        temperature = payloads.get("temperature", 0.7)
 
         result: Optional[types.GenerateContentResponse] = None
         while True:

@@ -145,6 +145,8 @@ export const useCommonStore = defineStore({
               "tags": res.data.data[key]?.tags ? res.data.data[key].tags : [],
               "logo": res.data.data[key]?.logo ? res.data.data[key].logo : "",
               "pinned": res.data.data[key]?.pinned ? res.data.data[key].pinned : false,
+              "stars": res.data.data[key]?.stars ? res.data.data[key].stars : 0,
+              "updated_at": res.data.data[key]?.updated_at ? res.data.data[key].updated_at : "",
             })
           }
           this.pluginMarketData = data;

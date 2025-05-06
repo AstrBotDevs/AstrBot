@@ -3,6 +3,7 @@ import base64
 import datetime
 import os
 import re
+import uuid
 import threading
 
 import aiohttp
@@ -63,7 +64,7 @@ class SimpleGewechatClient:
             "/astrbot-gewechat/callback", view_func=self._callback, methods=["POST"]
         )
         self.server.add_url_rule(
-            "/astrbot-gewechat/file/<file_id>",
+            "/astrbot-gewechat/file/<file_token>",
             view_func=self._handle_file,
             methods=["GET"],
         )
@@ -80,6 +81,11 @@ class SimpleGewechatClient:
         self.userrealnames = {}
 
         self.shutdown_event = asyncio.Event()
+
+        self.staged_files = {}
+        """存储了允许外部访问的文件列表。auth_token: file_path。通过 register_file 方法注册。"""
+
+        self.lock = asyncio.Lock()
 
     async def get_token_id(self):
         """获取 Gewechat Token。"""
@@ -174,9 +180,10 @@ class SimpleGewechatClient:
             user_id = from_user_name
 
         # 检查消息是否由自己发送，若是则忽略
-        if user_id == abm.self_id:
-            logger.info("忽略自己发送的消息")
-            return None
+        # 已经有可配置项专门配置是否需要响应自己的消息，因此这里注释掉。
+        # if user_id == abm.self_id:
+        #     logger.info("忽略自己发送的消息")
+        #     return None
 
         abm.message = []
 
@@ -202,7 +209,12 @@ class SimpleGewechatClient:
             else:
                 user_real_name = self.userrealnames[abm.group_id][user_id]
         else:
-            user_real_name = d.get("PushContent", "unknown : ").split(" : ")[0]
+            try:
+                info = (await self.get_user_or_group_info(user_id))["data"][0]
+                user_real_name = info["nickName"]
+            except Exception as e:
+                logger.debug(f"获取用户 {user_id} 昵称失败: {e}")
+                user_real_name = user_id
 
         if at_me:
             abm.message.insert(0, At(qq=abm.self_id, name=self.nickname))
@@ -260,9 +272,12 @@ class SimpleGewechatClient:
                 logger.info("消息类型(48)：地理位置")
             case 49:  # 公众号/文件/小程序/引用/转账/红包/视频号/群聊邀请
                 data_parser = GeweDataParser(content, abm.group_id == "")
-                abm_data = data_parser.parse_mutil_49()
-                if abm_data:
-                    abm.message.append(abm_data)
+                segments = data_parser.parse_mutil_49()
+                if segments:
+                    abm.message.extend(segments)
+                    for seg in segments:
+                        if isinstance(seg, Plain):
+                            abm.message_str += seg.text
             case 51:  # 帐号消息同步?
                 logger.info("消息类型(51)：帐号消息同步？")
             case 10000:  # 被踢出群聊/更换群主/修改群名称
@@ -301,9 +316,33 @@ class SimpleGewechatClient:
 
         return quart.jsonify({"r": "AstrBot ACK"})
 
-    async def _handle_file(self, file_id):
-        file_path = f"data/temp/{file_id}"
-        return await quart.send_file(file_path)
+    async def _register_file(self, file_path: str) -> str:
+        """向 AstrBot 回调服务器 注册一个允许外部访问的文件。
+
+        Args:
+            file_path (str): 文件路径。
+        Returns:
+            str: 返回一个 auth_token，文件路径为 file_path。通过 /astrbot-gewechat/file/auth_token 得到文件。
+        """
+        async with self.lock:
+            if not os.path.exists(file_path):
+                raise Exception(f"文件不存在: {file_path}")
+
+            file_token = str(uuid.uuid4())
+            self.staged_files[file_token] = file_path
+            return file_token
+
+    async def _handle_file(self, file_token):
+        async with self.lock:
+            if file_token not in self.staged_files:
+                logger.warning(f"请求的文件 {file_token} 不存在。")
+                return quart.abort(404)
+            if not os.path.exists(self.staged_files[file_token]):
+                logger.warning(f"请求的文件 {self.staged_files[file_token]} 不存在。")
+                return quart.abort(404)
+            file_path = self.staged_files[file_token]
+            self.staged_files.pop(file_token, None)
+            return await quart.send_file(file_path)
 
     async def _set_callback_url(self):
         logger.info("设置回调，请等待...")
@@ -453,17 +492,18 @@ class SimpleGewechatClient:
                             "此次登录需要安全验证码，请在管理面板聊天页输入 /gewe_code 验证码 来验证，如 /gewe_code 123456"
                         )
                     else:
-                        status = json_blob["data"]["status"]
-                        nickname = json_blob["data"].get("nickName", "")
-                        if status == 1:
-                            logger.info(f"等待确认...{nickname}")
-                        elif status == 2:
-                            logger.info(f"绿泡泡平台登录成功: {nickname}")
-                            break
-                        elif status == 0:
-                            logger.info("等待扫码...")
-                        else:
-                            logger.warning(f"未知状态: {status}")
+                        if "status" in json_blob["data"]:
+                            status = json_blob["data"]["status"]
+                            nickname = json_blob["data"].get("nickName", "")
+                            if status == 1:
+                                logger.info(f"等待确认...{nickname}")
+                            elif status == 2:
+                                logger.info(f"绿泡泡平台登录成功: {nickname}")
+                                break
+                            elif status == 0:
+                                logger.info("等待扫码...")
+                            else:
+                                logger.warning(f"未知状态: {status}")
             await asyncio.sleep(5)
 
         if appid:

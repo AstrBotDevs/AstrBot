@@ -152,6 +152,8 @@ pre-commit install
 
 ## ✨ Demo
 
+<details><summary>👉 点击展开多张 Demo 截图 👈</summary>
+
 <div align='center'>
 
 <img src="https://github.com/user-attachments/assets/4ee688d9-467d-45c8-99d6-368f9a8a92d8" width="600">
@@ -172,6 +174,9 @@ _✨ 插件系统——部分插件展示 ✨_
 _✨ WebUI ✨_
 
 </div>
+
+</details>
+
 
 ## ❤️ Special Thanks
 

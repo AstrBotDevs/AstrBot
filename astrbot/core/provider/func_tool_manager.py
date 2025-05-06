@@ -457,6 +457,11 @@ class FuncCall:
 
         def convert_schema(schema: dict) -> dict:
             """转换 schema 为 Gemini API 格式"""
+
+            # 如果 schema 包含 anyOf，则只返回 anyOf 字段
+            if "anyOf" in schema:
+                return {"anyOf": [convert_schema(s) for s in schema["anyOf"]]}
+
             result = {}
 
             if "type" in schema and schema["type"] in supported_types:
@@ -495,8 +500,6 @@ class FuncCall:
 
             if "items" in schema:
                 result["items"] = convert_schema(schema["items"])
-            if "anyOf" in schema:
-                result["anyOf"] = [convert_schema(s) for s in schema["anyOf"]]
 
             return result
 

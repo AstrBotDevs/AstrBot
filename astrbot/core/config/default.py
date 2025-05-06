@@ -2,7 +2,7 @@
 如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
 """
 
-VERSION = "3.5.5"
+VERSION = "3.5.7"
 DB_PATH = "data/data_v3.db"
 
 # 默认配置
@@ -140,6 +140,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
+                        "ws_reverse_token": "",
                     },
                     "gewechat(微信)": {
                         "id": "gwchat",
@@ -158,6 +159,7 @@ CONFIG_METADATA_2 = {
                         "secret": "",
                         "token": "",
                         "encoding_aes_key": "",
+                        "kf_name": "",
                         "api_base_url": "https://qyapi.weixin.qq.com/cgi-bin/",
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
@@ -188,10 +190,15 @@ CONFIG_METADATA_2 = {
                         "telegram_file_base_url": "https://api.telegram.org/file/bot",
                         "telegram_command_register": True,
                         "telegram_command_auto_refresh": True,
-                        "telegram_command_register_interval": 300
+                        "telegram_command_register_interval": 300,
                     },
                 },
                 "items": {
+                    "kf_name": {
+                      "description": "微信客服账号名",
+                      "type": "string",
+                      "hint": "可选。微信客服账号名(不是 ID)。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取"
+                    },
                     "telegram_token": {
                         "description": "Bot Token",
                         "type": "string",
@@ -236,7 +243,7 @@ CONFIG_METADATA_2 = {
                     "secret": {
                         "description": "secret",
                         "type": "string",
-                        "hint": "必填项。QQ 官方机器人平台的 secret。如何获取请参考文档。",
+                        "hint": "必填项。",
                     },
                     "enable_group_c2c": {
                         "description": "启用消息列表单聊",
@@ -257,6 +264,11 @@ CONFIG_METADATA_2 = {
                         "description": "反向 Websocket 端口",
                         "type": "int",
                         "hint": "aiocqhttp 适配器的反向 Websocket 端口。",
+                    },
+                    "ws_reverse_token": {
+                        "description": "反向 Websocket Token",
+                        "type": "string",
+                        "hint": "aiocqhttp 适配器的反向 Websocket Token。未设置则不启用 Token 验证。",
                     },
                     "lark_bot_name": {
                         "description": "飞书机器人的名字",
@@ -562,6 +574,9 @@ CONFIG_METADATA_2 = {
                             "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
+                        "gm_thinking_config": {
+                            "budget": 0,
+                        },
                     },
                     "DeepSeek": {
                         "id": "deepseek_default",
@@ -792,6 +807,17 @@ CONFIG_METADATA_2 = {
                                     "BLOCK_MEDIUM_AND_ABOVE",
                                     "BLOCK_LOW_AND_ABOVE",
                                 ],
+                            },
+                        },
+                    },
+                    "gm_thinking_config": {
+                        "description": "Gemini思考设置",
+                        "type": "object",
+                        "items": {
+                            "budget": {
+                                "description": "思考预算",
+                                "type": "int",
+                                "hint": "模型应该生成的思考Token的数量，设为0关闭思考。除gemini-2.5-flash外的模型会静默忽略此参数。",
                             },
                         },
                     },
