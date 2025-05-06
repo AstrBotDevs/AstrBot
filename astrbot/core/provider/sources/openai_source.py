@@ -21,7 +21,7 @@ from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
 from typing import List, AsyncGenerator
 from ..register import register_provider_adapter
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 
 
 @register_provider_adapter(
@@ -221,14 +221,16 @@ class ProviderOpenAIOfficial(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = [],
+        image_urls: list[str] = None,
         func_tool: FuncCall = None,
-        contexts=[],
-        system_prompt=None,
-        tool_calls_result=None,
+        contexts: list=None,
+        system_prompt: str=None,
+        tool_calls_result: ToolCallsResult=None,
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
+        if contexts is None:
+            contexts = []
         new_record = await self.assemble_context(prompt, image_urls)
         context_query = [*contexts, new_record]
         if system_prompt:
@@ -337,11 +339,11 @@ class ProviderOpenAIOfficial(Provider):
 
     async def text_chat(
         self,
-        prompt: str,
-        session_id: str = None,
-        image_urls: List[str] = [],
-        func_tool: FuncCall = None,
-        contexts=[],
+        prompt,
+        session_id = None,
+        image_urls = None,
+        func_tool = None,
+        contexts=None,
         system_prompt=None,
         tool_calls_result=None,
         **kwargs,
