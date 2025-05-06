@@ -190,6 +190,7 @@ _✨ WebUI ✨_
 此外，本项目的诞生离不开以下开源项目：
 
 - [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ)
+- [wechatpy/wechatpy](https://github.com/wechatpy/wechatpy)
 
 ## ⭐ Star History
 
