@@ -1,3 +1,4 @@
+import os
 import uuid
 import asyncio
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -6,6 +7,7 @@ from astrbot.api.message_components import Plain, Image, Record
 from wechatpy.enterprise import WeChatClient
 
 from astrbot.api import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 try:
     import pydub
@@ -52,19 +54,29 @@ class WecomPlatformEvent(AstrMessageEvent):
                 if start + 2048 >= len(plain):
                     result.append(plain[start:])
                     break
-                
+
                 # 向前搜索分割标点符号
                 end = min(start + 2048, len(plain))
                 cut_position = end
                 for i in range(end, start, -1):
-                    if i < len(plain) and plain[i-1] in ["。", "！", "？", ".", "!", "?", "\n", ";", "；"]:
+                    if i < len(plain) and plain[i - 1] in [
+                        "。",
+                        "！",
+                        "？",
+                        ".",
+                        "!",
+                        "?",
+                        "\n",
+                        ";",
+                        "；",
+                    ]:
                         cut_position = i
                         break
-                
+
                 # 没找到合适的位置分割, 直接切分
                 if cut_position == end and end < len(plain):
                     cut_position = end
-                
+
                 result.append(plain[start:cut_position])
                 start = cut_position
 
@@ -103,7 +115,8 @@ class WecomPlatformEvent(AstrMessageEvent):
             elif isinstance(comp, Record):
                 record_path = await comp.convert_to_file_path()
                 # 转成amr
-                record_path_amr = f"data/temp/{uuid.uuid4()}.amr"
+                temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                record_path_amr = os.path.join(temp_dir, f"{uuid.uuid4()}.amr")
                 pydub.AudioSegment.from_wav(record_path).export(
                     record_path_amr, format="amr"
                 )

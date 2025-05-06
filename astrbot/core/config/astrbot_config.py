@@ -4,8 +4,9 @@ import logging
 import enum
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 from typing import Dict
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-ASTRBOT_CONFIG_PATH = "data/cmd_config.json"
+ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 logger = logging.getLogger("astrbot")
 
 

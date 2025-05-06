@@ -22,6 +22,10 @@ from astrbot.core.utils.io import remove_dir
 from .star import star_registry, star_map
 from .star_handler import star_handlers_registry
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_plugin_path,
+    get_astrbot_config_path,
+)
 
 from .filter.permission import PermissionTypeFilter, PermissionType
 
@@ -34,17 +38,9 @@ class PluginManager:
         self.context._star_manager = self
 
         self.config = config
-        self.plugin_store_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "../../../data/plugins"
-            )
-        )
+        self.plugin_store_path = get_astrbot_plugin_path()
         """存储插件的路径。即 data/plugins"""
-        self.plugin_config_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "../../../data/config"
-            )
-        )
+        self.plugin_config_path = get_astrbot_config_path()
         """存储插件配置的路径。data/config"""
         self.reserved_plugin_path = os.path.abspath(
             os.path.join(

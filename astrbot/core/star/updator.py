@@ -6,16 +6,13 @@ from ..updator import RepoZipUpdator
 from astrbot.core.utils.io import remove_dir, on_error
 from ..star.star import StarMetadata
 from astrbot.core import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
 
 
 class PluginUpdator(RepoZipUpdator):
     def __init__(self, repo_mirror: str = "") -> None:
         super().__init__(repo_mirror)
-        self.plugin_store_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "../../../data/plugins"
-            )
-        )
+        self.plugin_store_path = get_astrbot_plugin_path()
 
     def get_plugin_store_path(self) -> str:
         return self.plugin_store_path

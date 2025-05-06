@@ -1,3 +1,4 @@
+import os
 import sys
 import uuid
 import asyncio
@@ -23,6 +24,7 @@ from wechatpy.enterprise.messages import TextMessage, ImageMessage, VoiceMessage
 from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.enterprise import parse_message
 from .wecom_event import WecomPlatformEvent
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -191,14 +193,15 @@ class WecomPlatformAdapter(Platform):
             resp: Response = await asyncio.get_event_loop().run_in_executor(
                 None, self.client.media.download, msg.media_id
             )
-            path = f"data/temp/wecom_{msg.media_id}.amr"
+            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
             with open(path, "wb") as f:
                 f.write(resp.content)
 
             try:
                 from pydub import AudioSegment
 
-                path_wav = f"data/temp/wecom_{msg.media_id}.wav"
+                path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
                 audio = AudioSegment.from_file(path)
                 audio.export(path_wav, format="wav")
             except Exception as e:

@@ -5,6 +5,7 @@
 from typing import Union
 import os
 import json
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 def load_config(namespace: str) -> Union[dict, bool]:
@@ -13,7 +14,7 @@ def load_config(namespace: str) -> Union[dict, bool]:
     namespace: str, 配置的唯一识别符，也就是配置文件的名字。
     返回值: 当配置文件存在时，返回 namespace 对应配置文件的内容dict，否则返回 False。
     """
-    path = f"data/config/{namespace}.json"
+    path = os.path.join(get_astrbot_data_path(), "config", f"{namespace}.json")
     if not os.path.exists(path):
         return False
     with open(path, "r", encoding="utf-8-sig") as f:
@@ -43,7 +44,10 @@ def put_config(namespace: str, name: str, key: str, value, description: str):
         raise ValueError("key 只支持 str 类型。")
     if not isinstance(value, (str, int, float, bool, list)):
         raise ValueError("value 只支持 str, int, float, bool, list 类型。")
-    path = f"data/config/{namespace}.json"
+
+    config_dir = os.path.join(get_astrbot_data_path(), "config")
+    path = os.path.join(config_dir, f"{namespace}.json")
+
     if not os.path.exists(path):
         with open(path, "w", encoding="utf-8-sig") as f:
             f.write("{}")
@@ -71,7 +75,7 @@ def update_config(namespace: str, key: str, value):
     key: str, 配置项的键。
     value: str, int, float, bool, list, 配置项的值。
     """
-    path = f"data/config/{namespace}.json"
+    path = os.path.join(get_astrbot_data_path(), "config", f"{namespace}.json")
     if not os.path.exists(path):
         raise FileNotFoundError(f"配置文件 {namespace}.json 不存在。")
     with open(path, "r", encoding="utf-8-sig") as f:

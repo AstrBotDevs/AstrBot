@@ -6,8 +6,9 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image, Record
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core import web_chat_back_queue
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-imgs_dir = "data/webchat/imgs"
+imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
 
 
 class WebChatMessageEvent(AstrMessageEvent):

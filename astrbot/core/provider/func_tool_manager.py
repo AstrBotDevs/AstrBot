@@ -12,6 +12,8 @@ from contextlib import AsyncExitStack
 from astrbot import logger
 from astrbot.core.utils.log_pipe import LogPipe
 
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
 try:
     import mcp
     from mcp.client.sse import sse_client
@@ -238,8 +240,7 @@ class FuncCall:
         }
         ```
         """
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        data_dir = os.path.abspath(os.path.join(current_dir, "../../../data"))
+        data_dir = get_astrbot_data_path()
 
         mcp_json_file = os.path.join(data_dir, "mcp_server.json")
         if not os.path.exists(mcp_json_file):

@@ -8,6 +8,7 @@ from astrbot.api.event import filter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import llm_tool, logger
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 @star.register(
@@ -29,10 +30,11 @@ class Main(star.Star):
         self.scheduler = AsyncIOScheduler(timezone=self.timezone)
 
         # set and load config
-        if not os.path.exists("data/astrbot-reminder.json"):
-            with open("data/astrbot-reminder.json", "w", encoding="utf-8") as f:
+        reminder_file = os.path.join(get_astrbot_data_path(), "astrbot-reminder.json")
+        if not os.path.exists(reminder_file):
+            with open(reminder_file, "w", encoding="utf-8") as f:
                 f.write("{}")
-        with open("data/astrbot-reminder.json", "r", encoding="utf-8") as f:
+        with open(reminder_file, "r", encoding="utf-8") as f:
             self.reminder_data = json.load(f)
 
         self._init_scheduler()
@@ -82,7 +84,8 @@ class Main(star.Star):
 
     async def _save_data(self):
         """Save the reminder data."""
-        with open("data/astrbot-reminder.json", "w", encoding="utf-8") as f:
+        reminder_file = os.path.join(get_astrbot_data_path(), "astrbot-reminder.json")
+        with open(reminder_file, "w", encoding="utf-8") as f:
             json.dump(self.reminder_data, f, ensure_ascii=False)
 
     def _parse_cron_expr(self, cron_expr: str):
