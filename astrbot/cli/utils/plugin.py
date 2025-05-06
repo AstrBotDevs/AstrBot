@@ -74,6 +74,60 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def load_yaml_metadata(plugin_dir: str) -> dict:
+    """从 metadata.yaml 文件加载插件元数据
+
+    Args:
+        plugin_dir: 插件目录路径
+
+    Returns:
+        dict: 包含元数据的字典，如果读取失败则返回空字典
+    """
+    yaml_path = os.path.join(plugin_dir, "metadata.yaml")
+    if os.path.exists(yaml_path):
+        try:
+            with open(yaml_path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except Exception as e:
+            click.echo(f"读取 {yaml_path} 失败: {e}", err=True)
+    return {}
+
+
+def extract_py_metadata(plugin_dir: str) -> dict:
+    """从 Python 文件中提取插件元数据
+
+    Args:
+        plugin_dir: 插件目录路径
+
+    Returns:
+        dict: 包含元数据的字典，如果提取失败则返回空字典
+    """
+    # 检查 main.py 或与目录同名的 py 文件
+    for filename in ("main.py", f"{os.path.basename(plugin_dir)}.py"):
+        py_file = os.path.join(plugin_dir, filename)
+        if os.path.exists(py_file):
+            try:
+                with open(py_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    register_match = re.search(
+                        r'@register_star\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"(?:\s*,\s*"?([^")]+)"?)?\s*\)',
+                        content,
+                    )
+                    if register_match:
+                        # 映射匹配组到元数据键
+                        metadata = {}
+                        keys = ["name", "author", "desc", "version", "repo"]
+                        for i, key in enumerate(keys):
+                            if i + 1 <= len(
+                                register_match.groups()
+                            ) and register_match.group(i + 1):
+                                metadata[key] = register_match.group(i + 1)
+                        return metadata
+            except Exception as e:
+                click.echo(f"读取 {py_file} 失败: {e}", err=True)
+    return {}
+
+
 def build_plug_list(plugins_dir: Path) -> list:
     """构建插件列表，包含本地和在线插件信息
 
@@ -81,14 +135,7 @@ def build_plug_list(plugins_dir: Path) -> list:
         plugins_dir (Path): 插件目录路径
 
     Returns:
-        list: 包含插件信息的字典列表，每个字典包含:
-            - name: 插件名称
-            - desc: 插件描述
-            - version: 插件版本
-            - author: 插件作者
-            - repo: 插件仓库地址
-            - status: 插件状态 [已安装/需更新/未安装/未发布]
-            - local_path: 本地插件路径
+        list: 包含插件信息的字典列表
     """
     # 获取本地插件信息
     result = []
@@ -98,49 +145,18 @@ def build_plug_list(plugins_dir: Path) -> list:
             if not os.path.isdir(plugin_dir):
                 continue
 
-            metadata = {}
-            # 优先从 metadata.yaml 读取
-            yaml_path = os.path.join(plugin_dir, "metadata.yaml")
-            if os.path.exists(yaml_path):
-                try:
-                    with open(yaml_path, "r", encoding="utf-8") as f:
-                        metadata = yaml.safe_load(f)
-                except Exception as e:
-                    click.echo(f"读取 {yaml_path} 失败: {e}", err=True)
-                    continue
+            # 从不同来源加载元数据
+            metadata = load_yaml_metadata(plugin_dir)
 
-            # 如果没有 metadata.yaml 或信息不完整，从 Python 文件读取
+            # 如果元数据不完整，尝试从 Python 文件提取
             if not metadata or not all(
                 k in metadata for k in ["name", "desc", "version", "author", "repo"]
             ):
-                # 检查 main.py 或与目录同名的 py 文件
-                py_file = os.path.join(plugin_dir, "main.py")
-                if not os.path.exists(py_file):
-                    py_file = os.path.join(
-                        plugin_dir, f"{os.path.basename(plugin_dir)}.py"
-                    )
-
-                if os.path.exists(py_file):
-                    try:
-                        with open(py_file, "r", encoding="utf-8") as f:
-                            content = f.read()
-                            register_match = re.search(
-                                r'@register_star\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"(?:\s*,\s*"?([^")]+)"?)?\s*\)',
-                                content,
-                            )
-                            if register_match:
-                                if "name" not in metadata:
-                                    metadata["name"] = register_match.group(1)
-                                if "author" not in metadata:
-                                    metadata["author"] = register_match.group(2)
-                                if "desc" not in metadata:
-                                    metadata["desc"] = register_match.group(3)
-                                if "version" not in metadata:
-                                    metadata["version"] = str(register_match.group(4))
-                                if "repo" not in metadata and register_match.group(5):
-                                    metadata["repo"] = register_match.group(5)
-                    except Exception as e:
-                        click.echo(f"读取 {py_file} 失败: {e}", err=True)
+                py_metadata = extract_py_metadata(plugin_dir)
+                # 合并元数据，保留已有的值
+                for key, value in py_metadata.items():
+                    if key not in metadata or not metadata[key]:
+                        metadata[key] = value
 
             # 如果成功提取元数据，添加到结果列表
             if metadata:
