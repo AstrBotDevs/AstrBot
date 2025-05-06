@@ -96,9 +96,10 @@ uv run main.py
 | -------- | ------- | ------- | ------ |
 | QQ(官方机器人接口) | ✔    | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片 |
 | QQ(OneBot)      | ✔    | 私聊、群聊 | 文字、图片、语音 |
-| 微信(个人号)    | ✔    | 微信个人号私聊、群聊 | 文字、图片、语音 |
-| [Telegram](https://github.com/Soulter/astrbot_plugin_telegram)   | ✔    | 私聊、群聊 | 文字、图片 |
-| [微信(企业微信)](https://github.com/Soulter/astrbot_plugin_wecom)    | ✔    | 私聊 | 文字、图片、语音 |
+| 微信个人号    | ✔    | 微信个人号私聊、群聊 | 文字、图片、语音 |
+| Telegram   | ✔    | 私聊、群聊 | 文字、图片 |
+| 企业微信    | ✔    | 私聊 | 文字、图片、语音 |
+| 微信客服    | ✔    | 私聊 | 文字、图片 |
 | 飞书   | ✔    | 私聊、群聊 | 文字、图片 |
 | 钉钉   | ✔    | 私聊、群聊 | 文字、图片 |
 | 微信对话开放平台 | 🚧    | 计划内 | - |
@@ -186,6 +187,9 @@ _✨ WebUI ✨_
   <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot" />
 </a>
 
+此外，本项目的诞生离不开以下开源项目：
+
+- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ)
 
 ## ⭐ Star History
 
