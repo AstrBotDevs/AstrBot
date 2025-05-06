@@ -1,44 +1,55 @@
-import shutil
+import asyncio
 
 import click
-import asyncio
-from pathlib import Path
-from ..utils import get_astrbot_root, check_astrbot_root, check_dashboard
+from filelock import FileLock, Timeout
+
+from ..utils import check_dashboard, get_astrbot_root
+
+
+async def initialize_astrbot(astrbot_root) -> None:
+    """执行 AstrBot 初始化逻辑"""
+    dot_astrbot = astrbot_root / ".astrbot"
+
+    if not dot_astrbot.exists():
+        click.echo(f"Current Directory: {astrbot_root}")
+        click.echo(
+            "如果你确认这是 Astrbot root directory, 你需要在当前目录下创建一个 .astrbot 文件标记该目录为 AstrBot 的数据目录。"
+        )
+        if click.confirm(
+            f"请检查当前目录是否正确，确认正确请回车: {astrbot_root}",
+            default=True,
+            abort=True,
+        ):
+            dot_astrbot.touch()
+            click.echo(f"Created {dot_astrbot}")
+
+    paths = {
+        "data": astrbot_root / "data",
+        "config": astrbot_root / "data" / "config",
+        "plugins": astrbot_root / "data" / "plugins",
+        "temp": astrbot_root / "data" / "temp",
+    }
+
+    for name, path in paths.items():
+        path.mkdir(parents=True, exist_ok=True)
+        click.echo(f"{'Created' if not path.exists() else 'Directory exists'}: {path}")
+
+    await check_dashboard(astrbot_root / "data")
 
 
 @click.command()
-@click.option("--path", "-p", help="AstrBot 数据目录")
-@click.option("--force", "-f", is_flag=True, help="强制初始化")
-def init(path: str | None, force: bool) -> None:
+def init() -> None:
     """初始化 AstrBot"""
     click.echo("Initializing AstrBot...")
-    astrbot_root = get_astrbot_root(path)
-    if force:
-        if click.confirm(
-            "强制初始化会删除当前目录下的所有文件，是否继续？",
-            default=False,
-            abort=True,
-        ):
-            click.echo("正在删除当前目录下的所有文件...")
-            shutil.rmtree(astrbot_root, ignore_errors=True)
+    astrbot_root = get_astrbot_root()
+    lock_file = astrbot_root / "astrbot.lock"
+    lock = FileLock(lock_file, timeout=5)
 
-    check_astrbot_root(astrbot_root)
+    try:
+        with lock.acquire():
+            asyncio.run(initialize_astrbot(astrbot_root))
+    except Timeout:
+        raise click.ClickException("无法获取锁文件，请检查是否有其他实例正在运行")
 
-    click.echo(f"AstrBot root directory: {astrbot_root}")
-
-    if not astrbot_root.exists():
-        astrbot_root.mkdir(parents=True, exist_ok=True)
-        click.echo(f"Created directory: {astrbot_root}")
-    else:
-        click.echo(f"Directory already exists: {astrbot_root}")
-
-    config_path: Path = astrbot_root / "config"
-    plugins_path: Path = astrbot_root / "plugins"
-    temp_path: Path = astrbot_root / "temp"
-    config_path.mkdir(parents=True, exist_ok=True)
-    plugins_path.mkdir(parents=True, exist_ok=True)
-    temp_path.mkdir(parents=True, exist_ok=True)
-
-    click.echo(f"Created directories: {config_path}, {plugins_path}, {temp_path}")
-
-    asyncio.run(_check_dashboard(astrbot_root))
+    except Exception as e:
+        raise click.ClickException(f"初始化失败: {e!s}")

@@ -1,8 +1,11 @@
+"""
+AstrBot CLI入口
+"""
+
 import click
 import sys
-from astrbot.core.config.default import VERSION
-from .commands.cmd_init import init
-from .commands.cmd_run import run
+from . import __version__
+from .commands import init, run, plug
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -15,12 +18,12 @@ logo_tmpl = r"""
 
 
 @click.group()
-@click.version_option(VERSION, prog_name="AstrBot")
+@click.version_option(__version__, prog_name="AstrBot")
 def cli() -> None:
     """The AstrBot CLI"""
     click.echo(logo_tmpl)
     click.echo("Welcome to AstrBot CLI!")
-    click.echo(f"AstrBot version: {VERSION}")
+    click.echo(f"AstrBot CLI version: {__version__}")
 
 
 @click.command()
@@ -49,6 +52,7 @@ def help(command_name: str | None) -> None:
 cli.add_command(init)
 cli.add_command(run)
 cli.add_command(help)
+cli.add_command(plug)
 
 if __name__ == "__main__":
     cli()

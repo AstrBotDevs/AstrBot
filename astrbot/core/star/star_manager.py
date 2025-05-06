@@ -29,6 +29,12 @@ from astrbot.core.utils.astrbot_path import (
 
 from .filter.permission import PermissionTypeFilter, PermissionType
 
+try:
+    from watchfiles import awatch, PythonFilter
+except ImportError:
+    if os.getenv("ASTROBOT_RELOAD", "0") == "1":
+        logger.warning("未安装 watchfiles，无法实现插件的热重载。")
+
 
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -52,6 +58,58 @@ class PluginManager:
         """插件配置 Schema 文件名"""
 
         self.failed_plugin_info = ""
+        if os.getenv("ASTROBOT_RELOAD", "0") == "1":
+            asyncio.create_task(self._watch_plugins_changes())
+
+    async def _watch_plugins_changes(self):
+        """监视插件文件变化"""
+        try:
+            async for changes in awatch(
+                self.plugin_store_path,
+                self.reserved_plugin_path,
+                watch_filter=PythonFilter(),
+                recursive=True,
+            ):
+                # 处理文件变化
+                await self._handle_file_changes(changes)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"插件热重载监视任务异常: {str(e)}")
+            logger.error(traceback.format_exc())
+
+    async def _handle_file_changes(self, changes):
+        """处理文件变化"""
+        logger.info(f"检测到文件变化: {changes}")
+        plugins_to_check = []
+
+        for star in star_registry:
+            if not star.activated:
+                continue
+            if star.root_dir_name is None:
+                continue
+            if star.reserved:
+                plugin_dir_path = os.path.join(
+                    self.reserved_plugin_path, star.root_dir_name
+                )
+            else:
+                plugin_dir_path = os.path.join(
+                    self.plugin_store_path, star.root_dir_name
+                )
+            plugins_to_check.append((plugin_dir_path, star.name))
+        reloaded_plugins = set()
+        for change in changes:
+            _, file_path = change
+            for plugin_dir_path, plugin_name in plugins_to_check:
+                if (
+                    os.path.commonpath([plugin_dir_path])
+                    == os.path.commonpath([plugin_dir_path, file_path])
+                    and plugin_name not in reloaded_plugins
+                ):
+                    logger.info(f"检测到插件 {plugin_name} 文件变化，正在重载...")
+                    await self.reload(plugin_name)
+                    reloaded_plugins.add(plugin_name)
+                    break
 
     def _get_classes(self, arg: ModuleType):
         """获取指定模块（可以理解为一个 python 文件）下所有的类"""
