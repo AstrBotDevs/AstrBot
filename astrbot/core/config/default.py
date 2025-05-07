@@ -155,7 +155,7 @@ CONFIG_METADATA_2 = {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
                         "enable": False,
-                        "appid": "wx4cb77256a17de10a",
+                        "appid": "",
                         "secret": "",
                         "token": "",
                         "encoding_aes_key": "",
