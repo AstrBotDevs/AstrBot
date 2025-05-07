@@ -151,6 +151,18 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
+                    "weixin_official_account(微信公众平台)": {
+                        "id": "weixin_official_account",
+                        "type": "weixin_official_account",
+                        "enable": False,
+                        "appid": "wx4cb77256a17de10a",
+                        "secret": "",
+                        "token": "",
+                        "encoding_aes_key": "",
+                        "api_base_url": "https://api.weixin.qq.com/cgi-bin/",
+                        "callback_server_host": "0.0.0.0",
+                        "port": 6194,
+                    },
                     "wecom(企业微信)": {
                         "id": "wecom",
                         "type": "wecom",

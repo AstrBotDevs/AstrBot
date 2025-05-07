@@ -192,7 +192,7 @@ wheels = [
 
 [[package]]
 name = "astrbot"
-version = "3.4.39"
+version = "3.5.7"
 source = { editable = "." }
 dependencies = [
     { name = "aiocqhttp" },
@@ -220,6 +220,7 @@ dependencies = [
     { name = "pip" },
     { name = "psutil" },
     { name = "pydantic" },
+    { name = "pydub" },
     { name = "pyjwt" },
     { name = "python-telegram-bot" },
     { name = "qq-botpy" },
@@ -257,6 +258,7 @@ requires-dist = [
     { name = "pip", specifier = ">=25.0.1" },
     { name = "psutil", specifier = ">=5.8.0" },
     { name = "pydantic", specifier = "~=2.10.3" },
+    { name = "pydub", specifier = ">=0.25.1" },
     { name = "pyjwt", specifier = ">=2.10.1" },
     { name = "python-telegram-bot", specifier = ">=22.0" },
     { name = "qq-botpy", specifier = ">=1.2.1" },
@@ -1656,6 +1658,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/67/1d/42628a2c33e93f8e9acbde0d5d735fa0850f3e6a2f8cb1eb6c40b9a732ac/pydantic_settings-2.9.1.tar.gz", hash = "sha256:c509bf79d27563add44e8446233359004ed85066cd096d8b510f715e6ef5d268", size = 163234 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b6/5f/d6d641b490fd3ec2c4c13b4244d68deea3a1b970a97be64f34fb5504ff72/pydantic_settings-2.9.1-py3-none-any.whl", hash = "sha256:59b4f431b1defb26fe620c71a7d3968a710d719f5f4cdbbdb7926edeb770f6ef", size = 44356 },
+]
+
+[[package]]
+name = "pydub"
+version = "0.25.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/9a/e6bca0eed82db26562c73b5076539a4a08d3cffd19c3cc5913a3e61145fd/pydub-0.25.1.tar.gz", hash = "sha256:980a33ce9949cab2a569606b65674d748ecbca4f0796887fd6f46173a7b0d30f", size = 38326 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a6/53/d78dc063216e62fc55f6b2eebb447f6a4b0a59f55c8406376f76bf959b08/pydub-0.25.1-py2.py3-none-any.whl", hash = "sha256:65617e33033874b59d87db603aa1ed450633288aefead953b30bded59cb599a6", size = 32327 },
 ]
 
 [[package]]
