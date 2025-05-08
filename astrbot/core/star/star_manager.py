@@ -32,7 +32,7 @@ from .filter.permission import PermissionTypeFilter, PermissionType
 try:
     from watchfiles import awatch, PythonFilter
 except ImportError:
-    if os.getenv("ASTROBOT_RELOAD", "0") == "1":
+    if os.getenv("ASTRBOT_RELOAD", "0") == "1":
         logger.warning("未安装 watchfiles，无法实现插件的热重载。")
 
 
@@ -58,7 +58,7 @@ class PluginManager:
         """插件配置 Schema 文件名"""
 
         self.failed_plugin_info = ""
-        if os.getenv("ASTROBOT_RELOAD", "0") == "1":
+        if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
 
     async def _watch_plugins_changes(self):

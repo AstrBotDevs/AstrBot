@@ -48,7 +48,7 @@ def run(reload: bool, port: str) -> None:
 
         if reload:
             click.echo("启用插件自动重载")
-            os.environ["ASTROBOT_RELOAD"] = "1"
+            os.environ["ASTRBOT_RELOAD"] = "1"
 
         lock_file = astrbot_root / "astrbot.lock"
         lock = FileLock(lock_file, timeout=5)

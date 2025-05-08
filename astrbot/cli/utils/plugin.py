@@ -1,6 +1,5 @@
 import shutil
 import tempfile
-import os
 
 import httpx
 import yaml
@@ -74,7 +73,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def load_yaml_metadata(plugin_dir: str) -> dict:
+def load_yaml_metadata(plugin_dir: Path) -> dict:
     """从 metadata.yaml 文件加载插件元数据
 
     Args:
@@ -83,17 +82,16 @@ def load_yaml_metadata(plugin_dir: str) -> dict:
     Returns:
         dict: 包含元数据的字典，如果读取失败则返回空字典
     """
-    yaml_path = os.path.join(plugin_dir, "metadata.yaml")
-    if os.path.exists(yaml_path):
+    yaml_path = plugin_dir / "metadata.yaml"
+    if yaml_path.exists():
         try:
-            with open(yaml_path, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f) or {}
+            return yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
         except Exception as e:
             click.echo(f"读取 {yaml_path} 失败: {e}", err=True)
     return {}
 
 
-def extract_py_metadata(plugin_dir: str) -> dict:
+def extract_py_metadata(plugin_dir: Path) -> dict:
     """从 Python 文件中提取插件元数据
 
     Args:
@@ -103,26 +101,24 @@ def extract_py_metadata(plugin_dir: str) -> dict:
         dict: 包含元数据的字典，如果提取失败则返回空字典
     """
     # 检查 main.py 或与目录同名的 py 文件
-    for filename in ("main.py", f"{os.path.basename(plugin_dir)}.py"):
-        py_file = os.path.join(plugin_dir, filename)
-        if os.path.exists(py_file):
+    for pattern in ["main.py", f"{plugin_dir.name}.py"]:
+        for py_file in plugin_dir.glob(pattern):
             try:
-                with open(py_file, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    register_match = re.search(
-                        r'@register_star\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"(?:\s*,\s*"?([^")]+)"?)?\s*\)',
-                        content,
-                    )
-                    if register_match:
-                        # 映射匹配组到元数据键
-                        metadata = {}
-                        keys = ["name", "author", "desc", "version", "repo"]
-                        for i, key in enumerate(keys):
-                            if i + 1 <= len(
-                                register_match.groups()
-                            ) and register_match.group(i + 1):
-                                metadata[key] = register_match.group(i + 1)
-                        return metadata
+                content = py_file.read_text(encoding="utf-8")
+                register_match = re.search(
+                    r'@register_star\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"(?:\s*,\s*"?([^")]+)"?)?\s*\)',
+                    content,
+                )
+                if register_match:
+                    # 映射匹配组到元数据键
+                    metadata = {}
+                    keys = ["name", "author", "desc", "version", "repo"]
+                    for i, key in enumerate(keys):
+                        if i + 1 <= len(
+                            register_match.groups()
+                        ) and register_match.group(i + 1):
+                            metadata[key] = register_match.group(i + 1)
+                    return metadata
             except Exception as e:
                 click.echo(f"读取 {py_file} 失败: {e}", err=True)
     return {}
@@ -139,11 +135,9 @@ def build_plug_list(plugins_dir: Path) -> list:
     """
     # 获取本地插件信息
     result = []
-    if os.path.exists(plugins_dir):
-        for plugin_name in os.listdir(plugins_dir):
-            plugin_dir = os.path.join(plugins_dir, plugin_name)
-            if not os.path.isdir(plugin_dir):
-                continue
+    if plugins_dir.exists():
+        for plugin_name in [d.name for d in plugins_dir.glob("*") if d.is_dir()]:
+            plugin_dir = plugins_dir / plugin_name
 
             # 从不同来源加载元数据
             metadata = load_yaml_metadata(plugin_dir)
@@ -157,7 +151,6 @@ def build_plug_list(plugins_dir: Path) -> list:
                 for key, value in py_metadata.items():
                     if key not in metadata or not metadata[key]:
                         metadata[key] = value
-
             # 如果成功提取元数据，添加到结果列表
             if metadata:
                 result.append(
@@ -202,7 +195,6 @@ def build_plug_list(plugins_dir: Path) -> list:
             online_plugin = next(
                 p for p in online_plugins if p["name"] == local_plugin["name"]
             )
-
             if (
                 VersionComparator.compare_version(
                     local_plugin["version"], online_plugin["version"]
