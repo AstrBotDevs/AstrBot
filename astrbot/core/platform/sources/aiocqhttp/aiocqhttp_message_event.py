@@ -3,8 +3,9 @@ import re
 from typing import AsyncGenerator, Dict, List
 from aiocqhttp import CQHttp
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, Image, Node, Nodes, Plain, Record
+from astrbot.api.message_components import At, Image, Node, Nodes, Plain, Record, File
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core import file_token_service, astrbot_config, logger
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -34,24 +35,16 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 }
             elif isinstance(segment, At):
                 d["data"] = {
-                    "qq": str(segment.qq)  # 转换为字符串
+                    "qq": str(segment.qq),  # 转换为字符串
                 }
             ret.append(d)
         return ret
 
     async def send(self, message: MessageChain):
-        ret = await AiocqhttpMessageEvent._parse_onebot_json(message)
-
-        if not ret:
-            return
-
-        send_one_by_one = False
-        for seg in message.chain:
-            if isinstance(seg, (Node, Nodes)):
-                # 转发消息不能和普通消息混在一起发送
-                send_one_by_one = True
-                break
-
+        # 转发消息、文件消息不能和普通消息混在一起发送
+        send_one_by_one = any(
+            isinstance(seg, (Node, Nodes, File)) for seg in message.chain
+        )
         if send_one_by_one:
             for seg in message.chain:
                 if isinstance(seg, (Node, Nodes)):
@@ -70,6 +63,26 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         await self.bot.call_action(
                             "send_private_forward_msg", **payload
                         )
+                elif isinstance(seg, File):
+                    d = seg.toDict()
+                    url_or_path = await seg.get_file(allow_return_url=True)
+                    if url_or_path.startswith("http"):
+                        payload_file = url_or_path
+                    elif callback_host := astrbot_config.get("callback_api_base"):
+                        callback_host = str(callback_host).removesuffix("/")
+                        token = await file_token_service.register_file(url_or_path)
+                        payload_file = f"{callback_host}/api/file/{token}"
+                        logger.debug(f"Generated file callback link: {payload_file}")
+                    else:
+                        payload_file = url_or_path
+                    d["data"] = {
+                        "name": seg.name,
+                        "file": payload_file,
+                    }
+                    await self.bot.send(
+                        self.message_obj.raw_message,
+                        [d],
+                    )
                 else:
                     await self.bot.send(
                         self.message_obj.raw_message,
@@ -79,6 +92,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     )
                     await asyncio.sleep(0.5)
         else:
+            ret = await AiocqhttpMessageEvent._parse_onebot_json(message)
+            if not ret:
+                return
             await self.bot.send(self.message_obj.raw_message, ret)
 
         await super().send(message)

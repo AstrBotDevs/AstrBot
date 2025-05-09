@@ -8,6 +8,7 @@ from .static_file import StaticFileRoute
 from .chat import ChatRoute
 from .tools import ToolsRoute  # 导入新的ToolsRoute
 from .conversation import ConversationRoute
+from .file import FileRoute
 
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "LogRoute",
     "StaticFileRoute",
     "ChatRoute",
-    "ToolsRoute",  # 添加新的ToolsRoute
+    "ToolsRoute",
     "ConversationRoute",
+    "FileRoute",
 ]
