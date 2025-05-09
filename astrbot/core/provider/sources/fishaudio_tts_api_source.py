@@ -1,3 +1,4 @@
+import os
 import uuid
 import ormsgpack
 from pydantic import BaseModel, conint
@@ -6,6 +7,7 @@ from typing import Annotated, Literal
 from ..provider import TTSProvider
 from ..entities import ProviderType
 from ..register import register_provider_adapter
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class ServeReferenceAudio(BaseModel):
@@ -87,7 +89,8 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         )
 
     async def get_audio(self, text: str) -> str:
-        path = f"data/temp/fishaudio_tts_api_{uuid.uuid4()}.wav"
+        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        path = os.path.join(temp_dir, f"fishaudio_tts_api_{uuid.uuid4()}.wav")
         self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)
         async with AsyncClient(base_url=self.api_base).stream(

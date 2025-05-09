@@ -8,9 +8,10 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.config.default import DB_PATH
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.file_token_service import FileTokenService
+from .utils.astrbot_path import get_astrbot_data_path
 
 # 初始化数据存储文件夹
-os.makedirs("data", exist_ok=True)
+os.makedirs(get_astrbot_data_path(), exist_ok=True)
 
 WEBUI_SK = "Advanced_System_for_Text_Response_and_Bot_Operations_Tool"
 DEMO_MODE = os.getenv("DEMO_MODE", False)

@@ -2,8 +2,11 @@
 如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
 """
 
+import os
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
 VERSION = "3.5.8"
-DB_PATH = "data/data_v3.db"
+DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
 DEFAULT_CONFIG = {

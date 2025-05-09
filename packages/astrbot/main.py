@@ -1,3 +1,4 @@
+import os
 import aiohttp
 import datetime
 import builtins
@@ -13,6 +14,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_manager import PluginManager
@@ -1161,7 +1163,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("gewe_code")
     async def gewe_code(self, event: AstrMessageEvent, code: str):
         """保存 gewechat 验证码"""
-        with open("data/temp/gewe_code", "w", encoding="utf-8") as f:
+        code_path = os.path.join(get_astrbot_data_path(), "temp","gewe_code")
+        with open(code_path, "w", encoding="utf-8") as f:
             f.write(code)
         yield event.plain_result("验证码已保存。")
 

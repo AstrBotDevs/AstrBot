@@ -6,6 +6,7 @@ from .zip_updator import ReleaseInfo, RepoZipUpdator
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.io import download_file
+from astrbot.core.utils.astrbot_path import get_astrbot_path
 
 
 class AstrBotUpdator(RepoZipUpdator):
@@ -16,9 +17,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
     def __init__(self, repo_mirror: str = "") -> None:
         super().__init__(repo_mirror)
-        self.MAIN_PATH = os.path.abspath(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../")
-        )
+        self.MAIN_PATH = get_astrbot_path()
         self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
 
     def terminate_child_processes(self):
@@ -51,7 +50,13 @@ class AstrBotUpdator(RepoZipUpdator):
         self.terminate_child_processes()
         py = py.replace(" ", "\\ ")
         try:
-            os.execl(py, py, *sys.argv)
+            if "astrbot" in os.path.basename(sys.argv[0]):  # 兼容cli
+                args = [
+                    f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]
+                ]
+                os.execl(py, py, "-m", "astrbot.cli.__main__", *args)
+            else:
+                os.execl(py, py, *sys.argv)
         except Exception as e:
             logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
             raise e
@@ -66,6 +71,9 @@ class AstrBotUpdator(RepoZipUpdator):
     async def update(self, reboot=False, latest=True, version=None, proxy=""):
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
+
+        if os.environ.get("ASTRBOT_CLI"):
+            raise Exception("不支持更新CLI启动的AstrBot") # 避免版本管理混乱
 
         if latest:
             latest_version = update_data[0]["tag_name"]
