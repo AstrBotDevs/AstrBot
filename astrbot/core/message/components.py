@@ -500,7 +500,7 @@ class Nodes(BaseMessageComponent):
         for node in self.nodes:
             d = node.toDict()
             d["data"]["uin"] = str(node.uin) # 转为字符串
-            ret["messages"].append(node.toDict())
+            ret["messages"].append(d)
         return ret
 
 class Xml(BaseMessageComponent):
