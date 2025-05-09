@@ -19,7 +19,6 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 ![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fstats&query=v&label=7%E6%97%A5%E6%B4%BB%E8%B7%83%E9%87%8F&cacheSeconds=3600&style=for-the-badge&color=3b618e)
 ![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%E4%B8%AA&style=for-the-badge&label=%E6%8F%92%E4%BB%B6%E5%B8%82%E5%9C%BA&cacheSeconds=3600)
 
-
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_en.md">English</a> ｜
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://astrbot.app/">查看文档</a> ｜
@@ -28,10 +27,13 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 
 AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用的插件系统和完善的大语言模型（LLM）接入功能的聊天机器人及开发框架。
 
-[![star](https://gitcode.com/Soulter/AstrBot/star/badge.svg?style=for-the-badge)](https://gitcode.com/Soulter/AstrBot)
 
 <!-- [![codecov](https://img.shields.io/codecov/c/github/soulter/astrbot?style=for-the-badge)](https://codecov.io/gh/Soulter/AstrBot)
  -->
+
+> [!NOTE]
+> 
+> 个人微信接入所依赖的开源项目 Gewechat 近期已停止维护，我们正在评估其他方案（如 xxxbot 等）并将在数日内接入（很快！）。目前推荐微信用户暂时使用**微信官方**推出的企业微信接入方式和微信客服接入方式(版本 >= v3.5.7)。详情请前往 [#1443](https://github.com/AstrBotDevs/AstrBot/issues/1443) 讨论。
 
 ## ✨ 近期更新
 
@@ -96,9 +98,10 @@ uv run main.py
 | -------- | ------- | ------- | ------ |
 | QQ(官方机器人接口) | ✔    | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片 |
 | QQ(OneBot)      | ✔    | 私聊、群聊 | 文字、图片、语音 |
-| 微信(个人号)    | ✔    | 微信个人号私聊、群聊 | 文字、图片、语音 |
-| [Telegram](https://github.com/Soulter/astrbot_plugin_telegram)   | ✔    | 私聊、群聊 | 文字、图片 |
-| [微信(企业微信)](https://github.com/Soulter/astrbot_plugin_wecom)    | ✔    | 私聊 | 文字、图片、语音 |
+| 微信个人号    | ✔    | 微信个人号私聊、群聊 | 文字、图片、语音 |
+| Telegram   | ✔    | 私聊、群聊 | 文字、图片 |
+| 企业微信    | ✔    | 私聊 | 文字、图片、语音 |
+| 微信客服    | ✔    | 私聊 | 文字、图片 |
 | 飞书   | ✔    | 私聊、群聊 | 文字、图片 |
 | 钉钉   | ✔    | 私聊、群聊 | 文字、图片 |
 | 微信对话开放平台 | 🚧    | 计划内 | - |
@@ -186,6 +189,10 @@ _✨ WebUI ✨_
   <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot" />
 </a>
 
+此外，本项目的诞生离不开以下开源项目：
+
+- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ)
+- [wechatpy/wechatpy](https://github.com/wechatpy/wechatpy)
 
 ## ⭐ Star History
 

@@ -1019,6 +1019,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
             conversation = await self.context.conversation_manager.get_conversation(
                 message.unified_msg_origin, cid
             )
+            if not conversation:
+                message.set_result(MessageEventResult().message("请先进入一个对话。可以使用 /new 创建。"))
             if not conversation.persona_id and not conversation.persona_id == "[%None]":
                 curr_persona_name = (
                     self.context.provider_manager.selected_default_persona["name"]

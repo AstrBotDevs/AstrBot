@@ -5,7 +5,7 @@
 import os
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.6"
+VERSION = "3.5.8"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
@@ -107,6 +107,7 @@ DEFAULT_CONFIG = {
     "knowledge_db": {},
     "persona": [],
     "timezone": "",
+    "callback_api_base": "",
 }
 
 
@@ -154,6 +155,18 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
+                    "weixin_official_account(微信公众平台)": {
+                        "id": "weixin_official_account",
+                        "type": "weixin_official_account",
+                        "enable": False,
+                        "appid": "",
+                        "secret": "",
+                        "token": "",
+                        "encoding_aes_key": "",
+                        "api_base_url": "https://api.weixin.qq.com/cgi-bin/",
+                        "callback_server_host": "0.0.0.0",
+                        "port": 6194,
+                    },
                     "wecom(企业微信)": {
                         "id": "wecom",
                         "type": "wecom",
@@ -162,6 +175,7 @@ CONFIG_METADATA_2 = {
                         "secret": "",
                         "token": "",
                         "encoding_aes_key": "",
+                        "kf_name": "",
                         "api_base_url": "https://qyapi.weixin.qq.com/cgi-bin/",
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
@@ -196,6 +210,11 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "kf_name": {
+                      "description": "微信客服账号名",
+                      "type": "string",
+                      "hint": "可选。微信客服账号名(不是 ID)。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取"
+                    },
                     "telegram_token": {
                         "description": "Bot Token",
                         "type": "string",
@@ -240,7 +259,7 @@ CONFIG_METADATA_2 = {
                     "secret": {
                         "description": "secret",
                         "type": "string",
-                        "hint": "必填项。QQ 官方机器人平台的 secret。如何获取请参考文档。",
+                        "hint": "必填项。",
                     },
                     "enable_group_c2c": {
                         "description": "启用消息列表单聊",
@@ -1267,6 +1286,12 @@ CONFIG_METADATA_2 = {
                 "type": "string",
                 "obvious_hint": True,
                 "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab",
+            },
+            "callback_api_base": {
+                "description": "对外可达的回调接口地址",
+                "type": "string",
+                "obvious_hint": True,
+                "hint": "外部服务可能会通过 AstrBot 生成的回调链接（如文件下载链接）访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址（host），因此需要通过此配置项显式指定 “外部服务如何访问 AstrBot” 的地址。如 http://localhost:6185，https://example.com 等。"
             },
             "log_level": {
                 "description": "控制台日志级别",
