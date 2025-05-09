@@ -567,10 +567,9 @@ class File(BaseMessageComponent):
     name: T.Optional[str] = ""  # 名字
     file_: T.Optional[str] = ""  # 本地路径
     url: T.Optional[str] = ""  # url
-    _downloaded: bool = False  # 是否已经下载
 
     def __init__(self, name: str, file: str = "", url: str = ""):
-        """文件消息段。一般情况下请直接使用 file 参数即可，可以传入文件路径或 URL，AstrBot 会自动识别。"""
+        """文件消息段。"""
         super().__init__(name=name, file_=file, url=url)
 
     @property
@@ -588,9 +587,11 @@ class File(BaseMessageComponent):
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    logger.warning(
-                        "不可以在异步上下文中同步等待下载! 请使用 await get_file() 代替"
-                    )
+                    logger.warning((
+                        "不可以在异步上下文中同步等待下载! "
+                        "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                        "请使用 await get_file() 代替直接获取 <File>.file 字段"
+                    ))
                     return ""
                 else:
                     # 等待下载完成
@@ -616,11 +617,14 @@ class File(BaseMessageComponent):
         else:
             self.file_ = value
 
-    async def get_file(self) -> str:
+    async def get_file(self, allow_return_url: bool=False) -> str:
         """异步获取文件。请注意在使用后清理下载的文件, 以免占用过多空间
 
+        Args:
+            allow_return_url: 是否允许以文件 http 下载链接的形式返回，这允许您自行控制是否需要下载文件。
+            注意，如果为 True，也可能返回文件路径。
         Returns:
-            str: 文件路径
+            str: 文件路径或者 http 下载链接
         """
         if self.file_ and os.path.exists(self.file_):
             return os.path.abspath(self.file_)
@@ -633,17 +637,11 @@ class File(BaseMessageComponent):
 
     async def _download_file(self):
         """下载文件"""
-        if self._downloaded:
-            return
-
-        os.makedirs("data/download", exist_ok=True)
+        os.makedirs("data/temp", exist_ok=True)
         filename = self.name or f"{uuid.uuid4().hex}"
-        file_path = f"data/download/{filename}"
-
+        file_path = f"data/temp/{filename}"
         await download_file(self.url, file_path)
-
         self.file_ = os.path.abspath(file_path)
-        self._downloaded = True
 
 
 class WechatEmoji(BaseMessageComponent):

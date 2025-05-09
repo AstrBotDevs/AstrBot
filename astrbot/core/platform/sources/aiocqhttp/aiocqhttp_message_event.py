@@ -2,10 +2,10 @@ import asyncio
 import re
 from typing import AsyncGenerator, Dict, List
 from aiocqhttp import CQHttp
-from astrbot.core.utils.io import file_to_base64
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, Image, Node, Nodes, Plain, Record, File
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core import file_token_service, astrbot_config, logger
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -68,10 +68,19 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         )
                 elif isinstance(seg, File):
                     d = seg.toDict()
-                    base64_data = file_to_base64(seg.file)
+                    url_or_path = await seg.get_file(allow_return_url=True)
+                    if url_or_path.startswith("http"):
+                        payload_file = url_or_path
+                    elif callback_host := astrbot_config.get("callback_api_base"):
+                        callback_host = str(callback_host).removesuffix("/")
+                        token = await file_token_service.register_file(url_or_path)
+                        payload_file = f"{callback_host}/file/{token}"
+                        logger.debug(f"Generated file callback link: {payload_file}")
+                    else:
+                        payload_file = url_or_path
                     d["data"] = {
                         "name": seg.name,
-                        "file": base64_data,
+                        "file": payload_file,
                     }
                     await self.bot.send(
                         self.message_obj.raw_message,
