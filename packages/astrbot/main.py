@@ -1446,9 +1446,3 @@ UID: {user_id} 此 ID 可用于设置管理员。
         plugin_cfg["reset"] = reset_cfg
         alter_cmd_cfg["astrbot"] = plugin_cfg
         sp.put("alter_cmd", alter_cmd_cfg)
-
-    @filter.command("test")
-    async def test_tool(self, event: AstrMessageEvent):
-        """测试工具"""
-        from astrbot.api.message_components import File
-        yield event.chain_result([File(name="test.txt", file="data/astrbot-reminder.json")])
