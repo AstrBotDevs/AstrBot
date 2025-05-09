@@ -2,8 +2,9 @@ import asyncio
 import re
 from typing import AsyncGenerator, Dict, List
 from aiocqhttp import CQHttp
+from astrbot.core.utils.io import file_to_base64
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, Image, Node, Nodes, Plain, Record
+from astrbot.api.message_components import At, Image, Node, Nodes, Plain, Record, File
 from astrbot.api.platform import Group, MessageMember
 
 
@@ -34,21 +35,16 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 }
             elif isinstance(segment, At):
                 d["data"] = {
-                    "qq": str(segment.qq)  # 转换为字符串
+                    "qq": str(segment.qq),  # 转换为字符串
                 }
             ret.append(d)
         return ret
 
     async def send(self, message: MessageChain):
-        ret = await AiocqhttpMessageEvent._parse_onebot_json(message)
-
-        if not ret:
-            return
-
         send_one_by_one = False
         for seg in message.chain:
-            if isinstance(seg, (Node, Nodes)):
-                # 转发消息不能和普通消息混在一起发送
+            if isinstance(seg, (Node, Nodes, File)):
+                # 转发消息、文件消息不能和普通消息混在一起发送
                 send_one_by_one = True
                 break
 
@@ -70,6 +66,17 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         await self.bot.call_action(
                             "send_private_forward_msg", **payload
                         )
+                elif isinstance(seg, File):
+                    d = seg.toDict()
+                    base64_data = file_to_base64(seg.file)
+                    d["data"] = {
+                        "name": seg.name,
+                        "file": base64_data,
+                    }
+                    await self.bot.send(
+                        self.message_obj.raw_message,
+                        [d],
+                    )
                 else:
                     await self.bot.send(
                         self.message_obj.raw_message,
@@ -79,6 +86,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     )
                     await asyncio.sleep(0.5)
         else:
+            ret = await AiocqhttpMessageEvent._parse_onebot_json(message)
+            if not ret:
+                return
             await self.bot.send(self.message_obj.raw_message, ret)
 
         await super().send(message)
