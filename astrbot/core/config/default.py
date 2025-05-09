@@ -88,7 +88,7 @@ DEFAULT_CONFIG = {
     "t2i_word_threshold": 150,
     "t2i_strategy": "remote",
     "t2i_endpoint": "",
-    "http_proxy": "",
+    "proxy": "",
     "dashboard": {
         "enable": True,
         "username": "astrbot",
@@ -1276,7 +1276,13 @@ CONFIG_METADATA_2 = {
             "http_proxy": {
                 "description": "HTTP 代理",
                 "type": "string",
-                "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`",
+                "obvious_hint": True,
+                "hint": "该配置将在下版本弃用，请配置`网络代理(proxy)`。启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`",
+            },
+            "proxy": {
+                "description": "网络代理",
+                "type": "string",
+                "hint": "启用后，会以添加环境变量的方式设置代理。支持HTTP和SOCKS代理，格式为 `http://ip:port` 或 `socks5://ip:port`",
             },
             "timezone": {
                 "description": "时区",
