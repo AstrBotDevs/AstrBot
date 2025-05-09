@@ -583,7 +583,7 @@ class File(BaseMessageComponent):
         if self.file_ and os.path.exists(self.file_):
             return os.path.abspath(self.file_)
 
-        if self.url and not self._downloaded:
+        if self.url:
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
