@@ -462,10 +462,10 @@ class Node(BaseMessageComponent):
     type: ComponentType = "Node"
     id: T.Optional[int] = 0  # 忽略
     name: T.Optional[str] = ""  # qq昵称
-    uin: T.Optional[int] = 0  # qq号
+    uin: T.Optional[str] = 0  # qq号
     content: T.Optional[T.Union[str, list, dict]] = ""  # 子消息段列表
     seq: T.Optional[T.Union[str, list]] = ""  # 忽略
-    time: T.Optional[int] = 0
+    time: T.Optional[int] = 0 # 忽略
 
     def __init__(self, content: T.Union[str, list, dict, "Node", T.List["Node"]], **_):
         if isinstance(content, list):
@@ -494,8 +494,14 @@ class Nodes(BaseMessageComponent):
         super().__init__(nodes=nodes, **_)
 
     def toDict(self):
-        return {"messages": [node.toDict() for node in self.nodes]}
-
+        ret = {
+            "messages": [],
+        }
+        for node in self.nodes:
+            d = node.toDict()
+            d["data"]["uin"] = str(node.uin) # 转为字符串
+            ret["messages"].append(node.toDict())
+        return ret
 
 class Xml(BaseMessageComponent):
     type: ComponentType = "Xml"
@@ -563,7 +569,7 @@ class File(BaseMessageComponent):
     url: T.Optional[str] = ""  # url
     _downloaded: bool = False  # 是否已经下载
 
-    def __init__(self, name: str, file: str, url: str = ""):
+    def __init__(self, name: str, file: str = "", url: str = ""):
         """文件消息段。一般情况下请直接使用 file 参数即可，可以传入文件路径或 URL，AstrBot 会自动识别。"""
         super().__init__(name=name, file_=file, url=url)
 
@@ -576,7 +582,7 @@ class File(BaseMessageComponent):
             str: 文件路径
         """
         if self.file_ and os.path.exists(self.file_):
-            return self.file_
+            return os.path.abspath(self.file_)
 
         if self.url and not self._downloaded:
             try:
@@ -591,7 +597,7 @@ class File(BaseMessageComponent):
                     loop.run_until_complete(self._download_file())
 
                     if self.file_ and os.path.exists(self.file_):
-                        return self.file_
+                        return os.path.abspath(self.file_)
             except Exception as e:
                 logger.error(f"文件下载失败: {e}")
 
@@ -611,19 +617,17 @@ class File(BaseMessageComponent):
             self.file_ = value
 
     async def get_file(self) -> str:
-        """
-        异步获取文件
-        To 插件开发者: 请注意在使用后清理下载的文件, 以免占用过多空间
+        """异步获取文件。请注意在使用后清理下载的文件, 以免占用过多空间
 
         Returns:
             str: 文件路径
         """
         if self.file_ and os.path.exists(self.file_):
-            return self.file_
+            return os.path.abspath(self.file_)
 
         if self.url:
             await self._download_file()
-            return self.file_
+            return os.path.abspath(self.file_)
 
         return ""
 
@@ -638,7 +642,7 @@ class File(BaseMessageComponent):
 
         await download_file(self.url, file_path)
 
-        self.file_ = file_path
+        self.file_ = os.path.abspath(file_path)
         self._downloaded = True
 
 
