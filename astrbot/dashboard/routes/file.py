@@ -19,9 +19,6 @@ class FileRoute(Route):
         try:
             file_path = await file_token_service.handle_file(file_token)
             return await send_file(file_path)
-        except FileNotFoundError as e:
-            logger.warning(str(e))
-            return abort(404)
-        except KeyError as e:
+        except (FileNotFoundError, KeyError) as e:
             logger.warning(str(e))
             return abort(404)

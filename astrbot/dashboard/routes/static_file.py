@@ -28,7 +28,7 @@ class StaticFileRoute(Route):
 
         @self.app.errorhandler(404)
         async def page_not_found(e):
-            return "404 Not found。如果你初次使用打开面板发现 404, 请参考文档: https://astrbot.app/faq.html。"
+            return "404 Not found。如果你初次使用打开面板发现 404, 请参考文档: https://astrbot.app/faq.html。如果你正在测试回调地址可达性，显示这段文字说明测试成功了。"
 
     async def index(self):
         return await self.app.send_static_file("index.html")
