@@ -559,12 +559,13 @@ class File(BaseMessageComponent):
 
     type: ComponentType = "File"
     name: T.Optional[str] = ""  # 名字
-    _file: T.Optional[str] = ""  # 本地路径
+    file_: T.Optional[str] = ""  # 本地路径
     url: T.Optional[str] = ""  # url
     _downloaded: bool = False  # 是否已经下载
 
-    def __init__(self, name: str = "", file: str = "", url: str = ""):
-        super().__init__(name=name, _file=file, url=url)
+    def __init__(self, name: str, file: str, url: str = ""):
+        """文件消息段。一般情况下请直接使用 file 参数即可，可以传入文件路径或 URL，AstrBot 会自动识别。"""
+        super().__init__(name=name, file_=file, url=url)
 
     @property
     def file(self) -> str:
@@ -574,8 +575,8 @@ class File(BaseMessageComponent):
         Returns:
             str: 文件路径
         """
-        if self._file and os.path.exists(self._file):
-            return self._file
+        if self.file_ and os.path.exists(self.file_):
+            return self.file_
 
         if self.url and not self._downloaded:
             try:
@@ -589,8 +590,8 @@ class File(BaseMessageComponent):
                     # 等待下载完成
                     loop.run_until_complete(self._download_file())
 
-                    if self._file and os.path.exists(self._file):
-                        return self._file
+                    if self.file_ and os.path.exists(self.file_):
+                        return self.file_
             except Exception as e:
                 logger.error(f"文件下载失败: {e}")
 
@@ -607,7 +608,7 @@ class File(BaseMessageComponent):
         if value.startswith("http://") or value.startswith("https://"):
             self.url = value
         else:
-            self._file = value
+            self.file_ = value
 
     async def get_file(self) -> str:
         """
@@ -617,12 +618,12 @@ class File(BaseMessageComponent):
         Returns:
             str: 文件路径
         """
-        if self._file and os.path.exists(self._file):
-            return self._file
+        if self.file_ and os.path.exists(self.file_):
+            return self.file_
 
         if self.url:
             await self._download_file()
-            return self._file
+            return self.file_
 
         return ""
 
@@ -637,7 +638,7 @@ class File(BaseMessageComponent):
 
         await download_file(self.url, file_path)
 
-        self._file = file_path
+        self.file_ = file_path
         self._downloaded = True
 
 
