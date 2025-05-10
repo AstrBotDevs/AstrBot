@@ -2,6 +2,7 @@ import os
 import psutil
 import sys
 import time
+import subprocess
 from .zip_updator import ReleaseInfo, RepoZipUpdator
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -42,24 +43,27 @@ class AstrBotUpdator(RepoZipUpdator):
             pass
 
     def _reboot(self, delay: int = 3):
-        """重启当前程序
+        """
+        重启当前程序，使用 subprocess.Popen 启动新进程并退出旧进程
         在指定的延迟后，终止所有子进程并重新启动程序
         """
-        py = sys.executable
         time.sleep(delay)
         self.terminate_child_processes()
-        py = py.replace(" ", "\\ ")
+        py = sys.executable
+
         try:
             if "astrbot" in os.path.basename(sys.argv[0]):  # 兼容cli
-                args = [
-                    f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]
-                ]
-                os.execl(py, py, "-m", "astrbot.cli.__main__", *args)
+                cmd = [py, "-m", "astrbot.cli.__main__"] + sys.argv[1:]
             else:
-                os.execl(py, py, *sys.argv)
+                cmd = [py] + sys.argv
+
+            subprocess.Popen(cmd, start_new_session=True)
+
         except Exception as e:
-            logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
+            logger.error(f"重启失败（{py} {cmd}，错误：{e}），请尝试手动重启。")
             raise e
+
+        os._exit(0)
 
     async def check_update(self, url: str, current_version: str) -> ReleaseInfo:
         """检查更新"""
@@ -73,7 +77,7 @@ class AstrBotUpdator(RepoZipUpdator):
         file_url = None
 
         if os.environ.get("ASTRBOT_CLI"):
-            raise Exception("不支持更新CLI启动的AstrBot") # 避免版本管理混乱
+            raise Exception("不支持更新CLI启动的AstrBot")  # 避免版本管理混乱
 
         if latest:
             latest_version = update_data[0]["tag_name"]
