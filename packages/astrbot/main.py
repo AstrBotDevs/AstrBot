@@ -140,7 +140,8 @@ class Main(star.Star):
 {notice}"""
 
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
-
+    
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("llm")
     async def llm(self, event: AstrMessageEvent):
         """开启/关闭 LLM"""
@@ -154,6 +155,7 @@ class Main(star.Star):
             status = "开启"
         cfg.save_config()
         yield event.plain_result(f"{status} LLM 聊天功能。")
+
 
     @filter.command_group("tool")
     def tool(self):
@@ -320,6 +322,7 @@ class Main(star.Star):
         event.set_result(MessageEventResult().message(ret).use_t2i(False))
 
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent):
         """开关文本转图片"""
@@ -333,6 +336,7 @@ class Main(star.Star):
         config.save_config()
         event.set_result(MessageEventResult().message("已开启文本转图片模式。"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("tts")
     async def tts(self, event: AstrMessageEvent):
         """开关文本转语音"""
@@ -589,6 +593,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         message.set_result(MessageEventResult().message(ret))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(
         self, message: AstrMessageEvent, idx_or_name: Union[int, str] = None
@@ -1163,6 +1168,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             sp.put("session_variables", session_vars)
             yield event.plain_result(f"会话 {uid} 变量 {key} 移除成功。")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("gewe_logout")
     async def gewe_logout(self, event: AstrMessageEvent):
         platforms = self.context.platform_manager.platform_insts
@@ -1173,6 +1179,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 yield event.plain_result("已登出 gewechat，请重启 AstrBot")
                 return
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("gewe_code")
     async def gewe_code(self, event: AstrMessageEvent, code: str):
         """保存 gewechat 验证码"""
