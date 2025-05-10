@@ -189,6 +189,7 @@ class ProviderGoogleGenAI(Provider):
                 ),
             )
             if "gemini-2.5-flash" in self.get_model()
+            and hasattr(types.ThinkingConfig, "thinking_budget")
             else None,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True
