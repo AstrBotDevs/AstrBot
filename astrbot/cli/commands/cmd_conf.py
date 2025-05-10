@@ -80,13 +80,15 @@ def _load_config() -> dict[str, Any]:
     if not config_path.exists():
         from astrbot.core.config.default import DEFAULT_CONFIG
 
-        config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(
             json.dumps(DEFAULT_CONFIG, ensure_ascii=False, indent=2),
             encoding="utf-8-sig",
         )
 
-    return json.loads(config_path.read_text(encoding="utf-8-sig"))
+    try:
+        return json.loads(config_path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"配置文件解析失败: {str(e)}")
 
 
 def _save_config(config: dict[str, Any]) -> None:
@@ -104,6 +106,10 @@ def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
     for part in parts[:-1]:
         if part not in obj:
             obj[part] = {}
+        elif not isinstance(obj[part], dict):
+            raise click.ClickException(
+                f"配置路径冲突: {'.'.join(parts[: parts.index(part) + 1])} 不是字典"
+            )
         obj = obj[part]
     obj[parts[-1]] = value
 
