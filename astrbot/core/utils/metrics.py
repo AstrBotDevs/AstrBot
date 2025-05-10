@@ -10,11 +10,11 @@ from astrbot.core import db_helper, logger
 class Metric:
     _iid_cache = None
 
-    @staticmethod
-    def get_installation_id():
+    @classmethod
+    def get_installation_id(cls):
         """获取或创建一个唯一的安装ID"""
-        if Metric._iid_cache is not None:
-            return Metric._iid_cache
+        if cls._iid_cache is not None:
+            return cls._iid_cache
 
         config_dir = os.path.join(os.path.expanduser("~"), ".astrbot")
         id_file = os.path.join(config_dir, ".installation_id")
@@ -22,8 +22,8 @@ class Metric:
         if os.path.exists(id_file):
             try:
                 with open(id_file, "r") as f:
-                    Metric._iid_cache = f.read().strip()
-                    return Metric._iid_cache
+                    cls._iid_cache = f.read().strip()
+                    return cls._iid_cache
             except Exception:
                 pass
         try:
@@ -31,14 +31,14 @@ class Metric:
             installation_id = str(uuid.uuid4())
             with open(id_file, "w") as f:
                 f.write(installation_id)
-            Metric._iid_cache = installation_id
+            cls._iid_cache = installation_id
             return installation_id
         except Exception:
-            Metric._iid_cache = "null"
+            cls._iid_cache = "null"
             return "null"
 
-    @staticmethod
-    async def upload(**kwargs):
+    @classmethod
+    async def upload(cls, **kwargs):
         """
         上传相关非敏感的指标以更好地了解 AstrBot 的使用情况。上传的指标不会包含任何有关消息文本、用户信息等敏感信息。
 
