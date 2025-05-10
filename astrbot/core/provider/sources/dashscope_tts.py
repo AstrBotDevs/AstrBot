@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import dashscope
 import uuid
 import asyncio
@@ -23,7 +24,9 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         self.voice: str = provider_config.get("dashscope_tts_voice", "loongstella")
         self.set_model(provider_config.get("model", None))
         self.timeout_ms = float(provider_config.get("timeout", 20)) * 1000
-        dashscope.api_key = self.chosen_api_key    async def get_audio(self, text: str) -> str:
+        dashscope.api_key = self.chosen_api_key    
+        
+    async def get_audio(self, text: str) -> Path:
         temp_dir = AstrbotFS.getAstrbotFS().temp
         path = temp_dir / f"dashscope_tts_{uuid.uuid4()}.wav"
         self.synthesizer = SpeechSynthesizer(
@@ -33,6 +36,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         )
         audio = await asyncio.get_event_loop().run_in_executor(
             None, self.synthesizer.call, text, self.timeout_ms
-        )        with open(path, "wb") as f:
+        )
+        with open(path, "wb") as f:
             f.write(audio)
-        return str(path)
+        return path

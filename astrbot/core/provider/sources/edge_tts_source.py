@@ -1,3 +1,5 @@
+from genericpath import exists
+from pathlib import Path
 import uuid
 import os
 import edge_tts
@@ -38,7 +40,8 @@ class ProviderEdgeTTS(TTSProvider):
 
         self.proxy = os.getenv("https_proxy", None)
 
-        self.set_model("edge_tts")    async def get_audio(self, text: str) -> str:
+        self.set_model("edge_tts")    
+    async def get_audio(self, text: str) -> Path:
         temp_dir = AstrbotFS.getAstrbotFS().temp
         mp3_path = temp_dir / f"edge_tts_temp_{uuid.uuid4()}.mp3"
         wav_path = temp_dir / f"edge_tts_{uuid.uuid4()}.wav"
@@ -90,8 +93,9 @@ class ProviderEdgeTTS(TTSProvider):
                 stdout, stderr = await p.communicate()
                 logger.info(f"[EdgeTTS] FFmpeg 标准输出: {stdout.decode().strip()}")
                 logger.debug(f"FFmpeg错误输出: {stderr.decode().strip()}")
-                logger.info(f"[EdgeTTS] 返回值(0代表成功): {p.returncode}")            os.remove(str(mp3_path))
-            if os.path.exists(str(wav_path)) and os.path.getsize(str(wav_path)) > 0:
+                logger.info(f"[EdgeTTS] 返回值(0代表成功): {p.returncode}")
+            mp3_path.rmdir()
+            if wav_path.exists() and wav_path.stat().st_size > 0:
                 return wav_path
             else:
                 logger.error("生成的WAV文件不存在或为空")
@@ -102,8 +106,8 @@ class ProviderEdgeTTS(TTSProvider):
                 f"FFmpeg 转换失败: {e.stderr.decode() if e.stderr else str(e)}"
             )
             try:
-                if os.path.exists(mp3_path):
-                    os.remove(mp3_path)
+                if mp3_path.exists():
+                    mp3_path.rmdir()
             except Exception:
                 pass
             raise RuntimeError(f"FFmpeg 转换失败: {str(e)}")
@@ -111,8 +115,8 @@ class ProviderEdgeTTS(TTSProvider):
         except Exception as e:
             logger.error(f"音频生成失败: {str(e)}")
             try:
-                if os.path.exists(mp3_path):
-                    os.remove(mp3_path)
+                if mp3_path.exists():
+                    mp3_path.rmdir()
             except Exception:
                 pass
             raise RuntimeError(f"音频生成失败: {str(e)}")

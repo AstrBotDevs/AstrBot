@@ -15,7 +15,7 @@ from astrbot.api.message_components import Plain, Image, At, Record, Video
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.utils.io import download_image_by_url
 from .downloader import GeweDownloader
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
 try:
     from .xml_data_parser import GeweDataParser
@@ -250,11 +250,8 @@ class SimpleGewechatClient:
             case 34:
                 # 语音消息
                 if "ImgBuf" in d and "buffer" in d["ImgBuf"]:
-                    voice_data = base64.b64decode(d["ImgBuf"]["buffer"])
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    file_path = os.path.join(
-                        temp_dir, f"gewe_voice_{abm.message_id}.silk"
-                    )
+                    voice_data = base64.b64decode(d["ImgBuf"]["buffer"])                    temp_dir = AstrbotFS.getAstrbotFS().temp
+                    file_path = str(temp_dir / f"gewe_voice_{abm.message_id}.silk")
 
                     async with await anyio.open_file(file_path, "wb") as f:
                         await f.write(voice_data)
@@ -461,9 +458,8 @@ class SimpleGewechatClient:
         while retry_cnt > 0:
             retry_cnt -= 1
 
-            # 需要验证码
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-            code_file_path = os.path.join(temp_dir, "gewe_code")
+            # 需要验证码            temp_dir = AstrbotFS.getAstrbotFS().temp
+            code_file_path = str(temp_dir / "gewe_code")
             if os.path.exists(code_file_path):
                 with open(code_file_path, "r") as f:
                     code = f.read().strip()

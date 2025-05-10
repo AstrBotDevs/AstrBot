@@ -10,7 +10,7 @@ import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
 from astrbot.api.provider import ProviderRequest
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
@@ -354,7 +354,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("op")
-    async def op(self, event: AstrMessageEvent, admin_id: str = None):
+    async def op(self, event: AstrMessageEvent, admin_id: str | None = None):
         """授权管理员。op <admin_id>"""
         if admin_id is None:
             event.set_result(

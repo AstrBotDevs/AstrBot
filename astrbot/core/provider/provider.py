@@ -1,5 +1,7 @@
 import abc
+from pathlib import Path
 from typing import List
+
 from astrbot.core.db import BaseDatabase
 from typing import TypedDict, AsyncGenerator
 from astrbot.core.provider.func_tool_manager import FuncCall
@@ -176,6 +178,6 @@ class TTSProvider(AbstractProvider):
         self.provider_settings = provider_settings
 
     @abc.abstractmethod
-    async def get_audio(self, text: str) -> str:
+    async def get_audio(self, text: str) -> Path:
         """获取文本的音频，返回音频文件路径"""
         raise NotImplementedError()

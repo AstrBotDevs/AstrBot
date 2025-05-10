@@ -1,3 +1,4 @@
+from pathlib import Path
 import time
 import re
 import traceback
@@ -178,7 +179,7 @@ class ResultDecorateStage(Stage):
                     if isinstance(comp, Plain) and len(comp.text) > 1:
                         try:
                             logger.info("TTS 请求: " + comp.text)
-                            audio_path = await tts_provider.get_audio(comp.text)
+                            audio_path: Path = await tts_provider.get_audio(comp.text)
                             logger.info("TTS 结果: " + audio_path)
                             if audio_path:
                                 new_chain.append(

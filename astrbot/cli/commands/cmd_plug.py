@@ -5,8 +5,6 @@ import shutil
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from rich.markdown import Markdown
 
 # 创建Rich控制台
 console = Console()
@@ -21,7 +19,7 @@ def plug():
 from ...core.utils.astrbot_path import get_astrbot_root
 
 
-def display_plugins(plugins: list[dict], title: str = None, color: str = None):
+def display_plugins(plugins: list[dict], title: str | None = None, color: str = None):
     # 创建一个美观的表格
     table = Table(show_header=True)
     table.add_column("名称", style="cyan", justify="left")
@@ -155,7 +153,9 @@ def list(all: bool):
         p for p in plugins if p["status"] == PluginStatus.NOT_INSTALLED
     ]
     if not_installed_plugins and all:
-        display_plugins(not_installed_plugins, "未安装的插件", "blue")    if (
+        display_plugins(not_installed_plugins, "未安装的插件", "blue")    
+    
+    if (
         not any([not_published_plugins, need_update_plugins, installed_plugins])
         and not all
     ):

@@ -63,7 +63,7 @@ class AstrMessageEvent(abc.ABC):
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras = {}
-        self.session = MessageSesion(
+        self.session = MessageSession(
             platform_name=platform_meta.name,
             message_type=message_obj.type,
             session_id=session_id,

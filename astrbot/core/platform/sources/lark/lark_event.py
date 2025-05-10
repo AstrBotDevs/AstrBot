@@ -10,7 +10,7 @@ from astrbot.api.message_components import Plain, Image as AstrBotImage, At
 from astrbot.core.utils.io import download_image_by_url
 from lark_oapi.api.im.v1 import *
 from astrbot import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
 
 class LarkMessageEvent(AstrMessageEvent):
@@ -40,10 +40,9 @@ class LarkMessageEvent(AstrMessageEvent):
                     file_path = image_file_path
                 elif comp.file and comp.file.startswith("base64://"):
                     base64_str = comp.file.removeprefix("base64://")
-                    image_data = base64.b64decode(base64_str)
-                    # save as temp file
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    file_path = os.path.join(temp_dir, f"{uuid.uuid4()}_test.jpg")
+                    image_data = base64.b64decode(base64_str)                    # save as temp file
+                    temp_dir = AstrbotFS.getAstrbotFS().temp
+                    file_path = str(temp_dir / f"{uuid.uuid4()}_test.jpg")
                     with open(file_path, "wb") as f:
                         f.write(BytesIO(image_data).getvalue())
                 else:

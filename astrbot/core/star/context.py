@@ -196,7 +196,7 @@ class Context:
                     return platform
 
     async def send_message(
-        self, session: Union[str, MessageSesion], message_chain: MessageChain
+        self, session: Union[str, MessageSession], message_chain: MessageChain
     ) -> bool:
         """
         根据 session(unified_msg_origin) 主动发送消息。

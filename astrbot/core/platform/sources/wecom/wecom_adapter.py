@@ -14,7 +14,7 @@ from astrbot.api.platform import (
 )
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain, Image, Record
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.api.platform import register_platform_adapter
 from astrbot.core import logger
 from requests import Response
@@ -178,7 +178,7 @@ class WecomPlatformAdapter(Platform):
 
     @override
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSession, message_chain: MessageChain
     ):
         await super().send_by_session(session, message_chain)
 

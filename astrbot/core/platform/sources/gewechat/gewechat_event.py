@@ -21,7 +21,7 @@ from astrbot.api.message_components import (
     WechatEmoji as Emoji,
 )
 from .client import SimpleGewechatClient
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
 
 def get_wav_duration(file_path):
@@ -106,21 +106,16 @@ class GewechatPlatformEvent(AstrMessageEvent):
                     video_url = comp.file
                     # 根据 url 下载视频
                     if video_url.startswith("http"):
-                        video_filename = f"{uuid.uuid4()}.mp4"
-                        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                        video_path = os.path.join(temp_dir, video_filename)
+                        video_filename = f"{uuid.uuid4()}.mp4"                        temp_dir = AstrbotFS.getAstrbotFS().temp
+                        video_path = str(temp_dir / video_filename)
                         await download_file(video_url, video_path)
                     else:
                         video_path = video_url
 
                     video_token = await client._register_file(video_path)
-                    video_callback_url = f"{client.file_server_url}/{video_token}"
-
-                    # 获取视频第一帧
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    thumb_path = os.path.join(
-                        temp_dir, f"gewechat_video_thumb_{uuid.uuid4()}.jpg"
-                    )
+                    video_callback_url = f"{client.file_server_url}/{video_token}"                    # 获取视频第一帧
+                    temp_dir = AstrbotFS.getAstrbotFS().temp
+                    thumb_path = str(temp_dir / f"gewechat_video_thumb_{uuid.uuid4()}.jpg")
 
                     video_path = video_path.replace(" ", "\\ ")
                     try:
@@ -177,10 +172,9 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 file_path = comp.file
                 file_name = comp.name
                 if file_path.startswith("file:///"):
-                    file_path = file_path[8:]
-                elif file_path.startswith("http"):
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    temp_file_path = os.path.join(temp_dir, file_name)
+                    file_path = file_path[8:]                elif file_path.startswith("http"):
+                    temp_dir = AstrbotFS.getAstrbotFS().temp
+                    temp_file_path = str(temp_dir / file_name)
                     await download_file(file_path, temp_file_path)
                     file_path = temp_file_path
                 else:

@@ -11,8 +11,6 @@ from rich.text import Text
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn
 from datetime import datetime
-import time
-
 # 创建Rich控制台
 console = Console()
 

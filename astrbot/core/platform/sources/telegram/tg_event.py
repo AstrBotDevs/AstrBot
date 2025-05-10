@@ -125,7 +125,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     elif isinstance(i, Image):
                         image_path = await i.convert_to_file_path()
                         await self.client.send_photo(photo=image_path, **payload)
-                        continue                    elif isinstance(i, File):
+                        continue                    
+                    elif isinstance(i, File):
                         if i.file.startswith("https://"):
                             temp_dir = AstrbotFS.getAstrbotFS().temp
                             path = temp_dir / i.name

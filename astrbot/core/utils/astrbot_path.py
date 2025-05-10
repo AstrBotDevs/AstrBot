@@ -70,6 +70,8 @@ data数据目录现在变更为astrbot_root
 于是干脆就不要data文件夹了，或者data文件夹改为真正的数据目录
 （astrbot_root本身就是数据目录，区别于源代码目录）
 
+root = get_astrbot_root() = AstrbotFS.getAstrbotFS().root
+
 """
 
 
