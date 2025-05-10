@@ -30,7 +30,6 @@ import uuid
 import asyncio
 from enum import Enum
 from pydantic.v1 import BaseModel
-from quart.app import P
 from astrbot.core import logger
 from astrbot.core.utils.io import AstrbotFS, download_image_by_url, file_to_base64, download_file
 
@@ -139,23 +138,19 @@ class Record(BaseMessageComponent):
             if k == "url":
                 pass
                 # Protocol.warn(f"go-cqhttp doesn't support send {self.type} by {k}")
-        super().__init__(file=file, path=path, **_)
-
-    @classmethod
-    def fromFileSystem(cls, path: str, **_):
-        return cls(file=f"file:///{os.path.abspath(path)}", path=path, **_)
+        super().__init__(file=file, path=path, **_)    @classmethod
+    def fromFileSystem(cls, path: Path, **_):
+        return cls(file=f"file:///{path.absolute()}", path=str(path), **_)
 
     @classmethod
     def fromURL(cls, url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
             return cls(file=url, path=None, **_)
-        raise Exception("not a valid url")
-
-    async def convert_to_file_path(self) -> str:
+        raise Exception("not a valid url")    async def convert_to_file_path(self) -> Path:
         """将这个语音统一转换为本地文件路径。这个方法避免了手动判断语音数据类型，直接返回语音数据的本地路径（如果是网络 URL, 则会自动进行下载）。
 
         Returns:
-            str: 语音的本地路径，以绝对路径表示。
+            Path: 语音的本地路径，以绝对路径表示。
         """
         if self.file and str(self.file).startswith("file:///"):
             file_path = self.file[8:]
@@ -352,21 +347,16 @@ class Image(BaseMessageComponent):
 
     @staticmethod
     def fromIO(IO):
-        return Image.fromBytes(IO.read())
-
-    async def convert_to_file_path(self) -> str:
+        return Image.fromBytes(IO.read())    async def convert_to_file_path(self) -> Path:
         """将这个图片统一转换为本地文件路径。这个方法避免了手动判断图片数据类型，直接返回图片数据的本地路径（如果是网络 URL, 则会自动进行下载）。
 
         Returns:
-            str: 图片的本地路径，以绝对路径表示。
-        """
-        url = self.url if self.url else self.file
-        if url and url.startswith("file://"):
-            image_file_path = url[8:]
-            return image_file_path
-        elif url and url.startswith("http"):
+            Path: 图片的本地路径，以绝对路径表示。
+        """url = self.url if self.url else self.file        if url and url.startswith("file://"):
+            image_file_path = Path(url[8:])
+            return image_file_path        elif url and url.startswith("http"):
             image_file_path = await download_image_by_url(url)
-            return os.path.abspath(image_file_path)
+            return Path(image_file_path).absolute()
         elif url and url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
@@ -374,8 +364,7 @@ class Image(BaseMessageComponent):
             image_file_path: Path = temp_dir / f"{uuid.uuid4()}.jpg"
             with open(image_file_path, "wb") as f:
                 f.write(image_bytes)
-            return image_file_path
-        elif os.path.exists(url):
+            return image_file_path        elif Path(url).exists():
             image_file_path = Path(url)
             return image_file_path
         else:
@@ -395,8 +384,7 @@ class Image(BaseMessageComponent):
             image_file_path = await download_image_by_url(url)
             bs64_data = file_to_base64(image_file_path)
         elif url and url.startswith("base64://"):
-            bs64_data = url
-        elif os.path.exists(url):
+            bs64_data = url        elif Path(url).exists():
             bs64_data = file_to_base64(url)
         else:
             raise Exception(f"not a valid file: {url}")
@@ -406,24 +394,24 @@ class Image(BaseMessageComponent):
 
 class Reply(BaseMessageComponent):
     type: ComponentType = "Reply"
-    id: T.Union[str, int]
+    id: str | int
     """所引用的消息 ID"""
-    chain: T.Optional[T.List["BaseMessageComponent"]] = []
+    chain: list["BaseMessageComponent"] | None = []
     """被引用的消息段列表"""
-    sender_id: T.Optional[int] | T.Optional[str] = 0
+    sender_id: int | str | None = 0
     """被引用的消息对应的发送者的 ID"""
-    sender_nickname: T.Optional[str] = ""
+    sender_nickname: str | None = ""
     """被引用的消息对应的发送者的昵称"""
-    time: T.Optional[int] = 0
+    time: int | None = 0
     """被引用的消息发送时间"""
-    message_str: T.Optional[str] = ""
+    message_str: str | None = ""
     """被引用的消息解析后的纯文本消息字符串"""
 
-    text: T.Optional[str] = ""
+    text: str | None = ""
     """deprecated"""
-    qq: T.Optional[int] = 0
+    qq: int | None = 0
     """deprecated"""
-    seq: T.Optional[int] = 0
+    seq: int | None = 0
     """deprecated"""
 
     def __init__(self, **_):
@@ -440,8 +428,8 @@ class RedBag(BaseMessageComponent):
 
 class Poke(BaseMessageComponent):
     type: str = ""
-    id: T.Optional[int] = 0
-    qq: T.Optional[int] = 0
+    id: int | None = 0
+    qq: int | None = 0
 
     def __init__(self, type: str, **_):
         type = f"Poke:{type}"
@@ -460,14 +448,14 @@ class Node(BaseMessageComponent):
     """群合并转发消息"""
 
     type: ComponentType = "Node"
-    id: T.Optional[int] = 0  # 忽略
-    name: T.Optional[str] = ""  # qq昵称
-    uin: T.Optional[str] = "0"  # qq号
-    content: T.Optional[T.Union[str, list, dict]] = ""  # 子消息段列表
-    seq: T.Optional[T.Union[str, list]] = ""  # 忽略
-    time: T.Optional[int] = 0 # 忽略
+    id: int | None = 0  # 忽略
+    name: str | None = ""  # qq昵称
+    uin: str | None = "0"  # qq号
+    content: str | list | dict | None = ""  # 子消息段列表
+    seq: str | list | None = ""  # 忽略
+    time: int | None = 0 # 忽略
 
-    def __init__(self, content: T.Union[str, list, dict, "Node", T.List["Node"]], **_):
+    def __init__(self, content: str | list | dict | "Node" | list["Node"], **_):
         if isinstance(content, list):
             _content = None
             if all(isinstance(item, Node) for item in content):
@@ -488,9 +476,9 @@ class Node(BaseMessageComponent):
 
 class Nodes(BaseMessageComponent):
     type: ComponentType = "Nodes"
-    nodes: T.List[Node]
+    nodes: list[Node]
 
-    def __init__(self, nodes: T.List[Node], **_):
+    def __init__(self, nodes: list[Node], **_):
         super().__init__(nodes=nodes, **_)
 
     def toDict(self):
@@ -506,7 +494,7 @@ class Nodes(BaseMessageComponent):
 class Xml(BaseMessageComponent):
     type: ComponentType = "Xml"
     data: str
-    resid: T.Optional[int] = 0
+    resid: int | None = 0
 
     def __init__(self, **_):
         super().__init__(**_)
@@ -514,8 +502,8 @@ class Xml(BaseMessageComponent):
 
 class Json(BaseMessageComponent):
     type: ComponentType = "Json"
-    data: T.Union[str, dict]
-    resid: T.Optional[int] = 0
+    data: str | dict
+    resid: int | None = 0
 
     def __init__(self, data, **_):
         if isinstance(data, dict):
@@ -535,11 +523,9 @@ class CardImage(BaseMessageComponent):
     icon: str | None = None
 
     def __init__(self, **_):
-        super().__init__(**_)
-
-    @staticmethod
-    def fromFileSystem(path, **_):
-        return CardImage(file=f"file:///{os.path.abspath(path)}", **_)
+        super().__init__(**_)    @staticmethod
+    def fromFileSystem(path: Path, **_):
+        return CardImage(file=f"file:///{path.absolute()}", **_)
 
 
 class TTS(BaseMessageComponent):
@@ -570,9 +556,7 @@ class File(BaseMessageComponent):
 
     def __init__(self, name: str | None = None, file: Path | None = None, url: str | None = None):
         """文件消息段。"""
-        super().__init__(name=name, file_=file, url=url)
-
-    @property
+        super().__init__(name=name, file_=file, url=url)    @property
     def file(self) -> Path | None:
         """
         获取文件路径，如果文件不存在但有URL，则同步下载文件
@@ -592,17 +576,17 @@ class File(BaseMessageComponent):
                         "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
                         "请使用 await get_file() 代替直接获取 <File>.file 字段"
                     ))
-                    return ""
+                    return None
                 else:
                     # 等待下载完成
                     loop.run_until_complete(self._download_file())
 
-                    if self.file_ and os.path.exists(self.file_):
+                    if self.file_ and Path(self.file_).exists():
                         return Path(self.file_).resolve()
             except Exception as e:
                 logger.error(f"文件下载失败: {e}")
 
-        return 
+        return None
 
     @file.setter
     def file(self, value: str):
@@ -615,9 +599,7 @@ class File(BaseMessageComponent):
         if value.startswith("http://") or value.startswith("https://"):
             self.url = value
         else:
-            self.file_ = value
-
-    async def get_file(self, allow_return_url: bool=False) -> str:
+            self.file_ = value    async def get_file(self, allow_return_url: bool=False) -> str:
         """异步获取文件。请注意在使用后清理下载的文件, 以免占用过多空间
 
         Args:
@@ -625,23 +607,22 @@ class File(BaseMessageComponent):
             注意，如果为 True，也可能返回文件路径。
         Returns:
             str: 文件路径或者 http 下载链接
-        """
-        if self.file_ and os.path.exists(self.file_):
-            return os.path.abspath(self.file_)
+        """if self.file_ and Path(self.file_).exists():
+            return str(Path(self.file_).absolute())
 
         if self.url:
             await self._download_file()
-            return os.path.abspath(self.file_)
+            return str(Path(self.file_).absolute())
 
         return ""
-
+    
     async def _download_file(self):
         """下载文件"""
-        download_dir = os.path.join(get_astrbot_data_path(), "temp")
-        os.makedirs(download_dir, exist_ok=True)
-        file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
-        await download_file(self.url, file_path)
-        self.file_ = os.path.abspath(file_path)
+        download_dir = AstrbotFS.getAstrbotFS().temp
+        download_dir.mkdir(exist_ok=True, parents=True)
+        file_path = download_dir / f"{uuid.uuid4().hex}"
+        await download_file(self.url, str(file_path))
+        self.file_ = file_path.absolute()
 
 
 class WechatEmoji(BaseMessageComponent):
