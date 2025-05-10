@@ -12,8 +12,6 @@ import psutil
 
 import certifi
 
-from typing import Union
-
 from PIL import Image
 import toml
 from .astrbot_path import get_astrbot_root, get_astrbot_temp_path, get_astrbot_webroot_path
@@ -43,7 +41,7 @@ def port_checker(port: int, host: str = "localhost"):
         sk.close()
         return False
 
-def save_temp_img(img: Union[Image.Image, str]) -> str:
+def save_temp_img(img: Image.Image | str ) -> str:
     
     temp_dir = get_astrbot_temp_path()
     # 获得文件创建时间，清除超过 12 小时的
