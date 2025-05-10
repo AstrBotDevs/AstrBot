@@ -27,8 +27,17 @@ class ConversationRoute(Route):
                 "POST",
                 self.update_history,
             ),
+            "/conversation/plugin_permissions": (
+                "GET",
+                self.get_group_plugin_permissions,
+            ),
+            "/conversation/set_plugin_permissions": (
+                "POST",
+                self.set_group_plugin_permissions,
+            ),
         }
         self.db_helper = db_helper
+        self.core_lifecycle = core_lifecycle
         self.register_routes()
 
     async def list_conversations(self):
@@ -213,3 +222,91 @@ class ConversationRoute(Route):
         except Exception as e:
             logger.error(f"更新对话历史失败: {str(e)}\n{traceback.format_exc()}")
             return Response().error(f"更新对话历史失败: {str(e)}").__dict__
+
+    async def get_group_plugin_permissions(self):
+        """获取群聊的插件权限配置"""
+        try:
+            user_id = request.args.get("user_id")
+            platform = request.args.get("platform")
+            session_id = request.args.get("sessionId")
+
+            if not user_id or not platform or not session_id:
+                return (
+                    Response()
+                    .error("缺少必要参数: user_id, platform 和 sessionId")
+                    .__dict__
+                )
+
+            group_id = f"{platform}:{session_id}"
+
+            # 从配置中获取群聊插件权限
+            config = self.core_lifecycle.astrbot_config
+            group_settings = config.get("group_settings", {})
+            plugin_enable = group_settings.get("plugin_enable", {})
+            group_plugin_enable = plugin_enable.get(group_id, {})
+
+            # 获取所有插件列表
+            plugins = []
+            for plugin in self.core_lifecycle.plugin_manager.context.get_all_stars():
+                plugins.append(
+                    {
+                        "name": plugin.name,
+                        "desc": plugin.desc,
+                        "reserved": plugin.reserved,
+                        "activated": plugin.activated,
+                    }
+                )
+
+            logger.debug(
+                f"获取群聊插件权限配置: {group_id}, 配置={group_plugin_enable}"
+            )
+
+            return (
+                Response()
+                .ok({"plugins": plugins, "plugin_enable": group_plugin_enable})
+                .__dict__
+            )
+
+        except Exception as e:
+            logger.error(f"获取群聊插件权限失败: {str(e)}\n{traceback.format_exc()}")
+            return Response().error(f"获取群聊插件权限失败: {str(e)}").__dict__
+
+    async def set_group_plugin_permissions(self):
+        """设置群聊的插件权限配置"""
+        try:
+            data = await request.get_json()
+            user_id = data.get("user_id")
+            platform = data.get("platform")
+            session_id = data.get("sessionId")
+            plugin_enable = data.get("plugin_enable", {})
+
+            if not user_id or not platform or not session_id:
+                return (
+                    Response()
+                    .error("缺少必要参数: user_id, platform 和 sessionId")
+                    .__dict__
+                )
+
+            group_id = f"{platform}:{session_id}"
+
+            # 更新配置
+            config = self.core_lifecycle.astrbot_config
+            group_settings = config.get("group_settings", {})
+            if "plugin_enable" not in group_settings:
+                group_settings["plugin_enable"] = {}
+
+            # 直接使用前端传回的完整配置
+            group_settings["plugin_enable"][group_id] = plugin_enable
+            config["group_settings"] = group_settings
+            config.save_config()
+
+            # 更新插件的平台兼容性缓存
+            await self.core_lifecycle.plugin_manager.update_all_plugin_compatibility()
+
+            logger.info(f"群聊插件权限配置已更新: {group_id}, 配置={plugin_enable}")
+
+            return Response().ok(None, "群聊插件权限配置已更新").__dict__
+
+        except Exception as e:
+            logger.error(f"设置群聊插件权限失败: {str(e)}\n{traceback.format_exc()}")
+            return Response().error(f"设置群聊插件权限失败: {str(e)}").__dict__
