@@ -225,7 +225,7 @@ class Main(star.Star):
         if plugin_list_info.strip() == "":
             plugin_list_info = "没有加载任何插件。"
 
-        plugin_list_info += "\n使用 /plugin <插件名> 查看插件帮助和加载的指令。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
+        plugin_list_info += "\n使用 /plugin help <插件名> 查看插件帮助和加载的指令。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
         event.set_result(
             MessageEventResult().message(f"{plugin_list_info}").use_t2i(False)
         )
