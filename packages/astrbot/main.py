@@ -281,7 +281,7 @@ class Main(star.Star):
         """获取插件帮助"""
         if not plugin_name:
             event.set_result(
-                MessageEventResult().message("/plugin view <插件名> 查看插件信息。")
+                MessageEventResult().message("/plugin help <插件名> 查看插件信息。")
             )
             return
         plugin = self.context.get_registered_star(plugin_name)
