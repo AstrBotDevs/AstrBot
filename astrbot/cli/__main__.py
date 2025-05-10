@@ -4,8 +4,8 @@ AstrBot CLI入口
 
 import click
 import sys
-from . import __version__
-from .commands import init, run, plug, conf
+from astrbot import __version__
+
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -26,7 +26,7 @@ def cli() -> None:
     click.echo(f"AstrBot CLI version: {__version__}")
 
 
-@click.command()
+@cli.command()
 @click.argument("command_name", required=False, type=str)
 def help(command_name: str | None) -> None:
     """显示命令的帮助信息
@@ -48,10 +48,9 @@ def help(command_name: str | None) -> None:
         # 显示通用帮助信息
         click.echo(cli.get_help(ctx))
 
-
+from astrbot.cli.commands import init, run, plug, conf
 cli.add_command(init)
 cli.add_command(run)
-cli.add_command(help)
 cli.add_command(plug)
 cli.add_command(conf)
 
