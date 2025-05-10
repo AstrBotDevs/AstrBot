@@ -13,6 +13,7 @@ Astrbot统一路径获取
 from __future__ import annotations
 import os
 from pathlib import Path
+from typing import ClassVar
 from pydantic import BaseModel
 
 def get_astrbot_path() -> Path:
@@ -87,7 +88,7 @@ def get_astrbot_cache_path() -> Path:
 class AstrbotFS(BaseModel):
     """Astrbot路径类"""
     root: Path
-    instance : AstrbotFS | None = None
+    instance: ClassVar[AstrbotFS | None] = None
 
     @property
     def dot_astrbot(self) -> Path:
@@ -180,18 +181,18 @@ class AstrbotFS(BaseModel):
         return cls.instance
 
     @classmethod
-    def getAstrbotRoot(cls,path: Path | str | None = None) -> AstrbotFS:
+    def getAstrbotFS(cls,path: Path | str | None = None) -> AstrbotFS:
         """获取Astrbot路径管理器"""
         if path:
             return cls.from_path(path) 
-        if cls.instance:
+        if cls.instance is not None:
             return cls.instance
         return cls.from_env() if os.environ.get("ASTRBOT_ROOT") else cls.from_default()
 
 """
 AstrbotFS使用方法：
 和logger logger = logging.getLogger("astrbot") 一样
-astrbot_fs = AstrbotFS.getAstrbotRoot()
+astrbot_fs = AstrbotFS.getAstrbotFS()
 全局单例
 
 获取路径：

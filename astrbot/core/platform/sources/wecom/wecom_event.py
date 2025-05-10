@@ -8,7 +8,7 @@ from wechatpy.enterprise import WeChatClient
 from .wecom_kf_message import WeChatKFMessage
 
 from astrbot.api import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
 try:
     import pydub
@@ -154,7 +154,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Record):
                     record_path = await comp.convert_to_file_path()
                     # 转成amr
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                    temp_dir = AstrbotFS.getAstrbotFS().temp
                     record_path_amr = os.path.join(temp_dir, f"{uuid.uuid4()}.amr")
                     pydub.AudioSegment.from_wav(record_path).export(
                         record_path_amr, format="amr"

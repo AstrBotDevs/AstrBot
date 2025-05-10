@@ -26,7 +26,7 @@ from wechatpy.messages import BaseMessage
 from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.enterprise import parse_message
 from .wecom_event import WecomPlatformEvent
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
 from .wecom_kf import WeChatKF
 from .wecom_kf_message import WeChatKFMessage
@@ -259,7 +259,7 @@ class WecomPlatformAdapter(Platform):
             resp: Response = await asyncio.get_event_loop().run_in_executor(
                 None, self.client.media.download, msg.media_id
             )
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            temp_dir = AstrbotFS.getAstrbotFS().temp
             path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
             with open(path, "wb") as f:
                 f.write(resp.content)

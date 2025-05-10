@@ -29,21 +29,21 @@ class Context:
     暴露给插件的接口上下文。
     """
 
-    _event_queue: Queue = None
+    _event_queue: Queue | None = None
     """事件队列。消息平台通过事件队列传递消息事件。"""
 
-    _config: AstrBotConfig = None
+    _config: AstrBotConfig | None = None
     """AstrBot 配置信息"""
 
-    _db: BaseDatabase = None
+    _db: BaseDatabase | None = None
     """AstrBot 数据库"""
 
-    provider_manager: ProviderManager = None
+    provider_manager: ProviderManager | None = None
 
-    platform_manager: PlatformManager = None
+    platform_manager: PlatformManager | None = None
 
     # back compatibility
-    _register_tasks: List[Awaitable] = []
+    _register_tasks: list[Awaitable] = []
     _star_manager = None
 
     def __init__(
@@ -51,10 +51,10 @@ class Context:
         event_queue: Queue,
         config: AstrBotConfig,
         db: BaseDatabase,
-        provider_manager: ProviderManager = None,
-        platform_manager: PlatformManager = None,
-        conversation_manager: ConversationManager = None,
-        knowledge_db_manager: KnowledgeDBManager = None,
+        provider_manager: ProviderManager | None = None,
+        platform_manager: PlatformManager | None = None,
+        conversation_manager: ConversationManager | None = None,
+        knowledge_db_manager: KnowledgeDBManager | None = None,
     ):
         self._event_queue = event_queue
         self._config = config
@@ -64,13 +64,14 @@ class Context:
         self.knowledge_db_manager = knowledge_db_manager
         self.conversation_manager = conversation_manager
 
-    def get_registered_star(self, star_name: str) -> StarMetadata:
+    def get_registered_star(self, star_name: str) -> StarMetadata | None:
         """根据插件名获取插件的 Metadata"""
         for star in star_registry:
             if star.name == star_name:
                 return star
+        return None
 
-    def get_all_stars(self) -> List[StarMetadata]:
+    def get_all_stars(self) -> list[StarMetadata]:
         """获取当前载入的所有插件 Metadata 的列表"""
         return star_registry
 
@@ -132,15 +133,15 @@ class Context:
                 return provider
         return None
 
-    def get_all_providers(self) -> List[Provider]:
+    def get_all_providers(self) -> list[Provider]:
         """获取所有用于文本生成任务的 LLM Provider(Chat_Completion 类型)。"""
         return self.provider_manager.provider_insts
 
-    def get_all_tts_providers(self) -> List[TTSProvider]:
+    def get_all_tts_providers(self) -> list[TTSProvider]:
         """获取所有用于 TTS 任务的 Provider。"""
         return self.provider_manager.tts_provider_insts
 
-    def get_all_stt_providers(self) -> List[STTProvider]:
+    def get_all_stt_providers(self) -> list[STTProvider]:
         """获取所有用于 STT 任务的 Provider。"""
         return self.provider_manager.stt_provider_insts
 

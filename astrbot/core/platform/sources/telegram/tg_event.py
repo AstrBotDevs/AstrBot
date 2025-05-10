@@ -14,7 +14,7 @@ from astrbot.api.message_components import (
 from telegram.ext import ExtBot
 from astrbot.core.utils.io import download_file
 from astrbot import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -74,13 +74,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_message(text=text, parse_mode="MarkdownV2", **payload)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
-                await client.send_photo(photo=image_path, **payload)
-            elif isinstance(i, File):
+                await client.send_photo(photo=image_path, **payload)            elif isinstance(i, File):
                 if i.file.startswith("https://"):
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    path = os.path.join(temp_dir, i.name)
-                    await download_file(i.file, path)
-                    i.file = path
+                    temp_dir = AstrbotFS.getAstrbotFS().temp
+                    path = temp_dir / i.name
+                    await download_file(i.file, str(path))
+                    i.file = str(path)
 
                 await client.send_document(document=i.file, filename=i.name, **payload)
             elif isinstance(i, Record):
@@ -126,13 +125,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     elif isinstance(i, Image):
                         image_path = await i.convert_to_file_path()
                         await self.client.send_photo(photo=image_path, **payload)
-                        continue
-                    elif isinstance(i, File):
+                        continue                    elif isinstance(i, File):
                         if i.file.startswith("https://"):
-                            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                            path = os.path.join(temp_dir, i.name)
-                            await download_file(i.file, path)
-                            i.file = path
+                            temp_dir = AstrbotFS.getAstrbotFS().temp
+                            path = temp_dir / i.name
+                            await download_file(i.file, str(path))
+                            i.file = str(path)
 
                         await self.client.send_document(
                             document=i.file, filename=i.name, **payload

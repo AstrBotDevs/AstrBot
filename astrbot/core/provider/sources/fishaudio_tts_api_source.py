@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 from ..provider import TTSProvider
 from ..entities import ProviderType
 from ..register import register_provider_adapter
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
 
 class ServeReferenceAudio(BaseModel):
@@ -86,11 +86,9 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             text=text,
             format="wav",
             reference_id=await self._get_reference_id_by_character(self.character),
-        )
-
-    async def get_audio(self, text: str) -> str:
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-        path = os.path.join(temp_dir, f"fishaudio_tts_api_{uuid.uuid4()}.wav")
+        )    async def get_audio(self, text: str) -> str:
+        temp_dir = AstrbotFS.getAstrbotFS().temp
+        path = temp_dir / f"fishaudio_tts_api_{uuid.uuid4()}.wav"
         self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)
         async with AsyncClient(base_url=self.api_base).stream(

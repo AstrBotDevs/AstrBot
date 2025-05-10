@@ -8,7 +8,7 @@ from astrbot.api.event import filter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import llm_tool, logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
 
 @star.register(
@@ -27,10 +27,8 @@ class Main(star.Star):
         except Exception as e:
             logger.error(f"时区设置错误: {e}, 使用本地时区")
             self.timezone = None
-        self.scheduler = AsyncIOScheduler(timezone=self.timezone)
-
-        # set and load config
-        reminder_file = os.path.join(get_astrbot_data_path(), "astrbot-reminder.json")
+        self.scheduler = AsyncIOScheduler(timezone=self.timezone)        # set and load config
+        reminder_file = os.path.join(AstrbotFS.getAstrbotFS().root, "astrbot-reminder.json")
         if not os.path.exists(reminder_file):
             with open(reminder_file, "w", encoding="utf-8") as f:
                 f.write("{}")
@@ -80,11 +78,9 @@ class Main(star.Star):
                 reminder["datetime"], "%Y-%m-%d %H:%M"
             ).replace(tzinfo=self.timezone)
             return reminder_time < datetime.datetime.now(self.timezone)
-        return False
-
-    async def _save_data(self):
+        return False    async def _save_data(self):
         """Save the reminder data."""
-        reminder_file = os.path.join(get_astrbot_data_path(), "astrbot-reminder.json")
+        reminder_file = os.path.join(AstrbotFS.getAstrbotFS().root, "astrbot-reminder.json")
         with open(reminder_file, "w", encoding="utf-8") as f:
             json.dump(self.reminder_data, f, ensure_ascii=False)
 

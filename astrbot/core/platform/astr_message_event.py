@@ -26,7 +26,7 @@ from .platform_metadata import PlatformMetadata
 
 
 @dataclass
-class MessageSesion:
+class MessageSession:
     platform_name: str
     message_type: MessageType
     session_id: str
@@ -34,10 +34,10 @@ class MessageSesion:
     def __str__(self):
         return f"{self.platform_name}:{self.message_type.value}:{self.session_id}"
 
-    @staticmethod
-    def from_str(session_str: str):
+    @classmethod
+    def from_str(cls, session_str: str):
         platform_name, message_type, session_id = session_str.split(":")
-        return MessageSesion(platform_name, MessageType(message_type), session_id)
+        return cls(platform_name, MessageType(message_type), session_id)
 
 
 class AstrMessageEvent(abc.ABC):

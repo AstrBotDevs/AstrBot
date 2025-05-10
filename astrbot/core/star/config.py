@@ -2,20 +2,18 @@
 此功能已过时，参考 https://astrbot.app/dev/plugin.html#%E6%B3%A8%E5%86%8C%E6%8F%92%E4%BB%B6%E9%85%8D%E7%BD%AE-beta
 """
 
-from typing import Union
 import os
 import json
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
-
-def load_config(namespace: str) -> Union[dict, bool]:
+def load_config(namespace: str) -> dict | bool:
     """
     从配置文件中加载配置。
     namespace: str, 配置的唯一识别符，也就是配置文件的名字。
     返回值: 当配置文件存在时，返回 namespace 对应配置文件的内容dict，否则返回 False。
-    """
-    path = os.path.join(get_astrbot_data_path(), "config", f"{namespace}.json")
-    if not os.path.exists(path):
+    """    
+    path = AstrbotFS.getAstrbotFS().config / f"{namespace}.json"
+    if not path.exists():
         return False
     with open(path, "r", encoding="utf-8-sig") as f:
         ret = {}
@@ -43,12 +41,12 @@ def put_config(namespace: str, name: str, key: str, value, description: str):
     if not isinstance(key, str):
         raise ValueError("key 只支持 str 类型。")
     if not isinstance(value, (str, int, float, bool, list)):
-        raise ValueError("value 只支持 str, int, float, bool, list 类型。")
+        raise ValueError("value 只支持 str, int, float, bool, list 类型。")    
+    
+    config_dir = AstrbotFS.getAstrbotFS().config
+    path = config_dir / f"{namespace}.json"
 
-    config_dir = os.path.join(get_astrbot_data_path(), "config")
-    path = os.path.join(config_dir, f"{namespace}.json")
-
-    if not os.path.exists(path):
+    if not path.exists():
         with open(path, "w", encoding="utf-8-sig") as f:
             f.write("{}")
     with open(path, "r", encoding="utf-8-sig") as f:
@@ -74,8 +72,8 @@ def update_config(namespace: str, key: str, value):
     namespace: str, 配置的唯一识别符，也就是配置文件的名字。
     key: str, 配置项的键。
     value: str, int, float, bool, list, 配置项的值。
-    """
-    path = os.path.join(get_astrbot_data_path(), "config", f"{namespace}.json")
+    """    
+    path = AstrbotFS.getAstrbotFS().config / f"{namespace}.json"
     if not os.path.exists(path):
         raise FileNotFoundError(f"配置文件 {namespace}.json 不存在。")
     with open(path, "r", encoding="utf-8-sig") as f:

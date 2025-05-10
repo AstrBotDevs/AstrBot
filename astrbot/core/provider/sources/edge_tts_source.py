@@ -7,7 +7,7 @@ from ..provider import TTSProvider
 from ..entities import ProviderType
 from ..register import register_provider_adapter
 from astrbot.core import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
 """
 edge_tts 方式，能够免费、快速生成语音，使用需要先安装edge-tts库
@@ -38,12 +38,10 @@ class ProviderEdgeTTS(TTSProvider):
 
         self.proxy = os.getenv("https_proxy", None)
 
-        self.set_model("edge_tts")
-
-    async def get_audio(self, text: str) -> str:
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-        mp3_path = os.path.join(temp_dir, f"edge_tts_temp_{uuid.uuid4()}.mp3")
-        wav_path = os.path.join(temp_dir, f"edge_tts_{uuid.uuid4()}.wav")
+        self.set_model("edge_tts")    async def get_audio(self, text: str) -> str:
+        temp_dir = AstrbotFS.getAstrbotFS().temp
+        mp3_path = temp_dir / f"edge_tts_temp_{uuid.uuid4()}.mp3"
+        wav_path = temp_dir / f"edge_tts_{uuid.uuid4()}.wav"
 
         # 构建 Edge TTS 参数
         kwargs = {"text": text, "voice": self.voice}
@@ -92,10 +90,8 @@ class ProviderEdgeTTS(TTSProvider):
                 stdout, stderr = await p.communicate()
                 logger.info(f"[EdgeTTS] FFmpeg 标准输出: {stdout.decode().strip()}")
                 logger.debug(f"FFmpeg错误输出: {stderr.decode().strip()}")
-                logger.info(f"[EdgeTTS] 返回值(0代表成功): {p.returncode}")
-
-            os.remove(mp3_path)
-            if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
+                logger.info(f"[EdgeTTS] 返回值(0代表成功): {p.returncode}")            os.remove(str(mp3_path))
+            if os.path.exists(str(wav_path)) and os.path.getsize(str(wav_path)) > 0:
                 return wav_path
             else:
                 logger.error("生成的WAV文件不存在或为空")

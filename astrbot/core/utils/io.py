@@ -239,5 +239,118 @@ async def download_dashboard(root: Path | None = None) -> str :
 
     return version
 
+# 和新版的AstrbotFS搭配使用
 
+from .astrbot_path import AstrbotFS
+class DashboardManager:
+    astrbot_fs: AstrbotFS = AstrbotFS.getAstrbotFS()
 
+    @classmethod
+    def get_version(cls) -> str:
+        """获取当前版本号"""
+        version_file: Path = cls.astrbot_fs.webroot / "dist" / "assets" / "version"
+        return version_file.read_text(encoding="utf-8").strip() if version_file.exists() else "N/A"    @classmethod
+    
+    @classmethod
+    def get_latest_version(cls) -> str:
+        """获取最新版本号
+        
+        从GitHub获取AstrBot最新的发布版本号标签名
+        例如 "v3.5.8"
+        
+        Returns:
+            str: 最新版本号，若获取失败则返回空字符串
+        """
+        import requests
+
+        try:
+            api_url = "https://api.github.com/repos/AstrBotDevs/AstrBot/releases/latest"
+            
+            # 发送请求（带超时和用户代理）
+            response = requests.get(
+                api_url, 
+                timeout=10
+            )
+            
+            # 如果请求成功
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("tag_name", "")
+            else:
+                print(f"获取最新版本号失败: HTTP {response.status_code}")
+                return ""
+        except Exception as e:
+            print(f"获取最新版本号过程中发生错误: {e}")
+            return ""
+
+    @classmethod
+    def need_update(cls) -> bool:
+        """检查是否需要更新"""
+        current_version = cls.get_version()
+        if current_version == "N/A" or cls.get_latest_version() != current_version:
+            """直接看版本是否一致就行了，不一致肯定是有新版本了"""
+            return True
+        return False    
+    
+    @classmethod
+    async def update(cls) -> None:
+        """更新管理面板"""
+        from rich.console import Console
+        from rich.panel import Panel
+        from rich.progress import Progress, TextColumn, BarColumn, TimeRemainingColumn, SpinnerColumn
+
+        console = Console()
+        
+        # 显示更新开始信息
+        console.print(Panel("[bold blue]管理面板更新[/bold blue]", 
+                            subtitle="开始更新过程...", 
+                            expand=False))
+
+        # 检查当前版本
+        current_version = cls.get_version()
+        console.print(f"[yellow]当前版本[/yellow]: {current_version}")
+        console.print(f"[yellow]正在获取最新版本信息...[/yellow]")
+        
+        latest_version = cls.get_latest_version()
+        console.print(f"[yellow]目标版本[/yellow]: {latest_version or '最新版本'}")
+        
+        # 显示进度条
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}[/bold blue]"),
+            BarColumn(bar_width=40),
+            TextColumn("[bold]{task.percentage:.0f}%"),
+            TimeRemainingColumn(),
+            console=console,
+            expand=True
+        ) as progress:
+            # 删除旧版本任务
+            delete_task = progress.add_task("[red]删除旧版本...", total=1)
+            
+            # 先删除旧的
+            if cls.astrbot_fs.webroot.exists():
+                try:
+                    shutil.rmtree(cls.astrbot_fs.webroot)
+                    progress.update(delete_task, completed=1)
+                except Exception as e:
+                    progress.update(delete_task, completed=1)
+                    console.print(f"[bold red]删除旧版本时出错: {e}[/bold red]")
+            else:
+                progress.update(delete_task, completed=1)
+                
+            # 下载新版本任务
+            download_task = progress.add_task("[green]下载并安装新版本...", total=1)
+            
+            # 下载新的
+            try:
+                # 这里使用 await 调用异步方法
+                version = await download_dashboard(cls.astrbot_fs.root)
+                progress.update(download_task, completed=1)
+                
+                # 更新完成，显示结果
+                console.print(Panel(f"[bold green]管理面板更新成功[/bold green]", 
+                                  subtitle=f"当前版本: {version}", 
+                                  expand=False))
+            except Exception as e:
+                progress.update(download_task, completed=1)
+                console.print(f"[bold red]下载新版本时出错: {str(e)}[/bold red]")

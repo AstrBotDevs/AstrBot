@@ -1,8 +1,15 @@
 import re
 from pathlib import Path
-
 import click
 import shutil
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.markdown import Markdown
+
+# 创建Rich控制台
+console = Console()
 
 
 @click.group()
@@ -14,19 +21,49 @@ def plug():
 from ...core.utils.astrbot_path import get_astrbot_root
 
 
-def display_plugins(plugins, title=None, color=None):
-    if title:
-        click.echo(click.style(title, fg=color, bold=True))
-
-    click.echo(f"{'名称':<20} {'版本':<10} {'状态':<10} {'作者':<15} {'描述':<30}")
-    click.echo("-" * 85)
-
+def display_plugins(plugins: list[dict], title: str = None, color: str = None):
+    # 创建一个美观的表格
+    table = Table(show_header=True)
+    table.add_column("名称", style="cyan", justify="left")
+    table.add_column("版本", style="green")
+    table.add_column("状态", style="yellow")
+    table.add_column("作者", style="blue")
+    table.add_column("描述", style="magenta")
+    
+    # 添加插件数据
     for p in plugins:
-        desc = p["desc"][:30] + ("..." if len(p["desc"]) > 30 else "")
-        click.echo(
-            f"{p['name']:<20} {p['version']:<10} {p['status']:<10} "
-            f"{p['author']:<15} {desc:<30}"
+        desc = p["desc"][:40] + ("..." if len(p["desc"]) > 40 else "")
+        
+        # 根据状态设置状态列的样式
+        status_style = {
+            "需要更新": "[yellow]需要更新[/yellow]",
+            "已安装": "[green]已安装[/green]",
+            "未安装": "[blue]未安装[/blue]",
+            "未发布": "[red]未发布[/red]"
+        }.get(p["status"], p["status"])
+        
+        table.add_row(
+            p["name"],
+            p["version"],
+            status_style,
+            p["author"],
+            desc
         )
+    
+    # 设置标题颜色
+    title_style = {
+        "red": "[bold red]",
+        "green": "[bold green]",
+        "blue": "[bold blue]",
+        "yellow": "[bold yellow]",
+        "cyan": "[bold cyan]"
+    }.get(color, "[bold]")
+    
+    # 显示结果
+    if title:
+        console.print(f"\n{title_style}{title}[/]")
+    
+    console.print(table)
 
 
 @plug.command()
@@ -118,13 +155,16 @@ def list(all: bool):
         p for p in plugins if p["status"] == PluginStatus.NOT_INSTALLED
     ]
     if not_installed_plugins and all:
-        display_plugins(not_installed_plugins, "未安装的插件", "blue")
-
-    if (
+        display_plugins(not_installed_plugins, "未安装的插件", "blue")    if (
         not any([not_published_plugins, need_update_plugins, installed_plugins])
         and not all
     ):
-        click.echo("未安装任何插件")
+        console.print(Panel(
+            "[yellow]未安装任何插件[/yellow]\n\n"
+            "使用 [bold cyan]astrbot plug install <插件名>[/bold cyan] 安装插件",
+            title="[bold]插件状态[/bold]",
+            border_style="yellow"
+        ))
 
 
 @plug.command()

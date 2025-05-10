@@ -4,14 +4,14 @@ from typing import List, Dict
 from astrbot.api import logger
 from ..embedding.openai_source import SimpleOpenAIEmbedding
 from . import Store
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import AstrbotFS
 
 
 class ChromaVectorStore(Store):
     def __init__(self, name: str, embedding_cfg: Dict) -> None:
         import os
         self.chroma_client = chromadb.PersistentClient(
-            path=os.path.join(get_astrbot_data_path(), "long_term_memory_chroma.db")
+            path=os.path.join(AstrbotFS.getAstrbotFS().root, "long_term_memory_chroma.db")
         )
         self.collection = self.chroma_client.get_or_create_collection(name=name)
         self.embedding = None
