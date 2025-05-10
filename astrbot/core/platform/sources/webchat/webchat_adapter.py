@@ -17,7 +17,7 @@ from astrbot.core import web_chat_queue
 from .webchat_event import WebChatMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 
 class QueueListener:
@@ -41,8 +41,8 @@ class WebChatAdapter(Platform):
         self.config = platform_config
         self.settings = platform_settings
         self.unique_session = platform_settings["unique_session"]
-        self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
-        os.makedirs(self.imgs_dir, exist_ok=True)
+        self.imgs_dir = get_astrbot_root() / "webchat" / "imgs"
+        self.imgs_dir.mkdir(parents=True, exist_ok=True)
 
         self.metadata = PlatformMetadata(
             name="webchat", description="webchat", id=self.config.get("id")
@@ -75,21 +75,21 @@ class WebChatAdapter(Platform):
             if isinstance(payload["image_url"], list):
                 for img in payload["image_url"]:
                     abm.message.append(
-                        Image.fromFileSystem(os.path.join(self.imgs_dir, img))
+                        Image.fromFileSystem(self.imgs_dir / img)
                     )
             else:
                 abm.message.append(
                     Image.fromFileSystem(
-                        os.path.join(self.imgs_dir, payload["image_url"])
+                        self.imgs_dir / payload["image_url"]
                     )
                 )
         if payload["audio_url"]:
             if isinstance(payload["audio_url"], list):
                 for audio in payload["audio_url"]:
-                    path = os.path.join(self.imgs_dir, audio)
+                    path = self.imgs_dir / audio
                     abm.message.append(Record(file=path, path=path))
             else:
-                path = os.path.join(self.imgs_dir, payload["audio_url"])
+                path = self.imgs_dir / payload["audio_url"] 
                 abm.message.append(Record(file=path, path=path))
 
         logger.debug(f"WebChatAdapter: {abm.message}")

@@ -1,6 +1,6 @@
 import os
 import asyncio
-from .log import LogManager, LogBroker  # noqa
+from .log import LogManager , LogBroker  # noqa
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.pip_installer import PipInstaller
@@ -8,10 +8,6 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.config.default import DB_PATH
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.file_token_service import FileTokenService
-from .utils.astrbot_path import get_astrbot_data_path
-
-# 初始化数据存储文件夹
-os.makedirs(get_astrbot_data_path(), exist_ok=True)
 
 WEBUI_SK = "Advanced_System_for_Text_Response_and_Bot_Operations_Tool"
 DEMO_MODE = os.getenv("DEMO_MODE", False)
@@ -32,3 +28,18 @@ pip_installer = PipInstaller(
 web_chat_queue = asyncio.Queue(maxsize=32)
 web_chat_back_queue = asyncio.Queue(maxsize=32)
 
+# 全局单例
+__all__ = [
+    "LogManager",
+    "LogBroker",
+    "astrbot_config",
+    "t2i_base_url",
+    "html_renderer",
+    "logger",
+    "db_helper",
+    "sp",
+    "file_token_service",
+    "pip_installer",
+    "web_chat_queue",
+    "web_chat_back_queue",
+]

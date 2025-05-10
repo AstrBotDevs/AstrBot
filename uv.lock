@@ -229,6 +229,7 @@ dependencies = [
     { name = "readability-lxml" },
     { name = "silk-python" },
     { name = "telegramify-markdown" },
+    { name = "toml" },
     { name = "watchfiles" },
     { name = "wechatpy" },
 ]
@@ -269,6 +270,7 @@ requires-dist = [
     { name = "readability-lxml", specifier = ">=0.8.1" },
     { name = "silk-python", specifier = ">=0.2.6" },
     { name = "telegramify-markdown", specifier = ">=0.5.0" },
+    { name = "toml", specifier = ">=0.10.2" },
     { name = "watchfiles", specifier = ">=1.0.5" },
     { name = "wechatpy", specifier = ">=1.8.18" },
 ]
@@ -1989,6 +1991,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c5/a7/2350b24d8939d4f56f31f09dbcf0ef13c4c3cab9c4d91b01d933447d3170/telegramify_markdown-0.5.1.tar.gz", hash = "sha256:a2c4ca337219607dce13883bdc30bf4faf07bf37e3f748594e8b10e1b5708fae", size = 35700, upload_time = "2025-04-08T07:56:03.35Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/80/14/859fb616d12ebc472c5cb6ff65c0021e8f81c3e614d3ada2b3ce60d3f655/telegramify_markdown-0.5.1-py3-none-any.whl", hash = "sha256:a757b9a0f0d681ba7e29638deabc8decc634626bee359d95effaa505a86b756d", size = 32062, upload_time = "2025-04-08T07:56:02.096Z" },
+]
+
+[[package]]
+name = "toml"
+version = "0.10.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/ba/1f744cdc819428fc6b5084ec34d9b30660f6f9daaf70eead706e3203ec3c/toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f", size = 22253, upload_time = "2020-11-01T01:40:22.204Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b", size = 16588, upload_time = "2020-11-01T01:40:20.672Z" },
 ]
 
 [[package]]

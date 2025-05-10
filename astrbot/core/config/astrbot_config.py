@@ -4,9 +4,9 @@ import logging
 import enum
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 from typing import Dict
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_root
 
-ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
+ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_root(), "cmd_config.json")
 logger = logging.getLogger("astrbot")
 
 
@@ -27,7 +27,7 @@ class AstrBotConfig(dict):
         self,
         config_path: str = ASTRBOT_CONFIG_PATH,
         default_config: dict = DEFAULT_CONFIG,
-        schema: dict = None,
+        schema: dict | None = None,
     ):
         super().__init__()
 

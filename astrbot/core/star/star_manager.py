@@ -18,7 +18,6 @@ from astrbot.core import logger, sp, pip_installer
 from .context import Context
 from . import StarMetadata
 from .updator import PluginUpdator
-from astrbot.core.utils.io import remove_dir
 from .star import star_registry, star_map
 from .star_handler import star_handlers_registry
 from astrbot.core.provider.register import llm_tools
@@ -656,13 +655,16 @@ class PluginManager:
         Raises:
             Exception: 当插件不存在、是保留插件时，或删除插件文件夹失败时抛出异常
         """
-        plugin = self.context.get_registered_star(plugin_name)
+        plugin: StarMetadata = self.context.get_registered_star(plugin_name)
         if not plugin:
             raise Exception("插件不存在。")
         if plugin.reserved:
             raise Exception("该插件是 AstrBot 保留插件，无法卸载。")
         root_dir_name = plugin.root_dir_name
         ppath = self.plugin_store_path
+
+        # 什么ppath 什么root_dir_name
+        ppath_root_dir_name = ppath / root_dir_name
 
         # 终止插件
         try:
@@ -677,7 +679,7 @@ class PluginManager:
         await self._unbind_plugin(plugin_name, plugin.module_path)
 
         try:
-            remove_dir(os.path.join(ppath, root_dir_name))
+            ppath_root_dir_name.rmdir()
         except Exception as e:
             raise Exception(
                 f"移除插件成功，但是删除插件文件夹失败: {str(e)}。您可以手动删除该文件夹，位于 addons/plugins/ 下。"

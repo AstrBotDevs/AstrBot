@@ -2,6 +2,7 @@ import os
 import psutil
 import sys
 import time
+from pathlib import Path
 from .zip_updator import ReleaseInfo, RepoZipUpdator
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -68,7 +69,7 @@ class AstrBotUpdator(RepoZipUpdator):
     async def get_releases(self) -> list:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
-    async def update(self, reboot=False, latest=True, version=None, proxy=""):
+    async def update(self, reboot : bool =False, latest : bool =True, version : str | None =None, proxy : str | None =None):
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
 
@@ -93,14 +94,15 @@ class AstrBotUpdator(RepoZipUpdator):
                 raise Exception("commit hash 长度不正确，应为 40")
             logger.info(f"正在尝试更新到指定 commit: {version}")
             file_url = "https://github.com/Soulter/AstrBot/archive/" + version + ".zip"
-
+            
         if proxy:
             proxy = proxy.removesuffix("/")
             file_url = f"{proxy}/{file_url}"
-
+            
         try:
-            await download_file(file_url, "temp.zip")
-            self.unzip_file("temp.zip", self.MAIN_PATH)
+            temp_zip_path = self.MAIN_PATH / "temp.zip"
+            await download_file(file_url, temp_zip_path)
+            self.unzip_file(temp_zip_path, Path(self.MAIN_PATH))
         except BaseException as e:
             raise e
 

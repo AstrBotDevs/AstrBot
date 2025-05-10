@@ -1,5 +1,7 @@
 import shutil
 import tempfile
+import json
+import toml
 
 import httpx
 import yaml
@@ -82,13 +84,50 @@ def load_yaml_metadata(plugin_dir: Path) -> dict:
     Returns:
         dict: 包含元数据的字典，如果读取失败则返回空字典
     """
-    yaml_path = plugin_dir / "metadata.yaml"
+    import yaml
+    yaml_path: Path = plugin_dir / "metadata.yaml"
     if yaml_path.exists():
         try:
             return yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
         except Exception as e:
             click.echo(f"读取 {yaml_path} 失败: {e}", err=True)
     return {}
+
+def load_json_metadata(plugin_dir: Path) -> dict:
+    """从 metadata.json 文件加载插件元数据
+
+    Args:
+        plugin_dir: 插件目录路径
+
+    Returns:
+        dict: 包含元数据的字典，如果读取失败则返回空字典
+    """
+    json_path: Path = plugin_dir / "metadata.json"
+    if json_path.exists():
+        try:
+            return json.loads(json_path.read_text(encoding="utf-8")) or {}
+        except Exception as e:
+            click.echo(f"读取 {json_path} 失败: {e}", err=True)
+    return {}
+
+def load_toml_metadata(plugin_dir: Path) -> dict:
+    """从 metadata.toml 文件加载插件元数据
+
+    Args:
+        plugin_dir: 插件目录路径
+
+    Returns:
+        dict: 包含元数据的字典，如果读取失败则返回空字典
+    """
+    toml_path = plugin_dir / "metadata.toml"
+    if toml_path.exists():
+        try:
+            return toml.loads(toml_path.read_text(encoding="utf-8")) or {}
+        except Exception as e:
+            click.echo(f"读取 {toml_path} 失败: {e}", err=True)
+    return {}
+
+
 
 
 def extract_py_metadata(plugin_dir: Path) -> dict:
@@ -124,7 +163,7 @@ def extract_py_metadata(plugin_dir: Path) -> dict:
     return {}
 
 
-def build_plug_list(plugins_dir: Path) -> list:
+def build_plug_list(plugins_dir: Path) -> list[dict[str,str]]:
     """构建插件列表，包含本地和在线插件信息
 
     Args:
@@ -215,12 +254,12 @@ def build_plug_list(plugins_dir: Path) -> list:
 
 
 def manage_plugin(
-    plugin: dict, plugins_dir: Path, is_update: bool = False, proxy: str | None = None
+    plugin: dict[str, str], plugins_dir: Path, is_update: bool = False, proxy: str | None = None
 ) -> None:
     """安装或更新插件
 
     Args:
-        plugin (dict): 插件信息字典
+        plugin (dict[str, str]): 插件信息字典
         plugins_dir (Path): 插件目录
         is_update (bool, optional): 是否为更新操作. 默认为 False
         proxy (str, optional): 代理服务器地址
@@ -232,35 +271,40 @@ def manage_plugin(
     if is_update and plugin.get("local_path"):
         target_path = Path(plugin["local_path"])
     else:
-        target_path = plugins_dir / plugin_name
+        target_path: Path = plugins_dir / plugin_name
 
-    backup_path = Path(f"{target_path}_backup") if is_update else None
+    # 创建备份路径或设为 None
+    backup_path: Path | None = None
+    if is_update:
+        backup_path = Path(f"{target_path}_backup")
 
     # 检查插件是否存在
-    if is_update and not target_path.exists():
-        raise click.ClickException(f"插件 {plugin_name} 未安装，无法更新")
-
-    # 备份现有插件
-    if is_update and backup_path.exists():
-        shutil.rmtree(backup_path)
-    if is_update:
-        shutil.copytree(target_path, backup_path)
+    if is_update and target_path.exists() == False:
+        raise click.ClickException(f"插件 {plugin_name} 未安装，无法更新")    # 备份现有插件
+    if is_update and backup_path is not None:
+        # 如果备份目录已存在，先删除
+        if backup_path.exists():
+            shutil.rmtree(str(backup_path))
+        # 创建备份
+        shutil.copytree(str(target_path), str(backup_path))
 
     try:
         click.echo(
             f"正在从 {repo_url} {'更新' if is_update else '下载'}插件 {plugin_name}..."
         )
-        get_git_repo(repo_url, target_path, proxy)
+        get_git_repo(str(repo_url), target_path, proxy)
 
         # 更新成功，删除备份
-        if is_update and backup_path.exists():
-            shutil.rmtree(backup_path)
+        if is_update and backup_path is not None and backup_path.exists():
+            shutil.rmtree(str(backup_path))
         click.echo(f"插件 {plugin_name} {'更新' if is_update else '安装'}成功")
     except Exception as e:
+        # 发生错误，清理并恢复
         if target_path.exists():
-            shutil.rmtree(target_path, ignore_errors=True)
-        if is_update and backup_path.exists():
-            shutil.move(backup_path, target_path)
+            shutil.rmtree(str(target_path), ignore_errors=True)
+        # 如果有备份，恢复备份
+        if is_update and backup_path is not None and backup_path.exists():
+            shutil.move(str(backup_path), str(target_path))
         raise click.ClickException(
             f"{'更新' if is_update else '安装'}插件 {plugin_name} 时出错: {e}"
         )

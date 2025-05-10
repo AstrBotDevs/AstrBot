@@ -1,19 +1,18 @@
 import os
-from typing import List, Dict
 from astrbot.core import logger
 from .store import Store
 from astrbot.core.config import AstrBotConfig
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 
 class KnowledgeDBManager:
     def __init__(self, astrbot_config: AstrBotConfig) -> None:
-        self.db_path = os.path.join(get_astrbot_data_path(), "knowledge_db")
+        self.db_path = get_astrbot_root() / "knowledge_db"
         self.config = astrbot_config.get("knowledge_db", {})
         self.astrbot_config = astrbot_config
-        if not os.path.exists(self.db_path):
-            os.makedirs(self.db_path)
-        self.store_insts: Dict[str, Store] = {}
+        if not self.db_path.exists():
+            self.db_path.mkdir(parents=True, exist_ok=True)
+        self.store_insts: dict[str, Store] = {}
         for name, cfg in self.config.items():
             if cfg["strategy"] == "embedding":
                 logger.info(f"加载 Chroma Vector Store：{name}")
@@ -28,14 +27,14 @@ class KnowledgeDBManager:
             else:
                 logger.error(f"不支持的策略：{cfg['strategy']}")
 
-    async def list_knowledge_db(self) -> List[str]:
+    async def list_knowledge_db(self) -> list[str]:
         return [
             f
             for f in os.listdir(self.db_path)
-            if os.path.isfile(os.path.join(self.db_path, f))
+            if os.path.isfile(self.db_path / f)
         ]
 
-    async def create_knowledge_db(self, name: str, config: Dict):
+    async def create_knowledge_db(self, name: str, config: dict):
         """
         config 格式：
         ```
@@ -78,14 +77,14 @@ class KnowledgeDBManager:
         for chunk in ret:
             await self.store_insts[name].save(chunk)
 
-    async def retrive_records(self, name: str, query: str, top_n: int = 3) -> List[str]:
+    async def retrive_records(self, name: str, query: str, top_n: int = 3) -> list[str]:
         if name not in self.store_insts:
             raise ValueError(f"未找到知识库：{name}")
 
         inst = self.store_insts[name]
         return await inst.query(query, top_n)
 
-    def _fixed_chunk(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
+    def _fixed_chunk(self, text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
         chunks = []
         start = 0
         while start < len(text):

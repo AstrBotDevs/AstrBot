@@ -11,17 +11,7 @@ def plug():
     pass
 
 
-def _get_data_path() -> Path:
-    from ..utils import (
-        get_astrbot_root,
-        check_astrbot_root
-    )
-    base = get_astrbot_root()
-    if not check_astrbot_root(base):
-        raise click.ClickException(
-            f"{base}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
-        )
-    return (base / "data").resolve()
+from ...core.utils.astrbot_path import get_astrbot_root
 
 
 def display_plugins(plugins, title=None, color=None):
@@ -44,8 +34,8 @@ def display_plugins(plugins, title=None, color=None):
 def new(name: str):
     """创建新插件"""
     from ..utils import get_git_repo
-    base_path = _get_data_path()
-    plug_path = base_path / "plugins" / name
+    root: Path = get_astrbot_root()
+    plug_path: Path = root / "plugins" / name
 
     if plug_path.exists():
         raise click.ClickException(f"插件 {name} 已存在")
@@ -100,8 +90,9 @@ def new(name: str):
 def list(all: bool):
     """列出插件"""
     from ..utils import build_plug_list, PluginStatus
-    base_path = _get_data_path()
-    plugins = build_plug_list(base_path / "plugins")
+
+    root: Path = get_astrbot_root()
+    plugins = build_plug_list(root / "plugins")
 
     # 未发布的插件
     not_published_plugins = [
@@ -142,9 +133,10 @@ def list(all: bool):
 def install(name: str, proxy: str | None):
     """安装插件"""
     from ..utils import build_plug_list, manage_plugin, PluginStatus
-    base_path = _get_data_path()
-    plug_path = base_path / "plugins"
-    plugins = build_plug_list(base_path / "plugins")
+
+    root: Path = get_astrbot_root()
+    plug_path: Path = root / "plugins"
+    plugins = build_plug_list(root / "plugins")
 
     plugin = next(
         (
@@ -166,8 +158,9 @@ def install(name: str, proxy: str | None):
 def remove(name: str):
     """卸载插件"""
     from ..utils import build_plug_list
-    base_path = _get_data_path()
-    plugins = build_plug_list(base_path / "plugins")
+
+    root: Path = get_astrbot_root()
+    plugins = build_plug_list(root / "plugins")
     plugin = next((p for p in plugins if p["name"] == name), None)
 
     if not plugin or not plugin.get("local_path"):
@@ -190,9 +183,10 @@ def remove(name: str):
 def update(name: str, proxy: str | None):
     """更新插件"""
     from ..utils import build_plug_list, manage_plugin, PluginStatus    
-    base_path = _get_data_path()
-    plug_path = base_path / "plugins"
-    plugins = build_plug_list(base_path / "plugins")
+
+    root: Path = get_astrbot_root()
+    plug_path: Path = root / "plugins"
+    plugins = build_plug_list(root / "plugins")
 
     if name:
         plugin = next(
@@ -229,15 +223,15 @@ def update(name: str, proxy: str | None):
 def search(query: str):
     """搜索插件"""
     from ..utils import build_plug_list
-    base_path = _get_data_path()
-    plugins = build_plug_list(base_path / "plugins")
+    root = get_astrbot_root()
+    plugins = build_plug_list(root / "plugins")
 
-    matched_plugins = [
+    matched_plugins = [ # type: ignore
         p
-        for p in plugins
-        if query.lower() in p["name"].lower()
-        or query.lower() in p["desc"].lower()
-        or query.lower() in p["author"].lower()
+        for p in plugins # type: ignore
+        if query.lower() in p["name"].lower() # type: ignore
+        or query.lower() in p["desc"].lower() # type: ignore
+        or query.lower() in p["author"].lower() # type: ignore
     ]
 
     if not matched_plugins:

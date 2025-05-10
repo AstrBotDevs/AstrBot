@@ -5,14 +5,14 @@ import os
 import asyncio
 import logging
 
-from typing import Dict, List, Awaitable, Literal, Any
+from typing import Awaitable, Literal, Any
 from dataclasses import dataclass
 from typing import Optional
 from contextlib import AsyncExitStack
 from astrbot import logger
 from astrbot.core.utils.log_pipe import LogPipe
 
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 try:
     import mcp
@@ -38,11 +38,11 @@ class FuncTool:
     """
 
     name: str
-    parameters: Dict
+    parameters: dict
     description: str
-    handler: Awaitable = None
+    handler: Awaitable | None = None
     """处理函数, 当 origin 为 mcp 时，这个为空"""
-    handler_module_path: str = None
+    handler_module_path: str | None = None
     """处理函数的模块路径，当 origin 为 mcp 时，这个为空
 
     必须要保留这个字段, handler 在初始化会被 functools.partial 包装，导致 handler 的 __module__ 为 functools
@@ -54,9 +54,9 @@ class FuncTool:
     """函数工具的来源, local 为本地函数工具, mcp 为 MCP 服务"""
 
     # MCP 相关字段
-    mcp_server_name: str = None
+    mcp_server_name: str | None = None
     """MCP 服务名称，当 origin 为 mcp 时有效"""
-    mcp_client: MCPClient = None
+    mcp_client: MCPClient | None = None
     """MCP 客户端，当 origin 为 mcp 时有效"""
 
     def __repr__(self):
@@ -90,8 +90,8 @@ class MCPClient:
 
         self.name = None
         self.active: bool = True
-        self.tools: List[mcp.Tool] = []
-        self.server_errlogs: List[str] = []
+        self.tools: list[mcp.Tool] = []
+        self.server_errlogs: list[str] = []
 
     async def connect_to_server(self, mcp_server_config: dict, name: str):
         """连接到 MCP 服务器
@@ -160,13 +160,13 @@ class MCPClient:
 
 class FuncCall:
     def __init__(self) -> None:
-        self.func_list: List[FuncTool] = []
+        self.func_list: list[FuncTool] = []
         """内部加载的 func tools"""
-        self.mcp_client_dict: Dict[str, MCPClient] = {}
+        self.mcp_client_dict: dict[str, MCPClient] = {}
         """MCP 服务列表"""
         self.mcp_service_queue = asyncio.Queue()
         """用于外部控制 MCP 服务的启停"""
-        self.mcp_client_event: Dict[str, asyncio.Event] = {}
+        self.mcp_client_event: dict[str, asyncio.Event] = {}
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -240,9 +240,9 @@ class FuncCall:
         }
         ```
         """
-        data_dir = get_astrbot_data_path()
+        root = get_astrbot_root()
 
-        mcp_json_file = os.path.join(data_dir, "mcp_server.json")
+        mcp_json_file = os.path.join(root, "mcp_server.json")
         if not os.path.exists(mcp_json_file):
             # 配置文件不存在错误处理
             with open(mcp_json_file, "w", encoding="utf-8") as f:
@@ -250,7 +250,7 @@ class FuncCall:
             logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
             return
 
-        mcp_server_json_obj: Dict[str, Dict] = json.load(
+        mcp_server_json_obj: dict[str, dict] = json.load(
             open(mcp_json_file, "r", encoding="utf-8")
         )["mcpServers"]
 

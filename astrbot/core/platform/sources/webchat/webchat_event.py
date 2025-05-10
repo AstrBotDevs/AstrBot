@@ -6,15 +6,14 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image, Record
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core import web_chat_back_queue
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_root
 
-imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
-
+imgs_dir = get_astrbot_root() / "webchat" / "imgs"
 
 class WebChatMessageEvent(AstrMessageEvent):
     def __init__(self, message_str, message_obj, platform_meta, session_id):
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        os.makedirs(imgs_dir, exist_ok=True)
+        imgs_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     async def _send(message: MessageChain, session_id: str, streaming: bool = False):
@@ -69,7 +68,7 @@ class WebChatMessageEvent(AstrMessageEvent):
             elif isinstance(comp, Record):
                 # save record to local
                 filename = str(uuid.uuid4()) + ".wav"
-                path = os.path.join(imgs_dir, filename)
+                path = imgs_dir / filename
                 if comp.file and comp.file.startswith("file:///"):
                     ph = comp.file[8:]
                     with open(path, "wb") as f:

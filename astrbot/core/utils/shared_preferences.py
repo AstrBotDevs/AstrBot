@@ -1,22 +1,22 @@
 import json
-import os
-from .astrbot_path import get_astrbot_data_path
+from pathlib import Path
+from .astrbot_path import get_astrbot_root
 
 
 class SharedPreferences:
-    def __init__(self, path=None):
+    def __init__(self, path: Path | None=None):
         if path is None:
-            path = os.path.join(get_astrbot_data_path(), "shared_preferences.json")
+            path = get_astrbot_root() / "shared_preferences.json"
         self.path = path
         self._data = self._load_preferences()
 
     def _load_preferences(self):
-        if os.path.exists(self.path):
+        if self.path.exists():
             try:
                 with open(self.path, "r") as f:
                     return json.load(f)
             except json.JSONDecodeError:
-                os.remove(self.path)
+                self.path.unlink()
         return {}
 
     def _save_preferences(self):

@@ -5,6 +5,7 @@ import shutil
 
 import ssl
 import certifi
+from pathlib import Path
 
 from astrbot.core.utils.io import on_error, download_file
 from astrbot.core import logger
@@ -118,7 +119,7 @@ class RepoZipUpdator:
             body=update_data[0]["body"],
         )
 
-    async def download_from_repo_url(self, target_path: str, repo_url: str, proxy=""):
+    async def download_from_repo_url(self, target_path: Path, repo_url: str, proxy=""):
         repo_namespace = repo_url.split("/")[-2:]
         author = repo_namespace[0]
         repo = repo_namespace[1]
@@ -134,44 +135,49 @@ class RepoZipUpdator:
             )
         else:
             release_url = releases[0]["zipball_url"]
-
+            
         if proxy:
             release_url = f"{proxy}/{release_url}"
             logger.info(f"使用代理下载: {release_url}")
+            
+        target_path_obj = Path(target_path).with_suffix(".zip")
+        await download_file(release_url, target_path_obj)
 
-        await download_file(release_url, target_path + ".zip")
-
-    def unzip_file(self, zip_path: str, target_dir: str):
+    def unzip_file(self, zip_path: Path, target_dir: Path):
         """
         解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir
         """
-        os.makedirs(target_dir, exist_ok=True)
+        target_dir.mkdir(parents=True, exist_ok=True)
         update_dir = ""
         logger.info(f"解压文件: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = z.namelist()[0]
             z.extractall(target_dir)
 
-        files = os.listdir(os.path.join(target_dir, update_dir))
+        update_dir_path = target_dir / update_dir
+        files = os.listdir(update_dir_path)
+        
         for f in files:
             logger.info(f"移动更新文件/目录: {f}")
-            if os.path.isdir(os.path.join(target_dir, update_dir, f)):
-                if os.path.exists(os.path.join(target_dir, f)):
-                    shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
+            src_path = update_dir_path / f
+            dst_path = target_dir / f
+            
+            if src_path.is_dir():
+                if dst_path.exists():
+                    shutil.rmtree(dst_path, onerror=on_error)
             else:
-                if os.path.exists(os.path.join(target_dir, f)):
-                    os.remove(os.path.join(target_dir, f))
-            shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
+                if dst_path.exists():
+                    dst_path.unlink()
+                    
+            shutil.move(str(src_path), str(target_dir))
 
         try:
-            logger.info(
-                f"删除临时更新文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}"
-            )
-            shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
-            os.remove(zip_path)
+            logger.info(f"删除临时更新文件: {zip_path} 和 {update_dir_path}")
+            shutil.rmtree(update_dir_path, onerror=on_error)
+            zip_path.unlink(missing_ok=True)
         except BaseException:
-            logger.warn(
-                f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}"
+            logger.warning(
+                f"删除更新文件失败，可以手动删除 {zip_path} 和 {update_dir_path}"
             )
 
     def format_repo_name(self, repo_url: str) -> str:

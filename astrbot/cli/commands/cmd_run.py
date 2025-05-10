@@ -1,16 +1,18 @@
 import os
-import sys
 from pathlib import Path
 import click
 import asyncio
 
+
+
+
 async def run_astrbot(astrbot_root: Path):
     """运行 AstrBot"""
     from ..utils import check_dashboard
-    from astrbot.core import logger, LogManager, LogBroker, db_helper
+    from astrbot.core import logger, LogManager,LogBroker , db_helper
     from astrbot.core.initial_loader import InitialLoader
 
-    await check_dashboard(astrbot_root / "data")
+    await check_dashboard(astrbot_root)
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
@@ -26,7 +28,7 @@ async def run_astrbot(astrbot_root: Path):
 @click.command()
 def run(reload: bool, port: str) -> None:
     """运行 AstrBot"""
-    from ..utils import get_astrbot_root, check_astrbot_root
+    from ...core.utils.astrbot_path import get_astrbot_root , check_astrbot_root
     from filelock import FileLock, Timeout
     try:
         os.environ["ASTRBOT_CLI"] = "1"
@@ -38,7 +40,7 @@ def run(reload: bool, port: str) -> None:
             )
 
         os.environ["ASTRBOT_ROOT"] = str(astrbot_root)
-        sys.path.insert(0, str(astrbot_root))
+        
 
         if port:
             os.environ["DASHBOARD_PORT"] = port
@@ -55,5 +57,3 @@ def run(reload: bool, port: str) -> None:
         click.echo("AstrBot 已关闭...")
     except Timeout:
         raise click.ClickException("无法获取锁文件，请检查是否有其他实例正在运行")
-    except Exception as e:
-        raise click.ClickException(f"运行时出现错误: {e!s}")

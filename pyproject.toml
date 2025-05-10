@@ -39,6 +39,7 @@ dependencies = [
     "readability-lxml>=0.8.1",
     "silk-python>=0.2.6",
     "telegramify-markdown>=0.5.0",
+    "toml>=0.10.2",
     "watchfiles>=1.0.5",
     "wechatpy>=1.8.18",
 ]

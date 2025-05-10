@@ -1,5 +1,4 @@
 import inspect
-import os
 from pathlib import Path
 from typing import Union, Awaitable, List, Optional, ClassVar
 from astrbot.core.message.components import BaseMessageComponent
@@ -8,7 +7,7 @@ from astrbot.api.platform import MessageMember, AstrBotMessage
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 
 class StarTools:
@@ -182,7 +181,7 @@ class StarTools:
 
             plugin_name = metadata.name
 
-        data_dir = Path(os.path.join(get_astrbot_data_path(), "plugin_data", plugin_name))
+        data_dir = get_astrbot_root() / "plugin_data" / plugin_name
 
         try:
             data_dir.mkdir(parents=True, exist_ok=True)

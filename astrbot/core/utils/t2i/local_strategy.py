@@ -11,7 +11,7 @@ from astrbot.core.config import VERSION
 from . import RenderStrategy
 from PIL import ImageFont, Image, ImageDraw
 from astrbot.core.utils.io import save_temp_img
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 
 class FontManager:
@@ -27,7 +27,7 @@ class FontManager:
 
         # 首先尝试加载自定义字体
         try:
-            font_path = os.path.join(get_astrbot_data_path(), "font.ttf")
+            font_path = os.path.join(get_astrbot_root(), "font.ttf")
             font = ImageFont.truetype(font_path, size)
             cls._font_cache[size] = font
             return font

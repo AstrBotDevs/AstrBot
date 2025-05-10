@@ -3,10 +3,10 @@
 """
 
 import os
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 VERSION = "3.5.8"
-DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
+DB_PATH = os.path.join(get_astrbot_root(), "data_v3.db")
 
 # 默认配置
 DEFAULT_CONFIG = {

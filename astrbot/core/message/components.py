@@ -25,15 +25,15 @@ SOFTWARE.
 import base64
 import json
 import os
+from pathlib import Path
 import uuid
 import asyncio
 import typing as T
 from enum import Enum
 from pydantic.v1 import BaseModel
 from astrbot.core import logger
+from ..utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url, file_to_base64, download_file
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-
 
 class ComponentType(Enum):
     Plain = "Plain"  # 纯文本消息
@@ -168,7 +168,7 @@ class Record(BaseMessageComponent):
         elif self.file and self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            temp_dir = get_astrbot_temp_path()
             file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
@@ -342,8 +342,8 @@ class Image(BaseMessageComponent):
         raise Exception("not a valid url")
 
     @staticmethod
-    def fromFileSystem(path, **_):
-        return Image(file=f"file:///{os.path.abspath(path)}", path=path, **_)
+    def fromFileSystem(path: Path, **_):
+        return Image(file=f"file:///{str(path.absolute())}", path=path, **_)
 
     @staticmethod
     def fromBase64(base64: str, **_):

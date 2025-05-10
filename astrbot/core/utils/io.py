@@ -7,6 +7,7 @@ import aiohttp
 import base64
 import zipfile
 import uuid
+from pathlib import Path
 import psutil
 
 import certifi
@@ -14,7 +15,7 @@ import certifi
 from typing import Union
 
 from PIL import Image
-from .astrbot_path import get_astrbot_data_path
+from .astrbot_path import get_astrbot_root, get_astrbot_temp_path, get_astrbot_webroot_path
 
 
 def on_error(func, path, exc_info):
@@ -30,13 +31,6 @@ def on_error(func, path, exc_info):
         raise exc_info[1]
 
 
-def remove_dir(file_path) -> bool:
-    if not os.path.exists(file_path):
-        return True
-    shutil.rmtree(file_path, onerror=on_error)
-    return True
-
-
 def port_checker(port: int, host: str = "localhost"):
     sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sk.settimeout(1)
@@ -48,17 +42,17 @@ def port_checker(port: int, host: str = "localhost"):
         sk.close()
         return False
 
-
 def save_temp_img(img: Union[Image.Image, str]) -> str:
-    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+    
+    temp_dir = get_astrbot_temp_path()
     # 获得文件创建时间，清除超过 12 小时的
     try:
         for f in os.listdir(temp_dir):
-            path = os.path.join(temp_dir, f)
-            if os.path.isfile(path):
-                ctime = os.path.getctime(path)
+            path = temp_dir / f
+            if path.is_file():
+                ctime = path.stat().st_ctime
                 if time.time() - ctime > 3600 * 12:
-                    os.remove(path)
+                    path.unlink()
     except Exception as e:
         print(f"清除临时文件失败: {e}")
 
@@ -75,7 +69,7 @@ def save_temp_img(img: Union[Image.Image, str]) -> str:
 
 
 async def download_image_by_url(
-    url: str, post: bool = False, post_data: dict = None, path=None
+    url: str, post: bool = False, post_data: dict = None, path: Path | None = None
 ) -> str:
     """
     下载图片, 返回 path
@@ -119,7 +113,7 @@ async def download_image_by_url(
         raise e
 
 
-async def download_file(url: str, path: str, show_progress: bool = False):
+async def download_file(url: str, path: Path , show_progress: bool = False):
     """
     从指定 url 下载文件到指定路径 path
     """
@@ -200,31 +194,43 @@ def get_local_ip_addresses():
 
     return network_ips
 
+async def get_dashboard_version() -> str:
+    # dist_dir = os.path.join(get_astrbot_data_path(), "dist")
+    dist_dir : Path = get_astrbot_webroot_path() / "dist"
+    if dist_dir.exists():
+        version_file = dist_dir / "assets" / "version"
+        if version_file.exists():
+            version = version_file.read_text(encoding="utf-8").strip()
+            return version
+    return "N/A"
 
-async def get_dashboard_version():
-    dist_dir = os.path.join(get_astrbot_data_path(), "dist")
-    if os.path.exists(dist_dir):
-        version_file = os.path.join(dist_dir, "assets", "version")
-        if os.path.exists(version_file):
-            with open(version_file, "r") as f:
-                v = f.read().strip()
-                return v
-    return None
 
+async def download_dashboard(root: Path | None = None) -> str :
+    """下载管理面板文件
+    """
 
-async def download_dashboard(path: str = None, extract_path: str = "data"):
-    """下载管理面板文件"""
-    if path is None:
-        path = os.path.join(get_astrbot_data_path(), "dashboard.zip")
+    if root is None:
+        root = get_astrbot_root()
+
+    webroot = get_astrbot_webroot_path()
 
     dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
     try:
-        await download_file(dashboard_release_url, path, show_progress=True)
+        await download_file(dashboard_release_url, root / "temp" / "dashboard.zip", show_progress=True)
     except BaseException as _:
         dashboard_release_url = (
             "https://github.com/Soulter/AstrBot/releases/latest/download/dist.zip"
         )
-        await download_file(dashboard_release_url, path, show_progress=True)
-    print("解压管理面板文件中...")
-    with zipfile.ZipFile(path, "r") as z:
-        z.extractall(extract_path)
+        await download_file(dashboard_release_url, root / "temp" / "dashboard.zip", show_progress=True)
+
+    with zipfile.ZipFile(str(root / "temp" / "dashboard.zip"), "r") as z:
+        z.extractall(webroot)
+
+    shutil.rmtree(root / "temp")
+
+    # 返回一个版本号 得知道下载得哪个版本吧
+    version = await get_dashboard_version() 
+    return version
+
+
+
