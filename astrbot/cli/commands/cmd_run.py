@@ -1,13 +1,8 @@
 import os
 import sys
 from pathlib import Path
-
 import click
 import asyncio
-
-
-
-
 
 async def run_astrbot(astrbot_root: Path):
     """运行 AstrBot"""
