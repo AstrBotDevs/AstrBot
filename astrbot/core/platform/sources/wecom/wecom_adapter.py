@@ -1,33 +1,31 @@
+import asyncio
 import os
 import sys
 import uuid
-import asyncio
-import quart
-import aiohttp
 
+import quart
+from requests import Response
+from wechatpy.enterprise import WeChatClient, parse_message
+from wechatpy.enterprise.crypto import WeChatCrypto
+from wechatpy.enterprise.messages import ImageMessage, TextMessage, VoiceMessage
+from wechatpy.exceptions import InvalidSignatureException
+from wechatpy.messages import BaseMessage
+
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import Image, Plain, Record
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
-    PlatformMetadata,
     MessageType,
+    Platform,
+    PlatformMetadata,
+    register_platform_adapter,
 )
-from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image, Record
-from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.api.platform import register_platform_adapter
 from astrbot.core import logger
-from requests import Response
-
-from wechatpy.enterprise.crypto import WeChatCrypto
-from wechatpy.enterprise import WeChatClient
-from wechatpy.enterprise.messages import TextMessage, ImageMessage, VoiceMessage
-from wechatpy.messages import BaseMessage
-from wechatpy.exceptions import InvalidSignatureException
-from wechatpy.enterprise import parse_message
-from .wecom_event import WecomPlatformEvent
+from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
+from .wecom_event import WecomPlatformEvent
 from .wecom_kf import WeChatKF
 from .wecom_kf_message import WeChatKFMessage
 
@@ -299,7 +297,7 @@ class WecomPlatformAdapter(Platform):
         external_userid = msg.get("external_userid", None)
         abm = AstrBotMessage()
         abm.raw_message = msg
-        abm.raw_message["_wechat_kf_flag"] = None # 方便处理
+        abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
         abm.self_id = msg["open_kfid"]
         abm.sender = MessageMember(external_userid, external_userid)
         abm.session_id = external_userid

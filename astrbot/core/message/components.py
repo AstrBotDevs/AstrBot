@@ -22,17 +22,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import asyncio
 import base64
 import json
 import os
-import uuid
-import asyncio
 import typing as T
+import uuid
 from enum import Enum
+
 from pydantic.v1 import BaseModel
+
 from astrbot.core import logger
-from astrbot.core.utils.io import download_image_by_url, file_to_base64, download_file
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
 
 
 class ComponentType(Enum):
@@ -468,7 +470,7 @@ class Node(BaseMessageComponent):
     uin: T.Optional[str] = "0"  # qq号
     content: T.Optional[T.Union[str, list, dict]] = ""  # 子消息段列表
     seq: T.Optional[T.Union[str, list]] = ""  # 忽略
-    time: T.Optional[int] = 0 # 忽略
+    time: T.Optional[int] = 0  # 忽略
 
     def __init__(self, content: T.Union[str, list, dict, "Node", T.List["Node"]], **_):
         if isinstance(content, list):
@@ -502,9 +504,10 @@ class Nodes(BaseMessageComponent):
         }
         for node in self.nodes:
             d = node.toDict()
-            d["data"]["uin"] = str(node.uin) # 转为字符串
+            d["data"]["uin"] = str(node.uin)  # 转为字符串
             ret["messages"].append(d)
         return ret
+
 
 class Xml(BaseMessageComponent):
     type: ComponentType = "Xml"
@@ -590,11 +593,13 @@ class File(BaseMessageComponent):
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    logger.warning((
-                        "不可以在异步上下文中同步等待下载! "
-                        "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
-                        "请使用 await get_file() 代替直接获取 <File>.file 字段"
-                    ))
+                    logger.warning(
+                        (
+                            "不可以在异步上下文中同步等待下载! "
+                            "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                            "请使用 await get_file() 代替直接获取 <File>.file 字段"
+                        )
+                    )
                     return ""
                 else:
                     # 等待下载完成
@@ -620,7 +625,7 @@ class File(BaseMessageComponent):
         else:
             self.file_ = value
 
-    async def get_file(self, allow_return_url: bool=False) -> str:
+    async def get_file(self, allow_return_url: bool = False) -> str:
         """异步获取文件。请注意在使用后清理下载的文件, 以免占用过多空间
 
         Args:

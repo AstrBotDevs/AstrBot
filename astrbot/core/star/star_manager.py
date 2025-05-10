@@ -2,35 +2,37 @@
 插件的重载、启停、安装、卸载等操作。
 """
 
-import inspect
+import asyncio
 import functools
+import inspect
+import json
+import logging
 import os
 import sys
-import json
 import traceback
-import yaml
-import logging
-import asyncio
 from types import ModuleType
 from typing import List
+
+import yaml
+
+from astrbot.core import logger, pip_installer, sp
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core import logger, sp, pip_installer
-from .context import Context
-from . import StarMetadata
-from .updator import PluginUpdator
-from astrbot.core.utils.io import remove_dir
-from .star import star_registry, star_map
-from .star_handler import star_handlers_registry
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
-    get_astrbot_plugin_path,
     get_astrbot_config_path,
+    get_astrbot_plugin_path,
 )
+from astrbot.core.utils.io import remove_dir
 
-from .filter.permission import PermissionTypeFilter, PermissionType
+from . import StarMetadata
+from .context import Context
+from .filter.permission import PermissionType, PermissionTypeFilter
+from .star import star_map, star_registry
+from .star_handler import star_handlers_registry
+from .updator import PluginUpdator
 
 try:
-    from watchfiles import awatch, PythonFilter
+    from watchfiles import PythonFilter, awatch
 except ImportError:
     if os.getenv("ASTRBOT_RELOAD", "0") == "1":
         logger.warning("未安装 watchfiles，无法实现插件的热重载。")
@@ -138,13 +140,11 @@ class PluginManager:
                 if os.path.exists(os.path.join(path, d, "main.py")) or os.path.exists(
                     os.path.join(path, d, d + ".py")
                 ):
-                    modules.append(
-                        {
-                            "pname": d,
-                            "module": module_str,
-                            "module_path": os.path.join(path, d, module_str),
-                        }
-                    )
+                    modules.append({
+                        "pname": d,
+                        "module": module_str,
+                        "module_path": os.path.join(path, d, module_str),
+                    })
         return modules
 
     def _get_plugin_modules(self) -> List[dict]:
