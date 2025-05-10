@@ -5,7 +5,7 @@ AstrBot CLI入口
 import click
 import sys
 from . import __version__
-from .commands import init, run, plug
+from .commands import init, run, plug, conf
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -53,6 +53,7 @@ cli.add_command(init)
 cli.add_command(run)
 cli.add_command(help)
 cli.add_command(plug)
+cli.add_command(conf)
 
 if __name__ == "__main__":
     cli()
