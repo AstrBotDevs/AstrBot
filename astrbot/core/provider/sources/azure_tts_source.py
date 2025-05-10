@@ -91,7 +91,7 @@ class OTTSProvider:
 class AzureNativeProvider(TTSProvider):
     def __init__(self, provider_config: dict, provider_settings: dict):
         super().__init__(provider_config, provider_settings)
-        self.subscription_key = provider_config["azure_tts_subscription_key"].strip()
+        self.subscription_key = provider_config.get("azure_tts_subscription_key", "").strip()
         if not re.fullmatch(r'^[a-zA-Z0-9]{32}$', self.subscription_key):
             raise ValueError("无效的Azure订阅密钥")
         self.region = provider_config.get("azure_tts_region", "eastus").strip()
