@@ -38,7 +38,7 @@ def help(command_name: str | None) -> None:
     init: Initialize the Astrbot \n
     run: Run the Astrbot \n 
     plug: Plug in a module to the Astrbot \n
-
+    @github: https://github.com/AstrBotDevs/AstrBot
     """
     ctx = click.get_current_context()
     if command_name:

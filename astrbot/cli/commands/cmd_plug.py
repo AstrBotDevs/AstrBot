@@ -4,18 +4,6 @@ from pathlib import Path
 import click
 import shutil
 
-from astrbot.cli.utils import check_astrbot_root
-
-
-# from ..utils import (
-#     get_git_repo,
-#     build_plug_list,
-#     manage_plugin,
-#     PluginStatus,
-#     check_astrbot_root,
-#     get_astrbot_root,
-# )
-# 
 
 @click.group()
 def plug():
