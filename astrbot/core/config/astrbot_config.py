@@ -46,8 +46,6 @@ class AstrBotConfig(dict):
 
         with open(config_path, "r", encoding="utf-8-sig") as f:
             conf_str = f.read()
-            if conf_str.startswith("/ufeff"):  # remove BOM
-                conf_str = conf_str.encode("utf8")[3:].decode("utf8")
             conf = json.loads(conf_str)
 
         # 检查配置完整性，并插入
