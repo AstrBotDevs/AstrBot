@@ -2,6 +2,7 @@ import os
 import psutil
 import sys
 import time
+import subprocess
 from .zip_updator import ReleaseInfo, RepoZipUpdator
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
