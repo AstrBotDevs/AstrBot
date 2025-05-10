@@ -145,7 +145,9 @@ class Record(BaseMessageComponent):
     def fromURL(cls, url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
             return cls(file=url, path=None, **_)
-        raise Exception("not a valid url")    async def convert_to_file_path(self) -> Path:
+        raise Exception("not a valid url")    
+    
+    async def convert_to_file_path(self) -> Path:
         """将这个语音统一转换为本地文件路径。这个方法避免了手动判断语音数据类型，直接返回语音数据的本地路径（如果是网络 URL, 则会自动进行下载）。
 
         Returns:
@@ -157,7 +159,8 @@ class Record(BaseMessageComponent):
         elif self.file and str(self.file).startswith("http"):
             file_path = await download_image_by_url(self.file)
             return Path(file_path).resolve()
-        elif self.file and str(self.file).startswith("base64://"):            bs64_data = self.file.removeprefix("base64://")
+        elif self.file and str(self.file).startswith("base64://"):            
+            bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             temp_dir = AstrbotFS.getAstrbotFS().temp
             file_path = temp_dir / f"{uuid.uuid4()}.jpg"
@@ -346,14 +349,19 @@ class Image(BaseMessageComponent):
 
     @staticmethod
     def fromIO(IO):
-        return Image.fromBytes(IO.read())    async def convert_to_file_path(self) -> Path:
+        return Image.fromBytes(IO.read())    
+        
+    async def convert_to_file_path(self) -> Path:
         """将这个图片统一转换为本地文件路径。这个方法避免了手动判断图片数据类型，直接返回图片数据的本地路径（如果是网络 URL, 则会自动进行下载）。
 
         Returns:
             Path: 图片的本地路径，以绝对路径表示。
-        """url = self.url if self.url else self.file        if url and url.startswith("file://"):
+        """url = self.url if self.url else self.file        
+        
+        if url and url.startswith("file://"):
             image_file_path = Path(url[8:])
-            return image_file_path        elif url and url.startswith("http"):
+            return image_file_path        
+        elif url and url.startswith("http"):
             image_file_path = await download_image_by_url(url)
             return Path(image_file_path).absolute()
         elif url and url.startswith("base64://"):
@@ -363,7 +371,8 @@ class Image(BaseMessageComponent):
             image_file_path: Path = temp_dir / f"{uuid.uuid4()}.jpg"
             with open(image_file_path, "wb") as f:
                 f.write(image_bytes)
-            return image_file_path        elif Path(url).exists():
+            return image_file_path        
+        elif Path(url).exists():
             image_file_path = Path(url)
             return image_file_path
         else:
@@ -383,7 +392,9 @@ class Image(BaseMessageComponent):
             image_file_path = await download_image_by_url(url)
             bs64_data = file_to_base64(image_file_path)
         elif url and url.startswith("base64://"):
-            bs64_data = url        elif Path(url).exists():
+            bs64_data = url        
+            
+        elif Path(url).exists():
             bs64_data = file_to_base64(url)
         else:
             raise Exception(f"not a valid file: {url}")
@@ -598,7 +609,9 @@ class File(BaseMessageComponent):
         if value.startswith("http://") or value.startswith("https://"):
             self.url = value
         else:
-            self.file_ = value    async def get_file(self, allow_return_url: bool=False) -> str:
+            self.file_ = value    
+            
+    async def get_file(self, allow_return_url: bool=False) -> str:
         """异步获取文件。请注意在使用后清理下载的文件, 以免占用过多空间
 
         Args:
@@ -606,7 +619,8 @@ class File(BaseMessageComponent):
             注意，如果为 True，也可能返回文件路径。
         Returns:
             str: 文件路径或者 http 下载链接
-        """if self.file_ and Path(self.file_).exists():
+        """
+        if self.file_ and Path(self.file_).exists():
             return str(Path(self.file_).absolute())
 
         if self.url:

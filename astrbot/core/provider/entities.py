@@ -94,19 +94,19 @@ class ProviderRequest:
     """提示词"""
     session_id: str = ""
     """会话 ID"""
-    image_urls: List[str] = None
+    image_urls: list[str] | None = None
     """图片 URL 列表"""
-    func_tool: FuncCall = None
+    func_tool: FuncCall | None = None
     """可用的函数工具"""
-    contexts: List = None
+    contexts: list[Dict[str, any]] | None = None
     """上下文。格式与 openai 的上下文格式一致：
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages
     """
     system_prompt: str = ""
     """系统提示词"""
-    conversation: Conversation = None
+    conversation: Conversation | None = None
 
-    tool_calls_result: ToolCallsResult = None
+    tool_calls_result: ToolCallsResult | None = None
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
 
     def __repr__(self):
