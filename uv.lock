@@ -223,6 +223,7 @@ dependencies = [
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pydub" },
+    { name = "pyffmpeg" },
     { name = "pyjwt" },
     { name = "python-telegram-bot" },
     { name = "qq-botpy" },
@@ -267,6 +268,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=5.8.0" },
     { name = "pydantic", specifier = "~=2.10.3" },
     { name = "pydub", specifier = ">=0.25.1" },
+    { name = "pyffmpeg", specifier = ">=2.4.3" },
     { name = "pyjwt", specifier = ">=2.10.1" },
     { name = "python-telegram-bot", specifier = ">=22.0" },
     { name = "qq-botpy", specifier = ">=1.2.1" },
@@ -1728,6 +1730,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fe/9a/e6bca0eed82db26562c73b5076539a4a08d3cffd19c3cc5913a3e61145fd/pydub-0.25.1.tar.gz", hash = "sha256:980a33ce9949cab2a569606b65674d748ecbca4f0796887fd6f46173a7b0d30f", size = 38326, upload_time = "2021-03-10T02:09:54.659Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/53/d78dc063216e62fc55f6b2eebb447f6a4b0a59f55c8406376f76bf959b08/pydub-0.25.1-py2.py3-none-any.whl", hash = "sha256:65617e33033874b59d87db603aa1ed450633288aefead953b30bded59cb599a6", size = 32327, upload_time = "2021-03-10T02:09:53.503Z" },
+]
+
+[[package]]
+name = "pyffmpeg"
+version = "2.4.3"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/87/63/cbbd76fcc0ed2d61ea1b5b1eeaee7d73c769acf9423498ebee2f4dfd416d/pyffmpeg-2.4.3-py3-none-macosx_10_9_universal2.whl", hash = "sha256:0f0675462db89ab8779172b74095fd38ce92c5948fe4df40d62bb090521e7153", size = 17511676, upload_time = "2025-01-16T11:45:56.629Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/61/f1610debc4dd6172154d07819966c4e7748a71ec80cba5a3b2f7d1c3534b/pyffmpeg-2.4.3-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:5cce89e7198c9ff5c4fa81735c6ab8b96a632f23a3b926c4b726a6d375c38861", size = 17511676, upload_time = "2025-01-16T11:46:01.638Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/bd/b08140d5c46a9afa5ce9d1cba674763c3c942879ac7efe4e15644f10d0d7/pyffmpeg-2.4.3-py3-none-macosx_11_0_arm64.whl", hash = "sha256:5b827aafbd83f9bd71b18ca7e95d3af04fc3e71e7b43606757c0bc20a33dbfe4", size = 17511676, upload_time = "2025-01-16T11:46:07.216Z" },
+    { url = "https://files.pythonhosted.org/packages/46/bd/808bb724edcce8dab6b41aa0df75ed69300c287bb9b288b1f1de23296d1b/pyffmpeg-2.4.3-py3-none-win32.whl", hash = "sha256:ff27a2269c2d5378074317118336137a3dd66017590721644afc788ef7a0e391", size = 41008995, upload_time = "2025-01-16T11:47:33.333Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/6d/631766d3fef705ce093df66488caabb3caf842611f3a91707313cf8b7a6a/pyffmpeg-2.4.3-py3-none-win_amd64.whl", hash = "sha256:98a36ce810ea8c84aee5e4bbb4c4c27c079db4aecdf914e0043cf5cfcecc9fcd", size = 41008995, upload_time = "2025-01-16T11:47:39.449Z" },
 ]
 
 [[package]]

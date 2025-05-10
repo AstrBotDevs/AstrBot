@@ -553,7 +553,7 @@ class SimpleGewechatClient:
                 json_blob = await resp.json()
                 logger.debug(f"发送消息结果: {json_blob}")
 
-    async def post_image(self, to_wxid, image_url: str):
+    async def post_image(self, to_wxid: str, image_url: str):
         """发送图片消息"""
         payload = {
             "appId": self.appid,
@@ -568,7 +568,7 @@ class SimpleGewechatClient:
                 json_blob = await resp.json()
                 logger.debug(f"发送图片结果: {json_blob}")
 
-    async def post_emoji(self, to_wxid, emoji_md5, emoji_size, cdnurl=""):
+    async def post_emoji(self, to_wxid: str, emoji_md5: str, emoji_size: str, cdnurl: str = ""):
         """发送emoji消息"""
         payload = {
             "appId": self.appid,
@@ -613,7 +613,7 @@ class SimpleGewechatClient:
                 json_blob = await resp.json()
                 logger.debug(f"发送视频结果: {json_blob}")
 
-    async def forward_video(self, to_wxid, cnd_xml: str):
+    async def forward_video(self, to_wxid: str, cnd_xml: str):
         """转发视频
 
         Args:
@@ -634,7 +634,7 @@ class SimpleGewechatClient:
                 json_blob = await resp.json()
                 logger.debug(f"转发视频结果: {json_blob}")
 
-    async def post_voice(self, to_wxid, voice_url: str, voice_duration: int):
+    async def post_voice(self, to_wxid: str, voice_url: str, voice_duration: int):
         """发送语音信息
 
         Args:
@@ -657,7 +657,7 @@ class SimpleGewechatClient:
                 json_blob = await resp.json()
                 logger.info(f"发送语音结果: {json_blob.get('msg', '操作失败')}")
 
-    async def post_file(self, to_wxid, file_url: str, file_name: str):
+    async def post_file(self, to_wxid: str, file_url: str, file_name: str):
         """发送文件
 
         Args:

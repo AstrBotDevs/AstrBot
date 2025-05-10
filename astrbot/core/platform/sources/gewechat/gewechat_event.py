@@ -172,7 +172,8 @@ class GewechatPlatformEvent(AstrMessageEvent):
                 file_path = comp.file
                 file_name = comp.name
                 if file_path.startswith("file:///"):
-                    file_path = file_path[8:]                elif file_path.startswith("http"):
+                    file_path = file_path[8:]                
+                elif file_path.startswith("http"):
                     temp_dir = AstrbotFS.getAstrbotFS().temp
                     temp_file_path = str(temp_dir / file_name)
                     await download_file(file_path, temp_file_path)

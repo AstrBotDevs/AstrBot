@@ -33,6 +33,7 @@ dependencies = [
     "psutil>=5.8.0",
     "pydantic~=2.10.3",
     "pydub>=0.25.1",
+    "pyffmpeg>=2.4.3",
     "pyjwt>=2.10.1",
     "python-telegram-bot>=22.0",
     "qq-botpy>=1.2.1",
