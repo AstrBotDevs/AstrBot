@@ -28,11 +28,11 @@ class ProviderMetaData:
     desc: str = ""
     """提供商适配器描述."""
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
-    cls_type: Type = None
+    cls_type: Type | None = None    
 
-    default_config_tmpl: dict = None
+    default_config_tmpl: dict | None = None
     """平台的默认配置模板"""
-    provider_display_name: str = None
+    provider_display_name: str | None = None
     """显示在 WebUI 配置页中的提供商名称，如空则是 type"""
 
 
@@ -56,8 +56,8 @@ class ToolCallMessageSegment:
 class AssistantMessageSegment:
     """OpenAI 格式的上下文中 role 为 assistant 的消息段。参考: https://platform.openai.com/docs/guides/function-calling"""
 
-    content: str = None
-    tool_calls: List[ChatCompletionMessageToolCall | Dict] = None
+    content: str | None = None
+    tool_calls: List[ChatCompletionMessageToolCall | Dict] | None = None
     role: str = "assistant"
 
     def to_dict(self):
