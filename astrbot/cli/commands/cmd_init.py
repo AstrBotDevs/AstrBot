@@ -1,13 +1,9 @@
 import asyncio
-
 import click
-from filelock import FileLock, Timeout
-
-from ..utils import check_dashboard, get_astrbot_root
-
 
 async def initialize_astrbot(astrbot_root) -> None:
     """执行 AstrBot 初始化逻辑"""
+    from ..utils import check_dashboard
     dot_astrbot = astrbot_root / ".astrbot"
 
     if not dot_astrbot.exists():
@@ -40,6 +36,8 @@ async def initialize_astrbot(astrbot_root) -> None:
 @click.command()
 def init() -> None:
     """初始化 AstrBot"""
+    from ..utils import get_astrbot_root
+    from filelock import FileLock, Timeout
     click.echo("Initializing AstrBot...")
     astrbot_root = get_astrbot_root()
     lock_file = astrbot_root / "astrbot.lock"

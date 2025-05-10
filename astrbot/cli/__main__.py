@@ -20,19 +20,25 @@ logo_tmpl = r"""
 @click.group()
 @click.version_option(__version__, prog_name="AstrBot")
 def cli() -> None:
-    """The AstrBot CLI"""
+    """
+    AstrBot CLI \b\n
+    @github: https://github.com/AstrBotDevs/AstrBot \b\n
+    """
     click.echo(logo_tmpl)
     click.echo("Welcome to AstrBot CLI!")
     click.echo(f"AstrBot CLI version: {__version__}")
 
-
-@click.command()
+# region 基本命令
+@cli.command()
 @click.argument("command_name", required=False, type=str)
 def help(command_name: str | None) -> None:
-    """显示命令的帮助信息
+    """Astrbot CLI helper
+    usage: astrbot help [command_name]
+    useful commands:
+    init: Initialize the Astrbot \n
+    run: Run the Astrbot \n 
+    plug: Plug in a module to the Astrbot \n
 
-    如果提供了 COMMAND_NAME，则显示该命令的详细帮助信息。
-    否则，显示通用帮助信息。
     """
     ctx = click.get_current_context()
     if command_name:
@@ -48,13 +54,15 @@ def help(command_name: str | None) -> None:
         # 显示通用帮助信息
         click.echo(cli.get_help(ctx))
 
+# endregion 基本命令
+
 from astrbot.cli.commands import init, run, plug
-
-if __name__ == "__main__":
-    cli()
-
 cli.add_command(init)
 cli.add_command(run)
 cli.add_command(plug)
+
+
+if __name__ == "__main__":
+    cli()
 
 

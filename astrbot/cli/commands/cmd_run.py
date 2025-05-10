@@ -5,13 +5,13 @@ from pathlib import Path
 import click
 import asyncio
 
-from filelock import FileLock, Timeout
 
-from ..utils import check_dashboard, check_astrbot_root, get_astrbot_root
+
 
 
 async def run_astrbot(astrbot_root: Path):
     """运行 AstrBot"""
+    from ..utils import check_dashboard
     from astrbot.core import logger, LogManager, LogBroker, db_helper
     from astrbot.core.initial_loader import InitialLoader
 
@@ -31,6 +31,8 @@ async def run_astrbot(astrbot_root: Path):
 @click.command()
 def run(reload: bool, port: str) -> None:
     """运行 AstrBot"""
+    from ..utils import get_astrbot_root, check_astrbot_root
+    from filelock import FileLock, Timeout
     try:
         os.environ["ASTRBOT_CLI"] = "1"
         astrbot_root = get_astrbot_root()

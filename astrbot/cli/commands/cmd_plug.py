@@ -4,16 +4,18 @@ from pathlib import Path
 import click
 import shutil
 
+from astrbot.cli.utils import check_astrbot_root
 
-from ..utils import (
-    get_git_repo,
-    build_plug_list,
-    manage_plugin,
-    PluginStatus,
-    check_astrbot_root,
-    get_astrbot_root,
-)
 
+# from ..utils import (
+#     get_git_repo,
+#     build_plug_list,
+#     manage_plugin,
+#     PluginStatus,
+#     check_astrbot_root,
+#     get_astrbot_root,
+# )
+# 
 
 @click.group()
 def plug():
@@ -22,6 +24,10 @@ def plug():
 
 
 def _get_data_path() -> Path:
+    from ..utils import (
+        get_astrbot_root,
+        check_astrbot_root
+    )
     base = get_astrbot_root()
     if not check_astrbot_root(base):
         raise click.ClickException(
@@ -49,6 +55,7 @@ def display_plugins(plugins, title=None, color=None):
 @click.argument("name")
 def new(name: str):
     """创建新插件"""
+    from ..utils import get_git_repo
     base_path = _get_data_path()
     plug_path = base_path / "plugins" / name
 
@@ -104,6 +111,7 @@ def new(name: str):
 @click.option("--all", "-a", is_flag=True, help="列出未安装的插件")
 def list(all: bool):
     """列出插件"""
+    from ..utils import build_plug_list, PluginStatus
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
 
@@ -145,6 +153,7 @@ def list(all: bool):
 @click.option("--proxy", help="代理服务器地址")
 def install(name: str, proxy: str | None):
     """安装插件"""
+    from ..utils import build_plug_list, manage_plugin, PluginStatus
     base_path = _get_data_path()
     plug_path = base_path / "plugins"
     plugins = build_plug_list(base_path / "plugins")
@@ -168,6 +177,7 @@ def install(name: str, proxy: str | None):
 @click.argument("name")
 def remove(name: str):
     """卸载插件"""
+    from ..utils import build_plug_list
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
     plugin = next((p for p in plugins if p["name"] == name), None)
@@ -191,6 +201,7 @@ def remove(name: str):
 @click.option("--proxy", help="Github代理地址")
 def update(name: str, proxy: str | None):
     """更新插件"""
+    from ..utils import build_plug_list, manage_plugin, PluginStatus    
     base_path = _get_data_path()
     plug_path = base_path / "plugins"
     plugins = build_plug_list(base_path / "plugins")
@@ -229,6 +240,7 @@ def update(name: str, proxy: str | None):
 @click.argument("query")
 def search(query: str):
     """搜索插件"""
+    from ..utils import build_plug_list
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
 
