@@ -80,7 +80,7 @@ class OTTSProvider:
                 response.raise_for_status()
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 with file_path.open("wb") as f:
-                    for chunk in response.iter_bytes(4096):
+                    async for chunk in response.aiter_bytes(4096):
                         f.write(chunk)
                 return str(file_path.resolve())
             except Exception as e:
