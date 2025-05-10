@@ -751,8 +751,57 @@ CONFIG_METADATA_2 = {
                         "dashscope_tts_voice": "loongstella",
                         "timeout": "20",
                     },
+                    "Azure_TTS": {
+                        "id": "azure_tts",
+                        "type": "azure_tts",
+                        "enable": True,
+                        "azure_tts_voice": "zh-CN-YunxiaNeural",
+                        "azure_tts_style": "cheerful",
+                        "azure_tts_role": "Boy",
+                        "azure_tts_rate": "1",
+                        "azure_tts_volume": "100",
+                        "azure_tts_subscription_key": "",
+                        "azure_tts_region": "eastus"
+                    },
                 },
                 "items": {
+                    "azure_tts_voice": {
+                        "type": "string",
+                        "description": "音色设置",
+                        "hint": "API 音色"
+                    },
+                    "azure_tts_style": {
+                        "type": "string",
+                        "description": "风格设置",
+                        "hint": "声音特定的讲话风格。 可以表达快乐、同情和平静等情绪。"
+                    },
+                    "azure_tts_role": {
+                        "type": "string",
+                        "description": "模仿设置（可选）",
+                        "hint": "讲话角色扮演。 声音可以模仿不同的年龄和性别，但声音名称不会更改。 例如，男性语音可以提高音调和改变语调来模拟女性语音，但语音名称不会更改。 如果角色缺失或不受声音的支持，则会忽略此属性。",
+                        "options": ["Boy","Girl","YoungAdultFemale","YoungAdultMale","OlderAdultFemale","OlderAdultMale","SeniorFemale","SeniorMale","禁用"]
+                    },
+                    "azure_tts_rate": {
+                        "type": "string",
+                        "description": "语速设置",
+                        "hint": "指示文本的讲出速率。可在字词或句子层面应用语速。 速率变化应为原始音频的 0.5 到 2 倍。"
+                    },
+                    "azure_tts_volume": {
+                        "type": "string",
+                        "description": "语音音量设置",
+                        "hint": "指示语音的音量级别。 可在句子层面应用音量的变化。以从 0.0 到 100.0（从最安静到最大声，例如 75）的数字表示。 默认值为 100.0。"
+                    },
+                    "azure_tts_region": {
+                        "type": "string",
+                        "description": "API 地区",
+                        "hint": "Azure_TTS 处理数据所在区域，具体参考 https://learn.microsoft.com/zh-cn/azure/ai-services/speech-service/regions",
+                        "options": ["southafricanorth", "eastasia", "southeastasia", "australiaeast", "centralindia", "japaneast", "japanwest", "koreacentral", "canadacentral", "northeurope", "westeurope", "francecentral", "germanywestcentral", "norwayeast", "swedencentral", "switzerlandnorth", "switzerlandwest", "uksouth", "uaenorth", "brazilsouth", "qatarcentral", "centralus", "eastus", "eastus2", "northcentralus", "southcentralus", "westcentralus", "westus", "westus2", "westus3"]
+                    },
+                    "azure_tts_subscription_key": {
+                        "type": "string",
+                        "description": "服务订阅密钥",
+                        "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）"
+                    },
                     "dashscope_tts_voice": {
                         "description": "语音合成模型",
                         "type": "string",
