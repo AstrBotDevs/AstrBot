@@ -21,19 +21,18 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-
+from __future__ import annotations
 import base64
 import json
 import os
 from pathlib import Path
 import uuid
 import asyncio
-import typing as T
 from enum import Enum
 from pydantic.v1 import BaseModel
+from quart.app import P
 from astrbot.core import logger
-from ..utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_image_by_url, file_to_base64, download_file
+from astrbot.core.utils.io import AstrbotFS, download_image_by_url, file_to_base64, download_file
 
 class ComponentType(Enum):
     Plain = "Plain"  # 纯文本消息
@@ -101,10 +100,9 @@ class BaseMessageComponent(BaseModel):
         return {"type": self.type.lower(), "data": data}
 
 
-class Plain(BaseMessageComponent):
-    type: ComponentType = "Plain"
+class Plain(BaseMessageComponent):    type: ComponentType = "Plain"
     text: str
-    convert: T.Optional[bool] = True  # 若为 False 则直接发送未转换 CQ 码的消息
+    convert: bool | None = True  # 若为 False 则直接发送未转换 CQ 码的消息
 
     def __init__(self, text: str, convert: bool = True, **_):
         super().__init__(text=text, convert=convert, **_)
@@ -127,30 +125,30 @@ class Face(BaseMessageComponent):
 
 class Record(BaseMessageComponent):
     type: ComponentType = "Record"
-    file: T.Optional[str] = ""
-    magic: T.Optional[bool] = False
-    url: T.Optional[str] = ""
-    cache: T.Optional[bool] = True
-    proxy: T.Optional[bool] = True
-    timeout: T.Optional[int] = 0
+    file: Path | None = None
+    magic: bool | None = False
+    url: str | None = None
+    cache: bool | None = True
+    proxy: bool | None = True
+    timeout: int | None = 0
     # 额外
-    path: T.Optional[str]
+    path: str | None = None
 
-    def __init__(self, file: T.Optional[str], **_):
+    def __init__(self, file: str | None, **_):
         for k in _.keys():
             if k == "url":
                 pass
                 # Protocol.warn(f"go-cqhttp doesn't support send {self.type} by {k}")
-        super().__init__(file=file, **_)
+        super().__init__(file=file, path=path, **_)
 
-    @staticmethod
-    def fromFileSystem(path, **_):
-        return Record(file=f"file:///{os.path.abspath(path)}", path=path, **_)
+    @classmethod
+    def fromFileSystem(cls, path: str, **_):
+        return cls(file=f"file:///{os.path.abspath(path)}", path=path, **_)
 
-    @staticmethod
-    def fromURL(url: str, **_):
+    @classmethod
+    def fromURL(cls, url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
-            return Record(file=url, **_)
+            return cls(file=url, path=None, **_)
         raise Exception("not a valid url")
 
     async def convert_to_file_path(self) -> str:
@@ -159,23 +157,22 @@ class Record(BaseMessageComponent):
         Returns:
             str: 语音的本地路径，以绝对路径表示。
         """
-        if self.file and self.file.startswith("file:///"):
+        if self.file and str(self.file).startswith("file:///"):
             file_path = self.file[8:]
-            return file_path
-        elif self.file and self.file.startswith("http"):
+            return Path(file_path).resolve()
+        elif self.file and str(self.file).startswith("http"):
             file_path = await download_image_by_url(self.file)
-            return os.path.abspath(file_path)
-        elif self.file and self.file.startswith("base64://"):
-            bs64_data = self.file.removeprefix("base64://")
+            return Path(file_path).resolve()
+        elif self.file and str(self.file).startswith("base64://"):            bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = get_astrbot_temp_path()
-            file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
+            temp_dir = AstrbotFS.getAstrbotFS().temp
+            file_path = temp_dir / f"{uuid.uuid4()}.jpg"
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
-            return os.path.abspath(file_path)
-        elif os.path.exists(self.file):
-            file_path = self.file
-            return os.path.abspath(file_path)
+            return file_path.resolve()
+        elif self.file.exists():
+            file_path: Path = self.file
+            return Path(file_path).resolve()
         else:
             raise Exception(f"not a valid file: {self.file}")
 
@@ -186,14 +183,14 @@ class Record(BaseMessageComponent):
             str: 语音的 base64 编码，不以 base64:// 或者 data:image/jpeg;base64, 开头。
         """
         # convert to base64
-        if self.file and self.file.startswith("file:///"):
+        if self.file and str(self.file).startswith("file:///"):
             bs64_data = file_to_base64(self.file[8:])
-        elif self.file and self.file.startswith("http"):
+        elif self.file and str(self.file).startswith("http"):
             file_path = await download_image_by_url(self.file)
             bs64_data = file_to_base64(file_path)
-        elif self.file and self.file.startswith("base64://"):
+        elif self.file and str(self.file).startswith("base64://"):
             bs64_data = self.file
-        elif os.path.exists(self.file):
+        elif self.file.exists():
             bs64_data = file_to_base64(self.file)
         else:
             raise Exception(f"not a valid file: {self.file}")
@@ -204,20 +201,20 @@ class Record(BaseMessageComponent):
 class Video(BaseMessageComponent):
     type: ComponentType = "Video"
     file: str
-    cover: T.Optional[str] = ""
-    c: T.Optional[int] = 2
+    cover: str | None = None
+    c: int | None = 2
     # 额外
-    path: T.Optional[str] = ""
+    path: str | None = None
 
     def __init__(self, file: str, **_):
         # for k in _.keys():
         #     if k == "c" and _[k] not in [2, 3]:
         #         logger.warn(f"Protocol: {k}={_[k]} doesn't match values")
-        super().__init__(file=file, **_)
+        super().__init__(file=file, path=self.path, **_)
 
     @staticmethod
-    def fromFileSystem(path, **_):
-        return Video(file=f"file:///{os.path.abspath(path)}", path=path, **_)
+    def fromFileSystem(path: Path, **_):
+        return Video(file=f"file:///{path.absolute()}", path=path, **_)
 
     @staticmethod
     def fromURL(url: str, **_):
@@ -228,8 +225,8 @@ class Video(BaseMessageComponent):
 
 class At(BaseMessageComponent):
     type: ComponentType = "At"
-    qq: T.Union[int, str]  # 此处str为all时代表所有人
-    name: T.Optional[str] = ""
+    qq: int | str  # 此处str为all时代表所有人
+    name: str | None = None
 
     def __init__(self, **_):
         super().__init__(**_)
@@ -265,7 +262,7 @@ class Shake(BaseMessageComponent):  # TODO
 
 class Anonymous(BaseMessageComponent):  # TODO
     type: ComponentType = "Anonymous"
-    ignore: T.Optional[bool] = False
+    ignore: bool | None = False
 
     def __init__(self, **_):
         super().__init__(**_)
@@ -275,8 +272,8 @@ class Share(BaseMessageComponent):
     type: ComponentType = "Share"
     url: str
     title: str
-    content: T.Optional[str] = ""
-    image: T.Optional[str] = ""
+    content: str | None = ""
+    image: str | None = ""
 
     def __init__(self, **_):
         super().__init__(**_)
@@ -285,7 +282,7 @@ class Share(BaseMessageComponent):
 class Contact(BaseMessageComponent):  # TODO
     type: ComponentType = "Contact"
     _type: str  # type 字段冲突
-    id: T.Optional[int] = 0
+    id: int | None = 0
 
     def __init__(self, **_):
         super().__init__(**_)
@@ -295,8 +292,8 @@ class Location(BaseMessageComponent):  # TODO
     type: ComponentType = "Location"
     lat: float
     lon: float
-    title: T.Optional[str] = ""
-    content: T.Optional[str] = ""
+    title: str | None = None
+    content: str | None = None
 
     def __init__(self, **_):
         super().__init__(**_)
@@ -305,12 +302,12 @@ class Location(BaseMessageComponent):  # TODO
 class Music(BaseMessageComponent):
     type: ComponentType = "Music"
     _type: str
-    id: T.Optional[int] = 0
-    url: T.Optional[str] = ""
-    audio: T.Optional[str] = ""
-    title: T.Optional[str] = ""
-    content: T.Optional[str] = ""
-    image: T.Optional[str] = ""
+    id: int | None = None
+    url: str | None = None
+    audio: str | None = None
+    title: str | None = None
+    content: str | None = None
+    image: str | None = None
 
     def __init__(self, **_):
         # for k in _.keys():
@@ -321,24 +318,24 @@ class Music(BaseMessageComponent):
 
 class Image(BaseMessageComponent):
     type: ComponentType = "Image"
-    file: T.Optional[str] = ""
-    _type: T.Optional[str] = ""
-    subType: T.Optional[int] = 0
-    url: T.Optional[str] = ""
-    cache: T.Optional[bool] = True
-    id: T.Optional[int] = 40000
-    c: T.Optional[int] = 2
+    file: str | None = None
+    _type: str | None = None
+    subType: int | None = None
+    url: str | None = None
+    cache: bool | None = None
+    id: int | None = None
+    c: int | None = None
     # 额外
-    path: T.Optional[str] = ""
-    file_unique: T.Optional[str] = ""  # 某些平台可能有图片缓存的唯一标识
+    path: str | None = None
+    file_unique: str | None = None  # 某些平台可能有图片缓存的唯一标识
 
-    def __init__(self, file: T.Optional[str], **_):
-        super().__init__(file=file, **_)
+    def __init__(self, file: str | None, **_):
+        super().__init__(file=file, path=self.path, **_)
 
     @staticmethod
     def fromURL(url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
-            return Image(file=url, **_)
+            return Image(file=url, path=None, **_)
         raise Exception("not a valid url")
 
     @staticmethod
@@ -347,7 +344,7 @@ class Image(BaseMessageComponent):
 
     @staticmethod
     def fromBase64(base64: str, **_):
-        return Image(f"base64://{base64}", **_)
+        return Image(f"base64://{base64}", path=None, **_)
 
     @staticmethod
     def fromBytes(byte: bytes):
@@ -364,7 +361,7 @@ class Image(BaseMessageComponent):
             str: 图片的本地路径，以绝对路径表示。
         """
         url = self.url if self.url else self.file
-        if url and url.startswith("file:///"):
+        if url and url.startswith("file://"):
             image_file_path = url[8:]
             return image_file_path
         elif url and url.startswith("http"):
@@ -373,14 +370,14 @@ class Image(BaseMessageComponent):
         elif url and url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-            image_file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
+            temp_dir = AstrbotFS.getAstrbotFS().temp
+            image_file_path: Path = temp_dir / f"{uuid.uuid4()}.jpg"
             with open(image_file_path, "wb") as f:
                 f.write(image_bytes)
-            return os.path.abspath(image_file_path)
+            return image_file_path
         elif os.path.exists(url):
-            image_file_path = url
-            return os.path.abspath(image_file_path)
+            image_file_path = Path(url)
+            return image_file_path
         else:
             raise Exception(f"not a valid file: {url}")
 
@@ -529,13 +526,13 @@ class Json(BaseMessageComponent):
 class CardImage(BaseMessageComponent):
     type: ComponentType = "CardImage"
     file: str
-    cache: T.Optional[bool] = True
-    minwidth: T.Optional[int] = 400
-    minheight: T.Optional[int] = 400
-    maxwidth: T.Optional[int] = 500
-    maxheight: T.Optional[int] = 500
-    source: T.Optional[str] = ""
-    icon: T.Optional[str] = ""
+    cache: bool | None = True
+    minwidth: int | None = 400
+    minheight: int | None = 400
+    maxwidth: int | None = 500
+    maxheight: int | None = 500
+    source: str | None = None
+    icon: str | None = None
 
     def __init__(self, **_):
         super().__init__(**_)
@@ -567,24 +564,24 @@ class File(BaseMessageComponent):
     """
 
     type: ComponentType = "File"
-    name: T.Optional[str] = ""  # 名字
-    file_: T.Optional[str] = ""  # 本地路径
-    url: T.Optional[str] = ""  # url
+    name: str | None = None  # 名字
+    file_: Path | None = None  # 本地路径
+    url: str | None = None  # url
 
-    def __init__(self, name: str, file: str = "", url: str = ""):
+    def __init__(self, name: str | None = None, file: Path | None = None, url: str | None = None):
         """文件消息段。"""
         super().__init__(name=name, file_=file, url=url)
 
     @property
-    def file(self) -> str:
+    def file(self) -> Path | None:
         """
         获取文件路径，如果文件不存在但有URL，则同步下载文件
 
         Returns:
-            str: 文件路径
+            Path: 文件路径
         """
-        if self.file_ and os.path.exists(self.file_):
-            return os.path.abspath(self.file_)
+        if self.file_ and self.file_.exists():
+            return Path(self.file_).resolve()
 
         if self.url:
             try:
@@ -601,11 +598,11 @@ class File(BaseMessageComponent):
                     loop.run_until_complete(self._download_file())
 
                     if self.file_ and os.path.exists(self.file_):
-                        return os.path.abspath(self.file_)
+                        return Path(self.file_).resolve()
             except Exception as e:
                 logger.error(f"文件下载失败: {e}")
 
-        return ""
+        return 
 
     @file.setter
     def file(self, value: str):
@@ -649,9 +646,9 @@ class File(BaseMessageComponent):
 
 class WechatEmoji(BaseMessageComponent):
     type: ComponentType = "WechatEmoji"
-    md5: T.Optional[str] = ""
-    md5_len: T.Optional[int] = 0
-    cdnurl: T.Optional[str] = ""
+    md5: str | None = None
+    md5_len: int | None = None
+    cdnurl: str | None = None
 
     def __init__(self, **_):
         super().__init__(**_)

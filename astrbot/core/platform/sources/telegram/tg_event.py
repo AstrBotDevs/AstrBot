@@ -1,5 +1,5 @@
-import os
 import asyncio
+
 import telegramify_markdown
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata, MessageType
@@ -80,7 +80,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     temp_dir = AstrbotFS.getAstrbotFS().temp
                     path = temp_dir / i.name
                     await download_file(i.file, str(path))
-                    i.file = str(path)
+                    i.file = path
 
                 await client.send_document(document=i.file, filename=i.name, **payload)
             elif isinstance(i, Record):
