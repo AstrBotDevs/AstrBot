@@ -7,6 +7,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import StarHandlerMetadata
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core import logger
+from astrbot.core.message.message_event_result import MessageEventResult
 
 
 @register_stage
@@ -62,7 +63,14 @@ class ProcessStage(Stage):
 
                 if not provider:
                     logger.info("未找到可用的 LLM 提供商，请先前往配置服务提供商。")
+                    # 添加错误通知
+                    event.set_result(
+                        MessageEventResult().message(
+                            "未找到可用的提供商，请联系机器人管理员配置服务提供商。"
+                        )
+                    )
+                    yield
+                    event.stop_event()
                     return
-
                 async for _ in self.llm_request_sub_stage.process(event):
                     yield
