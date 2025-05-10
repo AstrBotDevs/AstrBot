@@ -31,5 +31,11 @@ async def check_dashboard(astrbot_root: Path) -> None:
                 return
             else:
                 click.echo(f"管理面板版本: {dashboard_version}")
-                await download_dashboard()
+                version = await download_dashboard()
+                metadata = toml.load(astrbot_root / ".astrbot")
+                metadata["dashboard_version"] = version
+                click.echo("管理面板更新完成")
+                with open(astrbot_root / ".astrbot", "w", encoding="utf-8") as f:
+                    toml.dump(metadata, f)
+                
 

@@ -4,8 +4,6 @@ import click
 import asyncio
 
 
-
-
 async def run_astrbot(astrbot_root: Path):
     """运行 AstrBot"""
     from ..utils import check_dashboard
