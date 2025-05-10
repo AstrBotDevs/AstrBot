@@ -1,11 +1,10 @@
 """
 AstrBot CLI入口
 """
-
-import click
 import sys
-from astrbot.cli import __version__
-
+import click
+from astrbot import __version__
+import dotenv
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -16,6 +15,7 @@ logo_tmpl = r"""
 /__/     \__\ |_______/       |__|     | _| `._____||______/   \______/      |__|
 """
 
+dotenv.load_dotenv()
 
 @click.group()
 @click.version_option(__version__, prog_name="AstrBot")
@@ -28,6 +28,22 @@ def cli() -> None:
     click.echo("Welcome to AstrBot CLI!")
     click.echo(f"AstrBot CLI version: {__version__}")
 
+@cli.command()
+def star():
+    """Star AstrBot on GitHub"""
+    import webbrowser
+
+    repo_url = "https://github.com/AstrBotDevs/AstrBot"
+    click.echo(f"准备为 {repo_url} 点亮星标...")
+    
+    # 方法1: 使用浏览器自动打开GitHub页面
+    if click.confirm("是否直接在浏览器中打开项目页面进行Star?", default=True):
+        webbrowser.open(repo_url)
+        click.echo("已打开浏览器，请在页面中点击Star按钮。")
+        return
+    
+
+    
 # region 基本命令
 @cli.command()
 @click.argument("command_name", required=False, type=str)

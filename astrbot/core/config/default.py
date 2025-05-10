@@ -6,6 +6,7 @@ import os
 from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 VERSION = "3.5.8"
+"""版本号元数据 ，准备弃用 改用astrbot.__version__"""
 DB_PATH = os.path.join(get_astrbot_root(), "data_v3.db")
 
 # 默认配置

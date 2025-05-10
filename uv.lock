@@ -209,6 +209,7 @@ dependencies = [
     { name = "defusedxml" },
     { name = "dingtalk-stream" },
     { name = "docstring-parser" },
+    { name = "dotenv" },
     { name = "filelock" },
     { name = "google-genai" },
     { name = "googlesearch-python" },
@@ -250,6 +251,7 @@ requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "dingtalk-stream", specifier = ">=0.22.1" },
     { name = "docstring-parser", specifier = ">=0.16" },
+    { name = "dotenv", specifier = ">=0.9.9" },
     { name = "filelock", specifier = ">=3.18.0" },
     { name = "google-genai", specifier = ">=1.10.0" },
     { name = "googlesearch-python", specifier = ">=1.3.0" },
@@ -601,6 +603,17 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/08/12/9c22a58c0b1e29271051222d8906257616da84135af9ed167c9e28f85cb3/docstring_parser-0.16.tar.gz", hash = "sha256:538beabd0af1e2db0146b6bd3caa526c35a34d61af9fd2887f3a8a27a739aa6e", size = 26565, upload_time = "2024-03-15T10:39:44.419Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d5/7c/e9fcff7623954d86bdc17782036cbf715ecab1bec4847c008557affe1ca8/docstring_parser-0.16-py3-none-any.whl", hash = "sha256:bf0a1387354d3691d102edef7ec124f219ef639982d096e26e3b60aeffa90637", size = 36533, upload_time = "2024-03-15T10:39:41.527Z" },
+]
+
+[[package]]
+name = "dotenv"
+version = "0.9.9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dotenv" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b2/b7/545d2c10c1fc15e48653c91efde329a790f2eecfbbf2bd16003b5db2bab0/dotenv-0.9.9-py2.py3-none-any.whl", hash = "sha256:29cf74a087b31dafdb5a446b6d7e11cbce8ed2741540e2339c69fbef92c94ce9", size = 1892, upload_time = "2025-02-19T22:15:01.647Z" },
 ]
 
 [[package]]

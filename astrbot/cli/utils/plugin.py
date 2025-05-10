@@ -4,7 +4,6 @@ import json
 import toml
 
 import httpx
-import yaml
 import re
 from enum import Enum
 from io import BytesIO

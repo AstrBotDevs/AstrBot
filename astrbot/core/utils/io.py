@@ -15,6 +15,7 @@ import certifi
 from typing import Union
 
 from PIL import Image
+import toml
 from .astrbot_path import get_astrbot_root, get_astrbot_temp_path, get_astrbot_webroot_path
 
 
@@ -194,16 +195,17 @@ def get_local_ip_addresses():
 
     return network_ips
 
-async def get_dashboard_version() -> str:
+async def get_dashboard_version(root : Path) -> str:
     # dist_dir = os.path.join(get_astrbot_data_path(), "dist")
-    dist_dir : Path = get_astrbot_webroot_path() / "dist"
+    dist_dir : Path = root / "webroot" / "dist"
     if dist_dir.exists():
         version_file = dist_dir / "assets" / "version"
         if version_file.exists():
             version = version_file.read_text(encoding="utf-8").strip()
-            return version
-    return "N/A"
+            
+    version = "N/A"
 
+    return version
 
 async def download_dashboard(root: Path | None = None) -> str :
     """下载管理面板文件
@@ -229,7 +231,14 @@ async def download_dashboard(root: Path | None = None) -> str :
     shutil.rmtree(root / "temp")
 
     # 返回一个版本号 得知道下载得哪个版本吧
-    version = await get_dashboard_version() 
+    version = await get_dashboard_version(root) 
+
+    # 更新 .astrbot 文件
+    metadata = toml.load(root / ".astrbot")
+    metadata["dashboard_version"] = version
+    with open(root / ".astrbot", "w", encoding="utf-8") as f:
+        toml.dump(metadata, f)
+
     return version
 
 

@@ -1,2 +1,0 @@
-class PluginStorage():
-    pass
