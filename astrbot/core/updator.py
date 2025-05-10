@@ -50,22 +50,19 @@ class AstrBotUpdator(RepoZipUpdator):
         time.sleep(delay)
         self.terminate_child_processes()
         py = sys.executable
-        
+
         try:
-            if "astrbot" in os.path.basename(sys.argv[0]): # 兼容cli
+            if "astrbot" in os.path.basename(sys.argv[0]):  # 兼容cli
                 cmd = [py, "-m", "astrbot.cli.__main__"] + sys.argv[1:]
             else:
                 cmd = [py] + sys.argv
-                
-            subprocess.Popen(
-                cmd,
-                start_new_session=True
-            )
-            
+
+            subprocess.Popen(cmd, start_new_session=True)
+
         except Exception as e:
             logger.error(f"重启失败（{py} {cmd}，错误：{e}），请尝试手动重启。")
             raise e
-        
+
         os._exit(0)
 
     async def check_update(self, url: str, current_version: str) -> ReleaseInfo:
@@ -80,7 +77,7 @@ class AstrBotUpdator(RepoZipUpdator):
         file_url = None
 
         if os.environ.get("ASTRBOT_CLI"):
-            raise Exception("不支持更新CLI启动的AstrBot") # 避免版本管理混乱
+            raise Exception("不支持更新CLI启动的AstrBot")  # 避免版本管理混乱
 
         if latest:
             latest_version = update_data[0]["tag_name"]
