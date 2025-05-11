@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 import asyncio
+import traceback
 
 from filelock import FileLock, Timeout
 
@@ -59,4 +60,4 @@ def run(reload: bool, port: str) -> None:
     except Timeout:
         raise click.ClickException("无法获取锁文件，请检查是否有其他实例正在运行")
     except Exception as e:
-        raise click.ClickException(f"运行时出现错误: {e!s}")
+        raise click.ClickException(f"运行时出现错误: {e}\n{traceback.format_exc()}")

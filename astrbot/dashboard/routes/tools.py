@@ -7,6 +7,7 @@ from quart import request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .route import Response, Route, RouteContext
 
@@ -31,8 +32,7 @@ class ToolsRoute(Route):
 
     @property
     def mcp_config_path(self):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        data_dir = os.path.abspath(os.path.join(current_dir, "../../../data"))
+        data_dir = get_astrbot_data_path()
         return os.path.join(data_dir, "mcp_server.json")
 
     def load_mcp_config(self):
