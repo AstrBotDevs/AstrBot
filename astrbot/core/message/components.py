@@ -32,7 +32,7 @@ from enum import Enum
 
 from pydantic.v1 import BaseModel
 
-from astrbot.core import logger
+from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
 
@@ -201,6 +201,29 @@ class Record(BaseMessageComponent):
             raise Exception(f"not a valid file: {self.file}")
         bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data
+
+    async def register_to_file_service(self) -> str:
+        """
+        将语音注册到文件服务。
+
+        Returns:
+            str: 注册后的URL
+
+        Raises:
+            Exception: 如果未配置 callback_api_base
+        """
+        callback_host = astrbot_config.get("callback_api_base")
+
+        if not callback_host:
+            raise Exception("未配置 callback_api_base，文件服务不可用")
+
+        file_path = await self.convert_to_file_path()
+
+        token = await file_token_service.register_file(file_path)
+
+        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+
+        return f"{callback_host}/api/file/{token}"
 
 
 class Video(BaseMessageComponent):
@@ -407,6 +430,29 @@ class Image(BaseMessageComponent):
             raise Exception(f"not a valid file: {url}")
         bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data
+
+    async def register_to_file_service(self) -> str:
+        """
+        将图片注册到文件服务。
+
+        Returns:
+            str: 注册后的URL
+
+        Raises:
+            Exception: 如果未配置 callback_api_base
+        """
+        callback_host = astrbot_config.get("callback_api_base")
+
+        if not callback_host:
+            raise Exception("未配置 callback_api_base，文件服务不可用")
+
+        file_path = await self.convert_to_file_path()
+
+        token = await file_token_service.register_file(file_path)
+
+        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+
+        return f"{callback_host}/api/file/{token}"
 
 
 class Reply(BaseMessageComponent):
@@ -634,6 +680,9 @@ class File(BaseMessageComponent):
         Returns:
             str: 文件路径或者 http 下载链接
         """
+        if allow_return_url and self.url:
+            return self.url
+
         if self.file_ and os.path.exists(self.file_):
             return os.path.abspath(self.file_)
 
@@ -650,6 +699,29 @@ class File(BaseMessageComponent):
         file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
         await download_file(self.url, file_path)
         self.file_ = os.path.abspath(file_path)
+
+    async def register_to_file_service(self):
+        """
+        将文件注册到文件服务。
+
+        Returns:
+            str: 注册后的URL
+
+        Raises:
+            Exception: 如果未配置 callback_api_base
+        """
+        callback_host = astrbot_config.get("callback_api_base")
+
+        if not callback_host:
+            raise Exception("未配置 callback_api_base，文件服务不可用")
+
+        file_path = await self.get_file()
+
+        token = await file_token_service.register_file(file_path)
+
+        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+
+        return f"{callback_host}/api/file/{token}"
 
 
 class WechatEmoji(BaseMessageComponent):
