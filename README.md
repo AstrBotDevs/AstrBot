@@ -78,12 +78,26 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 #### 手动部署
 
-推荐使用 `uv`。
+> 推荐使用 `uv`。
+
+首先，安装 uv：
+
+```bash
+pip install uv
+```
+
+通过 Git Clone 安装 AstrBot：
 
 ```bash
 git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
-pip install uv
 uv run main.py
+```
+
+或者，直接通过 uvx 安装 AstrBot：
+
+```bash
+mkdir astrbot && cd astrbot
+uvx astrbot
 ```
 
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
