@@ -13,10 +13,7 @@ from .routes.route import RouteContext, Response
 from astrbot.core import logger, WEBUI_SK
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.io import get_local_ip_addresses
-
-DATAPATH = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data")
-)
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class AstrBotDashboard:
@@ -28,7 +25,7 @@ class AstrBotDashboard:
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
-        self.data_path = os.path.abspath(os.path.join(DATAPATH, "dist"))
+        self.data_path = os.path.abspath(os.path.join(get_astrbot_data_path, "dist"))
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
