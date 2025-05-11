@@ -302,6 +302,7 @@ class WecomPlatformAdapter(Platform):
         abm.sender = MessageMember(external_userid, external_userid)
         abm.session_id = external_userid
         abm.type = MessageType.FRIEND_MESSAGE
+        abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])
         if msgtype == "text":
             text = msg.get("text", {}).get("content", "").strip()
             abm.message = [Plain(text=text)]
