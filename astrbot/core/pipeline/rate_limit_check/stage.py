@@ -58,33 +58,30 @@ class RateLimitStage(Stage):
         now = datetime.now()
 
         async with self.locks[session_id]:  # 确保同一会话不会并发修改队列
-            timestamps = self.event_timestamps[session_id]
+            # 检查并处理限流，可能需要多次检查直到满足条件
+            while True:
+                timestamps = self.event_timestamps[session_id]
+                self._remove_expired_timestamps(timestamps, now)
 
-            self._remove_expired_timestamps(timestamps, now)
+                if len(timestamps) < self.rate_limit_count:
+                    timestamps.append(now)
+                    break
+                else:
+                    next_window_time = timestamps[0] + self.rate_limit_time
+                    stall_duration = (next_window_time - now).total_seconds() + 0.3
 
-            if len(timestamps) >= self.rate_limit_count:
-                # 达到限流阈值，计算下一个窗口的时间
-                next_window_time = timestamps[0] + self.rate_limit_time
-                stall_duration = (next_window_time - now).total_seconds()
-
-                match self.rl_strategy:
-                    case RateLimitStrategy.STALL.value:
-                        logger.info(
-                            f"会话 {session_id} 被限流。根据限流策略，此会话处理将被暂停 {stall_duration:.2f} 秒。"
-                        )
-                        await asyncio.sleep(stall_duration)
-                    case RateLimitStrategy.DISCARD.value:
-                        # event.set_result(MessageEventResult().message(f"会话 {session_id} 被限流。根据限流策略，此请求已被丢弃，直到您的限额于 {stall_duration:.2f} 秒后重置。"))
-                        logger.info(
-                            f"会话 {session_id} 被限流。根据限流策略，此请求已被丢弃，直到限额于 {stall_duration:.2f} 秒后重置。"
-                        )
-                        return event.stop_event()
-
-                self._remove_expired_timestamps(
-                    timestamps, now + timedelta(seconds=stall_duration)
-                )
-
-            timestamps.append(now)
+                    match self.rl_strategy:
+                        case RateLimitStrategy.STALL.value:
+                            logger.info(
+                                f"会话 {session_id} 被限流。根据限流策略，此会话处理将被暂停 {stall_duration:.2f} 秒。"
+                            )
+                            await asyncio.sleep(stall_duration)
+                            now = datetime.now()
+                        case RateLimitStrategy.DISCARD.value:
+                            logger.info(
+                                f"会话 {session_id} 被限流。根据限流策略，此请求已被丢弃，直到限额于 {stall_duration:.2f} 秒后重置。"
+                            )
+                            return event.stop_event()
 
     def _remove_expired_timestamps(
         self, timestamps: Deque[datetime], now: datetime
