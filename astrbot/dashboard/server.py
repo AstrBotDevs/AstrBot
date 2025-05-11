@@ -25,7 +25,7 @@ class AstrBotDashboard:
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
-        self.data_path = os.path.abspath(os.path.join(get_astrbot_data_path, "dist"))
+        self.data_path = os.path.abspath(os.path.join(get_astrbot_data_path(), "dist"))
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
