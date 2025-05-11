@@ -97,7 +97,8 @@ uv run main.py
 
 ```bash
 mkdir astrbot && cd astrbot
-uvx astrbot
+uvx astrbot init
+# uvx astrbot run
 ```
 
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
