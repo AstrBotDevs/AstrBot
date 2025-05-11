@@ -287,6 +287,31 @@ class AiocqhttpAdapter(Platform):
                             logger.error(f"获取引用消息失败: {e}。")
                             a = ComponentTypes[t](**m["data"])  # noqa: F405
                             abm.message.append(a)
+            elif t == "at":
+                for m in m_group:
+                    try:
+                        at_info = await self.bot.call_action(
+                            action="get_stranger_info",
+                            user_id=int(m["data"]["qq"]),
+                        )
+                        if at_info:
+                            nickname = at_info.get("nick", "")
+                            abm.message.append(
+                                At(
+                                    qq=m["data"]["qq"],
+                                    name=nickname,
+                                )
+                            )
+                            # 兼容文本消息
+                            message_str += f"@{nickname} "
+                        else:
+                            abm.message.append(
+                                At(qq=m["data"]["qq"], name="")
+                            )  # noqa: F405
+                    except ActionFailed as e:
+                        logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
+                    except BaseException as e:
+                        logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
             else:
                 for m in m_group:
                     a = ComponentTypes[t](**m["data"])  # noqa: F405
