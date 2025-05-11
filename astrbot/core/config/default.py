@@ -506,7 +506,7 @@ CONFIG_METADATA_2 = {
                             "model": "gpt-4o-mini",
                         },
                     },
-                    "Azure_OpenAI": {
+                    "Azure OpenAI": {
                         "id": "azure",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
@@ -519,7 +519,7 @@ CONFIG_METADATA_2 = {
                             "model": "gpt-4o-mini",
                         },
                     },
-                    "xAI(grok)": {
+                    "xAI": {
                         "id": "xai",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
@@ -531,7 +531,7 @@ CONFIG_METADATA_2 = {
                             "model": "grok-2-latest",
                         },
                     },
-                    "Anthropic(claude)": {
+                    "Anthropic": {
                         "id": "claude",
                         "type": "anthropic_chat_completion",
                         "provider_type": "chat_completion",
@@ -555,7 +555,7 @@ CONFIG_METADATA_2 = {
                             "model": "llama3.1-8b",
                         },
                     },
-                    "LM_Studio": {
+                    "LM Studio": {
                         "id": "lm_studio",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
@@ -578,7 +578,7 @@ CONFIG_METADATA_2 = {
                             "model": "gemini-1.5-flash",
                         },
                     },
-                    "Gemini(googlegenai原生)": {
+                    "Gemini": {
                         "id": "gemini_default",
                         "type": "googlegenai_chat_completion",
                         "provider_type": "chat_completion",
@@ -614,7 +614,7 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek-chat",
                         },
                     },
-                    "Zhipu(智谱)": {
+                    "智谱 AI": {
                         "id": "zhipu_default",
                         "type": "zhipu_chat_completion",
                         "provider_type": "chat_completion",
@@ -626,7 +626,7 @@ CONFIG_METADATA_2 = {
                             "model": "glm-4-flash",
                         },
                     },
-                    "SiliconFlow(硅基流动)": {
+                    "硅基流动": {
                         "id": "siliconflow",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
@@ -638,7 +638,7 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek-ai/DeepSeek-V3",
                         },
                     },
-                    "MoonShot(Kimi)": {
+                    "Kimi": {
                         "id": "moonshot",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
@@ -674,7 +674,7 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                     },
-                    "Dashscope(阿里云百炼应用)": {
+                    "阿里云百炼应用": {
                         "id": "dashscope",
                         "type": "dashscope",
                         "provider_type": "chat_completion",
@@ -716,7 +716,7 @@ CONFIG_METADATA_2 = {
                         "id": "whisper",
                         "model": "tiny",
                     },
-                    "sensevoice(本地加载)": {
+                    "SenseVoice(本地加载)": {
                         "sensevoice_hint": "(不用修改我)",
                         "type": "sensevoice_stt_selfhost",
                         "provider_type": "speech_to_text",
@@ -725,7 +725,7 @@ CONFIG_METADATA_2 = {
                         "stt_model": "iic/SenseVoiceSmall",
                         "is_emotion": False,
                     },
-                    "OpenAI_TTS(API)": {
+                    "OpenAI TTS(API)": {
                         "id": "openai_tts",
                         "type": "openai_tts_api",
                         "provider_type": "text_to_speech",
@@ -736,7 +736,7 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                     },
-                    "Edge_TTS": {
+                    "Edge TTS": {
                         "edgetts_hint": "提示：使用这个服务前需要安装有 ffmpeg，并且可以直接在终端调用 ffmpeg 指令。",
                         "id": "edge_tts",
                         "type": "edge_tts",
@@ -745,7 +745,7 @@ CONFIG_METADATA_2 = {
                         "edge-tts-voice": "zh-CN-XiaoxiaoNeural",
                         "timeout": 20,
                     },
-                    "GSVI_TTS(API)": {
+                    "GSVI TTS(API)": {
                         "id": "gsvi_tts",
                         "type": "gsvi_tts_api",
                         "provider_type": "text_to_speech",
@@ -755,7 +755,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "timeout": 20,
                     },
-                    "FishAudio_TTS(API)": {
+                    "FishAudio TTS(API)": {
                         "id": "fishaudio_tts",
                         "type": "fishaudio_tts_api",
                         "provider_type": "text_to_speech",
@@ -765,7 +765,7 @@ CONFIG_METADATA_2 = {
                         "fishaudio-tts-character": "可莉",
                         "timeout": "20",
                     },
-                    "阿里云百炼_TTS(API)": {
+                    "阿里云百炼 TTS(API)": {
                         "id": "dashscope_tts",
                         "type": "dashscope_tts",
                         "provider_type": "text_to_speech",
@@ -775,7 +775,7 @@ CONFIG_METADATA_2 = {
                         "dashscope_tts_voice": "loongstella",
                         "timeout": "20",
                     },
-                    "Azure_TTS": {
+                    "Azure TTS": {
                         "id": "azure_tts",
                         "type": "azure_tts",
                         "provider_type": "text_to_speech",
