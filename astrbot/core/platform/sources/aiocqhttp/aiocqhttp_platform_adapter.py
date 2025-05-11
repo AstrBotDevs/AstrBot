@@ -165,9 +165,7 @@ class AiocqhttpAdapter(Platform):
 
         if "sub_type" in event:
             if event["sub_type"] == "poke" and "target_id" in event:
-                abm.message.append(
-                    Poke(qq=str(event["target_id"]), type="poke")
-                )  # noqa: F405
+                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))  # noqa: F405
 
         return abm
 
@@ -218,7 +216,7 @@ class AiocqhttpAdapter(Platform):
             a = None
             if t == "text":
                 # 合并相邻文本段
-                message_str = "".join(m["data"]["text"] for m in m_group).strip()
+                message_str += "".join(m["data"]["text"] for m in m_group).strip()
                 a = ComponentTypes[t](text=message_str)  # noqa: F405
                 abm.message.append(a)
 
@@ -305,9 +303,7 @@ class AiocqhttpAdapter(Platform):
                             # 兼容文本消息
                             message_str += f"@{nickname} "
                         else:
-                            abm.message.append(
-                                At(qq=m["data"]["qq"], name="")
-                            )  # noqa: F405
+                            abm.message.append(At(qq=m["data"]["qq"], name=""))  # noqa: F405
                     except ActionFailed as e:
                         logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
                     except BaseException as e:
