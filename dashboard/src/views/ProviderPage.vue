@@ -132,7 +132,7 @@
                       <v-card-title style="font-size: 15px;">{{ name }}</v-card-title>
                     </v-card-item>
                     <v-card-text class="text-caption text-medium-emphasis">
-                      {{ getProviderDescription(template) }}
+                      {{ getProviderDescription(template, name) }}
                     </v-card-text>
                   </v-card>
                 </v-col>
@@ -298,7 +298,10 @@ export default {
     },
     
     // 获取提供商简介
-    getProviderDescription(template) {
+    getProviderDescription(template, name) {
+      if (name == 'OpenAI') {
+        return `${template.type} 服务提供商。同时也支持所有兼容 OpenAI API 的模型提供商。`;
+      }
       return `${template.type} 服务提供商`;
     },
     
