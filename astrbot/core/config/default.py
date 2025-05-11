@@ -497,6 +497,7 @@ CONFIG_METADATA_2 = {
                     "OpenAI": {
                         "id": "openai",
                         "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.openai.com/v1",
@@ -505,9 +506,10 @@ CONFIG_METADATA_2 = {
                             "model": "gpt-4o-mini",
                         },
                     },
-                    "Azure_OpenAI": {
+                    "Azure OpenAI": {
                         "id": "azure",
                         "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "api_version": "2024-05-01-preview",
                         "key": [],
@@ -517,9 +519,10 @@ CONFIG_METADATA_2 = {
                             "model": "gpt-4o-mini",
                         },
                     },
-                    "xAI(grok)": {
+                    "xAI": {
                         "id": "xai",
                         "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.x.ai/v1",
@@ -528,9 +531,10 @@ CONFIG_METADATA_2 = {
                             "model": "grok-2-latest",
                         },
                     },
-                    "Anthropic(claude)": {
+                    "Anthropic": {
                         "id": "claude",
                         "type": "anthropic_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.anthropic.com/v1",
@@ -543,6 +547,7 @@ CONFIG_METADATA_2 = {
                     "Ollama": {
                         "id": "ollama_default",
                         "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": ["ollama"],  # ollama 的 key 默认是 ollama
                         "api_base": "http://localhost:11434/v1",
@@ -550,9 +555,10 @@ CONFIG_METADATA_2 = {
                             "model": "llama3.1-8b",
                         },
                     },
-                    "LM_Studio": {
+                    "LM Studio": {
                         "id": "lm_studio",
                         "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": ["lmstudio"],
                         "api_base": "http://localhost:1234/v1",
@@ -563,6 +569,7 @@ CONFIG_METADATA_2 = {
                     "Gemini(OpenAI兼容)": {
                         "id": "gemini_default",
                         "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -571,9 +578,10 @@ CONFIG_METADATA_2 = {
                             "model": "gemini-1.5-flash",
                         },
                     },
-                    "Gemini(googlegenai原生)": {
+                    "Gemini": {
                         "id": "gemini_default",
                         "type": "googlegenai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://generativelanguage.googleapis.com/",
@@ -597,6 +605,7 @@ CONFIG_METADATA_2 = {
                     "DeepSeek": {
                         "id": "deepseek_default",
                         "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.deepseek.com/v1",
@@ -605,9 +614,10 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek-chat",
                         },
                     },
-                    "Zhipu(智谱)": {
+                    "智谱 AI": {
                         "id": "zhipu_default",
                         "type": "zhipu_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "timeout": 120,
@@ -616,9 +626,10 @@ CONFIG_METADATA_2 = {
                             "model": "glm-4-flash",
                         },
                     },
-                    "SiliconFlow(硅基流动)": {
+                    "硅基流动": {
                         "id": "siliconflow",
                         "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "timeout": 120,
@@ -627,9 +638,10 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek-ai/DeepSeek-V3",
                         },
                     },
-                    "MoonShot(Kimi)": {
+                    "Kimi": {
                         "id": "moonshot",
                         "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "timeout": 120,
@@ -641,6 +653,7 @@ CONFIG_METADATA_2 = {
                     "LLMTuner": {
                         "id": "llmtuner_default",
                         "type": "llm_tuner",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "base_model_path": "",
                         "adapter_model_path": "",
@@ -651,6 +664,7 @@ CONFIG_METADATA_2 = {
                     "Dify": {
                         "id": "dify_app_default",
                         "type": "dify",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "dify_api_type": "chat",
                         "dify_api_key": "",
@@ -660,9 +674,10 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                     },
-                    "Dashscope(阿里云百炼应用)": {
+                    "阿里云百炼应用": {
                         "id": "dashscope",
                         "type": "dashscope",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "dashscope_app_type": "agent",
                         "dashscope_api_key": "",
@@ -678,6 +693,7 @@ CONFIG_METADATA_2 = {
                     "FastGPT": {
                         "id": "fastgpt",
                         "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.fastgpt.in/api/v1",
@@ -686,6 +702,7 @@ CONFIG_METADATA_2 = {
                     "Whisper(API)": {
                         "id": "whisper",
                         "type": "openai_whisper_api",
+                        "provider_type": "speech_to_text",
                         "enable": False,
                         "api_key": "",
                         "api_base": "",
@@ -693,22 +710,25 @@ CONFIG_METADATA_2 = {
                     },
                     "Whisper(本地加载)": {
                         "whisper_hint": "(不用修改我)",
+                        "type": "openai_whisper_selfhost",
+                        "provider_type": "speech_to_text",
                         "enable": False,
                         "id": "whisper",
-                        "type": "openai_whisper_selfhost",
                         "model": "tiny",
                     },
-                    "sensevoice(本地加载)": {
+                    "SenseVoice(本地加载)": {
                         "sensevoice_hint": "(不用修改我)",
+                        "type": "sensevoice_stt_selfhost",
+                        "provider_type": "speech_to_text",
                         "enable": False,
                         "id": "sensevoice",
-                        "type": "sensevoice_stt_selfhost",
                         "stt_model": "iic/SenseVoiceSmall",
                         "is_emotion": False,
                     },
-                    "OpenAI_TTS(API)": {
+                    "OpenAI TTS(API)": {
                         "id": "openai_tts",
                         "type": "openai_tts_api",
+                        "provider_type": "text_to_speech",
                         "enable": False,
                         "api_key": "",
                         "api_base": "",
@@ -716,44 +736,49 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                     },
-                    "Edge_TTS": {
+                    "Edge TTS": {
                         "edgetts_hint": "提示：使用这个服务前需要安装有 ffmpeg，并且可以直接在终端调用 ffmpeg 指令。",
                         "id": "edge_tts",
                         "type": "edge_tts",
+                        "provider_type": "text_to_speech",
                         "enable": False,
                         "edge-tts-voice": "zh-CN-XiaoxiaoNeural",
                         "timeout": 20,
                     },
-                    "GSVI_TTS(API)": {
+                    "GSVI TTS(API)": {
                         "id": "gsvi_tts",
                         "type": "gsvi_tts_api",
+                        "provider_type": "text_to_speech",
                         "api_base": "http://127.0.0.1:5000",
                         "character": "",
                         "emotion": "default",
                         "enable": False,
                         "timeout": 20,
                     },
-                    "FishAudio_TTS(API)": {
+                    "FishAudio TTS(API)": {
                         "id": "fishaudio_tts",
                         "type": "fishaudio_tts_api",
+                        "provider_type": "text_to_speech",
                         "enable": False,
                         "api_key": "",
                         "api_base": "https://api.fish.audio/v1",
                         "fishaudio-tts-character": "可莉",
                         "timeout": "20",
                     },
-                    "阿里云百炼_TTS(API)": {
+                    "阿里云百炼 TTS(API)": {
                         "id": "dashscope_tts",
                         "type": "dashscope_tts",
+                        "provider_type": "text_to_speech",
                         "enable": False,
                         "api_key": "",
                         "model": "cosyvoice-v1",
                         "dashscope_tts_voice": "loongstella",
                         "timeout": "20",
                     },
-                    "Azure_TTS": {
+                    "Azure TTS": {
                         "id": "azure_tts",
                         "type": "azure_tts",
+                        "provider_type": "text_to_speech",
                         "enable": True,
                         "azure_tts_voice": "zh-CN-YunxiaNeural",
                         "azure_tts_style": "cheerful",
@@ -983,7 +1008,12 @@ CONFIG_METADATA_2 = {
                         "hint": "ID 不能和其它的服务提供商重复，否则将发生严重冲突。",
                     },
                     "type": {
-                        "description": "模型提供商类型",
+                        "description": "模型提供商种类",
+                        "type": "string",
+                        "invisible": True,
+                    },
+                    "provider_type": {
+                        "description": "模型提供商能力种类",
                         "type": "string",
                         "invisible": True,
                     },
