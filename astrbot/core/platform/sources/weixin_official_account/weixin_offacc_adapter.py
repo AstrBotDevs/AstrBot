@@ -136,6 +136,8 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             self.config["secret"].strip(),
         )
 
+        self.client.API_BASE_URL = self.api_base_url
+
         async def callback(msg):
             try:
                 await self.convert_message(msg)

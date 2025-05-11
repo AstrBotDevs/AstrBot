@@ -146,7 +146,7 @@ class WecomPlatformAdapter(Platform):
             self.client.kf = self.wechat_kf_api
             self.client.kf_message = self.wechat_kf_message_api
 
-            self.client.API_BASE_URL = self.api_base_url
+        self.client.API_BASE_URL = self.api_base_url
 
         async def callback(msg: BaseMessage):
             if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
