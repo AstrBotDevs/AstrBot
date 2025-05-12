@@ -218,7 +218,7 @@ class AiocqhttpAdapter(Platform):
             a = None
             if t == "text":
                 # 合并相邻文本段
-                message_str = "".join(m["data"]["text"] for m in m_group).strip()
+                message_str += "".join(m["data"]["text"] for m in m_group).strip()
                 a = ComponentTypes[t](text=message_str)  # noqa: F405
                 abm.message.append(a)
 
