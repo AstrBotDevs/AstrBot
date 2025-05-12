@@ -62,6 +62,10 @@ class PlatformManager:
                     from .sources.gewechat.gewechat_platform_adapter import (
                         GewechatPlatformAdapter,  # noqa: F401
                     )
+                case "wechat-xxxbot":
+                    from .sources.wechat_xxxbot.xxxbot_adapter import (
+                        WeChatXXXBotPlatformAdapter,  # noqa: F401
+                    )
                 case "lark":
                     from .sources.lark.lark_adapter import LarkPlatformAdapter  # noqa: F401
                 case "dingtalk":
@@ -73,7 +77,9 @@ class PlatformManager:
                 case "wecom":
                     from .sources.wecom.wecom_adapter import WecomPlatformAdapter  # noqa: F401
                 case "weixin_official_account":
-                    from .sources.weixin_official_account.weixin_offacc_adapter import WeixinOfficialAccountPlatformAdapter # noqa
+                    from .sources.weixin_official_account.weixin_offacc_adapter import (
+                        WeixinOfficialAccountPlatformAdapter,  # noqa
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->控制台->安装Pip库 中安装依赖库。"
