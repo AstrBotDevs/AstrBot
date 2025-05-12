@@ -294,7 +294,6 @@ class AiocqhttpAdapter(Platform):
                     try:
                         if m["data"]["qq"] == "all":
                             abm.message.append(At(qq="all", name="全体成员"))
-                            message_str += "@全体成员 "
                             continue
 
                         at_info = await self.bot.call_action(
