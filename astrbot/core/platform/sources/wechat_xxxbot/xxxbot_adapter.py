@@ -25,11 +25,11 @@ class WeChatXXXBotPlatformAdapter(Platform):
         self.settingss = platform_settings
         self.client = None
 
-        self.bot_wxid = self.config["bot_wxid"]
+        self.bot_wxid = self.config["xxxbot_bot_wxid"]
         self.api_base_url = self.config["api_base_url"]
 
         if not self.bot_wxid:
-            logger.warning("需要配置 bot_wxid，否则无法发送消息。")
+            logger.warning("需要配置 xxxbot_bot_wxid，否则无法发送消息。")
 
         self.client = XXXBotClient(
             self.config["host"],
