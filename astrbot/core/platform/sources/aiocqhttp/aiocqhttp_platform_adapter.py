@@ -288,6 +288,8 @@ class AiocqhttpAdapter(Platform):
                             a = ComponentTypes[t](**m["data"])  # noqa: F405
                             abm.message.append(a)
             elif t == "at":
+                first_at_self_processed = False
+
                 for m in m_group:
                     try:
                         at_info = await self.bot.call_action(
@@ -296,18 +298,23 @@ class AiocqhttpAdapter(Platform):
                         )
                         if at_info:
                             nickname = at_info.get("nick", "")
+                            is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
+
                             abm.message.append(
                                 At(
                                     qq=m["data"]["qq"],
                                     name=nickname,
                                 )
                             )
-                            # 兼容文本消息
-                            message_str += f"@{nickname} "
+
+                            if is_at_self and not first_at_self_processed:
+                                # 第一个@是机器人，不添加到message_str
+                                first_at_self_processed = True
+                            else:
+                                # 非第一个@机器人或@其他用户，添加到message_str
+                                message_str += f"@{nickname} "
                         else:
-                            abm.message.append(
-                                At(qq=m["data"]["qq"], name="")
-                            )  # noqa: F405
+                            abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
                     except ActionFailed as e:
                         logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
                     except BaseException as e:
