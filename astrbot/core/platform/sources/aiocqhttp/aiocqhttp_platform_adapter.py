@@ -217,9 +217,9 @@ class AiocqhttpAdapter(Platform):
         for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):
             a = None
             if t == "text":
-                # 合并相邻文本段
-                message_str += "".join(m["data"]["text"] for m in m_group).strip()
-                a = ComponentTypes[t](text=message_str)  # noqa: F405
+                current_text = "".join(m["data"]["text"] for m in m_group).strip()
+                message_str += current_text
+                a = ComponentTypes[t](text=current_text)  # noqa: F405
                 abm.message.append(a)
 
             elif t == "file":
@@ -292,6 +292,11 @@ class AiocqhttpAdapter(Platform):
 
                 for m in m_group:
                     try:
+                        if m["data"]["qq"] == "all":
+                            abm.message.append(At(qq="all", name="全体成员"))
+                            message_str += "@全体成员 "
+                            continue
+
                         at_info = await self.bot.call_action(
                             action="get_stranger_info",
                             user_id=int(m["data"]["qq"]),
