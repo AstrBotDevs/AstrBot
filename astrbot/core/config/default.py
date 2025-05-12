@@ -650,6 +650,18 @@ CONFIG_METADATA_2 = {
                             "model": "moonshot-v1-8k",
                         },
                     },
+                    "PPIO派欧云": {
+                        "id": "ppio",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.ppinfra.com/v3/openai",
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "deepseek/deepseek-r1",
+                        },
+                    },
                     "LLMTuner": {
                         "id": "llmtuner_default",
                         "type": "llm_tuner",
