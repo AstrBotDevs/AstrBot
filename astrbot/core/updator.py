@@ -44,20 +44,26 @@ class AstrBotUpdator(RepoZipUpdator):
     def _reboot(self, delay: int = 3):
         """重启当前程序
         在指定的延迟后，终止所有子进程并重新启动程序
-        这里只能使用 os.execl 来重启程序
+        这里只能使用 os.exec* 来重启程序
         """
         time.sleep(delay)
         self.terminate_child_processes()
-        py = sys.executable
+        if os.name == "nt":
+            py = f'"{sys.executable}"'
+        else:
+            py = sys.executable
 
         try:
             if "astrbot" in os.path.basename(sys.argv[0]):  # 兼容cli
-                args = [
-                    f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]
-                ]
-                os.execl(py, f'"{py}"', "-m", "astrbot.cli.__main__", *args)
+                if os.name == "nt":
+                    args = [
+                        f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]
+                    ]
+                else:
+                    args = sys.argv[1:]
+                os.execl(sys.executable, py, "-m", "astrbot.cli.__main__", *args)
             else:
-                os.execl(py, f'"{py}"', *sys.argv)
+                os.execl(sys.executable, py, *sys.argv)
         except Exception as e:
             logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
             raise e
