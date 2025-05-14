@@ -1,7 +1,7 @@
 import json
 import os
 import uuid
-from typing import Iterator
+from typing import Dict, Iterator, List, Union
 
 import requests
 
@@ -29,12 +29,23 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         self.group_id: str = provider_config.get("minimax-group-id", "")
         self.set_model(provider_config.get("model", ""))
         self.lang_boost: str = provider_config.get("minimax-langboost", "auto")
+        self.is_timber_weight: bool = provider_config.get(
+            "minimax-is-timber-weight", False
+        )
+        self.timber_weight: List[Dict[str, Union[str, int]]] = json.loads(
+            provider_config.get(
+                "minimax-timber-weight",
+                '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]',
+            )
+        )
 
         self.voice_setting: dict = {
             "speed": provider_config.get("minimax-voice-speed", 1.0),
             "vol": provider_config.get("minimax-voice-vol", 1.0),
             "pitch": provider_config.get("minimax-voice-pitch", 0),
-            "voice_id": provider_config.get("minimax-voice-id", ""),
+            "voice_id": provider_config.get("minimax-voice-id", "")
+            if not self.is_timber_weight
+            else "",
             "emotion": provider_config.get("minimax-voice-emotion", "neutral"),
             "latex_read": provider_config.get("minimax-voice-latex", False),
             "english_normalization": provider_config.get(
@@ -57,16 +68,19 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
 
     def _build_tts_stream_body(self, text: str):
         """构建流式请求体"""
-        body = json.dumps(
-            {
-                "model": self.model_name,
-                "text": text,
-                "stream": True,
-                "language_boost": self.lang_boost,
-                "voice_setting": self.voice_setting,
-                "audio_setting": self.audio_setting,
-            }
-        )
+        dict_body: Dict[str, object] = {
+            "model": self.model_name,
+            "text": text,
+            "stream": True,
+            "language_boost": self.lang_boost,
+            "voice_setting": self.voice_setting,
+            "audio_setting": self.audio_setting,
+        }
+        if self.is_timber_weight:
+            dict_body["timber_weights"] = self.timber_weight
+
+        body = json.dumps(dict_body)
+
         return body
 
     def _call_tts_stream(self, text: str) -> Iterator[bytes]:

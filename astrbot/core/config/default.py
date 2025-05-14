@@ -813,7 +813,9 @@ CONFIG_METADATA_2 = {
                         "minimax-voice-speed": 1.0,
                         "minimax-voice-vol": 1.0,
                         "minimax-voice-pitch": 0,
+                        "minimax-is-timber-weight": False,
                         "minimax-voice-id": "female-shaonv",
+                        "minimax-timber-weight": '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]',
                         "minimax-voice-emotion": "neutral",
                         "minimax-voice-latex": False,
                         "minimax-voice-english-normalization": False,
@@ -968,10 +970,20 @@ CONFIG_METADATA_2 = {
                         "description": "语调",
                         "hint": "生成声音的语调, 取值[-12, 12], 默认为0",
                     },
+                    "minimax-is-timber-weight": {
+                        "type": "bool",
+                        "description": "启用混合音色",
+                        "hint": "启用混合音色, 支持以自定义权重混合最多四种音色, 启用后自动忽略单一音色设置",
+                    },
+                    "minimax-timber-weight": {
+                        "type": "string",
+                        "description": "混合音色",
+                        "hint": "混合音色及其权重, 最多支持四种音色, 权重为整数, 取值[1, 100]. 可在官网体验页面查看代码获得预设以及编写模板",
+                    },
                     "minimax-voice-id": {
                         "type": "string",
-                        "description": "音色",
-                        "hint": "音色编号, 详见官网文档",
+                        "description": "单一音色",
+                        "hint": "单一音色编号, 详见官网文档",
                     },
                     "minimax-voice-emotion": {
                         "type": "string",
