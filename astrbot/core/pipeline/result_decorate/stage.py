@@ -248,6 +248,14 @@ class ResultDecorateStage(Stage):
                     if url:
                         if url.startswith("http"):
                             result.chain = [Image.fromURL(url)]
+                        elif (
+                            self.ctx.astrbot_config["t2i_use_file_service"]
+                            and self.ctx.astrbot_config["callback_api_base"]
+                        ):
+                            token = await file_token_service.register_file(url)
+                            url = f"{self.ctx.astrbot_config['callback_api_base']}/api/file/{token}"
+                            logger.debug(f"已注册：{url}")
+                            result.chain = [Image.fromURL(url)]
                         else:
                             result.chain = [Image.fromFileSystem(url)]
 

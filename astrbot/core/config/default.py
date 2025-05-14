@@ -92,6 +92,7 @@ DEFAULT_CONFIG = {
     "t2i_word_threshold": 150,
     "t2i_strategy": "remote",
     "t2i_endpoint": "",
+    "t2i_use_file_service": False,
     "http_proxy": "",
     "dashboard": {
         "enable": True,
@@ -1447,6 +1448,11 @@ CONFIG_METADATA_2 = {
                 "description": "文本转图像服务接口",
                 "type": "string",
                 "hint": "当 t2i_strategy 为 remote 时生效。为空时使用 AstrBot API 服务",
+            },
+            "t2i_use_file_service": {
+                "description": "本地文本转图像使用文件服务提供文件",
+                "type": "bool",
+                "hint": "当 t2i_strategy 为 local 并且配置 callback_api_base 时生效。是否使用文件服务提供文件。",
             },
             "pip_install_arg": {
                 "description": "pip 安装参数",
