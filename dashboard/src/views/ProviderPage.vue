@@ -20,23 +20,9 @@
           <span class="text-h6">服务提供商</span>
           <v-chip color="info" size="small" class="ml-2">{{ config_data.provider?.length || 0 }}</v-chip>
           <v-spacer></v-spacer>
-          <v-menu>
-            <template v-slot:activator="{ props }">
-              <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" v-bind="props">
-                新增服务提供商
-              </v-btn>
-            </template>
-            <v-list @update:selected="addFromDefaultConfigTmpl($event)">
-              <v-list-item 
-                v-for="(item, index) in metadata['provider_group']?.metadata?.provider?.config_template || {}" 
-                :key="index" 
-                rounded="xl" 
-                :value="index"
-              >
-                <v-list-item-title>{{ index }}</v-list-item-title>
-              </v-list-item>
-            </v-list>
-          </v-menu>
+          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true">
+            新增服务提供商
+          </v-btn>
         </v-card-title>
 
         <v-divider></v-divider>
@@ -96,6 +82,71 @@
         </v-expand-transition>
       </v-card>
     </v-container>
+
+    <!-- 添加提供商对话框 -->
+    <v-dialog v-model="showAddProviderDialog" max-width="1100px" min-height="95%">
+      <v-card class="provider-selection-dialog">
+        <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
+          <v-icon color="white" class="me-2">mdi-plus-circle</v-icon>
+          <span>服务提供商</span>
+          <v-spacer></v-spacer>
+          <v-btn icon variant="text" color="white" @click="showAddProviderDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        
+        <v-card-text class="pa-4" style="overflow-y: auto;">
+          <v-tabs v-model="activeProviderTab" grow slider-color="primary" bg-color="background">
+            <v-tab value="chat_completion" class="font-weight-medium px-3">
+              <v-icon start>mdi-message-text</v-icon>
+              基本
+            </v-tab>
+            <v-tab value="speech_to_text" class="font-weight-medium px-3">
+              <v-icon start>mdi-microphone-message</v-icon>
+              语音转文字
+            </v-tab>
+            <v-tab value="text_to_speech" class="font-weight-medium px-3">
+              <v-icon start>mdi-volume-high</v-icon>
+              文字转语音
+            </v-tab>
+          </v-tabs>
+          
+          <v-window v-model="activeProviderTab" class="mt-4">
+            <v-window-item v-for="tabType in ['chat_completion', 'speech_to_text', 'text_to_speech']" 
+                          :key="tabType" 
+                          :value="tabType">
+              <v-row class="mt-1">
+                <v-col v-for="(template, name) in getTemplatesByType(tabType)" 
+                      :key="name" 
+                      cols="12" sm="6" md="4">
+                  <v-card variant="outlined" hover class="provider-card" @click="selectProviderTemplate(name)">
+                    <v-card-item>
+                      <template v-slot:prepend>
+                        <v-avatar color="primary" variant="tonal" class="mr-3">
+                          <img :src="getProviderIcon(name)" v-if="getProviderIcon(name)" width="24" height="24">
+                          <span v-else style="font-weight: 1000;">
+                            {{ name[0].toUpperCase() }}
+                          </span>
+                        </v-avatar>
+                      </template>
+                      <v-card-title style="font-size: 15px;">{{ name }}</v-card-title>
+                    </v-card-item>
+                    <v-card-text class="text-caption text-medium-emphasis">
+                      {{ getProviderDescription(template, name) }}
+                    </v-card-text>
+                  </v-card>
+                </v-col>
+                <v-col v-if="Object.keys(getTemplatesByType(tabType)).length === 0" cols="12">
+                  <v-alert type="info" variant="tonal">
+                    暂无{{ getTabTypeName(tabType) }}类型的提供商模板
+                  </v-alert>
+                </v-col>
+              </v-row>
+            </v-window-item>
+          </v-window>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
 
     <!-- 配置对话框 -->
     <v-dialog v-model="showProviderCfg" width="900" persistent>
@@ -170,6 +221,10 @@ export default {
       save_message_success: "success",
 
       showConsole: false,
+      
+      // 新增提供商对话框相关
+      showAddProviderDialog: false,
+      activeProviderTab: 'chat_completion',
     }
   },
 
@@ -188,13 +243,83 @@ export default {
       });
     },
 
-    addFromDefaultConfigTmpl(index) {
-      this.newSelectedProviderName = index[0];
+    // 按提供商类型获取模板列表
+    getTemplatesByType(type) {
+      const templates = this.metadata['provider_group']?.metadata?.provider?.config_template || {};
+      const filtered = {};
+      
+      for (const [name, template] of Object.entries(templates)) {
+        if (template.provider_type === type) {
+          filtered[name] = template;
+        }
+      }
+      
+      return filtered;
+    },
+    
+    // 获取提供商类型对应的图标
+    getProviderIcon(type) {
+      const icons = {
+        'OpenAI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/openai.svg',
+        'Azure OpenAI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/openai.svg',
+        'Whisper': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/openai.svg',
+        'xAI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/xai.svg',
+        'Anthropic': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/anthropic.svg',
+        'Ollama': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/anthropic.svg',
+        'Gemini': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/gemini-color.svg',
+        'Gemini(OpenAI兼容)': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/gemini-color.svg',
+        'DeepSeek': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/deepseek.svg',
+        '智谱 AI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/zhipu.svg',
+        '硅基流动': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/siliconcloud.svg',
+        'Kimi': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/kimi.svg',
+        'PPIO派欧云': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/ppio.svg',
+        'Dify': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/dify-color.svg',
+        '阿里云百炼': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/alibabacloud-color.svg',
+        'FastGPT': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/fastgpt-color.svg',
+        'LM Studio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/lmstudio.svg',
+        'FishAudio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/fishaudio.svg',
+        'Azure': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/azure.svg',
+      };
+      for (const key in icons) {
+        if (type.startsWith(key)) {
+          return icons[key];
+        }
+      }
+      return ''
+    },
+
+    // 获取Tab类型的中文名称
+    getTabTypeName(tabType) {
+      const names = {
+        'chat_completion': '基本对话',
+        'speech_to_text': '语音转文本',
+        'text_to_speech': '文本转语音'
+      };
+      return names[tabType] || tabType;
+    },
+    
+    // 获取提供商简介
+    getProviderDescription(template, name) {
+      if (name == 'OpenAI') {
+        return `${template.type} 服务提供商。同时也支持所有兼容 OpenAI API 的模型提供商。`;
+      }
+      return `${template.type} 服务提供商`;
+    },
+    
+    // 选择提供商模板
+    selectProviderTemplate(name) {
+      this.newSelectedProviderName = name;
       this.showProviderCfg = true;
       this.updatingMode = false;
       this.newSelectedProviderConfig = JSON.parse(JSON.stringify(
-        this.metadata['provider_group']?.metadata?.provider?.config_template[index[0]] || {}
+        this.metadata['provider_group']?.metadata?.provider?.config_template[name] || {}
       ));
+      this.showAddProviderDialog = false;
+    },
+
+    // 废弃旧方法，保留为兼容
+    addFromDefaultConfigTmpl(index) {
+      this.selectProviderTemplate(index[0]);
     },
 
     configExistingProvider(provider) {
@@ -325,5 +450,30 @@ export default {
 .provider-page {
   padding: 20px;
   padding-top: 8px;
+}
+
+.provider-selection-dialog .v-card-title {
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
+
+.provider-card {
+  transition: all 0.3s ease;
+  height: 100%;
+  cursor: pointer;
+}
+
+.provider-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 25px 0 rgba(0, 0, 0, 0.05);
+  border-color: var(--v-primary-base);
+}
+
+.v-tabs {
+  border-radius: 8px;
+}
+
+.v-window {
+  border-radius: 4px;
 }
 </style>

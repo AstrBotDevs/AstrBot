@@ -8,6 +8,7 @@ from astrbot.core.db import BaseDatabase
 import asyncio
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class ChatRoute(Route):
@@ -33,7 +34,8 @@ class ChatRoute(Route):
         self.db = db
         self.core_lifecycle = core_lifecycle
         self.register_routes()
-        self.imgs_dir = "data/webchat/imgs"
+        self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
+        os.makedirs(self.imgs_dir, exist_ok=True)
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
 

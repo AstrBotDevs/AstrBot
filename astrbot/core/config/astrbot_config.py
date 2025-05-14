@@ -4,8 +4,9 @@ import logging
 import enum
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 from typing import Dict
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-ASTRBOT_CONFIG_PATH = "data/cmd_config.json"
+ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 logger = logging.getLogger("astrbot")
 
 
@@ -45,8 +46,6 @@ class AstrBotConfig(dict):
 
         with open(config_path, "r", encoding="utf-8-sig") as f:
             conf_str = f.read()
-            if conf_str.startswith("/ufeff"):  # remove BOM
-                conf_str = conf_str.encode("utf8")[3:].decode("utf8")
             conf = json.loads(conf_str)
 
         # 检查配置完整性，并插入

@@ -7,6 +7,7 @@ from ..provider import TTSProvider
 from ..entities import ProviderType
 from ..register import register_provider_adapter
 from astrbot.core import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 """
 edge_tts 方式，能够免费、快速生成语音，使用需要先安装edge-tts库
@@ -40,9 +41,9 @@ class ProviderEdgeTTS(TTSProvider):
         self.set_model("edge_tts")
 
     async def get_audio(self, text: str) -> str:
-        os.makedirs("data/temp", exist_ok=True)
-        mp3_path = f"data/temp/edge_tts_temp_{uuid.uuid4()}.mp3"
-        wav_path = f"data/temp/edge_tts_{uuid.uuid4()}.wav"
+        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        mp3_path = os.path.join(temp_dir, f"edge_tts_temp_{uuid.uuid4()}.mp3")
+        wav_path = os.path.join(temp_dir, f"edge_tts_{uuid.uuid4()}.wav")
 
         # 构建 Edge TTS 参数
         kwargs = {"text": text, "voice": self.voice}

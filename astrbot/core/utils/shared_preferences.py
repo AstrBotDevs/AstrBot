@@ -1,9 +1,12 @@
 import json
 import os
+from .astrbot_path import get_astrbot_data_path
 
 
 class SharedPreferences:
-    def __init__(self, path="data/shared_preferences.json"):
+    def __init__(self, path=None):
+        if path is None:
+            path = os.path.join(get_astrbot_data_path(), "shared_preferences.json")
         self.path = path
         self._data = self._load_preferences()
 

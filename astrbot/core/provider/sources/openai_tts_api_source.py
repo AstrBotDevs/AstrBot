@@ -1,8 +1,10 @@
+import os
 import uuid
 from openai import AsyncOpenAI, NOT_GIVEN
 from ..provider import TTSProvider
 from ..entities import ProviderType
 from ..register import register_provider_adapter
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 @register_provider_adapter(
@@ -31,7 +33,8 @@ class ProviderOpenAITTSAPI(TTSProvider):
         self.set_model(provider_config.get("model", None))
 
     async def get_audio(self, text: str) -> str:
-        path = f"data/temp/openai_tts_api_{uuid.uuid4()}.wav"
+        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        path = os.path.join(temp_dir, f"openai_tts_api_{uuid.uuid4()}.wav")
         async with self.client.audio.speech.with_streaming_response.create(
             model=self.model_name, voice=self.voice, response_format="wav", input=text
         ) as response:
