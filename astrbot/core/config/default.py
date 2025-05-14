@@ -66,6 +66,7 @@ DEFAULT_CONFIG = {
         "enable": False,
         "provider_id": "",
         "dual_output": False,
+        "use_file_service": False,
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
@@ -1306,6 +1307,11 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "启用后，Bot 将同时输出语音和文字消息。",
                         "obvious_hint": True,
+                    },
+                    "use_file_service": {
+                        "description": "使用文件服务提供 TTS 语音文件",
+                        "type": "bool",
+                        "hint": "启用后，如已配置 callback_api_base ，将会使用文件服务提供TTS语音文件",
                     },
                 },
             },
