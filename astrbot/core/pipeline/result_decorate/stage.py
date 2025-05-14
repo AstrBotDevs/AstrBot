@@ -208,8 +208,8 @@ class ResultDecorateStage(Stage):
 
                             new_chain.append(
                                 Record(
-                                    file=url if url else audio_path,
-                                    url=url if url else audio_path,
+                                    file=url or audio_path,
+                                    url=url or audio_path,
                                 )
                             )
                             if dual_output:
