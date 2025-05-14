@@ -128,7 +128,7 @@ uvx astrbot init
 
 | 名称    | 支持性 | 类型 | 备注 |
 | -------- | ------- | ------- | ------- |
-| OpenAI API | ✔    | 文本生成 | 也支持 DeepSeek、Google Gemini、GLM、Kimi、硅基流动、xAI 等兼容 OpenAI API 的服务 |
+| OpenAI API | ✔    | 文本生成 | 也支持 DeepSeek、Google Gemini、GLM、Kimi、xAI 等兼容 OpenAI API 的服务 |
 | Claude API | ✔    | 文本生成 |  |
 | Google Gemini API | ✔    | 文本生成 |  |
 | Dify | ✔    | LLMOps |  |
@@ -136,14 +136,18 @@ uvx astrbot init
 | Ollama | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
 | LM Studio | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
 | LLMTuner | ✔    | 模型加载器 | 本地加载 lora 等微调模型 |
+| 硅基流动 | ✔    | 模型 API 服务平台 |  |
 | PPIO 派欧云 | ✔    | 模型 API 服务平台 |  |
 | OneAPI | ✔    | LLM 分发系统 |  |
 | Whisper | ✔    | 语音转文本 | 支持 API、本地部署 |
 | SenseVoice | ✔    | 语音转文本 | 本地部署 |
 | OpenAI TTS API | ✔    | 文本转语音 |  |
 | GSVI | ✔    | 文本转语音 | GPT-Sovits-Inference |
-| Fishaudio | ✔    | 文本转语音 | GPT-Sovits 作者参与的项目 |
-| Edge-TTS | ✔    | 文本转语音 | Edge 浏览器的免费 TTS |
+| FishAudio | ✔    | 文本转语音 | GPT-Sovits 作者参与的项目 |
+| Edge TTS | ✔    | 文本转语音 | Edge 浏览器的免费 TTS |
+| 阿里云百炼 TTS | ✔    | 文本转语音 |  |
+| Azure TTS | ✔    | 文本转语音 | Microsoft Azure TTS |
+
 
 ## ❤️ 贡献
 
