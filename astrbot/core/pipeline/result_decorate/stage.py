@@ -1,17 +1,18 @@
-import time
 import re
+import time
 import traceback
-from typing import Union, AsyncGenerator
-from ..stage import Stage, register_stage, registered_stages
-from ..context import PipelineContext
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from typing import AsyncGenerator, Union
+
+from astrbot.core import html_renderer, logger
+from astrbot.core.message.components import At, File, Image, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core import logger
-from astrbot.core.message.components import Plain, Image, At, Reply, Record, File, Node
-from astrbot.core import html_renderer
-from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+from ..context import PipelineContext
+from ..stage import Stage, register_stage, registered_stages
 
 
 @register_stage
@@ -184,7 +185,9 @@ class ResultDecorateStage(Stage):
                                 new_chain.append(
                                     Record(file=audio_path, url=audio_path)
                                 )
-                                if(self.ctx.astrbot_config["provider_tts_settings"]["dual_output"]):
+                                if self.ctx.astrbot_config["provider_tts_settings"][
+                                    "dual_output"
+                                ]:
                                     new_chain.append(comp)
                             else:
                                 logger.error(
