@@ -747,6 +747,17 @@ CONFIG_METADATA_2 = {
                         "dashscope_tts_voice": "loongstella",
                         "timeout": "20",
                     },
+                    "火山引擎_TTS(API)": {
+                        "id": "volcengine_tts",
+                        "type": "volcengine_tts",
+                        "enable": False,
+                        "api_key": "",
+                        "appid": "",
+                        "cluster": "",
+                        "voice_type": "xiaoyun",
+                        "api_base": "https://openspeech.bytedance.com/api/v1/tts",
+                        "timeout": "20",
+                    },
                 },
                 "items": {
                     "dashscope_tts_voice": {
