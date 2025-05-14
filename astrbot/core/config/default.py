@@ -944,18 +944,18 @@ CONFIG_METADATA_2 = {
                     },
                     "minimax-group-id": {
                         "type": "string",
-                        "description": "用户所属的组",
+                        "description": "用户组",
                         "hint": "于账户管理->基本信息中可见",
                     },
                     "minimax-langboost": {
                         "type": "string",
-                        "description": "指定语言/方言识别能力",
+                        "description": "指定语言/方言",
                         "hint": "增强对指定的小语种和方言的识别能力，设置后可以提升在指定小语种/方言场景下的语音表现",
                         "options": [ "Chinese","Chinese,Yue","English","Arabic","Russian","Spanish","French","Portuguese","German","Turkish","Dutch","Ukrainian","Vietnamese","Indonesian","Japanese","Italian","Korean","Thai","Polish","Romanian","Greek","Czech","Finnish","Hindi","auto",],
                     },
                     "minimax-voice-speed": {
                         "type": "float",
-                        "description": "语速取值越大，语速越快",
+                        "description": "语速",
                         "hint": "生成声音的语速, 取值[0.5, 2], 默认为1.0, 取值越大，语速越快",
                     },
                     "minimax-voice-vol": {
@@ -970,23 +970,23 @@ CONFIG_METADATA_2 = {
                     },
                     "minimax-voice-id": {
                         "type": "string",
-                        "description": "音色编号",
-                        "hint": "请求的音色编号, 请见官网文档",
+                        "description": "音色",
+                        "hint": "音色编号, 详见官网文档",
                     },
                     "minimax-voice-emotion": {
                         "type": "string",
-                        "description": "语音情绪",
+                        "description": "情绪",
                         "hint": "控制合成语音的情绪",
                         "options": ["happy","sad","angry","fearful","disgusted","surprised","neutral",],
                     },
                     "minimax-voice-latex": {
                         "type": "bool",
-                        "description": "是否支持朗读latex公式",
-                        "hint": "",
+                        "description": "支持朗读latex公式",
+                        "hint": "朗读latex公式, 但是需要确保输入文本按官网要求格式化",
                     },
                     "minimax-voice-english-normalization": {
                         "type": "bool",
-                        "description": "是否支持英语文本规范化",
+                        "description": "支持英语文本规范化",
                         "hint": "可提升数字阅读场景的性能，但会略微增加延迟",
                     },
                     "rag_options": {
