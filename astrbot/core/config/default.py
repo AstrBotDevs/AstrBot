@@ -819,7 +819,7 @@ CONFIG_METADATA_2 = {
                         "minimax-voice-emotion": "neutral",
                         "minimax-voice-latex": False,
                         "minimax-voice-english-normalization": False,
-                        "timeout": "20",
+                        "timeout": 20,
                     },
                 },
                 "items": {

@@ -43,9 +43,9 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "speed": provider_config.get("minimax-voice-speed", 1.0),
             "vol": provider_config.get("minimax-voice-vol", 1.0),
             "pitch": provider_config.get("minimax-voice-pitch", 0),
-            "voice_id": provider_config.get("minimax-voice-id", "")
-            if not self.is_timber_weight
-            else "",
+            "voice_id": ""
+            if self.is_timber_weight
+            else provider_config.get("minimax-voice-id", ""),
             "emotion": provider_config.get("minimax-voice-emotion", "neutral"),
             "latex_read": provider_config.get("minimax-voice-latex", False),
             "english_normalization": provider_config.get(
@@ -59,7 +59,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "format": "mp3",
         }
 
-        self.concat_base_url: str = self.api_base + "?GroupId=" + self.group_id
+        self.concat_base_url: str = f"{self.api_base}?GroupId={self.group_id}"
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
             "accept": "application/json, text/plain, */*",
@@ -79,42 +79,37 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         if self.is_timber_weight:
             dict_body["timber_weights"] = self.timber_weight
 
-        body = json.dumps(dict_body)
-
-        return body
+        return json.dumps(dict_body)
 
     def _call_tts_stream(self, text: str) -> Iterator[bytes]:
         """进行流式请求"""
-        tts_body = self._build_tts_stream_body(text)
         try:
-            response = requests.request(
-                "POST",
+            response = requests.post(
                 self.concat_base_url,
                 stream=True,
                 headers=self.headers,
-                data=tts_body,
+                data=self._build_tts_stream_body(text),
             )
             response.raise_for_status()
+
             for chunk in response.raw:
-                if chunk:
-                    if chunk[:5] == b"data:":
-                        data = json.loads(chunk[5:])
-                        if "data" in data and "extra_info" not in data:
-                            if "audio" in data["data"]:
-                                audio = data["data"]["audio"]
-                                yield audio
+                if not chunk or not chunk.startswith(b"data:"):
+                    continue
+                data = json.loads(chunk[5:])
+                if "extra_info" in data:
+                    continue
+                audio = data.get("data", {}).get("audio")
+                if audio is not None:
+                    yield audio
+
         except requests.exceptions.RequestException as e:
             raise Exception(f"MiniMax TTS API请求失败: {str(e)}")
 
     def _audio_play(self, audio_stream: Iterator[bytes]) -> bytes:
         """解码数据流到audio比特流"""
-        audio = b""
-        for chunk in audio_stream:
-            if chunk is not None and chunk != "\n":
-                decoded_hex = bytes.fromhex(chunk)
-                audio += decoded_hex
-
-        return audio
+        return b"".join(
+            bytes.fromhex(chunk) for chunk in audio_stream if chunk and chunk != b"\n"
+        )
 
     async def get_audio(self, text: str) -> str:
         temp_dir = os.path.join(get_astrbot_data_path(), "temp")
