@@ -206,6 +206,10 @@ class ProviderManager:
                     from .sources.azure_tts_source import (
                         AzureTTSProvider as AzureTTSProvider,
                     )
+                case "minimax_tts_api":
+                    from .sources.minimax_tts_api_source import (
+                        ProviderMiniMaxTTSAPI as ProviderMiniMaxTTSAPI,
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。"

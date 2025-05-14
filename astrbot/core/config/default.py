@@ -788,6 +788,25 @@ CONFIG_METADATA_2 = {
                         "azure_tts_subscription_key": "",
                         "azure_tts_region": "eastus"
                     },
+                    "MiniMax TTS(API)": {
+                        "id": "minimax_tts",
+                        "type": "minimax_tts_api",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.minimax.chat/v1/t2a_v2",
+                        "minimax-group-id": "",
+                        "model": "speech-02-turbo",
+                        "minimax-langboost": "auto",
+                        "minimax-voice-speed": 1.0,
+                        "minimax-voice-vol": 1.0,
+                        "minimax-voice-pitch": 0,
+                        "minimax-voice-id": "female-shaonv",
+                        "minimax-voice-emotion": "neutral",
+                        "minimax-voice-latex": False,
+                        "minimax-voice-english-normalization": False,
+                        "timeout": "20",
+                    },
                 },
                 "items": {
                     "azure_tts_voice": {
@@ -910,6 +929,53 @@ CONFIG_METADATA_2 = {
                                 "hint": "模型应该生成的思考Token的数量，设为0关闭思考。除gemini-2.5-flash外的模型会静默忽略此参数。",
                             },
                         },
+                    },
+                    "minimax-group-id": {
+                        "type": "string",
+                        "description": "用户所属的组",
+                        "hint": "于账户管理->基本信息中可见",
+                    },
+                    "minimax-langboost": {
+                        "type": "string",
+                        "description": "指定语言/方言识别能力",
+                        "hint": "增强对指定的小语种和方言的识别能力，设置后可以提升在指定小语种/方言场景下的语音表现",
+                        "options": [ "Chinese","Chinese,Yue","English","Arabic","Russian","Spanish","French","Portuguese","German","Turkish","Dutch","Ukrainian","Vietnamese","Indonesian","Japanese","Italian","Korean","Thai","Polish","Romanian","Greek","Czech","Finnish","Hindi","auto",],
+                    },
+                    "minimax-voice-speed": {
+                        "type": "float",
+                        "description": "语速取值越大，语速越快",
+                        "hint": "生成声音的语速, 取值[0.5, 2], 默认为1.0, 取值越大，语速越快",
+                    },
+                    "minimax-voice-vol": {
+                        "type": "float",
+                        "description": "音量",
+                        "hint": "生成声音的音量, 取值(0, 10], 默认为1.0, 取值越大，音量越高",
+                    },
+                    "minimax-voice-pitch": {
+                        "type": "int",
+                        "description": "语调",
+                        "hint": "生成声音的语调, 取值[-12, 12], 默认为0",
+                    },
+                    "minimax-voice-id": {
+                        "type": "string",
+                        "description": "音色编号",
+                        "hint": "请求的音色编号, 请见官网文档",
+                    },
+                    "minimax-voice-emotion": {
+                        "type": "string",
+                        "description": "语音情绪",
+                        "hint": "控制合成语音的情绪",
+                        "options": ["happy","sad","angry","fearful","disgusted","surprised","neutral",],
+                    },
+                    "minimax-voice-latex": {
+                        "type": "bool",
+                        "description": "是否支持朗读latex公式",
+                        "hint": "",
+                    },
+                    "minimax-voice-english-normalization": {
+                        "type": "bool",
+                        "description": "是否支持英语文本规范化",
+                        "hint": "可提升数字阅读场景的性能，但会略微增加延迟",
                     },
                     "rag_options": {
                         "description": "RAG 选项",
