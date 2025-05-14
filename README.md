@@ -132,10 +132,11 @@ uvx astrbot init
 | Claude API | ✔    | 文本生成 |  |
 | Google Gemini API | ✔    | 文本生成 |  |
 | Dify | ✔    | LLMOps |  |
-| DashScope(阿里云百炼应用) | ✔    | LLMOps |  |
+| 阿里云百炼应用 | ✔    | LLMOps |  |
 | Ollama | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
 | LM Studio | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
 | LLMTuner | ✔    | 模型加载器 | 本地加载 lora 等微调模型 |
+| PPIO 派欧云 | ✔    | 模型 API 服务平台 |  |
 | OneAPI | ✔    | LLM 分发系统 |  |
 | Whisper | ✔    | 语音转文本 | 支持 API、本地部署 |
 | SenseVoice | ✔    | 语音转文本 | 本地部署 |
