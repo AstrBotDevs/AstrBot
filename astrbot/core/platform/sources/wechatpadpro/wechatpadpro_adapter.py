@@ -46,9 +46,7 @@ class WeChatPadProAdapter(Platform):
         """
         logger.info("WeChatPadPro 适配器正在启动...")
 
-        # 尝试从文件中加载凭据
-        loaded_credentials = self.load_credentials()
-        if loaded_credentials:
+        if loaded_credentials := self.load_credentials():
             self.auth_key = loaded_credentials.get("auth_key")
             self.wxid = loaded_credentials.get("wxid")
 
