@@ -345,8 +345,10 @@ class WeChatPadProAdapter(Platform):
         # 先判断群聊/私聊并设置基本属性
         await self._process_chat_type(abm, raw_message, from_user_name, to_user_name, content)
 
-        # 如果是机器人自己发送的消息，忽略
-        if from_user_name == self.wxid:
+        # 如果是机器人自己发送的消息、回显消息或系统消息，忽略
+        is_echo = raw_message.get("is_echo", False) or raw_message.get("msg_source") == "send"
+        is_system = msg_type in ("system", "sys")
+        if from_user_name == self.wxid or to_user_name == self.wxid or is_echo or is_system:
              return None
 
         # 再根据消息类型处理消息内容
