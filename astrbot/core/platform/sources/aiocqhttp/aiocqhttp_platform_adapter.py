@@ -316,7 +316,7 @@ class AiocqhttpAdapter(Platform):
                                 first_at_self_processed = True
                             else:
                                 # 非第一个@机器人或@其他用户，添加到message_str
-                                message_str += f"@{nickname} "
+                                message_str += f" @{nickname} "
                         else:
                             abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
                     except ActionFailed as e:
