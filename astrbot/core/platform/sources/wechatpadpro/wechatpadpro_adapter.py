@@ -6,8 +6,6 @@ import websockets
 from typing import Awaitable, Any, Optional, Coroutine
 from astrbot.api.message_components import Plain, Image, At, Record, Video
 from astrbot.api.platform import Platform, PlatformMetadata
-from astrbot.api.event import MessageChain
-from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember, MessageType
 from ...register import register_platform_adapter
 from astrbot import logger
@@ -20,6 +18,8 @@ class WeChatPadProAdapter(Platform):
         self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
     ) -> None:
         super().__init__(event_queue)
+        self._shutdown_event = None
+        self.wxnewpass = None
         self.config = platform_config
         self.settings = platform_settings
         self.unique_session = platform_settings.get("unique_session", False)
@@ -236,7 +236,6 @@ class WeChatPadProAdapter(Platform):
                                 status = response_data["Data"]["state"]
                                 logger.info(f"第 {attempts + 1} 次尝试，当前登录状态: {status}，还剩{countdown-attempts*5}秒")
                                 if status == 2:  # 状态 2 表示登录成功
-                                    logger.info("登录成功！")
                                     self.wxid = response_data["Data"].get("wxid")
                                     self.wxnewpass = response_data["Data"].get("wxnewpass")
                                     logger.info(f"登录成功，wxid: {self.wxid}, wxnewpass: {self.wxnewpass}")
@@ -324,7 +323,7 @@ class WeChatPadProAdapter(Platform):
             logger.error(f"处理 WebSocket 消息时发生错误: {e}")
 
 
-    async def convert_message(self, raw_message: dict) -> AstrBotMessage:
+    async def convert_message(self, raw_message: dict) -> AstrBotMessage | None:
         """
         将 WeChatPadPro 原始消息转换为 AstrBotMessage。
         """
@@ -332,7 +331,7 @@ class WeChatPadProAdapter(Platform):
         abm.raw_message = raw_message
         abm.message_id = str(raw_message.get("msg_id"))
         abm.timestamp = raw_message.get("create_time")
-        abm.self_id = self.wxid # 机器人的 wxid
+        abm.self_id = self.wxid
 
         from_user_name = raw_message.get("from_user_name", {}).get("str", "")
         to_user_name = raw_message.get("to_user_name", {}).get("str", "")
@@ -342,60 +341,55 @@ class WeChatPadProAdapter(Platform):
         abm.message_str = content # 纯文本消息内容 (初始值)
         abm.message = [] # Initialize message components list
 
-        # 先判断群聊/私聊并设置基本属性
-        await self._process_chat_type(abm, raw_message, from_user_name, to_user_name, content)
-
         # 如果是机器人自己发送的消息、回显消息或系统消息，忽略
-        is_echo = raw_message.get("is_echo", False) or raw_message.get("msg_source") == "send"
-        is_system = msg_type in ("system", "sys")
-        if from_user_name == self.wxid or to_user_name == self.wxid or is_echo or is_system:
-             return None
+        if from_user_name == self.wxid:
+            logger.info("忽略自己发送的消息！！！")
+            return None
 
-        # 再根据消息类型处理消息内容
-        self._process_message_content(abm, raw_message, msg_type, content)
+        # 先判断群聊/私聊并设置基本属性
+        if await self._process_chat_type(abm, raw_message, from_user_name, to_user_name, content):
+            # 再根据消息类型处理消息内容
+            self._process_message_content(abm, raw_message, msg_type, content)
 
-        return abm
+            return abm
+        return None
 
     async def _process_chat_type(self, abm: AstrBotMessage, raw_message: dict, from_user_name: str, to_user_name: str, content: str):
         """
         判断消息是群聊还是私聊，并设置 AstrBotMessage 的基本属性。
         """
+        if from_user_name == 'weixin':
+            logger.info("忽略微信团队的消息！！！")
+            return False
         if "@chatroom" in from_user_name:
+            logger.info("开始处理群消息！")
             abm.type = MessageType.GROUP_MESSAGE
-            abm.group_id = from_user_name # 群聊 ID
+            abm.group_id = from_user_name
 
             parts = content.split(":\n", 1)
             sender_wxid = ""
             if len(parts) == 2:
                 sender_wxid = parts[0]
-                sender_name_from_content = parts[1]
 
             abm.sender = MessageMember(user_id=sender_wxid, nickname="")
 
-            # 如果需要更准确的群昵称，调用 GetChatroomMemberDetail 接口
-            if sender_wxid: # 只有当发送者 wxid 可用时才尝试获取更准确的昵称
+            # 获取群聊发送者的nickname
+            if sender_wxid:
                 accurate_nickname = await self._get_group_member_nickname(abm.group_id, sender_wxid)
                 if accurate_nickname:
                     abm.sender.nickname = accurate_nickname
 
             # 对于群聊，session_id 可以是群聊 ID 或发送者 ID + 群聊 ID (如果 unique_session 为 True)
             if self.unique_session:
-                 # 需要获取发送者的 wxid，这可能需要额外的接口调用或从消息中解析
-                 # 暂时使用 from_user_name 作为 session_id 的一部分
-                 abm.session_id = f"{from_user_name}_{to_user_name}" # 示例，可能需要调整
+                 abm.session_id = f"{from_user_name}_{to_user_name}"
             else:
                  abm.session_id = from_user_name
-            # logger.info("跳过群消息")
-            # pass
         else:
             abm.type = MessageType.FRIEND_MESSAGE
-            abm.group_id = "" # 私聊没有群组 ID
+            abm.group_id = ""
             abm.sender = MessageMember(user_id=from_user_name, nickname="") # 暂时没有私聊发送者的昵称
-            abm.session_id = from_user_name # 私聊的 session_id 是发送者 ID
-            # 如果是来自 'weixin' 的消息，忽略
-            if from_user_name == 'weixin':
-                logger.info("收到来自 'weixin' 的消息，忽略！")
-                return
+            abm.session_id = from_user_name
+        return True
 
     async def _get_group_member_nickname(self, group_id: str, member_wxid: str) -> Optional[str]:
         """
@@ -418,10 +412,9 @@ class WeChatPadProAdapter(Platform):
                             if member.get("user_name") == member_wxid:
                                 return member.get("nick_name")
                         logger.warning(f"在群 {group_id} 中未找到成员 {member_wxid} 的昵称")
-                        return None
                     else:
                         logger.error(f"获取群成员详情失败: {response.status}, {response_data}")
-                        return None
+                    return None
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
                 return None
@@ -476,7 +469,6 @@ class WeChatPadProAdapter(Platform):
             except Exception as e:
                 logger.error(f"解析引用消息 XML 失败: {e}")
             pass
-        # elif msg_type == ... # Add handling for other message types here
         else:
             logger.warning(f"收到未处理的消息类型: {msg_type}, 原始消息: {raw_message}")
             # abm.message remains empty [] for unhandled types
@@ -500,11 +492,3 @@ class WeChatPadProAdapter(Platform):
         得到一个平台的元数据。
         """
         return self.metadata
-
-    async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
-    ) -> Awaitable[Any]:
-        """
-        通过会话发送消息。
-        """
-        logger.info(f"向会话 {session} 发送消息: {message_chain}")
