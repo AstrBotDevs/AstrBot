@@ -155,6 +155,14 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
+                    "wechatpadpro(微信)": {
+                        "id": "wechatpadpro",
+                        "type": "wechatpadpro",
+                        "enable": False,
+                        "admin_key": "stay33",
+                        "host": "这里填写你的局域网IP或者公网服务器IP",
+                        "port": 8059,
+                    },
                     "weixin_official_account(微信公众平台)": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
