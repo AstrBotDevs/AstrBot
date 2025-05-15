@@ -90,9 +90,15 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
 
             elif isinstance(component, Image):
                 # 发送图片消息
-                try:
-                    # 假设 Image 对象有 to_base64() 方法
-                    image_base64 = await component.convert_to_base64() # 需要 Image 组件支持转为 base64
+                if hasattr(component, "convert_to_base64"):
+                    try:
+                        image_base64 = await component.convert_to_base64()
+                    except Exception as e:
+                        logger.error(f"Error converting image to base64: {e}")
+                        continue
+                else:
+                    logger.error("Image component missing convert_to_base64, skipping image send.")
+                    continue
                     # logger.info(f"转换后的base64图片：{image_base64}")
 
                     # Base64图片格式校验
