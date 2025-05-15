@@ -365,10 +365,7 @@ class WeChatPadProAdapter(Platform):
             abm.group_id = from_user_name
 
             parts = content.split(":\n", 1)
-            sender_wxid = ""
-            if len(parts) == 2:
-                sender_wxid = parts[0]
-
+            sender_wxid = parts[0] if len(parts) == 2 else ""
             abm.sender = MessageMember(user_id=sender_wxid, nickname="")
 
             # 获取群聊发送者的nickname
