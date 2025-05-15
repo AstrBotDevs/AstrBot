@@ -26,6 +26,13 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
+from mcp.types import (
+    TextContent,
+    ImageContent,
+    EmbeddedResource,
+    TextResourceContents,
+    BlobResourceContents,
+)
 
 
 class LLMRequestSubStage(Stage):
@@ -71,7 +78,11 @@ class LLMRequestSubStage(Stage):
             )
 
             if req.conversation:
-                req.contexts = json.loads(req.conversation.history)
+                all_contexts = json.loads(req.conversation.history)
+                req.contexts = self._process_tool_message_pairs(
+                    all_contexts, remove_tags=True
+                )
+
         else:
             req = ProviderRequest(prompt="", image_urls=[])
             if self.provider_wake_prefix:
@@ -142,8 +153,19 @@ class LLMRequestSubStage(Stage):
         ):
             logger.debug("上下文长度超过限制，将截断。")
             req.contexts = req.contexts[
-                -(self.max_context_length - self.dequeue_context_length) * 2 :
+                -(self.max_context_length - self.dequeue_context_length + 1) * 2 :
             ]
+            # 找到第一个role 为 user 的索引，确保上下文格式正确
+            index = next(
+                (
+                    i
+                    for i, item in enumerate(req.contexts)
+                    if item.get("role") == "user"
+                ),
+                None,
+            )
+            if index is not None and index > 0:
+                req.contexts = req.contexts[index:]
 
         # session_id
         if not req.session_id:
@@ -257,6 +279,12 @@ class LLMRequestSubStage(Stage):
                 event.set_extra("tool_call_result", None)
                 yield
 
+        # 暂时直接发出去
+        if img_b64 := event.get_extra("tool_call_img_respond"):
+            await event.send(MessageChain(chain=[Image.fromBase64(img_b64)]))
+            event.set_extra("tool_call_img_respond", None)
+            yield
+
     async def _handle_llm_response(
         self,
         event: AstrMessageEvent,
@@ -367,21 +395,68 @@ class LLMRequestSubStage(Stage):
                     client = req.func_tool.mcp_client_dict[func_tool.mcp_server_name]
                     res = await client.session.call_tool(func_tool.name, func_tool_args)
                     if res:
-                        # TODO content的类型可能包括list[TextContent | ImageContent | EmbeddedResource]，这里只处理了TextContent。
-                        tool_call_result.append(
-                            ToolCallMessageSegment(
-                                role="tool",
-                                tool_call_id=func_tool_id,
-                                content=res.content[0].text,
+                        # TODO 仅对ImageContent | EmbeddedResource进行了简单的Fallback
+                        if isinstance(res.content[0], TextContent):
+                            tool_call_result.append(
+                                ToolCallMessageSegment(
+                                    role="tool",
+                                    tool_call_id=func_tool_id,
+                                    content=res.content[0].text,
+                                )
                             )
-                        )
+                        elif isinstance(res.content[0], ImageContent):
+                            tool_call_result.append(
+                                ToolCallMessageSegment(
+                                    role="tool",
+                                    tool_call_id=func_tool_id,
+                                    content="返回了图片(已直接发送给用户)",
+                                )
+                            )
+                            event.set_extra(
+                                "tool_call_img_respond",
+                                res.content[0].data,
+                            )
+                        elif isinstance(res.content[0], EmbeddedResource):
+                            resource = res.content[0].resource
+                            if isinstance(resource, TextResourceContents):
+                                tool_call_result.append(
+                                    ToolCallMessageSegment(
+                                        role="tool",
+                                        tool_call_id=func_tool_id,
+                                        content=resource.text,
+                                    )
+                                )
+                            elif (
+                                isinstance(resource, BlobResourceContents)
+                                and resource.mimeType
+                                and resource.mimeType.startswith("image/")
+                            ):
+                                tool_call_result.append(
+                                    ToolCallMessageSegment(
+                                        role="tool",
+                                        tool_call_id=func_tool_id,
+                                        content="返回了图片(已直接发送给用户)",
+                                    )
+                                )
+                                event.set_extra(
+                                    "tool_call_img_respond",
+                                    res.content[0].data,
+                                )
+                            else:
+                                tool_call_result.append(
+                                    ToolCallMessageSegment(
+                                        role="tool",
+                                        tool_call_id=func_tool_id,
+                                        content="返回的数据类型不受支持",
+                                    )
+                                )
                 else:
                     # 获取处理器，过滤掉平台不兼容的处理器
                     platform_id = event.get_platform_id()
                     star_md = star_map.get(func_tool.handler_module_path)
                     if (
-                        star_md and
-                        platform_id in star_md.supported_platforms
+                        star_md
+                        and platform_id in star_md.supported_platforms
                         and not star_md.supported_platforms[platform_id]
                     ):
                         logger.debug(
@@ -447,12 +522,22 @@ class LLMRequestSubStage(Stage):
 
         if llm_response.role == "assistant":
             # 文本回复
-            contexts = req.contexts
+            contexts = req.contexts.copy()
             contexts.append(await req.assemble_context())
 
-            # tool calls result
+            # 记录并标记函数调用结果
             if req.tool_calls_result:
-                contexts.extend(req.tool_calls_result.to_openai_messages())
+                tool_calls_messages = req.tool_calls_result.to_openai_messages()
+
+                # 添加标记
+                for message in tool_calls_messages:
+                    message["_tool_call_history"] = True
+
+                processed_tool_messages = self._process_tool_message_pairs(
+                    tool_calls_messages, remove_tags=False
+                )
+
+                contexts.extend(processed_tool_messages)
 
             contexts.append(
                 {"role": "assistant", "content": llm_response.completion_text}
@@ -463,3 +548,59 @@ class LLMRequestSubStage(Stage):
             await self.conv_manager.update_conversation(
                 event.unified_msg_origin, req.conversation.cid, history=contexts_to_save
             )
+
+    def _process_tool_message_pairs(self, messages, remove_tags=True):
+        """处理工具调用消息，确保assistant和tool消息成对出现
+
+        Args:
+            messages (list): 消息列表
+            remove_tags (bool): 是否移除_tool_call_history标记
+
+        Returns:
+            list: 处理后的消息列表，保证了assistant和对应tool消息的成对出现
+        """
+        result = []
+        i = 0
+
+        while i < len(messages):
+            current_msg = messages[i]
+
+            # 普通消息直接添加
+            if "_tool_call_history" not in current_msg:
+                result.append(current_msg.copy() if remove_tags else current_msg)
+                i += 1
+                continue
+
+            # 工具调用消息成对处理
+            if current_msg.get("role") == "assistant" and "tool_calls" in current_msg:
+                assistant_msg = current_msg.copy()
+
+                if remove_tags and "_tool_call_history" in assistant_msg:
+                    del assistant_msg["_tool_call_history"]
+
+                related_tools = []
+                j = i + 1
+                while (
+                    j < len(messages)
+                    and messages[j].get("role") == "tool"
+                    and "_tool_call_history" in messages[j]
+                ):
+                    tool_msg = messages[j].copy()
+
+                    if remove_tags:
+                        del tool_msg["_tool_call_history"]
+
+                    related_tools.append(tool_msg)
+                    j += 1
+
+                # 成对的时候添加到结果
+                if related_tools:
+                    result.append(assistant_msg)
+                    result.extend(related_tools)
+
+                i = j  # 跳过已处理
+            else:
+                # 单独的tool消息
+                i += 1
+
+        return result

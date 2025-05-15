@@ -12,6 +12,7 @@ from astrbot.core import logger
 from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
+from astrbot.core.utils.path_util import path_Mapping
 
 
 @register_stage
@@ -25,37 +26,20 @@ class RespondStage(Stage):
         Comp.Record: lambda comp: bool(comp.file),  # 语音
         Comp.Video: lambda comp: bool(comp.file),  # 视频
         Comp.At: lambda comp: bool(comp.qq) or bool(comp.name),  # @
-        Comp.AtAll: lambda comp: True,  # @所有人
-        Comp.RPS: lambda comp: True,  # 不知道是啥(未完成)
-        Comp.Dice: lambda comp: True,  # 骰子(未完成)
-        Comp.Shake: lambda comp: True,  # 摇一摇(未完成)
-        Comp.Anonymous: lambda comp: True,  # 匿名(未完成)
-        Comp.Share: lambda comp: bool(comp.url) and bool(comp.title),  # 分享
-        Comp.Contact: lambda comp: True,  # 联系人(未完成)
-        Comp.Location: lambda comp: bool(comp.lat and comp.lon),  # 位置
-        Comp.Music: lambda comp: bool(comp._type)
-        and bool(comp.url)
-        and bool(comp.audio),  # 音乐
         Comp.Image: lambda comp: bool(comp.file),  # 图片
         Comp.Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
-        Comp.RedBag: lambda comp: bool(comp.title),  # 红包
         Comp.Poke: lambda comp: comp.id != 0 and comp.qq != 0,  # 戳一戳
-        Comp.Forward: lambda comp: bool(comp.id and comp.id.strip()),  # 转发
         Comp.Node: lambda comp: bool(comp.name)
         and comp.uin != 0
         and bool(comp.content),  # 一个转发节点
         Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
-        Comp.Xml: lambda comp: bool(comp.data and comp.data.strip()),  # XML
-        Comp.Json: lambda comp: bool(comp.data),  # JSON
-        Comp.CardImage: lambda comp: bool(comp.file),  # 卡片图片
-        Comp.TTS: lambda comp: bool(comp.text and comp.text.strip()),  # 语音合成
-        Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),  # 未知消息
-        Comp.File: lambda comp: bool(comp.file),  # 文件
-        Comp.WechatEmoji: lambda comp: bool(comp.md5),  # 微信表情
+        Comp.File: lambda comp: bool(comp.file_ or comp.url),
     }
 
     async def initialize(self, ctx: PipelineContext):
         self.ctx = ctx
+        self.config = ctx.astrbot_config
+        self.platform_settings: dict = self.config.get("platform_settings", {})
 
         self.reply_with_mention = ctx.astrbot_config["platform_settings"][
             "reply_with_mention"
@@ -126,8 +110,6 @@ class RespondStage(Stage):
             if comp_type in self._component_validators:
                 if self._component_validators[comp_type](comp):
                     return False
-            else:
-                logger.info(f"空内容检查: 无法识别的组件类型: {comp_type.__name__}")
 
         # 如果所有组件都为空
         return True
@@ -143,12 +125,23 @@ class RespondStage(Stage):
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
             # 流式结果直接交付平台适配器处理
+            use_fallback = self.config.get("provider_settings", {}).get(
+                "streaming_segmented", False
+            )
             logger.info(f"应用流式输出({event.get_platform_name()})")
             await event._pre_send()
-            await event.send_streaming(result.async_stream)
+            await event.send_streaming(result.async_stream, use_fallback)
             await event._post_send()
             return
         elif len(result.chain) > 0:
+            # 检查路径映射
+            if mappings := self.platform_settings.get("path_mapping", []):
+                for idx, component in enumerate(result.chain):
+                    if isinstance(component, Comp.File) and component.file:
+                        # 支持 File 消息段的路径映射。
+                        component.file = path_Mapping(mappings, component.file)
+                        event.get_result().chain[idx] = component
+
             await event._pre_send()
 
             # 检查消息链是否为空
@@ -191,6 +184,7 @@ class RespondStage(Stage):
                 try:
                     await event.send(result)
                 except Exception as e:
+                    logger.error(traceback.format_exc())
                     logger.error(f"发送消息失败: {e} chain: {result.chain}")
             await event._post_send()
             logger.info(

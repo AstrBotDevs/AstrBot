@@ -175,7 +175,15 @@ class ConversationManager:
             if record["role"] == "user":
                 temp_contexts.append(f"User: {record['content']}")
             elif record["role"] == "assistant":
-                temp_contexts.append(f"Assistant: {record['content']}")
+                if "content" in record and record["content"]:
+                    temp_contexts.append(f"Assistant: {record['content']}")
+                elif "tool_calls" in record:
+                    tool_calls_str = json.dumps(
+                        record["tool_calls"], ensure_ascii=False
+                    )
+                    temp_contexts.append(f"Assistant: [函数调用] {tool_calls_str}")
+                else:
+                    temp_contexts.append("Assistant: [未知的内容]")
                 contexts.insert(0, temp_contexts)
                 temp_contexts = []
 

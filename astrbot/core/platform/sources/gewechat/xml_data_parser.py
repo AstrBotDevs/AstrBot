@@ -1,6 +1,11 @@
 from defusedxml import ElementTree as eT
 from astrbot.api import logger
-from astrbot.api.message_components import WechatEmoji as Emoji, Reply, Plain
+from astrbot.api.message_components import (
+    WechatEmoji as Emoji,
+    Reply,
+    Plain,
+    BaseMessageComponent,
+)
 
 
 class GeweDataParser:
@@ -11,7 +16,7 @@ class GeweDataParser:
     def _format_to_xml(self):
         return eT.fromstring(self.data)
 
-    def parse_mutil_49(self):
+    def parse_mutil_49(self) -> list[BaseMessageComponent] | None:
         appmsg_type = self._format_to_xml().find(".//appmsg/type")
         if appmsg_type is None:
             return
@@ -34,13 +39,18 @@ class GeweDataParser:
         except Exception as e:
             logger.error(f"gewechat: parse_emoji failed, {e}")
 
-    def parse_reply(self) -> Reply | None:
+    def parse_reply(self) -> list[Reply, Plain] | None:
+        """解析引用消息
+
+        Returns:
+            list[Reply, Plain]: 一个包含两个元素的列表。Reply 消息对象和引用者说的文本内容。微信平台下引用消息时只能发送文本消息。
+        """
         try:
             replied_id = -1
             replied_uid = 0
             replied_nickname = ""
-            replied_content = ""
-            content = ""
+            replied_content = ""  # 被引用者说的内容
+            content = ""  # 引用者说的内容
 
             root = self._format_to_xml()
             refermsg = root.find(".//refermsg")
@@ -57,22 +67,44 @@ class GeweDataParser:
                 if displayname is not None:
                     replied_nickname = displayname.text
                 if refermsg_content is not None:
-                    replied_content = refermsg_content.text
+                    # 处理引用嵌套，包括嵌套公众号消息
+                    if refermsg_content.text.startswith(
+                        "<msg>"
+                    ) or refermsg_content.text.startswith("<?xml"):
+                        try:
+                            logger.debug("gewechat: Reference message is nested")
+                            refer_root = eT.fromstring(refermsg_content.text)
+                            img = refer_root.find("img")
+                            if img is not None:
+                                replied_content = "[图片]"
+                            else:
+                                app_msg = refer_root.find("appmsg")
+                                refermsg_content_title = app_msg.find("title")
+                                logger.debug(
+                                    f"gewechat: Reference message nesting: {refermsg_content_title.text}"
+                                )
+                                replied_content = refermsg_content_title.text
+                        except Exception as e:
+                            logger.error(f"gewechat: nested failed, {e}")
+                            # 处理异常情况
+                            replied_content = refermsg_content.text
+                    else:
+                        replied_content = refermsg_content.text
 
                 # 提取引用者说的内容
             title = root.find(".//appmsg/title")
             if title is not None:
                 content = title.text
 
-            r = Reply(
+            reply_seg = Reply(
                 id=replied_id,
-                chain=[Plain(content)],
+                chain=[Plain(replied_content)],
                 sender_id=replied_uid,
                 sender_nickname=replied_nickname,
-                sender_str=replied_content,
-                message_str=content,
+                message_str=replied_content,
             )
-            return r
+            plain_seg = Plain(content)
+            return [reply_seg, plain_seg]
 
         except Exception as e:
             logger.error(f"gewechat: parse_reply failed, {e}")

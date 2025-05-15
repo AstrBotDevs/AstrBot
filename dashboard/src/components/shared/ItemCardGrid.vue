@@ -114,19 +114,6 @@ export default {
   justify-content: space-between;
 }
 
-.item-status-indicator {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 4px;
-  background-color: #e0e0e0;
-}
-
-.item-status-indicator.active {
-  background-color: #4CAF50;
-}
-
 .hover-elevation:hover {
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
   transform: translateY(-2px);

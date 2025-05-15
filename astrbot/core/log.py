@@ -25,6 +25,7 @@ import logging
 import colorlog
 import asyncio
 import os
+import sys
 from collections import deque
 from asyncio import Queue
 from typing import List
@@ -171,7 +172,9 @@ class LogManager:
         if logger.hasHandlers():
             return logger
         # 如果logger没有处理器
-        console_handler = logging.StreamHandler()  # 创建一个StreamHandler用于控制台输出
+        console_handler = logging.StreamHandler(
+            sys.stdout
+        )  # 创建一个StreamHandler用于控制台输出
         console_handler.setLevel(
             logging.DEBUG
         )  # 将日志级别设置为DEBUG(最低级别, 显示所有日志), *如果插件没有设置级别, 默认为DEBUG

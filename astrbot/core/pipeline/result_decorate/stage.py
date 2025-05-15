@@ -151,9 +151,9 @@ class ResultDecorateStage(Stage):
                                 # 不分段回复
                                 new_chain.append(comp)
                                 continue
-                            split_response = []
-                            for line in comp.text.split("\n"):
-                                split_response.extend(re.findall(self.regex, line))
+                            split_response = re.findall(
+                                self.regex, comp.text, re.DOTALL | re.MULTILINE
+                            )
                             if not split_response:
                                 new_chain.append(comp)
                                 continue
@@ -184,6 +184,8 @@ class ResultDecorateStage(Stage):
                                 new_chain.append(
                                     Record(file=audio_path, url=audio_path)
                                 )
+                                if(self.ctx.astrbot_config["provider_tts_settings"]["dual_output"]):
+                                    new_chain.append(comp)
                             else:
                                 logger.error(
                                     f"由于 TTS 音频文件没找到，消息段转语音失败: {comp.text}"

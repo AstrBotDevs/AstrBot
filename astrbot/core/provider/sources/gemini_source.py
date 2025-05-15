@@ -1,121 +1,55 @@
-import base64
-import aiohttp
-import json
-import random
 import asyncio
+import base64
+import json
+import logging
+import random
+from typing import Optional
+from collections.abc import AsyncGenerator
+
+from google import genai
+from google.genai import types
+from google.genai.errors import APIError
+
 import astrbot.core.message.components as Comp
-from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.io import download_image_by_url
-from astrbot.core.db import BaseDatabase
-from astrbot.api.provider import Provider, Personality
 from astrbot import logger
+from astrbot.api.provider import Personality, Provider
+from astrbot.core.db import BaseDatabase
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 from astrbot.core.provider.func_tool_manager import FuncCall
-from typing import List
+from astrbot.core.utils.io import download_image_by_url
+
 from ..register import register_provider_adapter
-from astrbot.core.provider.entities import LLMResponse
 
 
-class SimpleGoogleGenAIClient:
-    def __init__(self, api_key: str, api_base: str, timeout: int = 120) -> None:
-        self.api_key = api_key
-        if api_base.endswith("/"):
-            self.api_base = api_base[:-1]
-        else:
-            self.api_base = api_base
-        self.client = aiohttp.ClientSession(trust_env=True)
-        self.timeout = timeout
+class SuppressNonTextPartsWarning(logging.Filter):
+    """过滤 Gemini SDK 中的非文本部分警告"""
 
-    async def models_list(self) -> List[str]:
-        request_url = f"{self.api_base}/v1beta/models?key={self.api_key}"
-        async with self.client.get(request_url, timeout=self.timeout) as resp:
-            response = await resp.json()
+    def filter(self, record):
+        return "there are non-text parts in the response" not in record.getMessage()
 
-            models = []
-            for model in response["models"]:
-                if "generateContent" in model["supportedGenerationMethods"]:
-                    models.append(model["name"].replace("models/", ""))
-            return models
 
-    async def generate_content(
-        self,
-        contents: List[dict],
-        model: str = "gemini-1.5-flash",
-        system_instruction: str = "",
-        tools: dict = None,
-        modalities: List[str] = ["Text"],
-        safety_settings: List[dict] = [],
-    ):
-        payload = {}
-        if system_instruction:
-            payload["system_instruction"] = {"parts": {"text": system_instruction}}
-        if tools:
-            payload["tools"] = [tools]
-        payload["contents"] = contents
-        payload["generationConfig"] = {
-            "responseModalities": modalities,
-        }
-        payload["safetySettings"] = [
-            {"category": s["category"], "threshold": s["threshold"]}
-            for s in safety_settings
-        ]
-        logger.debug(f"payload: {payload}")
-        request_url = (
-            f"{self.api_base}/v1beta/models/{model}:generateContent?key={self.api_key}"
-        )
-        async with self.client.post(
-            request_url, json=payload, timeout=self.timeout
-        ) as resp:
-            if "application/json" in resp.headers.get("Content-Type"):
-                try:
-                    response = await resp.json()
-                except Exception as e:
-                    text = await resp.text()
-                    logger.error(f"Gemini 返回了非 json 数据: {text}")
-                    raise e
-                return response
-            else:
-                text = await resp.text()
-                logger.error(f"Gemini 返回了非 json 数据: {text}")
-                raise Exception("Gemini 返回了非 json 数据： ")
+logging.getLogger("google_genai.types").addFilter(SuppressNonTextPartsWarning())
 
-    async def stream_generate_content(
-        self,
-        contents: List[dict],
-        model: str = "gemini-1.5-flash",
-        system_instruction: str = "",
-        tools: dict = None,
-        modalities: List[str] = ["Text"],
-        safety_settings: List[dict] = [],
-    ):
-        payload = {}
-        if system_instruction:
-            payload["system_instruction"] = {"parts": {"text": system_instruction}}
-        if tools:
-            payload["tools"] = [tools]
-        payload["contents"] = contents
-        payload["generationConfig"] = {
-            "responseModalities": modalities,
-            "stream": True,
-        }
-        payload["safetySettings"] = [
-            {"category": s["category"], "threshold": s["threshold"]}
-            for s in safety_settings
-        ]
-        logger.debug(f"payload: {payload}")
-        request_url = (
-            f"{self.api_base}/v1beta/models/{model}:streamGenerateContent?key={self.api_key}"
-        )
-        async with self.client.post(
-            request_url, json=payload, timeout=self.timeout
-        ) as resp:
-            async for line in resp.content:
-                if line:
-                    yield line
 
 @register_provider_adapter(
     "googlegenai_chat_completion", "Google Gemini Chat Completion 提供商适配器"
 )
 class ProviderGoogleGenAI(Provider):
+    CATEGORY_MAPPING = {
+        "harassment": types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+        "hate_speech": types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        "sexually_explicit": types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        "dangerous_content": types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    }
+
+    THRESHOLD_MAPPING = {
+        "BLOCK_NONE": types.HarmBlockThreshold.BLOCK_NONE,
+        "BLOCK_ONLY_HIGH": types.HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        "BLOCK_MEDIUM_AND_ABOVE": types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        "BLOCK_LOW_AND_ABOVE": types.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    }
+
     def __init__(
         self,
         provider_config: dict,
@@ -131,196 +65,416 @@ class ProviderGoogleGenAI(Provider):
             db_helper,
             default_persona,
         )
-        self.chosen_api_key = None
-        self.api_keys: List = provider_config.get("key", [])
-        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
-        self.timeout = provider_config.get("timeout", 180)
-        if isinstance(self.timeout, str):
-            self.timeout = int(self.timeout)
-        self.client = SimpleGoogleGenAIClient(
-            api_key=self.chosen_api_key,
-            api_base=provider_config.get("api_base", None),
-            timeout=self.timeout,
-        )
+        self.api_keys: list = provider_config.get("key", [])
+        self.chosen_api_key: str = self.api_keys[0] if len(self.api_keys) > 0 else None
+        self.timeout: int = int(provider_config.get("timeout", 180))
+
+        self.api_base: Optional[str] = provider_config.get("api_base", None)
+        if self.api_base and self.api_base.endswith("/"):
+            self.api_base = self.api_base[:-1]
+
+        self._init_client()
         self.set_model(provider_config["model_config"]["model"])
+        self._init_safety_settings()
 
-        safety_mapping = {
-            "harassment": "HARM_CATEGORY_HARASSMENT",
-            "hate_speech": "HARM_CATEGORY_HATE_SPEECH",
-            "sexually_explicit": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            "dangerous_content": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        }
+    def _init_client(self) -> None:
+        """初始化Gemini客户端"""
+        self.client = genai.Client(
+            api_key=self.chosen_api_key,
+            http_options=types.HttpOptions(
+                base_url=self.api_base,
+                timeout=self.timeout * 1000,  # 毫秒
+            ),
+        ).aio
 
-        self.safety_settings = []
+    def _init_safety_settings(self) -> None:
+        """初始化安全设置"""
         user_safety_config = self.provider_config.get("gm_safety_settings", {})
-        for config_key, harm_category in safety_mapping.items():
-            if threshold := user_safety_config.get(config_key):
-                self.safety_settings.append(
-                    {"category": harm_category, "threshold": threshold}
-                )
+        self.safety_settings = [
+            types.SafetySetting(
+                category=harm_category, threshold=self.THRESHOLD_MAPPING[threshold_str]
+            )
+            for config_key, harm_category in self.CATEGORY_MAPPING.items()
+            if (threshold_str := user_safety_config.get(config_key))
+            and threshold_str in self.THRESHOLD_MAPPING
+        ]
 
-    async def get_models(self):
-        return await self.client.models_list()
+    async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
+        """处理API错误，返回是否需要重试"""
+        if e.code == 429 or "API key not valid" in e.message:
+            keys.remove(self.chosen_api_key)
+            if len(keys) > 0:
+                self.set_key(random.choice(keys))
+                logger.info(
+                    f"检测到 Key 异常({e.message})，正在尝试更换 API Key 重试... 当前 Key: {self.chosen_api_key[:12]}..."
+                )
+                await asyncio.sleep(1)
+                return True
+            else:
+                logger.error(
+                    f"检测到 Key 异常({e.message})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}..."
+                )
+                raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
+        else:
+            logger.error(
+                f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}"
+            )
+            raise e
+
+    async def _prepare_query_config(
+        self,
+        payloads: dict,
+        tools: Optional[FuncCall] = None,
+        system_instruction: Optional[str] = None,
+        modalities: Optional[list[str]] = None,
+        temperature: float = 0.7,
+    ) -> types.GenerateContentConfig:
+        """准备查询配置"""
+        if not modalities:
+            modalities = ["Text"]
+
+        # 流式输出不支持图片模态
+        if (
+            self.provider_settings.get("streaming_response", False)
+            and "Image" in modalities
+        ):
+            logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
+            modalities = ["Text"]
+
+        tool_list = None
+        native_coderunner = self.provider_config.get("gm_native_coderunner", False)
+        native_search = self.provider_config.get("gm_native_search", False)
+
+        if native_coderunner:
+            tool_list = [types.Tool(code_execution=types.ToolCodeExecution())]
+            if native_search:
+                logger.warning("已启用代码执行工具，搜索工具将被忽略")
+            if tools:
+                logger.warning("已启用代码执行工具，函数工具将被忽略")
+        elif native_search:
+            tool_list = [types.Tool(google_search=types.GoogleSearch())]
+            if tools:
+                logger.warning("已启用搜索工具，函数工具将被忽略")
+        elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
+            tool_list = [
+                types.Tool(function_declarations=func_desc["function_declarations"])
+            ]
+        return types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=temperature,
+            max_output_tokens=payloads.get("max_tokens")
+            or payloads.get("maxOutputTokens"),
+            top_p=payloads.get("top_p") or payloads.get("topP"),
+            top_k=payloads.get("top_k") or payloads.get("topK"),
+            frequency_penalty=payloads.get("frequency_penalty")
+            or payloads.get("frequencyPenalty"),
+            presence_penalty=payloads.get("presence_penalty")
+            or payloads.get("presencePenalty"),
+            stop_sequences=payloads.get("stop") or payloads.get("stopSequences"),
+            response_logprobs=payloads.get("response_logprobs")
+            or payloads.get("responseLogprobs"),
+            logprobs=payloads.get("logprobs"),
+            seed=payloads.get("seed"),
+            response_modalities=modalities,
+            tools=tool_list,
+            safety_settings=self.safety_settings if self.safety_settings else None,
+            thinking_config=types.ThinkingConfig(
+                thinking_budget=min(
+                    int(
+                        self.provider_config.get("gm_thinking_config", {}).get(
+                            "budget", 0
+                        )
+                    ),
+                    24576,
+                ),
+            )
+            if "gemini-2.5-flash" in self.get_model()
+            and hasattr(types.ThinkingConfig, "thinking_budget")
+            else None,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
+        )
+
+    def _prepare_conversation(self, payloads: dict) -> list[types.Content]:
+        """准备 Gemini SDK 的 Content 列表"""
+
+        def create_text_part(text: str) -> types.Part:
+            content_a = text if text else " "
+            if not text:
+                logger.warning("文本内容为空，已添加空格占位")
+            return types.Part.from_text(text=content_a)
+
+        def process_image_url(image_url_dict: dict) -> types.Part:
+            url = image_url_dict["url"]
+            mime_type = url.split(":")[1].split(";")[0]
+            image_bytes = base64.b64decode(url.split(",", 1)[1])
+            return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+
+        def append_or_extend(
+            contents: list[types.Content],
+            part: list[types.Part],
+            content_cls: type[types.Content],
+        ) -> None:
+            if contents and isinstance(contents[-1], content_cls):
+                contents[-1].parts.extend(part)
+            else:
+                contents.append(content_cls(parts=part))
+
+        gemini_contents: list[types.Content] = []
+        native_tool_enabled = any(
+            [
+                self.provider_config.get("gm_native_coderunner", False),
+                self.provider_config.get("gm_native_search", False),
+            ]
+        )
+        for message in payloads["messages"]:
+            role, content = message["role"], message.get("content")
+
+            if role == "user":
+                if isinstance(content, list):
+                    parts = [
+                        types.Part.from_text(text=item["text"] or " ")
+                        if item["type"] == "text"
+                        else process_image_url(item["image_url"])
+                        for item in content
+                    ]
+                else:
+                    parts = [create_text_part(content)]
+                append_or_extend(gemini_contents, parts, types.UserContent)
+
+            elif role == "assistant":
+                if content:
+                    parts = [types.Part.from_text(text=content)]
+                    append_or_extend(gemini_contents, parts, types.ModelContent)
+                elif not native_tool_enabled and "tool_calls" in message:
+                    parts = [
+                        types.Part.from_function_call(
+                            name=tool["function"]["name"],
+                            args=json.loads(tool["function"]["arguments"]),
+                        )
+                        for tool in message["tool_calls"]
+                    ]
+                    append_or_extend(gemini_contents, parts, types.ModelContent)
+                else:
+                    logger.warning("assistant 角色的消息内容为空，已添加空格占位")
+                    if native_tool_enabled and "tool_calls" in message:
+                        logger.warning(
+                            "检测到启用Gemini原生工具，且上下文中存在函数调用，建议使用 /reset 重置上下文"
+                        )
+                    parts = [types.Part.from_text(text=" ")]
+                    append_or_extend(gemini_contents, parts, types.ModelContent)
+
+            elif role == "tool" and not native_tool_enabled:
+                parts = [
+                    types.Part.from_function_response(
+                        name=message["tool_call_id"],
+                        response={
+                            "name": message["tool_call_id"],
+                            "content": message["content"],
+                        },
+                    )
+                ]
+                append_or_extend(gemini_contents, parts, types.UserContent)
+
+        if gemini_contents and isinstance(gemini_contents[0], types.ModelContent):
+            gemini_contents.pop()
+
+        return gemini_contents
+
+    @staticmethod
+    def _process_content_parts(
+        result: types.GenerateContentResponse, llm_response: LLMResponse
+    ) -> MessageChain:
+        """处理内容部分并构建消息链"""
+        finish_reason = result.candidates[0].finish_reason
+        result_parts: Optional[types.Part] = result.candidates[0].content.parts
+
+        if finish_reason == types.FinishReason.SAFETY:
+            raise Exception("模型生成内容未通过用户定义的内容安全检查")
+
+        if finish_reason in {
+            types.FinishReason.PROHIBITED_CONTENT,
+            types.FinishReason.SPII,
+            types.FinishReason.BLOCKLIST,
+        }:
+            raise Exception("模型生成内容违反Gemini平台政策")
+
+        # 防止旧版本SDK不存在IMAGE_SAFETY
+        if hasattr(types.FinishReason, "IMAGE_SAFETY"):
+            if finish_reason == types.FinishReason.IMAGE_SAFETY:
+                raise Exception("模型生成内容违反Gemini平台政策")
+
+        if not result_parts:
+            logger.debug(result.candidates)
+            raise Exception("API 返回的内容为空。")
+
+        chain = []
+        part: types.Part
+
+        # 暂时这样Fallback
+        if all(
+            part.inline_data and part.inline_data.mime_type.startswith("image/")
+            for part in result_parts
+        ):
+            chain.append(Comp.Plain("这是图片"))
+        for part in result_parts:
+            if part.text:
+                chain.append(Comp.Plain(part.text))
+            elif part.function_call:
+                llm_response.role = "tool"
+                llm_response.tools_call_name.append(part.function_call.name)
+                llm_response.tools_call_args.append(part.function_call.args)
+                # gemini 返回的 function_call.id 可能为 None
+                llm_response.tools_call_ids.append(
+                    part.function_call.id or part.function_call.name
+                )
+            elif part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                chain.append(Comp.Image.fromBytes(part.inline_data.data))
+        return MessageChain(chain=chain)
 
     async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
-        tool = None
-        if tools:
-            tool = tools.get_func_desc_google_genai_style()
-            if not tool:
-                tool = None
+        """非流式请求 Gemini API"""
+        system_instruction = next(
+            (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
+            None,
+        )
 
-        system_instruction = ""
-        for message in payloads["messages"]:
-            if message["role"] == "system":
-                system_instruction = message["content"]
+        modalities = ["Text"]
+        if self.provider_config.get("gm_resp_image_modal", False):
+            modalities.append("Image")
+
+        conversation = self._prepare_conversation(payloads)
+        temperature = payloads.get("temperature", 0.7)
+
+        result: Optional[types.GenerateContentResponse] = None
+        while True:
+            try:
+                config = await self._prepare_query_config(
+                    payloads, tools, system_instruction, modalities, temperature
+                )
+                result = await self.client.models.generate_content(
+                    model=self.get_model(),
+                    contents=conversation,
+                    config=config,
+                )
+
+                if result.candidates[0].finish_reason == types.FinishReason.RECITATION:
+                    if temperature > 2:
+                        raise Exception("温度参数已超过最大值2，仍然发生recitation")
+                    temperature += 0.2
+                    logger.warning(
+                        f"发生了recitation，正在提高温度至{temperature:.1f}重试..."
+                    )
+                    continue
+
                 break
 
-        google_genai_conversation = []
-        for message in payloads["messages"]:
-            if message["role"] == "user":
-                if isinstance(message["content"], str):
-                    if not message["content"]:
-                        message["content"] = ""
-
-                    google_genai_conversation.append(
-                        {"role": "user", "parts": [{"text": message["content"]}]}
+            except APIError as e:
+                if "Developer instruction is not enabled" in e.message:
+                    logger.warning(
+                        f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)"
                     )
-                elif isinstance(message["content"], list):
-                    # images
-                    parts = []
-                    for part in message["content"]:
-                        if part["type"] == "text":
-                            if not part["text"]:
-                                part["text"] = ""
-                            parts.append({"text": part["text"]})
-                        elif part["type"] == "image_url":
-                            parts.append(
-                                {
-                                    "inline_data": {
-                                        "mime_type": "image/jpeg",
-                                        "data": part["image_url"]["url"].replace(
-                                            "data:image/jpeg;base64,", ""
-                                        ),  # base64
-                                    }
-                                }
-                            )
-                    google_genai_conversation.append({"role": "user", "parts": parts})
-
-            elif message["role"] == "assistant":
-                if "content" in message:
-                    if not message["content"]:
-                        message["content"] = ""
-                    google_genai_conversation.append(
-                        {"role": "model", "parts": [{"text": message["content"]}]}
+                    system_instruction = None
+                elif "Function calling is not enabled" in e.message:
+                    logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除")
+                    tools = None
+                elif (
+                    "Multi-modal output is not supported" in e.message
+                    or "Model does not support the requested response modalities"
+                    in e.message
+                    or "only supports text output" in e.message
+                ):
+                    logger.warning(
+                        f"{self.get_model()} 不支持多模态输出，降级为文本模态"
                     )
-                elif "tool_calls" in message:
-                    # tool calls in the last turn
-                    parts = []
-                    for tool_call in message["tool_calls"]:
-                        parts.append(
-                            {
-                                "functionCall": {
-                                    "name": tool_call["function"]["name"],
-                                    "args": json.loads(
-                                        tool_call["function"]["arguments"]
-                                    ),
-                                }
-                            }
-                        )
-                    google_genai_conversation.append({"role": "model", "parts": parts})
-            elif message["role"] == "tool":
-                parts = []
-                parts.append(
-                    {
-                        "functionResponse": {
-                            "name": message["tool_call_id"],
-                            "response": {
-                                "name": message["tool_call_id"],
-                                "content": message["content"],
-                            },
-                        }
-                    }
-                )
-                google_genai_conversation.append({"role": "user", "parts": parts})
+                    modalities = ["Text"]
+                else:
+                    raise
+                continue
 
-        logger.debug(f"google_genai_conversation: {google_genai_conversation}")
-
-        modalites = ["Text"]
-        if self.provider_config.get("gm_resp_image_modal", False):
-            modalites.append("Image")
-
-        loop = True
-        while loop:
-            loop = False
-            result = await self.client.generate_content(
-                contents=google_genai_conversation,
-                model=self.get_model(),
-                system_instruction=system_instruction,
-                tools=tool,
-                modalities=modalites,
-                safety_settings=self.safety_settings,
-            )
-            logger.debug(f"result: {result}")
-
-            # Developer instruction is not enabled for models/gemini-2.0-flash-exp
-            if "Developer instruction is not enabled" in str(result):
-                logger.warning(
-                    f"{self.get_model()} 不支持 system prompt, 已自动去除, 将会影响人格设置。"
-                )
-                system_instruction = ""
-                loop = True
-
-            elif "Function calling is not enabled" in str(result):
-                logger.warning(
-                    f"{self.get_model()} 不支持函数调用，已自动去除，不影响使用。"
-                )
-                tool = None
-                loop = True
-
-            elif "Multi-modal output is not supported" in str(result):
-                logger.warning(
-                    f"{self.get_model()} 不支持多模态输出，降级为文本模态重新请求。"
-                )
-                modalites = ["Text"]
-                loop = True
-
-            elif "candidates" not in result:
-                raise Exception("Gemini 返回异常结果: " + str(result))
-
-        candidates = result["candidates"][0]["content"]["parts"]
         llm_response = LLMResponse("assistant")
-        chain = []
-        for candidate in candidates:
-            if "text" in candidate:
-                chain.append(Comp.Plain(candidate["text"]))
-            elif "functionCall" in candidate:
-                llm_response.role = "tool"
-                llm_response.tools_call_args.append(candidate["functionCall"]["args"])
-                llm_response.tools_call_name.append(candidate["functionCall"]["name"])
-                llm_response.tools_call_ids.append(
-                    candidate["functionCall"]["name"]
-                )  # 没有 tool id
-            elif "inlineData" in candidate:
-                mime_type: str = candidate["inlineData"]["mimeType"]
-                if mime_type.startswith("image/"):
-                    chain.append(Comp.Image.fromBase64(candidate["inlineData"]["data"]))
-
-        llm_response.result_chain = MessageChain(chain=chain)
+        llm_response.result_chain = self._process_content_parts(result, llm_response)
         return llm_response
+
+    async def _query_stream(
+        self, payloads: dict, tools: FuncCall
+    ) -> AsyncGenerator[LLMResponse, None]:
+        """流式请求 Gemini API"""
+        system_instruction = next(
+            (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
+            None,
+        )
+
+        conversation = self._prepare_conversation(payloads)
+
+        result = None
+        while True:
+            try:
+                config = await self._prepare_query_config(
+                    payloads, tools, system_instruction
+                )
+                result = await self.client.models.generate_content_stream(
+                    model=self.get_model(),
+                    contents=conversation,
+                    config=config,
+                )
+                break
+            except APIError as e:
+                if "Developer instruction is not enabled" in e.message:
+                    logger.warning(
+                        f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)"
+                    )
+                    system_instruction = None
+                elif "Function calling is not enabled" in e.message:
+                    logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除")
+                    tools = None
+                else:
+                    raise
+                continue
+
+        async for chunk in result:
+            llm_response = LLMResponse("assistant", is_chunk=True)
+
+            if chunk.candidates[0].content.parts and any(
+                part.function_call for part in chunk.candidates[0].content.parts
+            ):
+                llm_response = LLMResponse("assistant", is_chunk=False)
+                llm_response.result_chain = self._process_content_parts(
+                    chunk, llm_response
+                )
+                yield llm_response
+                break
+
+            if chunk.text:
+                llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
+                yield llm_response
+
+            if chunk.candidates[0].finish_reason:
+                llm_response = LLMResponse("assistant", is_chunk=False)
+                if not chunk.candidates[0].content.parts:
+                    llm_response.result_chain = MessageChain(chain=[Comp.Plain(" ")])
+                else:
+                    llm_response.result_chain = self._process_content_parts(
+                        chunk, llm_response
+                    )
+                yield llm_response
+                break
 
     async def text_chat(
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = None,
+        image_urls: list[str] = None,
         func_tool: FuncCall = None,
-        contexts=[],
-        system_prompt=None,
-        tool_calls_result=None,
+        contexts: list = None,
+        system_prompt: str = None,
+        tool_calls_result: ToolCallsResult = None,
         **kwargs,
     ) -> LLMResponse:
+        if contexts is None:
+            contexts = []
         new_record = await self.assemble_context(prompt, image_urls)
-        context_query = []
         context_query = [*contexts, new_record]
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
@@ -337,82 +491,92 @@ class ProviderGoogleGenAI(Provider):
         model_config["model"] = self.get_model()
 
         payloads = {"messages": context_query, **model_config}
-        llm_response = None
 
         retry = 10
         keys = self.api_keys.copy()
-        chosen_key = random.choice(keys)
 
-        for i in range(retry):
+        for _ in range(retry):
             try:
-                self.client.api_key = chosen_key
-                llm_response = await self._query(payloads, func_tool)
+                return await self._query(payloads, func_tool)
+            except APIError as e:
+                if await self._handle_api_error(e, keys):
+                    continue
                 break
-            except Exception as e:
-                if "429" in str(e) or "API key not valid" in str(e):
-                    keys.remove(chosen_key)
-                    if len(keys) > 0:
-                        chosen_key = random.choice(keys)
-                        logger.info(
-                            f"检测到 Key 异常({str(e)})，正在尝试更换 API Key 重试... 当前 Key: {chosen_key[:12]}..."
-                        )
-                        await asyncio.sleep(1)
-                        continue
-                    else:
-                        logger.error(
-                            f"检测到 Key 异常({str(e)})，且已没有可用的 Key。 当前 Key: {chosen_key[:12]}..."
-                        )
-                        raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
-                else:
-                    logger.error(
-                        f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}"
-                    )
-                    raise e
-
-        return llm_response
 
     async def text_chat_stream(
         self,
-        prompt,
-        session_id=None,
-        image_urls=...,
-        func_tool=None,
-        contexts=...,
-        system_prompt=None,
-        tool_calls_result=None,
+        prompt: str,
+        session_id: str = None,
+        image_urls: list[str] = None,
+        func_tool: FuncCall = None,
+        contexts: str = None,
+        system_prompt: str = None,
+        tool_calls_result: ToolCallsResult = None,
         **kwargs,
-    ):
-        # raise NotImplementedError("This method is not implemented yet.")
-        # 调用 text_chat 模拟流式
-        llm_response = await self.text_chat(
-            prompt=prompt,
-            session_id=session_id,
-            image_urls=image_urls,
-            func_tool=func_tool,
-            contexts=contexts,
-            system_prompt=system_prompt,
-            tool_calls_result=tool_calls_result,
-        )
-        llm_response.is_chunk = True
-        yield llm_response
-        llm_response.is_chunk = False
-        yield llm_response
+    ) -> AsyncGenerator[LLMResponse, None]:
+        if contexts is None:
+            contexts = []
+        new_record = await self.assemble_context(prompt, image_urls)
+        context_query = [*contexts, new_record]
+        if system_prompt:
+            context_query.insert(0, {"role": "system", "content": system_prompt})
+
+        for part in context_query:
+            if "_no_save" in part:
+                del part["_no_save"]
+
+        # tool calls result
+        if tool_calls_result:
+            context_query.extend(tool_calls_result.to_openai_messages())
+
+        model_config = self.provider_config.get("model_config", {})
+        model_config["model"] = self.get_model()
+
+        payloads = {"messages": context_query, **model_config}
+
+        retry = 10
+        keys = self.api_keys.copy()
+
+        for _ in range(retry):
+            try:
+                async for response in self._query_stream(payloads, func_tool):
+                    yield response
+                break
+            except APIError as e:
+                if await self._handle_api_error(e, keys):
+                    continue
+                break
+
+    async def get_models(self):
+        try:
+            models = await self.client.models.list()
+            return [
+                m.name.replace("models/", "")
+                for m in models
+                if "generateContent" in m.supported_actions
+            ]
+        except APIError as e:
+            raise Exception(f"获取模型列表失败: {e.message}")
 
     def get_current_key(self) -> str:
-        return self.client.api_key
+        return self.chosen_api_key
 
-    def get_keys(self) -> List[str]:
+    def get_keys(self) -> list[str]:
         return self.api_keys
 
     def set_key(self, key):
-        self.client.api_key = key
+        self.chosen_api_key = key
+        self._init_client()
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None):
+    async def assemble_context(self, text: str, image_urls: list[str] = None):
         """
         组装上下文。
         """
         if image_urls:
-            user_content = {"role": "user", "content": [{"type": "text", "text": text}]}
+            user_content = {
+                "role": "user",
+                "content": [{"type": "text", "text": text if text else "[图片]"}],
+            }
             for image_url in image_urls:
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)
@@ -444,5 +608,4 @@ class ProviderGoogleGenAI(Provider):
         return ""
 
     async def terminate(self):
-        await self.client.client.close()
         logger.info("Google GenAI 适配器已终止。")

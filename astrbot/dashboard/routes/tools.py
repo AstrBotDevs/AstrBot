@@ -1,10 +1,15 @@
-import os
 import json
+import os
 import traceback
-from .route import Route, Response, RouteContext
+
+import aiohttp
 from quart import request
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+
 from astrbot.core import logger
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+from .route import Response, Route, RouteContext
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
@@ -20,14 +25,14 @@ class ToolsRoute(Route):
             "/tools/mcp/add": ("POST", self.add_mcp_server),
             "/tools/mcp/update": ("POST", self.update_mcp_server),
             "/tools/mcp/delete": ("POST", self.delete_mcp_server),
+            "/tools/mcp/market": ("GET", self.get_mcp_markets),
         }
         self.register_routes()
         self.tool_mgr = self.core_lifecycle.provider_manager.llm_tools
 
     @property
     def mcp_config_path(self):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        data_dir = os.path.abspath(os.path.join(current_dir, "../../../data"))
+        data_dir = get_astrbot_data_path()
         return os.path.join(data_dir, "mcp_server.json")
 
     def load_mcp_config(self):
@@ -78,6 +83,7 @@ class ToolsRoute(Route):
                 ) in self.tool_mgr.mcp_client_dict.items():
                     if name_key == name:
                         server_info["tools"] = [tool.name for tool in mcp_client.tools]
+                        server_info["errlogs"] = mcp_client.server_errlogs
                         break
                 else:
                     server_info["tools"] = []
@@ -105,8 +111,14 @@ class ToolsRoute(Route):
 
             # 复制所有配置字段
             for key, value in server_data.items():
-                if key not in ["name", "active", "tools"]:  # 排除特殊字段
-                    server_config[key] = value
+                if key not in ["name", "active", "tools", "errlogs"]:  # 排除特殊字段
+                    if key == "mcpServers":
+                        key_0 = list(server_data["mcpServers"].keys())[
+                            0
+                        ]  # 不考虑为空的情况
+                        server_config = server_data["mcpServers"][key_0]
+                    else:
+                        server_config[key] = value
                     has_valid_config = True
 
             if not has_valid_config:
@@ -121,13 +133,11 @@ class ToolsRoute(Route):
 
             if self.save_mcp_config(config):
                 # 动态初始化新MCP客户端
-                self.tool_mgr.mcp_service_queue.put_nowait(
-                    {
-                        "type": "init",
-                        "name": name,
-                        "cfg": config["mcpServers"][name],
-                    }
-                )
+                await self.tool_mgr.mcp_service_queue.put({
+                    "type": "init",
+                    "name": name,
+                    "cfg": config["mcpServers"][name],
+                })
                 return Response().ok(None, f"成功添加 MCP 服务器 {name}").__dict__
             else:
                 return Response().error("保存配置失败").__dict__
@@ -162,8 +172,14 @@ class ToolsRoute(Route):
 
             # 复制所有配置字段
             for key, value in server_data.items():
-                if key not in ["name", "active", "tools"]:  # 排除特殊字段
-                    server_config[key] = value
+                if key not in ["name", "active", "tools", "errlogs"]:  # 排除特殊字段
+                    if key == "mcpServers":
+                        key_0 = list(server_data["mcpServers"].keys())[
+                            0
+                        ]  # 不考虑为空的情况
+                        server_config = server_data["mcpServers"][key_0]
+                    else:
+                        server_config[key] = value
                     only_update_active = False
 
             # 如果只更新活动状态，保留原始配置
@@ -179,37 +195,29 @@ class ToolsRoute(Route):
                 if active:
                     # 如果要激活服务器或者配置已更改
                     if name in self.tool_mgr.mcp_client_dict or not only_update_active:
-                        await self.tool_mgr.mcp_service_queue.put(
-                            {
-                                "type": "terminate",
-                                "name": name,
-                            }
-                        )
-                        await self.tool_mgr.mcp_service_queue.put(
-                            {
-                                "type": "init",
-                                "name": name,
-                                "cfg": config["mcpServers"][name],
-                            }
-                        )
+                        await self.tool_mgr.mcp_service_queue.put({
+                            "type": "terminate",
+                            "name": name,
+                        })
+                        await self.tool_mgr.mcp_service_queue.put({
+                            "type": "init",
+                            "name": name,
+                            "cfg": config["mcpServers"][name],
+                        })
                     else:
                         # 客户端不存在，初始化
-                        self.tool_mgr.mcp_service_queue.put_nowait(
-                            {
-                                "type": "init",
-                                "name": name,
-                                "cfg": config["mcpServers"][name],
-                            }
-                        )
+                        await self.tool_mgr.mcp_service_queue.put({
+                            "type": "init",
+                            "name": name,
+                            "cfg": config["mcpServers"][name],
+                        })
                 else:
                     # 如果要停用服务器
                     if name in self.tool_mgr.mcp_client_dict:
-                        self.tool_mgr.mcp_service_queue.put_nowait(
-                            {
-                                "type": "terminate",
-                                "name": name,
-                            }
-                        )
+                        self.tool_mgr.mcp_service_queue.put_nowait({
+                            "type": "terminate",
+                            "name": name,
+                        })
 
                 return Response().ok(None, f"成功更新 MCP 服务器 {name}").__dict__
             else:
@@ -237,12 +245,10 @@ class ToolsRoute(Route):
             if self.save_mcp_config(config):
                 # 关闭并删除MCP客户端
                 if name in self.tool_mgr.mcp_client_dict:
-                    self.tool_mgr.mcp_service_queue.put_nowait(
-                        {
-                            "type": "terminate",
-                            "name": name,
-                        }
-                    )
+                    self.tool_mgr.mcp_service_queue.put_nowait({
+                        "type": "terminate",
+                        "name": name,
+                    })
 
                 return Response().ok(None, f"成功删除 MCP 服务器 {name}").__dict__
             else:
@@ -250,3 +256,28 @@ class ToolsRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"删除 MCP 服务器失败: {str(e)}").__dict__
+
+    async def get_mcp_markets(self):
+        page = request.args.get("page", 1, type=int)
+        page_size = request.args.get("page_size", 10, type=int)
+        BASE_URL = (
+            "https://api.soulter.top/astrbot/mcpservers?page={}&page_size={}".format(
+                page,
+                page_size,
+            )
+        )
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{BASE_URL}") as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return Response().ok(data["data"]).__dict__
+                    else:
+                        return (
+                            Response()
+                            .error(f"获取市场数据失败: HTTP {response.status}")
+                            .__dict__
+                        )
+        except Exception as _:
+            logger.error(traceback.format_exc())
+        return Response().error("获取市场数据失败").__dict__

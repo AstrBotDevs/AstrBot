@@ -1,4 +1,5 @@
 import asyncio
+import os
 import uuid
 import aiohttp
 import dingtalk_stream
@@ -19,6 +20,7 @@ from ...register import register_platform_adapter
 from astrbot import logger
 from dingtalk_stream import AckMessage
 from astrbot.core.utils.io import download_file
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class MyEventHandler(dingtalk_stream.EventHandler):
@@ -152,7 +154,8 @@ class DingtalkPlatformAdapter(Platform):
             "downloadCode": download_code,
             "robotCode": robot_code,
         }
-        f_path = f"data/dingtalk_file_{uuid.uuid4()}.{ext}"
+        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        f_path = os.path.join(temp_dir, f"dingtalk_file_{uuid.uuid4()}.{ext}")
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 "https://api.dingtalk.com/v1.0/robot/messageFiles/download",

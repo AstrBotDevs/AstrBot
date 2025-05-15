@@ -145,7 +145,9 @@ class PluginRoute(Route):
             if handler.event_type == EventType.AdapterMessageEvent:
                 # 处理平台适配器消息事件
                 has_admin = False
-                for filter in (
+                for (
+                    filter
+                ) in (
                     handler.event_filters
                 ):  # 正常handler就只有 1~2 个 filter，因此这里时间复杂度不会太高
                     if isinstance(filter, CommandFilter):

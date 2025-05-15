@@ -99,15 +99,13 @@ import 'highlight.js/styles/github.css';
   
                                 </template>
                                 <template v-slot:item.stars="{ item }">
-                                    <a :href="item.repo">
-                                        <img v-if="item.repo" 
-                                        :src="`https://img.shields.io/github/stars/${item.repo.split('/').slice(-2).join('/')}.svg`" 
-                                        :alt="`Stars for ${item.name}`"
-                                        style="height: 20px;"
-                                    />
-                                    </a>
-                                    
+                                    <span>{{ item.stars }}</span>
                                 </template>
+                                <template v-slot:item.updated_at="{ item }">
+                                    <!-- 2025-04-28T16:39:27Z -->
+                                    <span>{{ new Date(item.updated_at).toLocaleString() }}</span>
+                                </template>
+
                                 <template v-slot:item.tags="{ item }">
                                     <span v-if="item.tags.length === 0">无</span>
                                     <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="x-small">{{ tag
@@ -283,6 +281,7 @@ export default {
                 { title: '描述', key: 'desc', maxWidth: '250px' },
                 { title: '作者', key: 'author', maxWidth: '70px' },
                 { title: 'Star数', key: 'stars', maxWidth: '100px' },
+                { title: '最近更新', key: 'updated_at', maxWidth: '100px' },
                 { title: '标签', key: 'tags', maxWidth: '100px' },
                 { title: '操作', key: 'actions', sortable: false }
             ],

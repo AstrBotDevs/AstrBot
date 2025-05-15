@@ -3,16 +3,20 @@ import json
 import textwrap
 import os
 import asyncio
-import copy
+import logging
 
 from typing import Dict, List, Awaitable, Literal, Any
 from dataclasses import dataclass
 from typing import Optional
 from contextlib import AsyncExitStack
 from astrbot import logger
+from astrbot.core.utils.log_pipe import LogPipe
+
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 try:
     import mcp
+    from mcp.client.sse import sse_client
 except (ModuleNotFoundError, ImportError):
     logger.warning("警告: 缺少依赖库 'mcp'，将无法使用 MCP 服务。")
 
@@ -87,26 +91,58 @@ class MCPClient:
         self.name = None
         self.active: bool = True
         self.tools: List[mcp.Tool] = []
+        self.server_errlogs: List[str] = []
 
-    async def connect_to_server(self, mcp_server_config: dict):
-        """Connect to an MCP server
+    async def connect_to_server(self, mcp_server_config: dict, name: str):
+        """连接到 MCP 服务器
+
+        如果 `url` 参数存在，则使用 SSE 的方式连接到 MCP 服务。
 
         Args:
             mcp_server_config (dict): Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
         """
         cfg = mcp_server_config.copy()
-        cfg.pop("active", None)
-        server_params = mcp.StdioServerParameters(
-            **cfg,
-        )
+        if "mcpServers" in cfg and len(cfg["mcpServers"]) > 0:
+            key_0 = list(cfg["mcpServers"].keys())[0]
+            cfg = cfg["mcpServers"][key_0]
+        cfg.pop("active", None)  # Remove active flag from config
 
-        stdio_transport = await self.exit_stack.enter_async_context(
-            mcp.stdio_client(server_params)
-        )
-        self.stdio, self.write = stdio_transport
-        self.session = await self.exit_stack.enter_async_context(
-            mcp.ClientSession(self.stdio, self.write)
-        )
+        if "url" in cfg:
+            # SSE transport method
+            self._streams_context = sse_client(url=cfg["url"])
+            streams = await self._streams_context.__aenter__()
+
+            # Create a new client session
+            # self.session = await self._session_context.__aenter__()
+            self.session = await self.exit_stack.enter_async_context(
+                mcp.ClientSession(*streams)
+            )
+
+        else:
+            server_params = mcp.StdioServerParameters(
+                **cfg,
+            )
+
+            def callback(msg: str):
+                # 处理 MCP 服务的错误日志
+                self.server_errlogs.append(msg)
+
+            stdio_transport = await self.exit_stack.enter_async_context(
+                mcp.stdio_client(
+                    server_params,
+                    errlog=LogPipe(
+                        level=logging.ERROR,
+                        logger=logger,
+                        identifier=f"MCPServer-{name}",
+                        callback=callback,
+                    ),
+                ),
+            )
+
+            # Create a new client session
+            self.session = await self.exit_stack.enter_async_context(
+                mcp.ClientSession(*stdio_transport)
+            )
 
         await self.session.initialize()
 
@@ -204,8 +240,7 @@ class FuncCall:
         }
         ```
         """
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        data_dir = os.path.abspath(os.path.join(current_dir, "../../../data"))
+        data_dir = get_astrbot_data_path()
 
         mcp_json_file = os.path.join(data_dir, "mcp_server.json")
         if not os.path.exists(mcp_json_file):
@@ -260,6 +295,13 @@ class FuncCall:
                     if data["name"] in self.mcp_client_event:
                         self.mcp_client_event[data["name"]].set()
                         self.mcp_client_event.pop(data["name"], None)
+                        self.func_list = [
+                            f
+                            for f in self.func_list
+                            if not (
+                                f.origin == "mcp" and f.mcp_server_name == data["name"]
+                            )
+                        ]
                 else:
                     for name in self.mcp_client_dict.keys():
                         # await self._terminate_mcp_client(name)
@@ -267,6 +309,7 @@ class FuncCall:
                         if name in self.mcp_client_event:
                             self.mcp_client_event[name].set()
                             self.mcp_client_event.pop(name, None)
+                    self.func_list = [f for f in self.func_list if f.origin != "mcp"]
 
     async def _init_mcp_client_task_wrapper(
         self, name: str, cfg: dict, event: asyncio.Event
@@ -278,6 +321,9 @@ class FuncCall:
             logger.info(f"收到 MCP 客户端 {name} 终止信号")
             await self._terminate_mcp_client(name)
         except Exception as e:
+            import traceback
+
+            traceback.print_exc()
             logger.error(f"初始化 MCP 客户端 {name} 失败: {e}")
 
     async def _init_mcp_client(self, name: str, config: dict) -> None:
@@ -289,10 +335,10 @@ class FuncCall:
 
             mcp_client = MCPClient()
             mcp_client.name = name
-            await mcp_client.connect_to_server(config)
+            self.mcp_client_dict[name] = mcp_client
+            await mcp_client.connect_to_server(config, name)
             tools_res = await mcp_client.list_tools_and_save()
             tool_names = [tool.name for tool in tools_res.tools]
-            self.mcp_client_dict[name] = mcp_client
 
             # 移除该MCP服务之前的工具（如有）
             self.func_list = [
@@ -314,13 +360,16 @@ class FuncCall:
                 self.func_list.append(func_tool)
 
             logger.info(f"已连接 MCP 服务 {name}, Tools: {tool_names}")
-            return True
+            return
         except Exception as e:
+            import traceback
+
+            logger.error(traceback.format_exc())
             logger.error(f"初始化 MCP 客户端 {name} 失败: {e}")
             # 发生错误时确保客户端被清理
             if name in self.mcp_client_dict:
                 await self._terminate_mcp_client(name)
-            return False
+            return
 
     async def _terminate_mcp_client(self, name: str) -> None:
         """关闭并清理MCP客户端"""
@@ -339,7 +388,7 @@ class FuncCall:
             ]
             logger.info(f"已关闭 MCP 服务 {name}")
 
-    def get_func_desc_openai_style(self) -> list:
+    def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
         """
         获得 OpenAI API 风格的**已经激活**的工具描述
         """
@@ -348,16 +397,19 @@ class FuncCall:
         for f in self.func_list:
             if not f.active:
                 continue
-            _l.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": f.name,
-                        "parameters": f.parameters,
-                        "description": f.description,
-                    },
-                }
-            )
+            func_ = {
+                "type": "function",
+                "function": {
+                    "name": f.name,
+                    # "parameters": f.parameters,
+                    "description": f.description,
+                },
+            }
+            func_["function"]["parameters"] = f.parameters
+            if not f.parameters.get("properties") and omit_empty_parameter_field:
+                # 如果 properties 为空，并且 omit_empty_parameter_field 为 True，则删除 parameters 字段
+                del func_["function"]["parameters"]
+            _l.append(func_)
         return _l
 
     def get_func_desc_anthropic_style(self) -> list:
@@ -383,28 +435,86 @@ class FuncCall:
             tools.append(tool)
         return tools
 
-    def get_func_desc_google_genai_style(self) -> Dict:
+    def get_func_desc_google_genai_style(self) -> dict:
+        """
+        获得 Google GenAI API 风格的**已经激活**的工具描述
+        """
+
+        # Gemini API 支持的数据类型和格式
+        supported_types = {
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "array",
+            "object",
+            "null",
+        }
+        supported_formats = {
+            "string": {"enum", "date-time"},
+            "integer": {"int32", "int64"},
+            "number": {"float", "double"},
+        }
+
+        def convert_schema(schema: dict) -> dict:
+            """转换 schema 为 Gemini API 格式"""
+
+            # 如果 schema 包含 anyOf，则只返回 anyOf 字段
+            if "anyOf" in schema:
+                return {"anyOf": [convert_schema(s) for s in schema["anyOf"]]}
+
+            result = {}
+
+            if "type" in schema and schema["type"] in supported_types:
+                result["type"] = schema["type"]
+                if "format" in schema and schema["format"] in supported_formats.get(
+                    result["type"], set()
+                ):
+                    result["format"] = schema["format"]
+            else:
+                # 暂时指定默认为null
+                result["type"] = "null"
+
+            support_fields = {
+                "title",
+                "description",
+                "enum",
+                "minimum",
+                "maximum",
+                "maxItems",
+                "minItems",
+                "nullable",
+                "required",
+            }
+            result.update({k: schema[k] for k in support_fields if k in schema})
+
+            if "properties" in schema:
+                properties = {}
+                for key, value in schema["properties"].items():
+                    prop_value = convert_schema(value)
+                    if "default" in prop_value:
+                        del prop_value["default"]
+                    properties[key] = prop_value
+
+                if properties:  # 只在有非空属性时添加
+                    result["properties"] = properties
+
+            if "items" in schema:
+                result["items"] = convert_schema(schema["items"])
+
+            return result
+
+        tools = [
+            {
+                "name": f.name,
+                "description": f.description,
+                **({"parameters": convert_schema(f.parameters)}),
+            }
+            for f in self.func_list
+            if f.active
+        ]
+
         declarations = {}
-        tools = []
-        for f in self.func_list:
-            if not f.active:
-                continue
-
-            func_declaration = {"name": f.name, "description": f.description}
-
-            # 检查并添加非空的properties参数
-            params = f.parameters if isinstance(f.parameters, dict) else {}
-            params = copy.deepcopy(params)
-            if params.get("properties", {}):
-                properties = params["properties"]
-                for key, value in properties.items():
-                    if "default" in value:
-                        del value["default"]
-                params["properties"] = properties
-                func_declaration["parameters"] = params
-
-            tools.append(func_declaration)
-
         if tools:
             declarations["function_declarations"] = tools
         return declarations

@@ -4,6 +4,8 @@ WORKDIR /AstrBot
 COPY . /AstrBot/
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    nodejs \
+    npm \
     gcc \
     build-essential \
     python3-dev \
@@ -28,3 +30,6 @@ EXPOSE 6185
 EXPOSE 6186
 
 CMD [ "python", "main.py" ]
+
+
+

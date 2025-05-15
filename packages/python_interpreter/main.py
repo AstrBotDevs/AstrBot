@@ -15,6 +15,7 @@ from astrbot.api.event import filter
 from astrbot.api.provider import ProviderRequest
 from astrbot.api.message_components import Image, File
 from astrbot.core.utils.io import download_image_by_url, download_file
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 PROMPT = """
 ## Task
@@ -90,7 +91,7 @@ DEFAULT_CONFIG = {
     },
     "docker_host_astrbot_abs_path": "",
 }
-PATH = "data/config/python_interpreter.json"
+PATH = os.path.join(get_astrbot_data_path(), "config", "python_interpreter.json")
 
 
 @star.register(
@@ -212,7 +213,8 @@ class Main(star.Star):
             if isinstance(comp, File):
                 if comp.file.startswith("http"):
                     name = comp.name if comp.name else uuid.uuid4().hex[:8]
-                    path = f"data/temp/{name}"
+                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                    path = os.path.join(temp_dir, name)
                     await download_file(comp.file, path)
                 else:
                     path = comp.file

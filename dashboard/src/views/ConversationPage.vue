@@ -839,10 +839,30 @@ export default {
 
         // 格式化消息内容
         formatMessage(content) {
-            if (!content) return '空消息';
 
+            // content 可能是数组
+            // [{"type": "image_url", "image_url": {"url": url_or_base64}}, {"type": "text", "text": "text"}]
+
+            let final_content = content;
+            if (Array.isArray(content)) {
+                // 处理数组内容
+                final_content = content.map(item => {
+                    if (item.type === 'image_url') {
+                        return `<img src="${item.image_url.url}" alt="Image" />`;
+                    } else if (item.type === 'text') {
+                        return item.text;
+                    }
+                    return '';
+                }).join('\n');
+            } else if (typeof content === 'object') {
+                // 处理对象内容
+                final_content = Object.values(content).join('');
+            } else if (typeof content === 'string') {
+                // 处理字符串内容
+                final_content = content;
+            } else if (!final_content) return '空消息';
             // 使用marked处理Markdown格式
-            return marked(content);
+            return marked(final_content);
         },
 
         // 显示成功消息

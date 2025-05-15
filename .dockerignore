@@ -18,3 +18,7 @@ ENV/
 README*.md
 dashboard/
 data/
+changelogs/
+tests/
+.ruff_cache/
+.astrbot

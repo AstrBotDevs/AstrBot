@@ -1,28 +1,33 @@
+import asyncio
+import os
 import sys
 import uuid
-import asyncio
-import quart
 
+import quart
+from requests import Response
+from wechatpy.enterprise import WeChatClient, parse_message
+from wechatpy.enterprise.crypto import WeChatCrypto
+from wechatpy.enterprise.messages import ImageMessage, TextMessage, VoiceMessage
+from wechatpy.exceptions import InvalidSignatureException
+from wechatpy.messages import BaseMessage
+
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import Image, Plain, Record
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
-    PlatformMetadata,
     MessageType,
+    Platform,
+    PlatformMetadata,
+    register_platform_adapter,
 )
-from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image, Record
-from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.api.platform import register_platform_adapter
 from astrbot.core import logger
-from requests import Response
+from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-from wechatpy.enterprise.crypto import WeChatCrypto
-from wechatpy.enterprise import WeChatClient
-from wechatpy.enterprise.messages import TextMessage, ImageMessage, VoiceMessage
-from wechatpy.exceptions import InvalidSignatureException
-from wechatpy.enterprise import parse_message
 from .wecom_event import WecomPlatformEvent
+from .wecom_kf import WeChatKF
+from .wecom_kf_message import WeChatKFMessage
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -131,9 +136,40 @@ class WecomPlatformAdapter(Platform):
             self.config["corpid"].strip(),
             self.config["secret"].strip(),
         )
+
+        # 微信客服
+        self.kf_name = self.config.get("kf_name", None)
+        if self.kf_name:
+            # inject
+            self.wechat_kf_api = WeChatKF(client=self.client)
+            self.wechat_kf_message_api = WeChatKFMessage(self.client)
+            self.client.kf = self.wechat_kf_api
+            self.client.kf_message = self.wechat_kf_message_api
+
         self.client.API_BASE_URL = self.api_base_url
 
-        async def callback(msg):
+        async def callback(msg: BaseMessage):
+            if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
+
+                def get_latest_msg_item() -> dict | None:
+                    token = msg._data["Token"]
+                    kfid = msg._data["OpenKfId"]
+                    has_more = 1
+                    ret = {}
+                    while has_more:
+                        ret = self.wechat_kf_api.sync_msg(token, kfid)
+                        has_more = ret["has_more"]
+                    msg_list = ret.get("msg_list", [])
+                    if msg_list:
+                        return msg_list[-1]
+                    return None
+
+                msg_new = await asyncio.get_event_loop().run_in_executor(
+                    None, get_latest_msg_item
+                )
+                if msg_new:
+                    await self.convert_wechat_kf_message(msg_new)
+                return
             await self.convert_message(msg)
 
         self.server.callback = callback
@@ -153,9 +189,39 @@ class WecomPlatformAdapter(Platform):
 
     @override
     async def run(self):
+        loop = asyncio.get_event_loop()
+        if self.kf_name:
+            try:
+                acc_list = (
+                    await loop.run_in_executor(
+                        None, self.wechat_kf_api.get_account_list
+                    )
+                ).get("account_list", [])
+                logger.debug(f"获取到微信客服列表: {str(acc_list)}")
+                for acc in acc_list:
+                    name = acc.get("name", None)
+                    if name != self.kf_name:
+                        continue
+                    open_kfid = acc.get("open_kfid", None)
+                    if not open_kfid:
+                        logger.error("获取微信客服失败，open_kfid 为空。")
+                    logger.debug(f"Found open_kfid: {str(open_kfid)}")
+                    kf_url = (
+                        await loop.run_in_executor(
+                            None,
+                            self.wechat_kf_api.add_contact_way,
+                            open_kfid,
+                            "astrbot_placeholder",
+                        )
+                    ).get("url", "")
+                    logger.info(
+                        f"请打开以下链接，在微信扫码以获取客服微信: https://api.cl2wm.cn/api/qrcode/code?text={kf_url}"
+                    )
+            except Exception as e:
+                logger.error(e)
         await self.server.start_polling()
 
-    async def convert_message(self, msg):
+    async def convert_message(self, msg: BaseMessage) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if msg.type == "text":
             assert isinstance(msg, TextMessage)
@@ -191,14 +257,15 @@ class WecomPlatformAdapter(Platform):
             resp: Response = await asyncio.get_event_loop().run_in_executor(
                 None, self.client.media.download, msg.media_id
             )
-            path = f"data/temp/wecom_{msg.media_id}.amr"
+            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
             with open(path, "wb") as f:
                 f.write(resp.content)
 
             try:
                 from pydub import AudioSegment
 
-                path_wav = f"data/temp/wecom_{msg.media_id}.wav"
+                path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
                 audio = AudioSegment.from_file(path)
                 audio.export(path_wav, format="wav")
             except Exception as e:
@@ -218,8 +285,41 @@ class WecomPlatformAdapter(Platform):
             abm.timestamp = msg.time
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
+        else:
+            logger.warning(f"暂未实现的事件: {msg.type}")
+            return
 
         logger.info(f"abm: {abm}")
+        await self.handle_msg(abm)
+
+    async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
+        msgtype = msg.get("msgtype", None)
+        external_userid = msg.get("external_userid", None)
+        abm = AstrBotMessage()
+        abm.raw_message = msg
+        abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
+        abm.self_id = msg["open_kfid"]
+        abm.sender = MessageMember(external_userid, external_userid)
+        abm.session_id = external_userid
+        abm.type = MessageType.FRIEND_MESSAGE
+        abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])
+        if msgtype == "text":
+            text = msg.get("text", {}).get("content", "").strip()
+            abm.message = [Plain(text=text)]
+            abm.message_str = text
+        elif msgtype == "image":
+            media_id = msg.get("image", {}).get("media_id", "")
+            resp: Response = await asyncio.get_event_loop().run_in_executor(
+                None, self.client.media.download, media_id
+            )
+            path = f"data/temp/wechat_kf_{media_id}.jpg"
+            with open(path, "wb") as f:
+                f.write(resp.content)
+            abm.message = [Image(file=path, url=path)]
+            abm.message_str = "[图片]"
+        else:
+            logger.warning(f"未实现的微信客服消息事件: {msg}")
+            return
         await self.handle_msg(abm)
 
     async def handle_msg(self, message: AstrBotMessage):
@@ -237,5 +337,8 @@ class WecomPlatformAdapter(Platform):
 
     async def terminate(self):
         self.server.shutdown_event.set()
-        await self.server.server.shutdown()
+        try:
+            await self.server.server.shutdown()
+        except Exception as _:
+            pass
         logger.info("企业微信 适配器已被优雅地关闭")

@@ -3,11 +3,12 @@ from typing import List, Dict
 from astrbot.core import logger
 from .store import Store
 from astrbot.core.config import AstrBotConfig
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class KnowledgeDBManager:
     def __init__(self, astrbot_config: AstrBotConfig) -> None:
-        self.db_path = "data/knowledge_db/"
+        self.db_path = os.path.join(get_astrbot_data_path(), "knowledge_db")
         self.config = astrbot_config.get("knowledge_db", {})
         self.astrbot_config = astrbot_config
         if not os.path.exists(self.db_path):

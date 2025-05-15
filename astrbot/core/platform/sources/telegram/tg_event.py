@@ -1,3 +1,4 @@
+import os
 import asyncio
 import telegramify_markdown
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -13,6 +14,7 @@ from astrbot.api.message_components import (
 from telegram.ext import ExtBot
 from astrbot.core.utils.io import download_file
 from astrbot import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -75,7 +77,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_photo(photo=image_path, **payload)
             elif isinstance(i, File):
                 if i.file.startswith("https://"):
-                    path = "data/temp/" + i.name
+                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                    path = os.path.join(temp_dir, i.name)
                     await download_file(i.file, path)
                     i.file = path
 
@@ -91,7 +94,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             await self.send_with_client(self.client, message, self.get_sender_id())
         await super().send(message)
 
-    async def send_streaming(self, generator):
+    async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None
 
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
@@ -126,7 +129,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         continue
                     elif isinstance(i, File):
                         if i.file.startswith("https://"):
-                            path = "data/temp/" + i.name
+                            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                            path = os.path.join(temp_dir, i.name)
                             await download_file(i.file, path)
                             i.file = path
 
@@ -183,16 +187,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         text=markdown_text,
                         chat_id=payload["chat_id"],
                         message_id=message_id,
-                        parse_mode="MarkdownV2"
+                        parse_mode="MarkdownV2",
                     )
                 except Exception as e:
                     logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
                     await self.client.edit_message_text(
-                        text=delta,
-                        chat_id=payload["chat_id"],
-                        message_id=message_id
+                        text=delta, chat_id=payload["chat_id"], message_id=message_id
                     )
         except Exception as e:
             logger.warning(f"编辑消息失败(streaming): {e!s}")
 
-        return await super().send_streaming(generator)
+        return await super().send_streaming(generator, use_fallback)
