@@ -508,8 +508,3 @@ class WeChatPadProAdapter(Platform):
         通过会话发送消息。
         """
         logger.info(f"向会话 {session} 发送消息: {message_chain}")
-        # 在这里实现将 MessageChain 转换为 WeChatPadPro 消息格式并发送的逻辑
-        # 例如：
-        # message_text = "".join([comp.text for comp in message_chain if isinstance(comp, Plain)])
-        # await self.client.send_message(session.session_id, message_text)
-        pass # 待实现
