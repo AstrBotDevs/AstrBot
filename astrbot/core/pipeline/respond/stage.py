@@ -154,6 +154,11 @@ class RespondStage(Stage):
             except Exception as e:
                 logger.warning(f"空内容检查异常: {e}")
 
+            record_comps = [c for c in result.chain if isinstance(c, Comp.Record)]
+            non_record_comps = [
+                c for c in result.chain if not isinstance(c, Comp.Record)
+            ]
+
             if self.enable_seg and (
                 (self.only_llm_result and result.is_llm_result())
                 or not self.only_llm_result
@@ -171,8 +176,18 @@ class RespondStage(Stage):
                             decorated_comps.append(comp)
                             result.chain.remove(comp)
                             break
+
+                for rcomp in record_comps:
+                    i = await self._calc_comp_interval(rcomp)
+                    await asyncio.sleep(i)
+                    try:
+                        await event.send(MessageChain([rcomp]))
+                    except Exception as e:
+                        logger.error(f"发送消息失败: {e} chain: {result.chain}")
+                        break
+
                 # 分段回复
-                for comp in result.chain:
+                for comp in non_record_comps:
                     i = await self._calc_comp_interval(comp)
                     await asyncio.sleep(i)
                     try:
@@ -181,11 +196,18 @@ class RespondStage(Stage):
                         logger.error(f"发送消息失败: {e} chain: {result.chain}")
                         break
             else:
+                for rcomp in record_comps:
+                    try:
+                        await event.send(MessageChain([rcomp]))
+                    except Exception as e:
+                        logger.error(f"发送消息失败: {e} chain: {result.chain}")
+
                 try:
-                    await event.send(result)
+                    await event.send(MessageChain(non_record_comps))
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"发送消息失败: {e} chain: {result.chain}")
+
             await event._post_send()
             logger.info(
                 f"AstrBot -> {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}"
