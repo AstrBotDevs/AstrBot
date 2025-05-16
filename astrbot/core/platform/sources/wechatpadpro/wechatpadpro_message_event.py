@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+from typing import TYPE_CHECKING
 
 import aiohttp
 from PIL import Image as PILImage  # 使用别名避免冲突
@@ -11,6 +12,9 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+
+if TYPE_CHECKING:
+    from .wechatpadpro_adapter import WeChatPadProAdapter
 
 
 class WeChatPadProMessageEvent(AstrMessageEvent):
