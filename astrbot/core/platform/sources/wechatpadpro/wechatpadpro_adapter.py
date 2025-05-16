@@ -57,7 +57,7 @@ class WeChatPadProAdapter(Platform):
         self.credentials_file = os.path.join(
             get_astrbot_data_path(), "wechatpadpro_credentials.json"
         )  # 持久化文件路径
-        self._websocket = None  # 用于保存 WebSocket 连接
+        self.ws_handle_task = None
 
     async def run(self) -> None:
         """
@@ -103,7 +103,6 @@ class WeChatPadProAdapter(Platform):
                 await self.terminate()
                 return
 
-        # 示例：保持运行直到终止事件被设置
         self._shutdown_event = asyncio.Event()
         await self._shutdown_event.wait()
         logger.info("WeChatPadPro 适配器已停止。")
@@ -325,7 +324,6 @@ class WeChatPadProAdapter(Platform):
         while True:
             try:
                 async with websockets.connect(ws_url) as websocket:
-                    self._websocket = websocket
                     logger.info("WebSocket 连接成功。")
                     # 设置空闲超时重连
                     wait_time = (
@@ -592,11 +590,10 @@ class WeChatPadProAdapter(Platform):
         """
         终止一个平台的运行实例。
         """
-        logger.info("正在终止 WeChatPadPro 适配器...")
-        # 关闭 WebSocket 连接
-        if self._websocket:
-            await self._websocket.close()
+        logger.info("终止 WeChatPadPro 适配器。")
         try:
+            if self.ws_handle_task:
+                self.ws_handle_task.cancel()
             self._shutdown_event.set()
         except Exception:
             pass
