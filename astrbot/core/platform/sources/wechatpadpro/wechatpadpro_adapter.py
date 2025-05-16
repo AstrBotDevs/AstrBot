@@ -254,7 +254,7 @@ class WeChatPadProAdapter(Platform):
         params = {"key": self.auth_key}
 
         attempts = 0  # 初始化尝试次数
-        max_attempts = 6  # 最大尝试次数
+        max_attempts = 36  # 最大尝试次数
         countdown = 180  # 倒计时时长
         logger.info(f"请在 {countdown} 秒内扫码登录。")
         while attempts < max_attempts:
