@@ -11,6 +11,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.platform.sources.wechatpadpro.wechatpadpro_adapter import WeChatPadProAdapter
 
 
 class WeChatPadProMessageEvent(AstrMessageEvent):
@@ -66,10 +67,11 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
             )
             message_text = f"@{mention_text} {text}"
             logger.info(f"已添加 @ 信息: {message_text}")
-
+        else:
+            message_text = text
         payload = {
             "MsgItem": [
-                {"MsgType": 1, "TextContent": text, "ToUserName": self.session_id}
+                {"MsgType": 1, "TextContent": message_text, "ToUserName": self.session_id}
             ]
         }
         url = f"{self.adapter.base_url}/message/SendTextMessage"
