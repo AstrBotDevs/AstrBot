@@ -389,6 +389,7 @@ class WeChatPadProAdapter(Platform):
         from_user_name = raw_message.get("from_user_name", {}).get("str", "")
         to_user_name = raw_message.get("to_user_name", {}).get("str", "")
         content = raw_message.get("content", {}).get("str", "")
+        push_content = raw_message.get("push_content", "")
         msg_type = raw_message.get("msg_type")
 
         abm.message_str = content  # 纯文本消息内容 (初始值)
@@ -405,7 +406,7 @@ class WeChatPadProAdapter(Platform):
 
         # 先判断群聊/私聊并设置基本属性
         if await self._process_chat_type(
-            abm, raw_message, from_user_name, to_user_name, content
+            abm, raw_message, from_user_name, to_user_name, content, push_content
         ):
             # 再根据消息类型处理消息内容
             self._process_message_content(abm, raw_message, msg_type, content)
@@ -420,6 +421,7 @@ class WeChatPadProAdapter(Platform):
         from_user_name: str,
         to_user_name: str,
         content: str,
+        push_content: str,
     ):
         """
         判断消息是群聊还是私聊，并设置 AstrBotMessage 的基本属性。
@@ -452,9 +454,10 @@ class WeChatPadProAdapter(Platform):
         else:
             abm.type = MessageType.FRIEND_MESSAGE
             abm.group_id = ""
-            abm.sender = MessageMember(
-                user_id=from_user_name, nickname=""
-            )  # 暂时没有私聊发送者的昵称
+            nick_name = ""
+            if push_content and " : " in push_content:
+                nick_name = push_content.split(" : ")[0]
+            abm.sender = MessageMember(user_id=from_user_name, nickname=nick_name)
             abm.session_id = from_user_name
         return True
 
