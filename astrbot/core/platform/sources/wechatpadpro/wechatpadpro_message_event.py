@@ -1,14 +1,16 @@
 import asyncio
+import base64
+import io
+
 import aiohttp
+from PIL import Image as PILImage  # 使用别名避免冲突
+
+from astrbot import logger
+from astrbot.core.message.components import Image, Plain  # Import Image
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
-from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.message.components import Plain, Image # Import Image
-from astrbot import logger
-import base64
-from PIL import Image as PILImage # 使用别名避免冲突
-import io
 
 
 class WeChatPadProMessageEvent(AstrMessageEvent):
@@ -19,11 +21,11 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         # 添加平台特定的参数，例如适配器实例
-        adapter: object, # 传递适配器实例
+        adapter: object,  # 传递适配器实例
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.message_obj = message_obj # Save the full message object
-        self.adapter = adapter # Save the adapter instance
+        self.message_obj = message_obj  # Save the full message object
+        self.adapter = adapter  # Save the adapter instance
 
     async def send(self, message: MessageChain):
         async with aiohttp.ClientSession() as session:
@@ -39,23 +41,37 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         b64 = await comp.convert_to_base64()
         raw = self._validate_base64(b64)
         b64c = self._compress_image(raw)
-        payload = {"MsgItem":[{"ImageContent": b64c, "MsgType":3, "ToUserName": self.session_id}]}
+        payload = {
+            "MsgItem": [
+                {"ImageContent": b64c, "MsgType": 3, "ToUserName": self.session_id}
+            ]
+        }
         url = f"{self.adapter.base_url}/message/SendImageNewMessage"
         await self._post(session, url, payload)
 
     async def _send_text(self, session: aiohttp.ClientSession, text: str):
         if (
-                self.message_obj.type == MessageType.GROUP_MESSAGE  # 确保是群聊消息
-                and self.adapter.settings.get("reply_with_mention", False)  # 检查适配器设置是否启用 reply_with_mention
-                and self.message_obj.sender  # 确保有发送者信息
-                and (self.message_obj.sender.user_id or self.message_obj.sender.nickname)  # 确保发送者有 ID 或昵称
+            self.message_obj.type == MessageType.GROUP_MESSAGE  # 确保是群聊消息
+            and self.adapter.settings.get(
+                "reply_with_mention", False
+            )  # 检查适配器设置是否启用 reply_with_mention
+            and self.message_obj.sender  # 确保有发送者信息
+            and (
+                self.message_obj.sender.user_id or self.message_obj.sender.nickname
+            )  # 确保发送者有 ID 或昵称
         ):
             # 优先使用 nickname，如果没有则使用 user_id
-            mention_text = self.message_obj.sender.nickname or self.message_obj.sender.user_id
+            mention_text = (
+                self.message_obj.sender.nickname or self.message_obj.sender.user_id
+            )
             message_text = f"@{mention_text} {text}"
             logger.info(f"已添加 @ 信息: {message_text}")
 
-        payload = {"MsgItem": [{"MsgType": 1, "TextContent": text, "ToUserName": self.session_id}]}
+        payload = {
+            "MsgItem": [
+                {"MsgType": 1, "TextContent": text, "ToUserName": self.session_id}
+            ]
+        }
         url = f"{self.adapter.base_url}/message/SendTextMessage"
         await self._post(session, url, payload)
 
@@ -70,7 +86,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         if img.format == "JPEG":
             img.save(buf, "JPEG", quality=80)
         else:
-            if img.mode in ("RGBA","P"):
+            if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
             img.save(buf, "JPEG", quality=80)
         # logger.info("图片处理完成！！！")
