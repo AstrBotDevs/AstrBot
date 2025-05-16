@@ -321,21 +321,26 @@ class WeChatPadProAdapter(Platform):
                 async with websockets.connect(ws_url) as websocket:
                     self._websocket = websocket
                     logger.info("WebSocket 连接成功。")
+                    #设置空闲超时重连
+                    wait_time = 120
                     while True:
                         try:
-                            message = await websocket.recv()
+                            message = await asyncio.wait_for(websocket.recv(), timeout=wait_time)
+                            logger.info(message)
                             asyncio.create_task(self.handle_websocket_message(message))
+                        except asyncio.TimeoutError:
+                            # 10 分钟内没有收到消息，断开连接并重新尝试
+                            logger.warning(f"WebSocket 连接空闲超过 {wait_time} 分钟，尝试重新连接。")
+                            break # 跳出内层循环，外层循环会处理重连
                         except websockets.exceptions.ConnectionClosedOK:
                             logger.info("WebSocket 连接正常关闭。")
                             break
                         except Exception as e:
                             logger.error(f"处理 WebSocket 消息时发生错误: {e}")
-                            # 在这里可以添加重连逻辑
                             break
             except Exception as e:
                 logger.error(f"WebSocket 连接失败: {e}")
-                # 在这里可以添加重连逻辑
-                await asyncio.sleep(5)  # 等待一段时间后重试
+                await asyncio.sleep(5) # 连接失败时，等待 5 秒后重试
 
     async def handle_websocket_message(self, message: str):
         """
