@@ -103,6 +103,9 @@ class AiocqhttpAdapter(Platform):
 
         if event["post_type"] == "message":
             abm = await self._convert_handle_message_event(event)
+            if abm.sender.user_id == "2854196310":
+                # 屏蔽 QQ 管家的消息
+                return
         elif event["post_type"] == "notice":
             abm = await self._convert_handle_notice_event(event)
         elif event["post_type"] == "request":
