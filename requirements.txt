@@ -34,3 +34,4 @@ google-genai
 click
 filelock
 watchfiles
+websockets

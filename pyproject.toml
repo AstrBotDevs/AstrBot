@@ -40,6 +40,7 @@ dependencies = [
     "silk-python>=0.2.6",
     "telegramify-markdown>=0.5.1",
     "watchfiles>=1.0.5",
+    "websockets>=15.0.1",
     "wechatpy>=1.8.18",
 ]
 
