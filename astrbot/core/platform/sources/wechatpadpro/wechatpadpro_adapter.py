@@ -45,8 +45,10 @@ class WeChatPadProAdapter(Platform):
         self.admin_key = self.config.get("admin_key")
         self.host = self.config.get("host")
         self.port = self.config.get("port")
-        self.active_mesasge_poll = self.config.get("wpp_active_message_poll", False)
-        self.active_message_poll_interval = self.config.get(
+        self.active_mesasge_poll: bool = self.config.get(
+            "wpp_active_message_poll", False
+        )
+        self.active_message_poll_interval: int = self.config.get(
             "wpp_active_message_poll_interval", 5
         )
         self.base_url = f"http://{self.host}:{self.port}"
@@ -72,8 +74,6 @@ class WeChatPadProAdapter(Platform):
             logger.info("WeChatPadPro 设备已在线，跳过扫码登录。")
             # 如果在线，连接 WebSocket 接收消息
             self.ws_handle_task = asyncio.create_task(self.connect_websocket())
-            if self.active_mesasge_poll:
-                asyncio.create_task(self._active_message_poll())
         else:
             logger.info("WeChatPadPro 设备不在线或无可用凭据，开始扫码登录流程。")
             # 1. 生成授权码
@@ -98,8 +98,6 @@ class WeChatPadProAdapter(Platform):
             if login_successful:
                 # 登录成功后，连接 WebSocket 接收消息
                 self.ws_handle_task = asyncio.create_task(self.connect_websocket())
-                if self.active_mesasge_poll:
-                    asyncio.create_task(self._active_message_poll())
             else:
                 logger.warning("登录失败或超时，WeChatPadPro 适配器将关闭。")
                 await self.terminate()
@@ -315,20 +313,6 @@ class WeChatPadProAdapter(Platform):
         logger.warning("登录检测超过最大尝试次数，退出检测。")
         return False
 
-    async def _active_message_poll(self):
-        """
-        部分 case 下，必须要重建 WebSocket 连接才能同步消息。
-        """
-        while True:
-            await asyncio.sleep(self.active_message_poll_interval)
-            logger.debug("主动拉取消息中...")
-            try:
-                if self.ws_handle_task.cancel():
-                    await asyncio.sleep(0.5)
-                    self.ws_handle_task = asyncio.create_task(self.connect_websocket())
-            except Exception as e:
-                logger.error(f"主动拉取消息时发生错误: {e}")
-
     async def connect_websocket(self):
         """
         建立 WebSocket 连接并处理接收到的消息。
@@ -343,17 +327,24 @@ class WeChatPadProAdapter(Platform):
                 async with websockets.connect(ws_url) as websocket:
                     self._websocket = websocket
                     logger.info("WebSocket 连接成功。")
-                    #设置空闲超时重连
-                    wait_time = 120
+                    # 设置空闲超时重连
+                    wait_time = (
+                        self.active_message_poll_interval
+                        if self.active_mesasge_poll
+                        else 120
+                    )
                     while True:
                         try:
-                            message = await asyncio.wait_for(websocket.recv(), timeout=wait_time)
+                            message = await asyncio.wait_for(
+                                websocket.recv(), timeout=wait_time
+                            )
                             logger.info(message)
                             asyncio.create_task(self.handle_websocket_message(message))
                         except asyncio.TimeoutError:
-                            # 10 分钟内没有收到消息，断开连接并重新尝试
-                            logger.warning(f"WebSocket 连接空闲超过 {wait_time} 分钟，尝试重新连接。")
-                            break # 跳出内层循环，外层循环会处理重连
+                            logger.warning(
+                                f"WebSocket 连接空闲超过 {wait_time} s"
+                            )
+                            break
                         except websockets.exceptions.ConnectionClosedOK:
                             logger.info("WebSocket 连接正常关闭。")
                             break
@@ -362,7 +353,7 @@ class WeChatPadProAdapter(Platform):
                             break
             except Exception as e:
                 logger.error(f"WebSocket 连接失败: {e}")
-                await asyncio.sleep(5) # 连接失败时，等待 5 秒后重试
+                await asyncio.sleep(5)
 
     async def handle_websocket_message(self, message: str):
         """
@@ -406,9 +397,9 @@ class WeChatPadProAdapter(Platform):
         abm.timestamp = raw_message.get("create_time")
         abm.self_id = self.wxid
 
-        if int(time.time()) - abm.timestamp > 60:
+        if int(time.time()) - abm.timestamp > 180:
             logger.warning(
-                f"忽略 1 分钟前的旧消息：消息时间戳 {abm.timestamp} 超过当前时间 {int(time.time())}。"
+                f"忽略 3 分钟前的旧消息：消息时间戳 {abm.timestamp} 超过当前时间 {int(time.time())}。"
             )
             return None
 
@@ -580,7 +571,9 @@ class WeChatPadProAdapter(Platform):
             image_resp = await self._download_raw_image(
                 from_user_name, to_user_name, msg_id
             )
-            image_bs64_data = image_resp.get("Data", {}).get("Data", {}).get("Buffer", None)
+            image_bs64_data = (
+                image_resp.get("Data", {}).get("Data", {}).get("Buffer", None)
+            )
             if image_bs64_data:
                 abm.message.append(Image.fromBase64(image_bs64_data))
         elif msg_type == 47:
