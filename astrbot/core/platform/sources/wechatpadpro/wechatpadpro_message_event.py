@@ -21,7 +21,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         # 添加平台特定的参数，例如适配器实例
-        adapter: object,  # 传递适配器实例
+        adapter: "WeChatPadProAdapter",  # 传递适配器实例
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.message_obj = message_obj  # Save the full message object
