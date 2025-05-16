@@ -186,7 +186,7 @@ class WeChatPadProAdapter(Platform):
                             and len(response_data["Data"]) > 0
                         ):
                             self.auth_key = response_data["Data"][0]
-                            logger.info(f"成功获取授权码: {self.auth_key}")
+                            logger.info("成功获取授权码")
                         else:
                             logger.error(
                                 f"生成授权码成功但未找到授权码: {response_data}"
@@ -307,7 +307,7 @@ class WeChatPadProAdapter(Platform):
         """
         os.environ["no_proxy"] = f"localhost,127.0.0.1,{self.host}"
         ws_url = f"ws://{self.host}:{self.port}/ws/GetSyncMsg?key={self.auth_key}"
-        logger.info(f"正在连接 WebSocket: {ws_url}")
+        logger.info(f"正在连接 WebSocket: ws://{self.host}:{self.port}/ws/GetSyncMsg?key=***")
         while True:
             try:
                 async with websockets.connect(ws_url) as websocket:
