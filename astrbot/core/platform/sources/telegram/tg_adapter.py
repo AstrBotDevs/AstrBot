@@ -282,10 +282,12 @@ class TelegramPlatformAdapter(Platform):
                             entity.offset + 1 : entity.offset + entity.length
                         ]
                         message.message.append(Comp.At(qq=name, name=name))
-                        plain_text = (
-                            plain_text[: entity.offset]
-                            + plain_text[entity.offset + entity.length :]
-                        )
+                        # 如果mention是当前bot则移除；否则保留
+                        if name.lower() == context.bot.username.lower():
+                            plain_text = (
+                                plain_text[: entity.offset]
+                                + plain_text[entity.offset + entity.length :]
+                            )
 
             if plain_text:
                 message.message.append(Comp.Plain(plain_text))

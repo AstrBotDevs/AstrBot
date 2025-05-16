@@ -2,7 +2,6 @@ import os
 import psutil
 import sys
 import time
-import subprocess
 from .zip_updator import ReleaseInfo, RepoZipUpdator
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -43,27 +42,31 @@ class AstrBotUpdator(RepoZipUpdator):
             pass
 
     def _reboot(self, delay: int = 3):
-        """
-        重启当前程序，使用 subprocess.Popen 启动新进程并退出旧进程
+        """重启当前程序
         在指定的延迟后，终止所有子进程并重新启动程序
+        这里只能使用 os.exec* 来重启程序
         """
         time.sleep(delay)
         self.terminate_child_processes()
-        py = sys.executable
+        if os.name == "nt":
+            py = f'"{sys.executable}"'
+        else:
+            py = sys.executable
 
         try:
             if "astrbot" in os.path.basename(sys.argv[0]):  # 兼容cli
-                cmd = [py, "-m", "astrbot.cli.__main__"] + sys.argv[1:]
+                if os.name == "nt":
+                    args = [
+                        f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]
+                    ]
+                else:
+                    args = sys.argv[1:]
+                os.execl(sys.executable, py, "-m", "astrbot.cli.__main__", *args)
             else:
-                cmd = [py] + sys.argv
-
-            subprocess.Popen(cmd, start_new_session=True)
-
+                os.execl(sys.executable, py, *sys.argv)
         except Exception as e:
-            logger.error(f"重启失败（{py} {cmd}，错误：{e}），请尝试手动重启。")
+            logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
             raise e
-
-        os._exit(0)
 
     async def check_update(self, url: str, current_version: str) -> ReleaseInfo:
         """检查更新"""
