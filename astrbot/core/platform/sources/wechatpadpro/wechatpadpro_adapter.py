@@ -8,7 +8,7 @@ import aiohttp
 import websockets
 
 from astrbot import logger
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import Plain, Image
 from astrbot.api.platform import Platform, PlatformMetadata
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astrbot_message import (
@@ -371,7 +371,6 @@ class WeChatPadProAdapter(Platform):
         logger.debug(f"收到 WebSocket 消息: {message}")
         try:
             message_data = json.loads(message)
-            # 检查消息结构，确保是有效的消息推送
             if (
                 message_data.get("msg_id") is not None
                 and message_data.get("from_user_name") is not None
@@ -419,8 +418,8 @@ class WeChatPadProAdapter(Platform):
         push_content = raw_message.get("push_content", "")
         msg_type = raw_message.get("msg_type")
 
-        abm.message_str = content  # 纯文本消息内容 (初始值)
-        abm.message = []  # Initialize message components list
+        abm.message_str = ""
+        abm.message = []
 
         # 如果是机器人自己发送的消息、回显消息或系统消息，忽略
         if from_user_name == self.wxid:
@@ -436,7 +435,7 @@ class WeChatPadProAdapter(Platform):
             abm, raw_message, from_user_name, to_user_name, content, push_content
         ):
             # 再根据消息类型处理消息内容
-            self._process_message_content(abm, raw_message, msg_type, content)
+            await self._process_message_content(abm, raw_message, msg_type, content)
 
             return abm
         return None
@@ -454,10 +453,8 @@ class WeChatPadProAdapter(Platform):
         判断消息是群聊还是私聊，并设置 AstrBotMessage 的基本属性。
         """
         if from_user_name == "weixin":
-            # logger.info("忽略微信团队的消息！！！")
             return False
         if "@chatroom" in from_user_name:
-            # logger.info("开始处理群消息！")
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = from_user_name
 
@@ -529,42 +526,74 @@ class WeChatPadProAdapter(Platform):
                 logger.error(f"获取群成员详情时发生错误: {e}")
                 return None
 
-    @staticmethod
-    def _process_message_content(
-        abm: AstrBotMessage, raw_message: dict, msg_type: int, content: str
+    async def _download_raw_image(
+        self, from_user_name: str, to_user_name: str, msg_id: int
+    ):
+        """下载原始图片。"""
+        url = f"{self.base_url}/message/GetMsgBigImg"
+        params = {"key": self.auth_key}
+        payload = {
+            "CompressType": 0,
+            "FromUserName": from_user_name,
+            "MsgId": msg_id,
+            "Section": {"DataLen": 61440, "StartPos": 0},
+            "ToUserName": to_user_name,
+            "TotalLen": 0,
+        }
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post(url, params=params, json=payload) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    else:
+                        logger.error(f"下载图片失败: {response.status}")
+                        return None
+            except aiohttp.ClientConnectorError as e:
+                logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
+                return None
+            except Exception as e:
+                logger.error(f"下载图片时发生错误: {e}")
+                return None
+
+    async def _process_message_content(
+        self, abm: AstrBotMessage, raw_message: dict, msg_type: int, content: str
     ):
         """
         根据消息类型处理消息内容，填充 AstrBotMessage 的 message 列表。
         """
         if msg_type == 1:  # 文本消息
-            # 对于群聊消息，从 content 中提取实际消息内容
+            abm.message_str = content
             if abm.type == MessageType.GROUP_MESSAGE:
                 parts = content.split(":\n", 1)
                 if len(parts) == 2:
-                    abm.message_str = parts[1]  # 更新纯文本消息内容为实际消息内容
+                    abm.message_str = parts[1]
                     abm.message.append(Plain(abm.message_str))
                 else:
-                    # 如果群聊消息格式不符合预期，仍然使用原始 content
                     abm.message.append(Plain(abm.message_str))
             else:  # 私聊消息
                 abm.message.append(Plain(abm.message_str))
-        elif msg_type == 3:  # 图片消息
-            # TODO: 从 raw_message 中提取图片信息并创建 Image 组件
-            logger.warning(f"收到图片消息，待实现处理: {raw_message}")
-            pass
-        elif msg_type == 47:  # 视频消息 (注意：表情消息也是 47，需要区分)
-            # TODO: 从 raw_message 中提取视频信息并创建 Video 组件
-            logger.warning(f"收到视频消息，待实现处理: {raw_message}")
-            pass
-        elif msg_type == 50:  # 语音/视频 (根据上下文判断是语音还是视频)
-            # TODO: 从 raw_message 中提取语音信息并创建 Record 组件
-            logger.warning(f"收到语音/视频消息，待实现处理: {raw_message}")
-            pass
-        elif msg_type == 49:  # 引用消息
-            # TODO: 解析 content 中的 XML，提取引用内容和发送者信息
-            logger.warning(f"收到引用消息，待实现处理: {raw_message}")
+        elif msg_type == 3:
+            # 图片消息
+            from_user_name = raw_message.get("from_user_name", {}).get("str", "")
+            to_user_name = raw_message.get("to_user_name", {}).get("str", "")
+            msg_id = raw_message.get("msg_id")
+            image_resp = await self._download_raw_image(
+                from_user_name, to_user_name, msg_id
+            )
+            image_bs64_data = image_resp.get("Data", {}).get("Data", {}).get("Buffer", None)
+            if image_bs64_data:
+                abm.message.append(Image.fromBase64(image_bs64_data))
+        elif msg_type == 47:
+            # 视频消息 (注意：表情消息也是 47，需要区分)
+            logger.warning("收到视频消息，待实现。")
+        elif msg_type == 50:
+            # 语音/视频
+            logger.warning("收到语音/视频消息，待实现。")
+        elif msg_type == 49:
+            # 引用消息
+            logger.warning("收到引用消息，待实现。")
         else:
-            logger.warning(f"收到未处理的消息类型: {msg_type}, 原始消息: {raw_message}")
+            logger.warning(f"收到未处理的消息类型: {msg_type}。")
 
     async def terminate(self):
         """
@@ -588,7 +617,6 @@ class WeChatPadProAdapter(Platform):
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
     ):
-        # 创建一个临时的 AstrBotMessage 实例，用于传递会话信息
         dummy_message_obj = AstrBotMessage()
         dummy_message_obj.session_id = session.session_id
         # 根据 session_id 判断消息类型
@@ -600,8 +628,6 @@ class WeChatPadProAdapter(Platform):
             dummy_message_obj.type = MessageType.FRIEND_MESSAGE
             dummy_message_obj.group_id = ""
             dummy_message_obj.sender = MessageMember(user_id="", nickname="")
-        # logger.info(f"会话消息：{session}")
-        # logger.info(f"临时消息结构:{dummy_message_obj}")
         sending_event = WeChatPadProMessageEvent(
             message_str="",
             message_obj=dummy_message_obj,
