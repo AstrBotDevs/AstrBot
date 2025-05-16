@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import time
 from typing import Optional
 
 import aiohttp
@@ -281,6 +282,9 @@ class WeChatPadProAdapter(Platform):
                                 logger.error(
                                     f"检测登录状态成功但未找到登录状态: {response_data}"
                                 )
+                        elif response_data.get("Code") == 300:
+                            # "不存在状态"
+                            pass
                         else:
                             logger.info(
                                 f"检测登录状态失败: {response.status}, {response_data}"
@@ -307,7 +311,9 @@ class WeChatPadProAdapter(Platform):
         """
         os.environ["no_proxy"] = f"localhost,127.0.0.1,{self.host}"
         ws_url = f"ws://{self.host}:{self.port}/ws/GetSyncMsg?key={self.auth_key}"
-        logger.info(f"正在连接 WebSocket: ws://{self.host}:{self.port}/ws/GetSyncMsg?key=***")
+        logger.info(
+            f"正在连接 WebSocket: ws://{self.host}:{self.port}/ws/GetSyncMsg?key=***"
+        )
         while True:
             try:
                 async with websockets.connect(ws_url) as websocket:
@@ -333,7 +339,7 @@ class WeChatPadProAdapter(Platform):
         """
         处理从 WebSocket 接收到的消息。
         """
-        logger.info(f"收到 WebSocket 消息: {message}")
+        logger.debug(f"收到 WebSocket 消息: {message}")
         try:
             message_data = json.loads(message)
             # 检查消息结构，确保是有效的消息推送
@@ -372,6 +378,12 @@ class WeChatPadProAdapter(Platform):
         abm.timestamp = raw_message.get("create_time")
         abm.self_id = self.wxid
 
+        if int(time.time()) - abm.timestamp > 60:
+            logger.warning(
+                f"忽略 1 分钟前的旧消息：消息时间戳 {abm.timestamp} 超过当前时间 {int(time.time())}。"
+            )
+            return None
+
         from_user_name = raw_message.get("from_user_name", {}).get("str", "")
         to_user_name = raw_message.get("to_user_name", {}).get("str", "")
         content = raw_message.get("content", {}).get("str", "")
@@ -382,7 +394,11 @@ class WeChatPadProAdapter(Platform):
 
         # 如果是机器人自己发送的消息、回显消息或系统消息，忽略
         if from_user_name == self.wxid:
-            # logger.info("忽略自己发送的消息！！！")
+            logger.info("忽略来自自己的消息。")
+            return None
+
+        if from_user_name in ["weixin", "newsapp", "newsapp_wechat"]:
+            logger.info("忽略来自微信团队的消息。")
             return None
 
         # 先判断群聊/私聊并设置基本属性
@@ -503,37 +519,20 @@ class WeChatPadProAdapter(Platform):
         elif msg_type == 3:  # 图片消息
             # TODO: 从 raw_message 中提取图片信息并创建 Image 组件
             logger.warning(f"收到图片消息，待实现处理: {raw_message}")
-            # 示例：abm.message.append(Image(file="图片文件路径或URL"))
             pass
         elif msg_type == 47:  # 视频消息 (注意：表情消息也是 47，需要区分)
             # TODO: 从 raw_message 中提取视频信息并创建 Video 组件
             logger.warning(f"收到视频消息，待实现处理: {raw_message}")
-            # 示例：abm.message.append(Video(file="视频文件路径或URL"))
             pass
         elif msg_type == 50:  # 语音/视频 (根据上下文判断是语音还是视频)
             # TODO: 从 raw_message 中提取语音信息并创建 Record 组件
             logger.warning(f"收到语音/视频消息，待实现处理: {raw_message}")
-            # 示例：abm.message.append(Record(file="语音文件路径或URL"))
             pass
         elif msg_type == 49:  # 引用消息
             # TODO: 解析 content 中的 XML，提取引用内容和发送者信息
             logger.warning(f"收到引用消息，待实现处理: {raw_message}")
-            # 示例：abm.message.append(Reply(id="被引用消息ID", sender_id="被引用消息发送者ID"))
-            try:
-                import xml.etree.ElementTree as ET
-
-                root = ET.fromstring(content)
-                # 示例：提取被引用消息的发送者和内容
-                # referenced_sender = root.find('.//dataitemsource/fromusr').text
-                # referenced_content = root.find('.//datadesc').text
-                # logger.info(f"引用消息解析结果 - 发送者: {referenced_sender}, 内容: {referenced_content}")
-                # 根据需要创建 Reply 组件或其他组件
-            except Exception as e:
-                logger.error(f"解析引用消息 XML 失败: {e}")
-            pass
         else:
             logger.warning(f"收到未处理的消息类型: {msg_type}, 原始消息: {raw_message}")
-            # abm.message remains empty [] for unhandled types
 
     async def terminate(self):
         """
@@ -543,10 +542,10 @@ class WeChatPadProAdapter(Platform):
         # 关闭 WebSocket 连接
         if self._websocket:
             await self._websocket.close()
-        # 在这里实现终止 WeChatPadPro 客户端或连接的逻辑
-        # await self.client.stop()
-        if hasattr(self, "_shutdown_event"):
+        try:
             self._shutdown_event.set()
+        except Exception:
+            pass
 
     def meta(self) -> PlatformMetadata:
         """
