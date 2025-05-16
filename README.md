@@ -33,7 +33,7 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 > [!NOTE]
 > 
-> 个人微信接入所依赖的开源项目 Gewechat 近期已停止维护，我们正在评估其他方案（如 xxxbot 等）并将在数日内接入（很快！）。目前推荐微信用户暂时使用**微信官方**推出的企业微信接入方式和微信客服接入方式(版本 >= v3.5.7)。详情请前往 [#1443](https://github.com/AstrBotDevs/AstrBot/issues/1443) 讨论。
+> 个人微信接入所依赖的开源项目 Gewechat 近期已停止维护，`v3.5.10` 已经支持接入 WeChatPadPro 替换 gewechat 方式。详见文档 [WeChatPadPro](https://astrbot.app/deploy/platform/wechat/wechatpadpro.html)
 
 ## ✨ 近期更新
 
