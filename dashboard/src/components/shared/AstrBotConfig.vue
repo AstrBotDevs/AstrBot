@@ -98,7 +98,7 @@ function saveEditedContent() {
                     :theme="metadata[metadataKey].items[key]?.editor_theme || 'vs-light'" 
                     :language="metadata[metadataKey].items[key]?.editor_language || 'json'"
                     style="min-height: 100px; flex-grow: 1; border: 1px solid rgba(0, 0, 0, 0.1);" 
-                    v-model="iterable[key]"
+                    v-model:value="iterable[key]"
                   >
                   </VueMonacoEditor>
                   <v-btn
