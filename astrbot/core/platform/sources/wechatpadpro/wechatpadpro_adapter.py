@@ -10,12 +10,14 @@ import websockets
 from astrbot import logger
 from astrbot.api.message_components import Plain
 from astrbot.api.platform import Platform, PlatformMetadata
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astrbot_message import (
     AstrBotMessage,
     MessageMember,
     MessageType,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.platform.astr_message_event import MessageSesion
 
 from ...register import register_platform_adapter
 from .wechatpadpro_message_event import WeChatPadProMessageEvent
@@ -552,3 +554,30 @@ class WeChatPadProAdapter(Platform):
         得到一个平台的元数据。
         """
         return self.metadata
+
+    async def send_by_session(
+        self, session: MessageSesion, message_chain: MessageChain
+    ):
+        # 创建一个临时的 AstrBotMessage 实例，用于传递会话信息
+        dummy_message_obj = AstrBotMessage()
+        dummy_message_obj.session_id = session.session_id
+        # 根据 session_id 判断消息类型
+        if "@chatroom" in session.session_id:
+            dummy_message_obj.type = MessageType.GROUP_MESSAGE
+            dummy_message_obj.group_id = session.session_id
+            dummy_message_obj.sender = MessageMember(user_id="", nickname="")
+        else:
+            dummy_message_obj.type = MessageType.FRIEND_MESSAGE
+            dummy_message_obj.group_id = ""
+            dummy_message_obj.sender = MessageMember(user_id="", nickname="")
+        # logger.info(f"会话消息：{session}")
+        # logger.info(f"临时消息结构:{dummy_message_obj}")
+        sending_event = WeChatPadProMessageEvent(
+            message_str="",
+            message_obj=dummy_message_obj,
+            platform_meta=self.meta(),
+            session_id=session.session_id,
+            adapter=self,
+        )
+        # 调用实例方法 send
+        await sending_event.send(message_chain)

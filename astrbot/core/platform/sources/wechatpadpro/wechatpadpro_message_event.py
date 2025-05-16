@@ -24,7 +24,6 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
-        # 添加平台特定的参数，例如适配器实例
         adapter: "WeChatPadProAdapter",  # 传递适配器实例
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
@@ -69,7 +68,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
                 self.message_obj.sender.nickname or self.message_obj.sender.user_id
             )
             message_text = f"@{mention_text} {text}"
-            logger.info(f"已添加 @ 信息: {message_text}")
+            # logger.info(f"已添加 @ 信息: {message_text}")
         else:
             message_text = text
         payload = {
