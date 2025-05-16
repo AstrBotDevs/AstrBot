@@ -91,31 +91,42 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 ) as response:
                     response.raise_for_status()
 
-                    async for chunk in response.content.iter_any():
-                        if not chunk or not chunk.startswith(b"data:"):
-                            logger.warning(f"Minimax TTS resp: {chunk}")
-                            if "invalid api key" in chunk.decode("utf-8"):
-                                raise Exception("MiniMax TTS: 无效的 API 密钥")
-                            continue
-                        try:
-                            data = json.loads(chunk[5:])
-                            if "extra_info" in data:
-                                continue
-                            audio = data.get("data", {}).get("audio")
-                            if audio is not None:
-                                yield audio
-                        except json.JSONDecodeError:
-                            continue
+                    buffer = b""
+                    while True:
+                        chunk = await response.content.read(8192)
+                        if not chunk:
+                            break
+
+                        buffer += chunk
+
+                        while b"\n\n" in buffer:
+                            try:
+                                message, buffer = buffer.split(b"\n\n", 1)
+                                if message.startswith(b"data: "):
+                                    try:
+                                        data = json.loads(message[6:])
+                                        if "extra_info" in data:
+                                            continue
+                                        audio = data.get("data", {}).get("audio")
+                                        if audio is not None:
+                                            yield audio
+                                    except json.JSONDecodeError:
+                                        logger.warning(
+                                            "Failed to parse JSON data from SSE message"
+                                        )
+                                        continue
+                            except ValueError:
+                                buffer = buffer[-1024:]
 
         except aiohttp.ClientError as e:
             raise Exception(f"MiniMax TTS API请求失败: {str(e)}")
 
-    async def _audio_play(self, audio_stream: AsyncIterator[bytes]) -> bytes:
+    async def _audio_play(self, audio_stream: AsyncIterator[str]) -> bytes:
         """解码数据流到 audio 比特流"""
         chunks = []
         async for chunk in audio_stream:
-            if chunk and chunk != b"\n":
-                chunks.append(bytes.fromhex(chunk.decode("utf-8")))
+            if chunk.strip():
+                chunks.append(bytes.fromhex(chunk.strip()))
         return b"".join(chunks)
 
     async def get_audio(self, text: str) -> str:
