@@ -45,6 +45,10 @@ class WeChatPadProAdapter(Platform):
         self.admin_key = self.config.get("admin_key")
         self.host = self.config.get("host")
         self.port = self.config.get("port")
+        self.active_mesasge_poll = self.config.get("wpp_active_message_poll", False)
+        self.active_message_poll_interval = self.config.get(
+            "wpp_active_message_poll_interval", 5
+        )
         self.base_url = f"http://{self.host}:{self.port}"
         self.auth_key = None  # 用于保存生成的授权码
         self.wxid = None  # 用于保存登录成功后的 wxid
@@ -67,7 +71,9 @@ class WeChatPadProAdapter(Platform):
         if self.auth_key and await self.check_online_status():
             logger.info("WeChatPadPro 设备已在线，跳过扫码登录。")
             # 如果在线，连接 WebSocket 接收消息
-            asyncio.create_task(self.connect_websocket())
+            self.ws_handle_task = asyncio.create_task(self.connect_websocket())
+            if self.active_mesasge_poll:
+                asyncio.create_task(self._active_message_poll())
         else:
             logger.info("WeChatPadPro 设备不在线或无可用凭据，开始扫码登录流程。")
             # 1. 生成授权码
@@ -91,7 +97,9 @@ class WeChatPadProAdapter(Platform):
 
             if login_successful:
                 # 登录成功后，连接 WebSocket 接收消息
-                asyncio.create_task(self.connect_websocket())
+                self.ws_handle_task = asyncio.create_task(self.connect_websocket())
+                if self.active_mesasge_poll:
+                    asyncio.create_task(self._active_message_poll())
             else:
                 logger.warning("登录失败或超时，WeChatPadPro 适配器将关闭。")
                 await self.terminate()
@@ -306,6 +314,20 @@ class WeChatPadProAdapter(Platform):
             await asyncio.sleep(5)  # 每隔5秒检测一次
         logger.warning("登录检测超过最大尝试次数，退出检测。")
         return False
+
+    async def _active_message_poll(self):
+        """
+        部分 case 下，必须要重建 WebSocket 连接才能同步消息。
+        """
+        while True:
+            await asyncio.sleep(self.active_message_poll_interval)
+            logger.debug("主动拉取消息中...")
+            try:
+                if self.ws_handle_task.cancel():
+                    await asyncio.sleep(0.5)
+                    self.ws_handle_task = asyncio.create_task(self.connect_websocket())
+            except Exception as e:
+                logger.error(f"主动拉取消息时发生错误: {e}")
 
     async def connect_websocket(self):
         """
