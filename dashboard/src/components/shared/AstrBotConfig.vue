@@ -4,20 +4,19 @@ import { ref } from 'vue'
 
 const dialog = ref(false)
 const currentEditingKey = ref('')
-const currentEditingValue = ref('')
 const currentEditingLanguage = ref('json')
+const currentEditingTheme = ref('vs-light')
+let currentEditingKeyIterable = null
 
-function openEditorDialog(key, value, language) {
+function openEditorDialog(key, value, theme, language) {
   currentEditingKey.value = key
-  currentEditingValue.value = value
   currentEditingLanguage.value = language || 'json'
+  currentEditingTheme.value = theme || 'vs-light'
+  currentEditingKeyIterable = value
   dialog.value = true
 }
 
 function saveEditedContent() {
-  if (currentEditingKey.value && iterable[currentEditingKey.value] !== undefined) {
-    iterable[currentEditingKey.value] = currentEditingValue.value
-  }
   dialog.value = false
 }
 </script>
@@ -107,7 +106,7 @@ function saveEditedContent() {
                     variant="text"
                     color="primary"
                     class="editor-fullscreen-btn"
-                    @click="openEditorDialog(key, iterable[key], metadata[metadataKey].items[key]?.editor_language)"
+                    @click="openEditorDialog(key, iterable, metadata[metadataKey].items[key]?.editor_theme, metadata[metadataKey].items[key]?.editor_language)"
                     title="全屏编辑"
                   >
                     <v-icon>mdi-fullscreen</v-icon>
@@ -297,10 +296,10 @@ function saveEditedContent() {
       </v-toolbar>
       <v-card-text class="pa-0">
         <VueMonacoEditor 
-          theme="vs-dark" 
+          :theme="currentEditingTheme"
           :language="currentEditingLanguage" 
           style="height: calc(100vh - 64px);"
-          v-model:value="currentEditingValue"
+          v-model:value="currentEditingKeyIterable[currentEditingKey]"
         >
         </VueMonacoEditor>
       </v-card-text>
