@@ -45,6 +45,10 @@ class WeChatPadProAdapter(Platform):
         self.admin_key = self.config.get("admin_key")
         self.host = self.config.get("host")
         self.port = self.config.get("port")
+        self.active_mesasge_poll = self.config.get("wpp_active_message_poll", False)
+        self.active_message_poll_interval = self.config.get(
+            "wpp_active_message_poll_interval", 5
+        )
         self.base_url = f"http://{self.host}:{self.port}"
         self.auth_key = None  # 用于保存生成的授权码
         self.wxid = None  # 用于保存登录成功后的 wxid
@@ -67,7 +71,9 @@ class WeChatPadProAdapter(Platform):
         if self.auth_key and await self.check_online_status():
             logger.info("WeChatPadPro 设备已在线，跳过扫码登录。")
             # 如果在线，连接 WebSocket 接收消息
-            asyncio.create_task(self.connect_websocket())
+            self.ws_handle_task = asyncio.create_task(self.connect_websocket())
+            if self.active_mesasge_poll:
+                asyncio.create_task(self._active_message_poll())
         else:
             logger.info("WeChatPadPro 设备不在线或无可用凭据，开始扫码登录流程。")
             # 1. 生成授权码
@@ -91,7 +97,9 @@ class WeChatPadProAdapter(Platform):
 
             if login_successful:
                 # 登录成功后，连接 WebSocket 接收消息
-                asyncio.create_task(self.connect_websocket())
+                self.ws_handle_task = asyncio.create_task(self.connect_websocket())
+                if self.active_mesasge_poll:
+                    asyncio.create_task(self._active_message_poll())
             else:
                 logger.warning("登录失败或超时，WeChatPadPro 适配器将关闭。")
                 await self.terminate()
@@ -307,6 +315,20 @@ class WeChatPadProAdapter(Platform):
         logger.warning("登录检测超过最大尝试次数，退出检测。")
         return False
 
+    async def _active_message_poll(self):
+        """
+        部分 case 下，必须要重建 WebSocket 连接才能同步消息。
+        """
+        while True:
+            await asyncio.sleep(self.active_message_poll_interval)
+            logger.debug("主动拉取消息中...")
+            try:
+                if self.ws_handle_task.cancel():
+                    await asyncio.sleep(0.5)
+                    self.ws_handle_task = asyncio.create_task(self.connect_websocket())
+            except Exception as e:
+                logger.error(f"主动拉取消息时发生错误: {e}")
+
     async def connect_websocket(self):
         """
         建立 WebSocket 连接并处理接收到的消息。
@@ -394,6 +416,7 @@ class WeChatPadProAdapter(Platform):
         from_user_name = raw_message.get("from_user_name", {}).get("str", "")
         to_user_name = raw_message.get("to_user_name", {}).get("str", "")
         content = raw_message.get("content", {}).get("str", "")
+        push_content = raw_message.get("push_content", "")
         msg_type = raw_message.get("msg_type")
 
         abm.message_str = content  # 纯文本消息内容 (初始值)
@@ -410,7 +433,7 @@ class WeChatPadProAdapter(Platform):
 
         # 先判断群聊/私聊并设置基本属性
         if await self._process_chat_type(
-            abm, raw_message, from_user_name, to_user_name, content
+            abm, raw_message, from_user_name, to_user_name, content, push_content
         ):
             # 再根据消息类型处理消息内容
             self._process_message_content(abm, raw_message, msg_type, content)
@@ -425,6 +448,7 @@ class WeChatPadProAdapter(Platform):
         from_user_name: str,
         to_user_name: str,
         content: str,
+        push_content: str,
     ):
         """
         判断消息是群聊还是私聊，并设置 AstrBotMessage 的基本属性。
@@ -457,9 +481,10 @@ class WeChatPadProAdapter(Platform):
         else:
             abm.type = MessageType.FRIEND_MESSAGE
             abm.group_id = ""
-            abm.sender = MessageMember(
-                user_id=from_user_name, nickname=""
-            )  # 暂时没有私聊发送者的昵称
+            nick_name = ""
+            if push_content and " : " in push_content:
+                nick_name = push_content.split(" : ")[0]
+            abm.sender = MessageMember(user_id=from_user_name, nickname=nick_name)
             abm.session_id = from_user_name
         return True
 

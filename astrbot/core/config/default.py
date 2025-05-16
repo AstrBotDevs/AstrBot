@@ -162,6 +162,8 @@ CONFIG_METADATA_2 = {
                         "admin_key": "stay33",
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 8059,
+                        "wpp_active_message_poll": False,
+                        "wpp_active_message_poll_interval": 3,
                     },
                     "weixin_official_account(微信公众平台)": {
                         "id": "weixin_official_account",
@@ -218,6 +220,16 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "wpp_active_message_poll": {
+                      "description": "是否启用主动消息轮询",
+                      "type": "bool",
+                      "hint": "只有当你发现微信消息没有按时同步到 AstrBot 时，才需要启用这个功能，默认不启用。"
+                    },
+                    "wpp_active_message_poll_interval": {
+                      "description": "主动消息轮询间隔",
+                      "type": "int",
+                      "hint": "主动消息轮询间隔，单位为秒，默认 3 秒，最大不要超过 60 秒，否则可能被认为是旧消息。"
+                    },
                     "kf_name": {
                       "description": "微信客服账号名",
                       "type": "string",
