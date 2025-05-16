@@ -11,7 +11,6 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
-from astrbot.core.platform.sources.wechatpadpro.wechatpadpro_adapter import WeChatPadProAdapter
 
 
 class WeChatPadProMessageEvent(AstrMessageEvent):
