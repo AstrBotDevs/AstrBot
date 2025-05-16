@@ -30,7 +30,7 @@
         <v-card-text class="px-4 py-3">
           <item-card-grid
             :items="config_data.provider || []"
-            title-field="id" 
+            title-field="id"
             enabled-field="enable"
             empty-icon="mdi-api-off"
             empty-text="暂无服务提供商，点击 新增服务提供商 添加"
@@ -42,7 +42,7 @@
               <div class="d-flex align-center mb-2">
                 <v-icon size="small" color="grey" class="me-2">mdi-tag</v-icon>
                 <span class="text-caption text-medium-emphasis">
-                  提供商类型: 
+                  提供商类型:
                   <v-chip size="x-small" color="primary" class="ml-1">{{ item.type }}</v-chip>
                 </span>
               </div>
@@ -94,7 +94,7 @@
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </v-card-title>
-        
+
         <v-card-text class="pa-4" style="overflow-y: auto;">
           <v-tabs v-model="activeProviderTab" grow slider-color="primary" bg-color="background">
             <v-tab value="chat_completion" class="font-weight-medium px-3">
@@ -110,14 +110,14 @@
               文字转语音
             </v-tab>
           </v-tabs>
-          
+
           <v-window v-model="activeProviderTab" class="mt-4">
-            <v-window-item v-for="tabType in ['chat_completion', 'speech_to_text', 'text_to_speech']" 
-                          :key="tabType" 
+            <v-window-item v-for="tabType in ['chat_completion', 'speech_to_text', 'text_to_speech']"
+                          :key="tabType"
                           :value="tabType">
               <v-row class="mt-1">
-                <v-col v-for="(template, name) in getTemplatesByType(tabType)" 
-                      :key="name" 
+                <v-col v-for="(template, name) in getTemplatesByType(tabType)"
+                      :key="name"
                       cols="12" sm="6" md="4">
                   <v-card variant="outlined" hover class="provider-card" @click="selectProviderTemplate(name)">
                     <v-card-item>
@@ -155,17 +155,17 @@
           <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
           <span>{{ updatingMode ? '编辑' : '新增' }} {{ newSelectedProviderName }} 服务提供商</span>
         </v-card-title>
-        
+
         <v-card-text class="py-4">
-          <AstrBotConfig 
+          <AstrBotConfig
             :iterable="newSelectedProviderConfig"
             :metadata="metadata['provider_group']?.metadata"
-            metadataKey="provider" 
+            metadataKey="provider"
           />
         </v-card-text>
-        
+
         <v-divider></v-divider>
-        
+
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showProviderCfg = false" :disabled="loading">
@@ -183,7 +183,7 @@
       location="top">
       {{ save_message }}
     </v-snackbar>
-    
+
     <WaitingForRestart ref="wfr"></WaitingForRestart>
   </div>
 </template>
@@ -221,7 +221,7 @@ export default {
       save_message_success: "success",
 
       showConsole: false,
-      
+
       // 新增提供商对话框相关
       showAddProviderDialog: false,
       activeProviderTab: 'chat_completion',
@@ -247,16 +247,16 @@ export default {
     getTemplatesByType(type) {
       const templates = this.metadata['provider_group']?.metadata?.provider?.config_template || {};
       const filtered = {};
-      
+
       for (const [name, template] of Object.entries(templates)) {
         if (template.provider_type === type) {
           filtered[name] = template;
         }
       }
-      
+
       return filtered;
     },
-    
+
     // 获取提供商类型对应的图标
     getProviderIcon(type) {
       const icons = {
@@ -279,6 +279,7 @@ export default {
         'LM Studio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/lmstudio.svg',
         'FishAudio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/fishaudio.svg',
         'Azure': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/azure.svg',
+        'MiniMax': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/minimax.svg',
       };
       for (const key in icons) {
         if (type.startsWith(key)) {
@@ -297,7 +298,7 @@ export default {
       };
       return names[tabType] || tabType;
     },
-    
+
     // 获取提供商简介
     getProviderDescription(template, name) {
       if (name == 'OpenAI') {
@@ -305,7 +306,7 @@ export default {
       }
       return `${template.type} 服务提供商`;
     },
-    
+
     // 选择提供商模板
     selectProviderTemplate(name) {
       this.newSelectedProviderName = name;
@@ -335,7 +336,7 @@ export default {
           break;
         }
       }
-      
+
       const mergeConfigWithOrder = (target, source, reference) => {
         // 首先复制所有source中的属性到target
         if (source && typeof source === 'object' && !Array.isArray(source)) {
@@ -349,7 +350,7 @@ export default {
             }
           }
         }
-        
+
         // 然后根据reference的结构添加或覆盖属性
         for (let key in reference) {
           if (typeof reference[key] === 'object' && reference[key] !== null) {
@@ -357,8 +358,8 @@ export default {
               target[key] = Array.isArray(reference[key]) ? [] : {};
             }
             mergeConfigWithOrder(
-              target[key], 
-              source && source[key] ? source[key] : {}, 
+              target[key],
+              source && source[key] ? source[key] : {},
               reference[key]
             );
           } else if (!(key in target)) {
@@ -367,7 +368,7 @@ export default {
           }
         }
       };
-      
+
       if (defaultConfig) {
         mergeConfigWithOrder(this.newSelectedProviderConfig, provider, defaultConfig);
       }
@@ -418,7 +419,7 @@ export default {
 
     providerStatusChange(provider) {
       provider.enable = !provider.enable; // 切换状态
-      
+
       axios.post('/api/config/provider/update', {
         id: provider.id,
         config: provider
@@ -430,13 +431,13 @@ export default {
         this.showError(err.response?.data?.message || err.message);
       });
     },
-    
+
     showSuccess(message) {
       this.save_message = message;
       this.save_message_success = "success";
       this.save_message_snack = true;
     },
-    
+
     showError(message) {
       this.save_message = message;
       this.save_message_success = "error";
