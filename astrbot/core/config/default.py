@@ -815,7 +815,7 @@ CONFIG_METADATA_2 = {
                         "minimax-voice-pitch": 0,
                         "minimax-is-timber-weight": False,
                         "minimax-voice-id": "female-shaonv",
-                        "minimax-timber-weight": '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 25}, {"voice_id": "Chinese (Mandarin)_BashfulGirl", "weight": 50}]',
+                        "minimax-timber-weight": '[\n    {\n        "voice_id": "Chinese (Mandarin)_Warm_Girl",\n        "weight": 25\n    },\n    {\n        "voice_id": "Chinese (Mandarin)_BashfulGirl",\n        "weight": 50\n    }\n]',
                         "minimax-voice-emotion": "neutral",
                         "minimax-voice-latex": False,
                         "minimax-voice-english-normalization": False,
@@ -978,6 +978,7 @@ CONFIG_METADATA_2 = {
                     "minimax-timber-weight": {
                         "type": "string",
                         "description": "混合音色",
+                        "editor_mode": True,
                         "hint": "混合音色及其权重, 最多支持四种音色, 权重为整数, 取值[1, 100]. 可在官网API语音调试台预览代码获得预设以及编写模板, 需要严格按照json字符串格式编写, 可以查看控制台判断是否解析成功. 具体结构可参照默认值以及官网代码预览.",
                     },
                     "minimax-voice-id": {
