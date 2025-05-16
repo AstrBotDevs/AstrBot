@@ -300,7 +300,7 @@ function saveEditedContent() {
           theme="vs-dark" 
           :language="currentEditingLanguage" 
           style="height: calc(100vh - 64px);"
-          v-model="currentEditingValue"
+          v-model:value="currentEditingValue"
         >
         </VueMonacoEditor>
       </v-card-text>
