@@ -1,17 +1,18 @@
-import time
 import re
+import time
 import traceback
-from typing import Union, AsyncGenerator
-from ..stage import Stage, register_stage, registered_stages
-from ..context import PipelineContext
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from typing import AsyncGenerator, Union
+
+from astrbot.core import html_renderer, logger, file_token_service
+from astrbot.core.message.components import At, File, Image, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core import logger
-from astrbot.core.message.components import Plain, Image, At, Reply, Record, File, Node
-from astrbot.core import html_renderer
-from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+from ..context import PipelineContext
+from ..stage import Stage, register_stage, registered_stages
 
 
 @register_stage
@@ -177,21 +178,43 @@ class ResultDecorateStage(Stage):
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
                         try:
-                            logger.info("TTS 请求: " + comp.text)
+                            logger.info(f"TTS 请求: {comp.text}")
                             audio_path = await tts_provider.get_audio(comp.text)
-                            logger.info("TTS 结果: " + audio_path)
-                            if audio_path:
-                                new_chain.append(
-                                    Record(file=audio_path, url=audio_path)
-                                )
-                                if(self.ctx.astrbot_config["provider_tts_settings"]["dual_output"]):
-                                    new_chain.append(comp)
-                            else:
+                            logger.info(f"TTS 结果: {audio_path}")
+                            if not audio_path:
                                 logger.error(
-                                    f"由于 TTS 音频文件没找到，消息段转语音失败: {comp.text}"
+                                    f"由于 TTS 音频文件未找到，消息段转语音失败: {comp.text}"
                                 )
                                 new_chain.append(comp)
-                        except BaseException:
+                                continue
+
+                            use_file_service = self.ctx.astrbot_config[
+                                "provider_tts_settings"
+                            ]["use_file_service"]
+                            callback_api_base = self.ctx.astrbot_config[
+                                "callback_api_base"
+                            ]
+                            dual_output = self.ctx.astrbot_config[
+                                "provider_tts_settings"
+                            ]["dual_output"]
+
+                            url = None
+                            if use_file_service and callback_api_base:
+                                token = await file_token_service.register_file(
+                                    audio_path
+                                )
+                                url = f"{callback_api_base}/api/file/{token}"
+                                logger.debug(f"已注册：{url}")
+
+                            new_chain.append(
+                                Record(
+                                    file=url or audio_path,
+                                    url=url or audio_path,
+                                )
+                            )
+                            if dual_output:
+                                new_chain.append(comp)
+                        except Exception:
                             logger.error(traceback.format_exc())
                             logger.error("TTS 失败，使用文本发送。")
                             new_chain.append(comp)
@@ -224,6 +247,14 @@ class ResultDecorateStage(Stage):
                         )
                     if url:
                         if url.startswith("http"):
+                            result.chain = [Image.fromURL(url)]
+                        elif (
+                            self.ctx.astrbot_config["t2i_use_file_service"]
+                            and self.ctx.astrbot_config["callback_api_base"]
+                        ):
+                            token = await file_token_service.register_file(url)
+                            url = f"{self.ctx.astrbot_config['callback_api_base']}/api/file/{token}"
+                            logger.debug(f"已注册：{url}")
                             result.chain = [Image.fromURL(url)]
                         else:
                             result.chain = [Image.fromFileSystem(url)]
