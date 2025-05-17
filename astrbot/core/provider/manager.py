@@ -206,6 +206,10 @@ class ProviderManager:
                     from .sources.azure_tts_source import (
                         AzureTTSProvider as AzureTTSProvider,
                     )
+                case "volcengine_tts":
+                    from .sources.volcengine_tts import (
+                        ProviderVolcengineTTS as ProviderVolcengineTTS,
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。"
