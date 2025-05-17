@@ -15,6 +15,8 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.io import get_local_ip_addresses
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
+APP: Quart = None
+
 
 class AstrBotDashboard:
     def __init__(
@@ -27,6 +29,7 @@ class AstrBotDashboard:
         self.config = core_lifecycle.astrbot_config
         self.data_path = os.path.abspath(os.path.join(get_astrbot_data_path(), "dist"))
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
+        APP = self.app  # noqa
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
@@ -50,6 +53,13 @@ class AstrBotDashboard:
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
         self.file_route = FileRoute(self.context)
+
+        if self.core_lifecycle.star_context.registered_web_apis:
+            for api in self.core_lifecycle.star_context.registered_web_apis:
+                route, view_handler, methods, _ = api
+                self.app.add_url_rule(
+                    f"/api/plug{route}", view_func=view_handler, methods=methods
+                )
 
         self.shutdown_event = shutdown_event
 

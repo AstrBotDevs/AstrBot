@@ -66,9 +66,9 @@ const sidebarItem: menu[] = [
     to: '/console'
   },
   {
-    title: '设置',
-    icon: 'mdi-wrench',
-    to: '/settings'
+    title: 'Alkaid',
+    icon: 'mdi-test-tube',
+    to: '/alkaid'
   },
   {
     title: '关于',

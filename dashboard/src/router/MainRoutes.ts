@@ -57,9 +57,9 @@ const MainRoutes = {
       component: () => import('@/views/ConsolePage.vue')
     },
     {
-      name: 'Project ATRI',
-      path: '/project-atri',
-      component: () => import('@/views/ATRIProject.vue')
+      name: 'Alkaid',
+      path: '/alkaid',
+      component: () => import('@/views/AlkaidPage.vue')
     },
     {
       name: 'Chat',

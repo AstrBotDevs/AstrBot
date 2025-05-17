@@ -42,6 +42,8 @@ class Context:
 
     platform_manager: PlatformManager = None
 
+    registered_web_apis: list = []
+
     # back compatibility
     _register_tasks: List[Awaitable] = []
     _star_manager = None
@@ -301,3 +303,6 @@ class Context:
         注册一个异步任务。
         """
         self._register_tasks.append(task)
+
+    def register_web_api(self, route: str, view_handler: Awaitable, methods: list, desc: str):
+        self.registered_web_apis.append((route, view_handler, methods, desc))
