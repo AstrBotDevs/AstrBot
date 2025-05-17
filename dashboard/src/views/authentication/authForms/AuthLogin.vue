@@ -8,9 +8,12 @@ const valid = ref(false);
 const show1 = ref(false);
 const password = ref('');
 const username = ref('');
+const loading = ref(false);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 async function validate(values: any, { setErrors }: any) {
+  loading.value = true;
+  
   // md5加密
   let password_ = password.value;
   if (password.value != '') {
@@ -21,67 +24,154 @@ async function validate(values: any, { setErrors }: any) {
   const authStore = useAuthStore();
   return authStore.login(username.value, password_).then((res) => {
     console.log(res);
+    loading.value = false;
   }).catch((err) => {
     setErrors({ apiError: err });
+    loading.value = false;
   });
 }
 
 </script>
 
 <template>
-  <Form @submit="validate" class="mt-7 loginForm" v-slot="{ errors, isSubmitting }">
-    <v-text-field v-model="username" label="用户名" class="mt-4 mb-8" required density="comfortable"
-      hide-details="auto" variant="outlined" color="primary"></v-text-field>
-    <v-text-field v-model="password" label="密码" required density="comfortable" variant="outlined"
-      color="primary" hide-details="auto" :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
-      :type="show1 ? 'text' : 'password'" @click:append="show1 = !show1" class="pwdInput"></v-text-field>
+  <Form @submit="validate" class="mt-4 login-form" v-slot="{ errors, isSubmitting }">
+    <v-text-field 
+      v-model="username" 
+      label="用户名" 
+      class="mb-6 input-field" 
+      required 
+      density="comfortable"
+      hide-details="auto" 
+      variant="outlined" 
+      color="primary"
+      prepend-inner-icon="mdi-account"
+      :disabled="loading"
+    ></v-text-field>
+    
+    <v-text-field 
+      v-model="password" 
+      label="密码" 
+      required 
+      density="comfortable" 
+      variant="outlined"
+      color="primary" 
+      hide-details="auto" 
+      :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
+      :type="show1 ? 'text' : 'password'" 
+      @click:append="show1 = !show1" 
+      class="pwd-input"
+      prepend-inner-icon="mdi-lock"
+      :disabled="loading"
+    ></v-text-field>
 
-    <small>默认用户名和密码为 astrbot。</small>
-    <v-btn color="secondary" :loading="isSubmitting" block class="mt-8" variant="flat" size="large" :disabled="valid"
-      type="submit">
-      登录</v-btn>
-    <div v-if="errors.apiError" class="mt-2">
-      <v-alert color="error">{{ errors.apiError }}</v-alert>
+    <div class="mt-1 mb-5 hint-text">
+      <small>默认用户名和密码为 astrbot</small>
+    </div>
+    
+    <v-btn 
+      color="secondary" 
+      :loading="isSubmitting || loading" 
+      block 
+      class="login-btn" 
+      variant="flat" 
+      size="large" 
+      :disabled="valid"
+      type="submit"
+      elevation="2"
+    >
+      <span class="login-btn-text">登录</span>
+    </v-btn>
+    
+    <div v-if="errors.apiError" class="mt-4 error-container">
+      <v-alert 
+        color="error" 
+        variant="tonal" 
+        density="comfortable"
+        icon="mdi-alert-circle"
+        border="start"
+      >
+        {{ errors.apiError }}
+      </v-alert>
     </div>
   </Form>
-
 </template>
 
 <style lang="scss">
-.custom-devider {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-}
-
-.googleBtn {
-  border-color: rgba(0, 0, 0, 0.08);
-  margin: 30px 0 20px 0;
-}
-
-.outlinedInput .v-field {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: none;
-}
-
-.orbtn {
-  padding: 2px 40px;
-  border-color: rgba(0, 0, 0, 0.08);
-  margin: 20px 15px;
-}
-
-.pwdInput {
-  position: relative;
-
-  .v-input__append {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-  }
-}
-
-.loginForm {
+.login-form {
   .v-text-field .v-field--active input {
     font-weight: 500;
   }
+
+  .input-field, .pwd-input {
+    .v-field__field {
+      padding-top: 5px;
+      padding-bottom: 5px;
+    }
+    
+    .v-field__outline {
+      opacity: 0.7;
+    }
+    
+    &:hover .v-field__outline {
+      opacity: 0.9;
+    }
+    
+    .v-field--focused .v-field__outline {
+      opacity: 1;
+    }
+    
+    .v-field__prepend-inner {
+      padding-right: 8px;
+      opacity: 0.7;
+    }
+  }
+
+  .pwd-input {
+    position: relative;
+
+    .v-input__append {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      opacity: 0.7;
+      
+      &:hover {
+        opacity: 1;
+      }
+    }
+  }
+  
+  .login-btn {
+    margin-top: 12px;
+    height: 48px;
+    transition: all 0.3s ease;
+    letter-spacing: 0.5px;
+    
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(94, 53, 177, 0.2) !important;
+    }
+    
+    .login-btn-text {
+      font-size: 1.05rem;
+      font-weight: 500;
+    }
+  }
+  
+  .hint-text {
+    color: rgba(0, 0, 0, 0.5);
+    padding-left: 5px;
+  }
+  
+  .error-container {
+    .v-alert {
+      border-left-width: 4px !important;
+    }
+  }
+}
+
+.custom-devider {
+  border-color: rgba(0, 0, 0, 0.08) !important;
 }
 </style>
