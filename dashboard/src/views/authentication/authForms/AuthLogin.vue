@@ -104,7 +104,8 @@ async function validate(values: any, { setErrors }: any) {
 
   .input-field, .pwd-input {
     .v-field__field {
-      padding-top: 10px;
+      padding-top: 5px;
+      padding-bottom: 5px;
     }
     
     .v-field__outline {
