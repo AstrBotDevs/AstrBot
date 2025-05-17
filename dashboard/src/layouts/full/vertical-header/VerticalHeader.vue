@@ -78,6 +78,17 @@ function accountEdit() {
     });
 }
 
+function getVersion() {
+  axios.get('/api/stat/version')
+    .then((res) => {
+      botCurrVersion.value = "v" + res.data.data.version;
+      dashboardCurrentVersion.value = res.data.data?.dashboard_version;
+    })
+    .catch((err) => {
+      console.log(err);
+    });
+}
+
 function checkUpdate() {
   updateStatus.value = '正在检查更新...';
   axios.get('/api/update/check')
@@ -90,8 +101,6 @@ function checkUpdate() {
       } else {
         updateStatus.value = res.data.message;
       }
-      botCurrVersion.value = res.data.data.version;
-      dashboardCurrentVersion.value = res.data.data.dashboard_version;
       dashboardHasNewVersion.value = res.data.data.dashboard_has_new_version;
     })
     .catch((err) => {
@@ -181,6 +190,7 @@ function updateDashboard() {
     });
 }
 
+getVersion();
 checkUpdate();
 
 const commonStore = useCommonStore();
@@ -208,23 +218,29 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <span style="margin-left: 16px; font-size: 24px; font-weight: 1000;">Astr<span
-        style="font-weight: normal;">Bot</span></span>
+    <div style="margin-left: 16px; display: flex; align-items: center; gap: 8px;">
+      <span style=" font-size: 24px; font-weight: 1000;">Astr<span style="font-weight: normal;">Bot</span>
+      </span>
+      <span style="font-size: 12px; color: #333333;">{{ botCurrVersion }}</span>
+    </div>
 
     <v-spacer />
 
     <div class="mr-4">
       <small v-if="hasNewVersion">
-        有新版本！
+        AstrBot 有新版本！
+      </small>
+      <small v-else-if="dashboardHasNewVersion">
+        WebUI 有新版本！
       </small>
     </div>
 
 
     <v-dialog v-model="updateStatusDialog" width="1000">
       <template v-slot:activator="{ props }">
-        <v-btn @click="checkUpdate(); getReleases(); getDevCommits();" class="text-primary mr-4" color="lightprimary"
+        <v-btn size="small" @click="checkUpdate(); getReleases(); getDevCommits();" class="text-primary mr-2" color="lightprimary"
           variant="flat" rounded="sm" v-bind="props">
-          更新 🔄
+          更新
         </v-btn>
       </template>
       <v-card>
@@ -353,8 +369,8 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
 
     <v-dialog v-model="dialog" persistent width="700">
       <template v-slot:activator="{ props }">
-        <v-btn class="text-primary mr-4" color="lightprimary" variant="flat" rounded="sm" v-bind="props">
-          账户 📰
+        <v-btn size="small" class="text-primary mr-4" color="lightprimary" variant="flat" rounded="sm" v-bind="props">
+          账户
         </v-btn>
       </template>
       <v-card>
