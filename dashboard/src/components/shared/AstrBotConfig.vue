@@ -1,3 +1,26 @@
+<script setup>
+import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
+import { ref } from 'vue'
+
+const dialog = ref(false)
+const currentEditingKey = ref('')
+const currentEditingLanguage = ref('json')
+const currentEditingTheme = ref('vs-light')
+let currentEditingKeyIterable = null
+
+function openEditorDialog(key, value, theme, language) {
+  currentEditingKey.value = key
+  currentEditingLanguage.value = language || 'json'
+  currentEditingTheme.value = theme || 'vs-light'
+  currentEditingKeyIterable = value
+  dialog.value = true
+}
+
+function saveEditedContent() {
+  dialog.value = false
+}
+</script>
+
 <template>
   <div class="config-section" v-if="iterable && metadata[metadataKey]?.type === 'object'">
     <v-list-item-title class="config-title">
@@ -67,6 +90,28 @@
                   class="config-field"
                   hide-details
                 ></v-select>
+
+                <!-- Code Editor with Full Screen Option -->
+                <div v-else-if="metadata[metadataKey].items[key]?.editor_mode && !metadata[metadataKey].items[key]?.invisible" class="editor-container">
+                  <VueMonacoEditor 
+                    :theme="metadata[metadataKey].items[key]?.editor_theme || 'vs-light'" 
+                    :language="metadata[metadataKey].items[key]?.editor_language || 'json'"
+                    style="min-height: 100px; flex-grow: 1; border: 1px solid rgba(0, 0, 0, 0.1);" 
+                    v-model:value="iterable[key]"
+                  >
+                  </VueMonacoEditor>
+                  <v-btn
+                    icon
+                    size="small"
+                    variant="text"
+                    color="primary"
+                    class="editor-fullscreen-btn"
+                    @click="openEditorDialog(key, iterable, metadata[metadataKey].items[key]?.editor_theme, metadata[metadataKey].items[key]?.editor_language)"
+                    title="全屏编辑"
+                  >
+                    <v-icon>mdi-fullscreen</v-icon>
+                  </v-btn>
+                </div>
                 
                 <!-- String input -->
                 <v-text-field
@@ -235,6 +280,31 @@
       <v-divider class="my-2 config-divider"></v-divider>
     </div>
   </v-card-text>
+
+  <!-- Full Screen Editor Dialog -->
+  <v-dialog v-model="dialog" fullscreen transition="dialog-bottom-transition" scrollable>
+    <v-card>
+      <v-toolbar color="primary" dark>
+        <v-btn icon @click="dialog = false">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+        <v-toolbar-title>编辑内容 - {{ currentEditingKey }}</v-toolbar-title>
+        <v-spacer></v-spacer>
+        <v-toolbar-items>
+          <v-btn variant="text" @click="saveEditedContent">保存</v-btn>
+        </v-toolbar-items>
+      </v-toolbar>
+      <v-card-text class="pa-0">
+        <VueMonacoEditor 
+          :theme="currentEditingTheme"
+          :language="currentEditingLanguage" 
+          style="height: calc(100vh - 64px);"
+          v-model:value="currentEditingKeyIterable[currentEditingKey]"
+        >
+        </VueMonacoEditor>
+      </v-card-text>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>
@@ -355,6 +425,25 @@ export default {
 .config-divider {
   border-color: rgba(0, 0, 0, 0.1);
   margin: 4px 0;
+}
+
+.editor-container {
+  position: relative;
+  display: flex;
+  width: 100%;
+}
+
+.editor-fullscreen-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 10;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.editor-fullscreen-btn:hover {
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
 @media (max-width: 600px) {

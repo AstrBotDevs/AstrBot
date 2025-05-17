@@ -8,6 +8,7 @@ from quart import request
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config import VERSION
+from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core import DEMO_MODE
 
 
@@ -46,7 +47,10 @@ class StatRoute(Route):
         return f"{h}小时{m}分{s}秒"
 
     async def get_version(self):
-        return Response().ok({"version": VERSION}).__dict__
+        return Response().ok({
+            "version": VERSION,
+            "dashboard_version": await get_dashboard_version(),
+        }).__dict__
 
     async def get_start_time(self):
         return Response().ok({"start_time": self.core_lifecycle.start_time}).__dict__

@@ -5,7 +5,7 @@
 import os
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.9"
+VERSION = "3.5.10"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
@@ -155,6 +155,16 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
+                    "wechatpadpro(微信)": {
+                        "id": "wechatpadpro",
+                        "type": "wechatpadpro",
+                        "enable": False,
+                        "admin_key": "stay33",
+                        "host": "这里填写你的局域网IP或者公网服务器IP",
+                        "port": 8059,
+                        "wpp_active_message_poll": False,
+                        "wpp_active_message_poll_interval": 3,
+                    },
                     "weixin_official_account(微信公众平台)": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
@@ -210,6 +220,16 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "wpp_active_message_poll": {
+                      "description": "是否启用主动消息轮询",
+                      "type": "bool",
+                      "hint": "只有当你发现微信消息没有按时同步到 AstrBot 时，才需要启用这个功能，默认不启用。"
+                    },
+                    "wpp_active_message_poll_interval": {
+                      "description": "主动消息轮询间隔",
+                      "type": "int",
+                      "hint": "主动消息轮询间隔，单位为秒，默认 3 秒，最大不要超过 60 秒，否则可能被认为是旧消息。"
+                    },
                     "kf_name": {
                       "description": "微信客服账号名",
                       "type": "string",
@@ -236,10 +256,10 @@ CONFIG_METADATA_2 = {
                         "hint": "Telegram 命令自动刷新间隔，单位为秒。",
                     },
                     "id": {
-                        "description": "ID",
+                        "description": "机器人名称",
                         "type": "string",
                         "obvious_hint": True,
-                        "hint": "ID 不能和其它的平台适配器重复，否则将发生严重冲突。",
+                        "hint": "机器人名称(ID)不能和其它的平台适配器重复。",
                     },
                     "type": {
                         "description": "适配器类型",
@@ -800,6 +820,27 @@ CONFIG_METADATA_2 = {
                         "azure_tts_subscription_key": "",
                         "azure_tts_region": "eastus"
                     },
+                    "MiniMax TTS(API)": {
+                        "id": "minimax_tts",
+                        "type": "minimax_tts_api",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.minimax.chat/v1/t2a_v2",
+                        "minimax-group-id": "",
+                        "model": "speech-02-turbo",
+                        "minimax-langboost": "auto",
+                        "minimax-voice-speed": 1.0,
+                        "minimax-voice-vol": 1.0,
+                        "minimax-voice-pitch": 0,
+                        "minimax-is-timber-weight": False,
+                        "minimax-voice-id": "female-shaonv",
+                        "minimax-timber-weight": '[\n    {\n        "voice_id": "Chinese (Mandarin)_Warm_Girl",\n        "weight": 25\n    },\n    {\n        "voice_id": "Chinese (Mandarin)_BashfulGirl",\n        "weight": 50\n    }\n]',
+                        "minimax-voice-emotion": "neutral",
+                        "minimax-voice-latex": False,
+                        "minimax-voice-english-normalization": False,
+                        "timeout": 20,
+                    },
                     "火山引擎_TTS(API)": {
                         "id": "volcengine_tts",
                         "type": "volcengine_tts",
@@ -934,6 +975,64 @@ CONFIG_METADATA_2 = {
                                 "hint": "模型应该生成的思考Token的数量，设为0关闭思考。除gemini-2.5-flash外的模型会静默忽略此参数。",
                             },
                         },
+                    },
+                    "minimax-group-id": {
+                        "type": "string",
+                        "description": "用户组",
+                        "hint": "于账户管理->基本信息中可见",
+                    },
+                    "minimax-langboost": {
+                        "type": "string",
+                        "description": "指定语言/方言",
+                        "hint": "增强对指定的小语种和方言的识别能力，设置后可以提升在指定小语种/方言场景下的语音表现",
+                        "options": [ "Chinese","Chinese,Yue","English","Arabic","Russian","Spanish","French","Portuguese","German","Turkish","Dutch","Ukrainian","Vietnamese","Indonesian","Japanese","Italian","Korean","Thai","Polish","Romanian","Greek","Czech","Finnish","Hindi","auto",],
+                    },
+                    "minimax-voice-speed": {
+                        "type": "float",
+                        "description": "语速",
+                        "hint": "生成声音的语速, 取值[0.5, 2], 默认为1.0, 取值越大，语速越快",
+                    },
+                    "minimax-voice-vol": {
+                        "type": "float",
+                        "description": "音量",
+                        "hint": "生成声音的音量, 取值(0, 10], 默认为1.0, 取值越大，音量越高",
+                    },
+                    "minimax-voice-pitch": {
+                        "type": "int",
+                        "description": "语调",
+                        "hint": "生成声音的语调, 取值[-12, 12], 默认为0",
+                    },
+                    "minimax-is-timber-weight": {
+                        "type": "bool",
+                        "description": "启用混合音色",
+                        "hint": "启用混合音色, 支持以自定义权重混合最多四种音色, 启用后自动忽略单一音色设置",
+                    },
+                    "minimax-timber-weight": {
+                        "type": "string",
+                        "description": "混合音色",
+                        "editor_mode": True,
+                        "hint": "混合音色及其权重, 最多支持四种音色, 权重为整数, 取值[1, 100]. 可在官网API语音调试台预览代码获得预设以及编写模板, 需要严格按照json字符串格式编写, 可以查看控制台判断是否解析成功. 具体结构可参照默认值以及官网代码预览.",
+                    },
+                    "minimax-voice-id": {
+                        "type": "string",
+                        "description": "单一音色",
+                        "hint": "单一音色编号, 详见官网文档",
+                    },
+                    "minimax-voice-emotion": {
+                        "type": "string",
+                        "description": "情绪",
+                        "hint": "控制合成语音的情绪",
+                        "options": ["happy","sad","angry","fearful","disgusted","surprised","neutral",],
+                    },
+                    "minimax-voice-latex": {
+                        "type": "bool",
+                        "description": "支持朗读latex公式",
+                        "hint": "朗读latex公式, 但是需要确保输入文本按官网要求格式化",
+                    },
+                    "minimax-voice-english-normalization": {
+                        "type": "bool",
+                        "description": "支持英语文本规范化",
+                        "hint": "可提升数字阅读场景的性能，但会略微增加延迟",
                     },
                     "rag_options": {
                         "description": "RAG 选项",
