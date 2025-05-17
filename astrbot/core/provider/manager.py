@@ -206,9 +206,9 @@ class ProviderManager:
                     from .sources.azure_tts_source import (
                         AzureTTSProvider as AzureTTSProvider,
                     )
-                case "minimax_tts_api":
-                    from .sources.minimax_tts_api_source import (
-                        ProviderMiniMaxTTSAPI as ProviderMiniMaxTTSAPI,
+                case "volcengine_tts":
+                    from .sources.volcengine_tts import (
+                        ProviderVolcengineTTS as ProviderVolcengineTTS,
                     )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(

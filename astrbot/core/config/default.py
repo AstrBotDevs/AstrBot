@@ -810,13 +810,14 @@ CONFIG_METADATA_2 = {
                     "火山引擎_TTS(API)": {
                         "id": "volcengine_tts",
                         "type": "volcengine_tts",
+                        "provider_type": "text_to_speech",
                         "enable": False,
                         "api_key": "",
                         "appid": "",
                         "cluster": "",
-                        "voice_type": "xiaoyun",
+                        "voice_type": "",
                         "api_base": "https://openspeech.bytedance.com/api/v1/tts",
-                        "timeout": "20",
+                        "timeout": 20,
                     },
                 },
                 "items": {
