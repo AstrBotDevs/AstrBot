@@ -7,7 +7,7 @@ from .waking_check.stage import WakingCheckStage
 from .whitelist_check.stage import WhitelistCheckStage
 from .rate_limit_check.stage import RateLimitStage
 from .content_safety_check.stage import ContentSafetyCheckStage
-from .platform_compatibility.stage import PlatformCompatibilityStage
+from .plugin_compatibility.stage import PlatformCompatibilityStage
 from .preprocess_stage.stage import PreProcessStage
 from .process_stage.stage import ProcessStage
 from .result_decorate.stage import ResultDecorateStage
