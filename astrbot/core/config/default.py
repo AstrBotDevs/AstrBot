@@ -256,10 +256,10 @@ CONFIG_METADATA_2 = {
                         "hint": "Telegram 命令自动刷新间隔，单位为秒。",
                     },
                     "id": {
-                        "description": "ID",
+                        "description": "机器人名称",
                         "type": "string",
                         "obvious_hint": True,
-                        "hint": "ID 不能和其它的平台适配器重复，否则将发生严重冲突。",
+                        "hint": "机器人名称(ID)不能和其它的平台适配器重复。",
                     },
                     "type": {
                         "description": "适配器类型",

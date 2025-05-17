@@ -58,7 +58,7 @@ import 'highlight.js/styles/github.css';
 
                         <v-row style="margin-top: 8px;">
                             <v-col cols="12" md="6" lg="6" v-for="plugin in pinnedPlugins">
-                                <ExtensionCard :extension="plugin" market-mode="true" :highlight="true">
+                                <ExtensionCard :extension="plugin" market-mode="true" :highlight="true" @install="extension_url=plugin.repo; newExtension()">
                                 </ExtensionCard>
                             </v-col>
                         </v-row>
