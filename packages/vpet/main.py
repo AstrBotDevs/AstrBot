@@ -1,6 +1,5 @@
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
-from astrbot.api import logger
 
 @register("vpet", "AstrBot Team", "虚拟桌宠", "0.0.1")
 class VPet(Star):
