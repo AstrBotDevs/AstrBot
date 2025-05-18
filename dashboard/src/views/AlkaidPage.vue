@@ -1,7 +1,6 @@
 <script setup>
-import Graph from "graphology";
-import Sigma from "sigma";
-import ForceSupervisor from "graphology-layout-force/worker";
+// 在较庞大的图下，d3 的性能不如 sigma.js 渲染库，因此我们优先使用 sigma.js 来渲染图。
+import * as d3 from "d3"; // npm install d3
 </script>
 
 
@@ -142,12 +141,14 @@ export default {
   },
   data() {
     return {
-      renderer: null,
-      graph: null,
-      layout: null,
+      simulation: null,
+      svg: null,
+      zoom: null,
       activeTab: 'long-term-memory',
       node_data: [],
       edge_data: [],
+      nodes: [],
+      links: [],
       searchUserId: null,
       userIdList: [],
       selectedNode: null,
@@ -167,34 +168,31 @@ export default {
     }
   },
   mounted() {
-    this.initSigma();
+    this.initD3Graph();
     this.ltmGetGraph();
     this.ltmGetUserIds();
   },
   beforeUnmount() {
-    if (this.renderer) {
-      this.renderer.kill();
-    }
-    if (this.layout) {
-      this.layout.stop();
+    if (this.simulation) {
+      this.simulation.stop();
     }
   },
   watch: {
     activeTab(newVal) {
       if (newVal === 'long-term-memory') {
         this.$nextTick(() => {
-          if (!this.renderer) {
-            this.initSigma();
+          if (!this.svg) {
+            this.initD3Graph();
           }
         });
       } else {
-        if (this.renderer) {
-          this.renderer.kill();
-          this.renderer = null;
+        if (this.simulation) {
+          this.simulation.stop();
+          this.simulation = null;
         }
-        if (this.layout) {
-          this.layout.stop();
-          this.layout = null;
+        if (this.svg) {
+          d3.select("#graph-container svg").remove();
+          this.svg = null;
         }
       }
     }
@@ -206,62 +204,46 @@ export default {
 
       axios.get('/api/plug/alkaid/ltm/graph', { params })
         .then(response => {
-          let nodes = response.data.data.nodes;
-          let edges = response.data.data.edges;
+          let nodesRaw = response.data.data.nodes;
+          let edgesRaw = response.data.data.edges;
 
-          this.node_data = nodes;
-          this.edge_data = edges;
+          this.node_data = nodesRaw;
+          this.edge_data = edgesRaw;
 
-          if (this.graph) {
-            this.graph.clear();
-          }
-
-
-
-          nodes.forEach(node => {
+          // 转换为D3所需的数据格式
+          this.nodes = nodesRaw.map(node => {
             const nodeId = node[0];
             const nodeData = node[1];
-
-            if (!this.graph.hasNode(nodeId)) {
-              const nodeType = nodeData._label || 'default';
-              const color = this.nodeColors[nodeType] || this.nodeColors['default'];
-
-              this.graph.addNode(nodeId, {
-                x: Math.random(),
-                y: Math.random(),
-                size: 5,
-                label: nodeData.name || nodeId.split('_')[0],
-                color: color,
-                originalData: nodeData
-              });
-            }
+            const nodeType = nodeData._label || 'default';
+            const color = this.nodeColors[nodeType] || this.nodeColors['default'];
+            
+            return {
+              id: nodeId,
+              label: nodeData.name || nodeId.split('_')[0],
+              color: color,
+              originalData: nodeData
+            };
           });
 
-          // 添加边
-          edges.forEach(edge => {
+          this.links = edgesRaw.map(edge => {
             const sourceId = edge[0];
             const targetId = edge[1];
             const edgeData = edge[2];
-
-            if (this.graph.hasNode(sourceId) && this.graph.hasNode(targetId)) {
-              const edgeId = `${sourceId}->${targetId}`;
-              const relationType = edgeData.relation_type || 'default';
-              const color = this.edgeColors[relationType] || this.edgeColors['default'];
-              this.graph.addEdge(sourceId, targetId, {
-                size: 1,
-                color: color,
-                originalData: edgeData,
-                label: relationType,
-                type: "line"
-              });
-            } else {
-              console.warn(`Edge ${sourceId} -> ${targetId} has missing nodes.`);
-            }
+            const relationType = edgeData.relation_type || 'default';
+            const color = this.edgeColors[relationType] || this.edgeColors['default'];
+            
+            return {
+              source: sourceId,
+              target: targetId,
+              color: color,
+              originalData: edgeData,
+              label: relationType
+            };
           });
 
+          this.updateD3Graph();
           this.updateGraphStats();
-
-          console.log('Graph initialized with', nodes.length, 'nodes and', edges.length, 'edges');
+          console.log('Graph initialized with', this.nodes.length, 'nodes and', this.links.length, 'links');
         })
         .catch(error => {
           console.error('Error fetching graph data:', error);
@@ -269,11 +251,6 @@ export default {
         .finally(() => {
           this.isLoading = false;
         });
-
-      if (this.layout) {
-        this.layout.start();
-      }
-
     },
 
     ltmGetUserIds() {
@@ -287,12 +264,10 @@ export default {
     },
 
     updateGraphStats() {
-      if (this.graph) {
-        this.graphStats = {
-          nodeCount: this.graph.order,
-          edgeCount: this.graph.size
-        };
-      }
+      this.graphStats = {
+        nodeCount: this.nodes.length,
+        edgeCount: this.links.length
+      };
     },
 
     refreshGraph() {
@@ -301,7 +276,7 @@ export default {
 
     onNodeSelect() {
       console.log('Selected user ID:', this.searchUserId);
-      if (!this.searchUserId || !this.graph) return;
+      if (!this.searchUserId) return;
 
       // 使用API的user_id参数筛选数据
       this.ltmGetGraph(this.searchUserId);
@@ -312,83 +287,136 @@ export default {
       this.ltmGetGraph();
     },
 
-    initSigma() {
+    initD3Graph() {
       const container = document.getElementById("graph-container");
       if (!container) return;
+      d3.select("#graph-container svg").remove();
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      const svg = d3.select("#graph-container")
+        .append("svg")
+        .attr("width", "100%")
+        .attr("height", "100%")
+        .attr("viewBox", [0, 0, width, height])
+        .classed("d3-graph", true);
+      const g = svg.append("g");
+      const zoom = d3.zoom()
+        .scaleExtent([0.1, 10])
+        .on("zoom", (event) => {
+          g.attr("transform", event.transform);
+        });
 
-      if (this.renderer) {
-        this.renderer.kill();
-        this.renderer = null;
-      }
-      if (this.layout) {
-        this.layout.stop();
-        this.layout = null;
-      }
+      svg.call(zoom);
+      const simulation = d3.forceSimulation()
+        .force("link", d3.forceLink().id(d => d.id).distance(100))
+        .force("charge", d3.forceManyBody().strength(-300))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collision", d3.forceCollide().radius(30));
 
-      const graph = new Graph({
-        multi: true,
+      this.svg = svg;
+      this.g = g;
+      this.zoom = zoom;
+      this.simulation = simulation;
+      this.width = width;
+      this.height = height;
+    },
+
+    updateD3Graph() {
+      if (!this.svg || !this.simulation) return;
+      const g = this.g;
+      g.selectAll("*").remove();
+      g.append("defs").append("marker")
+        .attr("id", "arrowhead")
+        .attr("viewBox", "0 -5 10 10")
+        .attr("refX", 20)
+        .attr("refY", 0)
+        .attr("orient", "auto")
+        .attr("markerWidth", 6)
+        .attr("markerHeight", 6)
+        .append("path")
+        .attr("d", "M0,-5L10,0L0,5")
+        .attr("fill", "#999");
+      const link = g.append("g")
+        .selectAll("line")
+        .data(this.links)
+        .join("line")
+        .attr("stroke", d => d.color)
+        .attr("stroke-width", 1.5)
+        .attr("marker-end", "url(#arrowhead)");
+      const edgeLabels = g.append("g")
+        .selectAll("text")
+        .data(this.links)
+        .join("text")
+        .text(d => d.label)
+        .attr("font-size", "8px")
+        .attr("text-anchor", "middle")
+        .attr("fill", "#666")
+        .attr("dy", -5);
+      const node = g.append("g")
+        .selectAll("circle")
+        .data(this.nodes)
+        .join("circle")
+        .attr("r", 8)
+        .attr("fill", d => d.color)
+        .style("cursor", "pointer")
+        .call(this.dragBehavior());
+      const nodeLabels = g.append("g")
+        .selectAll("text")
+        .data(this.nodes)
+        .join("text")
+        .text(d => d.label)
+        .attr("font-size", "10px")
+        .attr("text-anchor", "middle")
+        .attr("fill", "#333")
+        .attr("dy", -12);
+      node.on("click", (event, d) => {
+        event.stopPropagation();
+        this.selectedNode = d.originalData;
       });
-
-      const layout = new ForceSupervisor(graph, {
-        isNodeFixed: (_, attr) => attr.highlighted, settings: {
-          barnesHutOptimize: true,
-        }
-      });
-      layout.start();
-
-      this.layout = layout;
-      this.graph = graph;
-      const renderer = new Sigma(graph, container, {
-        minCameraRatio: 0.01,
-        maxCameraRatio: 2,
-        labelRenderedSizeThreshold: 1,
-        renderLabels: true,
-        renderEdgeLabels: true,
-        labelSize: 14,
-        labelColor: "#333333",
-      });
-      this.renderer = renderer;
-
-      let draggedNode = null;
-      let isDragging = false;
-
-      renderer.on("downNode", (e) => {
-        isDragging = true;
-        draggedNode = e.node;
-        graph.setNodeAttribute(draggedNode, "highlighted", true);
-        if (!renderer.getCustomBBox()) renderer.setCustomBBox(renderer.getBBox());
-      });
-
-      renderer.on("moveBody", ({ event }) => {
-        if (!isDragging || !draggedNode) return;
-        const pos = renderer.viewportToGraph(event);
-
-        graph.setNodeAttribute(draggedNode, "x", pos.x);
-        graph.setNodeAttribute(draggedNode, "y", pos.y);
-        event.preventSigmaDefault();
-        event.original.preventDefault();
-        event.original.stopPropagation();
-      });
-      const handleUp = () => {
-        if (draggedNode) {
-          graph.removeNodeAttribute(draggedNode, "highlighted");
-        }
-        isDragging = false;
-        draggedNode = null;
-      };
-      renderer.on("upNode", handleUp);
-      renderer.on("upStage", handleUp);
-
-      renderer.on("clickNode", (e) => {
-        const nodeId = e.node;
-        const nodeAttributes = graph.getNodeAttributes(nodeId);
-        this.selectedNode = nodeAttributes.originalData;
-      });
-
-      renderer.on("clickStage", () => {
+      this.svg.on("click", () => {
         this.selectedNode = null;
       });
+      this.simulation
+        .nodes(this.nodes)
+        .on("tick", () => {
+          link
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+          edgeLabels
+            .attr("x", d => (d.source.x + d.target.x) / 2)
+            .attr("y", d => (d.source.y + d.target.y) / 2);
+          node
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y);
+          nodeLabels
+            .attr("x", d => d.x)
+            .attr("y", d => d.y);
+        });
 
+      this.simulation.force("link")
+        .links(this.links);
+
+      this.simulation.alpha(1).restart();
+    },
+
+    dragBehavior() {
+      return d3.drag()
+        .on("start", (event, d) => {
+          if (!event.active) this.simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        })
+        .on("drag", (event, d) => {
+          d.fx = event.x;
+          d.fy = event.y;
+        })
+        .on("end", (event, d) => {
+          if (!event.active) this.simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        });
     },
 
     getRandomColor() {
@@ -427,5 +455,14 @@ export default {
 
 .memory-header {
   padding: 0 8px;
+}
+
+#graph-container svg {
+  width: 100%;
+  height: 100%;
+}
+
+.d3-graph {
+  background-color: #f2f6f9;
 }
 </style>
