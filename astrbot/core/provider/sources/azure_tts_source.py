@@ -53,8 +53,8 @@ class OTTSProvider:
     async def _generate_signature(self) -> str:
         await self._sync_time()
         timestamp = int(time.time()) + self.time_offset
-        nonce = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=10))
-        path = re.sub(r'^https?://[^/]+', '', self.api_url) or '/'
+        nonce = "".join(random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=10))
+        path = re.sub(r"^https?://[^/]+", "", self.api_url) or "/"
         return f"{timestamp}-{nonce}-0-{hashlib.md5(f'{path}-{timestamp}-{nonce}-0-{self.skey}'.encode()).hexdigest()}"
 
     async def get_audio(self, text: str, voice_params: Dict) -> str:
@@ -92,7 +92,7 @@ class AzureNativeProvider(TTSProvider):
     def __init__(self, provider_config: dict, provider_settings: dict):
         super().__init__(provider_config, provider_settings)
         self.subscription_key = provider_config.get("azure_tts_subscription_key", "").strip()
-        if not re.fullmatch(r'^[a-zA-Z0-9]{32}$', self.subscription_key):
+        if not re.fullmatch(r"^[a-zA-Z0-9]{32}$", self.subscription_key):
             raise ValueError("无效的Azure订阅密钥")
         self.region = provider_config.get("azure_tts_region", "eastus").strip()
         self.endpoint = f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1"
@@ -188,7 +188,7 @@ class AzureTTSProvider(TTSProvider):
                 raise ValueError(error_msg) from e
             except KeyError as e:
                 raise ValueError(f"配置错误: 缺少必要参数 {e}") from e
-        if re.fullmatch(r'^[a-zA-Z0-9]{32}$', key_value):
+        if re.fullmatch(r"^[a-zA-Z0-9]{32}$", key_value):
             return AzureNativeProvider(config, self.provider_settings)
         raise ValueError("订阅密钥格式无效，应为32位字母数字或other[...]格式")
 
