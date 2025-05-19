@@ -3,6 +3,7 @@ import base64
 import io
 from typing import TYPE_CHECKING
 from pydub import AudioSegment
+import os #
 
 import aiohttp
 from PIL import Image as PILImage  # 使用别名避免冲突
@@ -120,6 +121,13 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
             logger.error("pydub is not installed. Please install it to send voice messages.")
         except Exception as e:
             logger.error(f"Error converting or sending voice message: {e}")
+        finally:
+            if 'audio_file_path' in locals() and audio_file_path and os.path.exists(audio_file_path):
+                try:
+                    os.remove(audio_file_path)
+                    logger.info(f"Cleaned up temporary audio file: {audio_file_path}")
+                except Exception as cleanup_e:
+                    logger.error(f"Error cleaning up temporary audio file {audio_file_path}: {cleanup_e}")
 
     @staticmethod
     def _compress_image(data: bytes) -> str:
