@@ -814,13 +814,34 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "appid": "",
-                        "cluster": "",
-                        "voice_type": "",
+                        "volcengine_cluster": "",
+                        "volcengine_voice_type": "",
+                        "volcengine_speed_ratio": 1.0,
                         "api_base": "https://openspeech.bytedance.com/api/v1/tts",
                         "timeout": 20,
                     },
                 },
                 "items": {
+                    "volcengine_cluster": {
+                        "type": "string",
+                        "description": "火山引擎集群",
+                        "hint": "可选volcano_icl或volcano_icl_concurr"
+                    },
+                    "volcengine_voice_type": {
+                        "type": "string",
+                        "description": "火山引擎音色",
+                        "hint": "输入S_开头的声音id(SpeakerId)"
+                    },
+                    "volcengine_speed_ratio": {
+                        "type": "float",
+                        "description": "语速设置",
+                        "hint": "语速设置，范围为 0.2 到 3.0,默认值为 1.0"
+                    },
+                    "volcengine_volume_ratio": {
+                        "type": "float",
+                        "description": "音量设置",
+                        "hint": "音量设置，范围为 0.0 到 2.0,默认值为 1.0"
+                    },
                     "azure_tts_voice": {
                         "type": "string",
                         "description": "音色设置",
