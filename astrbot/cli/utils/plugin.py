@@ -59,7 +59,13 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
             proxy=proxy if proxy else None, follow_redirects=True
         ) as client:
             resp = client.get(download_url)
-            resp.raise_for_status()
+            if resp.status_code == 404 and "archive/refs/heads/master.zip" in download_url:
+                alt_url = download_url.replace("master.zip", "main.zip")
+                click.echo("master 分支不存在，尝试下载 main 分支")
+                resp = client.get(alt_url)
+                resp.raise_for_status()
+            else:
+                resp.raise_for_status()
             zip_content = BytesIO(resp.content)
         with ZipFile(zip_content) as z:
             z.extractall(temp_dir)
@@ -106,7 +112,7 @@ def extract_py_metadata(plugin_dir: Path) -> dict:
             try:
                 content = py_file.read_text(encoding="utf-8")
                 register_match = re.search(
-                    r'@register_star\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"(?:\s*,\s*"?([^")]+)"?)?\s*\)',
+                    r'@register(?:_star)?\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"(?:\s*,\s*"?([^")]+)"?)?\s*\)',
                     content,
                 )
                 if register_match:
