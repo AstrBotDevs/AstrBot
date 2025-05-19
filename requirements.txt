@@ -35,3 +35,4 @@ click
 filelock
 watchfiles
 websockets
+pydub

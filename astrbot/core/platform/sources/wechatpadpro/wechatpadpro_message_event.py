@@ -3,8 +3,6 @@ import base64
 import io
 from typing import TYPE_CHECKING
 from pydub import AudioSegment
-import tempfile
-import os
 
 import aiohttp
 from PIL import Image as PILImage  # 使用别名避免冲突
