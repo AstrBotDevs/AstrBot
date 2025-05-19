@@ -2,12 +2,15 @@ import asyncio
 import base64
 import io
 from typing import TYPE_CHECKING
+from pydub import AudioSegment
+import tempfile
+import os
 
 import aiohttp
 from PIL import Image as PILImage  # 使用别名避免冲突
 
 from astrbot import logger
-from astrbot.core.message.components import Image, Plain  # Import Image
+from astrbot.core.message.components import Image, Plain, Record
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageType
@@ -38,6 +41,8 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
                     await self._send_text(session, comp.text)
                 elif isinstance(comp, Image):
                     await self._send_image(session, comp)
+                elif isinstance(comp, Record):
+                    await self._send_voice(session, comp)
         await super().send(message)
 
     async def _send_image(self, session: aiohttp.ClientSession, comp: Image):
@@ -83,6 +88,41 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
     def _validate_base64(b64: str) -> bytes:
         return base64.b64decode(b64, validate=True)
 
+    async def _send_voice(self, session: aiohttp.ClientSession, comp: Record):
+        try:
+            audio_file_path = await comp.convert_to_file_path()
+            if not audio_file_path:
+                 logger.error("Failed to get audio file path for voice message.")
+                 return
+            # logger.info(audio_file_path)
+            audio = AudioSegment.from_file(audio_file_path)
+            # Convert to mono for AMR
+            audio = audio.set_channels(1)
+            # Resample to 8000Hz for AMR
+            audio = audio.set_frame_rate(8000)
+
+            # Export to BytesIO in memory
+            amr_buffer = io.BytesIO()
+            audio.export(amr_buffer, format="amr", bitrate="12.2k")
+            amr_data = amr_buffer.getvalue()
+
+            b64_voice_data = base64.b64encode(amr_data).decode('utf-8')
+            voice_second = len(audio) / 1000 # Duration in seconds
+            logger.info(f"获取的音频base64{voice_second}")
+            payload = {
+                "ToUserName": self.session_id,
+                "VoiceData": b64_voice_data,
+                "VoiceFormat": 4,  #语音格式：1=mp3, 2=wav, 3=wma, 4=amr
+                "VoiceSecond,": int(voice_second),
+            }
+            url = f"{self.adapter.base_url}/message/SendVoice"
+            await self._post(session, url, payload)
+
+        except ImportError:
+            logger.error("pydub is not installed. Please install it to send voice messages.")
+        except Exception as e:
+            logger.error(f"Error converting or sending voice message: {e}")
+
     @staticmethod
     def _compress_image(data: bytes) -> str:
         img = PILImage.open(io.BytesIO(data))
@@ -107,9 +147,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
             logger.error(f"{url} error: {e}")
 
 
-# TODO: 添加对其他消息组件类型的处理 (Record, Video, At等)
-# elif isinstance(component, Record):
-#     pass
+# TODO: 添加对其他消息组件类型的处理 (Video, At等)
 # elif isinstance(component, Video):
 #     pass
 # elif isinstance(component, At):
