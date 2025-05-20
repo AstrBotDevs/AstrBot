@@ -59,7 +59,24 @@ const MainRoutes = {
     {
       name: 'Alkaid',
       path: '/alkaid',
-      component: () => import('@/views/AlkaidPage.vue')
+      component: () => import('@/views/AlkaidPage.vue'),
+      children: [
+        {
+          path: 'knowledge-base',
+          name: 'KnowledgeBase',
+          component: () => import('@/views/alkaid/KnowledgeBase.vue')
+        },
+        {
+          path: 'long-term-memory',
+          name: 'LongTermMemory',
+          component: () => import('@/views/alkaid/LongTermMemory.vue')
+        },
+        {
+          path: 'other',
+          name: 'OtherFeatures',
+          component: () => import('@/views/alkaid/Other.vue')
+        }
+      ]
     },
     {
       name: 'Chat',
