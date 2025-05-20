@@ -4,6 +4,8 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image, Record
 from wechatpy import WeChatClient
+from wechatpy.replies import TextReply, ImageReply, VoiceReply
+
 
 from astrbot.api import logger
 
@@ -82,12 +84,23 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain):
         message_obj = self.message_obj
+        active_send_mode = message_obj.raw_message.get("active_send_mode", False)
         for comp in message.chain:
             if isinstance(comp, Plain):
                 # Split long text messages if needed
                 plain_chunks = await self.split_plain(comp.text)
                 for chunk in plain_chunks:
-                    self.client.message.send_text(message_obj.sender.user_id, chunk)
+                    if active_send_mode:
+                        self.client.message.send_text(message_obj.sender.user_id, chunk)
+                    else:
+                        reply = TextReply(
+                            content=chunk,
+                            message=self.message_obj.raw_message["message"],
+                        )
+                        xml = reply.render()
+                        future = self.message_obj.raw_message["future"]
+                        assert isinstance(future, asyncio.Future)
+                        future.set_result(xml)
                     await asyncio.sleep(0.5)  # Avoid sending too fast
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
@@ -102,10 +115,22 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         )
                         return
                     logger.debug(f"微信公众平台上传图片返回: {response}")
-                    self.client.message.send_image(
-                        message_obj.sender.user_id,
-                        response["media_id"],
-                    )
+
+                    if active_send_mode:
+                        self.client.message.send_image(
+                            message_obj.sender.user_id,
+                            response["media_id"],
+                        )
+                    else:
+                        reply = ImageReply(
+                            media_id=response["media_id"],
+                            message=self.message_obj.raw_message["message"],
+                        )
+                        xml = reply.render()
+                        future = self.message_obj.raw_message["future"]
+                        assert isinstance(future, asyncio.Future)
+                        future.set_result(xml)
+
             elif isinstance(comp, Record):
                 record_path = await comp.convert_to_file_path()
                 # 转成amr
@@ -124,10 +149,23 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         )
                         return
                     logger.info(f"微信公众平台上传语音返回: {response}")
-                    self.client.message.send_voice(
-                        message_obj.sender.user_id,
-                        response["media_id"],
-                    )
+
+
+                    if active_send_mode:
+                        self.client.message.send_voice(
+                            message_obj.sender.user_id,
+                            response["media_id"],
+                        )
+                    else:
+                        reply = VoiceReply(
+                            media_id=response["media_id"],
+                            message=self.message_obj.raw_message["message"],
+                        )
+                        xml = reply.render()
+                        future = self.message_obj.raw_message["future"]
+                        assert isinstance(future, asyncio.Future)
+                        future.set_result(xml)
+
             else:
                 logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
 
