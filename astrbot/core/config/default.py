@@ -176,6 +176,7 @@ CONFIG_METADATA_2 = {
                         "api_base_url": "https://api.weixin.qq.com/cgi-bin/",
                         "callback_server_host": "0.0.0.0",
                         "port": 6194,
+                        "active_send_mode": False
                     },
                     "wecom(企业微信)": {
                         "id": "wecom",
@@ -220,6 +221,11 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "active_send_mode": {
+                      "description": "是否换用主动发送接口",
+                      "type": "bool",
+                      "desc": "只有企业认证的公众号才能主动发送。主动发送接口的限制会少一些。"
+                    },
                     "wpp_active_message_poll": {
                       "description": "是否启用主动消息轮询",
                       "type": "bool",
