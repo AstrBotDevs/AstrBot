@@ -814,7 +814,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "appid": "",
-                        "volcengine_cluster": "",
+                        "volcengine_cluster": "volcano_tts",
                         "volcengine_voice_type": "",
                         "volcengine_speed_ratio": 1.0,
                         "api_base": "https://openspeech.bytedance.com/api/v1/tts",
@@ -825,12 +825,12 @@ CONFIG_METADATA_2 = {
                     "volcengine_cluster": {
                         "type": "string",
                         "description": "火山引擎集群",
-                        "hint": "可选volcano_icl或volcano_icl_concurr"
+                        "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
                     },
                     "volcengine_voice_type": {
                         "type": "string",
                         "description": "火山引擎音色",
-                        "hint": "输入S_开头的声音id(SpeakerId)"
+                        "hint": "输入声音id(Voice_type)"
                     },
                     "volcengine_speed_ratio": {
                         "type": "float",
