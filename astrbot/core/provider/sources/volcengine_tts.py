@@ -61,9 +61,9 @@ class ProviderVolcengineTTS(TTSProvider):
         
         payload = self._build_request_payload(text)
         
-        logger.info(f"请求头: {headers}")
-        logger.info(f"请求 URL: {self.api_base}")
-        logger.info(f"请求体: {json.dumps(payload, ensure_ascii=False)[:100]}...")
+        logger.debug(f"请求头: {headers}")
+        logger.debug(f"请求 URL: {self.api_base}")
+        logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:100]}...")
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -73,10 +73,10 @@ class ProviderVolcengineTTS(TTSProvider):
                     headers=headers,
                     timeout=self.timeout
                 ) as response:
-                    logger.info(f"响应状态码: {response.status}")
+                    logger.debug(f"响应状态码: {response.status}")
                     
                     response_text = await response.text()
-                    logger.info(f"响应内容: {response_text[:200]}...")
+                    logger.debug(f"响应内容: {response_text[:200]}...")
                     
                     if response.status == 200:
                         resp_data = json.loads(response_text)
@@ -103,5 +103,5 @@ class ProviderVolcengineTTS(TTSProvider):
         
         except Exception as e:
             error_details = traceback.format_exc()
-            logger.info(f"火山引擎 TTS 异常详情: {error_details}")
+            logger.debug(f"火山引擎 TTS 异常详情: {error_details}")
             raise Exception(f"火山引擎 TTS 异常: {str(e)}")
