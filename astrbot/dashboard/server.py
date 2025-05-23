@@ -54,14 +54,23 @@ class AstrBotDashboard:
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
         self.file_route = FileRoute(self.context)
 
-        if self.core_lifecycle.star_context.registered_web_apis:
-            for api in self.core_lifecycle.star_context.registered_web_apis:
-                route, view_handler, methods, _ = api
-                self.app.add_url_rule(
-                    f"/api/plug{route}", view_func=view_handler, methods=methods
-                )
+        self.app.add_url_rule(
+            "/api/plug/<path:subpath>",
+            view_func=self.srv_plug_route,
+            methods=["GET", "POST"],
+        )
 
         self.shutdown_event = shutdown_event
+
+    async def srv_plug_route(self, subpath, *args, **kwargs):
+        """
+        插件路由
+        """
+        registered_web_apis = self.core_lifecycle.star_context.registered_web_apis
+        for api in registered_web_apis:
+            route, view_handler, methods, _ = api
+            if route == f"/{subpath}" and request.method in methods:
+                    return await view_handler(*args, **kwargs)
 
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
