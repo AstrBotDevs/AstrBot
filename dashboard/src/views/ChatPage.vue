@@ -154,7 +154,7 @@ marked.setOptions({
 
                     <!-- 输入区域 -->
                     <div class="input-area fade-in">
-                        <v-text-field aria-autocomplete="none" id="input-field" variant="outlined" v-model="prompt"
+                        <v-text-field autocomplete="off" id="input-field" variant="outlined" v-model="prompt"
                             :label="inputFieldLabel" placeholder="开始输入..." :loading="loadingChat"
                             clear-icon="mdi-close-circle" clearable @click:clear="clearMessage" class="message-input"
                             @keydown="handleInputKeyDown" hide-details>
