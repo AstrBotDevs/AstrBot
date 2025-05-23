@@ -3,7 +3,6 @@ import tempfile
 
 import httpx
 import yaml
-import re
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
@@ -59,7 +58,16 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
             proxy=proxy if proxy else None, follow_redirects=True
         ) as client:
             resp = client.get(download_url)
-            resp.raise_for_status()
+            if (
+                resp.status_code == 404
+                and "archive/refs/heads/master.zip" in download_url
+            ):
+                alt_url = download_url.replace("master.zip", "main.zip")
+                click.echo("master 分支不存在，尝试下载 main 分支")
+                resp = client.get(alt_url)
+                resp.raise_for_status()
+            else:
+                resp.raise_for_status()
             zip_content = BytesIO(resp.content)
         with ZipFile(zip_content) as z:
             z.extractall(temp_dir)
@@ -91,39 +99,6 @@ def load_yaml_metadata(plugin_dir: Path) -> dict:
     return {}
 
 
-def extract_py_metadata(plugin_dir: Path) -> dict:
-    """从 Python 文件中提取插件元数据
-
-    Args:
-        plugin_dir: 插件目录路径
-
-    Returns:
-        dict: 包含元数据的字典，如果提取失败则返回空字典
-    """
-    # 检查 main.py 或与目录同名的 py 文件
-    for pattern in ["main.py", f"{plugin_dir.name}.py"]:
-        for py_file in plugin_dir.glob(pattern):
-            try:
-                content = py_file.read_text(encoding="utf-8")
-                register_match = re.search(
-                    r'@register_star\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"(?:\s*,\s*"?([^")]+)"?)?\s*\)',
-                    content,
-                )
-                if register_match:
-                    # 映射匹配组到元数据键
-                    metadata = {}
-                    keys = ["name", "author", "desc", "version", "repo"]
-                    for i, key in enumerate(keys):
-                        if i + 1 <= len(
-                            register_match.groups()
-                        ) and register_match.group(i + 1):
-                            metadata[key] = register_match.group(i + 1)
-                    return metadata
-            except Exception as e:
-                click.echo(f"读取 {py_file} 失败: {e}", err=True)
-    return {}
-
-
 def build_plug_list(plugins_dir: Path) -> list:
     """构建插件列表，包含本地和在线插件信息
 
@@ -139,31 +114,22 @@ def build_plug_list(plugins_dir: Path) -> list:
         for plugin_name in [d.name for d in plugins_dir.glob("*") if d.is_dir()]:
             plugin_dir = plugins_dir / plugin_name
 
-            # 从不同来源加载元数据
+            # 从 metadata.yaml 加载元数据
             metadata = load_yaml_metadata(plugin_dir)
 
-            # 如果元数据不完整，尝试从 Python 文件提取
-            if not metadata or not all(
+            # 如果成功加载元数据，添加到结果列表
+            if metadata and all(
                 k in metadata for k in ["name", "desc", "version", "author", "repo"]
             ):
-                py_metadata = extract_py_metadata(plugin_dir)
-                # 合并元数据，保留已有的值
-                for key, value in py_metadata.items():
-                    if key not in metadata or not metadata[key]:
-                        metadata[key] = value
-            # 如果成功提取元数据，添加到结果列表
-            if metadata:
-                result.append(
-                    {
-                        "name": str(metadata.get("name", "")),
-                        "desc": str(metadata.get("desc", "")),
-                        "version": str(metadata.get("version", "")),
-                        "author": str(metadata.get("author", "")),
-                        "repo": str(metadata.get("repo", "")),
-                        "status": PluginStatus.INSTALLED,
-                        "local_path": str(plugin_dir),
-                    }
-                )
+                result.append({
+                    "name": str(metadata.get("name", "")),
+                    "desc": str(metadata.get("desc", "")),
+                    "version": str(metadata.get("version", "")),
+                    "author": str(metadata.get("author", "")),
+                    "repo": str(metadata.get("repo", "")),
+                    "status": PluginStatus.INSTALLED,
+                    "local_path": str(plugin_dir),
+                })
 
     # 获取在线插件列表
     online_plugins = []
@@ -173,17 +139,15 @@ def build_plug_list(plugins_dir: Path) -> list:
             resp.raise_for_status()
             data = resp.json()
             for plugin_id, plugin_info in data.items():
-                online_plugins.append(
-                    {
-                        "name": str(plugin_id),
-                        "desc": str(plugin_info.get("desc", "")),
-                        "version": str(plugin_info.get("version", "")),
-                        "author": str(plugin_info.get("author", "")),
-                        "repo": str(plugin_info.get("repo", "")),
-                        "status": PluginStatus.NOT_INSTALLED,
-                        "local_path": None,
-                    }
-                )
+                online_plugins.append({
+                    "name": str(plugin_id),
+                    "desc": str(plugin_info.get("desc", "")),
+                    "version": str(plugin_info.get("version", "")),
+                    "author": str(plugin_info.get("author", "")),
+                    "repo": str(plugin_info.get("repo", "")),
+                    "status": PluginStatus.NOT_INSTALLED,
+                    "local_path": None,
+                })
     except Exception as e:
         click.echo(f"获取在线插件列表失败: {e}", err=True)
 
