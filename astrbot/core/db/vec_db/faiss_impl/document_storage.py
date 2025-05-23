@@ -1,6 +1,5 @@
 import aiosqlite
 import os
-from loguru import logger
 
 
 class DocumentStorage:
@@ -51,7 +50,6 @@ class DocumentStorage:
         result = []
         async with self.connection.cursor() as cursor:
             sql = "SELECT * FROM documents WHERE " + where_sql
-            logger.debug(f"DocDB Query SQL -> {sql} (values: {values})")
             await cursor.execute(sql, values)
             for row in await cursor.fetchall():
                 result.append(await self.tuple_to_dict(row))
@@ -86,7 +84,6 @@ class DocumentStorage:
                 "UPDATE documents SET text = ? WHERE doc_id = ?", (new_text, doc_id)
             )
             await self.connection.commit()
-            logger.debug(f"Updated document with doc_id {doc_id}.")
 
     async def get_user_ids(self) -> list[str]:
         """Retrieve all user IDs from the documents table.
