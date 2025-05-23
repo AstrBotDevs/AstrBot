@@ -66,6 +66,7 @@ DEFAULT_CONFIG = {
         "enable": False,
         "provider_id": "",
         "dual_output": False,
+        "use_file_service": False,
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
@@ -91,6 +92,7 @@ DEFAULT_CONFIG = {
     "t2i_word_threshold": 150,
     "t2i_strategy": "remote",
     "t2i_endpoint": "",
+    "t2i_use_file_service": False,
     "http_proxy": "",
     "dashboard": {
         "enable": True,
@@ -237,9 +239,9 @@ CONFIG_METADATA_2 = {
                       "hint": "主动消息轮询间隔，单位为秒，默认 3 秒，最大不要超过 60 秒，否则可能被认为是旧消息。"
                     },
                     "kf_name": {
-                      "description": "微信客服账号名",
-                      "type": "string",
-                      "hint": "可选。微信客服账号名(不是 ID)。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取"
+                        "description": "微信客服账号名",
+                        "type": "string",
+                        "hint": "可选。微信客服账号名(不是 ID)。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取",
                     },
                     "telegram_token": {
                         "description": "Bot Token",
@@ -824,7 +826,7 @@ CONFIG_METADATA_2 = {
                         "azure_tts_rate": "1",
                         "azure_tts_volume": "100",
                         "azure_tts_subscription_key": "",
-                        "azure_tts_region": "eastus"
+                        "azure_tts_region": "eastus",
                     },
                     "MiniMax TTS(API)": {
                         "id": "minimax_tts",
@@ -885,39 +887,80 @@ CONFIG_METADATA_2 = {
                     "azure_tts_voice": {
                         "type": "string",
                         "description": "音色设置",
-                        "hint": "API 音色"
+                        "hint": "API 音色",
                     },
                     "azure_tts_style": {
                         "type": "string",
                         "description": "风格设置",
-                        "hint": "声音特定的讲话风格。 可以表达快乐、同情和平静等情绪。"
+                        "hint": "声音特定的讲话风格。 可以表达快乐、同情和平静等情绪。",
                     },
                     "azure_tts_role": {
                         "type": "string",
                         "description": "模仿设置（可选）",
                         "hint": "讲话角色扮演。 声音可以模仿不同的年龄和性别，但声音名称不会更改。 例如，男性语音可以提高音调和改变语调来模拟女性语音，但语音名称不会更改。 如果角色缺失或不受声音的支持，则会忽略此属性。",
-                        "options": ["Boy","Girl","YoungAdultFemale","YoungAdultMale","OlderAdultFemale","OlderAdultMale","SeniorFemale","SeniorMale","禁用"]
+                        "options": [
+                            "Boy",
+                            "Girl",
+                            "YoungAdultFemale",
+                            "YoungAdultMale",
+                            "OlderAdultFemale",
+                            "OlderAdultMale",
+                            "SeniorFemale",
+                            "SeniorMale",
+                            "禁用",
+                        ],
                     },
                     "azure_tts_rate": {
                         "type": "string",
                         "description": "语速设置",
-                        "hint": "指示文本的讲出速率。可在字词或句子层面应用语速。 速率变化应为原始音频的 0.5 到 2 倍。"
+                        "hint": "指示文本的讲出速率。可在字词或句子层面应用语速。 速率变化应为原始音频的 0.5 到 2 倍。",
                     },
                     "azure_tts_volume": {
                         "type": "string",
                         "description": "语音音量设置",
-                        "hint": "指示语音的音量级别。 可在句子层面应用音量的变化。以从 0.0 到 100.0（从最安静到最大声，例如 75）的数字表示。 默认值为 100.0。"
+                        "hint": "指示语音的音量级别。 可在句子层面应用音量的变化。以从 0.0 到 100.0（从最安静到最大声，例如 75）的数字表示。 默认值为 100.0。",
                     },
                     "azure_tts_region": {
                         "type": "string",
                         "description": "API 地区",
                         "hint": "Azure_TTS 处理数据所在区域，具体参考 https://learn.microsoft.com/zh-cn/azure/ai-services/speech-service/regions",
-                        "options": ["southafricanorth", "eastasia", "southeastasia", "australiaeast", "centralindia", "japaneast", "japanwest", "koreacentral", "canadacentral", "northeurope", "westeurope", "francecentral", "germanywestcentral", "norwayeast", "swedencentral", "switzerlandnorth", "switzerlandwest", "uksouth", "uaenorth", "brazilsouth", "qatarcentral", "centralus", "eastus", "eastus2", "northcentralus", "southcentralus", "westcentralus", "westus", "westus2", "westus3"]
+                        "options": [
+                            "southafricanorth",
+                            "eastasia",
+                            "southeastasia",
+                            "australiaeast",
+                            "centralindia",
+                            "japaneast",
+                            "japanwest",
+                            "koreacentral",
+                            "canadacentral",
+                            "northeurope",
+                            "westeurope",
+                            "francecentral",
+                            "germanywestcentral",
+                            "norwayeast",
+                            "swedencentral",
+                            "switzerlandnorth",
+                            "switzerlandwest",
+                            "uksouth",
+                            "uaenorth",
+                            "brazilsouth",
+                            "qatarcentral",
+                            "centralus",
+                            "eastus",
+                            "eastus2",
+                            "northcentralus",
+                            "southcentralus",
+                            "westcentralus",
+                            "westus",
+                            "westus2",
+                            "westus3",
+                        ],
                     },
                     "azure_tts_subscription_key": {
                         "type": "string",
                         "description": "服务订阅密钥",
-                        "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）"
+                        "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）",
                     },
                     "dashscope_tts_voice": {
                         "description": "语音合成模型",
@@ -1404,6 +1447,11 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，Bot 将同时输出语音和文字消息。",
                         "obvious_hint": True,
                     },
+                    "use_file_service": {
+                        "description": "使用文件服务提供 TTS 语音文件",
+                        "type": "bool",
+                        "hint": "启用后，如已配置 callback_api_base ，将会使用文件服务提供TTS语音文件",
+                    },
                 },
             },
             "provider_ltm_settings": {
@@ -1520,7 +1568,7 @@ CONFIG_METADATA_2 = {
                 "description": "对外可达的回调接口地址",
                 "type": "string",
                 "obvious_hint": True,
-                "hint": "外部服务可能会通过 AstrBot 生成的回调链接（如文件下载链接）访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址（host），因此需要通过此配置项显式指定 “外部服务如何访问 AstrBot” 的地址。如 http://localhost:6185，https://example.com 等。"
+                "hint": "外部服务可能会通过 AstrBot 生成的回调链接（如文件下载链接）访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址（host），因此需要通过此配置项显式指定 “外部服务如何访问 AstrBot” 的地址。如 http://localhost:6185，https://example.com 等。",
             },
             "log_level": {
                 "description": "控制台日志级别",
@@ -1538,6 +1586,11 @@ CONFIG_METADATA_2 = {
                 "description": "文本转图像服务接口",
                 "type": "string",
                 "hint": "当 t2i_strategy 为 remote 时生效。为空时使用 AstrBot API 服务",
+            },
+            "t2i_use_file_service": {
+                "description": "本地文本转图像使用文件服务提供文件",
+                "type": "bool",
+                "hint": "当 t2i_strategy 为 local 并且配置 callback_api_base 时生效。是否使用文件服务提供文件。",
             },
             "pip_install_arg": {
                 "description": "pip 安装参数",

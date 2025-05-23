@@ -250,6 +250,51 @@ class Video(BaseMessageComponent):
             return Video(file=url, **_)
         raise Exception("not a valid url")
 
+    async def convert_to_file_path(self) -> str:
+        """将这个视频统一转换为本地文件路径。这个方法避免了手动判断视频数据类型，直接返回视频数据的本地路径（如果是网络 URL，则会自动进行下载）。
+
+        Returns:
+            str: 视频的本地路径，以绝对路径表示。
+        """
+        url = self.file
+        if url and url.startswith("file:///"):
+            return url[8:]
+        elif url and url.startswith("http"):
+            download_dir = os.path.join(get_astrbot_data_path(), "temp")
+            video_file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
+            await download_file(url, video_file_path)
+            if os.path.exists(video_file_path):
+                return os.path.abspath(video_file_path)
+            else:
+                raise Exception(f"download failed: {url}")
+        elif os.path.exists(url):
+            return os.path.abspath(url)
+        else:
+            raise Exception(f"not a valid file: {url}")
+
+    async def register_to_file_service(self):
+        """
+        将视频注册到文件服务。
+
+        Returns:
+            str: 注册后的URL
+
+        Raises:
+            Exception: 如果未配置 callback_api_base
+        """
+        callback_host = astrbot_config.get("callback_api_base")
+
+        if not callback_host:
+            raise Exception("未配置 callback_api_base，文件服务不可用")
+
+        file_path = await self.convert_to_file_path()
+
+        token = await file_token_service.register_file(file_path)
+
+        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+
+        return f"{callback_host}/api/file/{token}"
+
 
 class At(BaseMessageComponent):
     type: ComponentType = "At"
