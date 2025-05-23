@@ -76,7 +76,7 @@ class FaissVecDB(BaseVecDB):
         embedding = await self.embedding_provider.get_embedding(query)
         scores, indices = await self.embedding_storage.search(
             vector=np.array([embedding]).astype("float32"),
-            k=k if not metadata_filters else fetch_k,
+            k=fetch_k if metadata_filters else k,
         )
         # TODO: rerank
         if len(indices[0]) == 0 or indices[0][0] == -1:
