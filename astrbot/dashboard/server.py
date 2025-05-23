@@ -71,6 +71,7 @@ class AstrBotDashboard:
             route, view_handler, methods, _ = api
             if route == f"/{subpath}" and request.method in methods:
                     return await view_handler(*args, **kwargs)
+        return jsonify(Response().error("未找到该路由").__dict__)
 
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
