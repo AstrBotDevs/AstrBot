@@ -9,14 +9,14 @@ import numpy as np
 
 
 class EmbeddingStorage:
-    def __init__(self, dimention: int, path: str = None):
-        self.dimention = dimention
+    def __init__(self, dimension: int, path: str = None):
+        self.dimension = dimension
         self.path = path
         self.index = None
         if path and os.path.exists(path):
             self.index = faiss.read_index(path)
         else:
-            base_index = faiss.IndexFlatL2(dimention)
+            base_index = faiss.IndexFlatL2(dimension)
             self.index = faiss.IndexIDMap(base_index)
         self.storage = {}
 

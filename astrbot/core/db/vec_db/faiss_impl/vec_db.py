@@ -91,9 +91,7 @@ class FaissVecDB(BaseVecDB):
             return []
         result_docs = []
 
-        idx_pos = {}
-        for idx, fetch_doc in enumerate(fetched_docs):
-            idx_pos[fetch_doc["id"]] = idx
+        idx_pos = {fetch_doc["id"]: idx for idx, fetch_doc in enumerate(fetched_docs)}
         for i, indice_idx in enumerate(indices[0]):
             pos = idx_pos.get(indice_idx)
             if pos is None:
