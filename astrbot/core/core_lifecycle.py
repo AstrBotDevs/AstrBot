@@ -1,6 +1,6 @@
 """
 Astrbot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作。
-该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、KnowledgeDBManager、ConversationManager、PluginManager、PipelineScheduler、EventBus等。
+该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus等。
 该类还负责加载和执行插件, 以及处理事件总线的分发。
 
 工作流程:
@@ -28,7 +28,6 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
-from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star_handler import star_map
@@ -37,7 +36,7 @@ from astrbot.core.star.star_handler import star_map
 class AstrBotCoreLifecycle:
     """
     AstrBot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作。
-    该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、KnowledgeDBManager、ConversationManager、PluginManager、PipelineScheduler、
+    该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、
     EventBus 等。
     该类还负责加载和执行插件, 以及处理事件总线的分发。
     """
@@ -54,7 +53,7 @@ class AstrBotCoreLifecycle:
 
     async def initialize(self):
         """
-        初始化 AstrBot 核心生命周期管理类, 负责初始化各个组件, 包括 ProviderManager、PlatformManager、KnowledgeDBManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
+        初始化 AstrBot 核心生命周期管理类, 负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
         """
 
         # 初始化日志代理
@@ -73,9 +72,6 @@ class AstrBotCoreLifecycle:
         # 初始化平台管理器
         self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
 
-        # 初始化知识库管理器
-        self.knowledge_db_manager = KnowledgeDBManager(self.astrbot_config)
-
         # 初始化对话管理器
         self.conversation_manager = ConversationManager(self.db)
 
@@ -87,7 +83,6 @@ class AstrBotCoreLifecycle:
             self.provider_manager,
             self.platform_manager,
             self.conversation_manager,
-            self.knowledge_db_manager,
         )
 
         # 初始化插件管理器

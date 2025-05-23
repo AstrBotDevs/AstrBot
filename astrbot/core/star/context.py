@@ -16,7 +16,6 @@ from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
 from typing import Awaitable
-from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
@@ -56,14 +55,12 @@ class Context:
         provider_manager: ProviderManager = None,
         platform_manager: PlatformManager = None,
         conversation_manager: ConversationManager = None,
-        knowledge_db_manager: KnowledgeDBManager = None,
     ):
         self._event_queue = event_queue
         self._config = config
         self._db = db
         self.provider_manager = provider_manager
         self.platform_manager = platform_manager
-        self.knowledge_db_manager = knowledge_db_manager
         self.conversation_manager = conversation_manager
 
     def get_registered_star(self, star_name: str) -> StarMetadata:

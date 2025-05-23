@@ -86,7 +86,7 @@
         </v-dialog>
 
         <!-- 知识库内容管理对话框 -->
-        <v-dialog v-model="showContentDialog" max-width="1000px" persistent>
+        <v-dialog v-model="showContentDialog" max-width="1000px">
             <v-card>
                 <v-card-title class="d-flex align-center">
                     <div class="me-2 emoji-sm">{{ currentKB.emoji || '🙂' }}</div>
