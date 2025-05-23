@@ -339,9 +339,7 @@ class WeChatPadProAdapter(Platform):
                             logger.info(message)
                             asyncio.create_task(self.handle_websocket_message(message))
                         except asyncio.TimeoutError:
-                            logger.warning(
-                                f"WebSocket 连接空闲超过 {wait_time} s"
-                            )
+                            logger.warning(f"WebSocket 连接空闲超过 {wait_time} s")
                             break
                         except websockets.exceptions.ConnectionClosedOK:
                             logger.info("WebSocket 连接正常关闭。")
@@ -628,30 +626,29 @@ class WeChatPadProAdapter(Platform):
         # 调用实例方法 send
         await sending_event.send(message_chain)
 
-
     async def get_contact_list(self):
         """
         获取联系人列表。
         """
         url = f"{self.base_url}/friend/GetContactList"
         params = {"key": self.auth_key}
-        payload = {
-            "CurrentChatRoomContactSeq": 0,
-            "CurrentWxcontactSeq": 0
-        }
+        payload = {"CurrentChatRoomContactSeq": 0, "CurrentWxcontactSeq": 0}
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.post(url, params=params, json=payload) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        if result.get("Code") == 200 and result.get("Data"):
-                            contact_list = result.get("Data", {}).get("ContactList", {}).get("contactUsernameList", [])
-                            return contact_list
-                        else:
-                            logger.error(f"获取联系人列表失败: {result}")
-                            return None
-                    else:
+                    if response.status != 200:
                         logger.error(f"获取联系人列表失败: {response.status}")
+                        return None
+                    result = await response.json()
+                    if result.get("Code") == 200 and result.get("Data"):
+                        contact_list = (
+                            result.get("Data", {})
+                            .get("ContactList", {})
+                            .get("contactUsernameList", [])
+                        )
+                        return contact_list
+                    else:
+                        logger.error(f"获取联系人列表失败: {result}")
                         return None
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
@@ -659,30 +656,32 @@ class WeChatPadProAdapter(Platform):
             except Exception as e:
                 logger.error(f"获取联系人列表时发生错误: {e}")
                 return None
-            
-    async def get_contact_details_list(self, room_wx_id_list: [str] = [], user_names : [str] = []) -> Optional[dict]:
+
+    async def get_contact_details_list(
+        self, room_wx_id_list: list[str] = None, user_names: list[str] = None
+    ) -> Optional[dict]:
         """
         获取联系人详情列表。
         """
+        if room_wx_id_list is None:
+            room_wx_id_list = []
+        if user_names is None:
+            user_names = []
         url = f"{self.base_url}/friend/GetContactDetailsList"
         params = {"key": self.auth_key}
-        payload = {
-            "RoomWxIDList": room_wx_id_list,
-            "UserNames": user_names
-        }
+        payload = {"RoomWxIDList": room_wx_id_list, "UserNames": user_names}
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.post(url, params=params, json=payload) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        if result.get("Code") == 200 and result.get("Data"):
-                            contact_list = result.get("Data", {}).get("contactList", {})
-                            return contact_list
-                        else:
-                            logger.error(f"获取联系人详情列表失败: {result}")
-                            return None
-                    else:
+                    if response.status != 200:
                         logger.error(f"获取联系人详情列表失败: {response.status}")
+                        return None
+                    result = await response.json()
+                    if result.get("Code") == 200 and result.get("Data"):
+                        contact_list = result.get("Data", {}).get("contactList", {})
+                        return contact_list
+                    else:
+                        logger.error(f"获取联系人详情列表失败: {result}")
                         return None
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
@@ -690,5 +689,3 @@ class WeChatPadProAdapter(Platform):
             except Exception as e:
                 logger.error(f"获取联系人详情列表时发生错误: {e}")
                 return None
-            
-        
