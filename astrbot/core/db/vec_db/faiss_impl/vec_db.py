@@ -100,7 +100,7 @@ class FaissVecDB(BaseVecDB):
                 continue
             fetch_doc = fetched_docs[pos]
             score = scores[0][i]
-            result_docs.append(Result(similarity=score, data=fetch_doc))
+            result_docs.append(Result(similarity=float(score), data=fetch_doc))
         return result_docs[:k]
 
     async def delete(self, doc_id: int):
