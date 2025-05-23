@@ -166,6 +166,10 @@ function endDrag() {
       </template>
     </v-list>
     <div style="position: absolute; bottom: 16px; width: 100%; font-size: 13px;" class="text-center">
+      <v-btn style="margin-bottom: 8px;" size="small" variant="primary" v-if="!customizer.mini_sidebar" to="/settings">
+        🔧 设置
+      </v-btn>
+      <br/>
       <v-btn style="margin-bottom: 8px;" size="small" variant="plain" v-if="!customizer.mini_sidebar" @click="toggleIframe">
         官方文档
       </v-btn>

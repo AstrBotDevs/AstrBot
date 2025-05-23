@@ -16,7 +16,6 @@ from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
 from typing import Awaitable
-from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
@@ -42,6 +41,8 @@ class Context:
 
     platform_manager: PlatformManager = None
 
+    registered_web_apis: list = []
+
     # back compatibility
     _register_tasks: List[Awaitable] = []
     _star_manager = None
@@ -54,14 +55,12 @@ class Context:
         provider_manager: ProviderManager = None,
         platform_manager: PlatformManager = None,
         conversation_manager: ConversationManager = None,
-        knowledge_db_manager: KnowledgeDBManager = None,
     ):
         self._event_queue = event_queue
         self._config = config
         self._db = db
         self.provider_manager = provider_manager
         self.platform_manager = platform_manager
-        self.knowledge_db_manager = knowledge_db_manager
         self.conversation_manager = conversation_manager
 
     def get_registered_star(self, star_name: str) -> StarMetadata:
@@ -301,3 +300,6 @@ class Context:
         注册一个异步任务。
         """
         self._register_tasks.append(task)
+
+    def register_web_api(self, route: str, view_handler: Awaitable, methods: list, desc: str):
+        self.registered_web_apis.append((route, view_handler, methods, desc))

@@ -12,19 +12,22 @@ marked.setOptions({
     <v-card class="chat-page-card">
         <v-card-text class="chat-page-container">
             <div class="chat-layout">
-                <!-- 左侧对话列表面板 - 优化版 -->
                 <div class="sidebar-panel">
                     <div class="sidebar-header">
-                        <v-btn variant="elevated" rounded="lg" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                            prepend-icon="mdi-plus">
-                            创建对话
+                        <v-btn icon variant="plain">
+                            <v-icon icon="mdi-menu" color="deep-purple"></v-icon>
                         </v-btn>
                     </div>
 
+                    <div style="padding: 16px; padding-top: 8px;">
+                        <v-btn variant="elevated" rounded="lg" class="new-chat-btn" @click="newC" :disabled="!currCid"
+                        prepend-icon="mdi-plus">
+                        创建对话
+                    </v-btn>
+                    </div>
+                    
+
                     <div class="conversations-container">
-                        <div class="sidebar-section-title" v-if="conversations.length > 0">
-                            对话历史
-                        </div>
 
                         <v-card class="conversation-list-card" v-if="conversations.length > 0" flat>
                             <v-list density="compact" nav class="conversation-list"
@@ -36,7 +39,7 @@ marked.setOptions({
                                     </template>
                                     <v-list-item-title class="conversation-title">新对话</v-list-item-title>
                                     <v-list-item-subtitle class="timestamp">{{ formatDate(item.updated_at)
-                                    }}</v-list-item-subtitle>
+                                        }}</v-list-item-subtitle>
                                 </v-list-item>
                             </v-list>
                         </v-card>
@@ -151,10 +154,10 @@ marked.setOptions({
 
                     <!-- 输入区域 -->
                     <div class="input-area fade-in">
-                        <v-text-field id="input-field" variant="outlined" v-model="prompt" :label="inputFieldLabel"
-                            placeholder="开始输入..." :loading="loadingChat" clear-icon="mdi-close-circle" clearable
-                            @click:clear="clearMessage" class="message-input" @keydown="handleInputKeyDown"
-                            hide-details>
+                        <v-text-field autocomplete="off" id="input-field" variant="outlined" v-model="prompt"
+                            :label="inputFieldLabel" placeholder="开始输入..." :loading="loadingChat"
+                            clear-icon="mdi-close-circle" clearable @click:clear="clearMessage" class="message-input"
+                            @keydown="handleInputKeyDown" hide-details>
                             <template v-slot:loader>
                                 <v-progress-linear :active="loadingChat" height="3" color="deep-purple"
                                     indeterminate></v-progress-linear>
@@ -701,7 +704,6 @@ export default {
 
 .sidebar-header {
     padding: 16px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 .conversations-container {

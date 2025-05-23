@@ -102,7 +102,10 @@ class PluginRoute(Route):
 
     async def get_plugins(self):
         _plugin_resp = []
+        plugin_name = request.args.get("name")
         for plugin in self.plugin_manager.context.get_all_stars():
+            if plugin_name and plugin.name != plugin_name:
+                continue
             _t = {
                 "name": plugin.name,
                 "repo": "" if plugin.repo is None else plugin.repo,
