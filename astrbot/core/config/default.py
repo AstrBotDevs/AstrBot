@@ -5,7 +5,7 @@
 import os
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.10"
+VERSION = "3.5.11"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
@@ -176,6 +176,7 @@ CONFIG_METADATA_2 = {
                         "api_base_url": "https://api.weixin.qq.com/cgi-bin/",
                         "callback_server_host": "0.0.0.0",
                         "port": 6194,
+                        "active_send_mode": False
                     },
                     "wecom(企业微信)": {
                         "id": "wecom",
@@ -220,6 +221,11 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "active_send_mode": {
+                      "description": "是否换用主动发送接口",
+                      "type": "bool",
+                      "desc": "只有企业认证的公众号才能主动发送。主动发送接口的限制会少一些。"
+                    },
                     "wpp_active_message_poll": {
                       "description": "是否启用主动消息轮询",
                       "type": "bool",
@@ -841,8 +847,41 @@ CONFIG_METADATA_2 = {
                         "minimax-voice-english-normalization": False,
                         "timeout": 20,
                     },
+                    "火山引擎_TTS(API)": {
+                        "id": "volcengine_tts",
+                        "type": "volcengine_tts",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "appid": "",
+                        "volcengine_cluster": "volcano_tts",
+                        "volcengine_voice_type": "",
+                        "volcengine_speed_ratio": 1.0,
+                        "api_base": "https://openspeech.bytedance.com/api/v1/tts",
+                        "timeout": 20,
+                    },
                 },
                 "items": {
+                    "volcengine_cluster": {
+                        "type": "string",
+                        "description": "火山引擎集群",
+                        "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
+                    },
+                    "volcengine_voice_type": {
+                        "type": "string",
+                        "description": "火山引擎音色",
+                        "hint": "输入声音id(Voice_type)"
+                    },
+                    "volcengine_speed_ratio": {
+                        "type": "float",
+                        "description": "语速设置",
+                        "hint": "语速设置，范围为 0.2 到 3.0,默认值为 1.0"
+                    },
+                    "volcengine_volume_ratio": {
+                        "type": "float",
+                        "description": "音量设置",
+                        "hint": "音量设置，范围为 0.0 到 2.0,默认值为 1.0"
+                    },
                     "azure_tts_voice": {
                         "type": "string",
                         "description": "音色设置",

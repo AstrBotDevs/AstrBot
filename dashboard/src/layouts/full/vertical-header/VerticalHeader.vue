@@ -383,7 +383,7 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
               <v-col cols="12">
 
                 <v-alert v-if="accountWarning" color="warning" style="margin-bottom: 16px;">
-                  <div>为了安全，请尽快修改默认密码。</div>
+                  <div>为了安全，请务必修改默认密码。</div>
                 </v-alert>
 
                 <v-text-field label="原密码*" type="password" v-model="password" required
@@ -402,7 +402,7 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="blue-darken-1" variant="text" @click="dialog = false">
+          <v-btn v-if="!accountWarning" color="blue-darken-1" variant="text" @click="dialog = false">
             关闭
           </v-btn>
           <v-btn color="blue-darken-1" variant="text" @click="accountEdit">

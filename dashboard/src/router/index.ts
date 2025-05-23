@@ -24,6 +24,11 @@ router.beforeEach(async (to, from, next) => {
   const authRequired = !publicPages.includes(to.path);
   const auth: AuthStore = useAuthStore();
 
+  // 如果用户已登录且试图访问登录页面，则重定向到首页或之前尝试访问的页面
+  if (to.path === '/auth/login' && auth.has_token()) {
+    return next(auth.returnUrl || '/');
+  }
+
   if (to.matched.some((record) => record.meta.requiresAuth)) {
     if (authRequired && !auth.has_token()) {
       auth.returnUrl = to.fullPath;
