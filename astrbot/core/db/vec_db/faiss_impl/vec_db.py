@@ -5,7 +5,6 @@ from .document_storage import DocumentStorage
 from .embedding_storage import EmbeddingStorage
 from ..base import Result, BaseVecDB
 from astrbot.core.provider.provider import EmbeddingProvider
-from loguru import logger
 
 
 class FaissVecDB(BaseVecDB):
@@ -83,9 +82,7 @@ class FaissVecDB(BaseVecDB):
         if len(indices[0]) == 0 or indices[0][0] == -1:
             return []
         # normalize scores
-        logger.debug(f"before similarity: {scores} indices: {indices}")
         scores[0] = 1.0 - (scores[0] / 2.0)
-        logger.debug(f"retrieval from faiss: SIMILARITY {scores} INDICES {indices}")
         # NOTE: maybe the size is less than k.
         fetched_docs = await self.document_storage.get_documents(
             metadata_filters=metadata_filters or {}, ids=indices[0]
