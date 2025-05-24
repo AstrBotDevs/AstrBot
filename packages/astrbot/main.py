@@ -140,7 +140,7 @@ class Main(star.Star):
 {notice}"""
 
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
-
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("llm")
     async def llm(self, event: AstrMessageEvent):
         """开启/关闭 LLM"""
@@ -419,7 +419,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
             event.set_result(MessageEventResult().message("删除白名单成功。"))
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
-
+    
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")
     async def provider(
         self, event: AstrMessageEvent, idx: Union[str, int] = None, idx2: int = None
@@ -588,7 +589,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
             ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
 
         message.set_result(MessageEventResult().message(ret))
-
+    
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(
         self, message: AstrMessageEvent, idx_or_name: Union[int, str] = None
