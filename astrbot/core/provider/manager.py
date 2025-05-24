@@ -170,6 +170,10 @@ class ProviderManager:
                     from .sources.gemini_source import (
                         ProviderGoogleGenAI as ProviderGoogleGenAI,
                     )
+                case "google_agent_sdk":
+                    from .sources.google_agent_sdk_source import (
+                        ProviderGoogleAgentSDK as ProviderGoogleAgentSDK,
+                    )
                 case "sensevoice_stt_selfhost":
                     from .sources.sensevoice_selfhosted_source import (
                         ProviderSenseVoiceSTTSelfHost as ProviderSenseVoiceSTTSelfHost,
