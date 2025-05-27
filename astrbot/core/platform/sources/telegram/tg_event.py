@@ -206,6 +206,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             asyncio.get_event_loop().time()
                         )  # 更新上次编辑的时间
                 else:
+                    # delta 长度一般不会大于 4096，因此这里直接发送
                     try:
                         msg = await self.client.send_message(text=delta, **payload)
                         current_content = delta
