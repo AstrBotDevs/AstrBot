@@ -1,4 +1,5 @@
 import os
+import re
 import asyncio
 import telegramify_markdown
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -18,6 +19,16 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
+    # Telegram 的最大消息长度限制
+    MAX_MESSAGE_LENGTH = 4096
+
+    SPLIT_PATTERNS = {
+        "paragraph": re.compile(r"\n\n"),
+        "line": re.compile(r"\n"),
+        "sentence": re.compile(r"[.!?。！？]"),
+        "word": re.compile(r"\s"),
+    }
+
     def __init__(
         self,
         message_str: str,
@@ -29,8 +40,33 @@ class TelegramPlatformEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
 
-    @staticmethod
-    async def send_with_client(client: ExtBot, message: MessageChain, user_name: str):
+    def _split_message(self, text: str) -> list[str]:
+        if len(text) <= self.MAX_MESSAGE_LENGTH:
+            return [text]
+
+        chunks = []
+        while text:
+            if len(text) <= self.MAX_MESSAGE_LENGTH:
+                chunks.append(text)
+                break
+
+            split_point = self.MAX_MESSAGE_LENGTH
+            segment = text[: self.MAX_MESSAGE_LENGTH]
+
+            for _, pattern in self.SPLIT_PATTERNS.items():
+                if matches := list(pattern.finditer(segment)):
+                    last_match = matches[-1]
+                    split_point = last_match.end()
+                    break
+
+            chunks.append(text[:split_point])
+            text = text[split_point:].lstrip()
+
+        return chunks
+
+    async def send_with_client(
+        self, client: ExtBot, message: MessageChain, user_name: str
+    ):
         image_path = None
 
         has_reply = False
@@ -59,19 +95,22 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
             if isinstance(i, Plain):
                 if at_user_id and not at_flag:
-                    i.text = f"@{at_user_id} " + i.text
+                    i.text = f"@{at_user_id} {i.text}"
                     at_flag = True
-                text = i.text
-                try:
-                    text = telegramify_markdown.markdownify(
-                        i.text, max_line_length=None, normalize_whitespace=False
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"MarkdownV2 conversion failed: {e}. Using plain text instead."
-                    )
-                    return
-                await client.send_message(text=text, parse_mode="MarkdownV2", **payload)
+                chunks = self._split_message(i.text)
+                for chunk in chunks:
+                    try:
+                        md_text = telegramify_markdown.markdownify(
+                            chunk, max_line_length=None, normalize_whitespace=False
+                        )
+                        await client.send_message(
+                            text=md_text, parse_mode="MarkdownV2", **payload
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"MarkdownV2 send failed: {e}. Using plain text instead."
+                        )
+                        await client.send_message(text=chunk, **payload)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
                 await client.send_photo(photo=image_path, **payload)
@@ -147,17 +186,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         continue
 
                 # Plain
-                if not message_id:
-                    try:
-                        msg = await self.client.send_message(text=delta, **payload)
-                        current_content = delta
-                    except Exception as e:
-                        logger.warning(f"发送消息失败(streaming): {e!s}")
-                    message_id = msg.message_id
-                    last_edit_time = (
-                        asyncio.get_event_loop().time()
-                    )  # 记录初始消息发送时间
-                else:
+                if message_id and len(delta) <= self.MAX_MESSAGE_LENGTH:
                     current_time = asyncio.get_event_loop().time()
                     time_since_last_edit = current_time - last_edit_time
 
@@ -176,6 +205,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         last_edit_time = (
                             asyncio.get_event_loop().time()
                         )  # 更新上次编辑的时间
+                else:
+                    # delta 长度一般不会大于 4096，因此这里直接发送
+                    try:
+                        msg = await self.client.send_message(text=delta, **payload)
+                        current_content = delta
+                        delta = ""
+                    except Exception as e:
+                        logger.warning(f"发送消息失败(streaming): {e!s}")
+                    message_id = msg.message_id
+                    last_edit_time = (
+                        asyncio.get_event_loop().time()
+                    )  # 记录初始消息发送时间
 
         try:
             if delta and current_content != delta:
