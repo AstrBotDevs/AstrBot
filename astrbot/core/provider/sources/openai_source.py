@@ -195,7 +195,11 @@ class ProviderOpenAIOfficial(Provider):
             for tool_call in choice.message.tool_calls:
                 for tool in tools.func_list:
                     if tool.name == tool_call.function.name:
-                        args = json.loads(tool_call.function.arguments)
+                        # workaround for #1454
+                        if isinstance(tool_call.function.arguments, str):
+                            args = json.loads(tool_call.function.arguments)
+                        else:
+                            args = tool_call.function.arguments
                         args_ls.append(args)
                         func_name_ls.append(tool_call.function.name)
                         tool_call_ids.append(tool_call.id)
@@ -223,9 +227,9 @@ class ProviderOpenAIOfficial(Provider):
         session_id: str = None,
         image_urls: list[str] = None,
         func_tool: FuncCall = None,
-        contexts: list=None,
-        system_prompt: str=None,
-        tool_calls_result: ToolCallsResult=None,
+        contexts: list = None,
+        system_prompt: str = None,
+        tool_calls_result: ToolCallsResult = None,
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
@@ -340,9 +344,9 @@ class ProviderOpenAIOfficial(Provider):
     async def text_chat(
         self,
         prompt,
-        session_id = None,
-        image_urls = None,
-        func_tool = None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
