@@ -109,7 +109,12 @@ class MCPClient:
 
         if "url" in cfg:
             # SSE transport method
-            self._streams_context = sse_client(url=cfg["url"])
+            self._streams_context = sse_client(
+                url=cfg["url"],
+                headers=cfg.get("headers", {}),
+                timeout=cfg.get("timeout", 5),
+                sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
+            )
             streams = await self._streams_context.__aenter__()
 
             # Create a new client session
