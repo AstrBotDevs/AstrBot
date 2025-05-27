@@ -54,8 +54,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             segment = text[: self.MAX_MESSAGE_LENGTH]
 
             for _, pattern in self.SPLIT_PATTERNS.items():
-                matches = list(pattern.finditer(segment))
-                if matches:
+                if matches := list(pattern.finditer(segment)):
                     last_match = matches[-1]
                     split_point = last_match.end()
                     break
@@ -96,7 +95,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
             if isinstance(i, Plain):
                 if at_user_id and not at_flag:
-                    i.text = f"@{at_user_id} " + i.text
+                    i.text = f"@{at_user_id} {i.text}"
                     at_flag = True
                 chunks = self._split_message(i.text)
                 for chunk in chunks:
@@ -109,7 +108,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         )
                     except Exception as e:
                         logger.warning(
-                            f"MarkdownV2 conversion failed: {e}. Using plain text instead."
+                            f"MarkdownV2 send failed: {e}. Using plain text instead."
                         )
                         await client.send_message(text=chunk, **payload)
             elif isinstance(i, Image):
