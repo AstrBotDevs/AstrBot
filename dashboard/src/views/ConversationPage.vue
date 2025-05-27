@@ -121,6 +121,10 @@
                                     @click="editConversation(item)">
                                     <v-icon class="mr-1">mdi-pencil</v-icon>编辑
                                 </v-btn>
+                                <v-btn v-if="item.sessionInfo.messageType === 'GroupMessage'" color="indigo" variant="flat" size="small" class="action-button"
+                                    @click="configureGroupPermissions(item)">
+                                    <v-icon class="mr-1">mdi-lock</v-icon>权限
+                                </v-btn>
                                 <v-btn color="error" variant="flat" size="small" class="action-button"
                                     @click="confirmDeleteConversation(item)">
                                     <v-icon class="mr-1">mdi-delete</v-icon>删除
@@ -312,6 +316,113 @@
         <v-snackbar :timeout="3000" elevation="24" :color="messageType" v-model="showMessage" location="top">
             {{ message }}
         </v-snackbar>
+
+        <!-- 群聊插件权限配置对话框 -->
+        <v-dialog v-model="dialogGroupPermissions" max-width="900">
+            <v-card class="rounded-lg">
+                <v-toolbar color="indigo" density="comfortable" flat>
+                    <v-toolbar-title class="text-white">
+                        <v-icon color="white" class="mr-2">mdi-lock-open</v-icon>
+                        群聊插件权限配置
+                    </v-toolbar-title>
+                    <v-spacer></v-spacer>
+                    <v-btn icon @click="dialogGroupPermissions = false" variant="text" color="white">
+                        <v-icon>mdi-close</v-icon>
+                    </v-btn>
+                </v-toolbar>
+
+                <v-card-text class="pt-4">
+                    <div class="d-flex align-center mb-4">
+                        <div class="text-h6 mr-2">群聊信息:</div>
+                        <v-chip color="primary" class="mr-2">
+                            {{ selectedConversation?.sessionInfo.platform }}
+                        </v-chip>
+                        <v-chip color="green">
+                            {{ selectedConversation?.sessionInfo.sessionId }}
+                        </v-chip>
+                    </div>
+
+                    <p class="text-body-2 mb-4">
+                        设置在该群聊中启用或禁用的插件，勾选表示启用，取消勾选表示禁用。
+                        <br>
+                        注意：此设置会覆盖平台级别的插件设置。
+                    </p>
+
+                    <v-overlay :model-value="groupPermissionsLoading" class="align-center justify-center" persistent>
+                        <v-progress-circular color="primary" indeterminate size="64"></v-progress-circular>
+                    </v-overlay>
+
+                    <div class="mb-4 d-flex align-center">
+                        <v-btn-group density="comfortable">
+                            <v-btn color="success" variant="tonal" @click="selectAllPlugins(true)">
+                                <v-icon class="mr-1">mdi-check-all</v-icon>全选
+                            </v-btn>
+                            <v-btn color="error" variant="tonal" @click="selectAllPlugins(false)">
+                                <v-icon class="mr-1">mdi-close-box-multiple</v-icon>全不选
+                            </v-btn>
+                            <v-btn color="info" variant="tonal" @click="toggleAllPlugins()">
+                                <v-icon class="mr-1">mdi-swap-horizontal</v-icon>反选
+                            </v-btn>
+                        </v-btn-group>
+                    </div>
+
+                    <v-sheet class="rounded-lg overflow-hidden plugin-table-container">
+                        <v-table hover class="elevation-1" fixed-header height="400">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">插件名称</th>
+                                    <th class="text-left">描述</th>
+                                    <th class="text-center" style="width: 120px">插件状态</th>
+                                    <th class="text-center" style="width: 100px">权限设置</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="plugin in groupPermissionsData.plugins" :key="plugin.name">
+                                    <td>
+                                        <div class="d-flex align-center">
+                                            {{ plugin.name }}
+                                            <v-chip v-if="plugin.reserved" color="primary" size="x-small" class="ml-2">系统</v-chip>
+                                        </div>
+                                    </td>
+                                    <td>{{ plugin.desc }}</td>
+                                    <td class="text-center">
+                                        <v-chip 
+                                            :color="plugin.activated ? 'success' : 'error'" 
+                                            size="small" 
+                                            variant="outlined"
+                                        >
+                                            {{ plugin.activated ? '已启用' : '已停用' }}
+                                        </v-chip>
+                                    </td>
+                                    <td class="text-center">
+                                        <v-checkbox 
+                                            v-model="groupPermissionsData.pluginEnable[plugin.name]" 
+                                            hide-details
+                                            density="compact" 
+                                            color="indigo"
+                                            :disabled="!plugin.activated"
+                                            :title="!plugin.activated ? '插件已被停用，无法在群聊中启用' : ''"
+                                        ></v-checkbox>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </v-table>
+                    </v-sheet>
+                </v-card-text>
+
+                <v-divider></v-divider>
+
+                <v-card-actions class="pa-4">
+                    <v-spacer></v-spacer>
+                    <v-btn variant="text" @click="dialogGroupPermissions = false" :disabled="groupPermissionsLoading">
+                        取消
+                    </v-btn>
+                    <v-btn color="indigo" @click="saveGroupPermissions" :loading="groupPermissionsLoading">
+                        保存
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
     </div>
 </template>
 
@@ -415,6 +526,14 @@ export default {
             editedHistory: '',
             savingHistory: false,
             monacoEditor: null,
+
+            // 群聊插件权限配置
+            dialogGroupPermissions: false,
+            groupPermissionsLoading: false,
+            groupPermissionsData: {
+                plugins: [],
+                pluginEnable: {}
+            },
 
             commonStore: useCommonStore()
         }
@@ -877,6 +996,90 @@ export default {
             this.message = message;
             this.messageType = 'error';
             this.showMessage = true;
+        },
+
+        // 配置群聊插件权限
+        async configureGroupPermissions(item) {
+            this.selectedConversation = item;
+            this.groupPermissionsLoading = true;
+            this.dialogGroupPermissions = true;
+
+            try {
+                // 获取群聊的插件权限配置
+                const response = await axios.get('/api/conversation/plugin_permissions', {
+                    params: {
+                        user_id: item.user_id,
+                        platform: item.sessionInfo.platform,
+                        sessionId: item.sessionInfo.sessionId
+                    }
+                });
+
+                if (response.data.status === "ok") {
+                    // 更新插件列表和启用状态
+                    this.groupPermissionsData.plugins = response.data.data.plugins || [];
+                    this.groupPermissionsData.pluginEnable = response.data.data.plugin_enable || {};
+                    
+                    // 确保每个插件都有一个配置项，默认为启用
+                    this.groupPermissionsData.plugins.forEach(plugin => {
+                        if (this.groupPermissionsData.pluginEnable[plugin.name] === undefined) {
+                            this.groupPermissionsData.pluginEnable[plugin.name] = true;
+                        }
+                    });
+                } else {
+                    this.showErrorMessage(response.data.message || '获取群聊权限配置失败');
+                }
+            } catch (error) {
+                console.error('配置群聊权限出错:', error);
+                this.showErrorMessage(error.response?.data?.message || error.message || '配置群聊权限失败');
+            } finally {
+                this.groupPermissionsLoading = false;
+            }
+        },
+
+        // 保存群聊插件权限配置
+        async saveGroupPermissions() {
+            this.groupPermissionsLoading = true;
+            try {
+                const response = await axios.post('/api/conversation/set_plugin_permissions', {
+                    user_id: this.selectedConversation.user_id,
+                    platform: this.selectedConversation.sessionInfo.platform,
+                    sessionId: this.selectedConversation.sessionInfo.sessionId,
+                    plugin_enable: this.groupPermissionsData.pluginEnable
+                });
+
+                if (response.data.status === "ok") {
+                    this.dialogGroupPermissions = false;
+                    this.showSuccessMessage('群聊插件权限配置已更新');
+                } else {
+                    this.showErrorMessage(response.data.message || '更新群聊插件权限失败');
+                }
+            } catch (error) {
+                console.error('保存群聊插件权限出错:', error);
+                this.showErrorMessage(error.response?.data?.message || error.message || '保存群聊插件权限失败');
+            } finally {
+                this.groupPermissionsLoading = false;
+            }
+        },
+
+        // 全选/取消选择所有插件
+        selectAllPlugins(isSelected) {
+            // 为所有激活的插件设置相同的状态
+            this.groupPermissionsData.plugins.forEach(plugin => {
+                if (plugin.activated) {
+                    this.groupPermissionsData.pluginEnable[plugin.name] = isSelected;
+                }
+            });
+        },
+
+        // 反选所有插件
+        toggleAllPlugins() {
+            // 对每个激活的插件进行反选操作
+            this.groupPermissionsData.plugins.forEach(plugin => {
+                if (plugin.activated) {
+                    const currentState = this.groupPermissionsData.pluginEnable[plugin.name];
+                    this.groupPermissionsData.pluginEnable[plugin.name] = !currentState;
+                }
+            });
         }
     },
     get methods() {
@@ -1113,5 +1316,30 @@ export default {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* 插件权限表格容器 */
+.plugin-table-container {
+    max-height: 400px;
+}
+
+/* 滚动条样式优化 */
+.plugin-table-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.plugin-table-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.plugin-table-container::-webkit-scrollbar-thumb {
+    background: #c5c5c5;
+    border-radius: 4px;
+}
+
+.plugin-table-container::-webkit-scrollbar-thumb:hover {
+    background: #9e9e9e;
 }
 </style>
