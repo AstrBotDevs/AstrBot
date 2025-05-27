@@ -169,11 +169,14 @@ class ResultDecorateStage(Stage):
                     result.chain = new_chain
 
             # TTS
+            tts_provider = (
+                self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
+            )
             if (
                 self.ctx.astrbot_config["provider_tts_settings"]["enable"]
                 and result.is_llm_result()
+                and tts_provider
             ):
-                tts_provider = self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
                 new_chain = []
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:

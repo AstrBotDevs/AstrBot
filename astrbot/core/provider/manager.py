@@ -21,9 +21,9 @@ class ProviderManager:
         self.selected_provider_id = sp.get("curr_provider")
         self.selected_stt_provider_id = self.provider_stt_settings.get("provider_id")
         self.selected_tts_provider_id = self.provider_settings.get("provider_id")
-        self.provider_enabled = self.provider_settings.get("enable", False)
-        self.stt_enabled = self.provider_stt_settings.get("enable", False)
-        self.tts_enabled = self.provider_tts_settings.get("enable", False)
+        # self.provider_enabled = self.provider_settings.get("enable", False)
+        # self.stt_enabled = self.provider_stt_settings.get("enable", False)
+        # self.tts_enabled = self.provider_tts_settings.get("enable", False)
 
         # 人格情景管理
         # 目前没有拆成独立的模块
@@ -101,6 +101,8 @@ class ProviderManager:
         self.inst_map = {}
         """Provider 实例映射. key: provider_id, value: Provider 实例"""
         self.llm_tools = llm_tools
+        self.default_provider_inst: Provider = None
+        """默认的 Provider 实例。第 0 个或者用户以前指定的 Provider 实例"""
         self.curr_provider_inst: Provider = None
         """当前使用的 Provider 实例"""
         self.curr_stt_provider_inst: STTProvider = None
@@ -119,14 +121,9 @@ class ProviderManager:
         for provider_config in self.providers_config:
             await self.load_provider(provider_config)
 
-        if not self.curr_provider_inst:
-            logger.warning("未启用任何用于 文本生成 的提供商适配器。")
-
-        if self.stt_enabled and not self.curr_stt_provider_inst:
-            logger.warning("未启用任何用于 语音转文本 的提供商适配器。")
-
-        if self.tts_enabled and not self.curr_tts_provider_inst:
-            logger.warning("未启用任何用于 文本转语音 的提供商适配器。")
+        self.default_provider_inst = self.inst_map.get(self.selected_provider_id)
+        if not self.default_provider_inst and self.provider_insts:
+            self.default_provider_inst = self.provider_insts[0]
 
         # 初始化 MCP Client 连接
         asyncio.create_task(
@@ -245,15 +242,12 @@ class ProviderManager:
                     await inst.initialize()
 
                 self.stt_provider_insts.append(inst)
-                if (
-                    self.selected_stt_provider_id == provider_config["id"]
-                    and self.stt_enabled
-                ):
+                if self.selected_stt_provider_id == provider_config["id"]:
                     self.curr_stt_provider_inst = inst
                     logger.info(
                         f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。"
                     )
-                if not self.curr_stt_provider_inst and self.stt_enabled:
+                if not self.curr_stt_provider_inst:
                     self.curr_stt_provider_inst = inst
 
             elif provider_metadata.provider_type == ProviderType.TEXT_TO_SPEECH:
@@ -266,15 +260,12 @@ class ProviderManager:
                     await inst.initialize()
 
                 self.tts_provider_insts.append(inst)
-                if (
-                    self.selected_tts_provider_id == provider_config["id"]
-                    and self.tts_enabled
-                ):
+                if self.selected_tts_provider_id == provider_config["id"]:
                     self.curr_tts_provider_inst = inst
                     logger.info(
                         f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。"
                     )
-                if not self.curr_tts_provider_inst and self.tts_enabled:
+                if not self.curr_tts_provider_inst:
                     self.curr_tts_provider_inst = inst
 
             elif provider_metadata.provider_type == ProviderType.CHAT_COMPLETION:
@@ -291,15 +282,12 @@ class ProviderManager:
                     await inst.initialize()
 
                 self.provider_insts.append(inst)
-                if (
-                    self.selected_provider_id == provider_config["id"]
-                    and self.provider_enabled
-                ):
+                if self.selected_provider_id == provider_config["id"]:
                     self.curr_provider_inst = inst
                     logger.info(
                         f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。"
                     )
-                if not self.curr_provider_inst and self.provider_enabled:
+                if not self.curr_provider_inst:
                     self.curr_provider_inst = inst
 
             self.inst_map[provider_config["id"]] = inst
@@ -322,11 +310,7 @@ class ProviderManager:
 
         if len(self.provider_insts) == 0:
             self.curr_provider_inst = None
-        elif (
-            self.curr_provider_inst is None
-            and len(self.provider_insts) > 0
-            and self.provider_enabled
-        ):
+        elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
             self.curr_provider_inst = self.provider_insts[0]
             self.selected_provider_id = self.curr_provider_inst.meta().id
             logger.info(
@@ -335,11 +319,7 @@ class ProviderManager:
 
         if len(self.stt_provider_insts) == 0:
             self.curr_stt_provider_inst = None
-        elif (
-            self.curr_stt_provider_inst is None
-            and len(self.stt_provider_insts) > 0
-            and self.stt_enabled
-        ):
+        elif self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
             self.selected_stt_provider_id = self.curr_stt_provider_inst.meta().id
             logger.info(
@@ -348,11 +328,7 @@ class ProviderManager:
 
         if len(self.tts_provider_insts) == 0:
             self.curr_tts_provider_inst = None
-        elif (
-            self.curr_tts_provider_inst is None
-            and len(self.tts_provider_insts) > 0
-            and self.tts_enabled
-        ):
+        elif self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
             self.selected_tts_provider_id = self.curr_tts_provider_inst.meta().id
             logger.info(

@@ -46,28 +46,29 @@ class PreProcessStage(Stage):
             stt_provider = (
                 self.plugin_manager.context.provider_manager.curr_stt_provider_inst
             )
-            if stt_provider:
-                message_chain = event.get_messages()
-                for idx, component in enumerate(message_chain):
-                    if isinstance(component, Record) and component.url:
-                        path = component.url.removeprefix("file://")
-                        retry = 5
-                        for i in range(retry):
-                            try:
-                                result = await stt_provider.get_text(audio_url=path)
-                                if result:
-                                    logger.info("语音转文本结果: " + result)
-                                    message_chain[idx] = Plain(result)
-                                    event.message_str += result
-                                    event.message_obj.message_str += result
-                                break
-                            except FileNotFoundError as e:
-                                # napcat workaround
-                                logger.warning(e)
-                                logger.warning(f"重试中: {i + 1}/{retry}")
-                                await asyncio.sleep(0.5)
-                                continue
-                            except BaseException as e:
-                                logger.error(traceback.format_exc())
-                                logger.error(f"语音转文本失败: {e}")
-                                break
+            if not stt_provider:
+                return
+            message_chain = event.get_messages()
+            for idx, component in enumerate(message_chain):
+                if isinstance(component, Record) and component.url:
+                    path = component.url.removeprefix("file://")
+                    retry = 5
+                    for i in range(retry):
+                        try:
+                            result = await stt_provider.get_text(audio_url=path)
+                            if result:
+                                logger.info("语音转文本结果: " + result)
+                                message_chain[idx] = Plain(result)
+                                event.message_str += result
+                                event.message_obj.message_str += result
+                            break
+                        except FileNotFoundError as e:
+                            # napcat workaround
+                            logger.warning(e)
+                            logger.warning(f"重试中: {i + 1}/{retry}")
+                            await asyncio.sleep(0.5)
+                            continue
+                        except BaseException as e:
+                            logger.error(traceback.format_exc())
+                            logger.error(f"语音转文本失败: {e}")
+                            break
