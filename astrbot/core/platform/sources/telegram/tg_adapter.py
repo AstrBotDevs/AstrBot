@@ -144,7 +144,7 @@ class TelegramPlatformAdapter(Platform):
         command_dict = {}
         skip_commands = {"start"}
 
-        for handler_md in star_handlers_registry._handlers:
+        for handler_md in star_handlers_registry:
             handler_metadata = handler_md
             if not star_map[handler_metadata.handler_module_path].activated:
                 continue
