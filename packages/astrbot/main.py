@@ -472,8 +472,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     id_ = provider.meta().id
                     self.context.provider_manager.curr_tts_provider_inst = provider
                     sp.put("curr_provider_tts", id_)
-                    if not self.context.provider_manager.tts_enabled:
-                        self.context.provider_manager.tts_enabled = True
                     event.set_result(
                         MessageEventResult().message(f"成功切换到 {id_}。")
                     )
@@ -488,8 +486,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     id_ = provider.meta().id
                     self.context.provider_manager.curr_stt_provider_inst = provider
                     sp.put("curr_provider_stt", id_)
-                    if not self.context.provider_manager.stt_enabled:
-                        self.context.provider_manager.stt_enabled = True
                     event.set_result(
                         MessageEventResult().message(f"成功切换到 {id_}。")
                     )
@@ -501,8 +497,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 id_ = provider.meta().id
                 self.context.provider_manager.curr_provider_inst = provider
                 sp.put("curr_provider", id_)
-                if not self.context.provider_manager.provider_enabled:
-                    self.context.provider_manager.provider_enabled = True
                 event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
             else:
                 event.set_result(MessageEventResult().message("无效的参数。"))
