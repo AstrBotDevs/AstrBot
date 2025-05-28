@@ -29,9 +29,7 @@ class RespondStage(Stage):
         Comp.Image: lambda comp: bool(comp.file),  # 图片
         Comp.Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
         Comp.Poke: lambda comp: comp.id != 0 and comp.qq != 0,  # 戳一戳
-        Comp.Node: lambda comp: bool(comp.name)
-        and comp.uin != 0
-        and bool(comp.content),  # 一个转发节点
+        Comp.Node: lambda comp: bool(comp.content),  # 转发节点
         Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
         Comp.File: lambda comp: bool(comp.file_ or comp.url),
     }

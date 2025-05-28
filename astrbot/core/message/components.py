@@ -572,8 +572,9 @@ class Node(BaseMessageComponent):
     seq: T.Optional[T.Union[str, list]] = ""  # 忽略
     time: T.Optional[int] = 0  # 忽略
 
-    def __init__(self, content: list[BaseMessageComponent] | "Node", **_):
+    def __init__(self, content: list[BaseMessageComponent], **_):
         if isinstance(content, Node):
+            # back
             content = [content]
         super().__init__(content=content, **_)
 
@@ -596,6 +597,9 @@ class Node(BaseMessageComponent):
             elif isinstance(comp, (Node, Nodes)):
                 # For Node segments, we recursively convert them to dict
                 d = await comp.to_dict()
+                data_content.append(d)
+            else:
+                d = comp.toDict()
                 data_content.append(d)
         return {
             "type": "node",
@@ -627,9 +631,11 @@ class Nodes(BaseMessageComponent):
     async def to_dict(self):
         """将 Nodes 转换为字典格式，适用于 OneBot JSON 格式"""
         ret = {
-            "type": "nodes",
-            "data": {"nodes": [await node.to_dict() for node in self.nodes]},
+            "messages": []
         }
+        for node in self.nodes:
+            d = await node.to_dict()
+            ret["messages"].append(d)
         return ret
 
 
