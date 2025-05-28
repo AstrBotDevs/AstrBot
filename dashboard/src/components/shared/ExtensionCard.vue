@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, inject } from 'vue';
+import {useCustomizerStore} from "@/stores/customizer";
 
 const props = defineProps({
   extension: {
@@ -75,7 +76,7 @@ const viewReadme = () => {
 
 <template>
   <v-card class="mx-auto d-flex flex-column" :elevation="highlight ? 0 : 1"
-    :style="{ height: $vuetify.display.xs ? '250px' : '220px', backgroundColor: highlight ? '#FAF0DB' : '#ffffff', color: highlight ? '#000' : '#000000' }">
+    :style="{ height: $vuetify.display.xs ? '250px' : '220px', backgroundColor: useCustomizerStore().uiTheme==='PurpleThemeDark' ? 'var(--v-theme-surface)' : 'var(--v-theme-lightprimary)', color: 'var(--v-theme-primaryText)' }">
     <v-card-text style="padding: 16px; padding-bottom: 0px; display: flex; justify-content: space-between;">
 
       <div class="flex-grow-1">

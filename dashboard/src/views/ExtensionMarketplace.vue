@@ -52,7 +52,7 @@ import 'highlight.js/styles/github.css';
 
                 <v-card-text>
 
-                    <small style="color: #bbb;">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small>
+                    <small style="color: color(var(--v-theme-secondaryText, #bbb));">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small>
                     <div v-if="pinnedPlugins.length > 0" class="mt-4">
                         <h2>🥳 推荐</h2>
 
@@ -77,7 +77,7 @@ import 'highlight.js/styles/github.css';
                                             style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
                                             alt="logo">
                                         <span v-if="item?.repo"><a :href="item?.repo"
-                                                style="color: #000; text-decoration:none">{{
+                                                style="color: color(var(--v-theme-primaryText, #000)); text-decoration:none">{{
                                                     item.name }}</a></span>
                                         <span v-else>{{ item.name }}</span>
 

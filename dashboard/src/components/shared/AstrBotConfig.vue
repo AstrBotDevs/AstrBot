@@ -340,12 +340,12 @@ export default {
 .config-title {
   font-weight: 600;
   font-size: 1rem;
-  color: var(--v-primary-darken1);
+  color: var(--v-theme-primaryText);
 }
 
 .config-hint {
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--v-theme-secondaryText);
   margin-top: 2px;
 }
 
@@ -400,12 +400,12 @@ export default {
 .property-name {
   font-size: 0.875rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.87);
+  color: var(--v-theme-primaryText);
 }
 
 .property-hint {
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--v-theme-secondaryText);
   margin-top: 2px;
 }
 

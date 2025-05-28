@@ -3,6 +3,7 @@ export type ConfigProps = {
   Customizer_drawer: boolean;
   mini_sidebar: boolean;
   fontTheme: string;
+  uiTheme: string;
   inputBg: boolean;
 };
 
@@ -11,6 +12,7 @@ const config: ConfigProps = {
   Customizer_drawer: false,
   mini_sidebar: false,
   fontTheme: 'Roboto',
+  uiTheme: 'PurpleThemeDark',
   inputBg: false
 };
 

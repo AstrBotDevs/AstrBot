@@ -17,13 +17,15 @@ export type ThemeTypes = {
     lightwarning?: string;
     darkprimary?: string;
     darksecondary?: string;
-    darkText?: string;
-    lightText?: string;
+    primaryText?: string;
+    secondaryText?: string;
     borderLight?: string;
+    border?: string;
     inputBorder?: string;
     containerBg?: string;
     surface?: string;
     background?: string;
+    overlay?: string;
     'on-surface-variant'?: string;
     facebook?: string;
     twitter?: string;
@@ -31,5 +33,7 @@ export type ThemeTypes = {
     gray100?: string;
     primary200?: string;
     secondary200?: string;
+    codeBg?: string;
+    code?: string;
   };
 };
