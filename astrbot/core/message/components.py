@@ -102,6 +102,10 @@ class BaseMessageComponent(BaseModel):
             data[k] = v
         return {"type": self.type.lower(), "data": data}
 
+    async def to_dict(self) -> dict:
+        # 默认情况下，回退到旧的同步 toDict()
+        return self.toDict()
+
 
 class Plain(BaseMessageComponent):
     type: ComponentType = "Plain"
