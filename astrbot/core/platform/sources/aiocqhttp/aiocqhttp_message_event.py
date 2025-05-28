@@ -9,6 +9,7 @@ from astrbot.api.message_components import (
     Nodes,
     Plain,
     Record,
+    Video,
     File,
     BaseMessageComponent,
 )
@@ -36,6 +37,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             }
         elif isinstance(segment, File):
             # For File segments, we need to handle the file differently
+            d = await segment.to_dict()
+            return d
+        elif isinstance(segment, Video):
             d = await segment.to_dict()
             return d
         else:

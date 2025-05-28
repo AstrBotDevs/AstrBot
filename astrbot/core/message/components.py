@@ -238,9 +238,6 @@ class Video(BaseMessageComponent):
     path: T.Optional[str] = ""
 
     def __init__(self, file: str, **_):
-        # for k in _.keys():
-        #     if k == "c" and _[k] not in [2, 3]:
-        #         logger.warn(f"Protocol: {k}={_[k]} doesn't match values")
         super().__init__(file=file, **_)
 
     @staticmethod
@@ -297,6 +294,25 @@ class Video(BaseMessageComponent):
         logger.debug(f"已注册：{callback_host}/api/file/{token}")
 
         return f"{callback_host}/api/file/{token}"
+
+    async def to_dict(self):
+        """需要和 toDict 区分开，toDict 是同步方法"""
+        url_or_path = self.file
+        if url_or_path.startswith("http"):
+            payload_file = url_or_path
+        elif callback_host := astrbot_config.get("callback_api_base"):
+            callback_host = str(callback_host).removesuffix("/")
+            token = await file_token_service.register_file(url_or_path)
+            payload_file = f"{callback_host}/api/file/{token}"
+            logger.debug(f"Generated video file callback link: {payload_file}")
+        else:
+            payload_file = url_or_path
+        return {
+            "type": "video",
+            "data": {
+                "file": payload_file,
+            },
+        }
 
 
 class At(BaseMessageComponent):
@@ -630,9 +646,7 @@ class Nodes(BaseMessageComponent):
 
     async def to_dict(self):
         """将 Nodes 转换为字典格式，适用于 OneBot JSON 格式"""
-        ret = {
-            "messages": []
-        }
+        ret = {"messages": []}
         for node in self.nodes:
             d = await node.to_dict()
             ret["messages"].append(d)
