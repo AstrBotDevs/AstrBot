@@ -118,6 +118,9 @@ class Plain(BaseMessageComponent):
             self.text.replace("&", "&amp;").replace("[", "&#91;").replace("]", "&#93;")
         )
 
+    def toDict(self):
+        return {"type": "text", "data": {"text": self.text.strip()}}
+
 
 class Face(BaseMessageComponent):
     type: ComponentType = "Face"
@@ -303,6 +306,12 @@ class At(BaseMessageComponent):
 
     def __init__(self, **_):
         super().__init__(**_)
+
+    def toDict(self):
+        return {
+            "type": "at",
+            "data": {"qq": str(self.qq)},
+        }
 
 
 class AtAll(At):
@@ -559,27 +568,43 @@ class Node(BaseMessageComponent):
     id: T.Optional[int] = 0  # 忽略
     name: T.Optional[str] = ""  # qq昵称
     uin: T.Optional[str] = "0"  # qq号
-    content: T.Optional[T.Union[str, list, dict]] = ""  # 子消息段列表
+    content: T.Optional[list[BaseMessageComponent]] = None
     seq: T.Optional[T.Union[str, list]] = ""  # 忽略
     time: T.Optional[int] = 0  # 忽略
 
-    def __init__(self, content: T.Union[str, list, dict, "Node", T.List["Node"]], **_):
-        if isinstance(content, list):
-            _content = None
-            if all(isinstance(item, Node) for item in content):
-                _content = [node.toDict() for node in content]
-            else:
-                _content = ""
-                for chain in content:
-                    _content += chain.toString()
-            content = _content
-        elif isinstance(content, Node):
-            content = content.toDict()
+    def __init__(self, content: list[BaseMessageComponent] | "Node", **_):
+        if isinstance(content, Node):
+            content = [content]
         super().__init__(content=content, **_)
 
-    def toString(self):
-        # logger.warn("Protocol: node doesn't support stringify")
-        return ""
+    async def to_dict(self):
+        data_content = []
+        for comp in self.content:
+            if isinstance(comp, (Image, Record)):
+                # For Image and Record segments, we convert them to base64
+                bs64 = await comp.convert_to_base64()
+                data_content.append(
+                    {
+                        "type": comp.type.lower(),
+                        "data": {"file": f"base64://{bs64}"},
+                    }
+                )
+            elif isinstance(comp, File):
+                # For File segments, we need to handle the file differently
+                d = await comp.to_dict()
+                data_content.append(d)
+            elif isinstance(comp, (Node, Nodes)):
+                # For Node segments, we recursively convert them to dict
+                d = await comp.to_dict()
+                data_content.append(d)
+        return {
+            "type": "node",
+            "data": {
+                "user_id": str(self.uin),
+                "nickname": self.name,
+                "content": data_content,
+            },
+        }
 
 
 class Nodes(BaseMessageComponent):
@@ -590,13 +615,21 @@ class Nodes(BaseMessageComponent):
         super().__init__(nodes=nodes, **_)
 
     def toDict(self):
+        """Deprecated. Use to_dict instead"""
         ret = {
             "messages": [],
         }
         for node in self.nodes:
             d = node.toDict()
-            d["data"]["uin"] = str(node.uin)  # 转为字符串
             ret["messages"].append(d)
+        return ret
+
+    async def to_dict(self):
+        """将 Nodes 转换为字典格式，适用于 OneBot JSON 格式"""
+        ret = {
+            "type": "nodes",
+            "data": {"nodes": [await node.to_dict() for node in self.nodes]},
+        }
         return ret
 
 
@@ -767,6 +800,26 @@ class File(BaseMessageComponent):
         logger.debug(f"已注册：{callback_host}/api/file/{token}")
 
         return f"{callback_host}/api/file/{token}"
+
+    async def to_dict(self):
+        """需要和 toDict 区分开，toDict 是同步方法"""
+        url_or_path = await self.get_file(allow_return_url=True)
+        if url_or_path.startswith("http"):
+            payload_file = url_or_path
+        elif callback_host := astrbot_config.get("callback_api_base"):
+            callback_host = str(callback_host).removesuffix("/")
+            token = await file_token_service.register_file(url_or_path)
+            payload_file = f"{callback_host}/api/file/{token}"
+            logger.debug(f"Generated file callback link: {payload_file}")
+        else:
+            payload_file = url_or_path
+        return {
+            "type": "file",
+            "data": {
+                "name": self.name,
+                "file": payload_file,
+            },
+        }
 
 
 class WechatEmoji(BaseMessageComponent):
