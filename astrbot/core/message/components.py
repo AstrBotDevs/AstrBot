@@ -584,7 +584,7 @@ class Node(BaseMessageComponent):
     id: T.Optional[int] = 0  # 忽略
     name: T.Optional[str] = ""  # qq昵称
     uin: T.Optional[str] = "0"  # qq号
-    content: T.Optional[list[BaseMessageComponent]] = None
+    content: T.Optional[list[BaseMessageComponent]] = []
     seq: T.Optional[T.Union[str, list]] = ""  # 忽略
     time: T.Optional[int] = 0  # 忽略
 
