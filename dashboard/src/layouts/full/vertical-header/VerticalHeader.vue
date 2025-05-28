@@ -241,6 +241,7 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
 
     <v-btn size="small" @click="toggleDarkMode();" class="text-primary mr-2" color="color(var(--v-theme-surface))"
            variant="flat" rounded="sm">
+      <!-- 明暗主题切换按钮 -->
       <v-icon>mdi-lightbulb-night-outline</v-icon>
     </v-btn>
 
