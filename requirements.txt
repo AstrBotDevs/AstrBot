@@ -36,3 +36,4 @@ filelock
 watchfiles
 websockets
 faiss-cpu
+aiosqlite
