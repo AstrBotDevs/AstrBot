@@ -42,7 +42,7 @@ import config from '@/config';
           <div v-for="(val2, key2, index2) in metadata[key]['metadata']">
             <!-- <h3>{{ metadata[key]['metadata'][key2]['description'] }}</h3> -->
             <div v-if="metadata[key]['metadata'][key2]?.config_template"
-              v-show="key2 !== 'platform' && key2 !== 'provider'" style="border: 1px solid #e0e0e0; padding: 8px; margin-bottom: 16px; border-radius: 10px">
+              v-show="key2 !== 'platform' && key2 !== 'provider'" style="border: 1px solid var(--v-theme-border); padding: 8px; margin-bottom: 16px; border-radius: 10px">
               <!-- 带有 config_template 的配置项 -->
               <v-list-item-title style="font-weight: bold;">
                 {{ metadata[key]['metadata'][key2]['description'] }} ({{ key2 }})
@@ -88,7 +88,7 @@ import config from '@/config';
 
             <div v-else>
               <!-- 如果配置项是一个 object，那么 iterable 需要取到这个 object 的值，否则取到整个 config_data -->
-              <div v-if="metadata[key]['metadata'][key2]['type'] == 'object'" style="border: 1px solid #e0e0e0; padding: 8px; margin-bottom: 16px; border-radius: 10px">
+              <div v-if="metadata[key]['metadata'][key2]['type'] == 'object'" style="border: 1px solid var(--v-theme-border); padding: 8px; margin-bottom: 16px; border-radius: 10px">
                 <AstrBotConfig
                   :metadata="metadata[key]['metadata']" :iterable="config_data[key2]" :metadataKey="key2">
                 </AstrBotConfig>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import {ref, useCssModule} from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { Form } from 'vee-validate';
 import md5 from 'js-md5';
+import {useCustomizerStore} from "@/stores/customizer";
 
 const valid = ref(false);
 const show1 = ref(false);
@@ -42,8 +43,8 @@ async function validate(values: any, { setErrors }: any) {
       required 
       density="comfortable"
       hide-details="auto" 
-      variant="outlined" 
-      color="primary"
+      variant="outlined"
+      :style="{color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000dd' : '#ffffff'}"
       prepend-inner-icon="mdi-account"
       :disabled="loading"
     ></v-text-field>
@@ -54,7 +55,7 @@ async function validate(values: any, { setErrors }: any) {
       required 
       density="comfortable" 
       variant="outlined"
-      color="primary" 
+      :style="{color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000dd' : '#ffffff'}"
       hide-details="auto" 
       :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
       :type="show1 ? 'text' : 'password'" 
@@ -64,9 +65,9 @@ async function validate(values: any, { setErrors }: any) {
       :disabled="loading"
     ></v-text-field>
 
-    <div class="mt-1 mb-5 hint-text">
+    <v-label :style="{color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000aa' : '#ffffffcc'}" class="mt-1 mb-5">
       <small>默认用户名和密码为 astrbot</small>
-    </div>
+    </v-label>
     
     <v-btn 
       color="secondary" 
@@ -160,7 +161,7 @@ async function validate(values: any, { setErrors }: any) {
   }
   
   .hint-text {
-    color: rgba(0, 0, 0, 0.5);
+    color: var(--v-theme-secondaryText);
     padding-left: 5px;
   }
   
@@ -171,7 +172,7 @@ async function validate(values: any, { setErrors }: any) {
   }
 }
 
-.custom-devider {
+.custom-divider {
   border-color: rgba(0, 0, 0, 0.08) !important;
 }
 </style>

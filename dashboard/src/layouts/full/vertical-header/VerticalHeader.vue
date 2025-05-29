@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useCustomizerStore } from '../../../stores/customizer';
+import {ref} from 'vue';
+import {useCustomizerStore} from '@/stores/customizer';
 import axios from 'axios';
-import { md5 } from 'js-md5';
-import { useAuthStore } from '@/stores/auth';
-import { useCommonStore } from '@/stores/common';
-import { marked } from 'marked';
+import {md5} from 'js-md5';
+import {useAuthStore} from '@/stores/auth';
+import {useCommonStore} from '@/stores/common';
+import {marked} from 'marked';
 
 const customizer = useCustomizerStore();
 let dialog = ref(false);
@@ -30,11 +30,11 @@ let installLoading = ref(false);
 let tab = ref(0);
 
 let releasesHeader = [
-  { title: '标签', key: 'tag_name' },
-  { title: '发布时间', key: 'published_at' },
-  { title: '内容', key: 'body' },
-  { title: '源码地址', key: 'zipball_url' },
-  { title: '操作', key: 'switch' }
+  {title: '标签', key: 'tag_name'},
+  {title: '发布时间', key: 'published_at'},
+  {title: '内容', key: 'body'},
+  {title: '源码地址', key: 'zipball_url'},
+  {title: '操作', key: 'switch'}
 ];
 
 const open = (link: string) => {
@@ -56,78 +56,78 @@ function accountEdit() {
     new_password: newPassword.value,
     new_username: newUsername.value
   })
-    .then((res) => {
-      if (res.data.status == 'error') {
+      .then((res) => {
+        if (res.data.status == 'error') {
+          status.value = res.data.message;
+          password.value = '';
+          newPassword.value = '';
+          return;
+        }
+        dialog.value = !dialog.value;
         status.value = res.data.message;
+        setTimeout(() => {
+          const authStore = useAuthStore();
+          authStore.logout();
+        }, 1000);
+      })
+      .catch((err) => {
+        console.log(err);
+        status.value = err
         password.value = '';
         newPassword.value = '';
-        return;
-      }
-      dialog.value = !dialog.value;
-      status.value = res.data.message;
-      setTimeout(() => {
-        const authStore = useAuthStore();
-        authStore.logout();
-      }, 1000);
-    })
-    .catch((err) => {
-      console.log(err);
-      status.value = err
-      password.value = '';
-      newPassword.value = '';
-    });
+      });
 }
 
 function getVersion() {
   axios.get('/api/stat/version')
-    .then((res) => {
-      botCurrVersion.value = "v" + res.data.data.version;
-      dashboardCurrentVersion.value = res.data.data?.dashboard_version;
-    })
-    .catch((err) => {
-      console.log(err);
-    });
+      .then((res) => {
+        botCurrVersion.value = "v" + res.data.data.version;
+        dashboardCurrentVersion.value = res.data.data?.dashboard_version;
+      })
+      .catch((err) => {
+        console.log(err);
+      });
 }
 
 function checkUpdate() {
   updateStatus.value = '正在检查更新...';
   axios.get('/api/update/check')
-    .then((res) => {
-      hasNewVersion.value = res.data.data.has_new_version;
+      .then((res) => {
+        hasNewVersion.value = res.data.data.has_new_version;
 
-      if (res.data.data.has_new_version) {
-        releaseMessage.value = res.data.message;
-        updateStatus.value = '有新版本！';
-      } else {
-        updateStatus.value = res.data.message;
-      }
-      dashboardHasNewVersion.value = res.data.data.dashboard_has_new_version;
-    })
-    .catch((err) => {
-      if (err.response.status == 401) {
-        console.log("401");
-        const authStore = useAuthStore();
-        authStore.logout();
-        return;
-      }
-      console.log(err);
-      updateStatus.value = err
-    });
+        if (res.data.data.has_new_version) {
+          releaseMessage.value = res.data.message;
+          updateStatus.value = '有新版本！';
+        } else {
+          updateStatus.value = res.data.message;
+        }
+        dashboardHasNewVersion.value = res.data.data.dashboard_has_new_version;
+      })
+      .catch((err) => {
+        if (err.response.status == 401) {
+          console.log("401");
+          const authStore = useAuthStore();
+          authStore.logout();
+          return;
+        }
+        console.log(err);
+        updateStatus.value = err
+      });
 }
 
 function getReleases() {
   axios.get('/api/update/releases')
-    .then((res) => {
-      // releases.value = res.data.data;
-      // 更新 published_at 的时间为本地时间
-      releases.value = res.data.data.map((item: any) => {
-        item.published_at = new Date(item.published_at).toLocaleString();
-        return item;
+      .then((res) => {
+        // releases.value = res.data.data;
+        // 更新 published_at 的时间为本地时间
+        releases.value = res.data.data.map((item: any) => {
+          item.published_at = new Date(item.published_at).toLocaleString();
+          return item;
+        })
       })
-    })
-    .catch((err) => {
-      console.log(err);
-    });
+      .catch((err) => {
+        console.log(err);
+      });
 }
 
 function getDevCommits() {
@@ -137,17 +137,17 @@ function getDevCommits() {
       'Referer': 'https://api.github.com'
     }
   })
-    .then(response => response.json())
-    .then(data => {
-      devCommits.value = data.map((commit: any) => ({
-        sha: commit.sha,
-        date: new Date(commit.commit.author.date).toLocaleString(),
-        message: commit.commit.message
-      }));
-    })
-    .catch(err => {
-      console.log(err);
-    });
+      .then(response => response.json())
+      .then(data => {
+        devCommits.value = data.map((commit: any) => ({
+          sha: commit.sha,
+          date: new Date(commit.commit.author.date).toLocaleString(),
+          message: commit.commit.message
+        }));
+      })
+      .catch(err => {
+        console.log(err);
+      });
 }
 
 function switchVersion(version: string) {
@@ -157,37 +157,41 @@ function switchVersion(version: string) {
     version: version,
     proxy: localStorage.getItem('selectedGitHubProxy') || ''
   })
-    .then((res) => {
-      updateStatus.value = res.data.message;
-      if (res.data.status == 'ok') {
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      }
-    })
-    .catch((err) => {
-      console.log(err);
-      updateStatus.value = err
-    }).finally(() => {
-      installLoading.value = false;
-    });
+      .then((res) => {
+        updateStatus.value = res.data.message;
+        if (res.data.status == 'ok') {
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+        updateStatus.value = err
+      }).finally(() => {
+    installLoading.value = false;
+  });
 }
 
 function updateDashboard() {
   updateStatus.value = '正在更新...';
   axios.post('/api/update/dashboard')
-    .then((res) => {
-      updateStatus.value = res.data.message;
-      if (res.data.status == 'ok') {
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      }
-    })
-    .catch((err) => {
-      console.log(err);
-      updateStatus.value = err
-    });
+      .then((res) => {
+        updateStatus.value = res.data.message;
+        if (res.data.status == 'ok') {
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+        updateStatus.value = err
+      });
+}
+
+function toggleDarkMode() {
+  customizer.SET_UI_THEME(customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark');
 }
 
 getVersion();
@@ -209,22 +213,30 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
 <template>
   <v-app-bar elevation="0" height="55">
 
-    <v-btn style="margin-left: 22px;" class="hidden-md-and-down text-secondary" color="lightsecondary" icon rounded="sm"
-      variant="flat" @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
+    <v-btn v-if="useCustomizerStore().uiTheme==='PurpleTheme'" style="margin-left: 22px;" class="hidden-md-and-down text-secondary" color="lightsecondary" icon rounded="sm"
+           variant="flat" @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
-    <v-btn class="hidden-lg-and-up text-secondary ms-3" color="lightsecondary" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_SIDEBAR_DRAWER" size="small">
+    <v-btn v-else style="margin-left: 22px; color: var(--v-theme-primaryText); background-color: var(--v-theme-secondary)" class="hidden-md-and-down" icon rounded="sm"
+           variant="flat" @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
+      <v-icon>mdi-menu</v-icon>
+    </v-btn>
+    <v-btn v-if="useCustomizerStore().uiTheme==='PurpleTheme'" class="hidden-lg-and-up text-secondary ms-3" color="lightsecondary" icon rounded="sm" variant="flat"
+           @click.stop="customizer.SET_SIDEBAR_DRAWER" size="small">
+      <v-icon>mdi-menu</v-icon>
+    </v-btn>
+    <v-btn v-else class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
+           @click.stop="customizer.SET_SIDEBAR_DRAWER" size="small">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
     <div style="margin-left: 16px; display: flex; align-items: center; gap: 8px;">
       <span style=" font-size: 24px; font-weight: 1000;">Astr<span style="font-weight: normal;">Bot</span>
       </span>
-      <span style="font-size: 12px; color: #333333;">{{ botCurrVersion }}</span>
+      <span style="font-size: 12px; color: var(--v-theme-secondaryText);">{{ botCurrVersion }}</span>
     </div>
 
-    <v-spacer />
+    <v-spacer/>
 
     <div class="mr-4">
       <small v-if="hasNewVersion">
@@ -235,11 +247,18 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
       </small>
     </div>
 
+    <v-btn size="small" @click="toggleDarkMode();" class="text-primary mr-2" color="var(--v-theme-surface)"
+           variant="flat" rounded="sm">
+      <!-- 明暗主题切换按钮 -->
+      <v-icon v-if="useCustomizerStore().uiTheme === 'PurpleThemeDark'">mdi-weather-night</v-icon>
+      <v-icon v-else>mdi-white-balance-sunny</v-icon>
+    </v-btn>
 
     <v-dialog v-model="updateStatusDialog" width="1000">
       <template v-slot:activator="{ props }">
-        <v-btn size="small" @click="checkUpdate(); getReleases(); getDevCommits();" class="text-primary mr-2" color="lightprimary"
-          variant="flat" rounded="sm" v-bind="props">
+        <v-btn size="small" @click="checkUpdate(); getReleases(); getDevCommits();" class="text-primary mr-2"
+               color="var(--v-theme-surface)"
+               variant="flat" rounded="sm" v-bind="props">
           更新
         </v-btn>
       </template>
@@ -257,15 +276,16 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
             </div>
 
             <div
-              style="background-color: #646cff24; padding: 16px; border-radius: 10px; font-size: 14px; max-height: 400px; overflow-y: auto;"
-              v-html="marked(releaseMessage)" class="markdown-content">
+                style="background-color: #646cff24; padding: 16px; border-radius: 10px; font-size: 14px; max-height: 400px; overflow-y: auto;"
+                v-html="marked(releaseMessage)" class="markdown-content">
 
             </div>
 
             <div class="mb-4 mt-4">
               <small>💡 TIP: 跳到旧版本或者切换到某个版本不会重新下载管理面板文件，这可能会造成部分数据显示错误。您可在 <a
                   href="https://github.com/Soulter/AstrBot/releases">此处</a>
-                找到对应的面板文件 dist.zip，解压后替换 data/dist 文件夹即可。当然，前端源代码在 dashboard 目录下，你也可以自己使用 npm install 和 npm build
+                找到对应的面板文件 dist.zip，解压后替换 data/dist 文件夹即可。当然，前端源代码在 dashboard 目录下，你也可以自己使用
+                npm install 和 npm build
                 构建。</small>
             </div>
 
@@ -278,12 +298,13 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
               <!-- 发行版 -->
               <v-tabs-window-item key="0" v-show="tab == 0">
                 <v-btn class="mt-4 mb-4" @click="switchVersion('latest')" color="primary" style="border-radius: 10px;"
-                  :disabled="!hasNewVersion">
+                       :disabled="!hasNewVersion">
                   更新到最新版本
                 </v-btn>
                 <div class="mb-4">
-                  <small>`更新到最新版本` 按钮会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker 部署，也可以重新拉取镜像或者使用 <a
-                      href="https://containrrr.dev/watchtower/usage-overview/">watchtower</a> 来自动监控拉取。</small>
+                  <small>`更新到最新版本` 按钮会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker
+                    部署，也可以重新拉取镜像或者使用 <a
+                        href="https://containrrr.dev/watchtower/usage-overview/">watchtower</a> 来自动监控拉取。</small>
                 </div>
 
                 <v-data-table :headers="releasesHeader" :items="releases" item-key="name">
@@ -306,8 +327,8 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
               <v-tabs-window-item key="1" v-show="tab == 1">
                 <div style="margin-top: 16px;">
                   <v-data-table
-                    :headers="[{ title: 'SHA', key: 'sha' }, { title: '日期', key: 'date' }, { title: '信息', key: 'message' }, { title: '操作', key: 'switch' }]"
-                    :items="devCommits" item-key="sha">
+                      :headers="[{ title: 'SHA', key: 'sha' }, { title: '日期', key: 'date' }, { title: '信息', key: 'message' }, { title: '操作', key: 'switch' }]"
+                      :items="devCommits" item-key="sha">
                     <template v-slot:item.switch="{ item }: { item: { sha: string } }">
                       <v-btn @click="switchVersion(item.sha)" rounded="xl" variant="plain" color="primary">
                         切换
@@ -322,12 +343,13 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
             <h3 class="mb-4">手动输入版本号或 Commit SHA</h3>
 
             <v-text-field label="输入版本号或 master 分支下的 commit hash。" v-model="version" required
-              variant="outlined"></v-text-field>
+                          variant="outlined"></v-text-field>
             <div class="mb-4">
               <small>如 v3.3.16 (不带 SHA) 或 42e5ec5d80b93b6bfe8b566754d45ffac4c3fe0b</small>
               <br>
-              <a href="https://github.com/Soulter/AstrBot/commits/master"><small>查看 master 分支提交记录（点击右边的 copy
-                  即可复制）</small></a>
+              <a href="https://github.com/Soulter/AstrBot/commits/master"><small>查看 master 分支提交记录（点击右边的
+                copy
+                即可复制）</small></a>
             </div>
             <v-btn color="error" style="border-radius: 10px;" @click="switchVersion(version)">
               确定切换
@@ -352,7 +374,7 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
               </div>
 
               <v-btn color="primary" style="border-radius: 10px;" @click="updateDashboard()"
-                :disabled="!dashboardHasNewVersion">
+                     :disabled="!dashboardHasNewVersion">
                 下载并更新
               </v-btn>
             </div>
@@ -369,7 +391,7 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
 
     <v-dialog v-model="dialog" persistent width="700">
       <template v-slot:activator="{ props }">
-        <v-btn size="small" class="text-primary mr-4" color="lightprimary" variant="flat" rounded="sm" v-bind="props">
+        <v-btn size="small" class="text-primary mr-4" color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props">
           账户
         </v-btn>
       </template>
@@ -387,12 +409,12 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
                 </v-alert>
 
                 <v-text-field label="原密码*" type="password" v-model="password" required
-                  variant="outlined"></v-text-field>
+                              variant="outlined"></v-text-field>
 
                 <v-text-field label="新用户名" v-model="newUsername" required variant="outlined"></v-text-field>
 
                 <v-text-field label="新密码" type="password" v-model="newPassword" required
-                  variant="outlined"></v-text-field>
+                              variant="outlined"></v-text-field>
               </v-col>
             </v-row>
           </v-container>

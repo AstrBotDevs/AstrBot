@@ -132,12 +132,12 @@ export default {
 .platform-title {
   font-size: 18px;
   font-weight: 600;
-  color: #333;
+  color: var(--v-theme-primaryText);
 }
 
 .platform-subtitle {
   font-size: 12px;
-  color: #666;
+  color: var(--v-theme-secondaryText);
   margin-top: 4px;
 }
 
@@ -171,16 +171,16 @@ export default {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background-color: #f0f0f0;
-  color: #333;
+  background-color: var(--v-theme-surface);
+  color: var(--v-theme-primaryText);
   font-weight: 600;
   font-size: 14px;
   margin-right: 12px;
 }
 
 .top-rank {
-  background-color: #5e35b1;
-  color: white;
+  background-color: var(--v-theme-secondary);
+  color: var(--v-theme-surface);
 }
 
 .platform-name {
@@ -195,19 +195,19 @@ export default {
 .count-value {
   font-weight: 600;
   font-size: 14px;
-  color: #5e35b1;
+  color: var(--v-theme-secondary);
   margin-right: 4px;
 }
 
 .count-label {
   font-size: 12px;
-  color: #666;
+  color: var(--v-theme-secondaryText);
 }
 
 .platform-stats-summary {
   display: flex;
   justify-content: space-between;
-  background-color: #f5f5f5;
+  background-color: var(--v-theme-containerBg);
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 16px;
@@ -220,13 +220,13 @@ export default {
 
 .stat-label {
   font-size: 12px;
-  color: #666;
+  color: var(--v-theme-secondaryText);
   margin-bottom: 4px;
 }
 
 .stat-value {
   font-weight: 600;
-  color: #333;
+  color: var(--v-theme-primaryText);
 }
 
 .platform-chart {
@@ -246,7 +246,7 @@ export default {
 }
 
 .no-data-text {
-  color: #999;
+  color: var(--v-theme-secondaryText);
   margin-top: 16px;
   font-size: 14px;
 }

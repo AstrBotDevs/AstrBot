@@ -33,7 +33,7 @@ marked.setOptions({
                             <v-list density="compact" nav class="conversation-list"
                                 @update:selected="getConversationMessages">
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
-                                    color="primary" rounded="lg" class="conversation-item" active-color="primary">
+                                    rounded="lg" class="conversation-item" active-color="primary">
                                     <template v-slot:prepend>
                                         <v-icon size="small" icon="mdi-message-text-outline"></v-icon>
                                     </template>
@@ -720,7 +720,7 @@ export default {
     height: 100%;
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
-    background-color: #fff;
+    background-color: var(--v-theme-surface);
 }
 
 .chat-page-container {
@@ -743,7 +743,7 @@ export default {
     flex-direction: column;
     padding: 0;
     border-right: 1px solid rgba(0, 0, 0, 0.05);
-    background-color: #fcfcfc;
+    background-color: var(--v-theme-surface) !important;
     height: 100%;
     position: relative;
 }
@@ -766,7 +766,7 @@ export default {
 .sidebar-section-title {
     font-size: 12px;
     font-weight: 500;
-    color: #666;
+    color: var(--v-theme-secondaryText);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 12px;
@@ -824,7 +824,7 @@ export default {
 
 .timestamp {
     font-size: 11px;
-    color: #999;
+    color: var(--v-theme-secondaryText);
     line-height: 1;
 }
 
@@ -867,7 +867,7 @@ export default {
 
 .no-conversations-text {
     font-size: 14px;
-    color: #999;
+    color: var(--v-theme-secondaryText);
 }
 
 /* 聊天内容区域 */
@@ -903,21 +903,21 @@ export default {
 .bot-name {
     font-weight: 700;
     margin-left: 8px;
-    color: #673ab7;
+    color: var(--v-theme-secondary);
 }
 
 .welcome-hint {
     margin-top: 8px;
-    color: #666;
+    color: var(--v-theme-secondaryText);
     font-size: 14px;
 }
 
 .welcome-hint code {
-    background-color: #f5f0ff;
+    background-color: var(--v-theme-codeBg);
     padding: 2px 6px;
     margin: 0 4px;
     border-radius: 4px;
-    color: #673ab7;
+    color: var(--v-theme-code);
     font-family: 'Fira Code', monospace;
     font-size: 13px;
 }
@@ -956,15 +956,15 @@ export default {
 }
 
 .user-bubble {
-    background-color: #f5f0ff;
-    color: #333;
+    background-color: var(--v-theme-background);
+    color: var(--v-theme-primaryText);
     border-top-right-radius: 4px;
 }
 
 .bot-bubble {
-    background-color: #fff;
-    border: 1px solid #e8e8e8;
-    color: #333;
+    background-color: var(--v-theme-surface);
+    border: 1px solid var(--v-theme-border);
+    color: var(--v-theme-primaryText);
     border-top-left-radius: 4px;
 }
 
@@ -1011,9 +1011,9 @@ export default {
 /* 输入区域样式 */
 .input-area {
     padding: 16px;
-    background-color: #fff;
+    background-color: var(--v-theme-surface);
     position: relative;
-    border-top: 1px solid #f5f5f5;
+    border-top: 1px solid var(--v-theme-border);
 }
 
 .message-input {
@@ -1083,12 +1083,12 @@ export default {
     margin-top: 16px;
     margin-bottom: 10px;
     font-weight: 600;
-    color: #333;
+    color: var(--v-theme-primaryText);
 }
 
 .markdown-content h1 {
     font-size: 1.8em;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--v-theme-border);
     padding-bottom: 6px;
 }
 
@@ -1111,7 +1111,7 @@ export default {
 }
 
 .markdown-content pre {
-    background-color: #f8f8f8;
+    background-color: var(--v-theme-surface);
     padding: 12px;
     border-radius: 6px;
     overflow-x: auto;
@@ -1119,12 +1119,12 @@ export default {
 }
 
 .markdown-content code {
-    background-color: #f5f0ff;
+    background-color: var(--v-theme-codeBg);
     padding: 2px 4px;
     border-radius: 4px;
     font-family: 'Fira Code', monospace;
     font-size: 0.9em;
-    color: #673ab7;
+    color: var(--v-theme-code);
 }
 
 .markdown-content img {
@@ -1134,9 +1134,9 @@ export default {
 }
 
 .markdown-content blockquote {
-    border-left: 4px solid #673ab7;
+    border-left: 4px solid var(--v-theme-secondary);
     padding-left: 16px;
-    color: #666;
+    color: var(--v-theme-secondaryText);
     margin: 16px 0;
 }
 
@@ -1148,13 +1148,13 @@ export default {
 
 .markdown-content th,
 .markdown-content td {
-    border: 1px solid #eee;
+    border: 1px solid var(--v-theme-background);
     padding: 8px 12px;
     text-align: left;
 }
 
 .markdown-content th {
-    background-color: #f5f0ff;
+    background-color: var(--v-theme-containerBg);
 }
 
 /* 动画类 */

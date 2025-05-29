@@ -11,7 +11,7 @@
                         </div>
                         <div class="title-container">
                             <h1 class="text-h2 font-weight-bold">AstrBot</h1>
-                            <p class="text-subtitle-1" style="color: #777;">A project out of interests and loves ❤️</p>
+                            <p class="text-subtitle-1" style="color: var(--v-theme-secondaryText);">A project out of interests and loves ❤️</p>
                             <div class="action-buttons">
                                 <v-btn @click="open('https://github.com/Soulter/AstrBot')"
                                     color="primary" variant="elevated" prepend-icon="mdi-star">
@@ -32,16 +32,20 @@
                         <v-row justify="center" align="center">
                             <v-col cols="12" md="6" class="pr-md-8 contributors-info">
                                 <h2 class="text-h4 font-weight-medium">贡献者</h2>
-                                <p class="mb-4 text-body-1" style="color: #777;">
+                                <p class="mb-4 text-body-1" style="color: var(--v-theme-secondaryText);">
                                     本项目由众多开源社区成员共同维护。感谢每一位贡献者的付出！
                                 </p>
-                                <p class="text-body-1" style="color: #777;">
+                                <p class="text-body-1" style="color: var(--v-theme-secondaryText);">
                                     <a href="https://github.com/Soulter/AstrBot/graphs/contributors" class="text-decoration-none custom-link">查看 AstrBot 贡献者</a>
                                 </p>
                             </v-col>
                             <v-col cols="12" md="6">
                                 <v-card variant="outlined" class="overflow-hidden" elevation="2">
-                                    <v-img
+                                    <v-img v-if="useCustomizerStore().uiTheme==='PurpleThemeDark'"
+                                        alt="Active Contributors of Soulter/AstrBot"
+                                        src="https://next.ossinsight.io/widgets/official/compose-recent-active-contributors/thumbnail.png?repo_id=575865240&limit=365&image_size=auto&color_scheme=dark">
+                                    </v-img>
+                                    <v-img v-else
                                         alt="Active Contributors of Soulter/AstrBot"
                                         src="https://next.ossinsight.io/widgets/official/compose-recent-active-contributors/thumbnail.png?repo_id=575865240&limit=365&image_size=auto&color_scheme=light">
                                     </v-img>
@@ -60,12 +64,16 @@
                                 
                                 <div class="license-container mt-8">
                                     <img v-bind="props" src="https://www.gnu.org/graphics/agplv3-with-text-100x42.png" style="cursor: pointer;"/>
-                                    <p class="text-caption mt-2" style="color: #777;">AstrBot 采用 AGPL v3 协议开源</p>
+                                    <p class="text-caption mt-2" style="color: var(--v-theme-secondaryText);">AstrBot 采用 AGPL v3 协议开源</p>
                                 </div>
                             </v-col>
                             <v-col cols="12" md="6">
                                 <v-card variant="outlined" class="overflow-hidden" elevation="2">
-                                    <v-img
+                                    <v-img v-if="useCustomizerStore().uiTheme==='PurpleThemeDark'"
+                                        alt="Stars Map of Soulter/AstrBot"
+                                        src="https://next.ossinsight.io/widgets/official/analyze-repo-stars-map/thumbnail.png?activity=stars&repo_id=575865240&image_size=auto&color_scheme=dark">
+                                    </v-img>
+                                    <v-img v-else
                                         alt="Stars Map of Soulter/AstrBot"
                                         src="https://next.ossinsight.io/widgets/official/analyze-repo-stars-map/thumbnail.png?activity=stars&repo_id=575865240&image_size=auto&color_scheme=light">
                                     </v-img>
@@ -80,6 +88,8 @@
 </template>
 
 <script>
+import {useCustomizerStore} from "@/stores/customizer";
+
 export default {
     name: 'AboutPage',
     data() {
@@ -89,6 +99,7 @@ export default {
     },
 
     methods: {
+      useCustomizerStore,
         open(url) {
             window.open(url, '_blank');
         }
@@ -137,7 +148,7 @@ export default {
 }
 
 .contributors-section {
-    background-color: #f9f9fb;
+    background-color: var(--v-theme-containerBg, #f9f9fb);
 }
 
 .contributors-info, .stats-info {

@@ -1,6 +1,6 @@
 <template>
 
-    <div style="background-color: white; padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px;">
+    <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px;">
 
         <v-list lines="two">
             <v-list-subheader>网络</v-list-subheader>

@@ -104,11 +104,11 @@ export default {
 
 <style scoped>
 .list-config-item {
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--v-theme-border);
   padding: 16px;
   margin-bottom: 8px;
   border-radius: 10px;
-  background-color: #ffffff;
+  background-color: var(--v-theme-background);
 }
 
 .v-list-item {
