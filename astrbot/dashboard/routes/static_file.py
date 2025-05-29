@@ -12,7 +12,7 @@ class StaticFileRoute(Route):
             "/logs",
             "/extension",
             "/dashboard/default",
-            "/project-atri",
+            "/alkaid",
             "/console",
             "/chat",
             "/settings",
