@@ -160,7 +160,7 @@ async function validate(values: any, { setErrors }: any) {
   }
   
   .hint-text {
-    color: rgba(0, 0, 0, 0.5);
+    color: var(--v-theme-secondaryText);
     padding-left: 5px;
   }
   
@@ -171,7 +171,7 @@ async function validate(values: any, { setErrors }: any) {
   }
 }
 
-.custom-devider {
+.custom-divider {
   border-color: rgba(0, 0, 0, 0.08) !important;
 }
 </style>

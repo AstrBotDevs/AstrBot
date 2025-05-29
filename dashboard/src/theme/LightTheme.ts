@@ -36,7 +36,7 @@ const PurpleTheme: ThemeTypes = {
     gray100: '#fafafacc',
     primary200: '#90caf9',
     secondary200: '#b39ddb',
-    background: '#f9fafc',
+    background: '#f9fafcf4',
     overlay: '#ffffffaa',
     codeBg: '#f5f0ff',
     code: '#673ab7'
