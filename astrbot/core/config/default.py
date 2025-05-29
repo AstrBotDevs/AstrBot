@@ -5,7 +5,7 @@
 import os
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.11"
+VERSION = "3.5.12"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
@@ -178,7 +178,7 @@ CONFIG_METADATA_2 = {
                         "api_base_url": "https://api.weixin.qq.com/cgi-bin/",
                         "callback_server_host": "0.0.0.0",
                         "port": 6194,
-                        "active_send_mode": False
+                        "active_send_mode": False,
                     },
                     "wecom(企业微信)": {
                         "id": "wecom",
@@ -224,19 +224,19 @@ CONFIG_METADATA_2 = {
                 },
                 "items": {
                     "active_send_mode": {
-                      "description": "是否换用主动发送接口",
-                      "type": "bool",
-                      "desc": "只有企业认证的公众号才能主动发送。主动发送接口的限制会少一些。"
+                        "description": "是否换用主动发送接口",
+                        "type": "bool",
+                        "desc": "只有企业认证的公众号才能主动发送。主动发送接口的限制会少一些。",
                     },
                     "wpp_active_message_poll": {
-                      "description": "是否启用主动消息轮询",
-                      "type": "bool",
-                      "hint": "只有当你发现微信消息没有按时同步到 AstrBot 时，才需要启用这个功能，默认不启用。"
+                        "description": "是否启用主动消息轮询",
+                        "type": "bool",
+                        "hint": "只有当你发现微信消息没有按时同步到 AstrBot 时，才需要启用这个功能，默认不启用。",
                     },
                     "wpp_active_message_poll_interval": {
-                      "description": "主动消息轮询间隔",
-                      "type": "int",
-                      "hint": "主动消息轮询间隔，单位为秒，默认 3 秒，最大不要超过 60 秒，否则可能被认为是旧消息。"
+                        "description": "主动消息轮询间隔",
+                        "type": "int",
+                        "hint": "主动消息轮询间隔，单位为秒，默认 3 秒，最大不要超过 60 秒，否则可能被认为是旧消息。",
                     },
                     "kf_name": {
                         "description": "微信客服账号名",
@@ -867,22 +867,22 @@ CONFIG_METADATA_2 = {
                     "volcengine_cluster": {
                         "type": "string",
                         "description": "火山引擎集群",
-                        "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
+                        "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts",
                     },
                     "volcengine_voice_type": {
                         "type": "string",
                         "description": "火山引擎音色",
-                        "hint": "输入声音id(Voice_type)"
+                        "hint": "输入声音id(Voice_type)",
                     },
                     "volcengine_speed_ratio": {
                         "type": "float",
                         "description": "语速设置",
-                        "hint": "语速设置，范围为 0.2 到 3.0,默认值为 1.0"
+                        "hint": "语速设置，范围为 0.2 到 3.0,默认值为 1.0",
                     },
                     "volcengine_volume_ratio": {
                         "type": "float",
                         "description": "音量设置",
-                        "hint": "音量设置，范围为 0.0 到 2.0,默认值为 1.0"
+                        "hint": "音量设置，范围为 0.0 到 2.0,默认值为 1.0",
                     },
                     "azure_tts_voice": {
                         "type": "string",
@@ -1055,7 +1055,33 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "description": "指定语言/方言",
                         "hint": "增强对指定的小语种和方言的识别能力，设置后可以提升在指定小语种/方言场景下的语音表现",
-                        "options": [ "Chinese","Chinese,Yue","English","Arabic","Russian","Spanish","French","Portuguese","German","Turkish","Dutch","Ukrainian","Vietnamese","Indonesian","Japanese","Italian","Korean","Thai","Polish","Romanian","Greek","Czech","Finnish","Hindi","auto",],
+                        "options": [
+                            "Chinese",
+                            "Chinese,Yue",
+                            "English",
+                            "Arabic",
+                            "Russian",
+                            "Spanish",
+                            "French",
+                            "Portuguese",
+                            "German",
+                            "Turkish",
+                            "Dutch",
+                            "Ukrainian",
+                            "Vietnamese",
+                            "Indonesian",
+                            "Japanese",
+                            "Italian",
+                            "Korean",
+                            "Thai",
+                            "Polish",
+                            "Romanian",
+                            "Greek",
+                            "Czech",
+                            "Finnish",
+                            "Hindi",
+                            "auto",
+                        ],
                     },
                     "minimax-voice-speed": {
                         "type": "float",
@@ -1092,7 +1118,15 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "description": "情绪",
                         "hint": "控制合成语音的情绪",
-                        "options": ["happy","sad","angry","fearful","disgusted","surprised","neutral",],
+                        "options": [
+                            "happy",
+                            "sad",
+                            "angry",
+                            "fearful",
+                            "disgusted",
+                            "surprised",
+                            "neutral",
+                        ],
                     },
                     "minimax-voice-latex": {
                         "type": "bool",
