@@ -282,7 +282,10 @@ export default {
             try {
                 const response = await axios.get('/api/chat/get_file', {
                     params: { filename },
-                    responseType: 'blob'
+                    responseType: 'blob',
+                    headers: {
+                        'Authorization': 'Bearer ' + localStorage.getItem('token')
+                    }
                 });
                 
                 const blobUrl = URL.createObjectURL(response.data);
