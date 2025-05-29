@@ -19,18 +19,15 @@ import 'highlight.js/styles/github.css';
 
         <v-col cols="12" md="12">
             <v-card>
-
                 <v-card-title>
                     <div class="pl-2 pt-2 d-flex align-center pe-2">
                         <h2>✨ 插件市场</h2>                    
                         <v-btn icon size="small" style="margin-left: 8px" variant="plain" @click="jumpToPluginMarket()">
                             <v-icon size="small">mdi-help</v-icon>
-                            <v-tooltip activator="parent" location="start">
+                            <v-tooltip activator="parent" location="start" max-width="600" open-delay="400">
                                 <span>
                                     如无法显示，请单击此按钮跳转至插件市场，复制想安装插件对应的
-                                    `repo`
-                                    链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。
-
+                                    repo链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。<br/>
                                     如果因为网络问题安装失败，点击设置页选择 GitHub 加速地址。或前往仓库下载压缩包然后本地上传。
                                 </span>
                             </v-tooltip>
@@ -75,7 +72,7 @@ import 'highlight.js/styles/github.css';
                             <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
                                 :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys">
                                 <template v-slot:item.name="{ item }">
-                                    <div class="d-flex align-center" style="overflow-x: scroll;">
+                                    <div class="d-flex align-center" style="overflow-x: auto; scrollbar-width: thin; scrollbar-track-color: transparent;">
                                         <img v-if="item.logo" :src="item.logo"
                                             style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
                                             alt="logo">
@@ -282,8 +279,8 @@ export default {
             pluginMarketHeaders: [
                 { title: '名称', key: 'name', maxWidth: '200px' },
                 { title: '描述', key: 'desc', maxWidth: '250px' },
-                { title: '作者', key: 'author', maxWidth: '70px' },
-                { title: 'Star数', key: 'stars', maxWidth: '100px' },
+                { title: '作者', key: 'author', maxWidth: '90px' },
+                { title: 'Star数', key: 'stars', maxWidth: '80px' },
                 { title: '最近更新', key: 'updated_at', maxWidth: '100px' },
                 { title: '标签', key: 'tags', maxWidth: '100px' },
                 { title: '操作', key: 'actions', sortable: false }

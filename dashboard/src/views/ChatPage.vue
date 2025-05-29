@@ -21,19 +21,16 @@ marked.setOptions({
 
                     <div style="padding: 16px; padding-top: 8px;">
                         <v-btn variant="elevated" rounded="lg" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                        prepend-icon="mdi-plus">
-                        创建对话
-                    </v-btn>
+                        prepend-icon="mdi-plus">创建对话</v-btn>
                     </div>
                     
 
                     <div class="conversations-container">
-
                         <v-card class="conversation-list-card" v-if="conversations.length > 0" flat>
                             <v-list density="compact" nav class="conversation-list"
                                 @update:selected="getConversationMessages">
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
-                                    rounded="lg" class="conversation-item" active-color="primary">
+                                    rounded="lg" class="conversation-item" active-color="secondary">
                                     <template v-slot:prepend>
                                         <v-icon size="small" icon="mdi-message-text-outline"></v-icon>
                                     </template>
@@ -668,6 +665,7 @@ export default {
 }
 
 /* 聊天页面布局 */
+/* todo: 聊天页面背景颜色有问题 */
 .chat-page-card {
     margin-bottom: 16px;
     width: 100%;
@@ -697,7 +695,7 @@ export default {
     flex-direction: column;
     padding: 0;
     border-right: 1px solid rgba(0, 0, 0, 0.05);
-    background-color: var(--v-theme-surface) !important;
+    background-color: var(--v-theme-containerBg);
     height: 100%;
     position: relative;
 }
@@ -745,9 +743,9 @@ export default {
 }
 
 .conversation-list-card {
-    border-radius: 12px;
+    border-radius: 8px;
     box-shadow: none !important;
-    background-color: transparent;
+    background-color: var(--v-theme-containerBg);
 }
 
 .conversation-list {
@@ -803,6 +801,7 @@ export default {
     text-transform: none;
     letter-spacing: 0.25px;
     font-size: 12px;
+    line-height: 1.2em;
 }
 
 .delete-chat-btn:hover {
