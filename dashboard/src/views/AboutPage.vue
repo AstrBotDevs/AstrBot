@@ -11,7 +11,7 @@
                         </div>
                         <div class="title-container">
                             <h1 class="text-h2 font-weight-bold">AstrBot</h1>
-                            <p class="text-subtitle-1" style="color: color(var(--v-theme-secondaryText));">A project out of interests and loves ❤️</p>
+                            <p class="text-subtitle-1" style="color: var(--v-theme-secondaryText);">A project out of interests and loves ❤️</p>
                             <div class="action-buttons">
                                 <v-btn @click="open('https://github.com/Soulter/AstrBot')"
                                     color="primary" variant="elevated" prepend-icon="mdi-star">
@@ -32,10 +32,10 @@
                         <v-row justify="center" align="center">
                             <v-col cols="12" md="6" class="pr-md-8 contributors-info">
                                 <h2 class="text-h4 font-weight-medium">贡献者</h2>
-                                <p class="mb-4 text-body-1" style="color: color(var(--v-theme-secondaryText));">
+                                <p class="mb-4 text-body-1" style="color: var(--v-theme-secondaryText);">
                                     本项目由众多开源社区成员共同维护。感谢每一位贡献者的付出！
                                 </p>
-                                <p class="text-body-1" style="color: color(var(--v-theme-secondaryText));">
+                                <p class="text-body-1" style="color: var(--v-theme-secondaryText);">
                                     <a href="https://github.com/Soulter/AstrBot/graphs/contributors" class="text-decoration-none custom-link">查看 AstrBot 贡献者</a>
                                 </p>
                             </v-col>
@@ -64,7 +64,7 @@
                                 
                                 <div class="license-container mt-8">
                                     <img v-bind="props" src="https://www.gnu.org/graphics/agplv3-with-text-100x42.png" style="cursor: pointer;"/>
-                                    <p class="text-caption mt-2" style="color: color(var(--v-theme-secondaryText));">AstrBot 采用 AGPL v3 协议开源</p>
+                                    <p class="text-caption mt-2" style="color: var(--v-theme-secondaryText);">AstrBot 采用 AGPL v3 协议开源</p>
                                 </div>
                             </v-col>
                             <v-col cols="12" md="6">
@@ -148,7 +148,7 @@ export default {
 }
 
 .contributors-section {
-    background-color: color(var(--v-theme-containerBg, #f9f9fb));
+    background-color: var(--v-theme-containerBg, #f9f9fb);
 }
 
 .contributors-info, .stats-info {

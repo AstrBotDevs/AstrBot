@@ -293,12 +293,12 @@ export default {
 .chart-title {
   font-size: 18px;
   font-weight: 600;
-  color: color(var(--v-theme-primaryText));
+  color: var(--v-theme-primaryText);
 }
 
 .chart-subtitle {
   font-size: 12px;
-  color: color(var(--v-theme-secondaryText));
+  color: var(--v-theme-secondaryText);
   margin-top: 4px;
 }
 
@@ -315,31 +315,31 @@ export default {
 
 .stat-box {
   padding: 12px 16px;
-  background: color(var(--v-theme-surface));
+  background: var(--v-theme-surface);
   border-radius: 8px;
   flex: 1;
 }
 
 .stat-label {
   font-size: 12px;
-  color: color(var(--v-theme-secondaryText));
+  color: var(--v-theme-secondaryText);
   margin-bottom: 4px;
 }
 
 .stat-number {
   font-size: 18px;
   font-weight: 600;
-  color: color(var(--v-theme-primaryText));
+  color: var(--v-theme-primaryText);
   display: flex;
   align-items: center;
 }
 
 .trend-up .stat-number {
-  color: color(var(--v-theme-success));
+  color: var(--v-theme-success);
 }
 
 .trend-down .stat-number {
-  color: color(var(--v-theme-error));
+  color: var(--v-theme-error);
 }
 
 .chart-container {
@@ -354,7 +354,7 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  background: color(var(--v-theme-overlay));
+  background: var(--v-theme-overlay);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -365,6 +365,6 @@ export default {
 .loading-text {
   margin-top: 12px;
   font-size: 14px;
-  color: color(var(--v-theme-secondaryText));
+  color: var(--v-theme-secondaryText);
 }
 </style>

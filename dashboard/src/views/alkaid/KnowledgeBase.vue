@@ -597,7 +597,7 @@ export default {
     position: relative;
     cursor: pointer;
     display: flex;
-    background-color: #ffffff;
+    background-color: var(--v-theme-background);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     transition: all 0.3s ease;
 }
@@ -630,7 +630,7 @@ export default {
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: #ffffff;
+    background-color: var(--v-theme-background);
     border-radius: 50%;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     margin-bottom: 16px;

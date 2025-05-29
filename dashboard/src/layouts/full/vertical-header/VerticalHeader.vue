@@ -213,11 +213,19 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
 <template>
   <v-app-bar elevation="0" height="55">
 
-    <v-btn style="margin-left: 22px;" class="hidden-md-and-down text-secondary" color="lightsecondary" icon rounded="sm"
+    <v-btn v-if="useCustomizerStore().uiTheme==='PurpleTheme'" style="margin-left: 22px;" class="hidden-md-and-down text-secondary" color="lightsecondary" icon rounded="sm"
            variant="flat" @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
-    <v-btn class="hidden-lg-and-up text-secondary ms-3" color="lightsecondary" icon rounded="sm" variant="flat"
+    <v-btn v-else style="margin-left: 22px; color: var(--v-theme-primaryText); background-color: var(--v-theme-secondary)" class="hidden-md-and-down" icon rounded="sm"
+           variant="flat" @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
+      <v-icon>mdi-menu</v-icon>
+    </v-btn>
+    <v-btn v-if="useCustomizerStore().uiTheme==='PurpleTheme'" class="hidden-lg-and-up text-secondary ms-3" color="lightsecondary" icon rounded="sm" variant="flat"
+           @click.stop="customizer.SET_SIDEBAR_DRAWER" size="small">
+      <v-icon>mdi-menu</v-icon>
+    </v-btn>
+    <v-btn v-else class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
            @click.stop="customizer.SET_SIDEBAR_DRAWER" size="small">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
@@ -225,7 +233,7 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
     <div style="margin-left: 16px; display: flex; align-items: center; gap: 8px;">
       <span style=" font-size: 24px; font-weight: 1000;">Astr<span style="font-weight: normal;">Bot</span>
       </span>
-      <span style="font-size: 12px; color: color(var(--v-theme-secondaryText));">{{ botCurrVersion }}</span>
+      <span style="font-size: 12px; color: var(--v-theme-secondaryText);">{{ botCurrVersion }}</span>
     </div>
 
     <v-spacer/>
@@ -239,7 +247,7 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
       </small>
     </div>
 
-    <v-btn size="small" @click="toggleDarkMode();" class="text-primary mr-2" color="color(var(--v-theme-surface))"
+    <v-btn size="small" @click="toggleDarkMode();" class="text-primary mr-2" color="var(--v-theme-surface)"
            variant="flat" rounded="sm">
       <!-- 明暗主题切换按钮 -->
       <v-icon>mdi-lightbulb-night-outline</v-icon>
@@ -248,7 +256,7 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
     <v-dialog v-model="updateStatusDialog" width="1000">
       <template v-slot:activator="{ props }">
         <v-btn size="small" @click="checkUpdate(); getReleases(); getDevCommits();" class="text-primary mr-2"
-               color="color(var(--v-theme-surface))"
+               color="var(--v-theme-surface)"
                variant="flat" rounded="sm" v-bind="props">
           更新
         </v-btn>
@@ -382,7 +390,7 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
 
     <v-dialog v-model="dialog" persistent width="700">
       <template v-slot:activator="{ props }">
-        <v-btn size="small" class="text-primary mr-4" color="color(var(--v-theme-surface))" variant="flat" rounded="sm" v-bind="props">
+        <v-btn size="small" class="text-primary mr-4" color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props">
           账户
         </v-btn>
       </template>
