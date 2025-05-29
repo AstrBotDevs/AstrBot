@@ -168,7 +168,7 @@ marked.setOptions({
                                     <template v-slot:activator="{ props }">
                                         <v-btn v-bind="props" @click="sendMessage" class="send-btn" icon="mdi-send"
                                             variant="text" color="deep-purple"
-                                            :disabled="!prompt && stagedImagesUrl.length === 0 && !stagedAudioUrl" />
+                                            :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl" />
                                     </template>
                                 </v-tooltip>
 
@@ -218,7 +218,8 @@ export default {
             messages: [],
             conversations: [],
             currCid: '',
-            stagedImagesUrl: [],
+            stagedImagesName: [], // 用于存储图片**文件名**的数组
+            stagedImagesUrl: [], // 用于存储图片的blob URL数组
             loadingChat: false,
 
             inputFieldLabel: '聊天吧!',
@@ -236,7 +237,9 @@ export default {
             // Ctrl键长按相关变量
             ctrlKeyDown: false,
             ctrlKeyTimer: null,
-            ctrlKeyLongPressThreshold: 300 // 长按阈值，单位毫秒
+            ctrlKeyLongPressThreshold: 300, // 长按阈值，单位毫秒
+
+            mediaCache: {}, // Add a cache to store media blobs
         }
     },
 
@@ -265,9 +268,31 @@ export default {
 
         // 移除keyup事件监听
         document.removeEventListener('keyup', this.handleInputKeyUp);
+
+        // Cleanup blob URLs
+        this.cleanupMediaCache();
     },
 
     methods: {
+        async getMediaFile(filename) {
+            if (this.mediaCache[filename]) {
+                return this.mediaCache[filename];
+            }
+
+            try {
+                const response = await axios.get('/api/chat/get_file', {
+                    params: { filename },
+                    responseType: 'blob'
+                });
+                
+                const blobUrl = URL.createObjectURL(response.data);
+                this.mediaCache[filename] = blobUrl;
+                return blobUrl;
+            } catch (error) {
+                console.error('Error fetching media file:', error);
+                return '';
+            }
+        },
 
         async startListeningEvent() {
             const response = await fetch('/api/chat/listen', {
@@ -328,17 +353,19 @@ export default {
 
                     if (chunk_json.type === 'image') {
                         let img = chunk_json.data.replace('[IMAGE]', '');
+                        const imageUrl = await this.getMediaFile(img);
                         let bot_resp = {
                             type: 'bot',
-                            message: `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                            message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
                         }
                         this.messages.push(bot_resp);
                     } else if (chunk_json.type === 'record') {
                         let audio = chunk_json.data.replace('[RECORD]', '');
+                        const audioUrl = await this.getMediaFile(audio);
                         let bot_resp = {
                             type: 'bot',
                             message: `<audio controls class="audio-player">
-                    <source src="/api/chat/get_file?filename=${audio}" type="audio/wav">
+                    <source src="${audioUrl}" type="audio/wav">
                     您的浏览器不支持音频播放。
                   </audio>`
                         }
@@ -411,7 +438,7 @@ export default {
                     const audio = response.data.data.filename;
                     console.log('Audio uploaded:', audio);
 
-                    this.stagedAudioUrl = `/api/chat/get_file?filename=${audio}`;
+                    this.stagedAudioUrl = audio; // Store just the filename
                 } catch (err) {
                     console.error('Error uploading audio:', err);
                 }
@@ -436,7 +463,8 @@ export default {
                         });
 
                         const img = response.data.data.filename;
-                        this.stagedImagesUrl.push(`/api/chat/get_file?filename=${img}`);
+                        this.stagedImagesName.push(img); // Store just the filename
+                        this.stagedImagesUrl.push(URL.createObjectURL(file)); // Create a blob URL for immediate display
 
                     } catch (err) {
                         console.error('Error uploading image:', err);
@@ -446,6 +474,7 @@ export default {
         },
 
         removeImage(index) {
+            this.stagedImagesName.splice(index, 1);
             this.stagedImagesUrl.splice(index, 1);
         },
 
@@ -462,28 +491,30 @@ export default {
         getConversationMessages(cid) {
             if (!cid[0])
                 return;
-            axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(response => {
+            axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
                 this.currCid = cid[0];
                 let message = JSON.parse(response.data.data.history);
                 for (let i = 0; i < message.length; i++) {
                     if (message[i].message.startsWith('[IMAGE]')) {
                         let img = message[i].message.replace('[IMAGE]', '');
-                        message[i].message = `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                        const imageUrl = await this.getMediaFile(img);
+                        message[i].message = `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
                     }
                     if (message[i].message.startsWith('[RECORD]')) {
                         let audio = message[i].message.replace('[RECORD]', '');
+                        const audioUrl = await this.getMediaFile(audio);
                         message[i].message = `<audio controls class="audio-player">
-                                    <source src="/api/chat/get_file?filename=${audio}" type="audio/wav">
+                                    <source src="${audioUrl}" type="audio/wav">
                                     您的浏览器不支持音频播放。
                                   </audio>`
                     }
                     if (message[i].image_url && message[i].image_url.length > 0) {
                         for (let j = 0; j < message[i].image_url.length; j++) {
-                            message[i].image_url[j] = `/api/chat/get_file?filename=${message[i].image_url[j]}`;
+                            message[i].image_url[j] = await this.getMediaFile(message[i].image_url[j]);
                         }
                     }
                     if (message[i].audio_url) {
-                        message[i].audio_url = `/api/chat/get_file?filename=${message[i].audio_url}`;
+                        message[i].audio_url = await this.getMediaFile(message[i].audio_url);
                     }
                 }
                 this.messages = message;
@@ -534,31 +565,40 @@ export default {
                 await this.newConversation();
             }
 
-            this.messages.push({
+            // Create a message object with actual URLs for display
+            const userMessage = {
                 type: 'user',
                 message: this.prompt,
-                image_url: this.stagedImagesUrl,
-                audio_url: this.stagedAudioUrl
-            });
+                image_url: [],
+                audio_url: null
+            };
 
+            // Convert image filenames to blob URLs for display
+            if (this.stagedImagesName.length > 0) {
+                for (let i = 0; i < this.stagedImagesName.length; i++) {
+                    // If it's just a filename, get the blob URL
+                    if (!this.stagedImagesName[i].startsWith('blob:')) {
+                        const imgUrl = await this.getMediaFile(this.stagedImagesName[i]);
+                        userMessage.image_url.push(imgUrl);
+                    } else {
+                        userMessage.image_url.push(this.stagedImagesName[i]);
+                    }
+                }
+            }
+
+            // Convert audio filename to blob URL for display
+            if (this.stagedAudioUrl) {
+                if (!this.stagedAudioUrl.startsWith('blob:')) {
+                    userMessage.audio_url = await this.getMediaFile(this.stagedAudioUrl);
+                } else {
+                    userMessage.audio_url = this.stagedAudioUrl;
+                }
+            }
+
+            this.messages.push(userMessage);
             this.scrollToBottom();
 
-            // images
-            let image_filenames = [];
-            for (let i = 0; i < this.stagedImagesUrl.length; i++) {
-                let img = this.stagedImagesUrl[i].replace('/api/chat/get_file?filename=', '');
-                image_filenames.push(img);
-            }
-
-            // audio
-            let audio_filenames = [];
-            if (this.stagedAudioUrl) {
-                let audio = this.stagedAudioUrl.replace('/api/chat/get_file?filename=', '');
-                audio_filenames.push(audio);
-            }
-
             this.loadingChat = true;
-
 
             fetch('/api/chat/send', {
                 method: 'POST',
@@ -569,20 +609,19 @@ export default {
                 body: JSON.stringify({
                     message: this.prompt,
                     conversation_id: this.currCid,
-                    image_url: image_filenames,
-                    audio_url: audio_filenames
-                })  // 发送请求体
-            })
-                .then(response => {
-                    this.prompt = '';
-                    this.stagedImagesUrl = [];
-                    this.stagedAudioUrl = "";
-
-                    this.loadingChat = false;
+                    image_url: this.stagedImagesName, // Already contains just filenames
+                    audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : [] // Already contains just filename
                 })
-                .catch(err => {
-                    console.error(err);
-                });
+            })
+            .then(response => {
+                this.prompt = '';
+                this.stagedImagesName = [];
+                this.stagedAudioUrl = "";
+                this.loadingChat = false;
+            })
+            .catch(err => {
+                console.error(err);
+            });
         },
         scrollToBottom() {
             this.$nextTick(() => {
@@ -622,6 +661,15 @@ export default {
                     this.stopRecording();
                 }
             }
+        },
+
+        cleanupMediaCache() {
+            Object.values(this.mediaCache).forEach(url => {
+                if (url.startsWith('blob:')) {
+                    URL.revokeObjectURL(url);
+                }
+            });
+            this.mediaCache = {};
         },
     },
 }

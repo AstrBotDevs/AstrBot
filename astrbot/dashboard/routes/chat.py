@@ -60,11 +60,23 @@ class ChatRoute(Route):
         if not filename:
             return Response().error("Missing key: filename").__dict__
 
+        # Prevent path traversal attacks by extracting just the basename
+        filename_ = os.path.basename(filename)
+
+        # Check if the filename contains suspicious patterns
+        if (
+            filename_ != filename
+            or ".." in filename
+            or "/" in filename
+            or "\\" in filename
+        ):
+            return Response().error("Invalid filename").__dict__
+
         try:
-            with open(os.path.join(self.imgs_dir, filename), "rb") as f:
-                if filename.endswith(".wav"):
+            with open(os.path.join(self.imgs_dir, filename_), "rb") as f:
+                if filename_.endswith(".wav"):
                     return QuartResponse(f.read(), mimetype="audio/wav")
-                elif filename.split(".")[-1] in self.supported_imgs:
+                elif filename_.split(".")[-1] in self.supported_imgs:
                     return QuartResponse(f.read(), mimetype="image/jpeg")
                 else:
                     return QuartResponse(f.read())
