@@ -221,6 +221,16 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                     },
+                    "google_chat": {
+                        "id": "google_chat",
+                        "type": "google_chat",
+                        "enable": False,
+                        "webhook_url": "",
+                        "verification_token": "",
+                        "callback_server_host": "0.0.0.0",
+                        "port": 6200,
+                        "bot_name": "astrbot",
+                    },
                 },
                 "items": {
                     "active_send_mode": {
@@ -319,6 +329,31 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                         "obvious_hint": True,
+                    },
+                    "google_chat_webhook_url": {
+                        "description": "Google Chat Webhook URL",
+                        "type": "string",
+                        "hint": "发送消息到 Google Chat 的 Webhook 地址",
+                    },
+                    "google_chat_verification_token": {
+                        "description": "Google Chat 验证 Token",
+                        "type": "string",
+                        "hint": "可选，用于验证来自 Google Chat 的回调请求",
+                    },
+                    "google_chat_callback_server_host": {
+                        "description": "Google Chat 回调服务器 Host",
+                        "type": "string",
+                        "hint": "监听回调的服务器地址",
+                    },
+                    "google_chat_port": {
+                        "description": "Google Chat 回调服务器端口",
+                        "type": "int",
+                        "hint": "监听回调的服务器端口",
+                    },
+                    "google_chat_bot_name": {
+                        "description": "Google Chat 机器人名称",
+                        "type": "string",
+                        "hint": "机器人在 Google Chat 中显示的名称",
                     },
                 },
             },
@@ -628,6 +663,17 @@ CONFIG_METADATA_2 = {
                         },
                         "gm_thinking_config": {
                             "budget": 0,
+                        },
+                    },
+                    "Google Agent SDK": {
+                        "id": "google_agent_default",
+                        "type": "google_agent_sdk",
+                        "provider_type": "chat_completion",
+                        "enable": False,
+                        "key": [],
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "gemini-1.5-pro",
                         },
                     },
                     "DeepSeek": {

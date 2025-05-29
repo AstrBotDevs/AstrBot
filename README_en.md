@@ -70,6 +70,7 @@ See docs: [Source Code Deployment](https://astrbot.app/deploy/astrbot/cli.html)
 | [Telegram](https://github.com/Soulter/astrbot_plugin_telegram) | ✔      | Private/Group chats | Text, Images        |
 | [WeChat Work](https://github.com/Soulter/astrbot_plugin_wecom) | ✔      | Private chats       | Text, Images, Voice |
 | Feishu                                                         | ✔      | Group chats         | Text, Images        |
+| Google Chat                                                    | ✔      | Private/Group chats | Text, Images |
 | WeChat Open Platform                                           | 🚧      | Planned             | -                   |
 | Discord                                                        | 🚧      | Planned             | -                   |
 | WhatsApp                                                       | 🚧      | Planned             | -                   |
@@ -82,6 +83,7 @@ See docs: [Source Code Deployment](https://astrbot.app/deploy/astrbot/cli.html)
 | OpenAI API                | ✔       | Text Generation        | Supports all OpenAI API-compatible services including DeepSeek, Google Gemini, GLM, Moonshot, Alibaba Cloud Bailian, Silicon Flow, xAI, etc. |
 | Claude API                | ✔       | Text Generation        |                                                                       |
 | Google Gemini API         | ✔       | Text Generation        |                                                                       |
+| Google Agent SDK          | ✔       | Agent SDK              | [Documentation](https://google.github.io/adk-docs/) |
 | Dify                      | ✔       | LLMOps                 |                                                                       |
 | DashScope (Alibaba Cloud) | ✔       | LLMOps                 |                                                                       |
 | Ollama                    | ✔       | Model Loader           | Local deployment for open-source LLMs (DeepSeek, Llama, etc.)         |

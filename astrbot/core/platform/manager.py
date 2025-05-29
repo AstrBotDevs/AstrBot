@@ -74,6 +74,10 @@ class PlatformManager:
                     )
                 case "telegram":
                     from .sources.telegram.tg_adapter import TelegramPlatformAdapter  # noqa: F401
+                case "google_chat":
+                    from .sources.google_chat.google_chat_adapter import (
+                        GoogleChatPlatformAdapter,  # noqa: F401
+                    )
                 case "wecom":
                     from .sources.wecom.wecom_adapter import WecomPlatformAdapter  # noqa: F401
                 case "weixin_official_account":
