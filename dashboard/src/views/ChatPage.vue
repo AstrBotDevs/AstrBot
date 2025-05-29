@@ -282,10 +282,7 @@ export default {
             try {
                 const response = await axios.get('/api/chat/get_file', {
                     params: { filename },
-                    responseType: 'blob',
-                    headers: {
-                        'Authorization': 'Bearer ' + localStorage.getItem('token')
-                    }
+                    responseType: 'blob'
                 });
                 
                 const blobUrl = URL.createObjectURL(response.data);
@@ -433,8 +430,7 @@ export default {
                 try {
                     const response = await axios.post('/api/chat/post_file', formData, {
                         headers: {
-                            'Content-Type': 'multipart/form-data',
-                            'Authorization': 'Bearer ' + localStorage.getItem('token')
+                            'Content-Type': 'multipart/form-data'
                         }
                     });
 
@@ -460,8 +456,7 @@ export default {
                     try {
                         const response = await axios.post('/api/chat/post_image', formData, {
                             headers: {
-                                'Content-Type': 'multipart/form-data',
-                                'Authorization': 'Bearer ' + localStorage.getItem('token')
+                                'Content-Type': 'multipart/form-data'
                             }
                         });
 
