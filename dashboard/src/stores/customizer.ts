@@ -25,6 +25,7 @@ export const useCustomizerStore = defineStore({
     },
     SET_UI_THEME(payload: string) {
       this.uiTheme = payload;
+      localStorage.setItem("uiTheme", payload);
     },
   }
 });

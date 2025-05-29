@@ -7,12 +7,21 @@ export type ConfigProps = {
   inputBg: boolean;
 };
 
+function checkUITheme() {
+  const theme = localStorage.getItem("uiTheme");
+  console.log('memorized theme: ', theme);
+  if (!theme || !(['PurpleTheme', 'PurpleThemeDark'].includes(theme))) {
+    localStorage.setItem("uiTheme", "PurpleTheme");
+    return 'PurpleTheme';
+  } else return theme;
+}
+
 const config: ConfigProps = {
   Sidebar_drawer: true,
   Customizer_drawer: false,
   mini_sidebar: false,
   fontTheme: 'Roboto',
-  uiTheme: 'PurpleTheme',
+  uiTheme: checkUITheme(),
   inputBg: false
 };
 
