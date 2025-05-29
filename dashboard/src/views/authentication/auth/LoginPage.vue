@@ -44,7 +44,7 @@ onMounted(() => {
     </v-card>
   </div>
   <div v-else class="login-page-container-dark">
-    <div class="login-background"></div>
+    <div class="login-background-dark"></div>
     <v-card
         variant="outlined"
         class="login-card"
@@ -97,6 +97,17 @@ onMounted(() => {
   animation: rotate 60s linear infinite;
 }
 
+.login-background-dark {
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  background-color: var(--v-theme-surface);
+  z-index: 0;
+  animation: rotate 60s linear infinite;
+}
+
 @keyframes rotate {
   0% {
     transform: rotate(0deg);
@@ -109,10 +120,11 @@ onMounted(() => {
 .login-card {
   max-width: 520px;
   width: 90%;
+  color: var(--v-theme-primaryText) !important;
   border-radius: 12px !important;
   border-color: var(--v-theme-border) !important;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.07) !important;
-  background-color: var(--v-theme-background) !important;
+  background-color: var(--v-theme-surface) !important;
   transform: translateY(20px);
   opacity: 0;
   transition: all 0.5s ease;

@@ -33,7 +33,7 @@ marked.setOptions({
                             <v-list density="compact" nav class="conversation-list"
                                 @update:selected="getConversationMessages">
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
-                                    color="primary" rounded="lg" class="conversation-item" active-color="primary">
+                                    rounded="lg" class="conversation-item" active-color="primary">
                                     <template v-slot:prepend>
                                         <v-icon size="small" icon="mdi-message-text-outline"></v-icon>
                                     </template>
@@ -674,7 +674,7 @@ export default {
     height: 100%;
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
-    background-color: var(--v-theme-background);
+    background-color: var(--v-theme-surface);
 }
 
 .chat-page-container {
@@ -697,7 +697,7 @@ export default {
     flex-direction: column;
     padding: 0;
     border-right: 1px solid rgba(0, 0, 0, 0.05);
-    background-color: var(--v-theme-background);
+    background-color: var(--v-theme-surface) !important;
     height: 100%;
     position: relative;
 }
@@ -1065,7 +1065,7 @@ export default {
 }
 
 .markdown-content pre {
-    background-color: #f8f8f8;
+    background-color: var(--v-theme-surface);
     padding: 12px;
     border-radius: 6px;
     overflow-x: auto;
@@ -1073,12 +1073,12 @@ export default {
 }
 
 .markdown-content code {
-    background-color: #f5f0ff;
+    background-color: var(--v-theme-codeBg);
     padding: 2px 4px;
     border-radius: 4px;
     font-family: 'Fira Code', monospace;
     font-size: 0.9em;
-    color: #673ab7;
+    color: var(--v-theme-code);
 }
 
 .markdown-content img {
@@ -1088,9 +1088,9 @@ export default {
 }
 
 .markdown-content blockquote {
-    border-left: 4px solid #673ab7;
+    border-left: 4px solid var(--v-theme-secondary);
     padding-left: 16px;
-    color: #666;
+    color: var(--v-theme-secondaryText);
     margin: 16px 0;
 }
 
@@ -1102,13 +1102,13 @@ export default {
 
 .markdown-content th,
 .markdown-content td {
-    border: 1px solid #eee;
+    border: 1px solid var(--v-theme-background);
     padding: 8px 12px;
     text-align: left;
 }
 
 .markdown-content th {
-    background-color: #f5f0ff;
+    background-color: var(--v-theme-containerBg);
 }
 
 /* 动画类 */

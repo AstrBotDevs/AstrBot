@@ -6,7 +6,9 @@
       </div>
       <div class="logo-text">
         <h2 class="text-secondary">AstrBot 仪表盘</h2>
-        <h4 class="text-disabled">登录以继续</h4>
+        <!-- 父子组件传递css变量可能会出错，暂时使用十六进制颜色值 -->
+        <h4 :style="{color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000aa' : '#ffffffcc'}"
+            class="hint-text">登录以继续</h4>
       </div>
     </div>
   </div>
@@ -14,6 +16,7 @@
 
 <script setup lang="ts">
 // No props or other logic needed for this simple component
+import {useCustomizerStore} from "@/stores/customizer";
 </script>
 
 <style scoped>
@@ -56,7 +59,6 @@
   margin: 0;
   font-size: 1.8rem;
   font-weight: 600;
-  color: #5e35b1;
   letter-spacing: 0.5px;
 }
 
@@ -64,7 +66,7 @@
   margin: 4px 0 0 0;
   font-size: 1rem;
   font-weight: 400;
-  color: #616161;
   letter-spacing: 0.3px;
 }
+
 </style>

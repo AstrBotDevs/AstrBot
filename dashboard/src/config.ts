@@ -12,7 +12,7 @@ const config: ConfigProps = {
   Customizer_drawer: false,
   mini_sidebar: false,
   fontTheme: 'Roboto',
-  uiTheme: 'PurpleThemeDark',
+  uiTheme: 'PurpleTheme',
   inputBg: false
 };
 

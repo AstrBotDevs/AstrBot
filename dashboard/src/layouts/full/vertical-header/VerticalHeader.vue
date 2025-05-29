@@ -250,7 +250,8 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
     <v-btn size="small" @click="toggleDarkMode();" class="text-primary mr-2" color="var(--v-theme-surface)"
            variant="flat" rounded="sm">
       <!-- 明暗主题切换按钮 -->
-      <v-icon>mdi-lightbulb-night-outline</v-icon>
+      <v-icon v-if="useCustomizerStore().uiTheme === 'PurpleThemeDark'">mdi-weather-night</v-icon>
+      <v-icon v-else>mdi-white-balance-sunny</v-icon>
     </v-btn>
 
     <v-dialog v-model="updateStatusDialog" width="1000">
