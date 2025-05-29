@@ -4,6 +4,7 @@ import os
 
 import ssl
 import certifi
+import nh3
 
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
@@ -148,9 +149,7 @@ class PluginRoute(Route):
             if handler.event_type == EventType.AdapterMessageEvent:
                 # 处理平台适配器消息事件
                 has_admin = False
-                for (
-                    filter
-                ) in (
+                for filter in (
                     handler.event_filters
                 ):  # 正常handler就只有 1~2 个 filter，因此这里时间复杂度不会太高
                     if isinstance(filter, CommandFilter):
@@ -363,9 +362,11 @@ class PluginRoute(Route):
             with open(readme_path, "r", encoding="utf-8") as f:
                 readme_content = f.read()
 
+            cleaned_content = nh3.clean(readme_content)
+
             return (
                 Response()
-                .ok({"content": readme_content}, "成功获取README内容")
+                .ok({"content": cleaned_content}, "成功获取README内容")
                 .__dict__
             )
         except Exception as e:
@@ -386,14 +387,12 @@ class PluginRoute(Route):
                 platform_type = platform.get("type", "")
                 platform_id = platform.get("id", "")
 
-                platforms.append(
-                    {
-                        "name": platform_id,  # 使用type作为name，这是系统内部使用的平台名称
-                        "id": platform_id,  # 保留id字段以便前端可以显示
-                        "type": platform_type,
-                        "display_name": f"{platform_type}({platform_id})",
-                    }
-                )
+                platforms.append({
+                    "name": platform_id,  # 使用type作为name，这是系统内部使用的平台名称
+                    "id": platform_id,  # 保留id字段以便前端可以显示
+                    "type": platform_type,
+                    "display_name": f"{platform_type}({platform_id})",
+                })
 
             adjusted_platform_enable = {}
             for platform_id, plugins in platform_enable.items():
@@ -402,13 +401,11 @@ class PluginRoute(Route):
             # 获取所有插件，包括系统内部插件
             plugins = []
             for plugin in self.plugin_manager.context.get_all_stars():
-                plugins.append(
-                    {
-                        "name": plugin.name,
-                        "desc": plugin.desc,
-                        "reserved": plugin.reserved,  # 添加reserved标志
-                    }
-                )
+                plugins.append({
+                    "name": plugin.name,
+                    "desc": plugin.desc,
+                    "reserved": plugin.reserved,  # 添加reserved标志
+                })
 
             logger.debug(
                 f"获取插件平台配置: 原始配置={platform_enable}, 调整后={adjusted_platform_enable}"
@@ -416,13 +413,11 @@ class PluginRoute(Route):
 
             return (
                 Response()
-                .ok(
-                    {
-                        "platforms": platforms,
-                        "plugins": plugins,
-                        "platform_enable": adjusted_platform_enable,
-                    }
-                )
+                .ok({
+                    "platforms": platforms,
+                    "plugins": plugins,
+                    "platform_enable": adjusted_platform_enable,
+                })
                 .__dict__
             )
         except Exception as e:
