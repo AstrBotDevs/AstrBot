@@ -10,7 +10,7 @@ export default createVuetify({
   directives,
 
   theme: {
-    defaultTheme: 'PurpleThemeDark',
+    defaultTheme: 'PurpleTheme',
     themes: {
       PurpleTheme,
       PurpleThemeDark
