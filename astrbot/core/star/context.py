@@ -301,5 +301,11 @@ class Context:
         """
         self._register_tasks.append(task)
 
-    def register_web_api(self, route: str, view_handler: Awaitable, methods: list, desc: str):
+    def register_web_api(
+        self, route: str, view_handler: Awaitable, methods: list, desc: str
+    ):
+        for idx, api in enumerate(self.registered_web_apis):
+            if api[0] == route and methods == api[2]:
+                self.registered_web_apis[idx] = (route, view_handler, methods, desc)
+                return
         self.registered_web_apis.append((route, view_handler, methods, desc))
