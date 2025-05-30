@@ -131,7 +131,7 @@ const viewReadme = () => {
       </div>
     </v-card-text>
 
-    <v-card-actions style="padding: 0px; margin-top: auto;">
+    <v-card-actions style="margin-left: 0px; gap: 2px;">
       <v-btn color="teal-accent-4" text="查看文档" variant="text" @click="viewReadme"></v-btn>
       <v-btn v-if="!marketMode" color="teal-accent-4" text="操作" variant="text" @click="reveal = true"></v-btn>
       <v-btn v-if="marketMode && !extension?.installed" color="teal-accent-4" text="安装" variant="text"
