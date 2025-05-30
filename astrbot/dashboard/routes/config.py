@@ -172,15 +172,13 @@ class ConfigRoute(Route):
     async def _test_single_provider(self, provider): 
         """辅助函数：测试单个 provider 的可用性"""
         meta = provider.meta()
-        provider_name = provider.provider_config.get("name", meta.id if meta else meta.id)
-        if not provider_name and meta: 
-            provider_name = meta.id
-        elif not provider_name: 
-            provider_name = "Unknown Provider"
+        # 使用更简洁的回退逻辑获取provider_name
+        provider_name = provider.provider_config.get("name") or getattr(meta, 'id', 'Unknown Provider')
+        
         status_info = {
-            "id": meta.id if meta else "Unknown ID",
-            "model": meta.model if meta else "Unknown Model",
-            "type": meta.type if meta else "Unknown Type",
+            "id": getattr(meta, 'id', 'Unknown ID'),
+            "model": getattr(meta, 'model', 'Unknown Model'),
+            "type": getattr(meta, 'type', 'Unknown Type'),
             "name": provider_name,
             "status": "unavailable", # 默认为不可用
             "error": None,
