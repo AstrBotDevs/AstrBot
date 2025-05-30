@@ -13,17 +13,10 @@ marked.setOptions({
         <v-card-text class="chat-page-container">
             <div class="chat-layout">
                 <div class="sidebar-panel">
-                    <div class="sidebar-header">
-                        <v-btn icon variant="plain">
-                            <v-icon icon="mdi-menu" color="deep-purple"></v-icon>
-                        </v-btn>
-                    </div>
-
                     <div style="padding: 16px; padding-top: 8px;">
                         <v-btn variant="elevated" rounded="lg" class="new-chat-btn" @click="newC" :disabled="!currCid"
                         prepend-icon="mdi-plus">创建对话</v-btn>
                     </div>
-                    
 
                     <div class="conversations-container">
                         <v-card class="conversation-list-card" v-if="conversations.length > 0" flat>
@@ -718,7 +711,6 @@ export default {
     height: 100%;
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
-    background-color: var(--v-theme-surface);
 }
 
 .chat-page-container {

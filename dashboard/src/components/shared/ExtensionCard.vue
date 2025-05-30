@@ -77,7 +77,7 @@ const viewReadme = () => {
 <template>
   <v-card class="mx-auto d-flex flex-column" :elevation="highlight ? 0 : 1"
     :style="{ height: $vuetify.display.xs ? '250px' : '220px',
-     backgroundColor: useCustomizerStore().uiTheme==='PurpleTheme' ? '#eef2f6' : '#282833',
+     backgroundColor: useCustomizerStore().uiTheme==='PurpleTheme' ? '#ffffff' : '#282833',
      color: useCustomizerStore().uiTheme==='PurpleTheme' ? '#000000dd' : '#ffffff'}">
     <v-card-text style="padding: 16px; padding-bottom: 0px; display: flex; justify-content: space-between;">
 
