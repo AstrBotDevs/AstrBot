@@ -21,7 +21,11 @@ class AuthRoute(Route):
         post_data = await request.json
         if post_data["username"] == username and post_data["password"] == password:
             change_pwd_hint = False
-            if username == "astrbot" and password == "77b90590a8945a7d36c963981a307dc9":
+            if (
+                username == "astrbot"
+                and password == "77b90590a8945a7d36c963981a307dc9"
+                and not DEMO_MODE
+            ):
                 change_pwd_hint = True
                 logger.warning("为了保证安全，请尽快修改默认密码。")
 
