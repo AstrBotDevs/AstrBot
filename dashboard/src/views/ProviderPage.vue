@@ -27,13 +27,39 @@
 
         <v-divider></v-divider>
 
+        <!-- 添加分类标签页 -->
+        <v-card-text class="px-4 pt-3 pb-0">
+          <v-tabs v-model="activeProviderTypeTab" bg-color="transparent">
+            <v-tab value="all" class="font-weight-medium px-3">
+              <v-icon start>mdi-filter-variant</v-icon>
+              全部
+            </v-tab>
+            <v-tab value="chat_completion" class="font-weight-medium px-3">
+              <v-icon start>mdi-message-text</v-icon>
+              基本对话
+            </v-tab>
+            <v-tab value="speech_to_text" class="font-weight-medium px-3">
+              <v-icon start>mdi-microphone-message</v-icon>
+              语音转文字
+            </v-tab>
+            <v-tab value="text_to_speech" class="font-weight-medium px-3">
+              <v-icon start>mdi-volume-high</v-icon>
+              文字转语音
+            </v-tab>
+            <v-tab value="embedding" class="font-weight-medium px-3">
+              <v-icon start>mdi-code-json</v-icon>
+              Embedding
+            </v-tab>
+          </v-tabs>
+        </v-card-text>
+
         <v-card-text class="px-4 py-3">
           <item-card-grid
-            :items="config_data.provider || []"
+            :items="filteredProviders"
             title-field="id"
             enabled-field="enable"
             empty-icon="mdi-api-off"
-            empty-text="暂无服务提供商，点击 新增服务提供商 添加"
+            :empty-text="getEmptyText()"
             @toggle-enabled="providerStatusChange"
             @delete="deleteProvider"
             @edit="configExistingProvider"
@@ -109,10 +135,14 @@
               <v-icon start>mdi-volume-high</v-icon>
               文字转语音
             </v-tab>
+            <v-tab value="embedding" class="font-weight-medium px-3">
+              <v-icon start>mdi-code-json</v-icon>
+              Embedding
+            </v-tab>
           </v-tabs>
 
           <v-window v-model="activeProviderTab" class="mt-4">
-            <v-window-item v-for="tabType in ['chat_completion', 'speech_to_text', 'text_to_speech']"
+            <v-window-item v-for="tabType in ['chat_completion', 'speech_to_text', 'text_to_speech', 'embedding']"
                           :key="tabType"
                           :value="tabType">
               <v-row class="mt-1">
@@ -225,6 +255,21 @@ export default {
       // 新增提供商对话框相关
       showAddProviderDialog: false,
       activeProviderTab: 'chat_completion',
+
+      // 添加提供商类型分类
+      activeProviderTypeTab: 'all',
+    }
+  },
+
+  computed: {
+    // 根据选择的标签过滤提供商列表
+    filteredProviders() {
+      if (!this.config_data.provider || this.activeProviderTypeTab === 'all') {
+        return this.config_data.provider || [];
+      }
+
+      return this.config_data.provider.filter(provider =>
+        provider.provider_type === this.activeProviderTypeTab);
     }
   },
 
@@ -241,6 +286,15 @@ export default {
       }).catch((err) => {
         this.showError(err.response?.data?.message || err.message);
       });
+    },
+
+    // 获取空列表文本
+    getEmptyText() {
+      if (this.activeProviderTypeTab === 'all') {
+        return "暂无服务提供商，点击 新增服务提供商 添加";
+      } else {
+        return `暂无${this.getTabTypeName(this.activeProviderTypeTab)}类型的服务提供商，点击 新增服务提供商 添加`;
+      }
     },
 
     // 按提供商类型获取模板列表
@@ -294,7 +348,8 @@ export default {
       const names = {
         'chat_completion': '基本对话',
         'speech_to_text': '语音转文本',
-        'text_to_speech': '文本转语音'
+        'text_to_speech': '文本转语音',
+        'embedding': 'Embedding'
       };
       return names[tabType] || tabType;
     },

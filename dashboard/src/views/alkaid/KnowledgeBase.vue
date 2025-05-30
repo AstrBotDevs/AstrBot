@@ -72,6 +72,10 @@
 
                         <v-textarea v-model="newKB.description" label="描述" variant="outlined" placeholder="知识库的简短描述..."
                             rows="3"></v-textarea>
+
+                        <v-select v-model="newKB.embedding_provider_id" :items="embeddingProviderConfigs" :item-props="embeddingModelProps" label="Embedding(嵌入)模型"
+                            variant="outlined" class="mt-2">
+                        </v-select>
                     </v-form>
                 </v-card-text>
                 <v-card-actions>
@@ -256,7 +260,8 @@ export default {
             newKB: {
                 name: '',
                 emoji: '🙂',
-                description: ''
+                description: '',
+                embedding_provider_id: ''
             },
             snackbar: {
                 show: false,
@@ -306,13 +311,21 @@ export default {
             deleteTarget: {
                 collection_name: ''
             },
-            deleting: false
+            deleting: false,
+            embeddingProviderConfigs: []
         }
     },
     mounted() {
         this.checkPlugin();
+        this.getEmbeddingProviderList();
     },
     methods: {
+        embeddingModelProps(providerConfig) {
+            return {
+                title: providerConfig.embedding_model,
+                subtitle: `提供商 ID: ${providerConfig.id}`,
+            }
+        },
         checkPlugin() {
             axios.get('/api/plugin/get?name=astrbot_plugin_knowledge_base')
                 .then(response => {
@@ -365,10 +378,15 @@ export default {
         },
 
         createCollection(name, emoji, description) {
+            // 如果 this.newKB.embedding_provider_id 是 Object
+            if (typeof this.newKB.embedding_provider_id === 'object') {
+                this.newKB.embedding_provider_id = this.newKB.embedding_provider_id.id || '';
+            }
             axios.post('/api/plug/alkaid/kb/create_collection', {
                 collection_name: name,
                 emoji: emoji,
-                description: description
+                description: description,
+                embedding_provider_id: this.newKB.embedding_provider_id || ''
             })
                 .then(response => {
                     if (response.data.status === 'ok') {
@@ -394,7 +412,8 @@ export default {
             this.createCollection(
                 this.newKB.name,
                 this.newKB.emoji || '🙂',
-                this.newKB.description
+                this.newKB.description,
+                this.newKB.embedding_provider_id || ''
             );
         },
 
@@ -402,7 +421,8 @@ export default {
             this.newKB = {
                 name: '',
                 emoji: '🙂',
-                description: ''
+                description: '',
+                embedding_provider: ''
             };
         },
 
@@ -582,6 +602,27 @@ export default {
                     this.deleting = false;
                 });
         },
+
+        getEmbeddingProviderList() {
+            axios.get('/api/config/provider/list', {
+                params: {
+                    provider_type: 'embedding'
+                }
+            })
+                .then(response => {
+                    if (response.data.status === 'ok') {
+                        this.embeddingProviderConfigs = response.data.data || [];
+                    } else {
+                        this.showSnackbar(response.data.message || '获取嵌入模型列表失败', 'error');
+                        return [];
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching embedding providers:', error);
+                    this.showSnackbar('获取嵌入模型列表失败', 'error');
+                    return [];
+                });
+        }
     }
 }
 </script>

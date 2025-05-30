@@ -862,8 +862,34 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://openspeech.bytedance.com/api/v1/tts",
                         "timeout": 20,
                     },
+                    "OpenAI Embedding": {
+                        "id": "openai_embedding",
+                        "type": "openai_embedding",
+                        "provider_type": "embedding",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        "embedding_api_base": "",
+                        "embedding_model": "",
+                        "embedding_dimensions": 1536,
+                        "timeout": 20,
+                    },
                 },
                 "items": {
+                    "embedding_dimensions": {
+                        "description": "嵌入维度",
+                        "type": "int",
+                        "hint": "嵌入向量的维度。根据模型不同，可能需要调整，请参考具体模型的文档。此配置项请务必填写正确，否则将导致向量数据库无法正常工作。",
+                    },
+                    "embedding_model": {
+                        "description": "嵌入模型",
+                        "type": "string",
+                        "hint": "嵌入模型名称。",
+                    },
+                    "embedding_api_key": {
+                        "description": "API Key",
+                        "type": "string",
+                        "hint": "API Key",
+                    },
                     "volcengine_cluster": {
                         "type": "string",
                         "description": "火山引擎集群",

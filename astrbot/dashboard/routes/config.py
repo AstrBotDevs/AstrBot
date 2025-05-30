@@ -164,6 +164,7 @@ class ConfigRoute(Route):
             "/config/provider/update": ("POST", self.post_update_provider),
             "/config/provider/delete": ("POST", self.post_delete_provider),
             "/config/llmtools": ("GET", self.get_llm_tools),
+            "/config/provider/list": ("GET", self.get_provider_config_list),
         }
         self.register_routes()
 
@@ -174,6 +175,17 @@ class ConfigRoute(Route):
         if not plugin_name:
             return Response().ok(await self._get_astrbot_config()).__dict__
         return Response().ok(await self._get_plugin_config(plugin_name)).__dict__
+
+    async def get_provider_config_list(self):
+        provider_type = request.args.get("provider_type", None)
+        if not provider_type:
+            return Response().error("缺少参数 provider_type").__dict__
+        provider_list = []
+        astrbot_config = self.core_lifecycle.astrbot_config
+        for provider in astrbot_config["provider"]:
+            if provider.get("provider_type", None) == provider_type:
+                provider_list.append(provider)
+        return Response().ok(provider_list).__dict__
 
     async def post_astrbot_configs(self):
         post_configs = await request.json
