@@ -1,3 +1,8 @@
+"""
+astrbot.api.star
+该模块包括所有插件注册相关模块以及插件使用的数据
+"""
+
 from astrbot.core.star.register import (
     register_star as register,  # 注册插件（Star）
 )
