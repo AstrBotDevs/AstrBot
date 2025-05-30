@@ -18,7 +18,9 @@
                 </v-btn>
             </div>
             <div v-else>
-                <h2 class="mb-4">知识库列表</h2>
+                <h2 class="mb-4">知识库列表
+                    <v-icon v-class="ml-2" size="x-small" color="grey" @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
+                </h2>
                 <v-btn class="mb-4" prepend-icon="mdi-plus" variant="tonal" color="primary"
                     @click="showCreateDialog = true">
                     创建知识库
@@ -698,6 +700,10 @@ export default {
                     this.showSnackbar('获取嵌入模型列表失败', 'error');
                     return [];
                 });
+        },
+
+        openUrl(url) {
+            window.open(url, '_blank');
         }
     }
 }
