@@ -37,3 +37,4 @@ watchfiles
 websockets
 faiss-cpu
 aiosqlite
+nh3
