@@ -9,9 +9,9 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot import logger
 from astrbot.core import html_renderer
 from astrbot.core import sp
-from astrbot.core.star.register import register_llm_tool as llm_tool
 
-# astrbot.api.message_components
+# 原: astrbot.api.message_components (已弃用)
+# 现: astrbot.api.event.message.MessageComponents
 from .message_components import (
     ComponentType,  # 枚举所有消息类型名
     BaseMessageComponent,  # 消息类型基类, 如果你需要适配新的消息类型, 可以选择继承此类
@@ -58,7 +58,6 @@ from astrbot.core.message.message_event_result import (
 
 # astrbot.api.platform
 from astrbot.core.platform import (
-    AstrMessageEvent,  # AstrBot 事件, 其实应当出现在事件 api 下, 此处保留向后兼容
     AstrBotMessage,  # AstrBot 消息, 其实应当出现在事件 api 下, 因为它是事件的一部分, 此处保留向后兼容
     MessageMember,  # AstrBot 消息成员, 其实应当出现在事件 api 下, 此处保留向后兼容
     MessageType,  # AstrBot 消息类型, 其实应当出现在事件 api 下, 此处保留向后兼容
@@ -84,14 +83,25 @@ from astrbot.core.star.register import (
 from astrbot.core.star import Context, Star, StarTools
 from astrbot.core.star.config import load_config, put_config, update_config  # 已弃用
 
-
+# 原: astrbot.api.event.filter (已弃用)
+# 现: astrbot.api.star.register
 from astrbot.core.star.register import (
-    register_command as command,
-    register_command_group as command_group,
-    register_event_message_type as event_message_type,
-    register_regex as regex,
-    register_platform_adapter_type as platform_adapter_type,
+    register_command as command,  # 注册命令
+    register_command_group as command_group,  # 注册命令组
+    register_event_message_type as event_message_type,  # 注册监听器: 事件消息类型
+    register_regex as regex,  # 注册监听器: 正则表达式
+    register_platform_adapter_type as platform_adapter_type,  # 注册监听器: 平台适配器类型
+    register_permission_type as permission_type,  # 注册监听器: 权限类型
+    register_custom_filter as custom_filter,  # 注册监听器: 自定义过滤器
+    register_on_astrbot_loaded as on_astrbot_loaded,  # 注册触发器: AstrBot 加载完成时
+    register_on_llm_request as on_llm_request,  # 注册触发器: LLM 请求时
+    register_on_llm_response as on_llm_response,  # 注册触发器: LLM 响应时
+    register_on_decorating_result as on_decorating_result,  # 注册触发器: 装饰结果时
+    register_after_message_sent as after_message_sent,  # 注册触发器: 消息发送后
+    register_llm_tool as llm_tool,  # 注册 LLM 工具
 )
+
+# 监听器所用到的过滤器和类型
 from astrbot.core.star.filter.event_message_type import (
     EventMessageTypeFilter,
     EventMessageType,
@@ -100,3 +110,5 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterTypeFilter,
     PlatformAdapterType,
 )
+from astrbot.core.star.filter.permission import PermissionTypeFilter, PermissionType
+from astrbot.core.star.filter.custom_filter import CustomFilter

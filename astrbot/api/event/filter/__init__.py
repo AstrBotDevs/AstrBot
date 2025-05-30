@@ -1,3 +1,9 @@
+"""
+astrbot.api.event.filter
+该模块包括所有事件过滤器相关模块, 用于过滤事件消息
+⚠️ 标记为已弃用, 不会更新, 请使用 astrbot.api.star.register 导入
+"""
+
 from astrbot.core.star.register import (
     register_command as command,
     register_command_group as command_group,
