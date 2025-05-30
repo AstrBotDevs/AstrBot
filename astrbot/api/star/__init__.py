@@ -8,6 +8,6 @@ from astrbot.core.star.register import (
 )
 
 from astrbot.core.star import Context, Star, StarTools
-from astrbot.core.star.config import *
+from astrbot.core.star.config import load_config, put_config, update_config  # 已弃用
 
 __all__ = ["register", "Context", "Star", "StarTools"]

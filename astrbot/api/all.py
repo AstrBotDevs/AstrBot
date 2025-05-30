@@ -47,6 +47,7 @@ from .message_components import (
 )
 
 # astrbot.api.event
+from astrbot.core.platform import AstrMessageEvent
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     MessageChain,
@@ -54,9 +55,36 @@ from astrbot.core.message.message_event_result import (
     EventResultType,
     ResultContentType,
 )
-from astrbot.core.platform import AstrMessageEvent
 
-# star register
+# astrbot.api.platform
+from astrbot.core.platform import (
+    AstrMessageEvent,  # AstrBot 事件, 其实应当出现在事件 api 下, 此处保留向后兼容
+    AstrBotMessage,  # AstrBot 消息, 其实应当出现在事件 api 下, 因为它是事件的一部分, 此处保留向后兼容
+    MessageMember,  # AstrBot 消息成员, 其实应当出现在事件 api 下, 此处保留向后兼容
+    MessageType,  # AstrBot 消息类型, 其实应当出现在事件 api 下, 此处保留向后兼容
+    Platform,
+    PlatformMetadata,
+    Group,  # 一个群聊
+)
+from astrbot.core.platform.register import register_platform_adapter
+
+# astrbot.api.provider
+from astrbot.core.provider import Provider, STTProvider, Personality
+from astrbot.core.provider.entities import (
+    ProviderRequest,
+    ProviderType,
+    ProviderMetaData,
+    LLMResponse,
+)
+
+# astrbot.api.star
+from astrbot.core.star.register import (
+    register_star as register,  # 注册插件（Star）
+)
+from astrbot.core.star import Context, Star, StarTools
+from astrbot.core.star.config import load_config, put_config, update_config  # 已弃用
+
+
 from astrbot.core.star.register import (
     register_command as command,
     register_command_group as command_group,
@@ -72,24 +100,3 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterTypeFilter,
     PlatformAdapterType,
 )
-from astrbot.core.star.register import (
-    register_star as register,  # 注册插件（Star）
-)
-from astrbot.core.star import Context, Star
-from astrbot.core.star.config import *
-
-
-# provider
-from astrbot.core.provider import Provider, Personality, ProviderMetaData
-
-# platform
-from astrbot.core.platform import (
-    AstrMessageEvent,
-    Platform,
-    AstrBotMessage,
-    MessageMember,
-    MessageType,
-    PlatformMetadata,
-)
-
-from astrbot.core.platform.register import register_platform_adapter
