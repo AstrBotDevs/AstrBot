@@ -21,23 +21,18 @@ from astrbot.core.message.components import (
     Forward,  # 转发消息
     File,  # 文件
     # 其他消息组件
-    Share,  # 分享
-    Music,  # 音乐卡片
-    Xml,  # Xml 消息
+    Music,  # 音乐分享
     Json,  # Json 消息
-    CardImage,  # 卡片图片
     TTS,  # TTS
     Unknown,  # 未知类型
     # 特定平台消息组件
+    ## QQ
+    Dice,  # 骰子
+    Contact,  # 推荐好友/群
+    RPS,  # 猜拳魔法表情
+    ## 微信
     WechatEmoji,  # 微信表情
-    # TODO 消息组件
-    RPS,  # TODO
-    Dice,  # TODO
-    Shake,  # TODO
-    Anonymous,  # TODO
-    Contact,  # TODO
-    Location,  # TODO
-    RedBag,  # TODO
-    # 其他
-    ComponentTypes,  # 小写名->类型 字典实例
+    # 仅接收
+    Share,  # 链接分享
+    Shake,  # 私聊窗口抖动
 )
