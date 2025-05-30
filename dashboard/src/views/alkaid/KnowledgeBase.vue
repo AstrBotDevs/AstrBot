@@ -21,7 +21,11 @@
                 <h2 class="mb-4">知识库列表</h2>
                 <v-btn class="mb-4" prepend-icon="mdi-plus" variant="tonal" color="primary"
                     @click="showCreateDialog = true">
-                    创建新知识库
+                    创建知识库
+                </v-btn>
+                <v-btn class="mb-4 ml-4" prepend-icon="mdi-cog" variant="tonal" color="success"
+                    @click="$router.push('/extension?open_config=astrbot_plugin_knowledge_base')">
+                    配置
                 </v-btn>
 
                 <div class="kb-grid">
