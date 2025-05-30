@@ -70,13 +70,13 @@ class AstrBotDashboard:
         for api in registered_web_apis:
             route, view_handler, methods, _ = api
             if route == f"/{subpath}" and request.method in methods:
-                    return await view_handler(*args, **kwargs)
+                return await view_handler(*args, **kwargs)
         return jsonify(Response().error("未找到该路由").__dict__)
 
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
             return
-        allowed_endpoints = ["/api/auth/login", "/api/chat/get_file", "/api/file"]
+        allowed_endpoints = ["/api/auth/login", "/api/file"]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return
         # claim jwt

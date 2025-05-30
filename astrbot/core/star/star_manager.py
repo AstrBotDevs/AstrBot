@@ -13,6 +13,7 @@ import traceback
 from types import ModuleType
 from typing import List
 
+import nh3
 import yaml
 
 from astrbot.core import logger, pip_installer, sp
@@ -638,12 +639,13 @@ class PluginManager:
             try:
                 with open(readme_path, "r", encoding="utf-8") as f:
                     readme_content = f.read()
+                cleaned_content = nh3.clean(readme_content)
             except Exception as e:
                 logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")
 
         plugin_info = None
         if plugin:
-            plugin_info = {"repo": plugin.repo, "readme": readme_content}
+            plugin_info = {"repo": plugin.repo, "readme": cleaned_content}
 
         return plugin_info
 
