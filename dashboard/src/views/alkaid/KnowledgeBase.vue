@@ -414,7 +414,7 @@ export default {
         installPlugin() {
             this.installing = true;
             axios.post('/api/plugin/install', {
-                url: "https://github.com/soulter/astrbot_plugin_knowledge_base",
+                url: "https://github.com/lxfight/astrbot_plugin_knowledge_base",
                 proxy: localStorage.getItem('selectedGitHubProxy') || ""
             })
                 .then(response => {
