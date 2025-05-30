@@ -4,7 +4,6 @@ import os
 
 import ssl
 import certifi
-import nh3
 
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
@@ -18,6 +17,12 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star_handler import EventType
 from astrbot.core import DEMO_MODE
+
+try:
+    import nh3
+except ImportError:
+    logger.warning("未安装 nh3 库，无法清理插件 README.md 中的 HTML 标签。")
+    nh3 = None
 
 
 class PluginRoute(Route):
@@ -327,6 +332,9 @@ class PluginRoute(Route):
             return Response().error(str(e)).__dict__
 
     async def get_plugin_readme(self):
+        if not nh3:
+            return Response().error("未安装 nh3 库").__dict__
+
         plugin_name = request.args.get("name")
         logger.debug(f"正在获取插件 {plugin_name} 的README文件内容")
 
