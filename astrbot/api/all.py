@@ -1,6 +1,13 @@
+"""
+astrbot.api.all
+该模块提供AstrBot全部的api接口, 如果不清楚从哪里导入, 可以从这个模块导入
+"""
+
+# astrbot.api 下的接口
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot import logger
 from astrbot.core import html_renderer
+from astrbot.core import sp
 from astrbot.core.star.register import register_llm_tool as llm_tool
 
 # event

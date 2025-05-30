@@ -38,11 +38,13 @@ from astrbot.core.utils.io import download_file, download_image_by_url, file_to_
 
 
 class ComponentType(Enum):
+    # 常用消息组件
     Plain = "Plain"  # 纯文本消息
     Face = "Face"  # QQ表情
     Record = "Record"  # 语音
     Video = "Video"  # 视频
     At = "At"  # At
+    AtAll = "AtAll"  # At 全体成员
     Node = "Node"  # 转发消息的一个节点
     Nodes = "Nodes"  # 转发消息的多个节点
     Poke = "Poke"  # QQ 戳一戳
@@ -51,22 +53,26 @@ class ComponentType(Enum):
     Forward = "Forward"  # 转发消息
     File = "File"  # 文件
 
+    # 其他消息组件
+    Share = "Share"  # 分享
+    Music = "Music"  # 音乐卡片
+    RedBag = "RedBag"  # 红包
+    Xml = "Xml"  # Xml 消息
+    Json = "Json"  # Json 消息
+    CardImage = "CardImage"  # 卡片图片
+    TTS = "TTS"  # TTS
+    Unknown = "Unknown"  # 未知类型
+
+    # 特定平台消息组件
+    WechatEmoji = "WechatEmoji"  # Wechat 下的 emoji 表情包
+
+    # TODO 消息组件
     RPS = "RPS"  # TODO
     Dice = "Dice"  # TODO
     Shake = "Shake"  # TODO
     Anonymous = "Anonymous"  # TODO
-    Share = "Share"
     Contact = "Contact"  # TODO
     Location = "Location"  # TODO
-    Music = "Music"
-    RedBag = "RedBag"
-    Xml = "Xml"
-    Json = "Json"
-    CardImage = "CardImage"
-    TTS = "TTS"
-    Unknown = "Unknown"
-
-    WechatEmoji = "WechatEmoji"  # Wechat 下的 emoji 表情包
 
 
 class BaseMessageComponent(BaseModel):
