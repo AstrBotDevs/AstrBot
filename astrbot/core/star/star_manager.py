@@ -13,7 +13,6 @@ import traceback
 from types import ModuleType
 from typing import List
 
-import nh3
 import yaml
 
 from astrbot.core import logger, pip_installer, sp
@@ -37,6 +36,12 @@ try:
 except ImportError:
     if os.getenv("ASTRBOT_RELOAD", "0") == "1":
         logger.warning("未安装 watchfiles，无法实现插件的热重载。")
+
+try:
+    import nh3
+except ImportError:
+    logger.warning("未安装 nh3 库，无法清理插件 README.md 中的 HTML 标签。")
+    nh3 = None
 
 
 class PluginManager:
@@ -141,11 +146,13 @@ class PluginManager:
                 if os.path.exists(os.path.join(path, d, "main.py")) or os.path.exists(
                     os.path.join(path, d, d + ".py")
                 ):
-                    modules.append({
-                        "pname": d,
-                        "module": module_str,
-                        "module_path": os.path.join(path, d, module_str),
-                    })
+                    modules.append(
+                        {
+                            "pname": d,
+                            "module": module_str,
+                            "module_path": os.path.join(path, d, module_str),
+                        }
+                    )
         return modules
 
     def _get_plugin_modules(self) -> List[dict]:
@@ -635,7 +642,7 @@ class PluginManager:
         if not os.path.exists(readme_path):
             readme_path = os.path.join(plugin_path, "readme.md")
 
-        if os.path.exists(readme_path):
+        if os.path.exists(readme_path) and nh3:
             try:
                 with open(readme_path, "r", encoding="utf-8") as f:
                     readme_content = f.read()
