@@ -91,7 +91,7 @@ class UpdateRoute(Route):
             # pip 更新依赖
             logger.info("更新依赖中...")
             try:
-                pip_installer.install(requirements_path="requirements.txt")
+                await pip_installer.install(requirements_path="requirements.txt")
             except Exception as e:
                 logger.error(f"更新依赖失败: {e}")
 
@@ -140,7 +140,7 @@ class UpdateRoute(Route):
         if not package:
             return Response().error("缺少参数 package 或不合法。").__dict__
         try:
-            pip_installer.install(package, mirror=mirror)
+            await pip_installer.install(package, mirror=mirror)
             return Response().ok(None, "安装成功。").__dict__
         except Exception as e:
             logger.error(f"/api/update_pip: {traceback.format_exc()}")
