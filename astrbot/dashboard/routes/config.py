@@ -173,7 +173,7 @@ class ConfigRoute(Route):
     async def _test_single_provider(self, provider): 
         """辅助函数：测试单个 provider 的可用性"""
         meta = provider.meta()
-        provider_name = provider.provider_config.get("name", meta.id if meta else meta.id)
+        provider_name = provider.provider_config.get("id", "Unknown Provider")
         if not provider_name and meta: 
             provider_name = meta.id
         elif not provider_name: 
