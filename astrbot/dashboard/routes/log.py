@@ -23,6 +23,7 @@ class LogRoute(Route):
                         **message,  # see astrbot/core/log.py
                     }
                     yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0.07)  # 控制发送频率，避免过快
             except asyncio.CancelledError:
                 pass
             except BaseException as e:
