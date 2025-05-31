@@ -9,7 +9,7 @@ from astrbot.core.platform.register import platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core import logger
-import asyncio # 用于并发执行获取供应商请求
+import asyncio
 
 
 def try_cast(value: str, type_: str):
@@ -188,7 +188,7 @@ class ConfigRoute(Route):
         logger.debug(f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})")
         try:
             logger.debug(f"Sending 'Ping' to provider: {status_info['name']}")
-            response = await asyncio.wait_for(provider.text_chat(prompt="Ping"), timeout=20.0) #超时二十秒
+            response = await asyncio.wait_for(provider.text_chat(prompt="Ping"), timeout=20.0) # 超时 20 秒
             logger.debug(f"Received response from {status_info['name']}: {response}")
             # 只要 text_chat 调用成功返回一个 LLMResponse 对象 (即 response 不为 None)，就认为可用
             if response is not None:
