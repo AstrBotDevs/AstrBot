@@ -87,6 +87,51 @@
         </v-card-text>
       </v-card>
 
+      <!-- 供应商状态部分 -->
+      <v-card class="mb-6" elevation="2">
+        <v-card-title class="d-flex align-center py-3 px-4">
+          <v-icon color="primary" class="me-2">mdi-heart-pulse</v-icon>
+          <span class="text-h6">供应商可用性</span>
+          <v-spacer></v-spacer>
+          <v-btn color="primary" variant="tonal" :loading="loadingStatus" @click="fetchProviderStatus">
+            <v-icon left>mdi-refresh</v-icon>
+            刷新状态
+          </v-btn>
+        </v-card-title>
+        <v-card-subtitle class="px-4 py-1 text-caption text-medium-emphasis">
+          通过测试模型对话可用性判断，可能产生API费用
+        </v-card-subtitle>
+
+        <v-divider></v-divider>
+
+        <v-card-text class="px-4 py-3">
+          <v-alert v-if="providerStatuses.length === 0" type="info" variant="tonal">
+            点击"刷新状态"按钮获取供应商可用性
+          </v-alert>
+          
+          <v-container v-else class="pa-0">
+            <v-row>
+              <v-col v-for="status in providerStatuses" :key="status.id" cols="12" sm="6" md="4">
+                <v-card variant="outlined" class="status-card">
+                  <v-card-item>
+                    <v-icon :color="status.status === 'available' ? 'success' : 'error'" class="me-2">
+                      {{ status.status === 'available' ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+                    </v-icon>
+                    <span class="font-weight-bold">{{ status.id }}</span>
+                    <v-chip :color="status.status === 'available' ? 'success' : 'error'" size="small" class="ml-2">
+                      {{ status.status === 'available' ? '可用' : '不可用' }}
+                    </v-chip>
+                  </v-card-item>
+                  <v-card-text v-if="status.status === 'unavailable'" class="text-caption text-medium-emphasis">
+                    <span class="font-weight-bold">错误信息:</span> {{ status.error }}
+                  </v-card-text>
+                </v-card>
+              </v-col>
+            </v-row>
+          </v-container>
+        </v-card-text>
+      </v-card>
+
       <!-- 日志部分 -->
       <v-card elevation="2">
         <v-card-title class="d-flex align-center py-3 px-4">
@@ -251,6 +296,10 @@ export default {
       save_message_success: "success",
 
       showConsole: false,
+      
+      // 供应商状态相关
+      providerStatuses: [],
+      loadingStatus: false,
 
       // 新增提供商对话框相关
       showAddProviderDialog: false,
@@ -497,6 +546,22 @@ export default {
       this.save_message = message;
       this.save_message_success = "error";
       this.save_message_snack = true;
+    },
+    
+    // 获取供应商状态
+    fetchProviderStatus() {
+      this.loadingStatus = true;
+      axios.get('/api/config/provider/check_status').then((res) => {
+        if (res.data && res.data.status === 'ok') {
+          this.providerStatuses = res.data.data || [];
+        } else {
+          this.showError(res.data?.message || "获取供应商状态失败");
+        }
+        this.loadingStatus = false;
+      }).catch((err) => {
+        this.loadingStatus = false;
+        this.showError(err.response?.data?.message || err.message);
+      });
     }
   }
 }
