@@ -307,6 +307,28 @@ export default {
 
       // 添加提供商类型分类
       activeProviderTypeTab: 'all',
+
+      // 兼容旧版本（< v3.5.11）的 mapping，用于映射到对应的提供商能力类型
+      oldVersionProviderTypeMapping: {
+        "openai_chat_completion": "chat_completion",
+        "anthropic_chat_completion": "chat_completion",
+        "googlegenai_chat_completion": "chat_completion",
+        "zhipu_chat_completion": "chat_completion",
+        "llm_tuner": "chat_completion",
+        "dify": "chat_completion",
+        "dashscope": "chat_completion",
+        "openai_whisper_api": "speech_to_text",
+        "openai_whisper_selfhost": "speech_to_text",
+        "sensevoice_stt_selfhost": "speech_to_text",
+        "openai_tts_api": "text_to_speech",
+        "edge_tts": "text_to_speech",
+        "gsvi_tts_api": "text_to_speech",
+        "fishaudio_tts_api": "text_to_speech",
+        "dashscope_tts": "text_to_speech",
+        "azure_tts": "text_to_speech",
+        "minimax_tts_api": "text_to_speech",
+        "volcengine_tts": "text_to_speech",
+      }
     }
   },
 
@@ -317,8 +339,16 @@ export default {
         return this.config_data.provider || [];
       }
 
-      return this.config_data.provider.filter(provider =>
-        provider.provider_type === this.activeProviderTypeTab);
+      return this.config_data.provider.filter(provider => {
+        // 如果provider.provider_type已经存在，直接使用它
+        if (provider.provider_type) {
+          return provider.provider_type === this.activeProviderTypeTab;
+        }
+        
+        // 否则使用映射关系
+        const mappedType = this.oldVersionProviderTypeMapping[provider.type];
+        return mappedType === this.activeProviderTypeTab;
+      });
     }
   },
 
