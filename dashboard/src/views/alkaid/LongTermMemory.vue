@@ -1,6 +1,11 @@
 <template>
   <div id="long-term-memory" class="flex-grow-1" style="display: flex; flex-direction: row; ">
-    <div id="graph-container" style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px; max-height: calc(100% - 40px);">
+    <!-- <div id="graph-container"
+      style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px; max-height: calc(100% - 40px);">
+    </div> -->
+    <div id="graph-container-nonono"
+      style="display: flex; justify-content: center; align-items: center; width: 100%; font-weight: 1000; font-size: 24px;">
+      加速开发中...
     </div>
     <div id="graph-control-panel"
       style="min-width: 450px; border: 1px solid #eee; border-radius: 8px; padding: 16px; padding-bottom: 0px; margin-left: 16px; max-height: calc(100% - 40px);">
@@ -31,42 +36,27 @@
       <div class="mt-4">
         <h3>搜索记忆</h3>
         <v-card variant="outlined" class="mt-2 pa-3">
-          <div >
-            <v-text-field 
-              v-model="searchMemoryUserId" 
-              label="用户 ID"
-              variant="outlined"
-              density="compact"
-              hide-details
-              class="mb-2"
-            ></v-text-field>
-            <v-text-field
-              v-model="searchQuery"
-              label="输入关键词"
-              variant="outlined"
-              density="compact"
-              hide-details
-              @keyup.enter="searchMemory"
-              class="mb-2"
-            ></v-text-field>
+          <div>
+            <v-text-field v-model="searchMemoryUserId" label="用户 ID" variant="outlined" density="compact" hide-details
+              class="mb-2"></v-text-field>
+            <v-text-field v-model="searchQuery" label="输入关键词" variant="outlined" density="compact" hide-details
+              @keyup.enter="searchMemory" class="mb-2"></v-text-field>
             <v-btn color="info" @click="searchMemory" :loading="isSearching" variant="tonal">
               <v-icon start>mdi-text-search</v-icon>
               搜索
             </v-btn>
           </div>
-          
+
           <!-- 新增搜索结果展示区域 -->
           <div v-if="searchResults.length > 0" class="mt-3">
             <v-divider class="mb-3"></v-divider>
             <div class="text-subtitle-1 mb-2">搜索结果 ({{ searchResults.length }})</div>
             <v-expansion-panels variant="accordion">
-              <v-expansion-panel
-                v-for="(result, index) in searchResults"
-                :key="index"
-              >
+              <v-expansion-panel v-for="(result, index) in searchResults" :key="index">
                 <v-expansion-panel-title>
                   <div>
-                    <span class="text-truncate d-inline-block" style="max-width: 300px;">{{ result.text.substring(0, 30) }}...</span>
+                    <span class="text-truncate d-inline-block" style="max-width: 300px;">{{ result.text.substring(0, 30)
+                      }}...</span>
                     <span class="ms-2 text-caption text-grey">(相关度: {{ (result.score * 100).toFixed(1) }}%)</span>
                   </div>
                 </v-expansion-panel-title>
@@ -86,42 +76,21 @@
           </div>
         </v-card>
       </div>
-      
+
       <!-- 新增添加记忆数据的表单 -->
       <div class="mt-4">
         <h3>添加记忆数据</h3>
         <v-card variant="outlined" class="mt-2 pa-3">
           <v-form @submit.prevent="addMemoryData">
-            <v-textarea
-              v-model="newMemoryText"
-              label="输入文本内容"
-              variant="outlined"
-              rows="4"
-              hide-details
-              class="mb-2"
-            ></v-textarea>
-            
-            <v-text-field 
-              v-model="newMemoryUserId" 
-              label="用户 ID"
-              variant="outlined"
-              density="compact"
-              hide-details
-            ></v-text-field>
-            
-            <v-switch
-              v-model="needSummarize"
-              color="primary"
-              label="需要摘要"
-              hide-details
-            ></v-switch>
-            
-            <v-btn 
-              color="success" 
-              type="submit"
-              :loading="isSubmitting"
-              :disabled="!newMemoryText || !newMemoryUserId"
-            >
+            <v-textarea v-model="newMemoryText" label="输入文本内容" variant="outlined" rows="4" hide-details
+              class="mb-2"></v-textarea>
+
+            <v-text-field v-model="newMemoryUserId" label="用户 ID" variant="outlined" density="compact"
+              hide-details></v-text-field>
+
+            <v-switch v-model="needSummarize" color="primary" label="需要摘要" hide-details></v-switch>
+
+            <v-btn color="success" type="submit" :loading="isSubmitting" :disabled="!newMemoryText || !newMemoryUserId">
               <v-icon start>mdi-plus</v-icon>
               添加数据
             </v-btn>
@@ -249,26 +218,26 @@ export default {
         this.$toast.warning('请输入搜索关键词');
         return;
       }
-      
+
       this.isSearching = true;
       this.hasSearched = true;
       this.searchResults = [];
-      
+
       // 构建查询参数
       const params = {
         query: this.searchQuery
       };
-      
+
       // 如果有选择用户ID，也加入查询参数
       if (this.searchMemoryUserId) {
         params.user_id = this.searchMemoryUserId;
       }
-      
+
       axios.get('/api/plug/alkaid/ltm/graph/search', { params })
         .then(response => {
           if (response.data.status === 'ok') {
             const data = response.data.data;
-            
+
             // 处理返回的文档数组
             this.searchResults = Object.keys(data).map(doc_id => {
               return {
@@ -277,7 +246,7 @@ export default {
                 score: data[doc_id].score || 0
               };
             });
-            
+
             if (this.searchResults.length === 0) {
               this.$toast.info('未找到相关记忆内容');
             } else {
@@ -295,7 +264,7 @@ export default {
           this.isSearching = false;
         });
     },
-    
+
     // 添加新方法，用于提交记忆数据
     addMemoryData() {
       if (!this.newMemoryText || !this.newMemoryUserId) {
@@ -303,23 +272,23 @@ export default {
       }
 
       this.isSubmitting = true;
-      
+
       // 准备提交数据
       const payload = {
         text: this.newMemoryText,
         user_id: this.newMemoryUserId,
         need_summarize: this.needSummarize
       };
-      
+
       axios.post('/api/plug/alkaid/ltm/graph/add', payload)
         .then(response => {
           // 成功添加后刷新图表
           this.refreshGraph();
-          
+
           // 重置表单
           // this.newMemoryText = '';
           // this.needSummarize = false;
-          
+
           // 显示成功消息
           this.$toast.success('记忆数据添加成功！');
         })
@@ -331,7 +300,7 @@ export default {
           this.isSubmitting = false;
         });
     },
-    
+
     ltmGetGraph(userId = null) {
       this.isLoading = true;
       const params = userId ? { user_id: userId } : {};
@@ -571,6 +540,7 @@ export default {
 <style scoped>
 #long-term-memory {
   height: 100%;
+  max-height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: row;
@@ -585,8 +555,8 @@ export default {
 }
 
 #graph-control-panel {
-  height: 100%;
-  overflow-y: auto; /* 让控制面板可滚动而不是整个页面滚动 */
+  overflow-y: auto;
+  /* 让控制面板可滚动而不是整个页面滚动 */
   min-width: 450px;
   max-width: 450px;
 }
@@ -607,4 +577,5 @@ export default {
 .d3-graph {
   background-color: #f2f6f9;
 }
+
 </style>

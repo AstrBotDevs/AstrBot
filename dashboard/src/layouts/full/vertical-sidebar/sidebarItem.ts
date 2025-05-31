@@ -65,11 +65,11 @@ const sidebarItem: menu[] = [
     icon: 'mdi-console',
     to: '/console'
   },
-  // {
-  //   title: 'Alkaid',
-  //   icon: 'mdi-test-tube',
-  //   to: '/alkaid'
-  // },
+  {
+    title: 'Alkaid',
+    icon: 'mdi-test-tube',
+    to: '/alkaid'
+  },
   {
     title: '关于',
     icon: 'mdi-information',

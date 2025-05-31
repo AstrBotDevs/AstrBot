@@ -193,6 +193,11 @@ class EmbeddingProvider(AbstractProvider):
         ...
 
     @abc.abstractmethod
+    async def get_embeddings(self, text: list[str]) -> list[list[float]]:
+        """批量获取文本的向量"""
+        ...
+
+    @abc.abstractmethod
     def get_dim(self) -> int:
         """获取向量的维度"""
         ...
