@@ -413,7 +413,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             event.set_result(MessageEventResult().message("删除白名单成功。"))
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
-    
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")
     async def provider(
@@ -572,7 +572,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
 
         message.set_result(MessageEventResult().message(ret))
-    
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(

@@ -102,7 +102,7 @@ class WeChatPadProAdapter(Platform):
                     logger.warning("登录失败或超时，WeChatPadPro 适配器将关闭。")
                     await self.terminate()
                     return
-            
+
             # 登录成功后，连接 WebSocket 接收消息
             self.ws_handle_task = asyncio.create_task(self.connect_websocket())
 
@@ -181,7 +181,7 @@ class WeChatPadProAdapter(Platform):
                             f"检查在线状态失败: {response.status}, {response_data}"
                         )
                         return False
-                    
+
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
                 return False
@@ -439,7 +439,7 @@ class WeChatPadProAdapter(Platform):
         ):
             # 再根据消息类型处理消息内容
             await self._process_message_content(abm, raw_message, msg_type, content)
-            
+
             return abm
         return None
 

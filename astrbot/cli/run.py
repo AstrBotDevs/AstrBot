@@ -1,21 +1,16 @@
 import os
 import sys
 from pathlib import Path
-
 import click
 import asyncio
 import traceback
-
 from filelock import FileLock, Timeout
-
-from ..utils import check_dashboard, check_astrbot_root, get_astrbot_root
-
 
 async def run_astrbot(astrbot_root: Path):
     """运行 AstrBot"""
-    from astrbot.core import logger, LogManager, LogBroker, db_helper
-    from astrbot.core.initial_loader import InitialLoader
-
+    from ..core import logger, LogManager, LogBroker, db_helper
+    from ..core.initial_loader import InitialLoader
+    from .utils import check_dashboard
     await check_dashboard(astrbot_root / "data")
 
     log_broker = LogBroker()
@@ -32,6 +27,7 @@ async def run_astrbot(astrbot_root: Path):
 @click.command()
 def run(reload: bool, port: str) -> None:
     """运行 AstrBot"""
+    from .utils import check_astrbot_root, get_astrbot_root
     try:
         os.environ["ASTRBOT_CLI"] = "1"
         astrbot_root = get_astrbot_root()
@@ -48,7 +44,7 @@ def run(reload: bool, port: str) -> None:
             os.environ["DASHBOARD_PORT"] = port
 
         if reload:
-            click.echo("启用插件自动重载")
+            click.echo(click.style("✓ 启用插件自动重载", fg="cyan"))
             os.environ["ASTRBOT_RELOAD"] = "1"
 
         lock_file = astrbot_root / "astrbot.lock"
@@ -56,8 +52,8 @@ def run(reload: bool, port: str) -> None:
         with lock.acquire():
             asyncio.run(run_astrbot(astrbot_root))
     except KeyboardInterrupt:
-        click.echo("AstrBot 已关闭...")
+        click.echo(click.style("AstrBot 已关闭...", fg="red"))
     except Timeout:
-        raise click.ClickException("无法获取锁文件，请检查是否有其他实例正在运行")
+        raise click.ClickException(click.style("无法获取锁文件，请检查是否有其他实例正在运行", fg="red"))
     except Exception as e:
-        raise click.ClickException(f"运行时出现错误: {e}\n{traceback.format_exc()}")
+        raise click.ClickException(click.style(f"运行时出现错误: {e}\n{traceback.format_exc()}", fg="red"))

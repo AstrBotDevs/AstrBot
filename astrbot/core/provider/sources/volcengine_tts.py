@@ -5,7 +5,6 @@ import os
 import traceback
 import asyncio
 import aiohttp
-import requests
 from ..provider import TTSProvider
 from ..entities import ProviderType
 from ..register import register_provider_adapter
@@ -22,7 +21,7 @@ class ProviderVolcengineTTS(TTSProvider):
         self.cluster = provider_config.get("volcengine_cluster", "")
         self.voice_type = provider_config.get("volcengine_voice_type", "")
         self.speed_ratio = provider_config.get("volcengine_speed_ratio", 1.0)
-        self.api_base = provider_config.get("api_base", f"https://openspeech.bytedance.com/api/v1/tts")
+        self.api_base = provider_config.get("api_base", "https://openspeech.bytedance.com/api/v1/tts")
         self.timeout = provider_config.get("timeout", 20)
 
     def _build_request_payload(self, text: str) -> dict:
@@ -33,7 +32,7 @@ class ProviderVolcengineTTS(TTSProvider):
                 "cluster": self.cluster
             },
             "user": {
-                "uid": str(uuid.uuid4())  
+                "uid": str(uuid.uuid4())
             },
             "audio": {
                 "voice_type": self.voice_type,
@@ -58,49 +57,49 @@ class ProviderVolcengineTTS(TTSProvider):
             "Content-Type": "application/json",
             "Authorization": f"Bearer; {self.api_key}"
         }
-        
+
         payload = self._build_request_payload(text)
-        
+
         logger.debug(f"请求头: {headers}")
         logger.debug(f"请求 URL: {self.api_base}")
         logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:100]}...")
-        
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.api_base,
-                    data=json.dumps(payload), 
+                    data=json.dumps(payload),
                     headers=headers,
                     timeout=self.timeout
                 ) as response:
                     logger.debug(f"响应状态码: {response.status}")
-                    
+
                     response_text = await response.text()
                     logger.debug(f"响应内容: {response_text[:200]}...")
-                    
+
                     if response.status == 200:
                         resp_data = json.loads(response_text)
-                        
+
                         if "data" in resp_data:
                             audio_data = base64.b64decode(resp_data["data"])
-                            
+
                             os.makedirs("data/temp", exist_ok=True)
-                            
+
                             file_path = f"data/temp/volcengine_tts_{uuid.uuid4()}.mp3"
-                            
+
                             loop = asyncio.get_running_loop()
                             await loop.run_in_executor(
-                                None, 
+                                None,
                                 lambda: open(file_path, "wb").write(audio_data)
                             )
-                            
+
                             return file_path
                         else:
                             error_msg = resp_data.get("message", "未知错误")
                             raise Exception(f"火山引擎 TTS API 返回错误: {error_msg}")
                     else:
                         raise Exception(f"火山引擎 TTS API 请求失败: {response.status}, {response_text}")
-        
+
         except Exception as e:
             error_details = traceback.format_exc()
             logger.debug(f"火山引擎 TTS 异常详情: {error_details}")
