@@ -19,6 +19,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             base_url=provider_config.get(
                 "embedding_api_base", "https://api.openai.com/v1"
             ),
+            timeout=int(provider_config.get("timeout", 20)),
         )
         self.model = provider_config.get("embedding_model", "text-embedding-3-small")
         self.dimension = provider_config.get("embedding_dimensions", 1536)
