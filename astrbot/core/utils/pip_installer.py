@@ -47,7 +47,7 @@ class PipInstaller:
         except FileNotFoundError:
             # 没有 pip
             from pip import main as pip_main
-            result_code = pip_main(args)
+            result_code = await asyncio.to_thread(pip_main, args)
 
             # 清除 pip.main 导致的多余的 logging handlers
             for handler in logging.root.handlers[:]:
