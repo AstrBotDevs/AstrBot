@@ -4,11 +4,15 @@
             <!-- knowledge card -->
             <div v-if="!installed" class="d-flex align-center justify-center flex-column"
                 style="flex-grow: 1; width: 100%; height: 100%;">
-                <h2>还没有安装知识库插件</h2>
+                <h2>还没有安装知识库插件
+                    <v-icon v-class="ml - 2" size="small" color="grey"
+                        @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
+                </h2>
                 <v-btn style="margin-top: 16px;" variant="tonal" color="primary" @click="installPlugin"
                     :loading="installing">
                     立即安装
                 </v-btn>
+                <ConsoleDisplayer v-show="installing" style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%" :show-level-btns="false"></ConsoleDisplayer>
             </div>
             <div v-else-if="kbCollections.length == 0" class="d-flex align-center justify-center flex-column"
                 style="flex-grow: 1; width: 100%; height: 100%;">
@@ -19,7 +23,8 @@
             </div>
             <div v-else>
                 <h2 class="mb-4">知识库列表
-                    <v-icon v-class="ml-2" size="x-small" color="grey" @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
+                    <v-icon v-class="ml - 2" size="x-small" color="grey"
+                        @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
                 </h2>
                 <v-btn class="mb-4" prepend-icon="mdi-plus" variant="tonal" color="primary"
                     @click="showCreateDialog = true">
@@ -179,31 +184,15 @@
                                     </v-card-title>
                                     <v-card-text class="pa-4 pt-2">
                                         <div class="d-flex flex-wrap" style="gap: 8px">
-                                            <v-text-field
-                                                v-model="chunkSize"
-                                                label="分片长度"
-                                                type="number"
-                                                hint="控制每个文本块大小，留空使用默认值"
-                                                persistent-hint
-                                                variant="outlined"
-                                                density="comfortable"
-                                                class="flex-grow-1 chunk-field"
-                                                prepend-inner-icon="mdi-text-box-outline"
-                                                min="50"
-                                            ></v-text-field>
-                                            
-                                            <v-text-field
-                                                v-model="overlap"
-                                                label="重叠长度"
-                                                type="number"
-                                                hint="控制相邻文本块重叠度，留空使用默认值"
-                                                persistent-hint
-                                                variant="outlined"
-                                                density="comfortable"
-                                                class="flex-grow-1 chunk-field"
-                                                prepend-inner-icon="mdi-vector-intersection"
-                                                min="0"
-                                            ></v-text-field>
+                                            <v-text-field v-model="chunkSize" label="分片长度" type="number"
+                                                hint="控制每个文本块大小，留空使用默认值" persistent-hint variant="outlined"
+                                                density="comfortable" class="flex-grow-1 chunk-field"
+                                                prepend-inner-icon="mdi-text-box-outline" min="50"></v-text-field>
+
+                                            <v-text-field v-model="overlap" label="重叠长度" type="number"
+                                                hint="控制相邻文本块重叠度，留空使用默认值" persistent-hint variant="outlined"
+                                                density="comfortable" class="flex-grow-1 chunk-field"
+                                                prepend-inner-icon="mdi-vector-intersection" min="0"></v-text-field>
                                         </div>
                                     </v-card-text>
                                 </v-card>
@@ -311,9 +300,13 @@
 
 <script>
 import axios from 'axios';
+import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 
 export default {
     name: 'KnowledgeBase',
+    components: {
+        ConsoleDisplayer,
+    },
     data() {
         return {
             installed: true,
@@ -561,12 +554,12 @@ export default {
             const formData = new FormData();
             formData.append('file', this.selectedFile);
             formData.append('collection_name', this.currentKB.collection_name);
-            
+
             // 添加可选的分片长度和重叠长度参数
             if (this.chunkSize && this.chunkSize > 0) {
                 formData.append('chunk_size', this.chunkSize);
             }
-            
+
             if (this.overlap && this.overlap >= 0) {
                 formData.append('chunk_overlap', this.overlap);
             }
