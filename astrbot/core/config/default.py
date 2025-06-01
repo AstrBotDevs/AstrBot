@@ -873,14 +873,14 @@ CONFIG_METADATA_2 = {
                         "embedding_dimensions": 1536,
                         "timeout": 20,
                     },
-                    "Gemini Embedding": {
-                        "id": "gemini_embedding",
-                        "type": "gemini_embedding",
+                    "Ollama Embedding": {
+                        "id": "ollama_embedding",
+                        "type": "ollama_embedding",
                         "provider_type": "embedding",
                         "enable": True,
-                        "embedding_api_key": "",
-                        "embedding_api_base": "",
-                        "embedding_model": "gemini-embedding-exp-03-07",
+                        "embedding_api_key": "ollama",
+                        "embedding_api_base": "http://localhost:11434/v1",
+                        "embedding_model": "nomic-embed-text",
                         "embedding_dimensions": 768,
                         "timeout": 20,
                     },
@@ -899,10 +899,7 @@ CONFIG_METADATA_2 = {
                     "embedding_api_key": {
                         "description": "API Key",
                         "type": "string",
-                    },
-                    "embedding_api_base": {
-                        "description": "API Base URL",
-                        "type": "string",
+                        "hint": "API Key",
                     },
                     "volcengine_cluster": {
                         "type": "string",
