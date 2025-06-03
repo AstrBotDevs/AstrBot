@@ -1,5 +1,6 @@
-pydantic~=2.10.3
 aiohttp
+pydantic~=2.10.3
+psutil>=5.8.0
 openai
 anthropic
 qq-botpy
@@ -17,7 +18,6 @@ apscheduler
 docstring_parser
 aiodocker
 silk-python
-psutil>=5.8.0
 lark-oapi
 ormsgpack
 cryptography
@@ -31,5 +31,12 @@ certifi
 pip
 telegramify-markdown
 google-genai
-pysocks
+click
+filelock
+watchfiles
+websockets
+faiss-cpu
+aiosqlite
+nh3pysocks
 httpx[socks]
+pysocks

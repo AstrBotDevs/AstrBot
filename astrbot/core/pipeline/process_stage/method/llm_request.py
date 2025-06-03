@@ -67,6 +67,10 @@ class LLMRequestSubStage(Stage):
     ) -> Union[None, AsyncGenerator[None, None]]:
         req: ProviderRequest = None
 
+        if not self.ctx.astrbot_config["provider_settings"]["enable"]:
+            logger.debug("未启用 LLM 能力，跳过处理。")
+            return
+
         provider = self.ctx.plugin_manager.context.get_using_provider()
         if provider is None:
             return

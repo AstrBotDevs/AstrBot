@@ -12,31 +12,27 @@ marked.setOptions({
     <v-card class="chat-page-card">
         <v-card-text class="chat-page-container">
             <div class="chat-layout">
-                <!-- 左侧对话列表面板 - 优化版 -->
                 <div class="sidebar-panel">
-                    <div class="sidebar-header">
+                    <div style="padding: 16px; padding-top: 8px;">
                         <v-btn variant="elevated" rounded="lg" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                            prepend-icon="mdi-plus">
-                            创建对话
-                        </v-btn>
+                        prepend-icon="mdi-plus">
+                        创建对话
+                    </v-btn>
                     </div>
 
                     <div class="conversations-container">
-                        <div class="sidebar-section-title" v-if="conversations.length > 0">
-                            对话历史
-                        </div>
 
                         <v-card class="conversation-list-card" v-if="conversations.length > 0" flat>
                             <v-list density="compact" nav class="conversation-list"
                                 @update:selected="getConversationMessages">
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
-                                    color="primary" rounded="lg" class="conversation-item" active-color="primary">
+                                    rounded="lg" class="conversation-item" active-color="primary">
                                     <template v-slot:prepend>
                                         <v-icon size="small" icon="mdi-message-text-outline"></v-icon>
                                     </template>
                                     <v-list-item-title class="conversation-title">新对话</v-list-item-title>
                                     <v-list-item-subtitle class="timestamp">{{ formatDate(item.updated_at)
-                                    }}</v-list-item-subtitle>
+                                        }}</v-list-item-subtitle>
                                 </v-list-item>
                             </v-list>
                         </v-card>
@@ -151,10 +147,10 @@ marked.setOptions({
 
                     <!-- 输入区域 -->
                     <div class="input-area fade-in">
-                        <v-text-field id="input-field" variant="outlined" v-model="prompt" :label="inputFieldLabel"
-                            placeholder="开始输入..." :loading="loadingChat" clear-icon="mdi-close-circle" clearable
-                            @click:clear="clearMessage" class="message-input" @keydown="handleInputKeyDown"
-                            hide-details>
+                        <v-text-field autocomplete="off" id="input-field" variant="outlined" v-model="prompt"
+                            :label="inputFieldLabel" placeholder="开始输入..." :loading="loadingChat"
+                            clear-icon="mdi-close-circle" clearable @click:clear="clearMessage" class="message-input"
+                            @keydown="handleInputKeyDown" hide-details>
                             <template v-slot:loader>
                                 <v-progress-linear :active="loadingChat" height="3" color="deep-purple"
                                     indeterminate></v-progress-linear>
@@ -165,7 +161,7 @@ marked.setOptions({
                                     <template v-slot:activator="{ props }">
                                         <v-btn v-bind="props" @click="sendMessage" class="send-btn" icon="mdi-send"
                                             variant="text" color="deep-purple"
-                                            :disabled="!prompt && stagedImagesUrl.length === 0 && !stagedAudioUrl" />
+                                            :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl" />
                                     </template>
                                 </v-tooltip>
 
@@ -215,7 +211,8 @@ export default {
             messages: [],
             conversations: [],
             currCid: '',
-            stagedImagesUrl: [],
+            stagedImagesName: [], // 用于存储图片**文件名**的数组
+            stagedImagesUrl: [], // 用于存储图片的blob URL数组
             loadingChat: false,
 
             inputFieldLabel: '聊天吧!',
@@ -233,7 +230,9 @@ export default {
             // Ctrl键长按相关变量
             ctrlKeyDown: false,
             ctrlKeyTimer: null,
-            ctrlKeyLongPressThreshold: 300 // 长按阈值，单位毫秒
+            ctrlKeyLongPressThreshold: 300, // 长按阈值，单位毫秒
+
+            mediaCache: {}, // Add a cache to store media blobs
         }
     },
 
@@ -262,9 +261,31 @@ export default {
 
         // 移除keyup事件监听
         document.removeEventListener('keyup', this.handleInputKeyUp);
+
+        // Cleanup blob URLs
+        this.cleanupMediaCache();
     },
 
     methods: {
+        async getMediaFile(filename) {
+            if (this.mediaCache[filename]) {
+                return this.mediaCache[filename];
+            }
+
+            try {
+                const response = await axios.get('/api/chat/get_file', {
+                    params: { filename },
+                    responseType: 'blob'
+                });
+                
+                const blobUrl = URL.createObjectURL(response.data);
+                this.mediaCache[filename] = blobUrl;
+                return blobUrl;
+            } catch (error) {
+                console.error('Error fetching media file:', error);
+                return '';
+            }
+        },
 
         async startListeningEvent() {
             const response = await fetch('/api/chat/listen', {
@@ -325,17 +346,19 @@ export default {
 
                     if (chunk_json.type === 'image') {
                         let img = chunk_json.data.replace('[IMAGE]', '');
+                        const imageUrl = await this.getMediaFile(img);
                         let bot_resp = {
                             type: 'bot',
-                            message: `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                            message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
                         }
                         this.messages.push(bot_resp);
                     } else if (chunk_json.type === 'record') {
                         let audio = chunk_json.data.replace('[RECORD]', '');
+                        const audioUrl = await this.getMediaFile(audio);
                         let bot_resp = {
                             type: 'bot',
                             message: `<audio controls class="audio-player">
-                    <source src="/api/chat/get_file?filename=${audio}" type="audio/wav">
+                    <source src="${audioUrl}" type="audio/wav">
                     您的浏览器不支持音频播放。
                   </audio>`
                         }
@@ -400,15 +423,14 @@ export default {
                 try {
                     const response = await axios.post('/api/chat/post_file', formData, {
                         headers: {
-                            'Content-Type': 'multipart/form-data',
-                            'Authorization': 'Bearer ' + localStorage.getItem('token')
+                            'Content-Type': 'multipart/form-data'
                         }
                     });
 
                     const audio = response.data.data.filename;
                     console.log('Audio uploaded:', audio);
 
-                    this.stagedAudioUrl = `/api/chat/get_file?filename=${audio}`;
+                    this.stagedAudioUrl = audio; // Store just the filename
                 } catch (err) {
                     console.error('Error uploading audio:', err);
                 }
@@ -427,13 +449,13 @@ export default {
                     try {
                         const response = await axios.post('/api/chat/post_image', formData, {
                             headers: {
-                                'Content-Type': 'multipart/form-data',
-                                'Authorization': 'Bearer ' + localStorage.getItem('token')
+                                'Content-Type': 'multipart/form-data'
                             }
                         });
 
                         const img = response.data.data.filename;
-                        this.stagedImagesUrl.push(`/api/chat/get_file?filename=${img}`);
+                        this.stagedImagesName.push(img); // Store just the filename
+                        this.stagedImagesUrl.push(URL.createObjectURL(file)); // Create a blob URL for immediate display
 
                     } catch (err) {
                         console.error('Error uploading image:', err);
@@ -443,6 +465,7 @@ export default {
         },
 
         removeImage(index) {
+            this.stagedImagesName.splice(index, 1);
             this.stagedImagesUrl.splice(index, 1);
         },
 
@@ -459,28 +482,30 @@ export default {
         getConversationMessages(cid) {
             if (!cid[0])
                 return;
-            axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(response => {
+            axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
                 this.currCid = cid[0];
                 let message = JSON.parse(response.data.data.history);
                 for (let i = 0; i < message.length; i++) {
                     if (message[i].message.startsWith('[IMAGE]')) {
                         let img = message[i].message.replace('[IMAGE]', '');
-                        message[i].message = `<img src="/api/chat/get_file?filename=${img}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                        const imageUrl = await this.getMediaFile(img);
+                        message[i].message = `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
                     }
                     if (message[i].message.startsWith('[RECORD]')) {
                         let audio = message[i].message.replace('[RECORD]', '');
+                        const audioUrl = await this.getMediaFile(audio);
                         message[i].message = `<audio controls class="audio-player">
-                                    <source src="/api/chat/get_file?filename=${audio}" type="audio/wav">
+                                    <source src="${audioUrl}" type="audio/wav">
                                     您的浏览器不支持音频播放。
                                   </audio>`
                     }
                     if (message[i].image_url && message[i].image_url.length > 0) {
                         for (let j = 0; j < message[i].image_url.length; j++) {
-                            message[i].image_url[j] = `/api/chat/get_file?filename=${message[i].image_url[j]}`;
+                            message[i].image_url[j] = await this.getMediaFile(message[i].image_url[j]);
                         }
                     }
                     if (message[i].audio_url) {
-                        message[i].audio_url = `/api/chat/get_file?filename=${message[i].audio_url}`;
+                        message[i].audio_url = await this.getMediaFile(message[i].audio_url);
                     }
                 }
                 this.messages = message;
@@ -531,31 +556,40 @@ export default {
                 await this.newConversation();
             }
 
-            this.messages.push({
+            // Create a message object with actual URLs for display
+            const userMessage = {
                 type: 'user',
                 message: this.prompt,
-                image_url: this.stagedImagesUrl,
-                audio_url: this.stagedAudioUrl
-            });
+                image_url: [],
+                audio_url: null
+            };
 
+            // Convert image filenames to blob URLs for display
+            if (this.stagedImagesName.length > 0) {
+                for (let i = 0; i < this.stagedImagesName.length; i++) {
+                    // If it's just a filename, get the blob URL
+                    if (!this.stagedImagesName[i].startsWith('blob:')) {
+                        const imgUrl = await this.getMediaFile(this.stagedImagesName[i]);
+                        userMessage.image_url.push(imgUrl);
+                    } else {
+                        userMessage.image_url.push(this.stagedImagesName[i]);
+                    }
+                }
+            }
+
+            // Convert audio filename to blob URL for display
+            if (this.stagedAudioUrl) {
+                if (!this.stagedAudioUrl.startsWith('blob:')) {
+                    userMessage.audio_url = await this.getMediaFile(this.stagedAudioUrl);
+                } else {
+                    userMessage.audio_url = this.stagedAudioUrl;
+                }
+            }
+
+            this.messages.push(userMessage);
             this.scrollToBottom();
 
-            // images
-            let image_filenames = [];
-            for (let i = 0; i < this.stagedImagesUrl.length; i++) {
-                let img = this.stagedImagesUrl[i].replace('/api/chat/get_file?filename=', '');
-                image_filenames.push(img);
-            }
-
-            // audio
-            let audio_filenames = [];
-            if (this.stagedAudioUrl) {
-                let audio = this.stagedAudioUrl.replace('/api/chat/get_file?filename=', '');
-                audio_filenames.push(audio);
-            }
-
             this.loadingChat = true;
-
 
             fetch('/api/chat/send', {
                 method: 'POST',
@@ -566,20 +600,19 @@ export default {
                 body: JSON.stringify({
                     message: this.prompt,
                     conversation_id: this.currCid,
-                    image_url: image_filenames,
-                    audio_url: audio_filenames
-                })  // 发送请求体
-            })
-                .then(response => {
-                    this.prompt = '';
-                    this.stagedImagesUrl = [];
-                    this.stagedAudioUrl = "";
-
-                    this.loadingChat = false;
+                    image_url: this.stagedImagesName, // Already contains just filenames
+                    audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : [] // Already contains just filename
                 })
-                .catch(err => {
-                    console.error(err);
-                });
+            })
+            .then(response => {
+                this.prompt = '';
+                this.stagedImagesName = [];
+                this.stagedAudioUrl = "";
+                this.loadingChat = false;
+            })
+            .catch(err => {
+                console.error(err);
+            });
         },
         scrollToBottom() {
             this.$nextTick(() => {
@@ -619,6 +652,15 @@ export default {
                     this.stopRecording();
                 }
             }
+        },
+
+        cleanupMediaCache() {
+            Object.values(this.mediaCache).forEach(url => {
+                if (url.startsWith('blob:')) {
+                    URL.revokeObjectURL(url);
+                }
+            });
+            this.mediaCache = {};
         },
     },
 }
@@ -671,7 +713,6 @@ export default {
     height: 100%;
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
-    background-color: #fff;
 }
 
 .chat-page-container {
@@ -694,14 +735,13 @@ export default {
     flex-direction: column;
     padding: 0;
     border-right: 1px solid rgba(0, 0, 0, 0.05);
-    background-color: #fcfcfc;
+    background-color: var(--v-theme-surface) !important;
     height: 100%;
     position: relative;
 }
 
 .sidebar-header {
     padding: 16px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 .conversations-container {
@@ -718,7 +758,7 @@ export default {
 .sidebar-section-title {
     font-size: 12px;
     font-weight: 500;
-    color: #666;
+    color: var(--v-theme-secondaryText);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 12px;
@@ -776,7 +816,7 @@ export default {
 
 .timestamp {
     font-size: 11px;
-    color: #999;
+    color: var(--v-theme-secondaryText);
     line-height: 1;
 }
 
@@ -819,7 +859,7 @@ export default {
 
 .no-conversations-text {
     font-size: 14px;
-    color: #999;
+    color: var(--v-theme-secondaryText);
 }
 
 /* 聊天内容区域 */
@@ -855,21 +895,21 @@ export default {
 .bot-name {
     font-weight: 700;
     margin-left: 8px;
-    color: #673ab7;
+    color: var(--v-theme-secondary);
 }
 
 .welcome-hint {
     margin-top: 8px;
-    color: #666;
+    color: var(--v-theme-secondaryText);
     font-size: 14px;
 }
 
 .welcome-hint code {
-    background-color: #f5f0ff;
+    background-color: var(--v-theme-codeBg);
     padding: 2px 6px;
     margin: 0 4px;
     border-radius: 4px;
-    color: #673ab7;
+    color: var(--v-theme-code);
     font-family: 'Fira Code', monospace;
     font-size: 13px;
 }
@@ -908,15 +948,15 @@ export default {
 }
 
 .user-bubble {
-    background-color: #f5f0ff;
-    color: #333;
+    background-color: var(--v-theme-background);
+    color: var(--v-theme-primaryText);
     border-top-right-radius: 4px;
 }
 
 .bot-bubble {
-    background-color: #fff;
-    border: 1px solid #e8e8e8;
-    color: #333;
+    background-color: var(--v-theme-surface);
+    border: 1px solid var(--v-theme-border);
+    color: var(--v-theme-primaryText);
     border-top-left-radius: 4px;
 }
 
@@ -963,9 +1003,9 @@ export default {
 /* 输入区域样式 */
 .input-area {
     padding: 16px;
-    background-color: #fff;
+    background-color: var(--v-theme-surface);
     position: relative;
-    border-top: 1px solid #f5f5f5;
+    border-top: 1px solid var(--v-theme-border);
 }
 
 .message-input {
@@ -1035,12 +1075,12 @@ export default {
     margin-top: 16px;
     margin-bottom: 10px;
     font-weight: 600;
-    color: #333;
+    color: var(--v-theme-primaryText);
 }
 
 .markdown-content h1 {
     font-size: 1.8em;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--v-theme-border);
     padding-bottom: 6px;
 }
 
@@ -1063,7 +1103,7 @@ export default {
 }
 
 .markdown-content pre {
-    background-color: #f8f8f8;
+    background-color: var(--v-theme-surface);
     padding: 12px;
     border-radius: 6px;
     overflow-x: auto;
@@ -1071,12 +1111,12 @@ export default {
 }
 
 .markdown-content code {
-    background-color: #f5f0ff;
+    background-color: var(--v-theme-codeBg);
     padding: 2px 4px;
     border-radius: 4px;
     font-family: 'Fira Code', monospace;
     font-size: 0.9em;
-    color: #673ab7;
+    color: var(--v-theme-code);
 }
 
 .markdown-content img {
@@ -1086,9 +1126,9 @@ export default {
 }
 
 .markdown-content blockquote {
-    border-left: 4px solid #673ab7;
+    border-left: 4px solid var(--v-theme-secondary);
     padding-left: 16px;
-    color: #666;
+    color: var(--v-theme-secondaryText);
     margin: 16px 0;
 }
 
@@ -1100,13 +1140,13 @@ export default {
 
 .markdown-content th,
 .markdown-content td {
-    border: 1px solid #eee;
+    border: 1px solid var(--v-theme-background);
     padding: 8px 12px;
     text-align: left;
 }
 
 .markdown-content th {
-    background-color: #f5f0ff;
+    background-color: var(--v-theme-containerBg);
 }
 
 /* 动画类 */

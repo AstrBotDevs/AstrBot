@@ -1,3 +1,4 @@
+import os
 import aiohttp
 import datetime
 import builtins
@@ -13,6 +14,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_manager import PluginManager
@@ -59,7 +61,6 @@ class RstScene(Enum):
     version="4.0.0",
 )
 class Main(star.Star):
-
     def __init__(self, context: star.Context) -> None:
         self.context = context
         cfg = context.get_config()
@@ -138,7 +139,7 @@ class Main(star.Star):
 {notice}"""
 
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
-
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("llm")
     async def llm(self, event: AstrMessageEvent):
         """开启/关闭 LLM"""
@@ -205,105 +206,113 @@ class Main(star.Star):
             self.context.deactivate_llm_tool(tool.name)
         event.set_result(MessageEventResult().message("停用所有工具成功。"))
 
-    @filter.command("plugin")
-    async def plugin(
-        self, event: AstrMessageEvent, oper1: str = None, oper2: str = None
-    ):
-        """插件管理"""
-        if oper1 is None:
-            plugin_list_info = "已加载的插件：\n"
-            for plugin in self.context.get_all_stars():
-                plugin_list_info += (
-                    f"- `{plugin.name}` By {plugin.author}: {plugin.desc}"
-                )
-                if not plugin.activated:
-                    plugin_list_info += " (未启用)"
-                plugin_list_info += "\n"
-            if plugin_list_info.strip() == "":
-                plugin_list_info = "没有加载任何插件。"
+    @filter.command_group("plugin")
+    def plugin(self):
+        pass
 
-            plugin_list_info += "\n使用 /plugin <插件名> 查看插件帮助和加载的指令。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
+    @plugin.command("ls")
+    async def plugin_ls(self, event: AstrMessageEvent):
+        """获取已经安装的插件列表。"""
+        plugin_list_info = "已加载的插件：\n"
+        for plugin in self.context.get_all_stars():
+            plugin_list_info += f"- `{plugin.name}` By {plugin.author}: {plugin.desc}"
+            if not plugin.activated:
+                plugin_list_info += " (未启用)"
+            plugin_list_info += "\n"
+        if plugin_list_info.strip() == "":
+            plugin_list_info = "没有加载任何插件。"
+
+        plugin_list_info += "\n使用 /plugin help <插件名> 查看插件帮助和加载的指令。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
+        event.set_result(
+            MessageEventResult().message(f"{plugin_list_info}").use_t2i(False)
+        )
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @plugin.command("off")
+    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = None):
+        """禁用插件"""
+        if not plugin_name:
             event.set_result(
-                MessageEventResult().message(f"{plugin_list_info}").use_t2i(False)
+                MessageEventResult().message("/plugin off <插件名> 禁用插件。")
             )
-        else:
-            if oper1 == "off":
-                # 禁用插件
-                if oper2 is None:
-                    event.set_result(
-                        MessageEventResult().message("/plugin off <插件名> 禁用插件。")
-                    )
-                    return
-                await self.context._star_manager.turn_off_plugin(oper2)
-                event.set_result(MessageEventResult().message(f"插件 {oper2} 已禁用。"))
-            elif oper1 == "on":
-                # 启用插件
-                if oper2 is None:
-                    event.set_result(
-                        MessageEventResult().message("/plugin on <插件名> 启用插件。")
-                    )
-                    return
-                await self.context._star_manager.turn_on_plugin(oper2)
-                event.set_result(MessageEventResult().message(f"插件 {oper2} 已启用。"))
-            elif oper1 == "get":
-                if not oper2:
-                    raise Exception("请输入插件地址。")
-                if not event.is_admin():
-                    raise Exception(
-                        "改指令限制仅管理员使用，且无法通过 /alter_cmd 更改。"
-                    )
-                if not oper2.startswith("http"):
-                    oper2 = f"https://github.com/{oper2}"
+            return
+        await self.context._star_manager.turn_off_plugin(plugin_name)
+        event.set_result(MessageEventResult().message(f"插件 {plugin_name} 已禁用。"))
 
-                logger.info(f"准备从 {oper2} 获取插件。")
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @plugin.command("on")
+    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = None):
+        """启用插件"""
+        if not plugin_name:
+            event.set_result(
+                MessageEventResult().message("/plugin on <插件名> 启用插件。")
+            )
+            return
+        await self.context._star_manager.turn_on_plugin(plugin_name)
+        event.set_result(MessageEventResult().message(f"插件 {plugin_name} 已启用。"))
 
-                if self.context._star_manager:
-                    star_mgr: PluginManager = self.context._star_manager
-                    try:
-                        await star_mgr.install_plugin(oper2)
-                        event.set_result(MessageEventResult().message("获取插件成功。"))
-                    except Exception as e:
-                        logger.error(f"获取插件失败: {e}")
-                        event.set_result(
-                            MessageEventResult().message(f"获取插件失败: {e}")
-                        )
-                        return
-            else:
-                # 获取插件帮助
-                plugin = self.context.get_registered_star(oper1)
-                if plugin is None:
-                    event.set_result(MessageEventResult().message("未找到此插件。"))
-                    return
-                help_msg = ""
-                help_msg += f"\n\n✨ 作者: {plugin.author}\n✨ 版本: {plugin.version}"
-                command_handlers = []
-                command_names = []
-                for handler in star_handlers_registry:
-                    assert isinstance(handler, StarHandlerMetadata)
-                    if handler.handler_module_path != plugin.module_path:
-                        continue
-                    for filter_ in handler.event_filters:
-                        if isinstance(filter_, CommandFilter):
-                            command_handlers.append(handler)
-                            command_names.append(filter_.command_name)
-                            break
-                        elif isinstance(filter_, CommandGroupFilter):
-                            command_handlers.append(handler)
-                            command_names.append(filter_.group_name)
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @plugin.command("get")
+    async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = None):
+        """安装插件"""
+        if not plugin_repo:
+            event.set_result(
+                MessageEventResult().message("/plugin get <插件仓库地址> 安装插件")
+            )
+            return
+        logger.info(f"准备从 {plugin_repo} 安装插件。")
+        if self.context._star_manager:
+            star_mgr: PluginManager = self.context._star_manager
+            try:
+                await star_mgr.install_plugin(plugin_repo)
+                event.set_result(MessageEventResult().message("安装插件成功。"))
+            except Exception as e:
+                logger.error(f"安装插件失败: {e}")
+                event.set_result(MessageEventResult().message(f"安装插件失败: {e}"))
+                return
 
-                if len(command_handlers) > 0:
-                    help_msg += "\n\n🔧 指令列表：\n"
-                    for i in range(len(command_handlers)):
-                        help_msg += f"- {command_names[i]}"
-                        if command_handlers[i].desc:
-                            help_msg += f": {command_handlers[i].desc}"
-                        help_msg += "\n"
+    @plugin.command("help")
+    async def plugin_help(self, event: AstrMessageEvent, plugin_name: str = None):
+        """获取插件帮助"""
+        if not plugin_name:
+            event.set_result(
+                MessageEventResult().message("/plugin help <插件名> 查看插件信息。")
+            )
+            return
+        plugin = self.context.get_registered_star(plugin_name)
+        if plugin is None:
+            event.set_result(MessageEventResult().message("未找到此插件。"))
+            return
+        help_msg = ""
+        help_msg += f"\n\n✨ 作者: {plugin.author}\n✨ 版本: {plugin.version}"
+        command_handlers = []
+        command_names = []
+        for handler in star_handlers_registry:
+            assert isinstance(handler, StarHandlerMetadata)
+            if handler.handler_module_path != plugin.module_path:
+                continue
+            for filter_ in handler.event_filters:
+                if isinstance(filter_, CommandFilter):
+                    command_handlers.append(handler)
+                    command_names.append(filter_.command_name)
+                    break
+                elif isinstance(filter_, CommandGroupFilter):
+                    command_handlers.append(handler)
+                    command_names.append(filter_.group_name)
 
-                    help_msg += "\nTip: 指令的触发需要添加唤醒前缀，默认为 /。"
+        if len(command_handlers) > 0:
+            help_msg += "\n\n🔧 指令列表：\n"
+            for i in range(len(command_handlers)):
+                help_msg += f"- {command_names[i]}"
+                if command_handlers[i].desc:
+                    help_msg += f": {command_handlers[i].desc}"
+                help_msg += "\n"
 
-                ret = f"🧩 插件 {oper1} 帮助信息：\n" + help_msg
-                ret += "更多帮助信息请查看插件仓库 README。"
-                event.set_result(MessageEventResult().message(ret).use_t2i(False))
+            help_msg += "\nTip: 指令的触发需要添加唤醒前缀，默认为 /。"
+
+        ret = f"🧩 插件 {plugin_name} 帮助信息：\n" + help_msg
+        ret += "更多帮助信息请查看插件仓库 README。"
+        event.set_result(MessageEventResult().message(ret).use_t2i(False))
 
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent):
@@ -404,25 +413,21 @@ UID: {user_id} 此 ID 可用于设置管理员。
             event.set_result(MessageEventResult().message("删除白名单成功。"))
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
-
+    
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")
     async def provider(
         self, event: AstrMessageEvent, idx: Union[str, int] = None, idx2: int = None
     ):
         """查看或者切换 LLM Provider"""
 
-        if not self.context.get_using_provider():
-            event.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。")
-            )
-            return
-
         if idx is None:
             ret = "## 载入的 LLM 提供商\n"
             for idx, llm in enumerate(self.context.get_all_providers()):
                 id_ = llm.meta().id
                 ret += f"{idx + 1}. {id_} ({llm.meta().model})"
-                if self.context.get_using_provider().meta().id == id_:
+                provider_using = self.context.get_using_provider()
+                if provider_using and provider_using.meta().id == id_:
                     ret += " (当前使用)"
                 ret += "\n"
 
@@ -468,8 +473,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     id_ = provider.meta().id
                     self.context.provider_manager.curr_tts_provider_inst = provider
                     sp.put("curr_provider_tts", id_)
-                    if not self.context.provider_manager.tts_enabled:
-                        self.context.provider_manager.tts_enabled = True
                     event.set_result(
                         MessageEventResult().message(f"成功切换到 {id_}。")
                     )
@@ -484,8 +487,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     id_ = provider.meta().id
                     self.context.provider_manager.curr_stt_provider_inst = provider
                     sp.put("curr_provider_stt", id_)
-                    if not self.context.provider_manager.stt_enabled:
-                        self.context.provider_manager.stt_enabled = True
                     event.set_result(
                         MessageEventResult().message(f"成功切换到 {id_}。")
                     )
@@ -497,8 +498,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 id_ = provider.meta().id
                 self.context.provider_manager.curr_provider_inst = provider
                 sp.put("curr_provider", id_)
-                if not self.context.provider_manager.provider_enabled:
-                    self.context.provider_manager.provider_enabled = True
                 event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
             else:
                 event.set_result(MessageEventResult().message("无效的参数。"))
@@ -573,7 +572,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
             ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
 
         message.set_result(MessageEventResult().message(ret))
-
+    
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(
         self, message: AstrMessageEvent, idx_or_name: Union[int, str] = None
@@ -1017,6 +1017,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
             conversation = await self.context.conversation_manager.get_conversation(
                 message.unified_msg_origin, cid
             )
+            if not conversation:
+                message.set_result(
+                    MessageEventResult().message(
+                        "请先进入一个对话。可以使用 /new 创建。"
+                    )
+                )
             if not conversation.persona_id and not conversation.persona_id == "[%None]":
                 curr_persona_name = (
                     self.context.provider_manager.selected_default_persona["name"]
@@ -1159,7 +1165,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("gewe_code")
     async def gewe_code(self, event: AstrMessageEvent, code: str):
         """保存 gewechat 验证码"""
-        with open("data/temp/gewe_code", "w", encoding="utf-8") as f:
+        code_path = os.path.join(get_astrbot_data_path(), "temp", "gewe_code")
+        with open(code_path, "w", encoding="utf-8") as f:
             f.write(code)
         yield event.plain_result("验证码已保存。")
 

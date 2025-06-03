@@ -327,7 +327,7 @@
             </div>
             <small>1. 某些 MCP 服务器可能需要按照其要求在 env 中填充 `API_KEY` 或 `TOKEN` 等信息，请注意检查是否填写。</small>
             <br>
-            <small>2. 当配置中带有 url 参数时，将使用 SSE 的方式连接到服务器。</small>
+            <small>2. 当配置中指定 url 参数时：如果还同时指定 `transport` 参数的值为 `streamable_http`，则使用 Steamable HTTP，否则使用 SSE 连接。</small>
 
             <div class="monaco-container">
               <VueMonacoEditor v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{

@@ -21,3 +21,4 @@ data/
 changelogs/
 tests/
 .ruff_cache/
+.astrbot

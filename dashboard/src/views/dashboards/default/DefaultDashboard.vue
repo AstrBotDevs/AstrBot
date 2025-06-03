@@ -155,7 +155,7 @@ export default {
 <style scoped>
 .dashboard-container {
   padding: 16px;
-  background-color: #f9fafc;
+  background-color: var(--v-theme-background);
   min-height: calc(100vh - 64px);
   border-radius: 10px;
   
@@ -170,13 +170,13 @@ export default {
 .dashboard-title {
   font-size: 24px;
   font-weight: 600;
-  color: #333;
+  color: var(--v-theme-primaryText);
   margin-bottom: 4px;
 }
 
 .dashboard-subtitle {
   font-size: 14px;
-  color: #666;
+  color: var(--v-theme-secondaryText);
 }
 
 .notice-row {
@@ -194,18 +194,18 @@ export default {
 
 .plugin-card {
   border-radius: 8px;
-  background-color: white;
+  background-color: var(--v-theme-surface);
 }
 
 .plugin-title {
   font-size: 18px;
   font-weight: 600;
-  color: #333;
+  color: var(--v-theme-primaryText);
 }
 
 .plugin-subtitle {
   font-size: 12px;
-  color: #666;
+  color: var(--v-theme-secondaryText);
   margin-top: 4px;
 }
 
@@ -225,7 +225,7 @@ export default {
 
 .plugin-version {
   font-size: 12px;
-  color: #666;
+  color: var(--v-theme-secondaryText, #666);
 }
 
 .dashboard-footer {

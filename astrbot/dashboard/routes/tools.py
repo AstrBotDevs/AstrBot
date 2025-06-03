@@ -1,11 +1,15 @@
-import os
 import json
-import aiohttp
+import os
 import traceback
-from .route import Route, Response, RouteContext
+
+import aiohttp
 from quart import request
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+
 from astrbot.core import logger
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+from .route import Response, Route, RouteContext
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
@@ -28,8 +32,7 @@ class ToolsRoute(Route):
 
     @property
     def mcp_config_path(self):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        data_dir = os.path.abspath(os.path.join(current_dir, "../../../data"))
+        data_dir = get_astrbot_data_path()
         return os.path.join(data_dir, "mcp_server.json")
 
     def load_mcp_config(self):
@@ -130,13 +133,11 @@ class ToolsRoute(Route):
 
             if self.save_mcp_config(config):
                 # 动态初始化新MCP客户端
-                await self.tool_mgr.mcp_service_queue.put(
-                    {
-                        "type": "init",
-                        "name": name,
-                        "cfg": config["mcpServers"][name],
-                    }
-                )
+                await self.tool_mgr.mcp_service_queue.put({
+                    "type": "init",
+                    "name": name,
+                    "cfg": config["mcpServers"][name],
+                })
                 return Response().ok(None, f"成功添加 MCP 服务器 {name}").__dict__
             else:
                 return Response().error("保存配置失败").__dict__
@@ -194,37 +195,29 @@ class ToolsRoute(Route):
                 if active:
                     # 如果要激活服务器或者配置已更改
                     if name in self.tool_mgr.mcp_client_dict or not only_update_active:
-                        await self.tool_mgr.mcp_service_queue.put(
-                            {
-                                "type": "terminate",
-                                "name": name,
-                            }
-                        )
-                        await self.tool_mgr.mcp_service_queue.put(
-                            {
-                                "type": "init",
-                                "name": name,
-                                "cfg": config["mcpServers"][name],
-                            }
-                        )
+                        await self.tool_mgr.mcp_service_queue.put({
+                            "type": "terminate",
+                            "name": name,
+                        })
+                        await self.tool_mgr.mcp_service_queue.put({
+                            "type": "init",
+                            "name": name,
+                            "cfg": config["mcpServers"][name],
+                        })
                     else:
                         # 客户端不存在，初始化
-                        await self.tool_mgr.mcp_service_queue.put(
-                            {
-                                "type": "init",
-                                "name": name,
-                                "cfg": config["mcpServers"][name],
-                            }
-                        )
+                        await self.tool_mgr.mcp_service_queue.put({
+                            "type": "init",
+                            "name": name,
+                            "cfg": config["mcpServers"][name],
+                        })
                 else:
                     # 如果要停用服务器
                     if name in self.tool_mgr.mcp_client_dict:
-                        self.tool_mgr.mcp_service_queue.put_nowait(
-                            {
-                                "type": "terminate",
-                                "name": name,
-                            }
-                        )
+                        self.tool_mgr.mcp_service_queue.put_nowait({
+                            "type": "terminate",
+                            "name": name,
+                        })
 
                 return Response().ok(None, f"成功更新 MCP 服务器 {name}").__dict__
             else:
@@ -252,12 +245,10 @@ class ToolsRoute(Route):
             if self.save_mcp_config(config):
                 # 关闭并删除MCP客户端
                 if name in self.tool_mgr.mcp_client_dict:
-                    self.tool_mgr.mcp_service_queue.put_nowait(
-                        {
-                            "type": "terminate",
-                            "name": name,
-                        }
-                    )
+                    self.tool_mgr.mcp_service_queue.put_nowait({
+                        "type": "terminate",
+                        "name": name,
+                    })
 
                 return Response().ok(None, f"成功删除 MCP 服务器 {name}").__dict__
             else:
@@ -269,9 +260,11 @@ class ToolsRoute(Route):
     async def get_mcp_markets(self):
         page = request.args.get("page", 1, type=int)
         page_size = request.args.get("page_size", 10, type=int)
-        BASE_URL = "https://api.soulter.top/astrbot/mcpservers?page={}&page_size={}".format(
-            page,
-            page_size,
+        BASE_URL = (
+            "https://api.soulter.top/astrbot/mcpservers?page={}&page_size={}".format(
+                page,
+                page_size,
+            )
         )
         try:
             async with aiohttp.ClientSession() as session:

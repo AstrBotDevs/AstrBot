@@ -52,13 +52,17 @@ import 'highlight.js/styles/github.css';
 
                 <v-card-text>
 
-                    <small style="color: #bbb;">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small>
+                    <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small>
                     <div v-if="pinnedPlugins.length > 0" class="mt-4">
                         <h2>🥳 推荐</h2>
 
                         <v-row style="margin-top: 8px;">
                             <v-col cols="12" md="6" lg="6" v-for="plugin in pinnedPlugins">
-                                <ExtensionCard :extension="plugin" market-mode="true" :highlight="true">
+                                <ExtensionCard :extension="plugin" class="h-120 rounded-lg"
+                                               market-mode="true" :highlight="true"
+                                               @install="extension_url=plugin.repo;
+                                               newExtension()"
+                                               @view-readme="open(plugin.repo)">
                                 </ExtensionCard>
                             </v-col>
                         </v-row>
@@ -77,7 +81,7 @@ import 'highlight.js/styles/github.css';
                                             style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
                                             alt="logo">
                                         <span v-if="item?.repo"><a :href="item?.repo"
-                                                style="color: #000; text-decoration:none">{{
+                                                style="color: var(--v-theme-primaryText, #000); text-decoration:none">{{
                                                     item.name }}</a></span>
                                         <span v-else>{{ item.name }}</span>
 
@@ -565,7 +569,7 @@ export default {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     line-height: 1.6;
     padding: 8px 0;
-    color: #24292e;
+    color: var(--v-theme-secondaryText);
 }
 
 .markdown-body h1,
@@ -582,13 +586,13 @@ export default {
 
 .markdown-body h1 {
     font-size: 2em;
-    border-bottom: 1px solid #eaecef;
+    border-bottom: 1px solid var(--v-theme-border);
     padding-bottom: 0.3em;
 }
 
 .markdown-body h2 {
     font-size: 1.5em;
-    border-bottom: 1px solid #eaecef;
+    border-bottom: 1px solid var(--v-theme-border);
     padding-bottom: 0.3em;
 }
 
@@ -600,7 +604,7 @@ export default {
 .markdown-body code {
     padding: 0.2em 0.4em;
     margin: 0;
-    background-color: rgba(27, 31, 35, 0.05);
+    background-color: var(--v-theme-codeBg);
     border-radius: 3px;
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 85%;
@@ -611,7 +615,7 @@ export default {
     overflow: auto;
     font-size: 85%;
     line-height: 1.45;
-    background-color: #f6f8fa;
+    background-color: var(--v-theme-containerBg);
     border-radius: 3px;
     margin-bottom: 16px;
 }
@@ -631,19 +635,19 @@ export default {
     max-width: 100%;
     margin: 8px 0;
     box-sizing: border-box;
-    background-color: #fff;
+    background-color: var(--v-theme-background);
     border-radius: 3px;
 }
 
 .markdown-body blockquote {
     padding: 0 1em;
-    color: #6a737d;
-    border-left: 0.25em solid #dfe2e5;
+    color: var(--v-theme-secondaryText);
+    border-left: 0.25em solid var(--v-theme-border);
     margin-bottom: 16px;
 }
 
 .markdown-body a {
-    color: #0366d6;
+    color: var(--v-theme-primary);
     text-decoration: none;
 }
 
@@ -662,23 +666,23 @@ export default {
 .markdown-body table th,
 .markdown-body table td {
     padding: 6px 13px;
-    border: 1px solid #dfe2e5;
+    border: 1px solid var(--v-theme-background);
 }
 
 .markdown-body table tr {
-    background-color: #fff;
-    border-top: 1px solid #c6cbd1;
+    background-color: var(--v-theme-surface);
+    border-top: 1px solid var(--v-theme-border);
 }
 
 .markdown-body table tr:nth-child(2n) {
-    background-color: #f6f8fa;
+    background-color: var(--v-theme-background);
 }
 
 .markdown-body hr {
     height: 0.25em;
     padding: 0;
     margin: 24px 0;
-    background-color: #e1e4e8;
+    background-color: var(--v-theme-containerBg);
     border: 0;
 }
 </style>

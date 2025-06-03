@@ -103,6 +103,9 @@ class AiocqhttpAdapter(Platform):
 
         if event["post_type"] == "message":
             abm = await self._convert_handle_message_event(event)
+            if abm.sender.user_id == "2854196310":
+                # 屏蔽 QQ 管家的消息
+                return
         elif event["post_type"] == "notice":
             abm = await self._convert_handle_notice_event(event)
         elif event["post_type"] == "request":
@@ -217,9 +220,9 @@ class AiocqhttpAdapter(Platform):
         for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):
             a = None
             if t == "text":
-                # 合并相邻文本段
-                message_str = "".join(m["data"]["text"] for m in m_group).strip()
-                a = ComponentTypes[t](text=message_str)  # noqa: F405
+                current_text = "".join(m["data"]["text"] for m in m_group).strip()
+                message_str += current_text
+                a = ComponentTypes[t](text=current_text)  # noqa: F405
                 abm.message.append(a)
 
             elif t == "file":
@@ -287,6 +290,42 @@ class AiocqhttpAdapter(Platform):
                             logger.error(f"获取引用消息失败: {e}。")
                             a = ComponentTypes[t](**m["data"])  # noqa: F405
                             abm.message.append(a)
+            elif t == "at":
+                first_at_self_processed = False
+
+                for m in m_group:
+                    try:
+                        if m["data"]["qq"] == "all":
+                            abm.message.append(At(qq="all", name="全体成员"))
+                            continue
+
+                        at_info = await self.bot.call_action(
+                            action="get_stranger_info",
+                            user_id=int(m["data"]["qq"]),
+                        )
+                        if at_info:
+                            nickname = at_info.get("nick", "")
+                            is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
+
+                            abm.message.append(
+                                At(
+                                    qq=m["data"]["qq"],
+                                    name=nickname,
+                                )
+                            )
+
+                            if is_at_self and not first_at_self_processed:
+                                # 第一个@是机器人，不添加到message_str
+                                first_at_self_processed = True
+                            else:
+                                # 非第一个@机器人或@其他用户，添加到message_str
+                                message_str += f" @{nickname} "
+                        else:
+                            abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
+                    except ActionFailed as e:
+                        logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
+                    except BaseException as e:
+                        logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
             else:
                 for m in m_group:
                     a = ComponentTypes[t](**m["data"])  # noqa: F405

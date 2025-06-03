@@ -26,33 +26,12 @@ class RespondStage(Stage):
         Comp.Record: lambda comp: bool(comp.file),  # 语音
         Comp.Video: lambda comp: bool(comp.file),  # 视频
         Comp.At: lambda comp: bool(comp.qq) or bool(comp.name),  # @
-        Comp.AtAll: lambda comp: True,  # @所有人
-        Comp.RPS: lambda comp: True,  # 不知道是啥(未完成)
-        Comp.Dice: lambda comp: True,  # 骰子(未完成)
-        Comp.Shake: lambda comp: True,  # 摇一摇(未完成)
-        Comp.Anonymous: lambda comp: True,  # 匿名(未完成)
-        Comp.Share: lambda comp: bool(comp.url) and bool(comp.title),  # 分享
-        Comp.Contact: lambda comp: True,  # 联系人(未完成)
-        Comp.Location: lambda comp: bool(comp.lat and comp.lon),  # 位置
-        Comp.Music: lambda comp: bool(comp._type)
-        and bool(comp.url)
-        and bool(comp.audio),  # 音乐
         Comp.Image: lambda comp: bool(comp.file),  # 图片
         Comp.Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
-        Comp.RedBag: lambda comp: bool(comp.title),  # 红包
         Comp.Poke: lambda comp: comp.id != 0 and comp.qq != 0,  # 戳一戳
-        Comp.Forward: lambda comp: bool(comp.id and comp.id.strip()),  # 转发
-        Comp.Node: lambda comp: bool(comp.name)
-        and comp.uin != 0
-        and bool(comp.content),  # 一个转发节点
+        Comp.Node: lambda comp: bool(comp.content),  # 转发节点
         Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
-        Comp.Xml: lambda comp: bool(comp.data and comp.data.strip()),  # XML
-        Comp.Json: lambda comp: bool(comp.data),  # JSON
-        Comp.CardImage: lambda comp: bool(comp.file),  # 卡片图片
-        Comp.TTS: lambda comp: bool(comp.text and comp.text.strip()),  # 语音合成
-        Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),  # 未知消息
-        Comp.File: lambda comp: bool(comp.file),  # 文件
-        Comp.WechatEmoji: lambda comp: bool(comp.md5),  # 微信表情
+        Comp.File: lambda comp: bool(comp.file_ or comp.url),
     }
 
     async def initialize(self, ctx: PipelineContext):
@@ -129,8 +108,6 @@ class RespondStage(Stage):
             if comp_type in self._component_validators:
                 if self._component_validators[comp_type](comp):
                     return False
-            else:
-                logger.info(f"空内容检查: 无法识别的组件类型: {comp_type.__name__}")
 
         # 如果所有组件都为空
         return True
@@ -175,6 +152,11 @@ class RespondStage(Stage):
             except Exception as e:
                 logger.warning(f"空内容检查异常: {e}")
 
+            record_comps = [c for c in result.chain if isinstance(c, Comp.Record)]
+            non_record_comps = [
+                c for c in result.chain if not isinstance(c, Comp.Record)
+            ]
+
             if self.enable_seg and (
                 (self.only_llm_result and result.is_llm_result())
                 or not self.only_llm_result
@@ -192,8 +174,18 @@ class RespondStage(Stage):
                             decorated_comps.append(comp)
                             result.chain.remove(comp)
                             break
+
+                for rcomp in record_comps:
+                    i = await self._calc_comp_interval(rcomp)
+                    await asyncio.sleep(i)
+                    try:
+                        await event.send(MessageChain([rcomp]))
+                    except Exception as e:
+                        logger.error(f"发送消息失败: {e} chain: {result.chain}")
+                        break
+
                 # 分段回复
-                for comp in result.chain:
+                for comp in non_record_comps:
                     i = await self._calc_comp_interval(comp)
                     await asyncio.sleep(i)
                     try:
@@ -202,11 +194,18 @@ class RespondStage(Stage):
                         logger.error(f"发送消息失败: {e} chain: {result.chain}")
                         break
             else:
+                for rcomp in record_comps:
+                    try:
+                        await event.send(MessageChain([rcomp]))
+                    except Exception as e:
+                        logger.error(f"发送消息失败: {e} chain: {result.chain}")
+
                 try:
-                    await event.send(result)
+                    await event.send(MessageChain(non_record_comps))
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"发送消息失败: {e} chain: {result.chain}")
+
             await event._post_send()
             logger.info(
                 f"AstrBot -> {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}"

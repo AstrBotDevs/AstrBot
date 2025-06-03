@@ -2,28 +2,46 @@
 插件的重载、启停、安装、卸载等操作。
 """
 
-import inspect
+import asyncio
 import functools
+import inspect
+import json
+import logging
 import os
 import sys
-import json
 import traceback
-import yaml
-import logging
-import asyncio
 from types import ModuleType
 from typing import List
-from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core import logger, sp, pip_installer
-from .context import Context
-from . import StarMetadata
-from .updator import PluginUpdator
-from astrbot.core.utils.io import remove_dir
-from .star import star_registry, star_map
-from .star_handler import star_handlers_registry
-from astrbot.core.provider.register import llm_tools
 
-from .filter.permission import PermissionTypeFilter, PermissionType
+import yaml
+
+from astrbot.core import logger, pip_installer, sp
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.provider.register import llm_tools
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_config_path,
+    get_astrbot_plugin_path,
+)
+from astrbot.core.utils.io import remove_dir
+
+from . import StarMetadata
+from .context import Context
+from .filter.permission import PermissionType, PermissionTypeFilter
+from .star import star_map, star_registry
+from .star_handler import star_handlers_registry
+from .updator import PluginUpdator
+
+try:
+    from watchfiles import PythonFilter, awatch
+except ImportError:
+    if os.getenv("ASTRBOT_RELOAD", "0") == "1":
+        logger.warning("未安装 watchfiles，无法实现插件的热重载。")
+
+try:
+    import nh3
+except ImportError:
+    logger.warning("未安装 nh3 库，无法清理插件 README.md 中的 HTML 标签。")
+    nh3 = None
 
 
 class PluginManager:
@@ -34,17 +52,9 @@ class PluginManager:
         self.context._star_manager = self
 
         self.config = config
-        self.plugin_store_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "../../../data/plugins"
-            )
-        )
+        self.plugin_store_path = get_astrbot_plugin_path()
         """存储插件的路径。即 data/plugins"""
-        self.plugin_config_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "../../../data/config"
-            )
-        )
+        self.plugin_config_path = get_astrbot_config_path()
         """存储插件配置的路径。data/config"""
         self.reserved_plugin_path = os.path.abspath(
             os.path.join(
@@ -56,6 +66,58 @@ class PluginManager:
         """插件配置 Schema 文件名"""
 
         self.failed_plugin_info = ""
+        if os.getenv("ASTRBOT_RELOAD", "0") == "1":
+            asyncio.create_task(self._watch_plugins_changes())
+
+    async def _watch_plugins_changes(self):
+        """监视插件文件变化"""
+        try:
+            async for changes in awatch(
+                self.plugin_store_path,
+                self.reserved_plugin_path,
+                watch_filter=PythonFilter(),
+                recursive=True,
+            ):
+                # 处理文件变化
+                await self._handle_file_changes(changes)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"插件热重载监视任务异常: {str(e)}")
+            logger.error(traceback.format_exc())
+
+    async def _handle_file_changes(self, changes):
+        """处理文件变化"""
+        logger.info(f"检测到文件变化: {changes}")
+        plugins_to_check = []
+
+        for star in star_registry:
+            if not star.activated:
+                continue
+            if star.root_dir_name is None:
+                continue
+            if star.reserved:
+                plugin_dir_path = os.path.join(
+                    self.reserved_plugin_path, star.root_dir_name
+                )
+            else:
+                plugin_dir_path = os.path.join(
+                    self.plugin_store_path, star.root_dir_name
+                )
+            plugins_to_check.append((plugin_dir_path, star.name))
+        reloaded_plugins = set()
+        for change in changes:
+            _, file_path = change
+            for plugin_dir_path, plugin_name in plugins_to_check:
+                if (
+                    os.path.commonpath([plugin_dir_path])
+                    == os.path.commonpath([plugin_dir_path, file_path])
+                    and plugin_name not in reloaded_plugins
+                ):
+                    logger.info(f"检测到插件 {plugin_name} 文件变化，正在重载...")
+                    await self.reload(plugin_name)
+                    reloaded_plugins.add(plugin_name)
+                    break
 
     def _get_classes(self, arg: ModuleType):
         """获取指定模块（可以理解为一个 python 文件）下所有的类"""
@@ -104,7 +166,7 @@ class PluginManager:
             plugins.extend(_p)
         return plugins
 
-    def _check_plugin_dept_update(self, target_plugin: str = None):
+    async def _check_plugin_dept_update(self, target_plugin: str = None):
         """检查插件的依赖
         如果 target_plugin 为 None，则检查所有插件的依赖
         """
@@ -123,7 +185,7 @@ class PluginManager:
                 pth = os.path.join(plugin_path, "requirements.txt")
                 logger.info(f"正在安装插件 {p} 所需的依赖库: {pth}")
                 try:
-                    pip_installer.install(requirements_path=pth)
+                    await pip_installer.install(requirements_path=pth)
                 except Exception as e:
                     logger.error(f"更新插件 {p} 的依赖失败。Code: {str(e)}")
 
@@ -345,7 +407,7 @@ class PluginManager:
                     module = __import__(path, fromlist=[module_str])
                 except (ModuleNotFoundError, ImportError):
                     # 尝试安装依赖
-                    self._check_plugin_dept_update(target_plugin=root_dir_name)
+                    await self._check_plugin_dept_update(target_plugin=root_dir_name)
                     module = __import__(path, fromlist=[module_str])
                 except Exception as e:
                     logger.error(traceback.format_exc())
@@ -580,16 +642,17 @@ class PluginManager:
         if not os.path.exists(readme_path):
             readme_path = os.path.join(plugin_path, "readme.md")
 
-        if os.path.exists(readme_path):
+        if os.path.exists(readme_path) and nh3:
             try:
                 with open(readme_path, "r", encoding="utf-8") as f:
                     readme_content = f.read()
+                cleaned_content = nh3.clean(readme_content)
             except Exception as e:
                 logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")
 
         plugin_info = None
         if plugin:
-            plugin_info = {"repo": plugin.repo, "readme": readme_content}
+            plugin_info = {"repo": plugin.repo, "readme": cleaned_content}
 
         return plugin_info
 

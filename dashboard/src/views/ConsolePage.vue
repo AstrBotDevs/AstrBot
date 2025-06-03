@@ -7,7 +7,7 @@ import axios from 'axios';
 <template>
   <div style="height: 100%;">
     <div
-      style="background-color: white; padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; justify-content: space-between;">
+      style="background-color: var(--v-theme-surface); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; justify-content: space-between;">
       <h4>控制台</h4>
       <div class="d-flex align-center">
         <v-switch

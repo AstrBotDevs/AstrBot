@@ -1,31 +1,31 @@
+import asyncio
+import os
 import sys
 import uuid
-import asyncio
-import quart
-import aiohttp
 
+import quart
+from requests import Response
+from wechatpy.enterprise import WeChatClient, parse_message
+from wechatpy.enterprise.crypto import WeChatCrypto
+from wechatpy.enterprise.messages import ImageMessage, TextMessage, VoiceMessage
+from wechatpy.exceptions import InvalidSignatureException
+from wechatpy.messages import BaseMessage
+
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import Image, Plain, Record
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
-    PlatformMetadata,
     MessageType,
+    Platform,
+    PlatformMetadata,
+    register_platform_adapter,
 )
-from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image, Record
-from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.api.platform import register_platform_adapter
 from astrbot.core import logger
-from requests import Response
+from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-from wechatpy.enterprise.crypto import WeChatCrypto
-from wechatpy.enterprise import WeChatClient
-from wechatpy.enterprise.messages import TextMessage, ImageMessage, VoiceMessage
-from wechatpy.messages import BaseMessage
-from wechatpy.exceptions import InvalidSignatureException
-from wechatpy.enterprise import parse_message
 from .wecom_event import WecomPlatformEvent
-
 from .wecom_kf import WeChatKF
 from .wecom_kf_message import WeChatKFMessage
 
@@ -146,7 +146,7 @@ class WecomPlatformAdapter(Platform):
             self.client.kf = self.wechat_kf_api
             self.client.kf_message = self.wechat_kf_message_api
 
-            self.client.API_BASE_URL = self.api_base_url
+        self.client.API_BASE_URL = self.api_base_url
 
         async def callback(msg: BaseMessage):
             if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
@@ -257,14 +257,15 @@ class WecomPlatformAdapter(Platform):
             resp: Response = await asyncio.get_event_loop().run_in_executor(
                 None, self.client.media.download, msg.media_id
             )
-            path = f"data/temp/wecom_{msg.media_id}.amr"
+            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
             with open(path, "wb") as f:
                 f.write(resp.content)
 
             try:
                 from pydub import AudioSegment
 
-                path_wav = f"data/temp/wecom_{msg.media_id}.wav"
+                path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
                 audio = AudioSegment.from_file(path)
                 audio.export(path_wav, format="wav")
             except Exception as e:
@@ -296,11 +297,12 @@ class WecomPlatformAdapter(Platform):
         external_userid = msg.get("external_userid", None)
         abm = AstrBotMessage()
         abm.raw_message = msg
-        abm.raw_message["_wechat_kf_flag"] = None # 方便处理
+        abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
         abm.self_id = msg["open_kfid"]
         abm.sender = MessageMember(external_userid, external_userid)
         abm.session_id = external_userid
         abm.type = MessageType.FRIEND_MESSAGE
+        abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])
         if msgtype == "text":
             text = msg.get("text", {}).get("content", "").strip()
             abm.message = [Plain(text=text)]

@@ -378,6 +378,13 @@ const toggleAllPluginsForPlatform = (platformName) => {
 onMounted(async () => {
   await getExtensions();
 
+  // 检查是否有 open_config 参数
+  const urlParams = new URLSearchParams(window.location.search);
+  const plugin_name = urlParams.get('open_config');
+  if (plugin_name) {
+    openExtensionConfig(plugin_name);
+  }
+
   try {
     const data = await commonStore.getPluginCollections();
     pluginMarketData.value = data;

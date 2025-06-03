@@ -9,9 +9,6 @@ const customizer = useCustomizerStore();
 const sidebarMenu = shallowRef(sidebarItems);
 
 const showIframe = ref(false);
-const version = ref("");
-const buildVer = ref("");
-const hasWebUIUpdate = ref(false);
 
 // 默认桌面端 iframe 样式
 const iframeStyle = ref({
@@ -68,9 +65,10 @@ function toggleIframe() {
   showIframe.value = !showIframe.value;
 }
 
-function openIframeLink() {
+function openIframeLink(url) {
   if (typeof window !== 'undefined') {
-    window.open("https://astrbot.app", "_blank");
+    let url_ = url || "https://astrbot.app";
+    window.open(url_, "_blank");
   }
 }
 
@@ -149,25 +147,6 @@ function endDrag() {
   document.removeEventListener('touchend', onTouchEnd);
 }
 
-// 获取版本和更新信息
-onMounted(() => {
-  axios.get('/api/stat/version')
-    .then((res) => {
-      version.value = "v" + res.data.data.version;
-    })
-    .catch((err) => {
-      console.log(err);
-    });
-
-  axios.get('/api/update/check?type=dashboard')
-    .then((res) => {
-      hasWebUIUpdate.value = res.data.data.has_new_version;
-      buildVer.value = res.data.data.current_version;
-    })
-    .catch((err) => {
-      console.log(err);
-    });
-});
 </script>
 
 <template>
@@ -186,27 +165,23 @@ onMounted(() => {
         <NavItem :item="item" class="leftPadding" />
       </template>
     </v-list>
-    <div class="text-center">
-      <v-chip color="inputBorder" size="small"> {{ version }} </v-chip>
-    </div>
-    <div style="position: absolute; bottom: 32px; width: 100%; font-size: 13px;" class="text-center">
-      <v-list-item v-if="!customizer.mini_sidebar" @click="toggleIframe">
-        <v-btn variant="plain" size="small">
-          🤔 点击此处 查看/关闭 悬浮文档！
-        </v-btn>
-      </v-list-item>
-      <small style="display: block;" v-if="buildVer">WebUI 版本: {{ buildVer }}</small>
-      <small style="display: block;" v-else>构建: embedded</small>
-      <v-tooltip text="使用 /dashboard_update 指令更新管理面板">
-        <template v-slot:activator="{ props }">
-          <small v-bind="props" v-if="hasWebUIUpdate" style="display: block; margin-top: 4px;">面板有更新</small>
-        </template>
-      </v-tooltip>
-      <small style="display: block; margin-top: 8px;">AGPL-3.0</small>
+    <div style="position: absolute; bottom: 16px; width: 100%; font-size: 13px;" class="text-center">
+      <v-btn style="margin-bottom: 8px;" size="small" variant="primary" v-if="!customizer.mini_sidebar" to="/settings">
+        🔧 设置
+      </v-btn>
+      <br/>
+      <v-btn style="margin-bottom: 8px;" size="small" variant="plain" v-if="!customizer.mini_sidebar" @click="toggleIframe">
+        官方文档
+      </v-btn>
+      <br/>
+      <v-btn style="margin-bottom: 8px;" size="small" variant="plain" v-if="!customizer.mini_sidebar" @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
+        GitHub
+      </v-btn>
+      <br/>
+      
     </div>
   </v-navigation-drawer>
   
-  <!-- 优化后的悬浮 iframe -->
   <div
     v-if="showIframe"
     id="draggable-iframe"

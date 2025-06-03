@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, inject } from 'vue';
+import {useCustomizerStore} from "@/stores/customizer";
 
 const props = defineProps({
   extension: {
@@ -75,7 +76,9 @@ const viewReadme = () => {
 
 <template>
   <v-card class="mx-auto d-flex flex-column" :elevation="highlight ? 0 : 1"
-    :style="{ height: $vuetify.display.xs ? '250px' : '220px', backgroundColor: highlight ? '#FAF0DB' : '#ffffff', color: highlight ? '#000' : '#000000' }">
+    :style="{ height: $vuetify.display.xs ? '250px' : '220px',
+     backgroundColor: useCustomizerStore().uiTheme==='PurpleTheme' ? marketMode ? '#f8f0dd' : '#ffffff' : '#282833',
+     color: useCustomizerStore().uiTheme==='PurpleTheme' ? '#000000dd' : '#ffffff'}">
     <v-card-text style="padding: 16px; padding-bottom: 0px; display: flex; justify-content: space-between;">
 
       <div class="flex-grow-1">
@@ -128,7 +131,7 @@ const viewReadme = () => {
       </div>
     </v-card-text>
 
-    <v-card-actions style="padding: 0px; margin-top: auto;">
+    <v-card-actions style="margin-left: 0px; gap: 2px;">
       <v-btn color="teal-accent-4" text="查看文档" variant="text" @click="viewReadme"></v-btn>
       <v-btn v-if="!marketMode" color="teal-accent-4" text="操作" variant="text" @click="reveal = true"></v-btn>
       <v-btn v-if="marketMode && !extension?.installed" color="teal-accent-4" text="安装" variant="text"
