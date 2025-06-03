@@ -4,11 +4,15 @@
             <!-- knowledge card -->
             <div v-if="!installed" class="d-flex align-center justify-center flex-column"
                 style="flex-grow: 1; width: 100%; height: 100%;">
-                <h2>还没有安装知识库插件</h2>
-                <v-btn style="margin-top: 16px;" variant="tonal" color="primary"
-                    @click="installPlugin" :loading="installing">
+                <h2>还没有安装知识库插件
+                    <v-icon v-class="ml - 2" size="small" color="grey"
+                        @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
+                </h2>
+                <v-btn style="margin-top: 16px;" variant="tonal" color="primary" @click="installPlugin"
+                    :loading="installing">
                     立即安装
                 </v-btn>
+                <ConsoleDisplayer v-show="installing" style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%" :show-level-btns="false"></ConsoleDisplayer>
             </div>
             <div v-else-if="kbCollections.length == 0" class="d-flex align-center justify-center flex-column"
                 style="flex-grow: 1; width: 100%; height: 100%;">
@@ -18,10 +22,17 @@
                 </v-btn>
             </div>
             <div v-else>
-                <h2 class="mb-4">知识库列表</h2>
+                <h2 class="mb-4">知识库列表
+                    <v-icon v-class="ml - 2" size="x-small" color="grey"
+                        @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
+                </h2>
                 <v-btn class="mb-4" prepend-icon="mdi-plus" variant="tonal" color="primary"
                     @click="showCreateDialog = true">
-                    创建新知识库
+                    创建知识库
+                </v-btn>
+                <v-btn class="mb-4 ml-4" prepend-icon="mdi-cog" variant="tonal" color="success"
+                    @click="$router.push('/extension?open_config=astrbot_plugin_knowledge_base')">
+                    配置
                 </v-btn>
 
                 <div class="kb-grid">
@@ -45,9 +56,9 @@
                 <div style="padding: 16px; text-align: center;">
                     <small style="color: #a3a3a3">Tips: 在聊天页面通过 /kb 指令了解如何使用！</small>
                 </div>
-                
+
             </div>
-            
+
         </div>
 
         <!-- 创建知识库对话框 -->
@@ -68,6 +79,12 @@
 
                         <v-textarea v-model="newKB.description" label="描述" variant="outlined" placeholder="知识库的简短描述..."
                             rows="3"></v-textarea>
+
+                        <v-select v-model="newKB.embedding_provider_id" :items="embeddingProviderConfigs"
+                            :item-props="embeddingModelProps" label="Embedding(嵌入)模型" variant="outlined" class="mt-2">
+                        </v-select>
+
+                        <small>Tips: 一旦选择了一个知识库的嵌入模型，请不要再修改该提供商的模型或者向量维度信息，否则将严重影响该知识库的召回率甚至报错。</small>
                     </v-form>
                 </v-card-text>
                 <v-card-actions>
@@ -114,6 +131,18 @@
                     </v-btn>
                 </v-card-title>
 
+                <div v-if="currentKB._embedding_provider_config" class="px-6 py-2">
+                    <v-chip class="mr-2" color="primary" variant="tonal" size="small" rounded="sm">
+                        <v-icon start size="small">mdi-database</v-icon>
+                        嵌入模型: {{ currentKB._embedding_provider_config.embedding_model }}
+                    </v-chip>
+                    <v-chip color="secondary" variant="tonal" size="small" rounded="sm">
+                        <v-icon start size="small">mdi-vector-point</v-icon>
+                        向量维度: {{ currentKB._embedding_provider_config.embedding_dimensions }}
+                    </v-chip>
+                    <small style="margin-left: 8px;">💡 使用方式: 在聊天页中输入 “/kb use {{ currentKB.collection_name }}”</small>
+                </div>
+
                 <v-card-text>
                     <v-tabs v-model="activeTab">
                         <v-tab value="upload">上传文件</v-tab>
@@ -135,6 +164,38 @@
                                     <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
                                     <p class="mt-2">拖放文件到这里或点击上传</p>
                                 </div>
+
+                                <!-- 优化后的分片长度和重叠长度设置 -->
+                                <v-card class="mt-4 chunk-settings-card" variant="outlined" color="grey-lighten-4">
+                                    <v-card-title class="pa-4 pb-0 d-flex align-center">
+                                        <v-icon color="primary" class="mr-2">mdi-puzzle-outline</v-icon>
+                                        <span class="text-subtitle-1 font-weight-bold">分片设置</span>
+                                        <v-tooltip location="top">
+                                            <template v-slot:activator="{ props }">
+                                                <v-icon v-bind="props" class="ml-2" size="small" color="grey">
+                                                    mdi-information-outline
+                                                </v-icon>
+                                            </template>
+                                            <span>
+                                                分片长度决定每块文本的大小，重叠长度决定相邻文本块之间的重叠程度。<br>
+                                                较小的分片更精确但会增加数量，适当的重叠可提高检索准确性。
+                                            </span>
+                                        </v-tooltip>
+                                    </v-card-title>
+                                    <v-card-text class="pa-4 pt-2">
+                                        <div class="d-flex flex-wrap" style="gap: 8px">
+                                            <v-text-field v-model="chunkSize" label="分片长度" type="number"
+                                                hint="控制每个文本块大小，留空使用默认值" persistent-hint variant="outlined"
+                                                density="comfortable" class="flex-grow-1 chunk-field"
+                                                prepend-inner-icon="mdi-text-box-outline" min="50"></v-text-field>
+
+                                            <v-text-field v-model="overlap" label="重叠长度" type="number"
+                                                hint="控制相邻文本块重叠度，留空使用默认值" persistent-hint variant="outlined"
+                                                density="comfortable" class="flex-grow-1 chunk-field"
+                                                prepend-inner-icon="mdi-vector-intersection" min="0"></v-text-field>
+                                        </div>
+                                    </v-card-text>
+                                </v-card>
 
                                 <div class="selected-files mt-4" v-if="selectedFile">
                                     <div type="info" variant="tonal" class="d-flex align-center">
@@ -239,9 +300,13 @@
 
 <script>
 import axios from 'axios';
+import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 
 export default {
     name: 'KnowledgeBase',
+    components: {
+        ConsoleDisplayer,
+    },
     data() {
         return {
             installed: true,
@@ -252,7 +317,8 @@ export default {
             newKB: {
                 name: '',
                 emoji: '🙂',
-                description: ''
+                description: '',
+                embedding_provider_id: ''
             },
             snackbar: {
                 show: false,
@@ -292,6 +358,8 @@ export default {
             },
             activeTab: 'upload',
             selectedFile: null,
+            chunkSize: null,
+            overlap: null,
             uploading: false,
             searchQuery: '',
             searchResults: [],
@@ -302,13 +370,21 @@ export default {
             deleteTarget: {
                 collection_name: ''
             },
-            deleting: false
+            deleting: false,
+            embeddingProviderConfigs: []
         }
     },
     mounted() {
         this.checkPlugin();
+        this.getEmbeddingProviderList();
     },
     methods: {
+        embeddingModelProps(providerConfig) {
+            return {
+                title: providerConfig.embedding_model,
+                subtitle: `提供商 ID: ${providerConfig.id} | 嵌入模型维度: ${providerConfig.embedding_dimensions}`,
+            }
+        },
         checkPlugin() {
             axios.get('/api/plugin/get?name=astrbot_plugin_knowledge_base')
                 .then(response => {
@@ -331,7 +407,7 @@ export default {
         installPlugin() {
             this.installing = true;
             axios.post('/api/plugin/install', {
-                url: "https://github.com/soulter/astrbot_plugin_knowledge_base",
+                url: "https://github.com/lxfight/astrbot_plugin_knowledge_base",
                 proxy: localStorage.getItem('selectedGitHubProxy') || ""
             })
                 .then(response => {
@@ -361,10 +437,15 @@ export default {
         },
 
         createCollection(name, emoji, description) {
+            // 如果 this.newKB.embedding_provider_id 是 Object
+            if (typeof this.newKB.embedding_provider_id === 'object') {
+                this.newKB.embedding_provider_id = this.newKB.embedding_provider_id.id || '';
+            }
             axios.post('/api/plug/alkaid/kb/create_collection', {
                 collection_name: name,
                 emoji: emoji,
-                description: description
+                description: description,
+                embedding_provider_id: this.newKB.embedding_provider_id || ''
             })
                 .then(response => {
                     if (response.data.status === 'ok') {
@@ -390,7 +471,8 @@ export default {
             this.createCollection(
                 this.newKB.name,
                 this.newKB.emoji || '🙂',
-                this.newKB.description
+                this.newKB.description,
+                this.newKB.embedding_provider_id || ''
             );
         },
 
@@ -398,7 +480,8 @@ export default {
             this.newKB = {
                 name: '',
                 emoji: '🙂',
-                description: ''
+                description: '',
+                embedding_provider: ''
             };
         },
 
@@ -415,6 +498,9 @@ export default {
             this.searchQuery = '';
             this.searchResults = [];
             this.searchPerformed = false;
+            // 重置分片长度和重叠长度参数
+            this.chunkSize = null;
+            this.overlap = null;
         },
 
         triggerFileInput() {
@@ -469,6 +555,15 @@ export default {
             formData.append('file', this.selectedFile);
             formData.append('collection_name', this.currentKB.collection_name);
 
+            // 添加可选的分片长度和重叠长度参数
+            if (this.chunkSize && this.chunkSize > 0) {
+                formData.append('chunk_size', this.chunkSize);
+            }
+
+            if (this.overlap && this.overlap >= 0) {
+                formData.append('chunk_overlap', this.overlap);
+            }
+
             axios.post('/api/plug/alkaid/kb/collection/add_file', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data'
@@ -476,7 +571,7 @@ export default {
             })
                 .then(response => {
                     if (response.data.status === 'ok') {
-                        this.showSnackbar('文件上传成功');
+                        this.showSnackbar('操作成功: ' + response.data.message);
                         this.selectedFile = null;
 
                         // 刷新知识库列表，获取更新的数量
@@ -578,6 +673,31 @@ export default {
                     this.deleting = false;
                 });
         },
+
+        getEmbeddingProviderList() {
+            axios.get('/api/config/provider/list', {
+                params: {
+                    provider_type: 'embedding'
+                }
+            })
+                .then(response => {
+                    if (response.data.status === 'ok') {
+                        this.embeddingProviderConfigs = response.data.data || [];
+                    } else {
+                        this.showSnackbar(response.data.message || '获取嵌入模型列表失败', 'error');
+                        return [];
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching embedding providers:', error);
+                    this.showSnackbar('获取嵌入模型列表失败', 'error');
+                    return [];
+                });
+        },
+
+        openUrl(url) {
+            window.open(url, '_blank');
+        }
     }
 }
 </script>
@@ -745,6 +865,30 @@ export default {
 }
 
 .kb-card:hover .kb-actions {
+    opacity: 1;
+}
+
+.chunk-settings-card {
+    border: 1px solid rgba(92, 107, 192, 0.2) !important;
+    transition: all 0.3s ease;
+}
+
+.chunk-settings-card:hover {
+    border-color: rgba(92, 107, 192, 0.4) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07) !important;
+}
+
+.chunk-field :deep(.v-field__input) {
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+.chunk-field :deep(.v-field__prepend-inner) {
+    padding-right: 8px;
+    opacity: 0.7;
+}
+
+.chunk-field:focus-within :deep(.v-field__prepend-inner) {
     opacity: 1;
 }
 </style>

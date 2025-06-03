@@ -57,7 +57,8 @@ import 'highlight.js/styles/github.css';
                                 <ExtensionCard :extension="plugin" class="h-120 rounded-lg"
                                                market-mode="true" :highlight="true"
                                                @install="extension_url=plugin.repo;
-                                               newExtension()">
+                                               newExtension()"
+                                               @view-readme="open(plugin.repo)">
                                 </ExtensionCard>
                             </v-col>
                         </v-row>

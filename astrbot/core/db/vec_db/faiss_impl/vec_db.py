@@ -30,19 +30,13 @@ class FaissVecDB(BaseVecDB):
     async def initialize(self):
         await self.document_storage.initialize()
 
-    async def insert(
-        self,
-        content: str,
-        metadata: dict = None,
-        id: str = None,
-    ) -> int:
+    async def insert(self, content: str, metadata: dict = None, id: str = None) -> int:
         """
         插入一条文本和其对应向量，自动生成 ID 并保持一致性。
         """
         metadata = metadata or {}
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
-        # 获取向量
         vector = await self.embedding_provider.get_embedding(content)
         vector = np.array(vector, dtype=np.float32)
         async with self.document_storage.connection.cursor() as cursor:
@@ -54,9 +48,9 @@ class FaissVecDB(BaseVecDB):
             result = await self.document_storage.get_document_by_doc_id(str_id)
             int_id = result["id"]
 
-        # 插入向量到 FAISS
-        await self.embedding_storage.insert(vector, int_id)
-        return int_id
+            # 插入向量到 FAISS
+            await self.embedding_storage.insert(vector, int_id)
+            return int_id
 
     async def retrieve(
         self, query: str, k: int = 5, fetch_k: int = 20, metadata_filters: dict = None

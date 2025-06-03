@@ -29,9 +29,9 @@ class EmbeddingStorage:
         Raises:
             ValueError: 如果向量的维度与存储的维度不匹配
         """
-        if vector.shape[0] != self.dimention:
+        if vector.shape[0] != self.dimension:
             raise ValueError(
-                f"向量维度不匹配, 期望: {self.dimention}, 实际: {vector.shape[0]}"
+                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}"
             )
         self.index.add_with_ids(vector.reshape(1, -1), np.array([id]))
         self.storage[id] = vector
