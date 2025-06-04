@@ -873,6 +873,17 @@ CONFIG_METADATA_2 = {
                         "embedding_dimensions": 1536,
                         "timeout": 20,
                     },
+                    "Gemini Embedding": {
+                        "id": "gemini_embedding",
+                        "type": "gemini_embedding",
+                        "provider_type": "embedding",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        "embedding_api_base": "",
+                        "embedding_model": "gemini-embedding-exp-03-07",
+                        "embedding_dimensions": 768,
+                        "timeout": 20,
+                    },
                     "Ollama Embedding": {
                         "id": "ollama_embedding",
                         "type": "ollama_embedding",

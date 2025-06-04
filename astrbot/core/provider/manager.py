@@ -217,6 +217,10 @@ class ProviderManager:
                     from .sources.openai_embedding_source import (
                         OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
                     )
+                case "gemini_embedding":
+                    from .sources.gemini_embedding_source import (
+                        GeminiEmbeddingProvider as GeminiEmbeddingProvider,
+                    )
                 case "ollama_embedding":
                     from .sources.ollama_embedding_source import (
                         OllamaEmbeddingProvider as OllamaEmbeddingProvider,
