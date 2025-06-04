@@ -6,9 +6,8 @@ from typing import Optional
 
 import aiohttp
 import websockets
-
 from astrbot import logger
-from astrbot.api.message_components import Plain, Image
+from astrbot.api.message_components import Plain, Image, At
 from astrbot.api.platform import Platform, PlatformMetadata
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astrbot_message import (
@@ -21,6 +20,13 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 
 from ...register import register_platform_adapter
 from .wechatpadpro_message_event import WeChatPadProMessageEvent
+
+try:
+    from .xml_data_parser import GeweDataParser
+except ImportError as e:
+    logger.warning(
+        f"警告: 可能未安装 defusedxml 依赖库，将导致无法解析微信的 表情包、引用 类型的消息: {str(e)}"
+    )
 
 
 @register_platform_adapter("wechatpadpro", "WeChatPadPro 消息平台适配器")
@@ -58,6 +64,18 @@ class WeChatPadProAdapter(Platform):
             get_astrbot_data_path(), "wechatpadpro_credentials.json"
         )  # 持久化文件路径
         self.ws_handle_task = None
+
+        # 添加图片消息缓存，用于引用消息处理
+        self.cached_images = {}
+        """缓存图片消息。key是NewMsgId (对应引用消息的svrid)，value是图片的base64数据"""
+        # 设置缓存大小限制，避免内存占用过大
+        self.max_image_cache = 50
+
+        # 添加文本消息缓存，用于引用消息处理
+        self.cached_texts = {}
+        """缓存文本消息。key是NewMsgId (对应引用消息的svrid)，value是消息文本内容"""
+        # 设置文本缓存大小限制
+        self.max_text_cache = 100
 
     async def run(self) -> None:
         """
@@ -102,7 +120,7 @@ class WeChatPadProAdapter(Platform):
                     logger.warning("登录失败或超时，WeChatPadPro 适配器将关闭。")
                     await self.terminate()
                     return
-            
+
             # 登录成功后，连接 WebSocket 接收消息
             self.ws_handle_task = asyncio.create_task(self.connect_websocket())
 
@@ -161,27 +179,21 @@ class WeChatPadProAdapter(Platform):
                             return True
                         # login_state == 3 为离线状态
                         elif login_state == 3:
-                            logger.info(
-                                "WeChatPadPro 设备不在线。"
-                            )
+                            logger.info("WeChatPadPro 设备不在线。")
                             return False
                         else:
-                            logger.error(
-                                f"未知的在线状态: {login_state:}"
-                            )
+                            logger.error(f"未知的在线状态: {login_state:}")
                             return False
                     # Code == 300 为微信退出状态。
                     elif response.status == 200 and response_data.get("Code") == 300:
-                        logger.info(
-                            "WeChatPadPro 设备已退出。"
-                        )
+                        logger.info("WeChatPadPro 设备已退出。")
                         return False
                     else:
                         logger.error(
                             f"检查在线状态失败: {response.status}, {response_data}"
                         )
                         return False
-                    
+
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
                 return False
@@ -364,7 +376,9 @@ class WeChatPadProAdapter(Platform):
                             logger.error(f"处理 WebSocket 消息时发生错误: {e}")
                             break
             except Exception as e:
-                logger.error(f"WebSocket 连接失败: {e}, 请检查WeChatPadPro服务状态，或尝试重启WeChatPadPro适配器。")
+                logger.error(
+                    f"WebSocket 连接失败: {e}, 请检查WeChatPadPro服务状态，或尝试重启WeChatPadPro适配器。"
+                )
                 await asyncio.sleep(5)
 
     async def handle_websocket_message(self, message: str):
@@ -439,7 +453,7 @@ class WeChatPadProAdapter(Platform):
         ):
             # 再根据消息类型处理消息内容
             await self._process_message_content(abm, raw_message, msg_type, content)
-            
+
             return abm
         return None
 
@@ -457,6 +471,7 @@ class WeChatPadProAdapter(Platform):
         """
         if from_user_name == "weixin":
             return False
+        at_me = False
         if "@chatroom" in from_user_name:
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = from_user_name
@@ -478,6 +493,14 @@ class WeChatPadProAdapter(Platform):
                 abm.session_id = f"{from_user_name}_{to_user_name}"
             else:
                 abm.session_id = from_user_name
+
+            msg_source = raw_message.get("msg_source", "")
+            if self.wxid in msg_source:
+                at_me = True
+            if "在群聊中@了你" in raw_message.get("push_content", ""):
+                at_me = True
+            if at_me:
+                abm.message.insert(0, At(qq=abm.self_id, name=""))
         else:
             abm.type = MessageType.FRIEND_MESSAGE
             abm.group_id = ""
@@ -575,6 +598,25 @@ class WeChatPadProAdapter(Platform):
                     abm.message.append(Plain(abm.message_str))
             else:  # 私聊消息
                 abm.message.append(Plain(abm.message_str))
+
+            # 缓存文本消息，以便引用消息可以查找
+            try:
+                # 获取msg_id作为缓存的key
+                new_msg_id = raw_message.get("new_msg_id")
+                if new_msg_id:
+                    # 限制缓存大小
+                    if (
+                        len(self.cached_texts) >= self.max_text_cache
+                        and self.cached_texts
+                    ):
+                        # 删除最早的一条缓存
+                        oldest_key = next(iter(self.cached_texts))
+                        self.cached_texts.pop(oldest_key)
+
+                    logger.debug(f"缓存文本消息，new_msg_id={new_msg_id}")
+                    self.cached_texts[str(new_msg_id)] = content
+            except Exception as e:
+                logger.error(f"缓存文本消息失败: {e}")
         elif msg_type == 3:
             # 图片消息
             from_user_name = raw_message.get("from_user_name", {}).get("str", "")
@@ -588,15 +630,57 @@ class WeChatPadProAdapter(Platform):
             )
             if image_bs64_data:
                 abm.message.append(Image.fromBase64(image_bs64_data))
+                # 缓存图片，以便引用消息可以查找
+                try:
+                    # 获取msg_id作为缓存的key
+                    new_msg_id = raw_message.get("new_msg_id")
+                    if new_msg_id:
+                        # 限制缓存大小
+                        if (
+                            len(self.cached_images) >= self.max_image_cache
+                            and self.cached_images
+                        ):
+                            # 删除最早的一条缓存
+                            oldest_key = next(iter(self.cached_images))
+                            self.cached_images.pop(oldest_key)
+
+                        logger.debug(f"缓存图片消息，new_msg_id={new_msg_id}")
+                        self.cached_images[str(new_msg_id)] = image_bs64_data
+                except Exception as e:
+                    logger.error(f"缓存图片消息失败: {e}")
         elif msg_type == 47:
             # 视频消息 (注意：表情消息也是 47，需要区分)
-            logger.warning("收到视频消息，待实现。")
+            data_parser = GeweDataParser(
+                content=content,
+                is_private_chat=(abm.type != MessageType.GROUP_MESSAGE),
+                raw_message=raw_message,
+            )
+            emoji_message = data_parser.parse_emoji()
+            if emoji_message is not None:
+                abm.message.append(emoji_message)
         elif msg_type == 50:
             # 语音/视频
             logger.warning("收到语音/视频消息，待实现。")
         elif msg_type == 49:
-            # 引用消息
-            logger.warning("收到引用消息，待实现。")
+            try:
+                parser = GeweDataParser(
+                    content=content,
+                    is_private_chat=(abm.type != MessageType.GROUP_MESSAGE),
+                    cached_texts=self.cached_texts,
+                    cached_images=self.cached_images,
+                    raw_message=raw_message,
+                    downloader=self._download_raw_image,
+                )
+                components = await parser.parse_mutil_49()
+                if components:
+                    abm.message.extend(components)
+                    abm.message_str = "\n".join(
+                        c.text for c in components if isinstance(c, Plain)
+                    )
+            except Exception as e:
+                logger.warning(f"msg_type 49 处理失败: {e}")
+                abm.message.append(Plain("[XML 消息处理失败]"))
+                abm.message_str = "[XML 消息处理失败]"
         else:
             logger.warning(f"收到未处理的消息类型: {msg_type}。")
 
