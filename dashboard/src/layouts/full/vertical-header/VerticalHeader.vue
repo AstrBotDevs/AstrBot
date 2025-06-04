@@ -11,6 +11,7 @@ const customizer = useCustomizerStore();
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
+const username = localStorage.getItem('user');
 let password = ref('');
 let newPassword = ref('');
 let newUsername = ref('');
@@ -54,7 +55,7 @@ function accountEdit() {
   axios.post('/api/auth/account/edit', {
     password: password.value,
     new_password: newPassword.value,
-    new_username: newUsername.value
+    new_username: newUsername.value ? newUsername.value : username
   })
       .then((res) => {
         if (res.data.status == 'error') {
@@ -408,13 +409,15 @@ if (localStorage.getItem('change_pwd_hint') != null && localStorage.getItem('cha
                   <div>为了安全，请务必修改默认密码。</div>
                 </v-alert>
 
-                <v-text-field label="原密码*" type="password" v-model="password" required
-                              variant="outlined"></v-text-field>
+                <v-text-field label="原密码(*)" type="password" v-model="password" required
+                              variant="outlined"/>
 
-                <v-text-field label="新用户名" v-model="newUsername" required variant="outlined"></v-text-field>
+                <v-text-field label="新密码(*)" type="password" v-model="newPassword" required
+                              variant="outlined"/>
 
-                <v-text-field label="新密码" type="password" v-model="newPassword" required
-                              variant="outlined"></v-text-field>
+                <v-text-field label="新用户名(可选)" v-model="newUsername" variant="outlined"/>
+
+
               </v-col>
             </v-row>
           </v-container>
