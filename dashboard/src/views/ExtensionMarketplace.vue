@@ -377,7 +377,6 @@ export default {
             });
         },
         trimExtensionName() {
-            console.log(this.pluginMarketData);
             this.pluginMarketData.forEach(plugin => {
                 if (plugin.name) {
                   let name = plugin.name.trim().toLowerCase();
