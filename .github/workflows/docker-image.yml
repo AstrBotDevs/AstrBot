@@ -55,8 +55,8 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:latest
             ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
-            ghcr.io/soulter/astrbot:latest
-            ghcr.io/soulter/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
+            ghcr.io/astrbotdevs/astrbot:latest
+            ghcr.io/astrbotdevs/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
 
       - name: Post build notifications
         run: echo "Docker image has been built and pushed successfully"
