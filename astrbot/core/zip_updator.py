@@ -119,21 +119,32 @@ class RepoZipUpdator:
         )
 
     async def download_from_repo_url(self, target_path: str, repo_url: str, proxy=""):
-        repo_namespace = repo_url.split("/")[-2:]
-        author = repo_namespace[0]
-        repo = repo_namespace[1]
+        cleaned_repo_url = repo_url.rstrip('/')
+        url_parts = cleaned_repo_url.split("/")
+
+        if len(url_parts) >= 5 and url_parts[2].endswith("github.com"):
+            author = url_parts[3]
+            repo = url_parts[4]
+            branch = None
+            # 检查是否存在 /tree/branch 结构
+            if len(url_parts) >= 7 and url_parts[5] == "tree":
+                branch = url_parts[6]
 
         logger.info(f"正在下载更新 {repo} ...")
-        release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
-        releases = await self.fetch_release_info(url=release_url)
-        if not releases:
-            # download from the default branch directly.
-            logger.info(f"正在从默认分支下载 {author}/{repo} ")
-            release_url = (
-                f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
-            )
+        if branch:
+            logger.info(f"正在从指定分支 {branch} 下载 {author}/{repo}")
+            release_url = f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
         else:
-            release_url = releases[0]["zipball_url"]
+            release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
+            releases = await self.fetch_release_info(url=release_url)
+            if not releases:
+                # download from the default branch directly.
+                logger.info(f"正在从默认分支下载 {author}/{repo} ")
+                release_url = (
+                    f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
+                )
+            else:
+                release_url = releases[0]["zipball_url"]
 
         if proxy:
             release_url = f"{proxy}/{release_url}"
@@ -175,11 +186,10 @@ class RepoZipUpdator:
             )
 
     def format_repo_name(self, repo_url: str) -> str:
-        if repo_url.endswith("/"):
-            repo_url = repo_url[:-1]
-
-        repo_namespace = repo_url.split("/")[-2:]
-        repo = repo_namespace[1]
+        cleaned_repo_url = repo_url.rstrip('/')
+        url_parts = cleaned_repo_url.split("/")
+        if len(url_parts) >= 5 and url_parts[2].endswith("github.com"):
+            repo = url_parts[4]
 
         repo = self.format_name(repo)
 
