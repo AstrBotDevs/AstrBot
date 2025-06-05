@@ -14,7 +14,7 @@ jobs:
       - name: Pull The Codes
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Must be 0 so we can fetch tag info
+          fetch-depth: 0  # Must be 0 so we can fetch tags
 
       - name: Get latest tag (only on manual trigger)
         id: get-latest-tag
@@ -26,6 +26,13 @@ jobs:
       - name: Checkout to latest tag (only on manual trigger)
         if: github.event_name == 'workflow_dispatch'
         run: git checkout ${{ steps.get-latest-tag.outputs.latest_tag }}
+
+      - name: Prepare lowercase metadata
+        id: meta
+        run: |
+          TAG="${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}"
+          echo "tag_lc=${TAG,,}" >> $GITHUB_OUTPUT
+          echo "owner_lc=${{ github.repository_owner,, }}" >> $GITHUB_OUTPUT
 
       - name: Set QEMU
         uses: docker/setup-qemu-action@v3
@@ -44,7 +51,7 @@ jobs:
         with:
           registry: ghcr.io
           username: Soulter
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_GITHUB_TOKEN }}
 
       - name: Build and Push Docker to DockerHub and Github GHCR
         uses: docker/build-push-action@v6
@@ -54,9 +61,9 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:latest
-            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/astrbot:latest
-            ghcr.io/${{ github.repository_owner }}/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ steps.meta.outputs.tag_lc }}
+            ghcr.io/${{ steps.meta.outputs.owner_lc }}/astrbot:latest
+            ghcr.io/${{ steps.meta.outputs.owner_lc }}/astrbot:${{ steps.meta.outputs.tag_lc }}
 
       - name: Post build notifications
         run: echo "Docker image has been built and pushed successfully"
