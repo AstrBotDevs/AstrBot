@@ -9,7 +9,7 @@ from astrbot.core.platform.register import platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core import logger
-import asyncio # 用于并发执行获取供应商请求
+import asyncio
 
 
 def try_cast(value: str, type_: str):
@@ -166,15 +166,18 @@ class ConfigRoute(Route):
             "/config/provider/delete": ("POST", self.post_delete_provider),
             "/config/llmtools": ("GET", self.get_llm_tools),
             "/config/provider/check_status": ("GET", self.check_all_providers_status), 
+            "/config/provider/list": ("GET", self.get_provider_config_list),
         }
         self.register_routes()
 
     async def _test_single_provider(self, provider): 
         """辅助函数：测试单个 provider 的可用性"""
         meta = provider.meta()
-        # 使用更简洁的回退逻辑获取provider_name
-        provider_name = provider.provider_config.get("name") or getattr(meta, 'id', 'Unknown Provider')
-        
+        provider_name = provider.provider_config.get("id", "Unknown Provider")
+        if not provider_name and meta: 
+            provider_name = meta.id
+        elif not provider_name: 
+            provider_name = "Unknown Provider"
         status_info = {
             "id": getattr(meta, 'id', 'Unknown ID'),
             "model": getattr(meta, 'model', 'Unknown Model'),
@@ -186,7 +189,7 @@ class ConfigRoute(Route):
         logger.debug(f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})")
         try:
             logger.debug(f"Sending 'Ping' to provider: {status_info['name']}")
-            response = await asyncio.wait_for(provider.text_chat(prompt="Ping"), timeout=20.0) #超时二十秒
+            response = await asyncio.wait_for(provider.text_chat(prompt="Ping"), timeout=20.0) # 超时 20 秒
             logger.debug(f"Received response from {status_info['name']}: {response}")
             # 只要 text_chat 调用成功返回一个 LLMResponse 对象 (即 response 不为 None)，就认为可用
             if response is not None:
@@ -247,6 +250,17 @@ class ConfigRoute(Route):
         if not plugin_name:
             return Response().ok(await self._get_astrbot_config()).__dict__
         return Response().ok(await self._get_plugin_config(plugin_name)).__dict__
+
+    async def get_provider_config_list(self):
+        provider_type = request.args.get("provider_type", None)
+        if not provider_type:
+            return Response().error("缺少参数 provider_type").__dict__
+        provider_list = []
+        astrbot_config = self.core_lifecycle.astrbot_config
+        for provider in astrbot_config["provider"]:
+            if provider.get("provider_type", None) == provider_type:
+                provider_list.append(provider)
+        return Response().ok(provider_list).__dict__
 
     async def post_astrbot_configs(self):
         post_configs = await request.json

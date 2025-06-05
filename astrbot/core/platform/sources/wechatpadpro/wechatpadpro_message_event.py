@@ -7,7 +7,7 @@ import aiohttp
 from PIL import Image as PILImage  # 使用别名避免冲突
 
 from astrbot import logger
-from astrbot.core.message.components import Image, Plain  # Import Image
+from astrbot.core.message.components import Image, Plain, WechatEmoji  # Import Image
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageType
@@ -38,6 +38,8 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
                     await self._send_text(session, comp.text)
                 elif isinstance(comp, Image):
                     await self._send_image(session, comp)
+                elif isinstance(comp, WechatEmoji):
+                    await self._send_emoji(session, comp)
         await super().send(message)
 
     async def _send_image(self, session: aiohttp.ClientSession, comp: Image):
@@ -73,10 +75,27 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
             message_text = text
         payload = {
             "MsgItem": [
-                {"MsgType": 1, "TextContent": message_text, "ToUserName": self.session_id}
+                {
+                    "MsgType": 1,
+                    "TextContent": message_text,
+                    "ToUserName": self.session_id,
+                }
             ]
         }
         url = f"{self.adapter.base_url}/message/SendTextMessage"
+        await self._post(session, url, payload)
+
+    async def _send_emoji(self, session: aiohttp.ClientSession, comp: WechatEmoji):
+        payload = {
+            "EmojiList": [
+                {
+                    "EmojiMd5": comp.md5,
+                    "EmojiSize": comp.md5_len,
+                    "ToUserName": self.session_id,
+                }
+            ]
+        }
+        url = f"{self.adapter.base_url}/message/SendEmojiMessage"
         await self._post(session, url, payload)
 
     @staticmethod

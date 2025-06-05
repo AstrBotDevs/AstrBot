@@ -37,7 +37,15 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 ## ✨ 近期更新
 
-1. AstrBot 现已支持接入 [MCP](https://modelcontextprotocol.io/) 服务器！
+<details><summary>1. AstrBot 现已自带知识库能力</summary>
+
+ 📚 详见[文档](https://astrbot.app/use/knowledge-base.html)
+
+ ![image](https://github.com/user-attachments/assets/28b639b0-bb5c-4958-8e94-92ae8cfd1ab4)
+
+</details>
+
+2. AstrBot 现已支持接入 [MCP](https://modelcontextprotocol.io/) 服务器！
 
 ## ✨ 主要功能
 
@@ -171,7 +179,6 @@ pre-commit install
 
 - Star 这个项目！
 - 在[爱发电](https://afdian.com/a/soulter)支持我！
-- 在[微信](https://drive.soulter.top/f/pYfA/d903f4fa49a496fda3f16d2be9e023b5.png)支持我~
 
 ## ✨ Demo
 

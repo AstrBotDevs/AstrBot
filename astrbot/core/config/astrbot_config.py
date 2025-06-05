@@ -99,6 +99,12 @@ class AstrBotConfig(dict):
                     has_new |= self.check_config_integrity(
                         value, conf[key], path + "." + key if path else key
                     )
+        for key in list(conf.keys()):
+            if key not in refer_conf:
+                path_ = path + "." + key if path else key
+                logger.info(f"检查到配置项 {path_} 不存在，将从当前配置中删除")
+                del conf[key]
+                has_new = True
         return has_new
 
     def save_config(self, replace_config: Dict = None):

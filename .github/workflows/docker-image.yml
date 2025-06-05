@@ -11,24 +11,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 拉取源码
+      - name: Pull The Codes
         uses: actions/checkout@v3
         with:
-          fetch-depth: 1
+          fetch-depth: 0  # Must be 0 so we can fetch tags
 
-      - name: 设置 QEMU
+      - name: Get latest tag (only on manual trigger)
+        id: get-latest-tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          tag=$(git describe --tags --abbrev=0)
+          echo "latest_tag=$tag" >> $GITHUB_OUTPUT
+
+      - name: Checkout to latest tag (only on manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        run: git checkout ${{ steps.get-latest-tag.outputs.latest_tag }}
+
+      - name: Set QEMU
         uses: docker/setup-qemu-action@v3
 
-      - name: 设置 Docker Buildx
+      - name: Set Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 登录到 DockerHub
+      - name: Log in to DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
-      - name: 构建和推送 Docker hub
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: Soulter
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker to DockerHub and Github GHCR
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -36,8 +54,9 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:latest
-            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ github.ref_name }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
+            ghcr.io/soulter/astrbot:latest
+            ghcr.io/soulter/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
 
       - name: Post build notifications
         run: echo "Docker image has been built and pushed successfully"
-

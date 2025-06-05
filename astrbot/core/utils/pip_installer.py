@@ -1,5 +1,5 @@
 import logging
-from pip import main as pip_main
+import asyncio
 
 logger = logging.getLogger("astrbot")
 
@@ -9,7 +9,7 @@ class PipInstaller:
         self.pip_install_arg = pip_install_arg
         self.pypi_index_url = pypi_index_url
 
-    def install(
+    async def install(
         self,
         package_name: str = None,
         requirements_path: str = None,
@@ -29,12 +29,29 @@ class PipInstaller:
             args.extend(self.pip_install_arg.split())
 
         logger.info(f"Pip 包管理器: pip {' '.join(args)}")
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "pip", *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
 
-        result_code = pip_main(args)
+            assert process.stdout is not None
+            async for line in process.stdout:
+                logger.info(line.decode().strip())
 
-        # 清除 pip.main 导致的多余的 logging handlers
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
+            await process.wait()
 
-        if result_code != 0:
-            raise Exception(f"安装失败，错误码：{result_code}")
+            if process.returncode != 0:
+                raise Exception(f"安装失败，错误码：{process.returncode}")
+        except FileNotFoundError:
+            # 没有 pip
+            from pip import main as pip_main
+            result_code = await asyncio.to_thread(pip_main, args)
+
+            # 清除 pip.main 导致的多余的 logging handlers
+            for handler in logging.root.handlers[:]:
+                logging.root.removeHandler(handler)
+
+            if result_code != 0:
+                raise Exception(f"安装失败，错误码：{result_code}")

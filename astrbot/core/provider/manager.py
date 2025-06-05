@@ -98,6 +98,8 @@ class ProviderManager:
         """加载的 Speech To Text Provider 的实例"""
         self.tts_provider_insts: List[TTSProvider] = []
         """加载的 Text To Speech Provider 的实例"""
+        self.embedding_provider_insts: List[Provider] = []
+        """加载的 Embedding Provider 的实例"""
         self.inst_map = {}
         """Provider 实例映射. key: provider_id, value: Provider 实例"""
         self.llm_tools = llm_tools
@@ -211,6 +213,10 @@ class ProviderManager:
                     from .sources.volcengine_tts import (
                         ProviderVolcengineTTS as ProviderVolcengineTTS,
                     )
+                case "openai_embedding":
+                    from .sources.openai_embedding_source import (
+                        OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。"
@@ -289,6 +295,14 @@ class ProviderManager:
                     )
                 if not self.curr_provider_inst:
                     self.curr_provider_inst = inst
+
+            elif provider_metadata.provider_type == ProviderType.EMBEDDING:
+                inst = provider_metadata.cls_type(
+                    provider_config, self.provider_settings
+                )
+                if getattr(inst, "initialize", None):
+                    await inst.initialize()
+                self.embedding_provider_insts.append(inst)
 
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:

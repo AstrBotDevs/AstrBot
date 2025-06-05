@@ -19,6 +19,7 @@ class ProviderType(enum.Enum):
     CHAT_COMPLETION = "chat_completion"
     SPEECH_TO_TEXT = "speech_to_text"
     TEXT_TO_SPEECH = "text_to_speech"
+    EMBEDDING = "embedding"
 
 
 @dataclass
@@ -155,7 +156,9 @@ class ProviderRequest:
         if self.image_urls:
             user_content = {
                 "role": "user",
-                "content": [{"type": "text", "text": self.prompt if self.prompt else "[图片]"}],
+                "content": [
+                    {"type": "text", "text": self.prompt if self.prompt else "[图片]"}
+                ],
             }
             for image_url in self.image_urls:
                 if image_url.startswith("http"):

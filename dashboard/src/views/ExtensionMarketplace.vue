@@ -19,18 +19,15 @@ import 'highlight.js/styles/github.css';
 
         <v-col cols="12" md="12">
             <v-card>
-
                 <v-card-title>
                     <div class="pl-2 pt-2 d-flex align-center pe-2">
                         <h2>✨ 插件市场</h2>                    
                         <v-btn icon size="small" style="margin-left: 8px" variant="plain" @click="jumpToPluginMarket()">
                             <v-icon size="small">mdi-help</v-icon>
-                            <v-tooltip activator="parent" location="start">
+                            <v-tooltip activator="parent" location="start" max-width="500" open-delay="500">
                                 <span>
                                     如无法显示，请单击此按钮跳转至插件市场，复制想安装插件对应的
-                                    `repo`
-                                    链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。
-
+                                    repo链接然后点击右下角 + 号安装，或打开链接下载压缩包安装。<br/>
                                     如果因为网络问题安装失败，点击设置页选择 GitHub 加速地址。或前往仓库下载压缩包然后本地上传。
                                 </span>
                             </v-tooltip>
@@ -41,13 +38,12 @@ import 'highlight.js/styles/github.css';
                             <v-icon>{{ isListView ? 'mdi-view-grid' : 'mdi-view-list' }}</v-icon>
                         </v-btn>
 
-                        <v-spacer></v-spacer>
+                        <v-spacer/>
 
                         <v-text-field v-model="marketSearch" density="compact" label="Search"
                             prepend-inner-icon="mdi-magnify" variant="solo-filled" flat hide-details
                             single-line></v-text-field>
                     </div>
-
                 </v-card-title>
 
                 <v-card-text>
@@ -72,19 +68,25 @@ import 'highlight.js/styles/github.css';
 
                     <div v-if="isListView" class="mt-4">
                         <h2>📦 全部插件</h2>
+                        <v-switch
+                            v-model="showPluginFullName"
+                            label="显示完整名称"
+                            hide-details
+                            density="compact"
+                            style="margin-left: 12px"
+                        />
                         <v-col cols="12" md="12" style="padding: 0px;">
                             <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
                                 :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys">
                                 <template v-slot:item.name="{ item }">
-                                    <div class="d-flex align-center" style="overflow-x: scroll;">
+                                    <div class="d-flex align-center" style="overflow-x: auto; scrollbar-width: thin; scrollbar-track-color: transparent;">
                                         <img v-if="item.logo" :src="item.logo"
                                             style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
                                             alt="logo">
                                         <span v-if="item?.repo"><a :href="item?.repo"
                                                 style="color: var(--v-theme-primaryText, #000); text-decoration:none">{{
-                                                    item.name }}</a></span>
-                                        <span v-else>{{ item.name }}</span>
-
+                                                    showPluginFullName ? item.name : item.trimmedName }}</a></span>
+                                        <span v-else>{{ showPluginFullName ? item.name : item.trimmedName }}</span>
                                     </div>
 
                                 </template>
@@ -111,18 +113,18 @@ import 'highlight.js/styles/github.css';
                                 </template>
 
                                 <template v-slot:item.tags="{ item }">
-                                    <span v-if="item.tags.length === 0">无</span>
-                                    <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="x-small">{{ tag
-                                        }}</v-chip>
+                                    <span v-if="item.tags.length === 0">-</span>
+                                    <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="x-small">
+                                      {{ tag }}</v-chip>
                                 </template>
                                 <template v-slot:item.actions="{ item }">
-                                    <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" 
-                                        variant="flat" border
-                                        @click="extension_url = item.repo; newExtension()">安装</v-btn>
+                                    <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small"
+                                        variant="flat" @click="extension_url = item.repo; newExtension()">
+                                      <v-icon>mdi-download</v-icon></v-btn>
                                     <v-btn v-else class="text-none mr-2" size="x-small" variant="flat" border
-                                        disabled>已安装</v-btn>
-                                    <v-btn class="text-none mr-2" size="x-small" variant="flat" border 
-                                        @click="open(item.repo)">帮助</v-btn>
+                                        disabled><v-icon>mdi-check</v-icon></v-btn>
+                                    <v-btn class="text-none mr-2" size="x-small" variant="flat" border
+                                        @click="open(item.repo)"><v-icon>mdi-help</v-icon></v-btn>
                                 </template>
                             </v-data-table>
                         </v-col>
@@ -265,6 +267,7 @@ export default {
             loading_: false,
             upload_file: null,
             pluginMarketData: [],
+            showPluginFullName: false,
             loadingDialog: {
                 show: false,
                 title: "加载中...",
@@ -283,8 +286,8 @@ export default {
             pluginMarketHeaders: [
                 { title: '名称', key: 'name', maxWidth: '200px' },
                 { title: '描述', key: 'desc', maxWidth: '250px' },
-                { title: '作者', key: 'author', maxWidth: '70px' },
-                { title: 'Star数', key: 'stars', maxWidth: '100px' },
+                { title: '作者', key: 'author', maxWidth: '90px' },
+                { title: 'Star数', key: 'stars', maxWidth: '80px' },
                 { title: '最近更新', key: 'updated_at', maxWidth: '100px' },
                 { title: '标签', key: 'tags', maxWidth: '100px' },
                 { title: '操作', key: 'actions', sortable: false }
@@ -319,6 +322,7 @@ export default {
         this.loading_ = true
         this.commonStore.getPluginCollections().then((data) => {
             this.pluginMarketData = data;
+            this.trimExtensionName();
             this.checkAlreadyInstalled();
             this.checkUpdate();
             this.loading_ = false
@@ -367,11 +371,23 @@ export default {
         getExtensions() {
             axios.get('/api/plugin/get').then((res) => {
                 this.extension_data = res.data;
+                this.trimExtensionName();
                 this.checkAlreadyInstalled();
                 this.checkUpdate()
             });
         },
-
+        trimExtensionName() {
+            this.pluginMarketData.forEach(plugin => {
+                if (plugin.name) {
+                  let name = plugin.name.trim().toLowerCase();
+                  if (name.startsWith("astrbot_plugin_")) {
+                    plugin.trimmedName = name.substring(15);
+                  } else if (name.startsWith("astrbot_") || name.startsWith("astrbot-")) {
+                    plugin.trimmedName = name.substring(8);
+                  } else plugin.trimmedName = plugin.name;
+                }
+            });
+        },
         checkUpdate() {
             // 创建在线插件的map
             const onlinePluginsMap = new Map();

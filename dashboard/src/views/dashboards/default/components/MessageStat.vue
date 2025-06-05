@@ -69,6 +69,7 @@
 
 <script>
 import axios from 'axios';
+import {useCustomizerStore} from "@/stores/customizer";
 
 export default {
   name: 'MessageStat',
@@ -129,7 +130,7 @@ export default {
         }
       },
       tooltip: {
-        theme: 'light',
+        theme: useCustomizerStore().uiTheme==='PurpleTheme' ? 'light' : 'dark',
         x: {
           format: 'yyyy-MM-dd HH:mm'
         },
@@ -343,7 +344,7 @@ export default {
 }
 
 .chart-container {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--v-theme-border);
   padding-top: 20px;
   position: relative;
 }
