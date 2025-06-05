@@ -42,10 +42,12 @@ DEFAULT_CONFIG = {
         "empty_mention_waiting": True,
         "friend_message_needs_wake_prefix": False,
         "ignore_bot_self_message": False,
+        "seperate_provider": False,
     },
     "provider": [],
     "provider_settings": {
         "enable": True,
+        "default_provider_id": "",
         "wake_prefix": "",
         "web_search": False,
         "web_search_link": False,
@@ -1379,8 +1381,13 @@ CONFIG_METADATA_2 = {
                     "enable": {
                         "description": "启用大语言模型聊天",
                         "type": "bool",
-                        "hint": "如需切换大语言模型提供商，请使用 `/provider` 命令。",
+                        "hint": "如需切换大语言模型提供商，请使用 /provider 命令。",
                         "obvious_hint": True,
+                    },
+                    "default_provider_id": {
+                        "description": "默认模型提供商 ID",
+                        "type": "str",
+                        "hint": "可选。每个聊天会话的默认提供商 ID。"
                     },
                     "wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀",

@@ -18,12 +18,9 @@ class ProviderManager:
         self.persona_configs: list = config.get("persona", [])
         self.astrbot_config = config
 
-        self.selected_provider_id = sp.get("curr_provider")
+        self.selected_provider_id = self.provider_settings.get("default_provider_id")
         self.selected_stt_provider_id = self.provider_stt_settings.get("provider_id")
         self.selected_tts_provider_id = self.provider_settings.get("provider_id")
-        # self.provider_enabled = self.provider_settings.get("enable", False)
-        # self.stt_enabled = self.provider_stt_settings.get("enable", False)
-        # self.tts_enabled = self.provider_tts_settings.get("enable", False)
 
         # 人格情景管理
         # 目前没有拆成独立的模块
@@ -103,12 +100,10 @@ class ProviderManager:
         self.inst_map = {}
         """Provider 实例映射. key: provider_id, value: Provider 实例"""
         self.llm_tools = llm_tools
-        self.default_provider_inst: Provider = None
-        """默认的 Provider 实例。第 0 个或者用户以前指定的 Provider 实例"""
         self.curr_provider_inst: Provider = None
-        """当前使用的 Provider 实例"""
+        """默认设置的 Provider 实例"""
         self.curr_stt_provider_inst: STTProvider = None
-        """当前使用的 Speech To Text Provider 实例"""
+        """默认设置的 Speech To Text Provider 实例"""
         self.curr_tts_provider_inst: TTSProvider = None
         """当前使用的 Text To Speech Provider 实例"""
         self.db_helper = db_helper
@@ -123,9 +118,10 @@ class ProviderManager:
         for provider_config in self.providers_config:
             await self.load_provider(provider_config)
 
-        self.default_provider_inst = self.inst_map.get(self.selected_provider_id)
-        if not self.default_provider_inst and self.provider_insts:
-            self.default_provider_inst = self.provider_insts[0]
+        self.curr_provider_inst = self.inst_map.get(self.selected_provider_id)
+        if not self.curr_provider_inst and self.provider_insts:
+            self.curr_provider_inst = self.provider_insts[0]
+
 
         # 初始化 MCP Client 连接
         asyncio.create_task(

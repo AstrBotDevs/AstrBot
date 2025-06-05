@@ -140,24 +140,49 @@ class Context:
         """获取所有用于 STT 任务的 Provider。"""
         return self.provider_manager.stt_provider_insts
 
-    def get_using_provider(self) -> Provider:
+    def get_using_provider(self, umo: str = None) -> Provider:
         """
-        获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。
+        获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。通过 /provider 指令切换。
 
-        通过 /provider 指令切换。
+        Args:
+            umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
+        if umo:
+            perf = sp.get("session_provider_perf", {})
+            provider_id = perf.get(umo, None)
+            inst = self.provider_manager.inst_map.get(provider_id, None)
+            if inst:
+                return inst
         return self.provider_manager.curr_provider_inst
 
-    def get_using_tts_provider(self) -> TTSProvider:
+    def get_using_tts_provider(self, umo: str = None) -> TTSProvider:
         """
         获取当前使用的用于 TTS 任务的 Provider。
+
+        Args:
+            umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
+        if umo:
+            perf = sp.get("session_tts_provider_perf", {})
+            provider_id = perf.get(umo, None)
+            inst = self.provider_manager.inst_map.get(provider_id, None)
+            if inst:
+                return inst
         return self.provider_manager.curr_tts_provider_inst
 
-    def get_using_stt_provider(self) -> STTProvider:
+    def get_using_stt_provider(self, umo: str = None) -> STTProvider:
         """
         获取当前使用的用于 STT 任务的 Provider。
+
+        Args:
+            umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
+        if umo:
+            perf = sp.get("session_stt_provider_perf", {})
+            provider_id = perf.get(umo, None)
+            inst = self.provider_manager.inst_map.get(provider_id, None)
+            if inst:
+                return inst
         return self.provider_manager.curr_stt_provider_inst
 
     def get_config(self) -> AstrBotConfig:
