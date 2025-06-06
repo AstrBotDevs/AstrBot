@@ -1,13 +1,15 @@
 import asyncio
+import base64
 import json
 import os
 import time
 from typing import Optional
 
 import aiohttp
+import anyio
 import websockets
 from astrbot import logger
-from astrbot.api.message_components import Plain, Image, At
+from astrbot.api.message_components import Plain, Image, At, Record
 from astrbot.api.platform import Platform, PlatformMetadata
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astrbot_message import (
@@ -581,6 +583,32 @@ class WeChatPadProAdapter(Platform):
                 logger.error(f"下载图片时发生错误: {e}")
                 return None
 
+    async def download_voice(
+        self, to_user_name: str, new_msg_id: str, bufid: str, length: int
+    ):
+        """下载原始音频。"""
+        url = f"{self.base_url}/message/GetMsgVoice"
+        params = {"key": self.auth_key}
+        payload = {
+            "Bufid": bufid,
+            "ToUserName": to_user_name,
+            "NewMsgId": new_msg_id,
+            "Length": length,
+        }
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post(url, params=params, json=payload) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    logger.error(f"下载音频失败: {response.status}")
+                    return None
+            except aiohttp.ClientConnectorError as e:
+                logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
+                return None
+            except Exception as e:
+                logger.error(f"下载音频时发生错误: {e}")
+                return None
+
     async def _process_message_content(
         self, abm: AstrBotMessage, raw_message: dict, msg_type: int, content: str
     ):
@@ -659,8 +687,38 @@ class WeChatPadProAdapter(Platform):
             if emoji_message is not None:
                 abm.message.append(emoji_message)
         elif msg_type == 50:
-            # 语音/视频
             logger.warning("收到语音/视频消息，待实现。")
+        elif msg_type == 34:
+            # 语音消息
+            bufid = 0
+            to_user_name = raw_message.get("to_user_name", {}).get("str", "")
+            new_msg_id = raw_message.get("new_msg_id")
+            data_parser = GeweDataParser(
+                content=content,
+                is_private_chat=(abm.type != MessageType.GROUP_MESSAGE),
+                raw_message=raw_message,
+            )
+
+            voicemsg = data_parser._format_to_xml().find("voicemsg")
+            bufid = voicemsg.get("bufid") or "0"
+            length = int(voicemsg.get("length") or 0)
+            voice_resp = await self.download_voice(
+                to_user_name=to_user_name,
+                new_msg_id=new_msg_id,
+                bufid=bufid,
+                length=length,
+            )
+            voice_bs64_data = voice_resp.get("Data", {}).get("Base64", None)
+            if voice_bs64_data:
+                voice_bs64_data = base64.b64decode(voice_bs64_data)
+                temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                file_path = os.path.join(
+                    temp_dir, f"wechatpadpro_voice_{abm.message_id}.silk"
+                )
+
+                async with await anyio.open_file(file_path, "wb") as f:
+                    await f.write(voice_bs64_data)
+                abm.message.append(Record(file=file_path, url=file_path))
         elif msg_type == 49:
             try:
                 parser = GeweDataParser(
