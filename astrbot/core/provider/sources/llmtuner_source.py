@@ -60,10 +60,12 @@ class LLMTunerModelLoader(Provider):
         session_id: str = None,
         image_urls: List[str] = None,
         func_tool: FuncCall = None,
-        contexts: List = [],
+        contexts: List = None,
         system_prompt: str = None,
         **kwargs,
     ) -> LLMResponse:
+        if contexts is None:
+            contexts = []
         system_prompt = ""
         new_record = {"role": "user", "content": prompt}
         query_context = [*contexts, new_record]
