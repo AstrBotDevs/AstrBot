@@ -18,7 +18,8 @@ class PluginUpdator(RepoZipUpdator):
         return self.plugin_store_path
 
     async def install(self, repo_url: str, proxy="") -> str:
-        repo_name = self.format_repo_name(repo_url)
+        _, repo_name, _ = self.parse_github_url(repo_url)
+        repo_name = self.format_name(repo_name)
         plugin_path = os.path.join(self.plugin_store_path, repo_name)
         await self.download_from_repo_url(plugin_path, repo_url, proxy)
         self.unzip_file(plugin_path + ".zip", plugin_path)
@@ -54,7 +55,7 @@ class PluginUpdator(RepoZipUpdator):
     def unzip_file(self, zip_path: str, target_dir: str):
         os.makedirs(target_dir, exist_ok=True)
         update_dir = ""
-        logger.info(f"解压文件: {zip_path}")
+        logger.info(f"正在解压压缩包: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = z.namelist()[0]
             z.extractall(target_dir)
