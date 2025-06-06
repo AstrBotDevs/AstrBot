@@ -61,12 +61,14 @@ class ProviderDify(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = [],
+        image_urls: List[str] = None,
         func_tool: FuncCall = None,
         contexts: List = None,
         system_prompt: str = None,
         **kwargs,
     ) -> LLMResponse:
+        if image_urls is None:
+            image_urls = []
         result = ""
         conversation_id = self.conversation_ids.get(session_id, "")
 

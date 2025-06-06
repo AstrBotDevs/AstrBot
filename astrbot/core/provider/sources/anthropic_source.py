@@ -104,11 +104,13 @@ class ProviderAnthropic(ProviderOpenAIOfficial):
         session_id: str = None,
         image_urls: List[str] = [],
         func_tool: FuncCall = None,
-        contexts=[],
+        contexts=None,
         system_prompt=None,
         tool_calls_result: ToolCallsResult = None,
         **kwargs,
     ) -> LLMResponse:
+        if contexts is None:
+            contexts = []
         if not prompt:
             prompt = "<image>"
 

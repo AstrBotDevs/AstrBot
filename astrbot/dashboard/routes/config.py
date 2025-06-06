@@ -174,14 +174,15 @@ class ConfigRoute(Route):
         """辅助函数：测试单个 provider 的可用性"""
         meta = provider.meta()
         provider_name = provider.provider_config.get("id", "Unknown Provider")
+        logger.debug(f"Got provider meta: {meta}")
         if not provider_name and meta: 
             provider_name = meta.id
         elif not provider_name: 
             provider_name = "Unknown Provider"
         status_info = {
-            "id": meta.id if meta else "Unknown ID",
-            "model": meta.model if meta else "Unknown Model",
-            "type": meta.type if meta else "Unknown Type",
+            "id": getattr(meta, 'id', 'Unknown ID'),
+            "model": getattr(meta, 'model', 'Unknown Model'),
+            "type": getattr(meta, 'type', 'Unknown Type'),
             "name": provider_name,
             "status": "unavailable", # 默认为不可用
             "error": None,
@@ -189,7 +190,7 @@ class ConfigRoute(Route):
         logger.debug(f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})")
         try:
             logger.debug(f"Sending 'Ping' to provider: {status_info['name']}")
-            response = await asyncio.wait_for(provider.text_chat(prompt="Ping"), timeout=20.0) # 超时 20 秒
+            response = await asyncio.wait_for(provider.text_chat(prompt="REPLY `PONG` ONLY", timeout=45.0)
             logger.debug(f"Received response from {status_info['name']}: {response}")
             # 只要 text_chat 调用成功返回一个 LLMResponse 对象 (即 response 不为 None)，就认为可用
             if response is not None:
@@ -209,7 +210,7 @@ class ConfigRoute(Route):
                 logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None.")
 
         except asyncio.TimeoutError:
-            status_info["error"] = "Connection timed out after 10 seconds during test call."
+            status_info["error"] = "Connection timed out after 45 seconds during test call."
             logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) timed out.")
         except Exception as e:
             error_message = str(e)

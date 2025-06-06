@@ -31,10 +31,12 @@ class ProviderZhipu(ProviderOpenAIOfficial):
         session_id: str = None,
         image_urls: List[str] = None,
         func_tool: FuncCall = None,
-        contexts=[],
+        contexts=None,
         system_prompt=None,
         **kwargs,
     ) -> LLMResponse:
+        if contexts is None:
+            contexts = []
         new_record = await self.assemble_context(prompt, image_urls)
         context_query = []
 
