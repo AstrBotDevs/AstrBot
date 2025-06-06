@@ -110,14 +110,14 @@
                 :metadata="metadata['platform_group']?.metadata"
                 metadataKey="platform" />
             </v-col>
-            <v-col cols="12" md="4">
-              <v-btn :loading="iframeLoading" @click="refreshIframe" variant="tonal" color="primary" style="float: right;">
+            <v-col cols="12" md="4" class="d-flex flex-column align-end">
+              <v-btn :loading="iframeLoading" @click="refreshIframe" variant="tonal" color="primary">
                 <v-icon>mdi-refresh</v-icon>
                 刷新
               </v-btn>
               <iframe v-show="!iframeLoading"
                 :src="store.getTutorialLink(newSelectedPlatformConfig.type)"
-                @load="iframeLoading = false" style="width: 100%; border: none; height: 100%; min-height: 400px;">
+                @load="iframeLoading = false" style="width: 100%; border: none; min-height: 400px; margin-top: 10px; flex: 1;">
               </iframe>
             </v-col>
           </v-row>
