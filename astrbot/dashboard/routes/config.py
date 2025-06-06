@@ -165,18 +165,18 @@ class ConfigRoute(Route):
             "/config/provider/update": ("POST", self.post_update_provider),
             "/config/provider/delete": ("POST", self.post_delete_provider),
             "/config/llmtools": ("GET", self.get_llm_tools),
-            "/config/provider/check_status": ("GET", self.check_all_providers_status), 
+            "/config/provider/check_status": ("GET", self.check_all_providers_status),
             "/config/provider/list": ("GET", self.get_provider_config_list),
         }
         self.register_routes()
 
-    async def _test_single_provider(self, provider): 
+    async def _test_single_provider(self, provider):
         """辅助函数：测试单个 provider 的可用性"""
         meta = provider.meta()
         provider_name = provider.provider_config.get("id", "Unknown Provider")
-        if not provider_name and meta: 
+        if not provider_name and meta:
             provider_name = meta.id
-        elif not provider_name: 
+        elif not provider_name:
             provider_name = "Unknown Provider"
         status_info = {
             "id": meta.id if meta else "Unknown ID",
@@ -195,12 +195,12 @@ class ConfigRoute(Route):
             if response is not None:
                 status_info["status"] = "available"
                 response_text_snippet = ""
-                if hasattr(response, 'completion_text') and response.completion_text:
+                if hasattr(response, "completion_text") and response.completion_text:
                     response_text_snippet = response.completion_text[:70] + "..." if len(response.completion_text) > 70 else response.completion_text
-                elif hasattr(response, 'result_chain') and response.result_chain:
+                elif hasattr(response, "result_chain") and response.result_chain:
                     try:
                         response_text_snippet = response.result_chain.get_plain_text()[:70] + "..." if len(response.result_chain.get_plain_text()) > 70 else response.result_chain.get_plain_text()
-                    except: 
+                    except:
                         pass
                 logger.info(f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{response_text_snippet}'")
             else:
@@ -224,7 +224,7 @@ class ConfigRoute(Route):
         """
         logger.info("API call received: /config/provider/check_status")
         try:
-            all_providers: typing.List = self.core_lifecycle.star_context.get_all_providers() 
+            all_providers: typing.List = self.core_lifecycle.star_context.get_all_providers()
             logger.debug(f"Found {len(all_providers)} providers to check.")
 
             if not all_providers:
@@ -233,15 +233,15 @@ class ConfigRoute(Route):
 
             tasks = [self._test_single_provider(p) for p in all_providers]
             logger.debug(f"Created {len(tasks)} tasks for concurrent provider checks.")
-            
+
             results = await asyncio.gather(*tasks)
             logger.info(f"Provider status check completed. Results: {results}")
-            
-            return Response().ok(results).__dict__ 
+
+            return Response().ok(results).__dict__
         except Exception as e:
             logger.error(f"Critical error in check_all_providers_status: {str(e)}")
             logger.error(traceback.format_exc())
-            return Response().error(f"检查 Provider 状态时发生严重错误: {str(e)}").__dict__ 
+            return Response().error(f"检查 Provider 状态时发生严重错误: {str(e)}").__dict__
 
     async def get_configs(self):
         # plugin_name 为空时返回 AstrBot 配置
