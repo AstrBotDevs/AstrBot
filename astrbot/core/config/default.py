@@ -57,6 +57,8 @@ DEFAULT_CONFIG = {
         "dequeue_context_length": 1,
         "streaming_response": False,
         "streaming_segmented": False,
+        "max_retries": 3,
+        "retry_delay": 1.0,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -1440,6 +1442,16 @@ CONFIG_METADATA_2 = {
                         "description": "不支持流式回复的平台分段输出",
                         "type": "bool",
                         "hint": "启用后，若平台不支持流式回复，会分段输出。目前仅支持 aiocqhttp 和 gewechat 两个平台，不支持或无需使用流式分段输出的平台会静默忽略此选项",
+                    },
+                    "max_retries": {
+                        "description": "最大重试次数",
+                        "type": "int",
+                        "hint": "当 LLM 请求失败时, 最大重试次数。",
+                    },
+                    "retry_delay": {
+                        "description": "重试延迟时间",
+                        "type": "float",
+                        "hint": "当 LLM 请求失败时, 重试延迟时间。单位为秒。",
                     },
                 },
             },
