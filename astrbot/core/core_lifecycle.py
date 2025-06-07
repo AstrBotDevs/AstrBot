@@ -14,6 +14,7 @@ import asyncio
 import time
 import threading
 import os
+from astrbot.core.utils.proxy_manager import ProxyManager
 from .event_bus import EventBus
 from . import astrbot_config
 from asyncio import Queue
@@ -45,11 +46,21 @@ class AstrBotCoreLifecycle:
         self.log_broker = log_broker  # 初始化日志代理
         self.astrbot_config = astrbot_config  # 初始化配置
         self.db = db  # 初始化数据库
-
-        # 根据环境变量设置代理
-        os.environ["https_proxy"] = self.astrbot_config["http_proxy"]
-        os.environ["http_proxy"] = self.astrbot_config["http_proxy"]
-        os.environ["no_proxy"] = "localhost"
+        
+        # 初始化代理管理器
+        self.proxy_manager = ProxyManager()
+        
+        # 从配置中获取代理设置并应用，优先使用新的 proxy 字段，如果为空则尝试使用旧的 http_proxy 字段
+        proxy_url = self.astrbot_config.get("proxy", "")
+        if not proxy_url:
+            # 兼容旧版本的 http_proxy 配置
+            proxy_url = self.astrbot_config.get("http_proxy", "")
+            if proxy_url:
+                logger.warning(f"检测到旧版本代理配置(http_proxy)，已自动兼容。建议更新配置文件，重新设置网络代理（proxy）以适应新版本。")
+        self.proxy_manager.setup_proxy(proxy_url)
+        
+        # 设置不使用代理的本地地址
+        self.proxy_manager.setup_no_proxy_hosts()
 
     async def initialize(self):
         """
