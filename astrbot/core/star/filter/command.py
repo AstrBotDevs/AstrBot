@@ -7,6 +7,9 @@ from astrbot.core.config import AstrBotConfig
 from .custom_filter import CustomFilter
 from ..star_handler import StarHandlerMetadata
 
+class GreedyStr(str):
+    """标记指令完成其他参数接收后的所有剩余文本。"""
+    pass
 
 # 标准指令受到 wake_prefix 的制约。
 class CommandFilter(HandlerFilter):
@@ -68,7 +71,22 @@ class CommandFilter(HandlerFilter):
     ) -> Dict[str, Any]:
         """将参数列表 params 根据 param_type 转换为参数字典。"""
         result = {}
-        for i, (param_name, param_type_or_default_val) in enumerate(param_type.items()):
+        param_items = list(param_type.items())
+        for i, (param_name, param_type_or_default_val) in enumerate(param_items):
+            is_greedy = param_type_or_default_val is GreedyStr
+
+            if is_greedy:
+                # GreedyStr 必须是最后一个参数
+                if i != len(param_items) - 1:
+                    raise ValueError(
+                        f"参数 '{param_name}' (GreedyStr) 必须是最后一个参数。"
+                    )
+
+                # 将剩余的所有部分合并成一个字符串
+                remaining_params = params[i:]
+                result[param_name] = " ".join(remaining_params)
+                break
+            # 没有 GreedyStr 的情况
             if i >= len(params):
                 if (
                     isinstance(param_type_or_default_val, Type)
