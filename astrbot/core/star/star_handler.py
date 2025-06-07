@@ -26,8 +26,23 @@ class StarHandlerRegistry(Generic[T]):
             print(handler.handler_full_name)
 
     def get_handlers_by_event_type(
-        self, event_type: EventType, only_activated=True, platform_id=None
+        self,
+        event_type: EventType,
+        only_activated=True,
+        platform_id=None,
+        group_id=None,
     ) -> List[StarHandlerMetadata]:
+        """通过事件类型获取 Handler
+
+        Args:
+            event_type: 事件类型
+            only_activated: 是否只返回已激活的插件的处理器
+            platform_id: 平台ID，如果提供此参数，将过滤掉在此平台不兼容的处理器
+            group_id: "平台名称:群组ID"  event.get_platform_name():event.get_group_id()
+
+        Returns:
+            List[StarHandlerMetadata]: 处理器列表
+        """
         handlers = []
         for handler in self._handlers:
             if handler.event_type != event_type:
@@ -37,7 +52,7 @@ class StarHandlerRegistry(Generic[T]):
                 if not (plugin and plugin.activated):
                     continue
             if platform_id and event_type != EventType.OnAstrBotLoadedEvent:
-                if not handler.is_enabled_for_platform(platform_id):
+                if not handler.is_enabled_for_platform(platform_id, group_id):
                     continue
             handlers.append(handler)
         return handlers
@@ -120,15 +135,17 @@ class StarHandlerMetadata:
             "priority", 0
         )
 
-    def is_enabled_for_platform(self, platform_id: str) -> bool:
+    def is_enabled_for_platform(self, platform_id: str, group_id=None) -> bool:
         """检查插件是否在指定平台启用
 
         Args:
             platform_id: 平台ID，这是从event.get_platform_id()获取的，用于唯一标识平台实例
+            group_id: "平台名称:群组ID"  event.get_platform_name():event.get_group_id()
 
         Returns:
             bool: 是否启用，True表示启用，False表示禁用
         """
+
         plugin = star_map.get(self.handler_module_path)
 
         # 如果插件元数据不存在，默认允许执行
@@ -139,12 +156,21 @@ class StarHandlerMetadata:
         if not plugin.activated:
             return False
 
+        # 检查群聊插件权限设置 - 使用缓存的群聊权限
+        if group_id and hasattr(plugin, "group_permissions"):
+            # 如果群组ID在黑名单中（被明确禁用），则返回False
+            if group_id in plugin.group_permissions:
+                is_enabled = plugin.group_permissions[group_id]
+                # 由于我们只缓存禁用的群聊，所以这里应该总是False
+                return is_enabled
+
         # 直接使用StarMetadata中缓存的supported_platforms判断平台兼容性
         if (
             hasattr(plugin, "supported_platforms")
             and platform_id in plugin.supported_platforms
         ):
-            return plugin.supported_platforms[platform_id]
+            is_enabled = plugin.supported_platforms[platform_id]
+            return is_enabled
 
         # 如果没有缓存数据，默认允许执行
         return True

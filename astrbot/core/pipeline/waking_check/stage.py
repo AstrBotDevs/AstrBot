@@ -99,8 +99,15 @@ class WakingCheckStage(Stage):
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
 
+        # 构建群聊标识符
+        group_id = None
+        if event.get_group_id():
+            group_id = f"{event.get_platform_name()}:{event.get_group_id()}"
+
         for handler in star_handlers_registry.get_handlers_by_event_type(
-            EventType.AdapterMessageEvent
+            EventType.AdapterMessageEvent,
+            platform_id=event.get_platform_id(),
+            group_id=group_id,
         ):
             # filter 需满足 AND 逻辑关系
             passed = True

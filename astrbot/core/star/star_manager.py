@@ -334,11 +334,11 @@ class PluginManager:
         result = await self.load(specified_module_path)
 
         # 更新所有插件的平台兼容性
-        await self.update_all_platform_compatibility()
+        await self.update_all_plugin_compatibility()
 
         return result
 
-    async def update_all_platform_compatibility(self):
+    async def update_all_plugin_compatibility(self):
         """更新所有插件的平台兼容性设置"""
         # 获取最新的平台插件启用配置
         plugin_enable_config = self.config.get("platform_settings", {}).get(
@@ -350,9 +350,9 @@ class PluginManager:
 
         # 遍历所有插件，更新平台兼容性
         for plugin in self.context.get_all_stars():
-            plugin.update_platform_compatibility(plugin_enable_config)
+            plugin.update_plugin_compatibility(plugin_enable_config)
             logger.debug(
-                f"插件 {plugin.name} 支持的平台: {list(plugin.supported_platforms.keys())}"
+                f"[权限调试] 插件 {plugin.name} 支持的平台: {list(plugin.supported_platforms.keys())}"
             )
 
         return True
@@ -479,7 +479,7 @@ class PluginManager:
                     plugin_enable_config = self.config.get("platform_settings", {}).get(
                         "plugin_enable", {}
                     )
-                    metadata.update_platform_compatibility(plugin_enable_config)
+                    metadata.update_plugin_compatibility(plugin_enable_config)
 
                     # 绑定 handler
                     related_handlers = (

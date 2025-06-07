@@ -128,9 +128,15 @@ class LLMRequestSubStage(Stage):
         # 执行请求 LLM 前事件钩子。
         # 装饰 system_prompt 等功能
         # 获取当前平台ID
-        platform_id = event.get_platform_id()
+        # 构建群聊标识符
+        group_id = None
+        if event.get_group_id():
+            group_id = f"{event.get_platform_name()}:{event.get_group_id()}"
+
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnLLMRequestEvent, platform_id=platform_id
+            EventType.OnAfterMessageSentEvent,
+            platform_id=event.get_platform_id(),
+            group_id=group_id,
         )
         for handler in handlers:
             try:
