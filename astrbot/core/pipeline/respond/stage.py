@@ -211,6 +211,10 @@ class RespondStage(Stage):
             logger.info(
                 f"AstrBot -> {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}"
             )
+        else:
+            # 对使用 qq_official 适配器的会话控制器发送消息的特殊处理
+            if event.get_platform_name() == "qq_official":
+                await event._post_send()
 
         handlers = star_handlers_registry.get_handlers_by_event_type(
             EventType.OnAfterMessageSentEvent, platform_id=event.get_platform_id()
