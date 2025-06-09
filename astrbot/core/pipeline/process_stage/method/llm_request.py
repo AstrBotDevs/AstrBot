@@ -52,9 +52,6 @@ class LLMRequestSubStage(Stage):
         self.streaming_response = ctx.astrbot_config["provider_settings"][
             "streaming_response"
         ]  # bool
-        self.seperate_provider = ctx.astrbot_config["provider_settings"][
-            "seperate_provider"
-        ]  # bool
 
         for bwp in self.bot_wake_prefixs:
             if self.provider_wake_prefix.startswith(bwp):
@@ -73,9 +70,7 @@ class LLMRequestSubStage(Stage):
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug("未启用 LLM 能力，跳过处理。")
             return
-        umo = None
-        if self.seperate_provider:
-            umo = event.unified_msg_origin
+        umo = event.unified_msg_origin
         provider = self.ctx.plugin_manager.context.get_using_provider(umo=umo)
         if provider is None:
             return

@@ -3,6 +3,7 @@ from typing import List, Union
 
 from astrbot.core import sp
 from astrbot.core.provider.provider import Provider, TTSProvider, STTProvider
+from astrbot.core.provider.entities import ProviderType
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.provider.func_tool_manager import FuncCall
@@ -145,12 +146,12 @@ class Context:
         获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。通过 /provider 指令切换。
 
         Args:
-            umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
+            umo(str): unified_message_origin 值，如果传入并且用户启用了提供商会话隔离，则使用该会话偏好的提供商。
         """
-        if umo:
+        if umo and self._config["provider_settings"]["seperate_provider"]:
             perf = sp.get("session_provider_perf", {})
-            provider_id = perf.get(umo, None)
-            inst = self.provider_manager.inst_map.get(provider_id, None)
+            prov_id = perf.get(umo, {}).get(ProviderType.CHAT_COMPLETION.value, None)
+            inst = self.provider_manager.inst_map.get(prov_id, None)
             if inst:
                 return inst
         return self.provider_manager.curr_provider_inst
@@ -162,10 +163,10 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
-        if umo:
-            perf = sp.get("session_tts_provider_perf", {})
-            provider_id = perf.get(umo, None)
-            inst = self.provider_manager.inst_map.get(provider_id, None)
+        if umo and self._config["provider_settings"]["seperate_provider"]:
+            perf = sp.get("session_provider_perf", {})
+            prov_id = perf.get(umo, {}).get(ProviderType.TEXT_TO_SPEECH.value, None)
+            inst = self.provider_manager.inst_map.get(prov_id, None)
             if inst:
                 return inst
         return self.provider_manager.curr_tts_provider_inst
@@ -177,10 +178,10 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
-        if umo:
-            perf = sp.get("session_stt_provider_perf", {})
-            provider_id = perf.get(umo, None)
-            inst = self.provider_manager.inst_map.get(provider_id, None)
+        if umo and self._config["provider_settings"]["seperate_provider"]:
+            perf = sp.get("session_provider_perf", {})
+            prov_id = perf.get(umo, {}).get(ProviderType.TEXT_TO_SPEECH.value, None)
+            inst = self.provider_manager.inst_map.get(prov_id, None)
             if inst:
                 return inst
         return self.provider_manager.curr_stt_provider_inst

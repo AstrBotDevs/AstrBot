@@ -18,10 +18,6 @@ class ProviderManager:
         self.persona_configs: list = config.get("persona", [])
         self.astrbot_config = config
 
-        self.selected_provider_id = self.provider_settings.get("default_provider_id")
-        self.selected_stt_provider_id = self.provider_stt_settings.get("provider_id")
-        self.selected_tts_provider_id = self.provider_settings.get("provider_id")
-
         # 人格情景管理
         # 目前没有拆成独立的模块
         self.default_persona_name = self.provider_settings.get(
@@ -100,12 +96,13 @@ class ProviderManager:
         self.inst_map = {}
         """Provider 实例映射. key: provider_id, value: Provider 实例"""
         self.llm_tools = llm_tools
+
         self.curr_provider_inst: Provider = None
-        """默认设置的 Provider 实例"""
+        """默认的 Provider 实例"""
         self.curr_stt_provider_inst: STTProvider = None
-        """默认设置的 Speech To Text Provider 实例"""
+        """默认的 Speech To Text Provider 实例"""
         self.curr_tts_provider_inst: TTSProvider = None
-        """当前使用的 Text To Speech Provider 实例"""
+        """默认的 Text To Speech Provider 实例"""
         self.db_helper = db_helper
 
         # kdb(experimental)
@@ -114,14 +111,51 @@ class ProviderManager:
         if kdb_cfg and len(kdb_cfg):
             self.curr_kdb_name = list(kdb_cfg.keys())[0]
 
+    async def set_provider(
+        self, provider_id: str, provider_type: ProviderType, umo: str = None
+    ):
+        """设置提供商"""
+        if provider_id not in self.inst_map:
+            raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
+        if umo:
+            perf = sp.get("session_provider_perf", {})
+            session_perf = perf.get(umo, {})
+            session_perf[provider_type.value] = provider_id
+            perf[umo] = session_perf
+            sp.put("session_provider_perf", perf)
+            return
+        # 不启用提供商会话隔离模式的情况
+        self.curr_provider_inst = self.inst_map[provider_id]
+        if provider_type == ProviderType.TEXT_TO_SPEECH:
+            sp.put("curr_provider_tts", provider_id)
+        elif provider_type == ProviderType.SPEECH_TO_TEXT:
+            sp.put("curr_provider_stt", provider_id)
+        elif provider_type == ProviderType.CHAT_COMPLETION:
+            sp.put("curr_provider", provider_id)
+
     async def initialize(self):
+        # 逐个初始化提供商
         for provider_config in self.providers_config:
             await self.load_provider(provider_config)
 
-        self.curr_provider_inst = self.inst_map.get(self.selected_provider_id)
+        # 设置默认提供商
+        self.curr_provider_inst = self.inst_map.get(
+            self.provider_settings.get("default_provider_id")
+        )
         if not self.curr_provider_inst and self.provider_insts:
             self.curr_provider_inst = self.provider_insts[0]
 
+        self.curr_stt_provider_inst = self.inst_map.get(
+            self.provider_stt_settings.get("provider_id")
+        )
+        if not self.curr_stt_provider_inst and self.stt_provider_insts:
+            self.curr_stt_provider_inst = self.stt_provider_insts[0]
+
+        self.curr_tts_provider_inst = self.inst_map.get(
+            self.provider_settings.get("provider_id")
+        )
+        if not self.curr_tts_provider_inst and self.tts_provider_insts:
+            self.curr_tts_provider_inst = self.tts_provider_insts[0]
 
         # 初始化 MCP Client 连接
         asyncio.create_task(
@@ -244,7 +278,10 @@ class ProviderManager:
                     await inst.initialize()
 
                 self.stt_provider_insts.append(inst)
-                if self.selected_stt_provider_id == provider_config["id"]:
+                if (
+                    self.provider_stt_settings.get("provider_id")
+                    == provider_config["id"]
+                ):
                     self.curr_stt_provider_inst = inst
                     logger.info(
                         f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。"
@@ -262,7 +299,7 @@ class ProviderManager:
                     await inst.initialize()
 
                 self.tts_provider_insts.append(inst)
-                if self.selected_tts_provider_id == provider_config["id"]:
+                if self.provider_settings.get("provider_id") == provider_config["id"]:
                     self.curr_tts_provider_inst = inst
                     logger.info(
                         f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。"
@@ -284,7 +321,10 @@ class ProviderManager:
                     await inst.initialize()
 
                 self.provider_insts.append(inst)
-                if self.selected_provider_id == provider_config["id"]:
+                if (
+                    self.provider_settings.get("default_provider_id")
+                    == provider_config["id"]
+                ):
                     self.curr_provider_inst = inst
                     logger.info(
                         f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。"
@@ -322,7 +362,6 @@ class ProviderManager:
             self.curr_provider_inst = None
         elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
             self.curr_provider_inst = self.provider_insts[0]
-            self.selected_provider_id = self.curr_provider_inst.meta().id
             logger.info(
                 f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。"
             )
@@ -331,7 +370,6 @@ class ProviderManager:
             self.curr_stt_provider_inst = None
         elif self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
-            self.selected_stt_provider_id = self.curr_stt_provider_inst.meta().id
             logger.info(
                 f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。"
             )
@@ -340,7 +378,6 @@ class ProviderManager:
             self.curr_tts_provider_inst = None
         elif self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
-            self.selected_tts_provider_id = self.curr_tts_provider_inst.meta().id
             logger.info(
                 f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。"
             )

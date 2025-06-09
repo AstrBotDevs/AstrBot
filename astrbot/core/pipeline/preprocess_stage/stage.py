@@ -43,9 +43,8 @@ class PreProcessStage(Stage):
         # STT
         if self.stt_settings.get("enable", False):
             # TODO: 独立
-            stt_provider = (
-                self.plugin_manager.context.provider_manager.curr_stt_provider_inst
-            )
+            ctx = self.plugin_manager.context
+            stt_provider = ctx.get_using_stt_provider(event.unified_msg_origin)
             if not stt_provider:
                 return
             message_chain = event.get_messages()
