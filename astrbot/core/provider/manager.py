@@ -152,7 +152,7 @@ class ProviderManager:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
 
         self.curr_tts_provider_inst = self.inst_map.get(
-            self.provider_settings.get("provider_id")
+            self.provider_tts_settings.get("provider_id")
         )
         if not self.curr_tts_provider_inst and self.tts_provider_insts:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
