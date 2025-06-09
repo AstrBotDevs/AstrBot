@@ -123,7 +123,7 @@ class ProviderManager:
         """
         if provider_id not in self.inst_map:
             raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
-        if umo and self.provider_settings["seperate_provider"]:
+        if umo and self.provider_settings["separate_provider"]:
             perf = sp.get("session_provider_perf", {})
             session_perf = perf.get(umo, {})
             session_perf[provider_type.value] = provider_id

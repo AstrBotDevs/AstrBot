@@ -58,7 +58,7 @@ DEFAULT_CONFIG = {
         "dequeue_context_length": 1,
         "streaming_response": False,
         "streaming_segmented": False,
-        "seperate_provider": False,
+        "separate_provider": False,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -1384,7 +1384,7 @@ CONFIG_METADATA_2 = {
                         "hint": "如需切换大语言模型提供商，请使用 /provider 命令。",
                         "obvious_hint": True,
                     },
-                    "seperate_provider": {
+                    "separate_provider": {
                         "description": "提供商会话隔离",
                         "type": "bool",
                         "hint": "启用后，每个会话支持独立选择文本生成、STT、TTS 等提供商。如果会话在使用 /provider 指令时提示无权限，可以将会话加入管理员名单或者使用 /alter_cmd provider member 将指令设为非管理员指令。",

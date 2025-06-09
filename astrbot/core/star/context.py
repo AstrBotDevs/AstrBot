@@ -148,7 +148,7 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入并且用户启用了提供商会话隔离，则使用该会话偏好的提供商。
         """
-        if umo and self._config["provider_settings"]["seperate_provider"]:
+        if umo and self._config["provider_settings"]["separate_provider"]:
             perf = sp.get("session_provider_perf", {})
             prov_id = perf.get(umo, {}).get(ProviderType.CHAT_COMPLETION.value, None)
             inst = self.provider_manager.inst_map.get(prov_id, None)
@@ -163,7 +163,7 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
-        if umo and self._config["provider_settings"]["seperate_provider"]:
+        if umo and self._config["provider_settings"]["separate_provider"]:
             perf = sp.get("session_provider_perf", {})
             prov_id = perf.get(umo, {}).get(ProviderType.TEXT_TO_SPEECH.value, None)
             inst = self.provider_manager.inst_map.get(prov_id, None)
@@ -178,7 +178,7 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
-        if umo and self._config["provider_settings"]["seperate_provider"]:
+        if umo and self._config["provider_settings"]["separate_provider"]:
             perf = sp.get("session_provider_perf", {})
             prov_id = perf.get(umo, {}).get(ProviderType.TEXT_TO_SPEECH.value, None)
             inst = self.provider_manager.inst_map.get(prov_id, None)
