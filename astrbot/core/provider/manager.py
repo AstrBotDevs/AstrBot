@@ -114,10 +114,16 @@ class ProviderManager:
     async def set_provider(
         self, provider_id: str, provider_type: ProviderType, umo: str = None
     ):
-        """设置提供商"""
+        """设置提供商。
+
+        Args:
+            provider_id (str): 提供商 ID。
+            provider_type (ProviderType): 提供商类型。
+            umo (str, optional): 用户会话 ID，用于提供商会话隔离。当用户启用了提供商会话隔离时此参数才生效。
+        """
         if provider_id not in self.inst_map:
             raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
-        if umo:
+        if umo and self.provider_settings["seperate_provider"]:
             perf = sp.get("session_provider_perf", {})
             session_perf = perf.get(umo, {})
             session_perf[provider_type.value] = provider_id
