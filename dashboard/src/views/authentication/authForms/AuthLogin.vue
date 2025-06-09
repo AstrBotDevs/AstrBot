@@ -64,16 +64,12 @@ async function validate(values: any, { setErrors }: any) {
       prepend-inner-icon="mdi-lock"
       :disabled="loading"
     ></v-text-field>
-
-    <v-label :style="{color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000aa' : '#ffffffcc'}" class="mt-1 mb-5">
-      <small>默认用户名和密码为 astrbot</small>
-    </v-label>
     
     <v-btn 
       color="secondary" 
       :loading="isSubmitting || loading" 
       block 
-      class="login-btn" 
+      class="login-btn mt-8" 
       variant="flat" 
       size="large" 
       :disabled="valid"

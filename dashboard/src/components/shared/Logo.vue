@@ -5,18 +5,25 @@
         <img width="110" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
       </div>
       <div class="logo-text">
-        <h2 class="text-secondary">AstrBot 仪表盘</h2>
+        <h2 class="text-secondary">{{ title }}</h2>
         <!-- 父子组件传递css变量可能会出错，暂时使用十六进制颜色值 -->
         <h4 :style="{color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000aa' : '#ffffffcc'}"
-            class="hint-text">登录以继续</h4>
+            class="hint-text">{{ subtitle }}</h4>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// No props or other logic needed for this simple component
-import {useCustomizerStore} from "@/stores/customizer";
+import { useCustomizerStore } from "@/stores/customizer";
+
+const props = withDefaults(defineProps<{
+  title?: string;
+  subtitle?: string;
+}>(), {
+  title: 'AstrBot 仪表盘',
+  subtitle: '欢迎使用'
+})
 </script>
 
 <style scoped>
@@ -68,5 +75,4 @@ import {useCustomizerStore} from "@/stores/customizer";
   font-weight: 400;
   letter-spacing: 0.3px;
 }
-
 </style>

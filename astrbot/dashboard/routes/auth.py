@@ -1,5 +1,6 @@
 import jwt
 import datetime
+import asyncio
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core import WEBUI_SK, DEMO_MODE
@@ -41,6 +42,7 @@ class AuthRoute(Route):
                 .__dict__
             )
         else:
+            await asyncio.sleep(3)
             return Response().error("用户名或密码错误").__dict__
 
     async def edit_account(self):

@@ -46,11 +46,27 @@ class StatRoute(Route):
         h, m = divmod(m, 60)
         return f"{h}小时{m}分{s}秒"
 
+    def is_default_cred(self):
+        username = self.config["dashboard"]["username"]
+        password = self.config["dashboard"]["password"]
+        return (
+            username == "astrbot"
+            and password == "77b90590a8945a7d36c963981a307dc9"
+            and not DEMO_MODE
+        )
+
     async def get_version(self):
-        return Response().ok({
-            "version": VERSION,
-            "dashboard_version": await get_dashboard_version(),
-        }).__dict__
+        return (
+            Response()
+            .ok(
+                {
+                    "version": VERSION,
+                    "dashboard_version": await get_dashboard_version(),
+                    "change_pwd_hint": self.is_default_cred(),
+                }
+            )
+            .__dict__
+        )
 
     async def get_start_time(self):
         return Response().ok({"start_time": self.core_lifecycle.start_time}).__dict__

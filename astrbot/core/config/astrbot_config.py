@@ -43,6 +43,7 @@ class AstrBotConfig(dict):
             """不存在时载入默认配置"""
             with open(config_path, "w", encoding="utf-8-sig") as f:
                 json.dump(default_config, f, indent=4, ensure_ascii=False)
+                object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
 
         with open(config_path, "r", encoding="utf-8-sig") as f:
             conf_str = f.read()
