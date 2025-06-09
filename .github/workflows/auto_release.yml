@@ -48,8 +48,10 @@ jobs:
           EOF
 
           echo "Uploading dist.zip to R2 bucket: $R2_BUCKET_NAME/$R2_OBJECT_NAME"
-          rclone copy dashboard/dist.zip r2:$R2_BUCKET_NAME/$R2_OBJECT_NAME --progress
-          rclone copy dashboard/dist.zip r2:$R2_BUCKET_NAME/astrbot-webui-${VERSION_TAG}.zip --progress
+          mv dashboard/dist.zip dashboard/$R2_OBJECT_NAME
+          rclone copy dashboard/$R2_OBJECT_NAME r2:$R2_BUCKET_NAME --progress
+          mv dashboard/$R2_OBJECT_NAME dashboard/astrbot-webui-${VERSION_TAG}.zip
+          rclone copy dashboard/astrbot-webui-${VERSION_TAG}.zip r2:$R2_BUCKET_NAME --progress
 
       - name: Fetch Changelog
         run: |
