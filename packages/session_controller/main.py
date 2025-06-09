@@ -92,14 +92,12 @@ class Waiter(Star):
                     async def empty_mention_waiter(
                         controller: SessionController, event: AstrMessageEvent
                     ):
-                        logger.info("empty_mention_waiter")
                         event.message_obj.message.insert(
                             0, Comp.At(qq=event.get_self_id(), name=event.get_self_id())
                         )
                         new_event = copy.copy(event)
-                        self.context.get_event_queue().put_nowait(
-                            new_event
-                        )  # 重新推入事件队列
+                        # 重新推入事件队列
+                        self.context.get_event_queue().put_nowait(new_event)
                         event.stop_event()
                         controller.stop()
 

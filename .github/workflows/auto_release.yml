@@ -52,6 +52,7 @@ jobs:
           rclone copy dashboard/$R2_OBJECT_NAME r2:$R2_BUCKET_NAME --progress
           mv dashboard/$R2_OBJECT_NAME dashboard/astrbot-webui-${VERSION_TAG}.zip
           rclone copy dashboard/astrbot-webui-${VERSION_TAG}.zip r2:$R2_BUCKET_NAME --progress
+          mv dashboard/astrbot-webui-${VERSION_TAG}.zip dashboard/dist.zip
 
       - name: Fetch Changelog
         run: |
