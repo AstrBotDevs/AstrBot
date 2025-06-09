@@ -74,6 +74,8 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         system_prompt: str = None,
         **kwargs,
     ) -> LLMResponse:
+        if contexts is None:
+            contexts = []
         # 获得会话变量
         payload_vars = self.variables.copy()
         # 动态变量

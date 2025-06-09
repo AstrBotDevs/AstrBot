@@ -1,5 +1,10 @@
+import base64
 import wave
+import os
 from io import BytesIO
+import asyncio
+import tempfile
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
@@ -50,3 +55,46 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
         rate = wav.getframerate()
         duration = pilk.encode(wav_path, output_path, pcm_rate=rate, tencent=True)
         return duration
+
+
+async def wav_to_tencent_silk_base64(wav_path: str) -> str:
+    """
+    将 WAV 文件转为 Silk，并返回 Base64 字符串。
+    默认采样率为 24000，输出临时文件为 temp/output.silk。
+
+    参数:
+    - wav_path: 输入 .wav 文件路径（需为 PCM 16bit）
+
+    返回:
+    - Base64 编码的 Silk 字符串
+    - duration: 音频时长（秒）
+    """
+    try:
+        import pilk
+    except ImportError as e:
+        raise Exception("pysilk 模块未安装，请安装 pysilk") from e
+
+    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+
+    with wave.open(wav_path, "rb") as wav:
+        rate = wav.getframerate()
+
+    with tempfile.NamedTemporaryFile(
+        suffix=".silk", delete=False, dir=temp_dir
+    ) as tmp_file:
+        silk_path = tmp_file.name
+
+    try:
+        duration = await asyncio.to_thread(
+            pilk.encode, wav_path, silk_path, pcm_rate=rate, tencent=True
+        )
+
+        with open(silk_path, "rb") as f:
+            silk_bytes = await asyncio.to_thread(f.read)
+            silk_b64 = base64.b64encode(silk_bytes).decode("utf-8")
+
+        return silk_b64, duration  # 已是秒
+    finally:
+        if os.path.exists(silk_path):
+            os.remove(silk_path)
