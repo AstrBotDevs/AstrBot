@@ -1024,6 +1024,12 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后所有函数工具将全部失效",
                         "obvious_hint": True,
                     },
+                    "gm_url_context": {
+                        "description": "启用URL上下文功能",
+                        "type": "bool",
+                        "hint": "启用后所有函数工具将全部失效",
+                        "obvious_hint": True,
+                    },
                     "gm_safety_settings": {
                         "description": "安全过滤器",
                         "type": "object",
