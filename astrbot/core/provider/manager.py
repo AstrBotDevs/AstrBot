@@ -217,6 +217,10 @@ class ProviderManager:
                     from .sources.openai_embedding_source import (
                         OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
                     )
+                case "gemini_embedding":
+                    from .sources.gemini_embedding_source import (
+                        GeminiEmbeddingProvider as GeminiEmbeddingProvider,
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。"
