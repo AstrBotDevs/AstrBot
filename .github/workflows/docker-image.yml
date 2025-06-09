@@ -44,7 +44,7 @@ jobs:
         with:
           registry: ghcr.io
           username: Soulter
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_GITHUB_TOKEN }}
 
       - name: Build and Push Docker to DockerHub and Github GHCR
         uses: docker/build-push-action@v6
