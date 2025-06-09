@@ -78,7 +78,7 @@ class AuthRoute(Route):
     def generate_jwt(self, username):
         payload = {
             "username": username,
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(days=30),
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7),
         }
         token = jwt.encode(payload, WEBUI_SK, algorithm="HS256")
         return token
