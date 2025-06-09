@@ -620,8 +620,46 @@ class WeChatPadProAdapter(Platform):
             if abm.type == MessageType.GROUP_MESSAGE:
                 parts = content.split(":\n", 1)
                 if len(parts) == 2:
-                    abm.message_str = parts[1]
-                    abm.message.append(Plain(abm.message_str))
+                    message_content = parts[1]
+                    abm.message_str = message_content
+
+                    # 检查是否@了机器人，参考 gewechat 的实现方式
+                    # 微信大部分客户端在@用户昵称后面，紧接着是一个\u2005字符（四分之一空格）
+                    at_me = False
+
+                    # 检查 msg_source 中是否包含机器人的 wxid
+                    # wechatpadpro 的格式: <atuserlist>wxid</atuserlist>
+                    # gewechat 的格式: <atuserlist><![CDATA[wxid]]></atuserlist>
+                    msg_source = raw_message.get("msg_source", "")
+                    if f"<atuserlist>{abm.self_id}</atuserlist>" in msg_source or f"<atuserlist>{abm.self_id}," in msg_source or f",{abm.self_id}</atuserlist>" in msg_source:
+                        at_me = True
+
+                    # 也检查 push_content 中是否有@提示
+                    push_content = raw_message.get("push_content", "")
+                    if "在群聊中@了你" in push_content:
+                        at_me = True
+
+                    if at_me:
+                        # 被@了，在消息开头插入At组件（参考gewechat的做法）
+                        bot_nickname = await self._get_group_member_nickname(abm.group_id, abm.self_id)
+                        abm.message.insert(0, At(qq=abm.self_id, name=bot_nickname or abm.self_id))
+
+                        # 只有当消息内容不仅仅是@时才添加Plain组件
+                        if "\u2005" in message_content:
+                            # 检查@之后是否还有其他内容
+                            parts = message_content.split("\u2005")
+                            if len(parts) > 1 and any(part.strip() for part in parts[1:]):
+                                abm.message.append(Plain(message_content))
+                        else:
+                            # 检查是否只包含@机器人
+                            is_pure_at = False
+                            if bot_nickname and message_content.strip() == f"@{bot_nickname}":
+                                is_pure_at = True
+                            if not is_pure_at:
+                                abm.message.append(Plain(message_content))
+                    else:
+                        # 没有@机器人，作为普通文本处理
+                        abm.message.append(Plain(message_content))
                 else:
                     abm.message.append(Plain(abm.message_str))
             else:  # 私聊消息
