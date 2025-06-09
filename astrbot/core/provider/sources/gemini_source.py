@@ -142,19 +142,32 @@ class ProviderGoogleGenAI(Provider):
             modalities = ["Text"]
 
         tool_list = None
+        model_name = self.get_model()
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
 
-        if native_coderunner:
-            tool_list = [types.Tool(code_execution=types.ToolCodeExecution())]
+        if "gemini-2.5" in model_name:
+            if native_coderunner:
+                tool_list = [types.Tool(code_execution=types.ToolCodeExecution())]
             if native_search:
-                logger.warning("已启用代码执行工具，搜索工具将被忽略")
-            if tools:
-                logger.warning("已启用代码执行工具，函数工具将被忽略")
-        elif native_search:
-            tool_list = [types.Tool(google_search=types.GoogleSearch())]
-            if tools:
-                logger.warning("已启用搜索工具，函数工具将被忽略")
+                if tool_list:
+                    tool_list.append(types.Tool(google_search=types.GoogleSearch()))
+                else:
+                    tool_list = [types.Tool(google_search=types.GoogleSearch())]
+        elif "gemini-2.0-lite" in model_name:
+            if native_coderunner or native_search:
+                logger.warning("gemini-2.0-lite 不支持代码执行和搜索工具，将忽略这些设置")
+                tool_list = None
+        else:
+            if native_coderunner:
+                tool_list = [types.Tool(code_execution=types.ToolCodeExecution())]
+                if native_search:
+                    logger.warning("已启用代码执行工具，搜索工具将被忽略")
+            elif native_search:
+                tool_list = [types.Tool(google_search=types.GoogleSearch())]
+
+        if tools and tool_list:
+            logger.warning("已启用原生工具，函数工具将被忽略")
         elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
             tool_list = [
                 types.Tool(function_declarations=func_desc["function_declarations"])
