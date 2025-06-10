@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import {ref, useCssModule} from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { Form } from 'vee-validate';
