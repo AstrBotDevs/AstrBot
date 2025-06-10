@@ -324,9 +324,11 @@ export default {
         '$route': {
             immediate: true,
             handler(to) {
+                console.log('Route changed:', to.path);
                 // Check if the route matches /chat/<cid> pattern
-                if (to.path.startsWith('/chat/')) {
+                if (to.path.startsWith('/chat/') || to.path.startsWith('/chatbox/')) {
                     const pathCid = to.path.split('/')[2];
+                    console.log('Path CID:', pathCid);
                     if (pathCid && pathCid !== this.currCid) {
                         // If conversations are already loaded
                         if (this.conversations.length > 0) {
@@ -748,7 +750,11 @@ export default {
                 const cid = response.data.data.conversation_id;
                 this.currCid = cid;
                 // Update the URL to reflect the new conversation
-                router.push(`/chat/${cid}`);
+                if (this.$route.path.startsWith('/chatbox')) {
+                    router.push(`/chatbox/${cid}`);
+                } else {
+                    router.push(`/chat/${cid}`);
+                }
                 this.getConversations();
                 return cid;
             }).catch(err => {
@@ -760,7 +766,11 @@ export default {
         newC() {
             this.currCid = '';
             this.messages = [];
-            router.push('/chat');
+            if (this.$route.path.startsWith('/chatbox')) {
+                router.push('/chatbox');
+            } else {
+                router.push('/chat');
+            }
         },
 
         formatDate(timestamp) {
