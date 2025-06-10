@@ -111,13 +111,13 @@ const props = defineProps({
                 <!-- 右侧聊天内容区域 -->
                 <div class="chat-content-panel">
 
-                    <div v-if="currCid && getCurrentConversation" class="conversation-header fade-in">
-                        <div class="conversation-header-content">
+                    <div class="conversation-header fade-in">
+                        <div class="conversation-header-content" v-if="currCid && getCurrentConversation">
                             <h2 class="conversation-header-title">{{ getCurrentConversation.title || '新对话' }}</h2>
                             <div class="conversation-header-time">{{ formatDate(getCurrentConversation.updated_at) }}</div>
                         </div>
                         <div class="conversation-header-actions">
-                            <!-- router推送到 /chatbox -->
+                            <!-- router 推送到 /chatbox -->
                             <v-icon @click="router.push('/chatbox')" v-if="!props.chatboxMode" 
                                 class="fullscreen-icon">mdi-fullscreen</v-icon>
                         </div>
@@ -306,6 +306,8 @@ export default {
             sidebarHoverTimer: null,
             sidebarHoverExpanded: false,
             sidebarHoverDelay: 100, // 悬停延迟，单位毫秒
+
+            pendingCid: null, // Store pending conversation ID for route handling
         }
     },
     
@@ -314,6 +316,44 @@ export default {
         getCurrentConversation() {
             if (!this.currCid) return null;
             return this.conversations.find(c => c.cid === this.currCid);
+        }
+    },
+
+    watch: {
+        // Watch for route changes to handle direct navigation to /chat/<cid>
+        '$route': {
+            immediate: true,
+            handler(to) {
+                // Check if the route matches /chat/<cid> pattern
+                if (to.path.startsWith('/chat/')) {
+                    const pathCid = to.path.split('/')[2];
+                    if (pathCid && pathCid !== this.currCid) {
+                        // If conversations are already loaded
+                        if (this.conversations.length > 0) {
+                            const conversation = this.conversations.find(c => c.cid === pathCid);
+                            if (conversation) {
+                                this.getConversationMessages([pathCid]);
+                            }
+                        } else {
+                            // Store the cid to be used after conversations are loaded
+                            this.pendingCid = pathCid;
+                        }
+                    }
+                }
+            }
+        },
+        
+        // Watch for conversations loaded to handle pending cid
+        conversations: {
+            handler(newConversations) {
+                if (this.pendingCid && newConversations.length > 0) {
+                    const conversation = newConversations.find(c => c.cid === this.pendingCid);
+                    if (conversation) {
+                        this.getConversationMessages([this.pendingCid]);
+                        this.pendingCid = null;
+                    }
+                }
+            }
         }
     },
 
@@ -645,6 +685,15 @@ export default {
         getConversations() {
             axios.get('/api/chat/conversations').then(response => {
                 this.conversations = response.data.data;
+                
+                // If there's a pending conversation ID from the route
+                if (this.pendingCid) {
+                    const conversation = this.conversations.find(c => c.cid === this.pendingCid);
+                    if (conversation) {
+                        this.getConversationMessages([this.pendingCid]);
+                        this.pendingCid = null;
+                    }
+                }
             }).catch(err => {
                 console.error(err);
             });
@@ -652,6 +701,17 @@ export default {
         getConversationMessages(cid) {
             if (!cid[0])
                 return;
+                
+            // Update the URL to reflect the selected conversation
+            if (this.$route.path !== `/chat/${cid[0]}` && this.$route.path !== `/chatbox/${cid[0]}`) {
+                if (this.$route.path.startsWith('/chatbox')) {
+                    router.push(`/chatbox/${cid[0]}`);
+                } else {
+                    router.push(`/chat/${cid[0]}`);
+                }
+            }
+
+                
             axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
                 this.currCid = cid[0];
                 let message = JSON.parse(response.data.data.history);
@@ -684,17 +744,23 @@ export default {
             });
         },
         async newConversation() {
-            await axios.get('/api/chat/new_conversation').then(response => {
-                this.currCid = response.data.data.conversation_id;
+            return axios.get('/api/chat/new_conversation').then(response => {
+                const cid = response.data.data.conversation_id;
+                this.currCid = cid;
+                // Update the URL to reflect the new conversation
+                router.push(`/chat/${cid}`);
                 this.getConversations();
+                return cid;
             }).catch(err => {
                 console.error(err);
+                throw err;
             });
         },
 
         newC() {
             this.currCid = '';
             this.messages = [];
+            router.push('/chat');
         },
 
         formatDate(timestamp) {
@@ -723,7 +789,8 @@ export default {
 
         async sendMessage() {
             if (this.currCid == '') {
-                await this.newConversation();
+                const cid = await this.newConversation();
+                // URL is already updated in newConversation method
             }
 
             // Create a message object with actual URLs for display
