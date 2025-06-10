@@ -27,9 +27,14 @@ marked.setOptions({
                                     <template v-slot:prepend>
                                         <v-icon size="small" icon="mdi-message-text-outline"></v-icon>
                                     </template>
-                                    <v-list-item-title class="conversation-title">新对话</v-list-item-title>
+                                    <v-list-item-title class="conversation-title">{{ item.title || '新对话'}}</v-list-item-title>
                                     <v-list-item-subtitle class="timestamp">{{ formatDate(item.updated_at)
                                         }}</v-list-item-subtitle>
+                                    
+                                    <template v-slot:append>
+                                        <v-btn icon="mdi-pencil" size="x-small" variant="text" 
+                                            class="edit-title-btn" @click.stop="showEditTitleDialog(item.cid, item.title)" />
+                                    </template>
                                 </v-list-item>
                             </v-list>
                         </v-card>
@@ -195,6 +200,29 @@ marked.setOptions({
             </div>
         </v-card-text>
     </v-card>
+    
+    <!-- 编辑对话标题对话框 -->
+    <v-dialog v-model="editTitleDialog" max-width="400">
+        <v-card>
+            <v-card-title class="dialog-title">编辑对话标题</v-card-title>
+            <v-card-text>
+                <v-text-field
+                    v-model="editingTitle"
+                    label="对话标题"
+                    variant="outlined"
+                    hide-details
+                    class="mt-2"
+                    @keyup.enter="saveTitle"
+                    autofocus
+                />
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn text @click="editTitleDialog = false" color="grey-darken-1">取消</v-btn>
+                <v-btn text @click="saveTitle" color="primary">保存</v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
 </template>
 
 <script>
@@ -230,6 +258,11 @@ export default {
             ctrlKeyLongPressThreshold: 300, // 长按阈值，单位毫秒
 
             mediaCache: {}, // Add a cache to store media blobs
+            
+            // 添加对话标题编辑相关变量
+            editTitleDialog: false,
+            editingTitle: '',
+            editingCid: '',
         }
     },
 
@@ -264,6 +297,34 @@ export default {
     },
 
     methods: {
+        // 显示编辑对话标题对话框
+        showEditTitleDialog(cid, title) {
+            this.editingCid = cid;
+            this.editingTitle = title || ''; // 如果标题为空，则设置为空字符串
+            this.editTitleDialog = true;
+        },
+        
+        // 保存对话标题
+        saveTitle() {
+            if (!this.editingCid) return;
+            
+            axios.post('/api/chat/rename_conversation', {
+                conversation_id: this.editingCid,
+                title: this.editingTitle
+            })
+            .then(response => {
+                // 更新本地对话列表中的标题
+                const conversation = this.conversations.find(c => c.cid === this.editingCid);
+                if (conversation) {
+                    conversation.title = this.editingTitle;
+                }
+                this.editTitleDialog = false;
+            })
+            .catch(err => {
+                console.error('重命名对话失败:', err);
+            });
+        },
+        
         async getMediaFile(filename) {
             if (this.mediaCache[filename]) {
                 return this.mediaCache[filename];
@@ -374,6 +435,14 @@ export default {
                     } else if (chunk_json.type === 'end') {
                         in_streaming = false;
                         continue;
+                    } else if (chunk_json.type === 'update_title') {
+                        // 更新对话标题
+                        const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
+                        if (conversation) {
+                            conversation.title = chunk_json.data;
+                        }
+                    } else {
+                        console.warn('未知数据类型:', chunk_json.type);
                     }
                     this.scrollToBottom();
                 }
@@ -799,6 +868,7 @@ export default {
     height: auto !important;
     min-height: 56px;
     padding: 8px 12px !important;
+    position: relative; /* 确保相对定位，便于添加编辑按钮 */
 }
 
 .conversation-item:hover {
@@ -1151,5 +1221,12 @@ export default {
 /* 动画类 */
 .fade-in {
     animation: fadeIn 0.3s ease-in-out;
+}
+
+/* 对话框标题样式 */
+.dialog-title {
+    font-size: 18px;
+    font-weight: 500;
+    padding-bottom: 8px;
 }
 </style>

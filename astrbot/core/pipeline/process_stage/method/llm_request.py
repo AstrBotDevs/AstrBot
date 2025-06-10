@@ -33,6 +33,7 @@ from mcp.types import (
     TextResourceContents,
     BlobResourceContents,
 )
+from astrbot.core import web_chat_back_queue
 
 
 class LLMRequestSubStage(Stage):
@@ -287,7 +288,64 @@ class LLMRequestSubStage(Stage):
         if img_b64 := event.get_extra("tool_call_img_respond"):
             await event.send(MessageChain(chain=[Image.fromBase64(img_b64)]))
             event.set_extra("tool_call_img_respond", None)
-            yield
+
+        if event.get_platform_name() == "webchat":
+            # 异步处理 WebChat 特殊情况
+            asyncio.create_task(self._handle_webchat(event, req))
+
+    async def _handle_webchat(self, event: AstrMessageEvent, req: ProviderRequest):
+        """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
+        conversation = await self.conv_manager.get_conversation(
+            event.unified_msg_origin, req.conversation.cid
+        )
+        if conversation and not req.conversation.title:
+            messages = json.loads(conversation.history)
+            latest_pair = messages[-2:]
+            if not latest_pair:
+                return
+            provider = self.ctx.plugin_manager.context.get_using_provider()
+            cleaned_text = "User: " + latest_pair[0].get("content", "").strip()
+            # if len(latest_pair) > 1:
+            #     cleaned_text += (
+            #         "\nAssistant: " + latest_pair[1].get("content", "").strip()
+            #     )
+            logger.debug(f"WebChat 对话标题生成请求，清理后的文本: {cleaned_text}")
+            llm_resp = await provider.text_chat(
+                system_prompt="You are expert in summarizing user's query.",
+                prompt=(
+                    f"Please summarize the following query of user:\n"
+                    f"{cleaned_text}\n"
+                    "Only output the summary within 10 words, DO NOT INCLUDE any other text."
+                    "You must use the same language as the user."
+                    "If you think the dialog is too short to summarize, just output a special mark: `_None_`"
+                ),
+            )
+            if llm_resp and llm_resp.completion_text:
+                logger.debug(
+                    f"WebChat 对话标题生成响应: {llm_resp.completion_text.strip()}"
+                )
+                title = llm_resp.completion_text.strip()
+                if not title or "_None_" in title:
+                    return
+                await self.conv_manager.update_conversation_title(
+                    event.unified_msg_origin, title=title
+                )
+                # 由于 WebChat 平台特殊性，其有两个对话，因此我们要更新两个对话的标题
+                # webchat adapter 中，session_id 的格式是 f"webchat!{username}!{cid}"
+                # TODO: 优化 WebChat 适配器的对话管理
+                if event.session_id:
+                    username, cid = event.session_id.split("!")[1:3]
+                    db_helper = self.ctx.plugin_manager.context._db
+                    db_helper.update_conversation_title(
+                        user_id=username,
+                        cid=cid,
+                        title=title,
+                    )
+                    web_chat_back_queue.put_nowait({
+                        "type": "update_title",
+                        "cid": cid,
+                        "data": title,
+                    })
 
     async def _handle_llm_response(
         self,
