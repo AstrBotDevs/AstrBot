@@ -20,7 +20,7 @@ import ChatPage from './ChatPage.vue';
     #container {
         min-width: 600px;
         min-height: 370px;
-        max-width: 1200px;
+        max-width: 1100px;
         max-height: 860px;
         padding: 36px;
     }
