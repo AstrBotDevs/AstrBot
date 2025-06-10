@@ -1,13 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import MainRoutes from './MainRoutes';
 import AuthRoutes from './AuthRoutes';
+import ChatBoxRoutes from './ChatBoxRoutes';
 import { useAuthStore } from '@/stores/auth';
 
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     MainRoutes,
-    AuthRoutes
+    AuthRoutes,
+    ChatBoxRoutes
   ]
 });
 

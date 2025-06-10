@@ -1,10 +1,19 @@
 <script setup>
+import { router } from '@/router';
 import axios from 'axios';
 import { marked } from 'marked';
 import { ref } from 'vue';
+import { defineProps } from 'vue';
 
 marked.setOptions({
     breaks: true
+});
+
+const props = defineProps({
+    chatboxMode: {
+        type: Boolean,
+        default: false
+    }
 });
 </script>
 
@@ -12,13 +21,32 @@ marked.setOptions({
     <v-card class="chat-page-card">
         <v-card-text class="chat-page-container">
             <div class="chat-layout">
-                <div class="sidebar-panel">
-                    <div style="padding: 16px; padding-top: 8px;">
-                        <v-btn variant="elevated" rounded="lg" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                        prepend-icon="mdi-plus">创建对话</v-btn>
+                <div class="sidebar-panel" :class="{ 'sidebar-collapsed': sidebarCollapsed }"
+                    @mouseenter="handleSidebarMouseEnter" @mouseleave="handleSidebarMouseLeave">
+
+                    <div style="display: flex; align-items: center; justify-content: center; padding: 16px; padding-bottom: 0px;" v-if="props.chatboxMode">
+                        <img width="50" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
+                        <span v-if="!sidebarCollapsed" style="font-weight: 1000; font-size: 26px; margin-left: 8px;" class="text-secondary">AstrBot</span>
+                    </div>
+                    
+
+                    <div class="sidebar-collapse-btn-container">
+                        <v-btn icon class="sidebar-collapse-btn" @click="toggleSidebar" variant="text"
+                            color="deep-purple">
+                            <v-icon>{{ (sidebarCollapsed || (!sidebarCollapsed && sidebarHoverExpanded)) ?
+                                'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
+                        </v-btn>
                     </div>
 
-                    <div class="conversations-container">
+                    <div style="padding: 16px; padding-top: 8px;">
+                        <v-btn rounded="lg" class="new-chat-btn" @click="newC" :disabled="!currCid"
+                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus">创建对话</v-btn>
+                        <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currCid" v-if="sidebarCollapsed"
+                            elevation="0"></v-btn>
+                    </div>
+
+                    <div style="overflow-y: auto;" :class="{ 'fade-in': sidebarHoverExpanded }"
+                        v-if="!sidebarCollapsed">
                         <v-card class="conversation-list-card" v-if="conversations.length > 0" flat>
                             <v-list density="compact" nav class="conversation-list"
                                 @update:selected="getConversationMessages">
@@ -27,13 +55,15 @@ marked.setOptions({
                                     <template v-slot:prepend>
                                         <v-icon size="small" icon="mdi-message-text-outline"></v-icon>
                                     </template>
-                                    <v-list-item-title class="conversation-title">{{ item.title || '新对话'}}</v-list-item-title>
-                                    <v-list-item-subtitle class="timestamp">{{ formatDate(item.updated_at)
+                                    <v-list-item-title v-if="!sidebarCollapsed" class="conversation-title">{{ item.title
+                                        || '新对话' }}</v-list-item-title>
+                                    <v-list-item-subtitle v-if="!sidebarCollapsed" class="timestamp">{{
+                                        formatDate(item.updated_at)
                                         }}</v-list-item-subtitle>
-                                    
-                                    <template v-slot:append>
-                                        <v-btn icon="mdi-pencil" size="x-small" variant="text" 
-                                            class="edit-title-btn" @click.stop="showEditTitleDialog(item.cid, item.title)" />
+
+                                    <template v-if="!sidebarCollapsed" v-slot:append>
+                                        <v-btn icon="mdi-pencil" size="x-small" variant="text" class="edit-title-btn"
+                                            @click.stop="showEditTitleDialog(item.cid, item.title)" />
                                     </template>
                                 </v-list-item>
                             </v-list>
@@ -42,12 +72,14 @@ marked.setOptions({
                         <v-fade-transition>
                             <div class="no-conversations" v-if="conversations.length === 0">
                                 <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
-                                <div class="no-conversations-text">暂无对话历史</div>
+                                <div class="no-conversations-text" v-if="!sidebarCollapsed || sidebarHoverExpanded">
+                                    暂无对话历史</div>
                             </div>
                         </v-fade-transition>
                     </div>
 
-                    <div class="sidebar-footer">
+                    <div style="padding: 16px; padding-bottom: 0px;" :class="{ 'fade-in': sidebarHoverExpanded }"
+                        v-if="!sidebarCollapsed">
                         <div class="sidebar-section-title">
                             系统状态
                         </div>
@@ -58,7 +90,7 @@ marked.setOptions({
                                     <v-icon :icon="status?.llm_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
                                         size="x-small"></v-icon>
                                 </template>
-                                LLM 服务
+                                <span>LLM 服务</span>
                             </v-chip>
 
                             <v-chip class="status-chip" :color="status?.stt_enabled ? 'success' : 'grey-lighten-2'"
@@ -67,7 +99,7 @@ marked.setOptions({
                                     <v-icon :icon="status?.stt_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
                                         size="x-small"></v-icon>
                                 </template>
-                                语音转文本
+                                <span>语音转文本</span>
                             </v-chip>
                         </div>
 
@@ -81,6 +113,20 @@ marked.setOptions({
 
                 <!-- 右侧聊天内容区域 -->
                 <div class="chat-content-panel">
+
+                    <div v-if="currCid && getCurrentConversation" class="conversation-header fade-in">
+                        <div class="conversation-header-content">
+                            <h2 class="conversation-header-title">{{ getCurrentConversation.title || '新对话' }}</h2>
+                            <div class="conversation-header-time">{{ formatDate(getCurrentConversation.updated_at) }}</div>
+                        </div>
+                        <div class="conversation-header-actions">
+                            <!-- router推送到 /chatbox -->
+                            <v-icon @click="router.push('/chatbox')" v-if="!props.chatboxMode" 
+                                class="fullscreen-icon">mdi-fullscreen</v-icon>
+                        </div>
+                    </div>
+                    <v-divider v-if="currCid && getCurrentConversation" class="conversation-divider"></v-divider>
+
                     <div class="messages-container" ref="messageContainer">
                         <!-- 空聊天欢迎页 -->
                         <div class="welcome-container fade-in" v-if="messages.length == 0">
@@ -200,21 +246,14 @@ marked.setOptions({
             </div>
         </v-card-text>
     </v-card>
-    
+
     <!-- 编辑对话标题对话框 -->
     <v-dialog v-model="editTitleDialog" max-width="400">
         <v-card>
             <v-card-title class="dialog-title">编辑对话标题</v-card-title>
             <v-card-text>
-                <v-text-field
-                    v-model="editingTitle"
-                    label="对话标题"
-                    variant="outlined"
-                    hide-details
-                    class="mt-2"
-                    @keyup.enter="saveTitle"
-                    autofocus
-                />
+                <v-text-field v-model="editingTitle" label="对话标题" variant="outlined" hide-details class="mt-2"
+                    @keyup.enter="saveTitle" autofocus />
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
@@ -258,11 +297,26 @@ export default {
             ctrlKeyLongPressThreshold: 300, // 长按阈值，单位毫秒
 
             mediaCache: {}, // Add a cache to store media blobs
-            
+
             // 添加对话标题编辑相关变量
             editTitleDialog: false,
             editingTitle: '',
             editingCid: '',
+
+            // 侧边栏折叠状态
+            sidebarCollapsed: false,
+            sidebarHovered: false,
+            sidebarHoverTimer: null,
+            sidebarHoverExpanded: false,
+            sidebarHoverDelay: 100, // 悬停延迟，单位毫秒
+        }
+    },
+    
+    computed: {
+        // Get the current conversation from the conversations array
+        getCurrentConversation() {
+            if (!this.currCid) return null;
+            return this.conversations.find(c => c.cid === this.currCid);
         }
     },
 
@@ -281,6 +335,12 @@ export default {
 
         // 添加keyup事件监听
         document.addEventListener('keyup', this.handleInputKeyUp);
+
+        // 从 localStorage 获取侧边栏折叠状态
+        const savedCollapseState = localStorage.getItem('sidebarCollapsed');
+        if (savedCollapseState !== null) {
+            this.sidebarCollapsed = JSON.parse(savedCollapseState);
+        }
     },
 
     beforeUnmount() {
@@ -292,40 +352,86 @@ export default {
         // 移除keyup事件监听
         document.removeEventListener('keyup', this.handleInputKeyUp);
 
+        // 清除悬停定时器
+        if (this.sidebarHoverTimer) {
+            clearTimeout(this.sidebarHoverTimer);
+        }
+
         // Cleanup blob URLs
         this.cleanupMediaCache();
     },
 
     methods: {
+        // 切换侧边栏折叠状态
+        toggleSidebar() {
+            if (this.sidebarHoverExpanded) {
+                this.sidebarHoverExpanded = false;
+                return
+            }
+            this.sidebarCollapsed = !this.sidebarCollapsed;
+            // 保存折叠状态到 localStorage
+            localStorage.setItem('sidebarCollapsed', JSON.stringify(this.sidebarCollapsed));
+        },
+
+        // 侧边栏鼠标悬停处理
+        handleSidebarMouseEnter() {
+            if (!this.sidebarCollapsed) return;
+
+            this.sidebarHovered = true;
+
+            // 设置延迟定时器
+            this.sidebarHoverTimer = setTimeout(() => {
+                if (this.sidebarHovered) {
+                    this.sidebarHoverExpanded = true;
+                    this.sidebarCollapsed = false;
+                }
+            }, this.sidebarHoverDelay);
+        },
+
+        handleSidebarMouseLeave() {
+            this.sidebarHovered = false;
+
+            // 清除定时器
+            if (this.sidebarHoverTimer) {
+                clearTimeout(this.sidebarHoverTimer);
+                this.sidebarHoverTimer = null;
+            }
+
+            if (this.sidebarHoverExpanded) {
+                this.sidebarCollapsed = true;
+            }
+            this.sidebarHoverExpanded = false;
+        },
+
         // 显示编辑对话标题对话框
         showEditTitleDialog(cid, title) {
             this.editingCid = cid;
             this.editingTitle = title || ''; // 如果标题为空，则设置为空字符串
             this.editTitleDialog = true;
         },
-        
+
         // 保存对话标题
         saveTitle() {
             if (!this.editingCid) return;
-            
+
             const trimmedTitle = this.editingTitle.trim();
             axios.post('/api/chat/rename_conversation', {
                 conversation_id: this.editingCid,
                 title: trimmedTitle
             })
-            .then(response => {
-                // 更新本地对话列表中的标题
-                const conversation = this.conversations.find(c => c.cid === this.editingCid);
-                if (conversation) {
-                    conversation.title = trimmedTitle;
-                }
-                this.editTitleDialog = false;
-            })
-            .catch(err => {
-                console.error('重命名对话失败:', err);
-            });
+                .then(response => {
+                    // 更新本地对话列表中的标题
+                    const conversation = this.conversations.find(c => c.cid === this.editingCid);
+                    if (conversation) {
+                        conversation.title = trimmedTitle;
+                    }
+                    this.editTitleDialog = false;
+                })
+                .catch(err => {
+                    console.error('重命名对话失败:', err);
+                });
         },
-        
+
         async getMediaFile(filename) {
             if (this.mediaCache[filename]) {
                 return this.mediaCache[filename];
@@ -336,7 +442,7 @@ export default {
                     params: { filename },
                     responseType: 'blob'
                 });
-                
+
                 const blobUrl = URL.createObjectURL(response.data);
                 this.mediaCache[filename] = blobUrl;
                 return blobUrl;
@@ -671,15 +777,15 @@ export default {
                     audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : [] // Already contains just filename
                 })
             })
-            .then(response => {
-                this.prompt = '';
-                this.stagedImagesName = [];
-                this.stagedAudioUrl = "";
-                this.loadingChat = false;
-            })
-            .catch(err => {
-                console.error(err);
-            });
+                .then(response => {
+                    this.prompt = '';
+                    this.stagedImagesName = [];
+                    this.stagedAudioUrl = "";
+                    this.loadingChat = false;
+                })
+                .catch(err => {
+                    console.error(err);
+                });
         },
         scrollToBottom() {
             this.$nextTick(() => {
@@ -773,29 +879,43 @@ export default {
     }
 }
 
+/* 添加淡入动画 */
+@keyframes fadeInContent {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.fade-in {
+    animation: fadeInContent 0.2s ease-in forwards;
+}
+
 /* 聊天页面布局 */
 /* todo: 聊天页面背景颜色有问题 */
 .chat-page-card {
     margin-bottom: 16px;
     width: 100%;
     height: 100%;
-    border-radius: 12px;
+    border-radius: 16px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
 }
 
 .chat-page-container {
     width: 100%;
-    height: calc(100vh - 120px);
+    height: 100%;
+    max-height: calc(100vh - 120px);
     padding: 0;
 }
 
 .chat-layout {
     height: 100%;
     display: flex;
-    gap: 24px;
 }
 
-/* 侧边栏样式 - 优化版 */
 .sidebar-panel {
     max-width: 270px;
     min-width: 240px;
@@ -806,57 +926,34 @@ export default {
     background-color: var(--v-theme-containerBg);
     height: 100%;
     position: relative;
+    transition: all 0.3s ease;
+    overflow: hidden;
+    /* 防止内容溢出 */
 }
 
-.sidebar-header {
-    padding: 16px;
+/* 侧边栏折叠状态 */
+.sidebar-collapsed {
+    max-width: 75px;
+    min-width: 75px;
+    transition: all 0.3s ease;
 }
 
-.conversations-container {
-    flex-grow: 1;
-    overflow-y: auto;
-    padding: 16px;
+/* 当悬停展开时 */
+.sidebar-collapsed.sidebar-hovered {
+    max-width: 270px;
+    min-width: 240px;
+    transition: all 0.3s ease;
 }
 
-.sidebar-footer {
-    padding: 16px;
-    border-top: 1px solid rgba(0, 0, 0, 0.04);
+/* 侧边栏折叠按钮 */
+.sidebar-collapse-btn-container {
+    margin: 16px;
+    margin-bottom: 0px;
+    z-index: 10;
 }
 
-.sidebar-section-title {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--v-theme-secondaryText);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 12px;
-    padding-left: 4px;
-}
-
-.new-chat-btn {
-    width: 100%;
-    background-color: #673ab7 !important;
-    color: white !important;
-    font-weight: 500;
-    box-shadow: 0 2px 8px rgba(103, 58, 183, 0.25) !important;
-    transition: all 0.2s ease;
-    text-transform: none;
-    letter-spacing: 0.25px;
-}
-
-.new-chat-btn:hover {
-    background-color: #7e57c2 !important;
-    box-shadow: 0 4px 12px rgba(103, 58, 183, 0.3) !important;
-    transform: translateY(-1px);
-}
-
-.conversation-list-card {
-    border-radius: 8px;
-    box-shadow: none !important;
-    background-color: var(--v-theme-containerBg);
-}
-
-.conversation-list {
+.sidebar-collapse-btn {
+    opacity: 0.6;
     max-height: none;
     overflow-y: visible;
     padding: 0;
@@ -869,7 +966,8 @@ export default {
     height: auto !important;
     min-height: 56px;
     padding: 8px 12px !important;
-    position: relative; /* 确保相对定位，便于添加编辑按钮 */
+    position: relative;
+    /* 确保相对定位，便于添加编辑按钮 */
 }
 
 .conversation-item:hover {
@@ -881,12 +979,25 @@ export default {
     font-size: 14px;
     line-height: 1.3;
     margin-bottom: 2px;
+    transition: opacity 0.25s ease;
 }
 
 .timestamp {
     font-size: 11px;
     color: var(--v-theme-secondaryText);
     line-height: 1;
+    transition: opacity 0.25s ease;
+}
+
+.sidebar-section-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--v-theme-secondaryText);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    padding-left: 4px;
+    transition: opacity 0.25s ease;
 }
 
 .status-chips {
@@ -894,6 +1005,7 @@ export default {
     flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 16px;
+    transition: opacity 0.25s ease;
 }
 
 .status-chip {
@@ -911,6 +1023,7 @@ export default {
     letter-spacing: 0.25px;
     font-size: 12px;
     line-height: 1.2em;
+    transition: opacity 0.25s ease;
 }
 
 .delete-chat-btn:hover {
@@ -930,6 +1043,7 @@ export default {
 .no-conversations-text {
     font-size: 14px;
     color: var(--v-theme-secondaryText);
+    transition: opacity 0.25s ease;
 }
 
 /* 聊天内容区域 */
@@ -1229,5 +1343,49 @@ export default {
     font-size: 18px;
     font-weight: 500;
     padding-bottom: 8px;
+}
+
+/* 对话标题和时间样式 */
+.conversation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 16px 16px 16px;
+    border-bottom: 1px solid var(--v-theme-border);
+    width: 100%;
+    padding-right: 32px;
+}
+
+.conversation-header-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.conversation-header-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--v-theme-primaryText);
+}
+
+.conversation-header-time {
+    font-size: 12px;
+    color: var(--v-theme-secondaryText);
+    margin-top: 4px;
+}
+
+.conversation-header-actions {
+    display: flex;
+    align-items: center;
+}
+
+.fullscreen-icon {
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    cursor: pointer;
+}
+
+.fullscreen-icon:hover {
+    opacity: 1;
 }
 </style>
