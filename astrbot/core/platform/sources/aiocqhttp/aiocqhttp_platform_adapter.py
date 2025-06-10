@@ -221,6 +221,9 @@ class AiocqhttpAdapter(Platform):
             a = None
             if t == "text":
                 current_text = "".join(m["data"]["text"] for m in m_group).strip()
+                if not current_text:
+                    # 如果文本段为空，则跳过
+                    continue
                 message_str += current_text
                 a = ComponentTypes[t](text=current_text)  # noqa: F405
                 abm.message.append(a)
