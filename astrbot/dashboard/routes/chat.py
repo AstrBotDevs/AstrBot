@@ -258,7 +258,7 @@ class ChatRoute(Route):
         username = g.get("username", "guest")
         post_data = await request.json
         if "conversation_id" not in post_data or "title" not in post_data:
-            return Response().error("Missing key: conversation_id or titke").__dict__
+            return Response().error("Missing key: conversation_id or title").__dict__
 
         conversation_id = post_data["conversation_id"]
         title = post_data["title"]

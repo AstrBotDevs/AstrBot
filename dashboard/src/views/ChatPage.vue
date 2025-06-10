@@ -308,15 +308,16 @@ export default {
         saveTitle() {
             if (!this.editingCid) return;
             
+            const trimmedTitle = this.editingTitle.trim();
             axios.post('/api/chat/rename_conversation', {
                 conversation_id: this.editingCid,
-                title: this.editingTitle
+                title: trimmedTitle
             })
             .then(response => {
                 // 更新本地对话列表中的标题
                 const conversation = this.conversations.find(c => c.cid === this.editingCid);
                 if (conversation) {
-                    conversation.title = this.editingTitle;
+                    conversation.title = trimmedTitle;
                 }
                 this.editTitleDialog = false;
             })
