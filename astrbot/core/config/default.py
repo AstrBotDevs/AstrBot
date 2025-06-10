@@ -43,6 +43,7 @@ DEFAULT_CONFIG = {
         "empty_mention_waiting_need_reply": True,
         "friend_message_needs_wake_prefix": False,
         "ignore_bot_self_message": False,
+        "ignore_at_all": False,
     },
     "provider": [],
     "provider_settings": {
@@ -376,6 +377,11 @@ CONFIG_METADATA_2 = {
                         "description": "是否忽略机器人自身的消息",
                         "type": "bool",
                         "hint": "某些平台如 gewechat 会将自身账号在其他 APP 端发送的消息也当做消息事件下发导致给自己发消息时唤醒机器人",
+                    },
+                    "ignore_at_all": {
+                        "description": "是否忽略 @ 全体成员",
+                        "type": "bool",
+                        "hint": "启用后，机器人会忽略 @ 全体成员 的消息事件。",
                     },
                     "segmented_reply": {
                         "description": "分段回复",

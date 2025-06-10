@@ -4,7 +4,7 @@ from astrbot import logger
 from typing import Union, AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
-from astrbot.core.message.components import At
+from astrbot.core.message.components import At, AtAll
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
 from astrbot.core.star.filter.permission import PermissionTypeFilter
@@ -38,6 +38,9 @@ class WakingCheckStage(Stage):
         # 是否忽略机器人自己发送的消息
         self.ignore_bot_self_message = self.ctx.astrbot_config["platform_settings"].get(
             "ignore_bot_self_message", False
+        )
+        self.ignore_at_all = self.ctx.astrbot_config["platform_settings"].get(
+            "ignore_at_all", False
         )
 
     async def process(
@@ -79,10 +82,9 @@ class WakingCheckStage(Stage):
         if not is_wake:
             # 检查是否有 at 消息
             for message in messages:
-                if isinstance(message, At) and (
+                if (isinstance(message, At) and (
                     str(message.qq) == str(event.get_self_id())
-                    or str(message.qq) == "all"
-                ):
+                )) or (isinstance(message, AtAll) and not self.ignore_at_all):
                     is_wake = True
                     event.is_wake = True
                     wake_prefix = ""
