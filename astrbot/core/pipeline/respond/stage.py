@@ -191,6 +191,7 @@ class RespondStage(Stage):
                     await asyncio.sleep(i)
                     try:
                         await event.send(MessageChain([*decorated_comps, comp]))
+                        decorated_comps = []  # 清空已发送的装饰组件
                     except Exception as e:
                         logger.error(f"发送消息失败: {e} chain: {result.chain}")
                         break
