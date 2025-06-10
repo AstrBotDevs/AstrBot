@@ -26,6 +26,7 @@ class ChatRoute(Route):
             "/chat/conversations": ("GET", self.get_conversations),
             "/chat/get_conversation": ("GET", self.get_conversation),
             "/chat/delete_conversation": ("GET", self.delete_conversation),
+            "/chat/rename_conversation": ("POST", self.rename_conversation),
             "/chat/get_file": ("GET", self.get_file),
             "/chat/post_image": ("POST", self.post_image),
             "/chat/post_file": ("POST", self.post_file),
@@ -100,7 +101,6 @@ class ChatRoute(Route):
 
         file = post_data["file"]
         filename = f"{str(uuid.uuid4())}"
-        print(file)
         # 通过文件格式判断文件类型
         if file.content_type.startswith("audio"):
             filename += ".wav"
@@ -135,22 +135,24 @@ class ChatRoute(Route):
 
         self.curr_user_cid[username] = conversation_id
 
-        await web_chat_queue.put((
-            username,
-            conversation_id,
-            {
-                "message": message,
-                "image_url": image_url,  # list
-                "audio_url": audio_url,
-            },
-        ))
+        await web_chat_queue.put(
+            (
+                username,
+                conversation_id,
+                {
+                    "message": message,
+                    "image_url": image_url,  # list
+                    "audio_url": audio_url,
+                },
+            )
+        )
 
         # 持久化
         conversation = self.db.get_conversation_by_user_id(username, conversation_id)
         try:
             history = json.loads(conversation.history)
         except BaseException as e:
-            print(e)
+            logger.error(f"Failed to parse conversation history: {e}")
             history = []
         new_his = {"type": "user", "message": message}
         if image_url:
@@ -204,6 +206,9 @@ class ChatRoute(Route):
                     if streaming and type != "end":
                         continue
 
+                    if type == "update_title":
+                        continue
+
                     if result_text:
                         conversation = self.db.get_conversation_by_user_id(
                             username, cid
@@ -211,7 +216,7 @@ class ChatRoute(Route):
                         try:
                             history = json.loads(conversation.history)
                         except BaseException as e:
-                            print(e)
+                            logger.error(f"Failed to parse conversation history: {e}")
                             history = []
                         history.append({"type": "bot", "message": result_text})
                         self.db.update_conversation(
@@ -248,6 +253,18 @@ class ChatRoute(Route):
         conversation_id = str(uuid.uuid4())
         self.db.new_conversation(username, conversation_id)
         return Response().ok(data={"conversation_id": conversation_id}).__dict__
+
+    async def rename_conversation(self):
+        username = g.get("username", "guest")
+        post_data = await request.json
+        if "conversation_id" not in post_data or "title" not in post_data:
+            return Response().error("Missing key: conversation_id or title").__dict__
+
+        conversation_id = post_data["conversation_id"]
+        title = post_data["title"]
+
+        self.db.update_conversation_title(username, conversation_id, title=title)
+        return Response().ok(message="重命名成功！").__dict__
 
     async def get_conversations(self):
         username = g.get("username", "guest")
