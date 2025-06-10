@@ -52,14 +52,11 @@ const props = defineProps({
                                 @update:selected="getConversationMessages">
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                     rounded="lg" class="conversation-item" active-color="secondary">
-                                    <template v-slot:prepend>
-                                        <v-icon size="small" icon="mdi-message-text-outline"></v-icon>
-                                    </template>
                                     <v-list-item-title v-if="!sidebarCollapsed" class="conversation-title">{{ item.title
                                         || '新对话' }}</v-list-item-title>
-                                    <v-list-item-subtitle v-if="!sidebarCollapsed" class="timestamp">{{
+                                    <!-- <v-list-item-subtitle v-if="!sidebarCollapsed" class="timestamp">{{
                                         formatDate(item.updated_at)
-                                        }}</v-list-item-subtitle>
+                                        }}</v-list-item-subtitle> -->
 
                                     <template v-if="!sidebarCollapsed" v-slot:append>
                                         <v-btn icon="mdi-pencil" size="x-small" variant="text" class="edit-title-btn"
@@ -965,9 +962,8 @@ export default {
     transition: all 0.2s ease;
     height: auto !important;
     min-height: 56px;
-    padding: 8px 12px !important;
+    padding: 8px 16px !important;
     position: relative;
-    /* 确保相对定位，便于添加编辑按钮 */
 }
 
 .conversation-item:hover {
