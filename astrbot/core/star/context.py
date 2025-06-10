@@ -178,7 +178,7 @@ class Context:
         """
         if umo and self._config["provider_settings"]["separate_provider"]:
             perf = sp.get("session_provider_perf", {})
-            prov_id = perf.get(umo, {}).get(ProviderType.TEXT_TO_SPEECH.value, None)
+            prov_id = perf.get(umo, {}).get(ProviderType.SPEECH_TO_TEXT.value, None)
             if inst := self.provider_manager.inst_map.get(prov_id, None):
                 return inst
         return self.provider_manager.curr_stt_provider_inst
