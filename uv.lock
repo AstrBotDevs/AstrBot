@@ -204,7 +204,7 @@ wheels = [
 
 [[package]]
 name = "astrbot"
-version = "3.5.12"
+version = "3.5.14"
 source = { editable = "." }
 dependencies = [
     { name = "aiocqhttp" },
@@ -266,7 +266,7 @@ requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "dingtalk-stream", specifier = ">=0.22.1" },
     { name = "docstring-parser", specifier = ">=0.16" },
-    { name = "faiss-cpu", specifier = ">=1.11.0" },
+    { name = "faiss-cpu", specifier = ">=1.10.0" },
     { name = "filelock", specifier = ">=3.18.0" },
     { name = "google-genai", specifier = ">=1.14.0" },
     { name = "googlesearch-python", specifier = ">=1.3.0" },
