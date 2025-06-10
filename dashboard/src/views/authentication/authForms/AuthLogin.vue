@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {ref, useCssModule} from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { Form } from 'vee-validate';
@@ -23,6 +23,7 @@ async function validate(values: any, { setErrors }: any) {
   }
 
   const authStore = useAuthStore();
+  // @ts-ignore
   authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
   return authStore.login(username.value, password_).then((res) => {
     console.log(res);
