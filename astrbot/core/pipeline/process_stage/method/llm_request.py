@@ -70,8 +70,8 @@ class LLMRequestSubStage(Stage):
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug("未启用 LLM 能力，跳过处理。")
             return
-
-        provider = self.ctx.plugin_manager.context.get_using_provider()
+        umo = event.unified_msg_origin
+        provider = self.ctx.plugin_manager.context.get_using_provider(umo=umo)
         if provider is None:
             return
 

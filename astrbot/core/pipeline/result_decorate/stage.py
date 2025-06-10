@@ -169,8 +169,8 @@ class ResultDecorateStage(Stage):
                     result.chain = new_chain
 
             # TTS
-            tts_provider = (
-                self.ctx.plugin_manager.context.provider_manager.curr_tts_provider_inst
+            tts_provider = self.ctx.plugin_manager.context.get_using_tts_provider(
+                event.unified_msg_origin
             )
             if (
                 self.ctx.astrbot_config["provider_tts_settings"]["enable"]

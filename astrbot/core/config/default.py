@@ -46,6 +46,7 @@ DEFAULT_CONFIG = {
     "provider": [],
     "provider_settings": {
         "enable": True,
+        "default_provider_id": "",
         "wake_prefix": "",
         "web_search": False,
         "web_search_link": False,
@@ -57,6 +58,7 @@ DEFAULT_CONFIG = {
         "dequeue_context_length": 1,
         "streaming_response": False,
         "streaming_segmented": False,
+        "separate_provider": False,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -1386,8 +1388,18 @@ CONFIG_METADATA_2 = {
                     "enable": {
                         "description": "启用大语言模型聊天",
                         "type": "bool",
-                        "hint": "如需切换大语言模型提供商，请使用 `/provider` 命令。",
+                        "hint": "如需切换大语言模型提供商，请使用 /provider 命令。",
                         "obvious_hint": True,
+                    },
+                    "separate_provider": {
+                        "description": "提供商会话隔离",
+                        "type": "bool",
+                        "hint": "启用后，每个会话支持独立选择文本生成、STT、TTS 等提供商。如果会话在使用 /provider 指令时提示无权限，可以将会话加入管理员名单或者使用 /alter_cmd provider member 将指令设为非管理员指令。",
+                    },
+                    "default_provider_id": {
+                        "description": "默认模型提供商 ID",
+                        "type": "string",
+                        "hint": "可选。每个聊天会话的默认提供商 ID。",
                     },
                     "wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀",
@@ -1501,7 +1513,7 @@ CONFIG_METADATA_2 = {
                         "obvious_hint": True,
                     },
                     "provider_id": {
-                        "description": "提供商 ID，不填则默认第一个STT提供商",
+                        "description": "提供商 ID",
                         "type": "string",
                         "hint": "语音转文本提供商 ID。如果不填写将使用载入的第一个提供商。",
                     },
@@ -1518,7 +1530,7 @@ CONFIG_METADATA_2 = {
                         "obvious_hint": True,
                     },
                     "provider_id": {
-                        "description": "提供商 ID，不填则默认第一个TTS提供商",
+                        "description": "提供商 ID",
                         "type": "string",
                         "hint": "文本转语音提供商 ID。如果不填写将使用载入的第一个提供商。",
                     },

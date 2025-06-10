@@ -12,6 +12,7 @@ from astrbot.api import sp
 from astrbot.api.provider import ProviderRequest
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -139,6 +140,7 @@ class Main(star.Star):
 {notice}"""
 
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("llm")
     async def llm(self, event: AstrMessageEvent):
@@ -413,20 +415,21 @@ UID: {user_id} 此 ID 可用于设置管理员。
             event.set_result(MessageEventResult().message("删除白名单成功。"))
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
-    
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")
     async def provider(
         self, event: AstrMessageEvent, idx: Union[str, int] = None, idx2: int = None
     ):
         """查看或者切换 LLM Provider"""
+        umo = event.unified_msg_origin
 
         if idx is None:
             ret = "## 载入的 LLM 提供商\n"
             for idx, llm in enumerate(self.context.get_all_providers()):
                 id_ = llm.meta().id
                 ret += f"{idx + 1}. {id_} ({llm.meta().model})"
-                provider_using = self.context.get_using_provider()
+                provider_using = self.context.get_using_provider(umo=umo)
                 if provider_using and provider_using.meta().id == id_:
                     ret += " (当前使用)"
                 ret += "\n"
@@ -437,7 +440,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 for idx, tts in enumerate(tts_providers):
                     id_ = tts.meta().id
                     ret += f"{idx + 1}. {id_}"
-                    tts_using = self.context.get_using_tts_provider()
+                    tts_using = self.context.get_using_tts_provider(umo=umo)
                     if tts_using and tts_using.meta().id == id_:
                         ret += " (当前使用)"
                     ret += "\n"
@@ -448,7 +451,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 for idx, stt in enumerate(stt_providers):
                     id_ = stt.meta().id
                     ret += f"{idx + 1}. {id_}"
-                    stt_using = self.context.get_using_stt_provider()
+                    stt_using = self.context.get_using_stt_provider(umo=umo)
                     if stt_using and stt_using.meta().id == id_:
                         ret += " (当前使用)"
                     ret += "\n"
@@ -461,46 +464,54 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 ret += "\n使用 /provider stt <切换> STT 提供商。"
 
             event.set_result(MessageEventResult().message(ret))
-        else:
-            if idx == "tts":
-                if idx2 is None:
-                    event.set_result(MessageEventResult().message("请输入序号。"))
-                    return
-                else:
-                    if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
-                        event.set_result(MessageEventResult().message("无效的序号。"))
-                    provider = self.context.get_all_tts_providers()[idx2 - 1]
-                    id_ = provider.meta().id
-                    self.context.provider_manager.curr_tts_provider_inst = provider
-                    sp.put("curr_provider_tts", id_)
-                    event.set_result(
-                        MessageEventResult().message(f"成功切换到 {id_}。")
-                    )
-            elif idx == "stt":
-                if idx2 is None:
-                    event.set_result(MessageEventResult().message("请输入序号。"))
-                    return
-                else:
-                    if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
-                        event.set_result(MessageEventResult().message("无效的序号。"))
-                    provider = self.context.get_all_stt_providers()[idx2 - 1]
-                    id_ = provider.meta().id
-                    self.context.provider_manager.curr_stt_provider_inst = provider
-                    sp.put("curr_provider_stt", id_)
-                    event.set_result(
-                        MessageEventResult().message(f"成功切换到 {id_}。")
-                    )
-            elif isinstance(idx, int):
-                if idx > len(self.context.get_all_providers()) or idx < 1:
-                    event.set_result(MessageEventResult().message("无效的序号。"))
-
-                provider = self.context.get_all_providers()[idx - 1]
-                id_ = provider.meta().id
-                self.context.provider_manager.curr_provider_inst = provider
-                sp.put("curr_provider", id_)
-                event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+        elif idx == "tts":
+            if idx2 is None:
+                event.set_result(MessageEventResult().message("请输入序号。"))
+                return
             else:
-                event.set_result(MessageEventResult().message("无效的参数。"))
+                if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
+                    event.set_result(MessageEventResult().message("无效的序号。"))
+                provider = self.context.get_all_tts_providers()[idx2 - 1]
+                id_ = provider.meta().id
+                await self.context.provider_manager.set_provider(
+                    provider_id=id_,
+                    provider_type=ProviderType.TEXT_TO_SPEECH,
+                    umo=umo,
+                )
+                event.set_result(
+                    MessageEventResult().message(f"成功切换到 {id_}。")
+                )
+        elif idx == "stt":
+            if idx2 is None:
+                event.set_result(MessageEventResult().message("请输入序号。"))
+                return
+            else:
+                if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
+                    event.set_result(MessageEventResult().message("无效的序号。"))
+                provider = self.context.get_all_stt_providers()[idx2 - 1]
+                id_ = provider.meta().id
+                await self.context.provider_manager.set_provider(
+                    provider_id=id_,
+                    provider_type=ProviderType.SPEECH_TO_TEXT,
+                    umo=umo,
+                )
+                event.set_result(
+                    MessageEventResult().message(f"成功切换到 {id_}。")
+                )
+        elif isinstance(idx, int):
+            if idx > len(self.context.get_all_providers()) or idx < 1:
+                event.set_result(MessageEventResult().message("无效的序号。"))
+
+            provider = self.context.get_all_providers()[idx - 1]
+            id_ = provider.meta().id
+            await self.context.provider_manager.set_provider(
+                provider_id=id_,
+                provider_type=ProviderType.CHAT_COMPLETION,
+                umo=umo,
+            )
+            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+        else:
+            event.set_result(MessageEventResult().message("无效的参数。"))
 
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent):
@@ -572,7 +583,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
 
         message.set_result(MessageEventResult().message(ret))
-    
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(
