@@ -8,7 +8,7 @@
             <v-icon size="x-large" color="primary" class="me-2">mdi-creation</v-icon>服务提供商管理
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
-            管理AI服务提供商，连接到不同的大语言模型
+            管理模型服务提供商
           </p>
         </v-col>
       </v-row>
@@ -20,6 +20,9 @@
           <span class="text-h6">服务提供商</span>
           <v-chip color="info" size="small" class="ml-2">{{ config_data.provider?.length || 0 }}</v-chip>
           <v-spacer></v-spacer>
+          <v-btn color="success" prepend-icon="mdi-cog" variant="tonal" class="me-2" @click="showSettingsDialog = true">
+            设置
+          </v-btn>
           <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true">
             新增服务提供商
           </v-btn>
@@ -253,6 +256,49 @@
       </v-card>
     </v-dialog>
 
+    <!-- 设置对话框 -->
+    <v-dialog v-model="showSettingsDialog" max-width="600px">
+      <v-card>
+        <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
+          <v-icon color="white" class="me-2">mdi-cog</v-icon>
+          <span>服务提供商设置</span>
+          <v-spacer></v-spacer>
+          <v-btn icon variant="text" color="white" @click="showSettingsDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+
+        <v-card-text class="pa-4">
+          <v-list>
+            <v-list-item>
+              <v-switch
+                style="padding: 12px;"
+                v-model="sessionSeparationEnabled"
+                color="primary"
+                :loading="sessionSettingLoading"
+                @change="updateSessionSeparation"
+                hide-details
+              >
+                <template v-slot:label>
+                  <div>
+                    <div class="text-subtitle-1">启用提供商会话隔离</div>
+                    <div class="text-caption text-medium-emphasis">不同会话将可独立选择文本生成、TTS、STT 等服务提供商。</div>
+                  </div>
+                </template>
+              </v-switch>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+
+        <v-card-actions class="pa-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="showSettingsDialog = false">
+            关闭
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 消息提示 -->
     <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack"
       location="top">
@@ -284,6 +330,11 @@ export default {
       fetched: false,
       metadata: {},
       showProviderCfg: false,
+
+      // 设置对话框相关
+      showSettingsDialog: false,
+      sessionSeparationEnabled: false,
+      sessionSettingLoading: false,
 
       newSelectedProviderName: '',
       newSelectedProviderConfig: {},
@@ -354,6 +405,7 @@ export default {
 
   mounted() {
     this.getConfig();
+    this.getSessionSeparationStatus();
   },
 
   methods: {
@@ -563,6 +615,32 @@ export default {
       }).catch((err) => {
         provider.enable = !provider.enable; // 发生错误时回滚状态
         this.showError(err.response?.data?.message || err.message);
+      });
+    },
+
+    // 获取会话隔离配置状态
+    getSessionSeparationStatus() {
+      axios.get('/api/config/provider/get_session_seperate').then((res) => {
+        if (res.data && res.data.status === 'ok') {
+          this.sessionSeparationEnabled = res.data.data.enable;
+        }
+      }).catch((err) => {
+        this.showError(err.response?.data?.message || "获取会话隔离配置失败");
+      });
+    },
+
+    // 更新会话隔离配置
+    updateSessionSeparation() {
+      this.sessionSettingLoading = true;
+      axios.post('/api/config/provider/set_session_seperate', {
+        enable: this.sessionSeparationEnabled
+      }).then((res) => {
+        this.showSuccess(res.data.message || "会话隔离设置已更新");
+        this.sessionSettingLoading = false;
+      }).catch((err) => {
+        this.sessionSeparationEnabled = !this.sessionSeparationEnabled; // 发生错误时回滚状态
+        this.showError(err.response?.data?.message || err.message);
+        this.sessionSettingLoading = false;
       });
     },
 
