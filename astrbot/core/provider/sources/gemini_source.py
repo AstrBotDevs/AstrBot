@@ -162,7 +162,7 @@ class ProviderGoogleGenAI(Provider):
 
                 if url_context:
                     if hasattr(types, "UrlContext"):
-                        tool_list.append(types.Tool(web_context=types.UrlContext()))
+                        tool_list.append(types.Tool(url_context=types.UrlContext()))
                     else:
                         logger.warning(
                             "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包"
@@ -185,7 +185,7 @@ class ProviderGoogleGenAI(Provider):
 
             if url_context and not native_coderunner:
                 if hasattr(types, "UrlContext"):
-                    tool_list.append(types.Tool(web_context=types.UrlContext()))
+                    tool_list.append(types.Tool(url_context=types.UrlContext()))
                 else:
                     logger.warning(
                         "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包"
