@@ -254,7 +254,7 @@ commonStore.getStartTime();
            variant="flat" @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
-    <v-btn v-if="useCustomizerStore().uiTheme==='PurpleTheme'" class="hidden-lg-and-up text-secondary ms-3" color="lightsecondary" icon rounded="sm" variant="flat"
+    <v-btn v-if="useCustomizerStore().uiTheme==='PurpleTheme'" class="hidden-lg-and-up ms-3" color="lightsecondary" icon rounded="sm" variant="flat"
            @click.stop="customizer.SET_SIDEBAR_DRAWER" size="small">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
@@ -263,15 +263,15 @@ commonStore.getStartTime();
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <div style="margin-left: 16px; display: flex; align-items: center; gap: 8px;">
-      <span style=" font-size: 24px; font-weight: 1000;">Astr<span style="font-weight: normal;">Bot</span>
-      </span>
-      <span style="font-size: 12px; color: var(--v-theme-secondaryText);">{{ botCurrVersion }}</span>
+    <div class="logo-container" :class="{'mobile-logo': $vuetify.display.xs}">
+      <span class="logo-text">Astr<span class="logo-text-light">Bot</span></span>
+      <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
     <v-spacer/>
 
-    <div class="mr-4">
+    <!-- 版本提示信息 - 在手机上隐藏 -->
+    <div class="mr-4 hidden-xs">
       <small v-if="hasNewVersion">
         AstrBot 有新版本！
       </small>
@@ -280,24 +280,28 @@ commonStore.getStartTime();
       </small>
     </div>
 
-    <v-btn size="small" @click="toggleDarkMode();" class="text-primary mr-2" color="var(--v-theme-surface)"
-           variant="flat" rounded="sm">
-      <!-- 明暗主题切换按钮 -->
+    <!-- 主题切换按钮 -->
+    <v-btn size="small" @click="toggleDarkMode();" class="action-btn" 
+           color="var(--v-theme-surface)" variant="flat" rounded="sm">
       <v-icon v-if="useCustomizerStore().uiTheme === 'PurpleThemeDark'">mdi-weather-night</v-icon>
       <v-icon v-else>mdi-white-balance-sunny</v-icon>
     </v-btn>
 
-    <v-dialog v-model="updateStatusDialog" width="1000">
+    <!-- 更新对话框 -->
+    <v-dialog v-model="updateStatusDialog" :width="$vuetify.display.smAndDown ? '100%' : '1000'" :fullscreen="$vuetify.display.xs">
       <template v-slot:activator="{ props }">
-        <v-btn size="small" @click="checkUpdate(); getReleases(); getDevCommits();" class="text-primary mr-2"
-               color="var(--v-theme-surface)"
-               variant="flat" rounded="sm" v-bind="props">
-          更新
+        <v-btn size="small" @click="checkUpdate(); getReleases(); getDevCommits();" class="action-btn"
+               color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props">
+          <v-icon class="hidden-sm-and-up">mdi-update</v-icon>
+          <span class="hidden-xs">更新</span>
         </v-btn>
       </template>
       <v-card>
-        <v-card-title>
+        <v-card-title class="mobile-card-title">
           <span class="text-h5">更新 AstrBot</span>
+          <v-btn v-if="$vuetify.display.xs" icon @click="updateStatusDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
         </v-card-title>
         <v-card-text>
           <v-container>
@@ -308,10 +312,9 @@ commonStore.getStartTime();
               <small style="margin-left: 4px;">{{ updateStatus }}</small>
             </div>
 
-            <div
+            <div v-if="releaseMessage"
                 style="background-color: #646cff24; padding: 16px; border-radius: 10px; font-size: 14px; max-height: 400px; overflow-y: auto;"
                 v-html="marked(releaseMessage)" class="markdown-content">
-
             </div>
 
             <div class="mb-4 mt-4">
@@ -422,11 +425,12 @@ commonStore.getStartTime();
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="dialog" persistent max-width="500">
+    <!-- 账户对话框 -->
+    <v-dialog v-model="dialog" persistent :max-width="$vuetify.display.xs ? '90%' : '500'">
       <template v-slot:activator="{ props }">
-        <v-btn size="small" class="text-primary mr-4" color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props">
-          <v-icon class="mr-1">mdi-account</v-icon>
-          账户
+        <v-btn size="small" class="action-btn mr-4" color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props">
+          <v-icon>mdi-account</v-icon>
+          <span class="hidden-xs ml-1">账户</span>
         </v-btn>
       </template>
       <v-card class="account-dialog">
@@ -581,5 +585,69 @@ commonStore.getStartTime();
 
 .account-dialog .v-avatar:hover {
   transform: scale(1.05);
+}
+
+/* 响应式布局样式 */
+.logo-container {
+  margin-left: 16px; 
+  display: flex; 
+  align-items: center; 
+  gap: 8px;
+}
+
+.mobile-logo {
+  margin-left: 8px;
+  gap: 4px;
+}
+
+.logo-text {
+  font-size: 24px; 
+  font-weight: 1000;
+}
+
+.logo-text-light {
+  font-weight: normal;
+}
+
+.version-text {
+  font-size: 12px; 
+  color: var(--v-theme-secondaryText);
+}
+
+.action-btn {
+  margin-right: 6px;
+}
+
+/* 移动端对话框标题样式 */
+.mobile-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 移动端样式优化 */
+@media (max-width: 600px) {
+  .logo-text {
+    font-size: 20px;
+  }
+  
+  .action-btn {
+    margin-right: 4px;
+    min-width: 32px !important;
+    width: 32px;
+  }
+
+  .v-card-title {
+    padding: 12px 16px;
+  }
+  
+  .v-card-text {
+    padding: 16px;
+  }
+  
+  .v-tabs .v-tab {
+    padding: 0 10px;
+    font-size: 0.9rem;
+  }
 }
 </style>
