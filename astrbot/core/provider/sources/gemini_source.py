@@ -141,24 +141,66 @@ class ProviderGoogleGenAI(Provider):
             logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
             modalities = ["Text"]
 
-        tool_list = None
+        tool_list = []
+        model_name = self.get_model()
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
+        url_context = self.provider_config.get("gm_url_context", False)
 
-        if native_coderunner:
-            tool_list = [types.Tool(code_execution=types.ToolCodeExecution())]
-            if native_search:
-                logger.warning("已启用代码执行工具，搜索工具将被忽略")
-            if tools:
-                logger.warning("已启用代码执行工具，函数工具将被忽略")
-        elif native_search:
-            tool_list = [types.Tool(google_search=types.GoogleSearch())]
-            if tools:
-                logger.warning("已启用搜索工具，函数工具将被忽略")
+        if "gemini-2.5" in model_name:
+            if native_coderunner:
+                tool_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
+                if native_search:
+                    logger.warning("代码执行工具与搜索工具互斥，已忽略搜索工具")
+                if url_context:
+                    logger.warning(
+                        "代码执行工具与URL上下文工具互斥，已忽略URL上下文工具"
+                    )
+            else:
+                if native_search:
+                    tool_list.append(types.Tool(google_search=types.GoogleSearch()))
+
+                if url_context:
+                    if hasattr(types, "UrlContext"):
+                        tool_list.append(types.Tool(url_context=types.UrlContext()))
+                    else:
+                        logger.warning(
+                            "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包"
+                        )
+
+        elif "gemini-2.0-lite" in model_name:
+            if native_coderunner or native_search or url_context:
+                logger.warning(
+                    "gemini-2.0-lite 不支持代码执行、搜索工具和URL上下文，将忽略这些设置"
+                )
+            tool_list = None
+
+        else:
+            if native_coderunner:
+                tool_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
+                if native_search:
+                    logger.warning("代码执行工具与搜索工具互斥，已忽略搜索工具")
+            elif native_search:
+                tool_list.append(types.Tool(google_search=types.GoogleSearch()))
+
+            if url_context and not native_coderunner:
+                if hasattr(types, "UrlContext"):
+                    tool_list.append(types.Tool(url_context=types.UrlContext()))
+                else:
+                    logger.warning(
+                        "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包"
+                    )
+
+        if not tool_list:
+            tool_list = None
+
+        if tools and tool_list:
+            logger.warning("已启用原生工具，函数工具将被忽略")
         elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
             tool_list = [
                 types.Tool(function_declarations=func_desc["function_declarations"])
             ]
+
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=temperature,

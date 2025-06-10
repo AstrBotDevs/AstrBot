@@ -620,6 +620,7 @@ CONFIG_METADATA_2 = {
                         "gm_resp_image_modal": False,
                         "gm_native_search": False,
                         "gm_native_coderunner": False,
+                        "gm_url_context": False,
                         "gm_safety_settings": {
                             "harassment": "BLOCK_MEDIUM_AND_ABOVE",
                             "hate_speech": "BLOCK_MEDIUM_AND_ABOVE",
@@ -1020,6 +1021,12 @@ CONFIG_METADATA_2 = {
                     },
                     "gm_native_coderunner": {
                         "description": "启用原生代码执行器",
+                        "type": "bool",
+                        "hint": "启用后所有函数工具将全部失效",
+                        "obvious_hint": True,
+                    },
+                    "gm_url_context": {
+                        "description": "启用URL上下文功能",
                         "type": "bool",
                         "hint": "启用后所有函数工具将全部失效",
                         "obvious_hint": True,
