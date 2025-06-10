@@ -40,6 +40,7 @@ DEFAULT_CONFIG = {
         },
         "no_permission_reply": True,
         "empty_mention_waiting": True,
+        "empty_mention_waiting_need_reply": True,
         "friend_message_needs_wake_prefix": False,
         "ignore_bot_self_message": False,
     },
@@ -357,9 +358,14 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，当用户没有权限执行某个操作时，机器人会回复一条消息。",
                     },
                     "empty_mention_waiting": {
-                        "description": "只 @ 机器人是否触发等待回复",
+                        "description": "只 @ 机器人是否触发等待",
                         "type": "bool",
-                        "hint": "启用后，当消息内容只有 @ 机器人时，会触发等待回复，在 60 秒内的该用户的任意一条消息均会唤醒机器人。这在某些平台不支持 @ 和语音/图片等消息同时发送时特别有用。",
+                        "hint": "启用后，当消息内容只有 @ 机器人时，会触发等待，在 60 秒内的该用户的任意一条消息均会唤醒机器人。这在某些平台不支持 @ 和语音/图片等消息同时发送时特别有用。",
+                    },
+                    "empty_mention_waiting_need_reply": {
+                        "description": "只 @ 机器人触发等待时是否需要回复提醒",
+                        "type": "bool",
+                        "hint": "在上面一个配置项中，如果启用了触发等待，启用此项后，机器人会使用 LLM 生成一条回复。否则，将不回复而只是等待。",
                     },
                     "friend_message_needs_wake_prefix": {
                         "description": "私聊消息是否需要唤醒前缀",
