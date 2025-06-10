@@ -697,6 +697,9 @@ export default {
                     }
                 }
             }).catch(err => {
+                if (err.response.status === 401) {
+                    this.$router.push('/auth/login?redirect=/chatbox');
+                }
                 console.error(err);
             });
         },
