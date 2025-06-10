@@ -23,7 +23,7 @@ async function validate(values: any, { setErrors }: any) {
   }
 
   const authStore = useAuthStore();
-  authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect') || null;
+  authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
   return authStore.login(username.value, password_).then((res) => {
     console.log(res);
     loading.value = false;
