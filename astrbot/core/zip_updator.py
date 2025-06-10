@@ -148,6 +148,7 @@ class RepoZipUpdator:
                 release_url = releases[0]["zipball_url"]
 
         if proxy:
+            proxy = proxy.rstrip("/")
             release_url = f"{proxy}/{release_url}"
             logger.info(
                 f"检查到设置了镜像站，将使用镜像站下载 {author}/{repo} 仓库源码: {release_url}"
