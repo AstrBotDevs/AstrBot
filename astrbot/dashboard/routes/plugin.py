@@ -453,7 +453,7 @@ class PluginRoute(Route):
             config.save_config()
 
             # 更新插件的平台兼容性缓存
-            await self.plugin_manager.update_all_platform_compatibility()
+            await self.plugin_manager.update_all_plugin_compatibility()
 
             logger.info(f"插件平台可用性配置已更新: {platform_enable}")
 
