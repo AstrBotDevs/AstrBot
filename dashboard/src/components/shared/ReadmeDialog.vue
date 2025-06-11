@@ -164,124 +164,124 @@ function refreshReadme() {
 
 <style>
 .markdown-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  line-height: 1.6;
-  padding: 8px 0;
-  color: #24292e;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    padding: 8px 0;
+    color: var(--v-theme-secondaryText);
 }
 
-.markdown-body h1, 
-.markdown-body h2, 
-.markdown-body h3, 
-.markdown-body h4, 
-.markdown-body h5, 
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
 .markdown-body h6 {
-  margin-top: 24px;
-  margin-bottom: 16px;
-  font-weight: 600;
-  line-height: 1.25;
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    line-height: 1.25;
 }
 
 .markdown-body h1 {
-  font-size: 2em;
-  border-bottom: 1px solid #eaecef;
-  padding-bottom: 0.3em;
+    font-size: 2em;
+    border-bottom: 1px solid var(--v-theme-border);
+    padding-bottom: 0.3em;
 }
 
 .markdown-body h2 {
-  font-size: 1.5em;
-  border-bottom: 1px solid #eaecef;
-  padding-bottom: 0.3em;
+    font-size: 1.5em;
+    border-bottom: 1px solid var(--v-theme-border);
+    padding-bottom: 0.3em;
 }
 
 .markdown-body p {
-  margin-top: 0;
-  margin-bottom: 16px;
+    margin-top: 0;
+    margin-bottom: 16px;
 }
 
 .markdown-body code {
-  padding: 0.2em 0.4em;
-  margin: 0;
-  background-color: rgba(27, 31, 35, 0.05);
-  border-radius: 3px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 85%;
+    padding: 0.2em 0.4em;
+    margin: 0;
+    background-color: var(--v-theme-codeBg);
+    border-radius: 3px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 85%;
 }
 
 .markdown-body pre {
-  padding: 16px;
-  overflow: auto;
-  font-size: 85%;
-  line-height: 1.45;
-  background-color: #f6f8fa;
-  border-radius: 3px;
-  margin-bottom: 16px;
+    padding: 16px;
+    overflow: auto;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: var(--v-theme-containerBg);
+    border-radius: 3px;
+    margin-bottom: 16px;
 }
 
 .markdown-body pre code {
-  background-color: transparent;
-  padding: 0;
+    background-color: transparent;
+    padding: 0;
 }
 
 .markdown-body ul,
 .markdown-body ol {
-  padding-left: 2em;
-  margin-bottom: 16px;
+    padding-left: 2em;
+    margin-bottom: 16px;
 }
 
 .markdown-body img {
-  max-width: 100%;
-  margin: 8px 0;
-  box-sizing: border-box;
-  background-color: #fff;
-  border-radius: 3px;
+    max-width: 100%;
+    margin: 8px 0;
+    box-sizing: border-box;
+    background-color: var(--v-theme-background);
+    border-radius: 3px;
 }
 
 .markdown-body blockquote {
-  padding: 0 1em;
-  color: #6a737d;
-  border-left: 0.25em solid #dfe2e5;
-  margin-bottom: 16px;
+    padding: 0 1em;
+    color: var(--v-theme-secondaryText);
+    border-left: 0.25em solid var(--v-theme-border);
+    margin-bottom: 16px;
 }
 
 .markdown-body a {
-  color: #0366d6;
-  text-decoration: none;
+    color: var(--v-theme-primary);
+    text-decoration: none;
 }
 
 .markdown-body a:hover {
-  text-decoration: underline;
+    text-decoration: underline;
 }
 
 .markdown-body table {
-  border-spacing: 0;
-  border-collapse: collapse;
-  width: 100%;
-  overflow: auto;
-  margin-bottom: 16px;
+    border-spacing: 0;
+    border-collapse: collapse;
+    width: 100%;
+    overflow: auto;
+    margin-bottom: 16px;
 }
 
 .markdown-body table th,
 .markdown-body table td {
-  padding: 6px 13px;
-  border: 1px solid #dfe2e5;
+    padding: 6px 13px;
+    border: 1px solid var(--v-theme-background);
 }
 
 .markdown-body table tr {
-  background-color: #fff;
-  border-top: 1px solid #c6cbd1;
+    background-color: var(--v-theme-surface);
+    border-top: 1px solid var(--v-theme-border);
 }
 
 .markdown-body table tr:nth-child(2n) {
-  background-color: #f6f8fa;
+    background-color: var(--v-theme-background);
 }
 
 .markdown-body hr {
-  height: 0.25em;
-  padding: 0;
-  margin: 24px 0;
-  background-color: #e1e4e8;
-  border: 0;
+    height: 0.25em;
+    padding: 0;
+    margin: 24px 0;
+    background-color: var(--v-theme-containerBg);
+    border: 0;
 }
 </style>
 
