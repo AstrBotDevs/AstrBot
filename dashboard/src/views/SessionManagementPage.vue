@@ -157,6 +157,19 @@
             </v-select>
           </template>
 
+          <!-- 插件管理 -->
+          <template v-slot:item.plugins="{ item }">
+            <v-btn
+              size="small"
+              variant="text"
+              color="primary"
+              @click="openPluginManager(item)"
+              :loading="item.loadingPlugins"
+            >
+              编辑
+            </v-btn>
+          </template>
+
           <!-- 操作 -->
           <template v-slot:item.actions="{ item }">
             <v-btn
@@ -308,6 +321,65 @@
       </v-card>
     </v-dialog>
 
+    <!-- 插件管理对话框 -->
+    <v-dialog v-model="pluginDialog" max-width="800">
+      <v-card v-if="selectedSessionForPlugin">
+        <v-card-title class="bg-primary text-white py-3 px-4">
+          <v-icon color="white" class="me-2">mdi-pencil</v-icon>
+          <span>插件管理 - {{ selectedSessionForPlugin.session_name }}</span>
+          <v-spacer></v-spacer>
+          <v-btn icon variant="text" color="white" @click="pluginDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+
+        <v-card-text class="pa-4" v-if="!loadingPlugins">
+          <div v-if="sessionPlugins.length === 0" class="text-center py-8">
+            <v-icon size="64" color="grey-400">mdi-puzzle-outline</v-icon>
+            <div class="text-h6 mt-4 text-grey-600">暂无可用插件</div>
+            <div class="text-body-2 text-grey-500">目前没有激活的插件</div>
+          </div>
+          
+          <v-list v-else>
+            <v-list-item
+              v-for="plugin in sessionPlugins"
+              :key="plugin.name"
+              class="px-0"
+            >
+              <template v-slot:prepend>
+                <v-icon :color="plugin.enabled ? 'success' : 'grey'">
+                  {{ plugin.enabled ? 'mdi-check-circle' : 'mdi-circle-outline' }}
+                </v-icon>
+              </template>
+              
+              <v-list-item-title class="font-weight-medium">
+                {{ plugin.name }}
+              </v-list-item-title>
+              
+              <v-list-item-subtitle>
+                作者: {{ plugin.author }}
+              </v-list-item-subtitle>
+              
+              <template v-slot:append>
+                <v-switch
+                  :model-value="plugin.enabled"
+                  hide-details
+                  color="primary"
+                  @update:model-value="(value) => togglePlugin(plugin, value)"
+                  :loading="plugin.updating"
+                ></v-switch>
+              </template>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        
+        <v-card-text v-else class="text-center py-8">
+          <v-progress-circular indeterminate color="primary" size="48"></v-progress-circular>
+          <div class="text-body-1 mt-4">加载插件列表中...</div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <!-- 提示信息 -->
     <v-snackbar v-model="snackbar" :timeout="3000" :color="snackbarColor">
       {{ snackbarText }}
@@ -342,6 +414,12 @@ export default {
       detailDialog: false,
       selectedSession: null,
       
+      // 插件管理
+      pluginDialog: false,
+      selectedSessionForPlugin: null,
+      sessionPlugins: [],
+      loadingPlugins: false,
+      
       // 提示信息
       snackbar: false,
       snackbarText: '',
@@ -354,6 +432,7 @@ export default {
         { title: 'Chat Provider', key: 'chat_provider', sortable: false, width: '180px' },
         { title: 'STT Provider', key: 'stt_provider', sortable: false, width: '150px' },
         { title: 'TTS Provider', key: 'tts_provider', sortable: false, width: '150px' },
+        { title: '插件管理', key: 'plugins', sortable: false, width: '120px' },
         { title: '操作', key: 'actions', sortable: false, width: '80px' },
       ],
     }
@@ -433,7 +512,8 @@ export default {
           const data = response.data.data;
           this.sessions = data.sessions.map(session => ({
             ...session,
-            updating: false // 添加更新状态标志
+            updating: false, // 添加更新状态标志
+            loadingPlugins: false // 添加插件加载状态标志
           }));
           this.availablePersonas = data.available_personas;
           this.availableChatProviders = data.available_chat_providers;
@@ -549,6 +629,55 @@ export default {
       this.batchChatProvider = null;
     },
     
+    async openPluginManager(session) {
+      this.selectedSessionForPlugin = session;
+      this.pluginDialog = true;
+      this.loadingPlugins = true;
+      this.sessionPlugins = [];
+      
+      try {
+        const response = await axios.get('/api/session/plugins', {
+          params: { session_id: session.session_id }
+        });
+        
+        if (response.data.status === 'ok') {
+          this.sessionPlugins = response.data.data.plugins.map(plugin => ({
+            ...plugin,
+            updating: false
+          }));
+        } else {
+          this.showError(response.data.message || '加载插件列表失败');
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || '加载插件列表失败');
+      }
+      
+      this.loadingPlugins = false;
+    },
+    
+    async togglePlugin(plugin, enabled) {
+      plugin.updating = true;
+      
+      try {
+        const response = await axios.post('/api/session/update_plugin', {
+          session_id: this.selectedSessionForPlugin.session_id,
+          plugin_name: plugin.name,
+          enabled: enabled
+        });
+        
+        if (response.data.status === 'ok') {
+          plugin.enabled = enabled;
+          this.showSuccess(`插件 ${plugin.name} ${enabled ? '已启用' : '已禁用'}`);
+        } else {
+          this.showError(response.data.message || '插件状态更新失败');
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || '插件状态更新失败');
+      }
+      
+      plugin.updating = false;
+    },
+
     showSessionDetail(session) {
       this.selectedSession = session;
       this.detailDialog = true;

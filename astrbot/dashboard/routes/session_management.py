@@ -5,6 +5,7 @@ from quart import request
 from astrbot.core.db import BaseDatabase
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
 
 class SessionManagementRoute(Route):
@@ -20,6 +21,8 @@ class SessionManagementRoute(Route):
             "/session/update_persona": ("POST", self.update_session_persona),
             "/session/update_provider": ("POST", self.update_session_provider),
             "/session/get_session_info": ("POST", self.get_session_info),
+            "/session/plugins": ("GET", self.get_session_plugins),
+            "/session/update_plugin": ("POST", self.update_session_plugin),
         }
         self.db_helper = db_helper
         self.core_lifecycle = core_lifecycle
@@ -359,3 +362,82 @@ class SessionManagementRoute(Route):
             error_msg = f"获取会话信息失败: {str(e)}\n{traceback.format_exc()}"
             logger.error(error_msg)
             return Response().error(f"获取会话信息失败: {str(e)}").__dict__
+
+    async def get_session_plugins(self):
+        """获取指定会话的插件配置信息"""
+        try:
+            session_id = request.args.get("session_id")
+            
+            if not session_id:
+                return Response().error("缺少必要参数: session_id").__dict__
+            
+            # 获取所有已激活的插件
+            all_plugins = []
+            plugin_manager = self.core_lifecycle.star_context._star_manager
+            
+            for plugin in plugin_manager.context.get_all_stars():
+                # 只显示已激活的插件，不包括保留插件
+                if plugin.activated and not plugin.reserved:
+                    plugin_enabled = SessionPluginManager.is_plugin_enabled_for_session(session_id, plugin.name)
+                    
+                    all_plugins.append({
+                        "name": plugin.name,
+                        "author": plugin.author,
+                        "desc": plugin.desc,
+                        "enabled": plugin_enabled,
+                    })
+            
+            return Response().ok({
+                "session_id": session_id,
+                "plugins": all_plugins,
+            }).__dict__
+            
+        except Exception as e:
+            error_msg = f"获取会话插件配置失败: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            return Response().error(f"获取会话插件配置失败: {str(e)}").__dict__
+    
+    async def update_session_plugin(self):
+        """更新指定会话的插件启停状态"""
+        try:
+            data = await request.get_json()
+            session_id = data.get("session_id")
+            plugin_name = data.get("plugin_name")
+            enabled = data.get("enabled")
+            
+            if not session_id:
+                return Response().error("缺少必要参数: session_id").__dict__
+            
+            if not plugin_name:
+                return Response().error("缺少必要参数: plugin_name").__dict__
+            
+            if enabled is None:
+                return Response().error("缺少必要参数: enabled").__dict__
+            
+            # 验证插件是否存在且已激活
+            plugin_manager = self.core_lifecycle.star_context._star_manager
+            plugin = plugin_manager.context.get_registered_star(plugin_name)
+            
+            if not plugin:
+                return Response().error(f"插件 {plugin_name} 不存在").__dict__
+            
+            if not plugin.activated:
+                return Response().error(f"插件 {plugin_name} 未激活").__dict__
+            
+            if plugin.reserved:
+                return Response().error(f"插件 {plugin_name} 是系统保留插件，无法管理").__dict__
+            
+            # 使用 SessionPluginManager 更新插件状态
+            SessionPluginManager.set_plugin_status_for_session(session_id, plugin_name, enabled)
+            
+            return Response().ok({
+                "message": f"插件 {plugin_name} 已{'启用' if enabled else '禁用'}",
+                "session_id": session_id,
+                "plugin_name": plugin_name,
+                "enabled": enabled,
+            }).__dict__
+            
+        except Exception as e:
+            error_msg = f"更新会话插件状态失败: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            return Response().error(f"更新会话插件状态失败: {str(e)}").__dict__

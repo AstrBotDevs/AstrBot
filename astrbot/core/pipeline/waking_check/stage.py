@@ -8,6 +8,7 @@ from astrbot.core.message.components import At, AtAll
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
 from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
 
 @register_stage
@@ -159,6 +160,9 @@ class WakingCheckStage(Stage):
                     )
 
             event.clear_extra()
+
+        # 根据会话配置过滤插件处理器
+        activated_handlers = SessionPluginManager.filter_handlers_by_session(event, activated_handlers)
 
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)
