@@ -49,8 +49,7 @@ const sidebarItem: menu[] = [
     title: '插件市场',
     icon: 'mdi-storefront',
     to: '/extension-marketplace'
-  },
-  {
+  },  {
     title: '聊天',
     icon: 'mdi-chat',
     to: '/chat'
@@ -59,6 +58,11 @@ const sidebarItem: menu[] = [
     title: '对话数据库',
     icon: 'mdi-database',
     to: '/conversation'
+  },
+  {
+    title: '会话管理',
+    icon: 'mdi-account-group',
+    to: '/session-management'
   },
   {
     title: '控制台',
