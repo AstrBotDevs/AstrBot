@@ -478,9 +478,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     provider_type=ProviderType.TEXT_TO_SPEECH,
                     umo=umo,
                 )
-                event.set_result(
-                    MessageEventResult().message(f"成功切换到 {id_}。")
-                )
+                event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
         elif idx == "stt":
             if idx2 is None:
                 event.set_result(MessageEventResult().message("请输入序号。"))
@@ -495,9 +493,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     provider_type=ProviderType.SPEECH_TO_TEXT,
                     umo=umo,
                 )
-                event.set_result(
-                    MessageEventResult().message(f"成功切换到 {id_}。")
-                )
+                event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
         elif isinstance(idx, int):
             if idx > len(self.context.get_all_providers()) or idx < 1:
                 event.set_result(MessageEventResult().message("无效的序号。"))
@@ -544,13 +540,13 @@ UID: {user_id} 此 ID 可用于设置管理员。
             )
             return
 
-        if not self.context.get_using_provider():
+        if not self.context.get_using_provider(message.unified_msg_origin):
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。")
             )
             return
 
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
@@ -590,7 +586,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
         self, message: AstrMessageEvent, idx_or_name: Union[int, str] = None
     ):
         """查看或者切换模型"""
-        if not self.context.get_using_provider():
+        prov = self.context.get_using_provider(message.unified_msg_origin)
+        if not prov:
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。")
             )
@@ -601,7 +598,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         if idx_or_name is None:
             models = []
             try:
-                models = await self.context.get_using_provider().get_models()
+                models = await prov.get_models()
             except BaseException as e:
                 err_msg = api_key_pattern.sub("key=***", str(e))
                 message.set_result(
@@ -616,7 +613,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 ret += f"\n{i}. {model}"
                 i += 1
 
-            curr_model = self.context.get_using_provider().get_model() or "无"
+            curr_model = prov.get_model() or "无"
             ret += f"\n当前模型: [{curr_model}]"
 
             ret += "\nTips: 使用 /model <模型名/编号>，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
@@ -625,7 +622,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             if isinstance(idx_or_name, int):
                 models = []
                 try:
-                    models = await self.context.get_using_provider().get_models()
+                    models = await prov.get_models()
                 except BaseException as e:
                     message.set_result(
                         MessageEventResult().message("获取模型列表失败: " + str(e))
@@ -636,24 +633,22 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 else:
                     try:
                         new_model = models[idx_or_name - 1]
-                        self.context.get_using_provider().set_model(new_model)
+                        prov.set_model(new_model)
                     except BaseException as e:
                         message.set_result(
                             MessageEventResult().message("切换模型未知错误: " + str(e))
                         )
                     message.set_result(MessageEventResult().message("切换模型成功。"))
             else:
-                self.context.get_using_provider().set_model(idx_or_name)
+                prov.set_model(idx_or_name)
                 message.set_result(
-                    MessageEventResult().message(
-                        f"切换模型到 {self.context.get_using_provider().get_model()}。"
-                    )
+                    MessageEventResult().message(f"切换模型到 {prov.get_model()}。")
                 )
 
     @filter.command("history")
     async def his(self, message: AstrMessageEvent, page: int = 1):
         """查看对话记录"""
-        if not self.context.get_using_provider():
+        if not self.context.get_using_provider(message.unified_msg_origin):
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。")
             )
@@ -700,7 +695,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def convs(self, message: AstrMessageEvent, page: int = 1):
         """查看对话列表"""
 
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             """原有的Dify处理逻辑保持不变"""
             ret = "Dify 对话列表:\n"
@@ -790,7 +785,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         """
         创建新对话
         """
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
@@ -818,7 +813,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("groupnew")
     async def groupnew_conv(self, message: AstrMessageEvent, sid: str):
         """创建新群聊对话"""
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
@@ -855,7 +850,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             )
             return
 
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
             data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
@@ -909,7 +904,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("rename")
     async def rename_conv(self, message: AstrMessageEvent, new_name: str):
         """重命名对话"""
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
 
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
@@ -941,7 +936,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             )
             return
 
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
             dify_cid = provider.conversation_ids.pop(message.unified_msg_origin, None)
@@ -982,32 +977,33 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("key")
     async def key(self, message: AstrMessageEvent, index: int = None):
-        if not self.context.get_using_provider():
+        prov = self.context.get_using_provider(message.unified_msg_origin)
+        if not prov:
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。")
             )
             return
 
         if index is None:
-            keys_data = self.context.get_using_provider().get_keys()
-            curr_key = self.context.get_using_provider().get_current_key()
+            keys_data = prov.get_keys()
+            curr_key = prov.get_current_key()
             ret = "Key:"
             for i, k in enumerate(keys_data):
                 ret += f"\n{i + 1}. {k[:8]}"
 
             ret += f"\n当前 Key: {curr_key[:8]}"
-            ret += "\n当前模型: " + self.context.get_using_provider().get_model()
+            ret += "\n当前模型: " + prov.get_model()
             ret += "\n使用 /key <idx> 切换 Key。"
 
             message.set_result(MessageEventResult().message(ret).use_t2i(False))
         else:
-            keys_data = self.context.get_using_provider().get_keys()
+            keys_data = prov.get_keys()
             if index > len(keys_data) or index < 1:
                 message.set_result(MessageEventResult().message("Key 序号错误。"))
             else:
                 try:
                     new_key = keys_data[index - 1]
-                    self.context.get_using_provider().set_key(new_key)
+                    prov.set_key(new_key)
                 except BaseException as e:
                     message.set_result(
                         MessageEventResult().message("切换 Key 未知错误: " + str(e))
@@ -1206,7 +1202,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
             if need_active:
                 """主动回复"""
-                provider = self.context.get_using_provider()
+                provider = self.context.get_using_provider(event.unified_msg_origin)
                 if not provider:
                     logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
                     return
