@@ -77,6 +77,7 @@ async function validate(values: any, { setErrors }: any) {
       :disabled="valid"
       type="submit"
       elevation="2"
+
     >
       <span class="login-btn-text">登录</span>
     </v-btn>
@@ -146,6 +147,7 @@ async function validate(values: any, { setErrors }: any) {
     height: 48px;
     transition: all 0.3s ease;
     letter-spacing: 0.5px;
+    border-radius: 8px !important;
     
     &:hover {
       transform: translateY(-2px);
