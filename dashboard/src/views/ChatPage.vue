@@ -39,13 +39,16 @@ const props = defineProps({
                     </div>
 
                     <div style="padding: 16px; padding-top: 8px;">
-                        <v-btn rounded="lg" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus">创建对话</v-btn>
+                        <v-btn block variant="text" class="new-chat-btn" @click="newC" :disabled="!currCid"
+                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus" style="box-shadow: 0 1px 2px rgba(0,0,0,0.1); background-color: transparent !important; border-radius: 4px;">创建对话</v-btn>
                         <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currCid" v-if="sidebarCollapsed"
                             elevation="0"></v-btn>
                     </div>
+                    <div v-if="!sidebarCollapsed">
+                        <v-divider class="mx-2"></v-divider>
+                    </div>
 
-                    <div style="overflow-y: auto;" :class="{ 'fade-in': sidebarHoverExpanded }"
+                    <div style="overflow-y: auto; flex-grow: 1;" :class="{ 'fade-in': sidebarHoverExpanded }"
                         v-if="!sidebarCollapsed">
                         <v-card class="conversation-list-card" v-if="conversations.length > 0" flat>
                             <v-list density="compact" nav class="conversation-list"
@@ -75,14 +78,17 @@ const props = defineProps({
                         </v-fade-transition>
                     </div>
 
-                    <div style="padding: 16px; padding-bottom: 0px;" :class="{ 'fade-in': sidebarHoverExpanded }"
+                    <div v-if="!sidebarCollapsed">
+                        <v-divider class="mx-2"></v-divider>
+                    </div>
+                    <div style="padding: 16px;" :class="{ 'fade-in': sidebarHoverExpanded }"
                         v-if="!sidebarCollapsed">
                         <div class="sidebar-section-title">
                             系统状态
                         </div>
                         <div class="status-chips">
                             <v-chip class="status-chip" :color="status?.llm_enabled ? 'primary' : 'grey-lighten-2'"
-                                variant="elevated" size="small">
+                                variant="outlined" size="small" rounded="sm">
                                 <template v-slot:prepend>
                                     <v-icon :icon="status?.llm_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
                                         size="x-small"></v-icon>
@@ -91,7 +97,7 @@ const props = defineProps({
                             </v-chip>
 
                             <v-chip class="status-chip" :color="status?.stt_enabled ? 'success' : 'grey-lighten-2'"
-                                variant="elevated" size="small">
+                                variant="outlined" size="small" rounded="sm">
                                 <template v-slot:prepend>
                                     <v-icon :icon="status?.stt_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
                                         size="x-small"></v-icon>
@@ -100,11 +106,22 @@ const props = defineProps({
                             </v-chip>
                         </div>
 
-                        <v-btn variant="tonal" rounded="lg" class="delete-chat-btn" v-if="currCid"
-                            @click="deleteConversation(currCid)" color="error" density="comfortable" size="small">
-                            <v-icon start size="small">mdi-delete</v-icon>
-                            删除此对话
-                        </v-btn>
+                        <transition
+                            name="expand"
+                            @before-enter="beforeEnter"
+                            @enter="enter"
+                            @after-enter="afterEnter"
+                            @before-leave="beforeLeave"
+                            @leave="leave"
+                        >
+                            <div v-if="currCid" class="delete-btn-container">
+                                <v-btn variant="outlined" rounded="sm" class="delete-chat-btn"
+                                    @click="deleteConversation(currCid)" color="error" density="comfortable" size="small">
+                                    <v-icon start size="small">mdi-delete</v-icon>
+                                    删除此对话
+                                </v-btn>
+                            </div>
+                        </transition>
                     </div>
                 </div>
 
@@ -118,8 +135,11 @@ const props = defineProps({
                         </div>
                         <div class="conversation-header-actions">
                             <!-- router 推送到 /chatbox -->
-                            <v-icon @click="router.push('/chatbox')" v-if="!props.chatboxMode" 
+                            <v-icon @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')" v-if="!props.chatboxMode"
                                 class="fullscreen-icon">mdi-fullscreen</v-icon>
+                            <!-- router 推送到 /chat -->
+                            <v-icon @click="router.push(currCid ? `/chat/${currCid}` : '/chat')" v-if="props.chatboxMode"
+                                class="fullscreen-icon">mdi-fullscreen-exit</v-icon>
                         </div>
                     </div>
                     <v-divider v-if="currCid && getCurrentConversation" class="conversation-divider"></v-divider>
@@ -912,6 +932,23 @@ export default {
             });
             this.mediaCache = {};
         },
+
+        // For smooth height transition on delete button
+        beforeEnter(el) {
+            el.style.height = '0';
+        },
+        enter(el) {
+            el.style.height = el.scrollHeight + 'px';
+        },
+        afterEnter(el) {
+            el.style.height = 'auto';
+        },
+        beforeLeave(el) {
+            el.style.height = el.scrollHeight + 'px';
+        },
+        leave(el) {
+            el.style.height = '0';
+        },
     },
 }
 </script>
@@ -967,9 +1004,16 @@ export default {
     }
 }
 
-.fade-in {
-    animation: fadeInContent 0.2s ease-in forwards;
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
 }
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
+
 
 /* 聊天页面布局 */
 /* todo: 聊天页面背景颜色有问题 */
@@ -1006,6 +1050,23 @@ export default {
     transition: all 0.3s ease;
     overflow: hidden;
     /* 防止内容溢出 */
+}
+
+.sidebar-panel ::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar-panel ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar-panel ::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.sidebar-panel ::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.3);
 }
 
 /* 侧边栏折叠状态 */
@@ -1074,19 +1135,30 @@ export default {
     margin-bottom: 12px;
     padding-left: 4px;
     transition: opacity 0.25s ease;
+    white-space: nowrap;
 }
 
 .status-chips {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
     margin-bottom: 16px;
     transition: opacity 0.25s ease;
 }
 
+.status-chips .v-chip {
+    flex: 1 1 0;
+    justify-content: center;
+    opacity: 0.7; /* Make border and text slightly transparent */
+}
+
 .status-chip {
     font-size: 12px;
     height: 24px !important;
+}
+
+.delete-chat-btn {
+    height: 32px !important; /* Increase button height */
 }
 
 .delete-chat-btn {
@@ -1104,6 +1176,20 @@ export default {
 
 .delete-chat-btn:hover {
     background-color: rgba(211, 47, 47, 0.1) !important;
+}
+
+.delete-btn-container {
+    margin-top: -8px; /* Reduce space to the element above */
+}
+
+.delete-chat-btn {
+    opacity: 0.7;
+}
+
+.expand-enter-active,
+.expand-leave-active {
+    transition: height 0.15s ease-in-out;
+    overflow: hidden;
 }
 
 .no-conversations {
