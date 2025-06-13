@@ -6,6 +6,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
+from astrbot.core.star.session_llm_manager import SessionLLMManager
 
 
 class SessionManagementRoute(Route):
@@ -23,6 +24,7 @@ class SessionManagementRoute(Route):
             "/session/get_session_info": ("POST", self.get_session_info),
             "/session/plugins": ("GET", self.get_session_plugins),
             "/session/update_plugin": ("POST", self.update_session_plugin),
+            "/session/update_llm": ("POST", self.update_session_llm),
         }
         self.db_helper = db_helper
         self.core_lifecycle = core_lifecycle
@@ -47,8 +49,7 @@ class SessionManagementRoute(Route):
             provider_manager = self.core_lifecycle.star_context.provider_manager
             
             sessions = []
-            
-            # 构建会话信息
+              # 构建会话信息
             for session_id, conversation_id in session_conversations.items():
                 session_info = {
                     "session_id": session_id,
@@ -61,6 +62,7 @@ class SessionManagementRoute(Route):
                     "stt_provider_name": None,
                     "tts_provider_id": None,
                     "tts_provider_name": None,
+                    "llm_enabled": SessionLLMManager.is_llm_enabled_for_session(session_id),
                     "platform": session_id.split(":")[0] if ":" in session_id else "unknown",
                     "message_type": session_id.split(":")[1] if session_id.count(":") >= 1 else "unknown",
                     "session_name": session_id.split(":")[2] if session_id.count(":") >= 2 else session_id,
@@ -260,8 +262,7 @@ class SessionManagementRoute(Route):
             
             if not session_id:
                 return Response().error("缺少必要参数: session_id").__dict__
-            
-            # 获取会话对话信息
+              # 获取会话对话信息
             session_conversations = sp.get("session_conversation", {})
             conversation_id = session_conversations.get(session_id)
             
@@ -279,6 +280,7 @@ class SessionManagementRoute(Route):
                 "stt_provider_name": None,
                 "tts_provider_id": None,
                 "tts_provider_name": None,
+                "llm_enabled": SessionLLMManager.is_llm_enabled_for_session(session_id),
                 "platform": session_id.split(":")[0] if ":" in session_id else "unknown",
                 "message_type": session_id.split(":")[1] if session_id.count(":") >= 1 else "unknown",
                 "session_name": session_id.split(":")[2] if session_id.count(":") >= 2 else session_id,
@@ -441,3 +443,30 @@ class SessionManagementRoute(Route):
             error_msg = f"更新会话插件状态失败: {str(e)}\n{traceback.format_exc()}"
             logger.error(error_msg)
             return Response().error(f"更新会话插件状态失败: {str(e)}").__dict__
+    
+    async def update_session_llm(self):
+        """更新指定会话的LLM启停状态"""
+        try:
+            data = await request.get_json()
+            session_id = data.get("session_id")
+            enabled = data.get("enabled")
+            
+            if not session_id:
+                return Response().error("缺少必要参数: session_id").__dict__
+            
+            if enabled is None:
+                return Response().error("缺少必要参数: enabled").__dict__
+            
+            # 使用 SessionLLMManager 更新LLM状态
+            SessionLLMManager.set_llm_status_for_session(session_id, enabled)
+            
+            return Response().ok({
+                "message": f"LLM已{'启用' if enabled else '禁用'}",
+                "session_id": session_id,
+                "llm_enabled": enabled,
+            }).__dict__
+            
+        except Exception as e:
+            error_msg = f"更新会话LLM状态失败: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            return Response().error(f"更新会话LLM状态失败: {str(e)}").__dict__

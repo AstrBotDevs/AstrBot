@@ -154,7 +154,25 @@
                   {{ selection.raw.label }}
                 </v-chip>
               </template>
-            </v-select>
+            </v-select>          </template>
+
+          <!-- LLM启停 -->
+          <template v-slot:item.llm_enabled="{ item }">
+            <v-switch
+              :model-value="item.llm_enabled"
+              @update:model-value="(value) => updateLLM(item, value)"
+              :loading="item.updating"
+              hide-details
+              density="compact"
+              color="primary"
+              inset
+            >
+              <template v-slot:label>
+                <span class="text-caption">
+                  {{ item.llm_enabled ? '已启用' : '已禁用' }}
+                </span>
+              </template>
+            </v-switch>
           </template>
 
           <!-- 插件管理 -->
@@ -307,12 +325,23 @@
                 </v-chip>
               </v-list-item-subtitle>
             </v-list-item>
-            
-            <v-list-item v-if="selectedSession.tts_provider_name">
+              <v-list-item v-if="selectedSession.tts_provider_name">
               <v-list-item-title>TTS Provider</v-list-item-title>
               <v-list-item-subtitle>
                 <v-chip size="small" color="warning">
                   {{ selectedSession.tts_provider_name }}
+                </v-chip>
+              </v-list-item-subtitle>
+            </v-list-item>
+            
+            <v-list-item>
+              <v-list-item-title>LLM状态</v-list-item-title>
+              <v-list-item-subtitle>
+                <v-chip 
+                  size="small" 
+                  :color="selectedSession.llm_enabled ? 'success' : 'error'"
+                >
+                  {{ selectedSession.llm_enabled ? '已启用' : '已禁用' }}
                 </v-chip>
               </v-list-item-subtitle>
             </v-list-item>
@@ -424,14 +453,14 @@ export default {
       snackbar: false,
       snackbarText: '',
       snackbarColor: 'success',
-      
-      // 表格头部
+        // 表格头部
       headers: [
         { title: '会话信息', key: 'session_info', sortable: false, width: '200px' },
         { title: '人格', key: 'persona', sortable: false, width: '180px' },
         { title: 'Chat Provider', key: 'chat_provider', sortable: false, width: '180px' },
         { title: 'STT Provider', key: 'stt_provider', sortable: false, width: '150px' },
         { title: 'TTS Provider', key: 'tts_provider', sortable: false, width: '150px' },
+        { title: 'LLM启停', key: 'llm_enabled', sortable: false, width: '120px' },
         { title: '插件管理', key: 'plugins', sortable: false, width: '120px' },
         { title: '操作', key: 'actions', sortable: false, width: '80px' },
       ],
@@ -585,6 +614,25 @@ export default {
         }
       } catch (error) {
         this.showError(error.response?.data?.message || 'Provider 更新失败');
+      }      session.updating = false;
+    },
+    
+    async updateLLM(session, enabled) {
+      session.updating = true;
+      try {
+        const response = await axios.post('/api/session/update_llm', {
+          session_id: session.session_id,
+          enabled: enabled
+        });
+        
+        if (response.data.status === 'ok') {
+          session.llm_enabled = enabled;
+          this.showSuccess(`LLM ${enabled ? '已启用' : '已禁用'}`);
+        } else {
+          this.showError(response.data.message || 'LLM状态更新失败');
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || 'LLM状态更新失败');
       }
       session.updating = false;
     },

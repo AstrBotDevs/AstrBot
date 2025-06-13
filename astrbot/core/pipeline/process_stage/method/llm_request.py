@@ -26,6 +26,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
+from astrbot.core.star.session_llm_manager import SessionLLMManager
 from mcp.types import (
     TextContent,
     ImageContent,
@@ -71,6 +72,12 @@ class LLMRequestSubStage(Stage):
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug("未启用 LLM 能力，跳过处理。")
             return
+        
+        # 检查会话级别的LLM启停状态
+        if not SessionLLMManager.should_process_llm_request(event):
+            logger.debug(f"会话 {event.unified_msg_origin} 禁用了 LLM，跳过处理。")
+            return
+            
         umo = event.unified_msg_origin
         provider = self.ctx.plugin_manager.context.get_using_provider(umo=umo)
         if provider is None:
