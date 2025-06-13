@@ -4,6 +4,7 @@ import axios from 'axios';
 import { marked } from 'marked';
 import { ref } from 'vue';
 import { defineProps } from 'vue';
+import { useCustomizerStore } from '@/stores/customizer';
 
 marked.setOptions({
     breaks: true
@@ -48,7 +49,7 @@ const props = defineProps({
                         <v-divider class="mx-2"></v-divider>
                     </div>
 
-                    <div style="overflow-y: auto; flex-grow: 1;" :class="{ 'fade-in': sidebarHoverExpanded }"
+                    <div style="overflow-y: auto; flex-grow: 1;" class="sidebar-panel" :class="{ 'fade-in': sidebarHoverExpanded }"
                         v-if="!sidebarCollapsed">
                         <v-card class="conversation-list-card" v-if="conversations.length > 0" flat>
                             <v-list density="compact" nav class="conversation-list"
@@ -135,11 +136,27 @@ const props = defineProps({
                         </div>
                         <div class="conversation-header-actions">
                             <!-- router 推送到 /chatbox -->
-                            <v-icon @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')" v-if="!props.chatboxMode"
-                                class="fullscreen-icon">mdi-fullscreen</v-icon>
+                            <v-tooltip text="全屏模式" v-if="!props.chatboxMode">
+                                <template v-slot:activator="{ props }">
+                                    <v-icon v-bind="props" @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')"
+                                        class="fullscreen-icon">mdi-fullscreen</v-icon>
+                                </template>
+                            </v-tooltip>
+                            <!-- 主题切换按钮 -->
+                            <v-tooltip :text="isDark ? '切换到日间模式' : '切换到夜间模式'" v-if="props.chatboxMode">
+                                <template v-slot:activator="{ props }">
+                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon" variant="text">
+                                        <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
+                                    </v-btn>
+                                </template>
+                            </v-tooltip>
                             <!-- router 推送到 /chat -->
-                            <v-icon @click="router.push(currCid ? `/chat/${currCid}` : '/chat')" v-if="props.chatboxMode"
-                                class="fullscreen-icon">mdi-fullscreen-exit</v-icon>
+                            <v-tooltip text="退出全屏" v-if="props.chatboxMode">
+                                <template v-slot:activator="{ props }">
+                                    <v-icon v-bind="props" @click="router.push(currCid ? `/chat/${currCid}` : '/chat')"
+                                        class="fullscreen-icon">mdi-fullscreen-exit</v-icon>
+                                </template>
+                            </v-tooltip>
                         </div>
                     </div>
                     <v-divider v-if="currCid && getCurrentConversation" class="conversation-divider"></v-divider>
@@ -332,6 +349,9 @@ export default {
     },
     
     computed: {
+        isDark() {
+            return useCustomizerStore().uiTheme === 'PurpleThemeDark';
+        },
         // Get the current conversation from the conversations array
         getCurrentConversation() {
             if (!this.currCid) return null;
@@ -380,6 +400,7 @@ export default {
     },
 
     mounted() {
+        // Theme is now handled globally by the customizer store.
         this.startListeningEvent();
         this.checkStatus();
         this.getConversations();
@@ -421,6 +442,11 @@ export default {
     },
 
     methods: {
+        toggleTheme() {
+            const customizer = useCustomizerStore();
+            const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
+            customizer.SET_UI_THEME(newTheme);
+        },
         // 切换侧边栏折叠状态
         toggleSidebar() {
             if (this.sidebarHoverExpanded) {
@@ -1016,7 +1042,6 @@ export default {
 
 
 /* 聊天页面布局 */
-/* todo: 聊天页面背景颜色有问题 */
 .chat-page-card {
     margin-bottom: 16px;
     width: 100%;
@@ -1142,7 +1167,7 @@ export default {
     display: flex;
     flex-wrap: nowrap;
     gap: 8px;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
     transition: opacity 0.25s ease;
 }
 
@@ -1158,12 +1183,9 @@ export default {
 }
 
 .delete-chat-btn {
-    height: 32px !important; /* Increase button height */
-}
-
-.delete-chat-btn {
+    height: 32px !important;
     width: 100%;
-    color: #d32f2f !important;
+    color: rgb(var(--v-theme-error)) !important;
     font-weight: 500;
     box-shadow: none !important;
     margin-top: 8px;
@@ -1172,18 +1194,15 @@ export default {
     font-size: 12px;
     line-height: 1.2em;
     transition: opacity 0.25s ease;
+    opacity: 0.7;
 }
 
 .delete-chat-btn:hover {
-    background-color: rgba(211, 47, 47, 0.1) !important;
+    background-color: rgba(var(--v-theme-error-rgb), 0.1) !important;
 }
 
 .delete-btn-container {
-    margin-top: -8px; /* Reduce space to the element above */
-}
-
-.delete-chat-btn {
-    opacity: 0.7;
+    /* margin-top: -8px; */ /* Removed for better layout practices */
 }
 
 .expand-enter-active,
