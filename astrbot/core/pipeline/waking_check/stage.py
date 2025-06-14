@@ -4,7 +4,7 @@ from astrbot import logger
 from typing import Union, AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
-from astrbot.core.message.components import At, AtAll
+from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
 from astrbot.core.star.filter.permission import PermissionTypeFilter
@@ -88,6 +88,12 @@ class WakingCheckStage(Stage):
                     is_wake = True
                     event.is_wake = True
                     wake_prefix = ""
+                    event.is_at_or_wake_command = True
+                    break
+            for message in messages:
+                if isinstance(message, Reply) and str(message.sender_id) == str(event.get_self_id()):
+                    is_wake = True
+                    event.is_wake = True
                     event.is_at_or_wake_command = True
                     break
             # 检查是否是私聊
