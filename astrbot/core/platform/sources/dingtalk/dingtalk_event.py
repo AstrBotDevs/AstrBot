@@ -31,21 +31,23 @@ class DingtalkMessageEvent(AstrMessageEvent):
                     self.message_obj.raw_message,
                 )
             elif isinstance(segment, Comp.Image):
+                file = segment.file
                 markdown_str = ""
-                if segment.file and segment.file.startswith("file:///"):
-                    logger.warning(
-                        "dingtalk only support url image, not: " + segment.file
-                    )
-                    continue
-                elif segment.file and segment.file.startswith("http"):
-                    markdown_str += f"![image]({segment.file})\n\n"
-                elif segment.file and segment.file.startswith("base64://"):
-                    logger.warning("dingtalk only support url image, not base64")
-                    continue
-                else:
-                    logger.warning(
-                        "dingtalk only support url image, not: " + segment.file
-                    )
+
+                try:
+                    if not file:
+                        logger.warning("钉钉图片 segment 缺少 file 字段，跳过")
+                        continue
+
+                    if file.startswith("http"):
+                        markdown_str += f"![image]({file})\n\n"
+                    else:
+                        url = await segment.register_to_file_service()
+                        markdown_str += f"![image]({url})\n\n"
+
+                except Exception as e:
+                    logger.error(f"钉钉图片处理失败: {e}")
+                    logger.warning(f"跳过图片发送: {file}")
                     continue
 
                 ret = await asyncio.get_event_loop().run_in_executor(
