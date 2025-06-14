@@ -32,25 +32,20 @@ class DingtalkMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(segment, Comp.Image):
                 markdown_str = ""
-                try:
-                    if segment.file and segment.file.startswith("file:///"):
-                        # 本地文件，注册到文件服务
-                        url = await segment.register_to_file_service()
-                        markdown_str += f"![image]({url})\n\n"
-                    elif segment.file and segment.file.startswith("http"):
-                        # HTTP URL，直接使用
-                        markdown_str += f"![image]({segment.file})\n\n"
-                    elif segment.file and segment.file.startswith("base64://"):
-                        # base64图片，注册到文件服务
-                        url = await segment.register_to_file_service()
-                        markdown_str += f"![image]({url})\n\n"
-                    else:
-                        # 其他本地路径，尝试注册到文件服务
-                        url = await segment.register_to_file_service()
-                        markdown_str += f"![image]({url})\n\n"
-                except Exception as e:
-                    logger.error(f"钉钉图片处理失败: {e}")
-                    logger.warning(f"跳过图片发送: {segment.file}")
+                if segment.file and segment.file.startswith("file:///"):
+                    logger.warning(
+                        "dingtalk only support url image, not: " + segment.file
+                    )
+                    continue
+                elif segment.file and segment.file.startswith("http"):
+                    markdown_str += f"![image]({segment.file})\n\n"
+                elif segment.file and segment.file.startswith("base64://"):
+                    logger.warning("dingtalk only support url image, not base64")
+                    continue
+                else:
+                    logger.warning(
+                        "dingtalk only support url image, not: " + segment.file
+                    )
                     continue
 
                 ret = await asyncio.get_event_loop().run_in_executor(
