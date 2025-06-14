@@ -26,24 +26,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
         """修复部分字段"""
-        if isinstance(segment, (Image, Record)):
-            # For Image and Record segments, we convert them to base64
-            bs64 = await segment.convert_to_base64()
-            return {
-                "type": segment.type.lower(),
-                "data": {
-                    "file": f"base64://{bs64}",
-                },
-            }
-        elif isinstance(segment, File):
-            # For File segments, we need to handle the file differently
-            d = await segment.to_dict()
-            return d
-        elif isinstance(segment, Video):
-            d = await segment.to_dict()
-            return d
+        if isinstance(segment, (Image, Record, File, Video)):
+            return await segment.to_dict()
         else:
-            # For other segments, we simply convert them to a dict by calling toDict
             return segment.toDict()
 
     @staticmethod
