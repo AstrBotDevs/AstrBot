@@ -31,23 +31,23 @@ class DingtalkMessageEvent(AstrMessageEvent):
                     self.message_obj.raw_message,
                 )
             elif isinstance(segment, Comp.Image):
-                file = segment.file
+                file_ = segment.file
                 markdown_str = ""
 
                 try:
-                    if not file:
+                    if not file_:
                         logger.warning("钉钉图片 segment 缺少 file 字段，跳过")
                         continue
 
-                    if file.startswith("http"):
-                        markdown_str += f"![image]({file})\n\n"
+                    if file_.startswith("http://", "https://"):
+                        markdown_str += f"![image]({file_})\n\n"
                     else:
                         url = await segment.register_to_file_service()
                         markdown_str += f"![image]({url})\n\n"
 
                 except Exception as e:
                     logger.error(f"钉钉图片处理失败: {e}")
-                    logger.warning(f"跳过图片发送: {file}")
+                    logger.warning(f"跳过图片发送: {file_}")
                     continue
 
                 ret = await asyncio.get_event_loop().run_in_executor(
