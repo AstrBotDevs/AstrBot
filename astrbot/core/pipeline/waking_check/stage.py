@@ -90,6 +90,7 @@ class WakingCheckStage(Stage):
                     wake_prefix = ""
                     event.is_at_or_wake_command = True
                     break
+            # 检查是否引用了bot的消息
             for message in messages:
                 if isinstance(message, Reply) and str(message.sender_id) == str(event.get_self_id()):
                     is_wake = True
