@@ -31,34 +31,32 @@ class DingtalkMessageEvent(AstrMessageEvent):
                     self.message_obj.raw_message,
                 )
             elif isinstance(segment, Comp.Image):
-                file_ = segment.file
                 markdown_str = ""
 
                 try:
-                    if not file_:
+                    if not segment.file:
                         logger.warning("钉钉图片 segment 缺少 file 字段，跳过")
                         continue
-
-                    if file_.startswith("http://", "https://"):
-                        markdown_str += f"![image]({file_})\n\n"
+                    if segment.file.startswith(("http://", "https://")):
+                        image_url = segment.file
                     else:
-                        url = await segment.register_to_file_service()
-                        markdown_str += f"![image]({url})\n\n"
+                        image_url = await segment.register_to_file_service()
+
+                    markdown_str = f"![image]({image_url})\n\n"
+
+                    ret = await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        client.reply_markdown,
+                        "😄",
+                        markdown_str,
+                        self.message_obj.raw_message,
+                    )
+                    logger.debug(f"send image: {ret}")
 
                 except Exception as e:
                     logger.error(f"钉钉图片处理失败: {e}")
-                    logger.warning(f"跳过图片发送: {file_}")
+                    logger.warning(f"跳过图片发送: {image_path}")
                     continue
-
-                ret = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    client.reply_markdown,
-                    "😄",
-                    markdown_str,
-                    self.message_obj.raw_message,
-                )
-                logger.debug(f"send image: {ret}")
-
     async def send(self, message: MessageChain):
         await self.send_with_client(self.client, message)
         await super().send(message)
