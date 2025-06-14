@@ -160,25 +160,23 @@ function endDrag() {
     width="220"
     :rail="customizer.mini_sidebar"
   >
-    <v-list class="pa-4 listitem" style="height: auto;">
-      <template v-for="(item, i) in sidebarMenu" :key="i">
-        <NavItem :item="item" class="leftPadding" />
-      </template>
-    </v-list>
-    <div style="position: absolute; bottom: 16px; width: 100%; font-size: 13px;" class="text-center">
-      <v-btn style="margin-bottom: 8px;" size="small" variant="primary" v-if="!customizer.mini_sidebar" to="/settings">
-        🔧 设置
-      </v-btn>
-      <br/>
-      <v-btn style="margin-bottom: 8px;" size="small" variant="plain" v-if="!customizer.mini_sidebar" @click="toggleIframe">
-        官方文档
-      </v-btn>
-      <br/>
-      <v-btn style="margin-bottom: 8px;" size="small" variant="plain" v-if="!customizer.mini_sidebar" @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
-        GitHub
-      </v-btn>
-      <br/>
-      
+    <div class="sidebar-container">
+      <v-list class="pa-4 listitem flex-grow-1">
+        <template v-for="(item, i) in sidebarMenu" :key="i">
+          <NavItem :item="item" class="leftPadding" />
+        </template>
+      </v-list>
+      <div class="sidebar-footer" v-if="!customizer.mini_sidebar">
+        <v-btn style="margin-bottom: 8px;" size="small" variant="primary" to="/settings">
+          🔧 设置
+        </v-btn>
+        <v-btn style="margin-bottom: 8px;" size="small" variant="plain" @click="toggleIframe">
+          官方文档
+        </v-btn>
+        <v-btn style="margin-bottom: 8px;" size="small" variant="plain" @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
+          GitHub
+        </v-btn>
+      </div>
     </div>
   </v-navigation-drawer>
   
