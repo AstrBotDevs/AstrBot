@@ -4,7 +4,7 @@
   box-shadow: none !important;
 }
 .listitem {
-  height: calc(100vh - 100px);
+  overflow-y: auto;
   .v-list {
     color: rgb(var(--v-theme-secondaryText));
   }
@@ -14,6 +14,39 @@
     padding-inline-start: calc(12px + var(--indent-padding) / 2) !important;
     &:hover {
       color: rgb(var(--v-theme-secondary));
+    }
+  }
+}
+
+// 深色主题下的侧边栏悬停和选中样式
+.v-theme--PurpleThemeDark .leftSidebar {
+  .listitem {
+    .v-list-group__items .v-list-item,
+    .v-list-item {
+      &:hover {
+        color: #b794f6 !important;
+        
+        .v-list-item-title {
+          color: #b794f6 !important;
+        }
+        
+        .v-icon {
+          color: #b794f6 !important;
+        }
+      }
+      
+      // 选中状态的样式
+      &.v-list-item--active {
+        color: #b794f6 !important;
+        
+        .v-list-item-title {
+          color: #b794f6 !important;
+        }
+        
+        .v-icon {
+          color: #b794f6 !important;
+        }
+      }
     }
   }
   .v-list-item--density-default.v-list-item--one-line {
@@ -48,6 +81,37 @@
       .v-list .v-list-group__items,
       .hide-menu {
         opacity: 1;
+      }
+    }
+  }
+}
+
+// 新的flex布局样式
+.leftSidebar {
+  .sidebar-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    
+    .flex-grow-1 {
+      flex: 1 1 auto;
+      overflow-y: auto;
+    }
+    
+    .sidebar-footer {
+      padding: 16px;
+      background: inherit;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 13px;
+      text-align: center;
+      flex-shrink: 0;
+      
+      .v-btn {
+        width: 100%;
+        max-width: 180px;
+        margin-bottom: 8px !important;
       }
     }
   }
