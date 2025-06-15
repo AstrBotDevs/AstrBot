@@ -1,10 +1,11 @@
+import random
 import re
 import time
 import traceback
 from typing import AsyncGenerator, Union
 
 from astrbot.core import html_renderer, logger, file_token_service
-from astrbot.core.message.components import At, File, Image, Node, Plain, Record, Reply
+from astrbot.core.message.components import At, Face, File, Image, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
@@ -263,7 +264,6 @@ class ResultDecorateStage(Stage):
                             result.chain = [Image.fromFileSystem(url)]
 
             # 触发转发消息
-            has_forwarded = False
             if event.get_platform_name() == "aiocqhttp":
                 word_cnt = 0
                 for comp in result.chain:
@@ -274,13 +274,17 @@ class ResultDecorateStage(Stage):
                         uin=event.get_self_id(), name="AstrBot", content=[*result.chain]
                     )
                     result.chain = [node]
-                    has_forwarded = True
 
-            if not has_forwarded:
+
+            if any(isinstance(comp, (Plain, Face, Image, At)) for comp in result.chain):
                 # at 回复
                 if (
-                    self.reply_with_mention
+                    random.random() < self.reply_with_mention
                     and event.get_message_type() != MessageType.FRIEND_MESSAGE
+                    and not (
+                        isinstance(result.chain[0], At)
+                        and result.chain[0].qq == event.get_sender_id()
+                    )
                 ):
                     result.chain.insert(
                         0, At(qq=event.get_sender_id(), name=event.get_sender_name())
@@ -289,6 +293,6 @@ class ResultDecorateStage(Stage):
                         result.chain[1].text = "\n" + result.chain[1].text
 
                 # 引用回复
-                if self.reply_with_quote:
+                if random.random() < self.reply_with_quote:
                     if not any(isinstance(item, File) for item in result.chain):
                         result.chain.insert(0, Reply(id=event.message_obj.message_id))

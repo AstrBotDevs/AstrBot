@@ -89,6 +89,15 @@ class AstrBotConfig(dict):
         # 创建一个新的有序字典以保持参考配置的顺序
         new_conf = {}
 
+        # 向后兼容性处理
+        if path == "platform_settings":
+            for key in ["reply_with_mention", "reply_with_quote"]:
+                if key in conf and isinstance(conf[key], bool):
+                    # 将布尔值转换为概率值
+                    conf[key] = 1.0 if conf[key] else 0.0
+                    has_new = True
+                    logger.info(f"配置项 {key} 已从布尔值转换为概率值: {conf[key]}")
+
         # 先按照参考配置的顺序添加配置项
         for key, value in refer_conf.items():
             if key not in conf:
