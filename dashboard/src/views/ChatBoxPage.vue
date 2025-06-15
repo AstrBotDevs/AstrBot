@@ -1,13 +1,18 @@
 <script setup>
 import ChatPage from './ChatPage.vue';
+import { useCustomizerStore } from '@/stores/customizer';
+const customizer = useCustomizerStore();
 </script>
 
 <template>
-    <div style="height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-        <div id="container">
-            <ChatPage chatbox-mode="true"></ChatPage>
+    <v-app :theme="customizer.uiTheme" style="height: 100%; width: 100%;">
+        <div
+            style="height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <div id="container">
+                <ChatPage chatbox-mode="true"></ChatPage>
+            </div>
         </div>
-    </div>
+    </v-app>
 </template>
 
 <style scoped>
