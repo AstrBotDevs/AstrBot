@@ -14,64 +14,66 @@ export interface menu {
   subCaption?: string;
 }
 
+// 注意：这个文件现在包含i18n键值而不是直接的文本
+// 在组件中使用时需要通过$t()函数进行翻译
 const sidebarItem: menu[] = [
   {
-    title: '统计',
+    title: 'sidebar.dashboard',
     icon: 'mdi-view-dashboard',
     to: '/dashboard/default'
   },
   {
-    title: '消息平台',
+    title: 'sidebar.platforms',
     icon: 'mdi-message-processing',
     to: '/platforms',
   },
   {
-    title: '服务提供商',
+    title: 'sidebar.providers',
     icon: 'mdi-creation',
     to: '/providers',
   },
   {
-    title: 'MCP',
+    title: 'sidebar.toolUse',
     icon: 'mdi-function-variant',
     to: '/tool-use'
   },
   {
-    title: '配置文件',
+    title: 'sidebar.config',
     icon: 'mdi-cog',
     to: '/config',
   },
   {
-    title: '插件管理',
+    title: 'sidebar.extension',
     icon: 'mdi-puzzle',
     to: '/extension'
   },
   {
-    title: '插件市场',
+    title: 'sidebar.extensionMarketplace',
     icon: 'mdi-storefront',
     to: '/extension-marketplace'
   },
   {
-    title: '聊天',
+    title: 'sidebar.chat',
     icon: 'mdi-chat',
     to: '/chat'
   },
   {
-    title: '对话数据库',
+    title: 'sidebar.conversation',
     icon: 'mdi-database',
     to: '/conversation'
   },
   {
-    title: '控制台',
+    title: 'sidebar.console',
     icon: 'mdi-console',
     to: '/console'
   },
   {
-    title: 'Alkaid',
+    title: 'sidebar.alkaid',
     icon: 'mdi-test-tube',
     to: '/alkaid'
   },
   {
-    title: '关于',
+    title: 'sidebar.about',
     icon: 'mdi-information',
     to: '/about'
   },

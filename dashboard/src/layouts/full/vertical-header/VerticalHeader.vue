@@ -3,6 +3,7 @@ import {ref, computed} from 'vue';
 import {useCustomizerStore} from '@/stores/customizer';
 import axios from 'axios';
 import Logo from '@/components/shared/Logo.vue';
+import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import {md5} from 'js-md5';
 import {useAuthStore} from '@/stores/auth';
 import {useCommonStore} from '@/stores/common';
@@ -146,7 +147,7 @@ function checkUpdate() {
         dashboardHasNewVersion.value = res.data.data.dashboard_has_new_version;
       })
       .catch((err) => {
-        if (err.response.status == 401) {
+        if (err.response && err.response.status == 401) {
           console.log("401");
           const authStore = useAuthStore();
           authStore.logout();
@@ -279,6 +280,9 @@ commonStore.getStartTime();
         WebUI 有新版本！
       </small>
     </div>
+
+    <!-- 语言切换器 -->
+    <LanguageSwitcher />
 
     <!-- 主题切换按钮 -->
     <v-btn size="small" @click="toggleDarkMode();" class="action-btn" 
