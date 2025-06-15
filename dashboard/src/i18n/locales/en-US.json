@@ -1,0 +1,241 @@
+{
+  "auth": {
+    "username": "Username",
+    "password": "Password", 
+    "login": "Login",
+    "loginLoading": "Logging in..."
+  },
+  "theme": {
+    "switchToDark": "Switch to Dark Theme",
+    "switchToLight": "Switch to Light Theme"
+  },
+  "language": {
+    "select": "Select Language",
+    "zh-CN": "简体中文",
+    "en-US": "English"
+  },
+  "component": {
+    "logo": {
+      "title": "AstrBot Dashboard",
+      "subtitle": "Welcome"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Real-time monitoring and statistics",
+    "lastUpdated": "Last Updated",
+    "loading": "Loading...",
+    "noData": "No platform data available",
+    "stats": {
+      "totalMessages": "Total Messages",
+      "totalMessagesDesc": "Total messages sent from all platforms",
+      "onlinePlatforms": "Message Platforms",
+      "onlinePlatformsDesc": "Number of connected message platforms",
+      "runningTime": "Uptime",
+      "runningTimeDesc": "AstrBot running time",
+      "memoryUsage": "Memory Usage",
+      "cpuLoad": "CPU Load",
+      "online": "Online",
+      "memoryPercentage": "Memory Usage",
+      "status": {
+        "good": "Good",
+        "normal": "Normal",
+        "high": "High"
+      }
+    },
+    "platform": {
+      "title": "Platform Message Statistics",
+      "subtitle": "Message distribution across platforms",
+      "platformCount": "Platforms",
+      "mostActive": "Most Active",
+      "totalPercent": "Total Message %",
+      "messages": "messages"
+    },
+    "messageChart": {
+      "title": "Message Trend Analysis",
+      "subtitle": "Track message volume changes over time",
+      "totalMessages": "Total Messages",
+      "dailyAverage": "Daily Average",
+      "growthRate": "Growth Rate",
+      "timeRanges": {
+        "1day": "Past 1 Day",
+        "3days": "Past 3 Days",
+        "7days": "Past 7 Days",
+        "30days": "Past 30 Days"
+      },
+      "messageCount": "Message Count",
+      "time": "Time"
+    }
+  },
+  "settings": {
+    "sections": {
+      "network": "Network",
+      "system": "System",
+      "internationalization": "Internationalization"
+    },
+    "network": {
+      "githubProxy": "GitHub Proxy",
+      "githubProxyDesc": "Set the GitHub proxy address for downloading plugins or updating AstrBot. This is effective in mainland China's network environment. Can be customized, and changes take effect immediately. All addresses are not guaranteed to be stable. If errors occur when updating plugins/projects, please first check if the proxy address is working properly.",
+      "selectGithubProxy": "Select GitHub Proxy"
+    },
+    "system": {
+      "restart": "Restart",
+      "restartDesc": "Restart AstrBot",
+      "restartButton": "Restart"
+    },
+    "i18n": {
+      "title": "Language Settings",
+      "desc": "Change the interface display language. Settings will take effect immediately and be saved to local storage.",
+      "currentLanguage": "Current Language",
+      "selectLanguage": "Select Language"
+    }
+  },
+  "console": {
+    "title": "Console",
+    "autoScroll": {
+      "enabled": "Auto-scroll enabled",
+      "disabled": "Auto-scroll disabled"
+    },
+    "pip": {
+      "install": "Install pip package",
+      "packageName": "Package name, e.g. llmtuner",
+      "mirror": "Force PyPI repository URL (optional)",
+      "mirrorHint": "Force PyPI repository URL > Configuration item `PyPI repository URL`",
+      "installButton": "Install"
+    }
+  },
+  "about": {
+    "subtitle": "A project born from passion and love ❤️",
+    "starProject": "Star this project! 🌟",
+    "submitIssue": "Submit Issue",
+    "contributors": {
+      "title": "Contributors",
+      "description": "This project is maintained by many open source community members. Thanks to every contributor!",
+      "viewContributors": "View AstrBot Contributors"
+    },
+    "globalDeployment": {
+      "title": "Global Deployment",
+      "license": "AstrBot is open source under AGPL v3 license"
+    }
+  },
+  "alkaid": {
+    "title": "The Alkaid Project.",
+    "subtitle": "AstrBot Alpha Project",
+    "tabs": {
+      "knowledgeBase": "Knowledge Base",
+      "longTermMemory": "Long-term Memory Layer",
+      "other": "..."
+    }
+  },
+  "alkaidSigma": {
+    "title": "The Alkaid Project.",
+    "subtitle": "AstrBot Experimental Project",
+    "tabs": {
+      "longTermMemory": "Long-term Memory Layer",
+      "other": "Other"
+    },
+    "visualization": {
+      "title": "Visualization",
+      "filterUserId": "Filter User ID",
+      "filter": "Filter",
+      "resetFilter": "Reset Filter",
+      "refreshGraph": "Refresh Graph"
+    },
+    "nodeDetails": {
+      "title": "Node Details",
+      "id": "ID",
+      "type": "Type",
+      "name": "Name",
+      "userId": "User ID",
+      "timestamp": "Timestamp"
+    },
+    "graphStats": {
+      "title": "Graph Statistics",
+      "nodeCount": "Node Count",
+      "edgeCount": "Edge Count"
+    },
+    "underDevelopment": "Under Development"
+  },
+  "chat": {
+    "conversationUntitled": "New Conversation",
+    "createConversation": "Create Conversation",
+    "noHistory": "No conversation history",
+    "systemStatus": "System Status",
+    "llmService": "LLM Service",
+    "speechToText": "Speech to Text",
+    "deleteConversation": "Delete this conversation",
+    "fullscreenMode": "Fullscreen Mode",
+    "exitFullscreen": "Exit Fullscreen",
+    "switchToLight": "Switch to Light Mode",
+    "switchToDark": "Switch to Dark Mode",
+    "welcome": {
+      "hello": "Hello, I'm",
+      "help": "Type",
+      "helpCommand": "help",
+      "helpHint": "for help 😊",
+      "voiceRecord": "Hold",
+      "ctrl": "Ctrl",
+      "voiceRecordHint": "to record voice 🎤",
+      "pasteImage": "Press",
+      "pasteImageHint": "to paste image 🏞️"
+    },
+    "input": {
+      "placeholder": "Start typing...",
+      "send": "Send",
+      "voiceInput": "Voice Input",
+      "browserNotSupportAudio": "Your browser does not support audio playback."
+    },
+    "editConversationTitle": "Edit Conversation Title",
+    "editConversationTitleLabel": "Conversation Title",
+    "editConversationTitleCancel": "Cancel",
+    "editConversationTitleSave": "Save"
+  },
+  "provider": {
+    "title": "Service Provider Management",
+    "subtitle": "Manage model service providers",
+    "providers": {
+      "title": "Service Providers",
+      "settings": "Settings",
+      "addProvider": "Add Provider",
+      "tabs": {
+        "all": "All",
+        "chatCompletion": "Basic Chat",
+        "speechToText": "Speech to Text",
+        "textToSpeech": "Text to Speech",
+        "embedding": "Embedding"
+      },
+      "details": {
+        "providerType": "Provider Type",
+        "apiBase": "API Base",
+        "apiKey": "API Key"
+      }
+    },
+    "availability": {
+      "title": "Provider Availability",
+      "refresh": "Refresh Status",
+      "subtitle": "Test model conversation availability, may incur API costs",
+      "noStatus": "Click 'Refresh Status' button to get provider availability",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "errorMessage": "Error Message"
+    },
+    "logs": {
+      "title": "Service Logs",
+      "expand": "Expand",
+      "collapse": "Collapse"
+    },
+    "dialog": {
+      "add": {
+        "title": "Service Provider",
+        "basic": "Basic",
+        "noTemplates": "No templates available for {type} provider type"
+      },
+      "config": {
+        "edit": "Edit",
+        "add": "Add",
+        "cancel": "Cancel",
+        "save": "Save"
+      }
+    }
+  }
+}

@@ -7,11 +7,11 @@
         </div>
         
         <div class="stat-content">
-          <div class="stat-title">消息平台</div>
+          <div class="stat-title">{{ t('dashboard.stats.onlinePlatforms') }}</div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">{{ stat.platform_count || 0 }}</h2>
           </div>
-          <div class="stat-subtitle">已连接的消息平台数量</div>
+          <div class="stat-subtitle">{{ t('dashboard.stats.onlinePlatformsDesc') }}</div>
         </div>
       </div>
     </v-card-text>
@@ -19,9 +19,15 @@
 </template>
 
 <script>
+import { useI18n } from 'vue-i18n';
+
 export default {
   name: 'OnlinePlatform',
-  props: ['stat']
+  props: ['stat'],
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  }
 };
 </script>
 

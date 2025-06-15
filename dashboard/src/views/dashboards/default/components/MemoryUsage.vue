@@ -7,7 +7,7 @@
         </div>
         
         <div class="stat-content">
-          <div class="stat-title">内存占用</div>
+          <div class="stat-title">{{ t('dashboard.stats.memoryUsage') }}</div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">{{ stat.memory?.process || 0 }} <span class="memory-unit">MiB / {{ stat.memory?.system || 0 }} MiB</span></h2>
             <v-chip :color="memoryStatus.color" size="x-small" class="status-chip">
@@ -19,7 +19,7 @@
       
       <div class="metrics-container">
         <div class="metric-item">
-          <div class="metric-label">CPU 负载</div>
+          <div class="metric-label">{{ t('dashboard.stats.cpuLoad') }}</div>
           <div class="metric-value">{{ stat.cpu_percent || '0' }}%</div>
         </div>
       </div>
@@ -28,9 +28,15 @@
 </template>
 
 <script>
+import { useI18n } from 'vue-i18n';
+
 export default {
   name: 'MemoryUsage',
   props: ['stat'],
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   computed: {
     memoryPercentage() {
       if (!this.stat.memory || !this.stat.memory.process || !this.stat.memory.system) return 0;
@@ -39,11 +45,11 @@ export default {
     memoryStatus() {
       const percentage = this.memoryPercentage;
       if (percentage < 30) {
-        return { color: 'success', label: '良好' };
+        return { color: 'success', label: this.t('dashboard.stats.status.good') };
       } else if (percentage < 70) {
-        return { color: 'warning', label: '正常' };
+        return { color: 'warning', label: this.t('dashboard.stats.status.normal') };
       } else {
-        return { color: 'error', label: '偏高' };
+        return { color: 'error', label: this.t('dashboard.stats.status.high') };
       }
     }
   }

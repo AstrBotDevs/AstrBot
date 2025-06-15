@@ -3,8 +3,8 @@
     <v-card-text class="pa-4" style="height: 100%;">
       <v-container fluid class="d-flex flex-column" style="height: 100%;">
         <div style="margin-bottom: 32px;">
-          <h1 class="gradient-text">The Alkaid Project.</h1>
-          <small style="color: #a3a3a3;">AstrBot Alpha 项目</small>
+          <h1 class="gradient-text">{{ t('alkaid.title') }}</h1>
+          <small style="color: #a3a3a3;">{{ t('alkaid.subtitle') }}</small>
         </div>
 
         <div style="display: flex; gap: 8px; margin-bottom: 16px;">
@@ -12,19 +12,19 @@
             :color="isActive('knowledge-base') ? '#9b72cb' : ''" rounded="lg" 
             @click="navigateTo('knowledge-base')">
             <v-icon start>mdi-text-box-search</v-icon>
-            知识库
+            {{ t('alkaid.tabs.knowledgeBase') }}
           </v-btn>
           <v-btn size="large" :variant="isActive('long-term-memory') ? 'flat' : 'tonal'"
             :color="isActive('long-term-memory') ? '#9b72cb' : ''" rounded="lg"
             @click="navigateTo('long-term-memory')">
             <v-icon start>mdi-dots-hexagon</v-icon>
-            长期记忆层
+            {{ t('alkaid.tabs.longTermMemory') }}
           </v-btn>
           <v-btn size="large" :variant="isActive('other') ? 'flat' : 'tonal'"
             :color="isActive('other') ? '#9b72cb' : ''" rounded="lg" 
             @click="navigateTo('other')">
             <v-icon start>mdi-tools</v-icon>
-            ...
+            {{ t('alkaid.tabs.other') }}
           </v-btn>
         </div>
 
@@ -37,9 +37,15 @@
 </template>
 
 <script>
+import { useI18n } from 'vue-i18n';
+
 export default {
   name: 'AlkaidPage',
   components: {},
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   data() {
     return {}
   },

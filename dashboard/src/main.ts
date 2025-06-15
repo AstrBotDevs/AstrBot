@@ -6,6 +6,7 @@ import vuetify from './plugins/vuetify';
 import confirmPlugin from './plugins/confirmPlugin';
 import '@/scss/style.scss';
 import VueApexCharts from 'vue3-apexcharts';
+import i18n from './i18n';
 
 import print from 'vue3-print-nb';
 import { loader } from '@guolao/vue-monaco-editor'
@@ -18,6 +19,7 @@ app.use(print);
 app.use(VueApexCharts);
 app.use(vuetify);
 app.use(confirmPlugin);
+app.use(i18n);
 app.mount('#app');
 
 

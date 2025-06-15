@@ -7,11 +7,11 @@
         </div>
         
         <div class="stat-content">
-          <div class="stat-title">运行时间</div>
+          <div class="stat-title">{{ t('dashboard.stats.runningTime') }}</div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">{{ formattedTime }}</h2>
           </div>
-          <div class="stat-subtitle">AstrBot 运行时间</div>
+          <div class="stat-subtitle">{{ t('dashboard.stats.runningTimeDesc') }}</div>
         </div>
       </div>
     </v-card-text>
@@ -19,12 +19,18 @@
 </template>
 
 <script>
+import { useI18n } from 'vue-i18n';
+
 export default {
   name: 'RunningTime',
   props: ['stat'],
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   computed: {
     formattedTime() {
-      return this.stat?.running || '加载中...';
+      return this.stat?.running || this.t('dashboard.loading');
     }
   }
 };

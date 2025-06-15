@@ -1,0 +1,241 @@
+{
+  "auth": {
+    "username": "用户名",
+    "password": "密码",
+    "login": "登录",
+    "loginLoading": "登录中..."
+  },
+  "theme": {
+    "switchToDark": "切换到深色主题",
+    "switchToLight": "切换到浅色主题"
+  },
+  "language": {
+    "select": "选择语言",
+    "zh-CN": "简体中文",
+    "en-US": "English"
+  },
+  "component": {
+    "logo": {
+      "title": "AstrBot 仪表盘",
+      "subtitle": "欢迎使用"
+    }
+  },
+  "dashboard": {
+    "title": "控制台",
+    "subtitle": "实时监控和统计数据",
+    "lastUpdated": "最后更新",
+    "loading": "加载中...",
+    "noData": "暂无平台数据",
+    "stats": {
+      "totalMessages": "消息总数",
+      "totalMessagesDesc": "所有平台发送的消息总计",
+      "onlinePlatforms": "消息平台",
+      "onlinePlatformsDesc": "已连接的消息平台数量",
+      "runningTime": "运行时间",
+      "runningTimeDesc": "AstrBot 运行时间",
+      "memoryUsage": "内存占用",
+      "cpuLoad": "CPU 负载",
+      "online": "在线",
+      "memoryPercentage": "内存使用率",
+      "status": {
+        "good": "良好",
+        "normal": "正常",
+        "high": "偏高"
+      }
+    },
+    "platform": {
+      "title": "平台消息统计",
+      "subtitle": "各平台消息数量分布",
+      "platformCount": "平台数",
+      "mostActive": "最活跃",
+      "totalPercent": "总消息占比",
+      "messages": "条"
+    },
+    "messageChart": {
+      "title": "消息趋势分析",
+      "subtitle": "跟踪消息数量随时间的变化",
+      "totalMessages": "总消息数",
+      "dailyAverage": "平均每天",
+      "growthRate": "增长率",
+      "timeRanges": {
+        "1day": "过去 1 天",
+        "3days": "过去 3 天",
+        "7days": "过去 7 天",
+        "30days": "过去 30 天"
+      },
+      "messageCount": "消息条数",
+      "time": "时间"
+    }
+  },
+  "settings": {
+    "sections": {
+      "network": "网络",
+      "system": "系统",
+      "internationalization": "国际化"
+    },
+    "network": {
+      "githubProxy": "GitHub 加速地址",
+      "githubProxyDesc": "设置下载插件或者更新 AstrBot 时所用的 GitHub 加速地址。这在中国大陆的网络环境有效。可以自定义，输入结果实时生效。所有地址均不保证稳定性，如果在更新插件/项目时出现报错，请首先检查加速地址是否能正常使用。",
+      "selectGithubProxy": "选择 GitHub 加速地址"
+    },
+    "system": {
+      "restart": "重启",
+      "restartDesc": "重启 AstrBot",
+      "restartButton": "重启"
+    },
+    "i18n": {
+      "title": "语言设置",
+      "desc": "更改界面显示语言。设置将立即生效并保存到本地存储。",
+      "currentLanguage": "当前语言",
+      "selectLanguage": "选择语言"
+    }
+  },
+  "console": {
+    "title": "控制台",
+    "autoScroll": {
+      "enabled": "自动滚动已开启",
+      "disabled": "自动滚动已关闭"
+    },
+    "pip": {
+      "install": "安装 pip 库",
+      "packageName": "库名，如 llmtuner",
+      "mirror": "强制 PyPI 软件仓库链接（可选）",
+      "mirrorHint": "强制 PyPI 软件仓库链接 > 配置项 `PyPI 软件仓库地址`",
+      "installButton": "安装"
+    }
+  },
+  "about": {
+    "subtitle": "一个源于兴趣和热爱的项目 ❤️",
+    "starProject": "Star 这个项目! 🌟",
+    "submitIssue": "提交 Issue",
+    "contributors": {
+      "title": "贡献者",
+      "description": "本项目由众多开源社区成员共同维护。感谢每一位贡献者的付出！",
+      "viewContributors": "查看 AstrBot 贡献者"
+    },
+    "globalDeployment": {
+      "title": "全球部署",
+      "license": "AstrBot 采用 AGPL v3 协议开源"
+    }
+  },
+  "alkaid": {
+    "title": "The Alkaid Project.",
+    "subtitle": "AstrBot Alpha 项目",
+    "tabs": {
+      "knowledgeBase": "知识库",
+      "longTermMemory": "长期记忆层",
+      "other": "..."
+    }
+  },
+  "alkaidSigma": {
+    "title": "The Alkaid Project.",
+    "subtitle": "AstrBot 实验性项目",
+    "tabs": {
+      "longTermMemory": "长期记忆层",
+      "other": "其他"
+    },
+    "visualization": {
+      "title": "可视化",
+      "filterUserId": "筛选用户 ID",
+      "filter": "筛选",
+      "resetFilter": "重置筛选",
+      "refreshGraph": "刷新图形"
+    },
+    "nodeDetails": {
+      "title": "节点详情",
+      "id": "ID",
+      "type": "类型",
+      "name": "名称",
+      "userId": "用户ID",
+      "timestamp": "时间戳"
+    },
+    "graphStats": {
+      "title": "图形统计",
+      "nodeCount": "节点数",
+      "edgeCount": "边数"
+    },
+    "underDevelopment": "功能开发中"
+  },
+  "chat": {
+    "conversationUntitled": "新对话",
+    "createConversation": "创建对话",
+    "noHistory": "暂无对话历史",
+    "systemStatus": "系统状态",
+    "llmService": "LLM 服务",
+    "speechToText": "语音转文本",
+    "deleteConversation": "删除此对话",
+    "fullscreenMode": "全屏模式",
+    "exitFullscreen": "退出全屏",
+    "switchToLight": "切换到日间模式",
+    "switchToDark": "切换到夜间模式",
+    "welcome": {
+      "hello": "Hello, I'm",
+      "help": "输入",
+      "helpCommand": "help",
+      "helpHint": "获取帮助 😊",
+      "voiceRecord": "长按",
+      "ctrl": "Ctrl",
+      "voiceRecordHint": "录制语音 🎤",
+      "pasteImage": "按",
+      "pasteImageHint": "粘贴图片 🏞️"
+    },
+    "input": {
+      "placeholder": "开始输入...",
+      "send": "发送",
+      "voiceInput": "语音输入",
+      "browserNotSupportAudio": "您的浏览器不支持音频播放。"
+    },
+    "editConversationTitle": "编辑对话标题",
+    "editConversationTitleLabel": "对话标题",
+    "editConversationTitleCancel": "取消",
+    "editConversationTitleSave": "保存"
+  },
+  "provider": {
+    "title": "服务提供商管理",
+    "subtitle": "管理模型服务提供商",
+    "providers": {
+      "title": "服务提供商",
+      "settings": "设置",
+      "addProvider": "新增服务提供商",
+      "tabs": {
+        "all": "全部",
+        "chatCompletion": "基本对话",
+        "speechToText": "语音转文字",
+        "textToSpeech": "文字转语音",
+        "embedding": "Embedding"
+      },
+      "details": {
+        "providerType": "提供商类型",
+        "apiBase": "API Base",
+        "apiKey": "API Key"
+      }
+    },
+    "availability": {
+      "title": "供应商可用性",
+      "refresh": "刷新状态",
+      "subtitle": "通过测试模型对话可用性判断，可能产生API费用",
+      "noStatus": "点击\"刷新状态\"按钮获取供应商可用性",
+      "available": "可用",
+      "unavailable": "不可用",
+      "errorMessage": "错误信息"
+    },
+    "logs": {
+      "title": "服务日志",
+      "expand": "展开",
+      "collapse": "收起"
+    },
+    "dialog": {
+      "add": {
+        "title": "服务提供商",
+        "basic": "基本",
+        "noTemplates": "暂无{type}类型的提供商模板"
+      },
+      "config": {
+        "edit": "编辑",
+        "add": "新增",
+        "cancel": "取消",
+        "save": "保存"
+      }
+    }
+  }
+}

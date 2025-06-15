@@ -2,6 +2,9 @@
 import Graph from "graphology";
 import Sigma from "sigma";
 import ForceSupervisor from "graphology-layout-force/worker";
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 </script>
 
 
@@ -10,8 +13,8 @@ import ForceSupervisor from "graphology-layout-force/worker";
     <v-card-text class="pa-4" style="height: 100%;">
       <v-container fluid class="d-flex flex-column" style="height: 100%;">
         <div style="margin-bottom: 32px;">
-          <h1 class="gradient-text">The Alkaid Project.</h1>
-          <small style="color: #a3a3a3;">AstrBot 实验性项目</small>
+          <h1 class="gradient-text">{{ t('alkaidSigma.title') }}</h1>
+          <small style="color: #a3a3a3;">{{ t('alkaidSigma.subtitle') }}</small>
         </div>
 
         <div style="display: flex; gap: 8px; margin-bottom: 16px;">
@@ -19,12 +22,12 @@ import ForceSupervisor from "graphology-layout-force/worker";
             :color="activeTab === 'long-term-memory' ? '#9b72cb' : ''" rounded="lg"
             @click="activeTab = 'long-term-memory'">
             <v-icon start>mdi-dots-hexagon</v-icon>
-            长期记忆层
+            {{ t('alkaidSigma.tabs.longTermMemory') }}
           </v-btn>
           <v-btn size="large" :variant="activeTab === 'other' ? 'flat' : 'tonal'"
             :color="activeTab === 'other' ? '#9b72cb' : ''" rounded="lg" @click="activeTab = 'other'">
             <v-icon start>mdi-dots-horizontal</v-icon>
-            其他
+            {{ t('alkaidSigma.tabs.other') }}
           </v-btn>
         </div>
 
@@ -35,24 +38,24 @@ import ForceSupervisor from "graphology-layout-force/worker";
           <div id="graph-control-panel"
             style="min-width: 450px; border: 1px solid #eee; border-radius: 8px; padding: 16px; margin-left: 16px;">
             <div>
-              <span style="color: #333333;">可视化</span>
+              <span style="color: #333333;">{{ t('alkaidSigma.visualization.title') }}</span>
               <div style="margin-top: 8px;">
                 <v-autocomplete v-model="searchUserId" :items="userIdList" variant="outlined"
-                  label="筛选用户 ID"></v-autocomplete>
+                  :label="t('alkaidSigma.visualization.filterUserId')"></v-autocomplete>
                 <v-btn color="primary" @click="onNodeSelect" variant="tonal" style="margin-top: 8px;">
                   <v-icon start>mdi-magnify</v-icon>
-                  筛选
+                  {{ t('alkaidSigma.visualization.filter') }}
                 </v-btn>
                 <v-btn color="secondary" @click="resetFilter" variant="tonal"
                   style="margin-top: 8px; margin-left: 8px;">
                   <v-icon start>mdi-filter-remove</v-icon>
-                  重置筛选
+                  {{ t('alkaidSigma.visualization.resetFilter') }}
                 </v-btn>
               </div>
               <div style="margin-top: 16px;">
                 <v-btn color="primary" @click="refreshGraph" variant="tonal">
                   <v-icon start>mdi-refresh</v-icon>
-                  刷新图形
+                  {{ t('alkaidSigma.visualization.refreshGraph') }}
                 </v-btn>
               </div>
             </div>
@@ -60,41 +63,41 @@ import ForceSupervisor from "graphology-layout-force/worker";
             <v-divider class="my-4"></v-divider>
 
             <div v-if="selectedNode" class="mt-4">
-              <h3>节点详情</h3>
+              <h3>{{ t('alkaidSigma.nodeDetails.title') }}</h3>
               <v-card variant="outlined" class="mt-2 pa-3">
                 <div v-if="selectedNode.id">
                   <div class="d-flex justify-space-between">
-                    <span class="text-subtitle-2">ID:</span>
+                    <span class="text-subtitle-2">{{ t('alkaidSigma.nodeDetails.id') }}:</span>
                     <span>{{ selectedNode.id }}</span>
                   </div>
                 </div>
                 <div v-if="selectedNode._label">
                   <div class="d-flex justify-space-between">
-                    <span class="text-subtitle-2">类型:</span>
+                    <span class="text-subtitle-2">{{ t('alkaidSigma.nodeDetails.type') }}:</span>
                     <span>{{ selectedNode._label }}</span>
                   </div>
                 </div>
                 <div v-if="selectedNode.name">
                   <div class="d-flex justify-space-between">
-                    <span class="text-subtitle-2">名称:</span>
+                    <span class="text-subtitle-2">{{ t('alkaidSigma.nodeDetails.name') }}:</span>
                     <span>{{ selectedNode.name }}</span>
                   </div>
                 </div>
                 <div v-if="selectedNode.user_id">
                   <div class="d-flex justify-space-between">
-                    <span class="text-subtitle-2">用户ID:</span>
+                    <span class="text-subtitle-2">{{ t('alkaidSigma.nodeDetails.userId') }}:</span>
                     <span>{{ selectedNode.user_id }}</span>
                   </div>
                 </div>
                 <div v-if="selectedNode.ts">
                   <div class="d-flex justify-space-between">
-                    <span class="text-subtitle-2">时间戳:</span>
+                    <span class="text-subtitle-2">{{ t('alkaidSigma.nodeDetails.timestamp') }}:</span>
                     <span>{{ selectedNode.ts }}</span>
                   </div>
                 </div>
                 <div v-if="selectedNode.type">
                   <div class="d-flex justify-space-between">
-                    <span class="text-subtitle-2">类型:</span>
+                    <span class="text-subtitle-2">{{ t('alkaidSigma.nodeDetails.type') }}:</span>
                     <span>{{ selectedNode.type }}</span>
                   </div>
                 </div>
@@ -102,14 +105,14 @@ import ForceSupervisor from "graphology-layout-force/worker";
             </div>
 
             <div v-if="graphStats" class="mt-4">
-              <h3>图形统计</h3>
+              <h3>{{ t('alkaidSigma.graphStats.title') }}</h3>
               <v-card variant="outlined" class="mt-2 pa-3">
                 <div class="d-flex justify-space-between">
-                  <span class="text-subtitle-2">节点数:</span>
+                  <span class="text-subtitle-2">{{ t('alkaidSigma.graphStats.nodeCount') }}:</span>
                   <span>{{ graphStats.nodeCount }}</span>
                 </div>
                 <div class="d-flex justify-space-between">
-                  <span class="text-subtitle-2">边数:</span>
+                  <span class="text-subtitle-2">{{ t('alkaidSigma.graphStats.edgeCount') }}:</span>
                   <span>{{ graphStats.edgeCount }}</span>
                 </div>
               </v-card>
@@ -121,7 +124,7 @@ import ForceSupervisor from "graphology-layout-force/worker";
           <div class="d-flex align-center justify-center"
             style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px;">
             <v-icon size="64" color="grey-lighten-1">mdi-tools</v-icon>
-            <p class="text-h6 text-grey ml-4">功能开发中</p>
+            <p class="text-h6 text-grey ml-4">{{ t('alkaidSigma.underDevelopment') }}</p>
           </div>
         </div>
 

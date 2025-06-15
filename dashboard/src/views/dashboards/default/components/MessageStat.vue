@@ -3,8 +3,8 @@
     <v-card-text>
       <div class="chart-header">
         <div>
-          <div class="chart-title">消息趋势分析</div>
-          <div class="chart-subtitle">跟踪消息数量随时间的变化</div>
+          <div class="chart-title">{{ t('dashboard.messageChart.title') }}</div>
+          <div class="chart-subtitle">{{ t('dashboard.messageChart.subtitle') }}</div>
         </div>
         
         <v-select 
@@ -32,17 +32,17 @@
       
       <div class="chart-stats">
         <div class="stat-box">
-          <div class="stat-label">总消息数</div>
+          <div class="stat-label">{{ t('dashboard.messageChart.totalMessages') }}</div>
           <div class="stat-number">{{ totalMessages }}</div>
         </div>
         
         <div class="stat-box">
-          <div class="stat-label">平均每天</div>
+          <div class="stat-label">{{ t('dashboard.messageChart.dailyAverage') }}</div>
           <div class="stat-number">{{ dailyAverage }}</div>
         </div>
         
         <div class="stat-box" :class="{'trend-up': growthRate > 0, 'trend-down': growthRate < 0}">
-          <div class="stat-label">增长率</div>
+          <div class="stat-label">{{ t('dashboard.messageChart.growthRate') }}</div>
           <div class="stat-number">
             <v-icon size="small" :icon="growthRate > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'"></v-icon>
             {{ Math.abs(growthRate) }}%
@@ -53,7 +53,7 @@
       <div class="chart-container">
         <div v-if="loading" class="loading-overlay">
           <v-progress-circular indeterminate color="primary"></v-progress-circular>
-          <div class="loading-text">加载中...</div>
+          <div class="loading-text">{{ t('dashboard.loading') }}</div>
         </div>
         <apexchart 
           type="area" 
@@ -70,135 +70,151 @@
 <script>
 import axios from 'axios';
 import {useCustomizerStore} from "@/stores/customizer";
+import { useI18n } from 'vue-i18n';
 
 export default {
   name: 'MessageStat',
   props: ['stat'],
-  data: () => ({
-    totalMessages: '0',
-    dailyAverage: '0',
-    growthRate: 0,
-    loading: false,
-    selectedTimeRange: { label: '过去 1 天', value: 86400 },
-    timeRanges: [
-      { label: '过去 1 天', value: 86400 },
-      { label: '过去 3 天', value: 259200 },
-      { label: '过去 7 天', value: 604800 },
-      { label: '过去 30 天', value: 2592000 },
-    ],
-    
-    chartOptions: {
-      chart: {
-        type: 'area',
-        height: 400,
-        fontFamily: `inherit`,
-        foreColor: '#a1aab2',
-        toolbar: {
-          show: true,
-          tools: {
-            download: true,
-            selection: false,
-            zoom: true,
-            zoomin: true,
-            zoomout: true,
-            pan: true,
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
+  data() {
+    return {
+      totalMessages: '0',
+      dailyAverage: '0',
+      growthRate: 0,
+      loading: false,
+      selectedTimeRange: { label: '', value: 86400 },
+      timeRanges: [],
+      
+      chartOptions: {
+        chart: {
+          type: 'area',
+          height: 400,
+          fontFamily: `inherit`,
+          foreColor: '#a1aab2',
+          toolbar: {
+            show: true,
+            tools: {
+              download: true,
+              selection: false,
+              zoom: true,
+              zoomin: true,
+              zoomout: true,
+              pan: true,
+            },
+          },
+          animations: {
+            enabled: true,
+            easing: 'easeinout',
+            speed: 800,
           },
         },
-        animations: {
-          enabled: true,
-          easing: 'easeinout',
-          speed: 800,
+        colors: ['#5e35b1'],
+        fill: {
+          type: 'solid',
+          opacity: 0.3,
         },
-      },
-      colors: ['#5e35b1'],
-      fill: {
-        type: 'solid',
-        opacity: 0.3,
-      },
-      dataLabels: {
-        enabled: false
-      },
-      stroke: {
-        curve: 'smooth',
-        width: 2
-      },
-      markers: {
-        size: 3,
-        strokeWidth: 2,
-        hover: {
-          size: 5,
-        }
-      },
-      tooltip: {
-        theme: useCustomizerStore().uiTheme==='PurpleTheme' ? 'light' : 'dark',
-        x: {
-          format: 'yyyy-MM-dd HH:mm'
+        dataLabels: {
+          enabled: false
         },
-        y: {
-          title: {
-            formatter: () => '消息条数 '
-          }
+        stroke: {
+          curve: 'smooth',
+          width: 2
         },
-      },
-      xaxis: {
-        type: 'datetime',
-        title: {
-          text: '时间'
-        },
-        labels: {
-          formatter: function (value) {
-            return new Date(value).toLocaleString('zh-CN', {
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            });
+        markers: {
+          size: 3,
+          strokeWidth: 2,
+          hover: {
+            size: 5,
           }
         },
         tooltip: {
-          enabled: false
+          theme: useCustomizerStore().uiTheme==='PurpleTheme' ? 'light' : 'dark',
+          x: {
+            format: 'yyyy-MM-dd HH:mm'
+          },
+          y: {
+            title: {
+              formatter: () => this.t('dashboard.messageChart.messageCount') + ' '
+            }
+          },
+        },
+        xaxis: {
+          type: 'datetime',
+          title: {
+            text: this.t('dashboard.messageChart.time')
+          },
+          labels: {
+            formatter: function (value) {
+              return new Date(value).toLocaleString('zh-CN', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+            }
+          },
+          tooltip: {
+            enabled: false
+          }
+        },
+        yaxis: {
+          title: {
+            text: this.t('dashboard.messageChart.messageCount')
+          },
+          min: function(min) {
+            return min < 10 ? 0 : Math.floor(min * 0.8);
+          },
+        },
+        grid: {
+          borderColor: "gray100",
+          row: {
+            colors: ['transparent', 'transparent'],
+            opacity: 0.2
+          },
+          column: {
+            colors: ['transparent', 'transparent'],
+          },
+          padding: {
+            left: 0,
+            right: 0
+          }
         }
       },
-      yaxis: {
-        title: {
-          text: '消息条数'
-        },
-        min: function(min) {
-          return min < 10 ? 0 : Math.floor(min * 0.8);
-        },
-      },
-      grid: {
-        borderColor: "gray100",
-        row: {
-          colors: ['transparent', 'transparent'],
-          opacity: 0.2
-        },
-        column: {
-          colors: ['transparent', 'transparent'],
-        },
-        padding: {
-          left: 0,
-          right: 0
+      
+      chartSeries: [
+        {
+          name: '',
+          data: []
         }
-      }
-    },
-    
-    chartSeries: [
-      {
-        name: '消息条数',
-        data: []
-      }
-    ],
-    
-    messageTimeSeries: []
-  }),
-
+      ],
+      
+      messageTimeSeries: []
+    }
+  },
+  
   mounted() {
-    // 初始加载
+    this.initializeI18n();
     this.fetchMessageSeries();
   },
-
+  
   methods: {
+    initializeI18n() {
+      this.selectedTimeRange = { 
+        label: this.t('dashboard.messageChart.timeRanges.1day'), 
+        value: 86400 
+      };
+      this.timeRanges = [
+        { label: this.t('dashboard.messageChart.timeRanges.1day'), value: 86400 },
+        { label: this.t('dashboard.messageChart.timeRanges.3days'), value: 259200 },
+        { label: this.t('dashboard.messageChart.timeRanges.7days'), value: 604800 },
+        { label: this.t('dashboard.messageChart.timeRanges.30days'), value: 2592000 },
+      ];
+      this.chartSeries[0].name = this.t('dashboard.messageChart.messageCount');
+    },
+    
     formatNumber(num) {
       return new Intl.NumberFormat('zh-CN').format(num);
     },

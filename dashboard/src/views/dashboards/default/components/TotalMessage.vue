@@ -7,14 +7,14 @@
         </div>
         
         <div class="stat-content">
-          <div class="stat-title">消息总数</div>
+          <div class="stat-title">{{ t('dashboard.stats.totalMessages') }}</div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">{{ formattedCount }}</h2>
             <v-chip v-if="stat.daily_increase" class="trend-chip" size="x-small" color="success">
               +{{ stat.daily_increase }}
             </v-chip>
           </div>
-          <div class="stat-subtitle">所有平台发送的消息总计</div>
+          <div class="stat-subtitle">{{ t('dashboard.stats.totalMessagesDesc') }}</div>
         </div>
       </div>
     </v-card-text>
@@ -22,9 +22,15 @@
 </template>
 
 <script>
+import { useI18n } from 'vue-i18n';
+
 export default {
   name: 'TotalMessage',
   props: ['stat'],
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   computed: {
     formattedCount() {
       const count = this.stat?.message_count;
