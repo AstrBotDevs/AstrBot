@@ -195,7 +195,7 @@ function endDrag() {
         <!-- 跳转按钮 -->
         <v-btn
           icon
-          @click.stop="openIframeLink"
+          @click.stop="openIframeLink('https://astrbot.app')"
           @mousedown.stop
           style="border-radius: 8px; border: 1px solid #ccc;"
         >
