@@ -3,8 +3,8 @@
     <v-card-text>
       <div class="platform-header">
         <div>
-          <div class="platform-title">平台消息统计</div>
-          <div class="platform-subtitle">各平台消息数量分布</div>
+          <div class="platform-title">{{ t('dashboard.platform.title') }}</div>
+          <div class="platform-subtitle">{{ t('dashboard.platform.subtitle') }}</div>
         </div>
       </div>
       
@@ -27,7 +27,7 @@
             <template v-slot:append>
               <div class="platform-count">
                 <span class="count-value">{{ platform.count }}</span>
-                <span class="count-label">条</span>
+                <span class="count-label">{{ t('dashboard.platform.messages') }}</span>
               </div>
             </template>
           </v-list-item>
@@ -35,17 +35,17 @@
         
         <div class="platform-stats-summary">
           <div class="platform-stat-item">
-            <div class="stat-label">平台数</div>
+            <div class="stat-label">{{ t('dashboard.platform.platformCount') }}</div>
             <div class="stat-value">{{ platforms.length }}</div>
           </div>
           <v-divider vertical></v-divider>
           <div class="platform-stat-item">
-            <div class="stat-label">最活跃</div>
+            <div class="stat-label">{{ t('dashboard.platform.mostActive') }}</div>
             <div class="stat-value">{{ mostActivePlatform }}</div>
           </div>
           <v-divider vertical></v-divider>
           <div class="platform-stat-item">
-            <div class="stat-label">总消息占比</div>
+            <div class="stat-label">{{ t('dashboard.platform.totalPercent') }}</div>
             <div class="stat-value">{{ topPlatformPercentage }}%</div>
           </div>
         </div>
@@ -65,16 +65,22 @@
       
       <div v-else class="no-data">
         <v-icon icon="mdi-information-outline" size="40" color="grey-lighten-1"></v-icon>
-        <div class="no-data-text">暂无平台数据</div>
+        <div class="no-data-text">{{ t('dashboard.noData') }}</div>
       </div>
     </v-card-text>
   </v-card>
 </template>
 
 <script>
+import { useI18n } from 'vue-i18n';
+
 export default {
   name: 'PlatformStat',
   props: ['stat'],
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   data: () => ({
     platforms: []
   }),

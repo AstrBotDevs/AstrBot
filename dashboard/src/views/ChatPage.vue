@@ -5,6 +5,9 @@ import { marked } from 'marked';
 import { ref } from 'vue';
 import { defineProps } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 marked.setOptions({
     breaks: true
@@ -41,7 +44,7 @@ const props = defineProps({
 
                     <div style="padding: 16px; padding-top: 8px;">
                         <v-btn block variant="text" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus" style="box-shadow: 0 1px 2px rgba(0,0,0,0.1); background-color: transparent !important; border-radius: 4px;">创建对话</v-btn>
+                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus" style="box-shadow: 0 1px 2px rgba(0,0,0,0.1); background-color: transparent !important; border-radius: 4px;">{{ t('chat.createConversation') }}</v-btn>
                         <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currCid" v-if="sidebarCollapsed"
                             elevation="0"></v-btn>
                     </div>
@@ -57,7 +60,7 @@ const props = defineProps({
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                     rounded="lg" class="conversation-item" active-color="secondary">
                                     <v-list-item-title v-if="!sidebarCollapsed" class="conversation-title">{{ item.title
-                                        || '新对话' }}</v-list-item-title>
+                                        || t('chat.conversationUntitled') }}</v-list-item-title>
                                     <!-- <v-list-item-subtitle v-if="!sidebarCollapsed" class="timestamp">{{
                                         formatDate(item.updated_at)
                                         }}</v-list-item-subtitle> -->
@@ -74,7 +77,7 @@ const props = defineProps({
                             <div class="no-conversations" v-if="conversations.length === 0">
                                 <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
                                 <div class="no-conversations-text" v-if="!sidebarCollapsed || sidebarHoverExpanded">
-                                    暂无对话历史</div>
+                                    {{ t('chat.noHistory') }}</div>
                             </div>
                         </v-fade-transition>
                     </div>
@@ -85,7 +88,7 @@ const props = defineProps({
                     <div style="padding: 16px;" :class="{ 'fade-in': sidebarHoverExpanded }"
                         v-if="!sidebarCollapsed">
                         <div class="sidebar-section-title">
-                            系统状态
+                            {{ t('chat.systemStatus') }}
                         </div>
                         <div class="status-chips">
                             <v-chip class="status-chip" :color="status?.llm_enabled ? 'primary' : 'grey-lighten-2'"
@@ -94,7 +97,7 @@ const props = defineProps({
                                     <v-icon :icon="status?.llm_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
                                         size="x-small"></v-icon>
                                 </template>
-                                <span>LLM 服务</span>
+                                <span>{{ t('chat.llmService') }}</span>
                             </v-chip>
 
                             <v-chip class="status-chip" :color="status?.stt_enabled ? 'success' : 'grey-lighten-2'"
@@ -103,7 +106,7 @@ const props = defineProps({
                                     <v-icon :icon="status?.stt_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
                                         size="x-small"></v-icon>
                                 </template>
-                                <span>语音转文本</span>
+                                <span>{{ t('chat.speechToText') }}</span>
                             </v-chip>
                         </div>
 
@@ -119,7 +122,7 @@ const props = defineProps({
                                 <v-btn variant="outlined" rounded="sm" class="delete-chat-btn"
                                     @click="deleteConversation(currCid)" color="error" density="comfortable" size="small">
                                     <v-icon start size="small">mdi-delete</v-icon>
-                                    删除此对话
+                                    {{ t('chat.deleteConversation') }}
                                 </v-btn>
                             </div>
                         </transition>
@@ -131,19 +134,19 @@ const props = defineProps({
 
                     <div class="conversation-header fade-in">
                         <div class="conversation-header-content" v-if="currCid && getCurrentConversation">
-                            <h2 class="conversation-header-title">{{ getCurrentConversation.title || '新对话' }}</h2>
+                            <h2 class="conversation-header-title">{{ getCurrentConversation.title || t('chat.conversationUntitled') }}</h2>
                             <div class="conversation-header-time">{{ formatDate(getCurrentConversation.updated_at) }}</div>
                         </div>
                         <div class="conversation-header-actions">
                             <!-- router 推送到 /chatbox -->
-                            <v-tooltip text="全屏模式" v-if="!props.chatboxMode">
+                            <v-tooltip :text="t('chat.fullscreenMode')" v-if="!props.chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-icon v-bind="props" @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')"
                                         class="fullscreen-icon">mdi-fullscreen</v-icon>
                                 </template>
                             </v-tooltip>
                             <!-- 主题切换按钮 -->
-                            <v-tooltip :text="isDark ? '切换到日间模式' : '切换到夜间模式'" v-if="props.chatboxMode">
+                            <v-tooltip :text="isDark ? t('chat.switchToLight') : t('chat.switchToDark')" v-if="props.chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon" variant="text">
                                         <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
@@ -151,7 +154,7 @@ const props = defineProps({
                                 </template>
                             </v-tooltip>
                             <!-- router 推送到 /chat -->
-                            <v-tooltip text="退出全屏" v-if="props.chatboxMode">
+                            <v-tooltip :text="t('chat.exitFullscreen')" v-if="props.chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-icon v-bind="props" @click="router.push(currCid ? `/chat/${currCid}` : '/chat')"
                                         class="fullscreen-icon">mdi-fullscreen-exit</v-icon>
@@ -165,23 +168,23 @@ const props = defineProps({
                         <!-- 空聊天欢迎页 -->
                         <div class="welcome-container fade-in" v-if="messages.length == 0">
                             <div class="welcome-title">
-                                <span>Hello, I'm</span>
+                                <span>{{ t('chat.welcome.hello') }}</span>
                                 <span class="bot-name">AstrBot ⭐</span>
                             </div>
                             <div class="welcome-hint">
-                                <span>输入</span>
-                                <code>help</code>
-                                <span>获取帮助 😊</span>
+                                <span>{{ t('chat.welcome.help') }}</span>
+                                <code>{{ t('chat.welcome.helpCommand') }}</code>
+                                <span>{{ t('chat.welcome.helpHint') }}</span>
                             </div>
                             <div class="welcome-hint">
-                                <span>长按</span>
-                                <code>Ctrl</code>
-                                <span>录制语音 🎤</span>
+                                <span>{{ t('chat.welcome.voiceRecord') }}</span>
+                                <code>{{ t('chat.welcome.ctrl') }}</code>
+                                <span>{{ t('chat.welcome.voiceRecordHint') }}</span>
                             </div>
                             <div class="welcome-hint">
-                                <span>按</span>
-                                <code>Ctrl + V</code>
-                                <span>粘贴图片 🏞️</span>
+                                <span>{{ t('chat.welcome.pasteImage') }}</span>
+                                <code>{{ t('chat.welcome.ctrl') }}</code>
+                                <span>{{ t('chat.welcome.pasteImageHint') }}</span>
                             </div>
                         </div>
 
@@ -205,7 +208,7 @@ const props = defineProps({
                                         <div class="audio-attachment" v-if="msg.audio_url && msg.audio_url.length > 0">
                                             <audio controls class="audio-player">
                                                 <source :src="msg.audio_url" type="audio/wav">
-                                                您的浏览器不支持音频播放。
+                                                {{ t('chat.input.browserNotSupportAudio') }}
                                             </audio>
                                         </div>
                                     </div>
@@ -230,7 +233,7 @@ const props = defineProps({
                     <!-- 输入区域 -->
                     <div class="input-area fade-in">
                         <v-text-field autocomplete="off" id="input-field" variant="outlined" v-model="prompt"
-                            :label="inputFieldLabel" placeholder="开始输入..." :loading="loadingChat"
+                            :label="inputFieldLabel" :placeholder="t('chat.input.placeholder')" :loading="loadingChat"
                             clear-icon="mdi-close-circle" clearable @click:clear="clearMessage" class="message-input"
                             @keydown="handleInputKeyDown" hide-details>
                             <template v-slot:loader>
@@ -239,7 +242,7 @@ const props = defineProps({
                             </template>
 
                             <template v-slot:append>
-                                <v-tooltip text="发送">
+                                <v-tooltip :text="t('chat.input.send')">
                                     <template v-slot:activator="{ props }">
                                         <v-btn v-bind="props" @click="sendMessage" class="send-btn" icon="mdi-send"
                                             variant="text" color="deep-purple"
@@ -247,12 +250,10 @@ const props = defineProps({
                                     </template>
                                 </v-tooltip>
 
-                                <v-tooltip text="语音输入">
+                                <v-tooltip :text="t('chat.input.voiceInput')">
                                     <template v-slot:activator="{ props }">
-                                        <v-btn v-bind="props" @click="isRecording ? stopRecording() : startRecording()"
-                                            class="record-btn"
-                                            :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
-                                            :color="isRecording ? 'error' : 'deep-purple'" />
+                                        <v-btn v-bind="props" @click="startRecording" class="voice-btn" icon="mdi-microphone"
+                                            variant="text" color="deep-purple" />
                                     </template>
                                 </v-tooltip>
                             </template>
@@ -284,15 +285,15 @@ const props = defineProps({
     <!-- 编辑对话标题对话框 -->
     <v-dialog v-model="editTitleDialog" max-width="400">
         <v-card>
-            <v-card-title class="dialog-title">编辑对话标题</v-card-title>
+            <v-card-title class="dialog-title">{{ t('chat.editConversationTitle') }}</v-card-title>
             <v-card-text>
-                <v-text-field v-model="editingTitle" label="对话标题" variant="outlined" hide-details class="mt-2"
+                <v-text-field v-model="editingTitle" :label="t('chat.editConversationTitleLabel')" variant="outlined" hide-details class="mt-2"
                     @keyup.enter="saveTitle" autofocus />
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
-                <v-btn text @click="editTitleDialog = false" color="grey-darken-1">取消</v-btn>
-                <v-btn text @click="saveTitle" color="primary">保存</v-btn>
+                <v-btn text @click="editTitleDialog = false" color="grey-darken-1">{{ t('chat.editConversationTitleCancel') }}</v-btn>
+                <v-btn text @click="saveTitle" color="primary">{{ t('chat.editConversationTitleSave') }}</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>

@@ -1,8 +1,8 @@
 <template>
   <div class="dashboard-container">
     <div class="dashboard-header">
-      <h1 class="dashboard-title">控制台</h1>
-      <div class="dashboard-subtitle">实时监控和统计数据</div>
+      <h1 class="dashboard-title">{{ t('dashboard.title') }}</h1>
+      <div class="dashboard-subtitle">{{ t('dashboard.subtitle') }}</div>
     </div>
     
     <v-slide-y-transition>
@@ -58,7 +58,7 @@
     </v-row>
     <div class="dashboard-footer">
       <v-chip size="small" color="primary" variant="flat" prepend-icon="mdi-refresh">
-        最后更新: {{ lastUpdated }}
+        {{ t('dashboard.lastUpdated') }}: {{ lastUpdated }}
       </v-chip>
       <v-btn 
         icon="mdi-refresh" 
@@ -82,6 +82,7 @@ import MemoryUsage from './components/MemoryUsage.vue';
 import MessageStat from './components/MessageStat.vue';
 import PlatformStat from './components/PlatformStat.vue';
 import axios from 'axios';
+import { useI18n } from 'vue-i18n';
 
 export default {
   name: 'DefaultDashboard',
@@ -93,17 +94,22 @@ export default {
     MessageStat,
     PlatformStat,
   },
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   data: () => ({
     stat: {},
     noticeTitle: '',
     noticeContent: '',
     noticeType: '',
-    lastUpdated: '加载中...',
+    lastUpdated: '',
     refreshInterval: null,
     isRefreshing: false
   }),
 
   mounted() {
+    this.lastUpdated = this.t('dashboard.loading');
     this.fetchData();
     this.fetchNotice();
     

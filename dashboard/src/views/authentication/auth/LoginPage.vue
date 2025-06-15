@@ -5,11 +5,18 @@ import { onMounted, ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import {useCustomizerStore} from "@/stores/customizer";
+import { useI18n } from 'vue-i18n';
 
+const { t, locale } = useI18n();
 const cardVisible = ref(false);
 const router = useRouter();
 const authStore = useAuthStore();
 const customizer = useCustomizerStore();
+
+const languages = [
+  { value: 'zh-CN', title: 'zh-CN' },
+  { value: 'en-US', title: 'en-US' }
+];
 
 // 主题切换函数
 function toggleTheme() {
@@ -18,7 +25,19 @@ function toggleTheme() {
   );
 }
 
+// 语言切换函数
+function changeLanguage(lang: string) {
+  locale.value = lang;
+  localStorage.setItem('preferred-language', lang);
+}
+
 onMounted(() => {
+  // 从本地存储恢复语言设置
+  const savedLang = localStorage.getItem('preferred-language');
+  if (savedLang && languages.some(lang => lang.value === savedLang)) {
+    locale.value = savedLang;
+  }
+  
   // 检查用户是否已登录，如果已登录则重定向
   if (authStore.has_token()) {
     router.push(authStore.returnUrl || '/');
@@ -36,8 +55,30 @@ onMounted(() => {
   <div v-if="useCustomizerStore().uiTheme==='PurpleTheme'" class="login-page-container">
     <div class="login-background"></div>
     
-    <!-- 主题切换按钮 -->
-    <div class="theme-toggle-container">
+    <!-- 控制按钮组 -->
+    <div class="controls-container">
+      <!-- 语言选择 -->
+      <v-select
+        v-model="locale"
+        :items="languages"
+        item-title="title"
+        item-value="value"
+        variant="outlined"
+        density="compact"
+        class="language-select"
+        hide-details
+        @update:model-value="changeLanguage"
+      >
+        <template #selection="{ item }">
+          <v-icon class="me-2">mdi-translate</v-icon>
+          {{ t(`language.${item.value}`) }}
+        </template>
+        <template #item="{ props, item }">
+          <v-list-item v-bind="props" :title="t(`language.${item.value}`)"></v-list-item>
+        </template>
+      </v-select>
+      
+      <!-- 主题切换按钮 -->
       <v-btn
         @click="toggleTheme"
         class="theme-toggle-btn"
@@ -49,7 +90,7 @@ onMounted(() => {
       >
         <v-icon size="20">mdi-weather-night</v-icon>
         <v-tooltip activator="parent" location="left">
-          切换到深色主题
+          {{ t('theme.switchToDark') }}
         </v-tooltip>
       </v-btn>
     </div>
@@ -73,8 +114,30 @@ onMounted(() => {
   <div v-else class="login-page-container-dark">
     <div class="login-background-dark"></div>
     
-    <!-- 主题切换按钮 -->
-    <div class="theme-toggle-container">
+    <!-- 控制按钮组 -->
+    <div class="controls-container">
+      <!-- 语言选择 -->
+      <v-select
+        v-model="locale"
+        :items="languages"
+        item-title="title"
+        item-value="value"
+        variant="outlined"
+        density="compact"
+        class="language-select language-select-dark"
+        hide-details
+        @update:model-value="changeLanguage"
+      >
+        <template #selection="{ item }">
+          <v-icon class="me-2">mdi-translate</v-icon>
+          {{ t(`language.${item.value}`) }}
+        </template>
+        <template #item="{ props, item }">
+          <v-list-item v-bind="props" :title="t(`language.${item.value}`)"></v-list-item>
+        </template>
+      </v-select>
+      
+      <!-- 主题切换按钮 -->
       <v-btn
         @click="toggleTheme"
         class="theme-toggle-btn"
@@ -86,7 +149,7 @@ onMounted(() => {
       >
         <v-icon size="20">mdi-white-balance-sunny</v-icon>
         <v-tooltip activator="parent" location="left">
-          切换到浅色主题
+          {{ t('theme.switchToLight') }}
         </v-tooltip>
       </v-btn>
     </div>
@@ -190,6 +253,50 @@ onMounted(() => {
   }
   100% {
     transform: rotate(360deg);
+  }
+}
+
+.controls-container {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.language-select {
+  min-width: 160px;
+  max-width: 200px;
+  
+  .v-field {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-radius: 8px !important;
+    
+    &:hover {
+      background: rgba(255, 255, 255, 0.95) !important;
+    }
+  }
+  
+  .v-field__input {
+    font-size: 0.875rem;
+    padding: 8px 12px;
+  }
+}
+
+.language-select-dark {
+  .v-field {
+    background: rgba(42, 39, 51, 0.9) !important;
+    color: #ffffff !important;
+    
+    &:hover {
+      background: rgba(42, 39, 51, 0.95) !important;
+    }
+  }
+  
+  .v-icon {
+    color: #ffffff !important;
   }
 }
 

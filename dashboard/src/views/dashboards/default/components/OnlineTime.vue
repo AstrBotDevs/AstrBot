@@ -8,15 +8,15 @@
           </div>
           
           <div class="stat-content">
-            <div class="stat-title">运行时间</div>
-            <h3 class="uptime-value">{{ stat.running || '加载中...' }}</h3>
+            <div class="stat-title">{{ t('dashboard.stats.runningTime') }}</div>
+            <h3 class="uptime-value">{{ stat.running || t('dashboard.loading') }}</h3>
           </div>
           
           <v-spacer></v-spacer>
           
           <div class="uptime-status">
             <v-icon icon="mdi-circle" size="10" color="success" class="blink-animation"></v-icon>
-            <span class="status-text">在线</span>
+            <span class="status-text">{{ t('dashboard.stats.online') }}</span>
           </div>
         </div>
       </v-card-text>
@@ -30,7 +30,7 @@
           </div>
           
           <div class="stat-content">
-            <div class="stat-title">内存占用</div>
+            <div class="stat-title">{{ t('dashboard.stats.memoryUsage') }}</div>
             <div class="memory-values">
               <h3 class="memory-value">{{ stat.memory?.process || 0 }} <span class="memory-unit">MiB</span></h3>
               <span class="memory-separator">/</span>
@@ -53,13 +53,19 @@
 </template>
 
 <script>
+import { useI18n } from 'vue-i18n';
+
 export default {
   name: 'OnlineTime',
   props: ['stat'],
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   data: () => ({
     stat: {
       memory: { process: 0, system: 0 },
-      running: "加载中...",
+      running: "",
     },
   }),
   computed: {
