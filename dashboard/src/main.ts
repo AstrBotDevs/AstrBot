@@ -4,6 +4,7 @@ import App from './App.vue';
 import { router } from './router';
 import vuetify from './plugins/vuetify';
 import confirmPlugin from './plugins/confirmPlugin';
+import i18n from './i18n';
 import '@/scss/style.scss';
 import VueApexCharts from 'vue3-apexcharts';
 
@@ -14,6 +15,7 @@ import axios from 'axios';
 const app = createApp(App);
 app.use(router);
 app.use(createPinia());
+app.use(i18n);
 app.use(print);
 app.use(VueApexCharts);
 app.use(vuetify);
