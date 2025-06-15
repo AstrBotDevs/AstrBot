@@ -310,9 +310,25 @@ export default {
     this.ltmGetUserIds();
   },
   beforeUnmount() {
+    // 停止D3仿真
     if (this.simulation) {
       this.simulation.stop();
     }
+    
+    // 清理DOM元素
+    if (this.svg) {
+      try {
+        this.svg.remove();
+      } catch (e) {
+        console.warn('Error removing SVG:', e);
+      }
+    }
+    
+    // 重置数据
+    this.nodes = [];
+    this.links = [];
+    this.userIdList = [];
+    this.searchResults = [];
   },
   methods: {
     // 添加搜索记忆方法
@@ -410,8 +426,10 @@ export default {
 
       axios.get('/api/plug/alkaid/ltm/graph', { params })
         .then(response => {
-          let nodesRaw = response.data.data.nodes;
-          let edgesRaw = response.data.data.edges;
+          const data = response.data.data || {};
+          // 确保数据是数组类型，并且先检查data是否存在
+          let nodesRaw = data && Array.isArray(data.nodes) ? data.nodes : [];
+          let edgesRaw = data && Array.isArray(data.edges) ? data.edges : [];
 
           this.node_data = nodesRaw;
           this.edge_data = edgesRaw;
@@ -453,6 +471,11 @@ export default {
         })
         .catch(error => {
           console.error('Error fetching graph data:', error);
+          // 出错时重置为空数组
+          this.nodes = [];
+          this.links = [];
+          this.node_data = [];
+          this.edge_data = [];
         })
         .finally(() => {
           this.isLoading = false;
@@ -462,10 +485,13 @@ export default {
     ltmGetUserIds() {
       axios.get('/api/plug/alkaid/ltm/user_ids')
         .then(response => {
-          this.userIdList = response.data.data;
+          // 确保返回的数据是数组类型
+          const data = response.data.data;
+          this.userIdList = Array.isArray(data) ? data : [];
         })
         .catch(error => {
           console.error('Error fetching user IDs:', error);
+          this.userIdList = []; // 出错时设置为空数组
         });
     },
 
@@ -575,10 +601,20 @@ export default {
 
     initD3Graph() {
       const container = document.getElementById("graph-container");
-      if (!container) return;
-      d3.select("#graph-container svg").remove();
-      const width = container.clientWidth;
-      const height = container.clientHeight;
+      if (!container) {
+        console.warn('Graph container not found');
+        return;
+      }
+      
+      // 安全清理现有SVG
+      try {
+        d3.select("#graph-container svg").remove();
+      } catch (e) {
+        console.warn('Error removing existing SVG:', e);
+      }
+      
+      const width = container.clientWidth || 800;
+      const height = container.clientHeight || 600;
       const svg = d3.select("#graph-container")
         .append("svg")
         .attr("width", "100%")
@@ -608,9 +644,18 @@ export default {
     },
 
     updateD3Graph() {
-      if (!this.svg || !this.simulation) return;
+      if (!this.svg || !this.simulation || !this.g) {
+        console.warn('D3 elements not ready for update');
+        return;
+      }
+      
       const g = this.g;
-      g.selectAll("*").remove();
+      try {
+        g.selectAll("*").remove();
+      } catch (e) {
+        console.warn('Error clearing D3 graph:', e);
+        return;
+      }
       
       // 添加箭头定义
       g.append("defs").append("marker")

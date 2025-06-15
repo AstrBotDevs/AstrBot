@@ -5,7 +5,7 @@
             <div v-if="!installed" class="d-flex align-center justify-center flex-column"
                 style="flex-grow: 1; width: 100%; height: 100%;">
                 <h2>还没有安装知识库插件
-                    <v-icon v-class="ml - 2" size="small" color="grey"
+                    <v-icon class="ml-2" size="small" color="grey"
                         @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
                 </h2>
                 <v-btn style="margin-top: 16px;" variant="tonal" color="primary" @click="installPlugin"
@@ -23,7 +23,7 @@
             </div>
             <div v-else>
                 <h2 class="mb-4">知识库列表
-                    <v-icon v-class="ml - 2" size="x-small" color="grey"
+                    <v-icon class="ml-2" size="x-small" color="grey"
                         @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
                 </h2>
                 <v-btn class="mb-4" prepend-icon="mdi-plus" variant="tonal" color="primary"
