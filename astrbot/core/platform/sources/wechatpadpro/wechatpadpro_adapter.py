@@ -158,7 +158,6 @@ class WeChatPadProAdapter(Platform):
             os.makedirs(data_dir, exist_ok=True)
             with open(self.credentials_file, "w") as f:
                 json.dump(credentials, f)
-            logger.info("成功保存 WeChatPadPro 凭据。")
         except Exception as e:
             logger.error(f"保存 WeChatPadPro 凭据失败: {e}")
 
@@ -189,6 +188,10 @@ class WeChatPadProAdapter(Platform):
                     # Code == 300 为微信退出状态。
                     elif response.status == 200 and response_data.get("Code") == 300:
                         logger.info("WeChatPadPro 设备已退出。")
+                        return False
+                    elif response.status == 200 and response_data.get("Code") == -2:
+                        # 该链接不存在
+                        self.auth_key = None
                         return False
                     else:
                         logger.error(
@@ -224,7 +227,7 @@ class WeChatPadProAdapter(Platform):
                             and len(response_data["Data"]) > 0
                         ):
                             self.auth_key = response_data["Data"][0]
-                            logger.info("成功获取授权码")
+                            logger.info(f"成功获取授权码 {self.auth_key[:8]}...")
                         else:
                             logger.error(
                                 f"生成授权码成功但未找到授权码: {response_data}"
@@ -250,7 +253,6 @@ class WeChatPadProAdapter(Platform):
             try:
                 async with session.post(url, params=params, json=payload) as response:
                     response_data = await response.json()
-                    # 修正成功判断条件和数据提取路径
                     if response.status == 200 and response_data.get("Code") == 200:
                         # 二维码地址在 Data.QrCodeUrl 字段中
                         if response_data.get("Data") and response_data["Data"].get(
@@ -262,6 +264,13 @@ class WeChatPadProAdapter(Platform):
                                 f"获取登录二维码成功但未找到二维码地址: {response_data}"
                             )
                             return None
+                    elif "该 key 无效" in response_data.get("Text"):
+                        logger.error(
+                            "授权码无效，已经清除。请重新启动 AstrBot 或者本消息适配器。原因也可能是 WeChatPadPro 的 MySQL 服务没有启动成功，请检查 WeChatPadPro 服务的日志。"
+                        )
+                        self.auth_key = None
+                        self.save_credentials()
+                        return None
                     else:
                         logger.error(
                             f"获取登录二维码失败: {response.status}, {response_data}"
@@ -631,7 +640,11 @@ class WeChatPadProAdapter(Platform):
                     # wechatpadpro 的格式: <atuserlist>wxid</atuserlist>
                     # gewechat 的格式: <atuserlist><![CDATA[wxid]]></atuserlist>
                     msg_source = raw_message.get("msg_source", "")
-                    if f"<atuserlist>{abm.self_id}</atuserlist>" in msg_source or f"<atuserlist>{abm.self_id}," in msg_source or f",{abm.self_id}</atuserlist>" in msg_source:
+                    if (
+                        f"<atuserlist>{abm.self_id}</atuserlist>" in msg_source
+                        or f"<atuserlist>{abm.self_id}," in msg_source
+                        or f",{abm.self_id}</atuserlist>" in msg_source
+                    ):
                         at_me = True
 
                     # 也检查 push_content 中是否有@提示
@@ -641,19 +654,28 @@ class WeChatPadProAdapter(Platform):
 
                     if at_me:
                         # 被@了，在消息开头插入At组件（参考gewechat的做法）
-                        bot_nickname = await self._get_group_member_nickname(abm.group_id, abm.self_id)
-                        abm.message.insert(0, At(qq=abm.self_id, name=bot_nickname or abm.self_id))
+                        bot_nickname = await self._get_group_member_nickname(
+                            abm.group_id, abm.self_id
+                        )
+                        abm.message.insert(
+                            0, At(qq=abm.self_id, name=bot_nickname or abm.self_id)
+                        )
 
                         # 只有当消息内容不仅仅是@时才添加Plain组件
                         if "\u2005" in message_content:
                             # 检查@之后是否还有其他内容
                             parts = message_content.split("\u2005")
-                            if len(parts) > 1 and any(part.strip() for part in parts[1:]):
+                            if len(parts) > 1 and any(
+                                part.strip() for part in parts[1:]
+                            ):
                                 abm.message.append(Plain(message_content))
                         else:
                             # 检查是否只包含@机器人
                             is_pure_at = False
-                            if bot_nickname and message_content.strip() == f"@{bot_nickname}":
+                            if (
+                                bot_nickname
+                                and message_content.strip() == f"@{bot_nickname}"
+                            ):
                                 is_pure_at = True
                             if not is_pure_at:
                                 abm.message.append(Plain(message_content))
