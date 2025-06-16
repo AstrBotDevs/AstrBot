@@ -1,0 +1,26 @@
+{
+  "title": "Alkaid实验室",
+  "subtitle": "探索前沿AI功能",
+  "comingSoon": "前面的世界，以后再来探索吧！",
+  "page": {
+    "title": "The Alkaid Project.",
+    "subtitle": "AstrBot Alpha 项目",
+    "navigation": {
+      "knowledgeBase": "知识库",
+      "longTermMemory": "长期记忆层",
+      "other": "..."
+    }
+  },
+  "features": {
+    "knowledgeBase": "知识库",
+    "longTermMemory": "长期记忆",
+    "advancedChat": "高级对话",
+    "multiModal": "多模态交互"
+  },
+  "status": {
+    "experimental": "实验性",
+    "beta": "测试版",
+    "stable": "稳定版",
+    "deprecated": "已弃用"
+  }
+} 

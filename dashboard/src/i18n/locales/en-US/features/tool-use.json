@@ -1,0 +1,114 @@
+{
+  "title": "Function Tool Management",
+  "subtitle": "Manage MCP servers and view available function tools",
+  "tooltip": {
+    "info": "What are Function Calling and MCP?",
+    "marketplace": "Browse and install MCP servers from the community",
+    "serverConfig": "MCP server (stdio) configuration supports the following fields:\ncommand: Command name (e.g. python or uv)\nargs: Command arguments array (e.g. [\"run\", \"server.py\"])\nenv: Environment variables object (e.g. {\"api_key\": \"abc\"})\ncwd: Working directory path (e.g. /path/to/server)\nencoding: Output encoding (default utf-8)\nencoding_error_handler: The text encoding error handler. Defaults to strict.\nOther fields please refer to MCP documentation\n⚠️ If you deploy AstrBot using Docker, make sure to install MCP servers in the data directory mounted by AstrBot"
+  },
+  "tabs": {
+    "local": "Local Servers",
+    "marketplace": "MCP Marketplace"
+  },
+  "mcpServers": {
+    "title": "MCP Servers",
+    "buttons": {
+      "refresh": "Refresh",
+      "add": "Add Server",
+      "useTemplate": "Use Template"
+    },
+    "empty": "No MCP servers available, click Add Server to add one",
+    "status": {
+      "noTools": "No available tools",
+      "availableTools": "Available tools",
+      "configSummary": "Config: {keys}",
+      "noConfig": "No configuration set"
+    }
+  },
+  "functionTools": {
+    "title": "Function Tools",
+    "buttons": {
+      "expand": "Expand",
+      "collapse": "Collapse"
+    },
+    "search": "Search function tools",
+    "empty": "No function tools available",
+    "description": "Function Description",
+    "parameters": "Parameter List",
+    "noParameters": "This tool has no parameters",
+    "table": {
+      "paramName": "Parameter Name",
+      "type": "Type",
+      "description": "Description",
+      "required": "Required"
+    }
+  },
+  "marketplace": {
+    "title": "MCP Server Marketplace",
+    "search": "Search servers",
+    "buttons": {
+      "refresh": "Refresh",
+      "detail": "Details",
+      "import": "Import"
+    },
+    "loading": "Loading MCP server marketplace...",
+    "empty": "No MCP servers available",
+    "status": {
+      "availableTools": "Available tools ({count})",
+      "noToolsInfo": "No tool information available"
+    }
+  },
+  "dialogs": {
+    "addServer": {
+      "title": "Add MCP Server",
+      "editTitle": "Edit MCP Server",
+      "fields": {
+        "name": "Server Name",
+        "nameRequired": "Name is required",
+        "enable": "Enable Server",
+        "config": "Server Configuration"
+      },
+      "configNotes": {
+        "note1": "1. Some MCP servers may require filling in `API_KEY` or `TOKEN` information in env according to their requirements, please check if filled.",
+        "note2": "2. When url parameter is specified in configuration: if `transport` parameter is also specified as `streamable_http`, Streamable HTTP is used, otherwise SSE connection is used."
+      },
+      "errors": {
+        "configEmpty": "Configuration cannot be empty",
+        "jsonFormat": "JSON format error: {error}",
+        "jsonParse": "JSON parse error: {error}"
+      },
+      "buttons": {
+        "cancel": "Cancel",
+        "save": "Save"
+      }
+    },
+    "serverDetail": {
+      "title": "Server Details",
+      "installConfig": "Installation Configuration",
+      "availableTools": "Available Tools",
+      "buttons": {
+        "close": "Close",
+        "importConfig": "Import Configuration"
+      }
+    },
+    "confirmDelete": "Are you sure you want to delete server {name}?"
+  },
+  "messages": {
+    "getServersError": "Failed to get MCP server list: {error}",
+    "getToolsError": "Failed to get function tools list: {error}",
+    "saveSuccess": "Save successful!",
+    "saveError": "Save failed: {error}",
+    "deleteSuccess": "Delete successful!",
+    "deleteError": "Delete failed: {error}",
+    "updateSuccess": "Update successful!",
+    "updateError": "Update failed: {error}",
+    "getMarketError": "Failed to get MCP marketplace server list: {error}",
+    "importError": {
+      "noConfig": "This server has no available configuration",
+      "invalidFormat": "Server configuration format is incorrect",
+      "failed": "Import configuration failed: {error}"
+    },
+    "configParseError": "Configuration parse error: {error}",
+    "noAvailableConfig": "No available configuration"
+  }
+} 

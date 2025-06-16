@@ -3,8 +3,8 @@
     <v-card-text>
       <div class="platform-header">
         <div>
-          <div class="platform-title">平台消息统计</div>
-          <div class="platform-subtitle">各平台消息数量分布</div>
+          <div class="platform-title">{{ t('charts.platformStat.title') }}</div>
+          <div class="platform-subtitle">{{ t('charts.platformStat.subtitle') }}</div>
         </div>
       </div>
       
@@ -27,7 +27,7 @@
             <template v-slot:append>
               <div class="platform-count">
                 <span class="count-value">{{ platform.count }}</span>
-                <span class="count-label">条</span>
+                <span class="count-label">{{ t('charts.platformStat.messageUnit') }}</span>
               </div>
             </template>
           </v-list-item>
@@ -35,17 +35,17 @@
         
         <div class="platform-stats-summary">
           <div class="platform-stat-item">
-            <div class="stat-label">平台数</div>
+            <div class="stat-label">{{ t('charts.platformStat.platformCount') }}</div>
             <div class="stat-value">{{ platforms.length }}</div>
           </div>
           <v-divider vertical></v-divider>
           <div class="platform-stat-item">
-            <div class="stat-label">最活跃</div>
+            <div class="stat-label">{{ t('charts.platformStat.mostActive') }}</div>
             <div class="stat-value">{{ mostActivePlatform }}</div>
           </div>
           <v-divider vertical></v-divider>
           <div class="platform-stat-item">
-            <div class="stat-label">总消息占比</div>
+            <div class="stat-label">{{ t('charts.platformStat.totalPercentage') }}</div>
             <div class="stat-value">{{ topPlatformPercentage }}%</div>
           </div>
         </div>
@@ -65,19 +65,27 @@
       
       <div v-else class="no-data">
         <v-icon icon="mdi-information-outline" size="40" color="grey-lighten-1"></v-icon>
-        <div class="no-data-text">暂无平台数据</div>
+        <div class="no-data-text">{{ t('charts.platformStat.noData') }}</div>
       </div>
     </v-card-text>
   </v-card>
 </template>
 
 <script>
+import { useModuleI18n } from '@/i18n/composables';
+
 export default {
   name: 'PlatformStat',
   props: ['stat'],
-  data: () => ({
-    platforms: []
-  }),
+  setup() {
+    const { tm: t } = useModuleI18n('features/dashboard');
+    return { t };
+  },
+  data() {
+    return {
+      platforms: []
+    };
+  },
   computed: {
     sortedPlatforms() {
       return [...this.platforms].sort((a, b) => b.count - a.count);

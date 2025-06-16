@@ -1,22 +1,4 @@
-<script setup>
-import { router } from '@/router';
-import axios from 'axios';
-import { marked } from 'marked';
-import { ref } from 'vue';
-import { defineProps } from 'vue';
-import { useCustomizerStore } from '@/stores/customizer';
 
-marked.setOptions({
-    breaks: true
-});
-
-const props = defineProps({
-    chatboxMode: {
-        type: Boolean,
-        default: false
-    }
-});
-</script>
 
 <template>
     <v-card class="chat-page-card">
@@ -25,7 +7,7 @@ const props = defineProps({
                 <div class="sidebar-panel" :class="{ 'sidebar-collapsed': sidebarCollapsed }"
                     @mouseenter="handleSidebarMouseEnter" @mouseleave="handleSidebarMouseLeave">
 
-                    <div style="display: flex; align-items: center; justify-content: center; padding: 16px; padding-bottom: 0px;" v-if="props.chatboxMode">
+                    <div style="display: flex; align-items: center; justify-content: center; padding: 16px; padding-bottom: 0px;" v-if="chatboxMode">
                         <img width="50" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
                         <span v-if="!sidebarCollapsed" style="font-weight: 1000; font-size: 26px; margin-left: 8px;" class="text-secondary">AstrBot</span>
                     </div>
@@ -41,7 +23,7 @@ const props = defineProps({
 
                     <div style="padding: 16px; padding-top: 8px;">
                         <v-btn block variant="text" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus" style="box-shadow: 0 1px 2px rgba(0,0,0,0.1); background-color: transparent !important; border-radius: 4px;">创建对话</v-btn>
+                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus" style="box-shadow: 0 1px 2px rgba(0,0,0,0.1); background-color: transparent !important; border-radius: 4px;">{{ tm('actions.newChat') }}</v-btn>
                         <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currCid" v-if="sidebarCollapsed"
                             elevation="0"></v-btn>
                     </div>
@@ -57,7 +39,7 @@ const props = defineProps({
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                     rounded="lg" class="conversation-item" active-color="secondary">
                                     <v-list-item-title v-if="!sidebarCollapsed" class="conversation-title">{{ item.title
-                                        || '新对话' }}</v-list-item-title>
+                                        || tm('conversation.newConversation') }}</v-list-item-title>
                                     <!-- <v-list-item-subtitle v-if="!sidebarCollapsed" class="timestamp">{{
                                         formatDate(item.updated_at)
                                         }}</v-list-item-subtitle> -->
@@ -74,7 +56,7 @@ const props = defineProps({
                             <div class="no-conversations" v-if="conversations.length === 0">
                                 <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
                                 <div class="no-conversations-text" v-if="!sidebarCollapsed || sidebarHoverExpanded">
-                                    暂无对话历史</div>
+                                    {{ tm('conversation.noHistory') }}</div>
                             </div>
                         </v-fade-transition>
                     </div>
@@ -85,7 +67,7 @@ const props = defineProps({
                     <div style="padding: 16px;" :class="{ 'fade-in': sidebarHoverExpanded }"
                         v-if="!sidebarCollapsed">
                         <div class="sidebar-section-title">
-                            系统状态
+                            {{ tm('conversation.systemStatus') }}
                         </div>
                         <div class="status-chips">
                             <v-chip class="status-chip" :color="status?.llm_enabled ? 'primary' : 'grey-lighten-2'"
@@ -94,7 +76,7 @@ const props = defineProps({
                                     <v-icon :icon="status?.llm_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
                                         size="x-small"></v-icon>
                                 </template>
-                                <span>LLM 服务</span>
+                                <span>{{ tm('conversation.llmService') }}</span>
                             </v-chip>
 
                             <v-chip class="status-chip" :color="status?.stt_enabled ? 'success' : 'grey-lighten-2'"
@@ -103,7 +85,7 @@ const props = defineProps({
                                     <v-icon :icon="status?.stt_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
                                         size="x-small"></v-icon>
                                 </template>
-                                <span>语音转文本</span>
+                                <span>{{ tm('conversation.speechToText') }}</span>
                             </v-chip>
                         </div>
 
@@ -119,7 +101,7 @@ const props = defineProps({
                                 <v-btn variant="outlined" rounded="sm" class="delete-chat-btn"
                                     @click="deleteConversation(currCid)" color="error" density="comfortable" size="small">
                                     <v-icon start size="small">mdi-delete</v-icon>
-                                    删除此对话
+                                    {{ tm('actions.deleteChat') }}
                                 </v-btn>
                             </div>
                         </transition>
@@ -131,19 +113,19 @@ const props = defineProps({
 
                     <div class="conversation-header fade-in">
                         <div class="conversation-header-content" v-if="currCid && getCurrentConversation">
-                            <h2 class="conversation-header-title">{{ getCurrentConversation.title || '新对话' }}</h2>
+                            <h2 class="conversation-header-title">{{ getCurrentConversation.title || tm('conversation.newConversation') }}</h2>
                             <div class="conversation-header-time">{{ formatDate(getCurrentConversation.updated_at) }}</div>
                         </div>
                         <div class="conversation-header-actions">
                             <!-- router 推送到 /chatbox -->
-                            <v-tooltip text="全屏模式" v-if="!props.chatboxMode">
+                            <v-tooltip :text="tm('actions.fullscreen')" v-if="!chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-icon v-bind="props" @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')"
                                         class="fullscreen-icon">mdi-fullscreen</v-icon>
                                 </template>
                             </v-tooltip>
                             <!-- 主题切换按钮 -->
-                            <v-tooltip :text="isDark ? '切换到日间模式' : '切换到夜间模式'" v-if="props.chatboxMode">
+                            <v-tooltip :text="isDark ? tm('modes.lightMode') : tm('modes.darkMode')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon" variant="text">
                                         <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
@@ -151,7 +133,7 @@ const props = defineProps({
                                 </template>
                             </v-tooltip>
                             <!-- router 推送到 /chat -->
-                            <v-tooltip text="退出全屏" v-if="props.chatboxMode">
+                            <v-tooltip :text="tm('actions.exitFullscreen')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-icon v-bind="props" @click="router.push(currCid ? `/chat/${currCid}` : '/chat')"
                                         class="fullscreen-icon">mdi-fullscreen-exit</v-icon>
@@ -169,19 +151,19 @@ const props = defineProps({
                                 <span class="bot-name">AstrBot ⭐</span>
                             </div>
                             <div class="welcome-hint">
-                                <span>输入</span>
+                                <span>{{ t('core.common.type') }}</span>
                                 <code>help</code>
-                                <span>获取帮助 😊</span>
+                                <span>{{ tm('shortcuts.help') }} 😊</span>
                             </div>
                             <div class="welcome-hint">
-                                <span>长按</span>
+                                <span>{{ t('core.common.longPress') }}</span>
                                 <code>Ctrl</code>
-                                <span>录制语音 🎤</span>
+                                <span>{{ tm('shortcuts.voiceRecord') }} 🎤</span>
                             </div>
                             <div class="welcome-hint">
-                                <span>按</span>
+                                <span>{{ t('core.common.press') }}</span>
                                 <code>Ctrl + V</code>
-                                <span>粘贴图片 🏞️</span>
+                                <span>{{ tm('shortcuts.pasteImage') }} 🏞️</span>
                             </div>
                         </div>
 
@@ -205,7 +187,7 @@ const props = defineProps({
                                         <div class="audio-attachment" v-if="msg.audio_url && msg.audio_url.length > 0">
                                             <audio controls class="audio-player">
                                                 <source :src="msg.audio_url" type="audio/wav">
-                                                您的浏览器不支持音频播放。
+                                                {{ t('messages.errors.browser.audioNotSupported') }}
                                             </audio>
                                         </div>
                                     </div>
@@ -230,7 +212,7 @@ const props = defineProps({
                     <!-- 输入区域 -->
                     <div class="input-area fade-in">
                         <v-text-field autocomplete="off" id="input-field" variant="outlined" v-model="prompt"
-                            :label="inputFieldLabel" placeholder="开始输入..." :loading="loadingChat"
+                            :label="inputFieldLabel" :placeholder="tm('input.placeholder')" :loading="loadingChat"
                             clear-icon="mdi-close-circle" clearable @click:clear="clearMessage" class="message-input"
                             @keydown="handleInputKeyDown" hide-details>
                             <template v-slot:loader>
@@ -239,7 +221,7 @@ const props = defineProps({
                             </template>
 
                             <template v-slot:append>
-                                <v-tooltip text="发送">
+                                <v-tooltip :text="tm('input.send')">
                                     <template v-slot:activator="{ props }">
                                         <v-btn v-bind="props" @click="sendMessage" class="send-btn" icon="mdi-send"
                                             variant="text" color="deep-purple"
@@ -247,7 +229,7 @@ const props = defineProps({
                                     </template>
                                 </v-tooltip>
 
-                                <v-tooltip text="语音输入">
+                                <v-tooltip :text="tm('input.voice')">
                                     <template v-slot:activator="{ props }">
                                         <v-btn v-bind="props" @click="isRecording ? stopRecording() : startRecording()"
                                             class="record-btn"
@@ -269,7 +251,7 @@ const props = defineProps({
                             <div v-if="stagedAudioUrl" class="audio-preview">
                                 <v-chip color="deep-purple-lighten-4" class="audio-chip">
                                     <v-icon start icon="mdi-microphone" size="small"></v-icon>
-                                    新录音
+                                    {{ tm('voice.recording') }}
                                 </v-chip>
                                 <v-btn @click="removeAudio" class="remove-attachment-btn" icon="mdi-close" size="small"
                                     color="error" variant="text" />
@@ -284,24 +266,50 @@ const props = defineProps({
     <!-- 编辑对话标题对话框 -->
     <v-dialog v-model="editTitleDialog" max-width="400">
         <v-card>
-            <v-card-title class="dialog-title">编辑对话标题</v-card-title>
+            <v-card-title class="dialog-title">{{ tm('actions.editTitle') }}</v-card-title>
             <v-card-text>
-                <v-text-field v-model="editingTitle" label="对话标题" variant="outlined" hide-details class="mt-2"
+                                    <v-text-field v-model="editingTitle" :label="tm('conversation.newConversation')" variant="outlined" hide-details class="mt-2"
                     @keyup.enter="saveTitle" autofocus />
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
-                <v-btn text @click="editTitleDialog = false" color="grey-darken-1">取消</v-btn>
-                <v-btn text @click="saveTitle" color="primary">保存</v-btn>
+                <v-btn text @click="editTitleDialog = false" color="grey-darken-1">{{ t('core.common.cancel') }}</v-btn>
+                <v-btn text @click="saveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
 </template>
 
 <script>
+import { router } from '@/router';
+import axios from 'axios';
+import { marked } from 'marked';
+import { useCustomizerStore } from '@/stores/customizer';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
+
+marked.setOptions({
+    breaks: true
+});
+
 export default {
     name: 'ChatPage',
     components: {
+    },
+    props: {
+        chatboxMode: {
+            type: Boolean,
+            default: false
+        }
+    },
+    setup() {
+        const { t } = useI18n();
+        const { tm } = useModuleI18n('features/chat');
+        
+        return {
+            t,
+            tm,
+            router
+        };
     },
     data() {
         return {
@@ -313,7 +321,7 @@ export default {
             stagedImagesUrl: [], // 用于存储图片的blob URL数组
             loadingChat: false,
 
-            inputFieldLabel: '聊天吧!',
+            inputFieldLabel: '',
 
             isRecording: false,
             audioChunks: [],
@@ -401,6 +409,8 @@ export default {
 
     mounted() {
         // Theme is now handled globally by the customizer store.
+        // 设置输入框标签
+        this.inputFieldLabel = this.tm('title');
         this.startListeningEvent();
         this.checkStatus();
         this.getConversations();
@@ -756,9 +766,9 @@ export default {
             // Update the URL to reflect the selected conversation
             if (this.$route.path !== `/chat/${cid[0]}` && this.$route.path !== `/chatbox/${cid[0]}`) {
                 if (this.$route.path.startsWith('/chatbox')) {
-                    router.push(`/chatbox/${cid[0]}`);
+                    this.$router.push(`/chatbox/${cid[0]}`);
                 } else {
-                    router.push(`/chat/${cid[0]}`);
+                    this.$router.push(`/chat/${cid[0]}`);
                 }
             }
 
@@ -800,9 +810,9 @@ export default {
                 this.currCid = cid;
                 // Update the URL to reflect the new conversation
                 if (this.$route.path.startsWith('/chatbox')) {
-                    router.push(`/chatbox/${cid}`);
+                    this.$router.push(`/chatbox/${cid}`);
                 } else {
-                    router.push(`/chat/${cid}`);
+                    this.$router.push(`/chat/${cid}`);
                 }
                 this.getConversations();
                 return cid;
@@ -816,9 +826,9 @@ export default {
             this.currCid = '';
             this.messages = [];
             if (this.$route.path.startsWith('/chatbox')) {
-                router.push('/chatbox');
+                this.$router.push('/chatbox');
             } else {
-                router.push('/chat');
+                this.$router.push('/chat');
             }
         },
 

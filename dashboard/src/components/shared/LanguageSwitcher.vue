@@ -1,59 +1,77 @@
 <template>
-  <v-menu>
-    <template v-slot:activator="{ props }">
+  <v-menu offset="12" location="bottom center">
+    <template v-slot:activator="{ props: activatorProps }">
       <v-btn
-        v-bind="props"
-        variant="text"
+        v-bind="activatorProps"
+        :variant="props.variant === 'header' ? 'flat' : 'text'"
+        :color="props.variant === 'header' ? 'var(--v-theme-surface)' : undefined"
+        :rounded="props.variant === 'header' ? 'sm' : undefined"
         icon
         size="small"
-        class="language-switcher"
+        :class="['language-switcher', `language-switcher--${props.variant}`, props.variant === 'header' ? 'action-btn' : '']"
       >
-        <v-icon>mdi-translate</v-icon>
-        <v-tooltip activator="parent" location="bottom">
-          {{ $t('common.language') }}
+        <v-icon 
+          size="18"
+          :color="props.variant === 'default' ? (useCustomizerStore().uiTheme === 'PurpleTheme' ? '#5e35b1' : '#d7c5fa') : undefined"
+        >
+          mdi-translate
+        </v-icon>
+        <v-tooltip activator="parent" location="top">
+          {{ t('core.common.language') }}
         </v-tooltip>
       </v-btn>
     </template>
     
-    <v-list density="compact" min-width="140">
-      <v-list-item
-        v-for="lang in languages"
-        :key="lang.code"
-        :value="lang.code"
-        @click="changeLanguage(lang.code)"
-        :class="{ 'v-list-item--active': currentLocale === lang.code }"
-      >
-        <template v-slot:prepend>
-          <span class="language-flag">{{ lang.flag }}</span>
-        </template>
-        <v-list-item-title>{{ lang.name }}</v-list-item-title>
-        <template v-slot:append v-if="currentLocale === lang.code">
-          <v-icon color="primary" size="small">mdi-check</v-icon>
-        </template>
-      </v-list-item>
-    </v-list>
+    <v-card class="language-dropdown" elevation="8" rounded="lg">
+      <v-list density="compact" class="pa-1">
+        <v-list-item
+          v-for="lang in languages"
+          :key="lang.code"
+          :value="lang.code"
+          @click="changeLanguage(lang.code)"
+          :class="{ 'v-list-item--active': currentLocale === lang.code, 'language-item-selected': currentLocale === lang.code }"
+          class="language-item"
+          rounded="md"
+        >
+          <template v-slot:prepend>
+            <span class="language-flag">{{ lang.flag }}</span>
+          </template>
+          <v-list-item-title>{{ lang.name }}</v-list-item-title>
+        </v-list-item>
+      </v-list>
+    </v-card>
   </v-menu>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useI18n, useLanguageSwitcher } from '@/i18n/composables'
+import { useCustomizerStore } from '@/stores/customizer'
+import type { Locale } from '@/i18n/types'
 
-const { locale } = useI18n()
+// 定义props来控制样式变体
+const props = withDefaults(defineProps<{
+  variant?: 'default' | 'header'
+}>(), {
+  variant: 'default'
+})
 
-const languages = [
-  { code: 'zh-CN', name: '简体中文', flag: '🇨🇳' },
-  { code: 'en-US', name: 'English', flag: '🇺🇸' }
-]
+// 使用新的i18n系统
+const { t } = useI18n()
+const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher()
+
+const languages = computed(() => 
+  languageOptions.value.map(lang => ({
+    code: lang.value,
+    name: lang.label,
+    flag: lang.flag
+  }))
+)
 
 const currentLocale = computed(() => locale.value)
 
-const changeLanguage = (langCode: string) => {
-  locale.value = langCode
-  localStorage.setItem('locale', langCode)
-  
-  // 可选：刷新页面以确保所有文本都更新
-  // window.location.reload()
+const changeLanguage = async (langCode: string) => {
+  await switchLanguage(langCode as Locale)
 }
 </script>
 
@@ -63,7 +81,73 @@ const changeLanguage = (langCode: string) => {
   margin-right: 8px;
 }
 
-.language-switcher {
+/* 默认变体样式 - 圆形按钮用于登录页 */
+.language-switcher--default {
   margin: 0 4px;
+  transition: all 0.3s ease;
+  border-radius: 50% !important;
+  min-width: 32px !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.language-switcher--default:hover {
+  transform: scale(1.05);
+  background: rgba(94, 53, 177, 0.08) !important;
+}
+
+/* Header变体样式 - 完全继承Vuetify和action-btn的默认样式 */
+.language-switcher--header {
+  /* action-btn类已经处理了margin-right: 6px，不需要额外样式 */
+}
+
+/* 深色模式下的悬停效果（仅对default变体） */
+:deep(.v-theme--PurpleThemeDark) .language-switcher--default:hover {
+  background: rgba(114, 46, 209, 0.12) !important;
+}
+
+.language-dropdown {
+  min-width: 100px;
+  width: fit-content;
+  border: 1px solid rgba(94, 53, 177, 0.15) !important;
+  background: #f8f6fc !important;
+  backdrop-filter: blur(10px);
+}
+
+/* 深色模式下的下拉框样式 */
+:deep(.v-theme--PurpleThemeDark) .language-dropdown {
+  background: #2a2733 !important;
+  border: 1px solid rgba(110, 60, 180, 0.692) !important;
+}
+
+.language-item {
+  margin: 2px 0;
+  transition: all 0.2s ease;
+}
+
+.language-item:hover {
+  background: rgba(94, 53, 177, 0.08) !important;
+}
+
+.language-item-selected {
+  background: rgba(94, 53, 177, 0.15) !important;
+  font-weight: 500;
+}
+
+.language-item-selected:hover {
+  background: rgba(94, 53, 177, 0.2) !important;
+}
+
+/* 深色模式下的列表项悬停效果 */
+:deep(.v-theme--PurpleThemeDark) .language-item:hover {
+  background: rgba(114, 46, 209, 0.12) !important;
+}
+
+:deep(.v-theme--PurpleThemeDark) .language-item-selected {
+  background: rgba(114, 46, 209, 0.2) !important;
+}
+
+:deep(.v-theme--PurpleThemeDark) .language-item-selected:hover {
+  background: rgba(114, 46, 209, 0.25) !important;
 }
 </style> 

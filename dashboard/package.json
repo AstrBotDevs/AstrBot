@@ -28,7 +28,7 @@
     "marked": "^15.0.7",
     "pinia": "2.1.6",
     "remixicon": "3.5.0",
-    "vue-i18n": "^9.8.0",
+    "vue-i18n": "^11.1.5",
     "vee-validate": "4.11.3",
     "vite-plugin-vuetify": "1.0.2",
     "vue": "3.3.4",

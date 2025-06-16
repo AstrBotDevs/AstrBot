@@ -1,0 +1,37 @@
+{
+  "title": "Long-term Memory",
+  "subtitle": "AI assistant's long-term memory management",
+  "memories": {
+    "title": "Memory List",
+    "content": "Memory Content",
+    "importance": "Importance Level",
+    "createTime": "Create Time",
+    "lastAccess": "Last Access",
+    "category": "Category"
+  },
+  "categories": {
+    "personal": "Personal Information",
+    "preferences": "Preference Settings",
+    "conversations": "Conversation History",
+    "facts": "Factual Information",
+    "skills": "Skill Knowledge"
+  },
+  "importance": {
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low"
+  },
+  "actions": {
+    "view": "View Details",
+    "edit": "Edit",
+    "delete": "Delete",
+    "pin": "Pin",
+    "unpin": "Unpin"
+  },
+  "filters": {
+    "all": "All",
+    "category": "By Category",
+    "importance": "By Importance",
+    "dateRange": "By Date Range"
+  }
+} 
