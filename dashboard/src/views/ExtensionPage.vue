@@ -568,8 +568,10 @@ onMounted(async () => {
         <!-- 标签页 -->
         <v-card-text>
 
-          <div class="d-flex align-center mb-2" style="justify-content: space-between;">
-            <v-tabs v-model="activeTab" color="primary" class="mb-4">
+          <!-- 标签栏和搜索栏 - 响应式布局 -->
+          <div class="mb-4">
+            <!-- 标签栏 -->
+            <v-tabs v-model="activeTab" color="primary" class="mb-3">
               <v-tab value="installed">
                 <v-icon class="mr-2">mdi-puzzle</v-icon>
                 {{ tm('tabs.installed') }}
@@ -580,20 +582,40 @@ onMounted(async () => {
               </v-tab>
             </v-tabs>
 
-
-            <v-text-field v-if="activeTab == 'market'" style="max-width: 300px;" v-model="marketSearch" density="compact"
-              :label="tm('search.marketPlaceholder')" prepend-inner-icon="mdi-magnify" variant="solo-filled" flat hide-details
-              single-line></v-text-field>
-            <v-text-field  v-else style="max-width: 300px;" v-model="pluginSearch" density="compact" :label="tm('search.placeholder')" prepend-inner-icon="mdi-magnify"
-              variant="solo-filled" flat hide-details single-line></v-text-field>
-
+            <!-- 搜索栏 - 在移动端时独占一行 -->
+            <v-row class="mb-2">
+              <v-col cols="12" sm="6" md="4" lg="3">
+                <v-text-field 
+                  v-if="activeTab == 'market'" 
+                  v-model="marketSearch" 
+                  density="compact"
+                  :label="tm('search.marketPlaceholder')" 
+                  prepend-inner-icon="mdi-magnify" 
+                  variant="solo-filled" 
+                  flat 
+                  hide-details
+                  single-line>
+                </v-text-field>
+                <v-text-field 
+                  v-else 
+                  v-model="pluginSearch" 
+                  density="compact" 
+                  :label="tm('search.placeholder')" 
+                  prepend-inner-icon="mdi-magnify"
+                  variant="solo-filled" 
+                  flat 
+                  hide-details 
+                  single-line>
+                </v-text-field>
+              </v-col>
+            </v-row>
           </div>
 
 
           <!-- 已安装插件标签页内容 -->
           <v-tab-item v-show="activeTab === 'installed'">
             <v-row class="mb-4">
-              <v-col cols="12" sm="6" md="6" class="d-flex align-center">
+              <v-col cols="12" class="d-flex align-center flex-wrap ga-2">
                 <v-btn-group variant="outlined" density="comfortable" color="primary">
                   <v-btn @click="isListView = false" :color="!isListView ? 'primary' : undefined"
                     :variant="!isListView ? 'flat' : 'outlined'">
@@ -605,13 +627,14 @@ onMounted(async () => {
                   </v-btn>
                 </v-btn-group>
 
-                <v-btn class="ml-2" @click="toggleShowReserved" prepend-icon="mdi-eye-settings-outline"
-                  :color="showReserved ? 'primary' : undefined" :variant="showReserved ? 'flat' : 'outlined'">
+                <v-btn @click="toggleShowReserved" prepend-icon="mdi-eye-settings-outline"
+                  :color="showReserved ? 'primary' : undefined" :variant="showReserved ? 'flat' : 'outlined'"
+                  class="flex-shrink-0">
                   {{ showReserved ? tm('buttons.hideSystemPlugins') : tm('buttons.showSystemPlugins') }}
                 </v-btn>
 
-                <v-btn class="ml-2" prepend-icon="mdi-tune-vertical" color="primary" variant="outlined"
-                  @click="getPlatformEnableConfig">
+                <v-btn prepend-icon="mdi-tune-vertical" color="primary" variant="outlined"
+                  @click="getPlatformEnableConfig" class="flex-shrink-0">
                   {{ tm('buttons.platformConfig') }}
                 </v-btn>
               </v-col>

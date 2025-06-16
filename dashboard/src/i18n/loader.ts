@@ -128,69 +128,44 @@ export class I18nLoader {
   }
 
   /**
+   * 通用模块加载器 - 减少重复代码，提高可维护性
+   */
+  private async loadModules(
+    locale: string,
+    prefix: string,
+    overrideList: string[] = []
+  ): Promise<any> {
+    // 使用覆盖列表或从注册表中筛选符合前缀的模块名
+    const moduleNames = overrideList.length > 0
+      ? overrideList
+      : Array.from(this.moduleRegistry.keys()).filter(key => key.startsWith(prefix));
+
+    const results = await Promise.all(
+      moduleNames.map(module => this.loadModule(locale, module))
+    );
+
+    return this.mergeModules(results, moduleNames);
+  }
+
+  /**
    * 加载核心模块（最高优先级）
    */
   async loadCoreModules(locale: string): Promise<any> {
-    const coreModules = [
-      'core/common',
-      'core/actions', 
-      'core/status',
-      'core/navigation',
-      'core/header'
-    ];
-
-    const results = await Promise.all(
-      coreModules.map(module => this.loadModule(locale, module))
-    );
-
-    return this.mergeModules(results, coreModules);
+    return this.loadModules(locale, 'core');
   }
 
   /**
    * 加载功能模块
    */
   async loadFeatureModules(locale: string, features?: string[]): Promise<any> {
-    const featureModules = features || [
-      'features/chat',
-      'features/extension',
-      'features/conversation',
-      'features/tooluse',
-      'features/provider',
-      'features/platform',
-      'features/config',
-      'features/console',
-      'features/about',
-      'features/settings',
-      'features/auth',
-      'features/chart',
-      'features/dashboard',
-      'features/alkaid/index',
-      'features/alkaid/knowledge-base',
-      'features/alkaid/memory'
-    ];
-
-    const results = await Promise.all(
-      featureModules.map(module => this.loadModule(locale, module))
-    );
-
-    return this.mergeModules(results, featureModules);
+    return this.loadModules(locale, 'features', features || []);
   }
 
   /**
    * 加载消息模块
    */
   async loadMessageModules(locale: string): Promise<any> {
-    const messageModules = [
-      'messages/errors',
-      'messages/success',
-      'messages/validation'
-    ];
-
-    const results = await Promise.all(
-      messageModules.map(module => this.loadModule(locale, module))
-    );
-
-    return this.mergeModules(results, messageModules);
+    return this.loadModules(locale, 'messages');
   }
 
   /**

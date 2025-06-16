@@ -594,7 +594,25 @@ export default {
                     console.log(line)
 
                     // data: {"type": "plain", "data": "helloworld"}
-                    let chunk_json = JSON.parse(line.replace('data: ', ''));
+                    let chunk_json;
+                    try {
+                        chunk_json = JSON.parse(line.replace('data: ', ''));
+                    } catch (parseError) {
+                        console.warn('JSON解析失败:', line, parseError);
+                        continue;
+                    }
+
+                    // 检查解析后的数据是否有效
+                    if (!chunk_json || typeof chunk_json !== 'object') {
+                        console.warn('无效的数据对象:', chunk_json);
+                        continue;
+                    }
+
+                    // 检查是否有type字段
+                    if (!chunk_json.hasOwnProperty('type')) {
+                        console.warn('数据缺少type字段:', chunk_json);
+                        continue;
+                    }
 
                     if (chunk_json.type === 'heartbeat') {
                         continue; // 心跳包

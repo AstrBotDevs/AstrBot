@@ -57,13 +57,15 @@ export function useI18n() {
         value = value[k];
       } else {
         console.warn(`Translation key not found: ${key}`);
-        return key; // 返回键名作为回退
+        // 返回带括号的键名，便于在开发时识别缺失的翻译
+        return `[MISSING: ${key}]`;
       }
     }
     
     if (typeof value !== 'string') {
-      console.warn(`Translation value is not string: ${key}`);
-      return key;
+      console.warn(`Translation value is not string: ${key}`, value);
+      // 返回带括号的键名，便于在开发时识别类型错误的翻译
+      return `[INVALID: ${key}]`;
     }
     
     // 此时value确定是string类型
