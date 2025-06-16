@@ -5,7 +5,7 @@ import traceback
 from typing import AsyncGenerator, Union
 
 from astrbot.core import html_renderer, logger, file_token_service
-from astrbot.core.message.components import At, Face, File, Image, Node, Plain, Record, Reply
+from astrbot.core.message.components import At, Face, Image, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
@@ -294,5 +294,4 @@ class ResultDecorateStage(Stage):
 
                 # 引用回复
                 if random.random() < self.reply_with_quote:
-                    if not any(isinstance(item, File) for item in result.chain):
                         result.chain.insert(0, Reply(id=event.message_obj.message_id))
