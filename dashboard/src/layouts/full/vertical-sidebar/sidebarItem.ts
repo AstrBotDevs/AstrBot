@@ -46,10 +46,6 @@ const sidebarItem: menu[] = [
     to: '/extension'
   },
   {
-    title: '插件市场',
-    icon: 'mdi-storefront',
-    to: '/extension-marketplace'
-  },  {
     title: '聊天',
     icon: 'mdi-chat',
     to: '/chat'
