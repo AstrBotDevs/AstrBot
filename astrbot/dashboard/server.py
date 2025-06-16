@@ -36,7 +36,8 @@ class AstrBotDashboard:
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
         self.app.json.sort_keys = False
         self.app.before_request(self.auth_middleware)
-        # token 用于验证请求        logging.getLogger(self.app.name).removeHandler(default_handler)
+        # token 用于验证请求        
+        logging.getLogger(self.app.name).removeHandler(default_handler)
         self.context = RouteContext(self.config, self.app)
         self.ur = UpdateRoute(
             self.context, core_lifecycle.astrbot_updator, core_lifecycle
