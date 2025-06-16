@@ -85,15 +85,10 @@ export class I18nLoader {
     }
 
     try {
-      // 使用fetch方式加载JSON文件
-      const modulePath = `/src/i18n/locales/${locale}/${moduleInfo.path}`;
-      const response = await fetch(modulePath);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
+      // 使用动态import加载JSON文件，兼容构建和开发环境
+      const modulePath = `../locales/${locale}/${moduleInfo.path}`;
+      const module = await import(/* @vite-ignore */ modulePath);
+      const data = module.default || module;
 
       // 缓存结果
       this.cache.set(cacheKey, data);
@@ -105,7 +100,30 @@ export class I18nLoader {
       return data;
     } catch (error) {
       console.error(`加载模块 ${moduleName} 失败:`, error);
-      return {};
+      
+      // 回退方案：尝试使用fetch（开发环境）
+      try {
+        const modulePath = `/src/i18n/locales/${locale}/${moduleInfo.path}`;
+        const response = await fetch(modulePath);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+
+        // 缓存结果
+        this.cache.set(cacheKey, data);
+        
+        // 更新模块信息
+        moduleInfo.loaded = true;
+        moduleInfo.data = data;
+
+        return data;
+      } catch (fetchError) {
+        console.error(`回退fetch加载也失败:`, fetchError);
+        return {};
+      }
     }
   }
 
