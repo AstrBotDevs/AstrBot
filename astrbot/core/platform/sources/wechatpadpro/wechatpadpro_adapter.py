@@ -505,7 +505,7 @@ class WeChatPadProAdapter(Platform):
 
             # 对于群聊，session_id 可以是群聊 ID 或发送者 ID + 群聊 ID (如果 unique_session 为 True)
             if self.unique_session:
-                abm.session_id = f"{from_user_name}_{abm.sender.user_id}"
+                abm.session_id = f"{from_user_name}#{abm.sender.user_id}"
             else:
                 abm.session_id = from_user_name
 
@@ -832,7 +832,10 @@ class WeChatPadProAdapter(Platform):
         # 根据 session_id 判断消息类型
         if "@chatroom" in session.session_id:
             dummy_message_obj.type = MessageType.GROUP_MESSAGE
-            dummy_message_obj.group_id = session.session_id
+            if "#" in session.session_id:
+                dummy_message_obj.group_id = session.session_id.split("#")[0]
+            else:
+                dummy_message_obj.group_id = session.session_id
             dummy_message_obj.sender = MessageMember(user_id="", nickname="")
         else:
             dummy_message_obj.type = MessageType.FRIEND_MESSAGE
