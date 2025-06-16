@@ -5,7 +5,10 @@
   "status": {
     "loading": "加载中...",
     "dataError": "获取数据失败",
-    "noticeError": "获取公告失败"
+    "noticeError": "获取公告失败",
+    "online": "在线",
+    "uptime": "运行时间",
+    "memoryUsage": "内存占用"
   },
   "stats": {
     "totalMessage": {

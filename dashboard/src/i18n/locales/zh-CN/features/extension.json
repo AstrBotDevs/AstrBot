@@ -29,14 +29,17 @@
     "close": "关闭",
     "save": "保存",
     "saveAndClose": "保存并关闭",
-    "cancel": "取消"
+    "cancel": "取消",
+    "actions": "操作",
+    "back": "返回"
   },
   "status": {
     "enabled": "启用",
     "disabled": "禁用",
     "system": "系统",
     "loading": "加载中...",
-    "installed": "已安装"
+    "installed": "已安装",
+    "unknown": "未知"
   },
   "tooltips": {
     "enable": "点击启用",
@@ -99,6 +102,10 @@
     "loading": {
       "title": "加载中...",
       "logs": "日志"
+    },
+    "uninstall": {
+      "title": "删除确认",
+      "message": "你确定要删除当前插件吗？"
     }
   },
   "messages": {
@@ -127,5 +134,27 @@
     "fromUrl": "从链接安装",
     "selectFile": "选择文件",
     "enterUrl": "输入插件仓库链接"
+  },
+  "card": {
+    "actions": {
+      "pluginConfig": "插件配置",
+      "uninstallPlugin": "卸载插件",
+      "reloadPlugin": "重载插件",
+      "togglePlugin": "插件",
+      "viewHandlers": "查看行为",
+      "updateTo": "更新到"
+    },
+    "status": {
+      "hasUpdate": "有新版本可用",
+      "disabled": "该插件已经被禁用",
+      "handlersCount": "个行为"
+    },
+    "alt": {
+      "logo": "logo",
+      "extensionIcon": "扩展图标"
+    },
+    "errors": {
+      "confirmNotRegistered": "$confirm 未正确注册"
+    }
   }
 } 

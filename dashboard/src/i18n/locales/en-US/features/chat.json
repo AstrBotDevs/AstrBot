@@ -6,7 +6,9 @@
     "send": "Send",
     "clear": "Clear",
     "upload": "Upload File",
-    "voice": "Voice Input"
+    "voice": "Voice Input",
+    "recordingPrompt": "Recording, please speak...",
+    "chatPrompt": "Let's chat!"
   },
   "message": {
     "user": "User",

@@ -28,12 +28,12 @@ const extension_config = reactive({
   config: {}
 });
 const pluginMarketData = ref([]);
-const loadingDialog = reactive({
-  show: false,
-  title: "加载中...",
-  statusCode: 0, // 0: loading, 1: success, 2: error,
-  result: ""
-});
+  const loadingDialog = reactive({
+    show: false,
+    title: "",
+    statusCode: 0, // 0: loading, 1: success, 2: error,
+    result: ""
+  });
 const showPluginInfoDialog = ref(false);
 const selectedPlugin = ref({});
 const curr_namespace = ref("");
@@ -178,8 +178,8 @@ const checkUpdate = () => {
 
     if (matchedPlugin) {
       extension.online_version = matchedPlugin.version;
-      extension.has_update = extension.version !== matchedPlugin.version &&
-        matchedPlugin.version !== "未知";
+              extension.has_update = extension.version !== matchedPlugin.version &&
+          matchedPlugin.version !== tm('features.extension.status.unknown');
     } else {
       extension.has_update = false;
     }
@@ -204,6 +204,7 @@ const uninstallExtension = async (extension_name) => {
 };
 
 const updateExtension = async (extension_name) => {
+  loadingDialog.title = tm('features.extension.status.loading');
   loadingDialog.show = true;
   try {
     const res = await axios.post('/api/plugin/update', {
@@ -464,6 +465,7 @@ const newExtension = async () => {
     return;
   }
   loading_.value = true;
+  loadingDialog.title = tm('features.extension.status.loading');
   loadingDialog.show = true;
   if (upload_file.value !== null) {
     toast(tm('messages.installing'), "primary");

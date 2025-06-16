@@ -157,11 +157,11 @@ export default {
     // 安全访问翻译的计算属性
     messages() {
       return {
-        loadError: "配置加载失败",
-        saveSuccess: "配置保存成功", 
-        saveError: "配置保存失败",
-        configApplied: "配置应用成功",
-        configApplyError: "配置应用失败"
+        loadError: this.tm('features.config.messages.loadError'),
+        saveSuccess: this.tm('features.config.messages.saveSuccess'),
+        saveError: this.tm('features.config.messages.saveError'),
+        configApplied: this.tm('features.config.messages.configApplied'),
+        configApplyError: this.tm('features.config.messages.configApplyError')
       };
     }
   },

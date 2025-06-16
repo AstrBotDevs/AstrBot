@@ -5,7 +5,10 @@
   "status": {
     "loading": "Loading...",
     "dataError": "Failed to fetch data",
-    "noticeError": "Failed to fetch notice"
+    "noticeError": "Failed to fetch notice",
+    "online": "Online",
+    "uptime": "Uptime",
+    "memoryUsage": "Memory Usage"
   },
   "stats": {
     "totalMessage": {

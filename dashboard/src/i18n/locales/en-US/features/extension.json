@@ -29,14 +29,17 @@
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "actions": "Actions",
+    "back": "Back"
   },
   "status": {
     "enabled": "Enabled",
     "disabled": "Disabled",
     "system": "System",
     "loading": "Loading...",
-    "installed": "Installed"
+    "installed": "Installed",
+    "unknown": "Unknown"
   },
   "tooltips": {
     "enable": "Click to Enable",
@@ -99,6 +102,10 @@
     "loading": {
       "title": "Loading...",
       "logs": "Logs"
+    },
+    "uninstall": {
+      "title": "Confirm Deletion",
+      "message": "Are you sure you want to delete this extension?"
     }
   },
   "messages": {
@@ -127,5 +134,27 @@
     "fromUrl": "Install from URL",
     "selectFile": "Select File",
     "enterUrl": "Enter extension repository URL"
+  },
+  "card": {
+    "actions": {
+      "pluginConfig": "Extension Config",
+      "uninstallPlugin": "Uninstall Extension",
+      "reloadPlugin": "Reload Extension",
+      "togglePlugin": "Extension",
+      "viewHandlers": "View Handlers",
+      "updateTo": "Update to"
+    },
+    "status": {
+      "hasUpdate": "New version available",
+      "disabled": "This extension is disabled",
+      "handlersCount": " handlers"
+    },
+    "alt": {
+      "logo": "logo",
+      "extensionIcon": "extension icon"
+    },
+    "errors": {
+      "confirmNotRegistered": "$confirm not properly registered"
+    }
   }
 } 

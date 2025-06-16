@@ -36,5 +36,40 @@
     "confirmMessage": "你确定要执行此操作吗？",
     "confirmButton": "确定",
     "cancelButton": "取消"
+  },
+  "restart": {
+    "waiting": "正在等待 AstrBot 重启...",
+    "maxRetriesReached": "拉取状态达到最大次数，请手动检查。"
+  },
+  "readme": {
+    "title": "插件说明文档",
+    "buttons": {
+      "viewOnGithub": "在GitHub中查看仓库",
+      "refresh": "刷新文档"
+    },
+    "loading": "正在加载README文档...",
+    "errors": {
+      "fetchFailed": "获取README失败",
+      "fetchError": "获取README时发生错误"
+    },
+    "empty": {
+      "title": "该插件未提供文档链接或GitHub仓库地址。",
+      "subtitle": "请查看插件市场或联系插件作者获取更多信息。"
+    }
+  },
+  "editor": {
+    "fullscreen": "全屏编辑",
+    "editingTitle": "编辑内容"
+  },
+  "list": {
+    "addItemPlaceholder": "添加新项，按回车确认添加",
+    "addButton": "添加"
+  },
+  "itemCard": {
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "delete": "删除",
+    "edit": "编辑",
+    "noData": "暂无数据"
   }
 } 

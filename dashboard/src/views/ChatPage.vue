@@ -690,12 +690,12 @@ export default {
             };
             this.mediaRecorder.start();
             this.isRecording = true;
-            this.inputFieldLabel = "录音中，请说话...";
+            this.inputFieldLabel = this.tm('features.chat.input.recordingPrompt');
         },
 
         async stopRecording() {
             this.isRecording = false;
-            this.inputFieldLabel = "聊天吧!";
+            this.inputFieldLabel = this.tm('features.chat.input.chatPrompt');
             this.mediaRecorder.stop();
             this.mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
