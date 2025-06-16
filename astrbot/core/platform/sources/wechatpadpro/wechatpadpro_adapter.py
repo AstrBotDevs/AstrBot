@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import os
+import traceback
 import time
 from typing import Optional
 
@@ -206,6 +207,7 @@ class WeChatPadProAdapter(Platform):
                 return False
             except Exception as e:
                 logger.error(f"检查在线状态时发生错误: {e}")
+                logger.error(traceback.format_exc())
                 return False
 
     async def generate_auth_key(self):
