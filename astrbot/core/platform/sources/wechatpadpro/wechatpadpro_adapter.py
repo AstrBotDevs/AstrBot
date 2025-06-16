@@ -363,7 +363,7 @@ class WeChatPadProAdapter(Platform):
         while True:
             try:
                 async with websockets.connect(ws_url) as websocket:
-                    logger.info("WebSocket 连接成功。")
+                    logger.debug("WebSocket 连接成功。")
                     # 设置空闲超时重连
                     wait_time = (
                         self.active_message_poll_interval
@@ -378,7 +378,7 @@ class WeChatPadProAdapter(Platform):
                             # logger.debug(message) # 不显示原始消息内容
                             asyncio.create_task(self.handle_websocket_message(message))
                         except asyncio.TimeoutError:
-                            logger.warning(f"WebSocket 连接空闲超过 {wait_time} s")
+                            logger.debug(f"WebSocket 连接空闲超过 {wait_time} s")
                             break
                         except websockets.exceptions.ConnectionClosedOK:
                             logger.info("WebSocket 连接正常关闭。")
