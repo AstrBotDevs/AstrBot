@@ -165,6 +165,8 @@ class WeChatPadProAdapter(Platform):
         """
         检查 WeChatPadPro 设备是否在线。
         """
+        if not self.auth_key:
+            return False
         url = f"{self.base_url}/login/GetLoginStatus"
         params = {"key": self.auth_key}
 
@@ -183,7 +185,7 @@ class WeChatPadProAdapter(Platform):
                             logger.info("WeChatPadPro 设备不在线。")
                             return False
                         else:
-                            logger.error(f"未知的在线状态: {login_state:}")
+                            logger.error(f"未知的在线状态: {response_data}")
                             return False
                     # Code == 300 为微信退出状态。
                     elif response.status == 200 and response_data.get("Code") == 300:
