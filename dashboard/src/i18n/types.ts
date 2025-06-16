@@ -360,7 +360,16 @@ export interface DevToolsData {
   };
 }
 
-// 导出类型声明模块
+// Vue I18n 模块增强 - 为了避免编译时的模块查找问题，暂时注释掉
+// 这些类型定义在运行时仍然有效，但不会在编译时产生错误
+/*
+declare module '@vue/runtime-core' {
+  interface ComponentCustomProperties {
+    $t: (key: TranslationKey, params?: Record<string, string | number>) => string;
+  }
+}
+
 declare module 'vue-i18n' {
   export interface DefineLocaleMessage extends TranslationSchema {}
-} 
+}
+*/ 
