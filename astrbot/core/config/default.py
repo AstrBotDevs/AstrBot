@@ -25,8 +25,8 @@ DEFAULT_CONFIG = {
         "id_whitelist_log": True,
         "wl_ignore_admin_on_group": True,
         "wl_ignore_admin_on_friend": True,
-        "reply_with_mention": 0.0,
-        "reply_with_quote": 0.0,
+        "reply_with_mention": False,
+        "reply_with_quote": False,
         "path_mapping": [],
         "segmented_reply": {
             "enable": False,
@@ -808,6 +808,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "http://127.0.0.1:9880",
                         "gpt_weights_path": "",
                         "sovits_weights_path": "",
+                        "timeout": 60,
                         "gsv_default_parms": {
                             "gsv_ref_audio_path": "",
                             "gsv_prompt_text": "",
