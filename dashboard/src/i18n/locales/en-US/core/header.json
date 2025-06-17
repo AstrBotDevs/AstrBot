@@ -1,4 +1,5 @@
 {
+  "logoTitle": "AstrBot Dashboard",
   "version": {
     "hasNewVersion": "AstrBot has a new version!",
     "dashboardHasNewVersion": "WebUI has a new version!"

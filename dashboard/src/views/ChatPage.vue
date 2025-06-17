@@ -124,6 +124,12 @@
                                         class="fullscreen-icon">mdi-fullscreen</v-icon>
                                 </template>
                             </v-tooltip>
+                            <!-- 语言切换按钮 -->
+                            <v-tooltip :text="t('core.common.language')" v-if="chatboxMode">
+                                <template v-slot:activator="{ props }">
+                                    <LanguageSwitcher variant="chatbox" />
+                                </template>
+                            </v-tooltip>
                             <!-- 主题切换按钮 -->
                             <v-tooltip :text="isDark ? tm('modes.lightMode') : tm('modes.darkMode')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
@@ -286,6 +292,7 @@ import axios from 'axios';
 import { marked } from 'marked';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 
 marked.setOptions({
     breaks: true
@@ -294,6 +301,7 @@ marked.setOptions({
 export default {
     name: 'ChatPage',
     components: {
+        LanguageSwitcher
     },
     props: {
         chatboxMode: {
@@ -410,7 +418,7 @@ export default {
     mounted() {
         // Theme is now handled globally by the customizer store.
         // 设置输入框标签
-        this.inputFieldLabel = this.tm('title');
+        this.inputFieldLabel = this.tm('input.chatPrompt');
         this.startListeningEvent();
         this.checkStatus();
         this.getConversations();
@@ -637,7 +645,7 @@ export default {
                             type: 'bot',
                             message: `<audio controls class="audio-player">
                     <source src="${audioUrl}" type="audio/wav">
-                    您的浏览器不支持音频播放。
+                    ${this.t('messages.errors.browser.audioNotSupported')}
                   </audio>`
                         }
                         this.messages.push(bot_resp);
@@ -690,12 +698,12 @@ export default {
             };
             this.mediaRecorder.start();
             this.isRecording = true;
-            this.inputFieldLabel = this.tm('features.chat.input.recordingPrompt');
+            this.inputFieldLabel = this.tm('input.recordingPrompt');
         },
 
         async stopRecording() {
             this.isRecording = false;
-            this.inputFieldLabel = this.tm('features.chat.input.chatPrompt');
+            this.inputFieldLabel = this.tm('input.chatPrompt');
             this.mediaRecorder.stop();
             this.mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
@@ -805,7 +813,7 @@ export default {
                         const audioUrl = await this.getMediaFile(audio);
                         message[i].message = `<audio controls class="audio-player">
                                     <source src="${audioUrl}" type="audio/wav">
-                                    您的浏览器不支持音频播放。
+                                    ${this.t('messages.errors.browser.audioNotSupported')}
                                   </audio>`
                     }
                     if (message[i].image_url && message[i].image_url.length > 0) {
@@ -861,7 +869,9 @@ export default {
                 second: '2-digit',
                 hour12: false
             };
-            return date.toLocaleString('zh-CN', options).replace(/\//g, '-').replace(/, /g, ' ');
+            // 使用当前语言环境的locale
+            const locale = this.t('core.common.locale') || 'zh-CN';
+            return date.toLocaleString(locale, options).replace(/\//g, '-').replace(/, /g, ' ');
         },
 
         deleteConversation(cid) {

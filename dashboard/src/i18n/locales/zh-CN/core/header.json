@@ -1,4 +1,5 @@
 {
+  "logoTitle": "AstrBot 仪表盘",
   "version": {
     "hasNewVersion": "AstrBot 有新版本！",
     "dashboardHasNewVersion": "WebUI 有新版本！"

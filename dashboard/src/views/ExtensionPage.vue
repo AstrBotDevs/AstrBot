@@ -179,7 +179,7 @@ const checkUpdate = () => {
     if (matchedPlugin) {
       extension.online_version = matchedPlugin.version;
               extension.has_update = extension.version !== matchedPlugin.version &&
-          matchedPlugin.version !== tm('features.extension.status.unknown');
+          matchedPlugin.version !== tm('status.unknown');
     } else {
       extension.has_update = false;
     }
@@ -204,7 +204,7 @@ const uninstallExtension = async (extension_name) => {
 };
 
 const updateExtension = async (extension_name) => {
-  loadingDialog.title = tm('features.extension.status.loading');
+  loadingDialog.title = tm('status.loading');
   loadingDialog.show = true;
   try {
     const res = await axios.post('/api/plugin/update', {
@@ -465,7 +465,7 @@ const newExtension = async () => {
     return;
   }
   loading_.value = true;
-  loadingDialog.title = tm('features.extension.status.loading');
+  loadingDialog.title = tm('status.loading');
   loadingDialog.show = true;
   if (upload_file.value !== null) {
     toast(tm('messages.installing'), "primary");
@@ -542,7 +542,7 @@ onMounted(async () => {
     checkAlreadyInstalled();
     checkUpdate();
   } catch (err) {
-    console.error(tm('messages.getMarketDataFailed'), err);
+    toast(tm('messages.getMarketDataFailed') + " " + err, "error");
   }
 });
 

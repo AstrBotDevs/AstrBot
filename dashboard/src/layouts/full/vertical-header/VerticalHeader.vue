@@ -442,7 +442,7 @@ commonStore.getStartTime();
       <v-card class="account-dialog">
         <v-card-text class="py-6">
           <div class="d-flex flex-column align-center mb-6">
-            <logo title="AstrBot 仪表盘" :subtitle="t('core.header.accountDialog.title')"></logo>
+            <logo :title="t('core.header.logoTitle')" :subtitle="t('core.header.accountDialog.title')"></logo>
           </div>
           <v-alert 
             v-if="accountWarning" 

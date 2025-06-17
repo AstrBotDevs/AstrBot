@@ -366,7 +366,7 @@ export default {
             this.searchResults = Object.keys(data).map(doc_id => {
               return {
                 doc_id: doc_id,
-                text: data[doc_id].text || '无文本内容',
+                text: data[doc_id].text || this.tm('search.noTextContent'),
                 score: data[doc_id].score || 0
               };
             });
@@ -596,7 +596,7 @@ export default {
 
     // 格式化时间戳的辅助方法
     formatTime(timestamp) {
-      if (!timestamp) return '未知';
+      if (!timestamp) return this.tm('factDialog.unknown');
       try {
         return new Date(timestamp).toLocaleString();
       } catch (e) {
@@ -709,7 +709,7 @@ export default {
             this.selectedEdgeFactId = factId;
             this.getFactDetails(factId);
           } else {
-            this.$toast.info('该关系没有关联的记忆数据');
+            this.$toast.info(this.tm('messages.relationNoMemoryData'));
           }
         });
         

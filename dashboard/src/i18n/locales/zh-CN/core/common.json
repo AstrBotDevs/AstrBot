@@ -26,6 +26,7 @@
   "uninstall": "卸载",
   "update": "更新",
   "language": "语言",
+  "locale": "zh-CN",
   "type": "输入",
   "press": "按",
   "longPress": "长按",

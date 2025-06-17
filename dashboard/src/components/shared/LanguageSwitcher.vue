@@ -3,12 +3,12 @@
     <template v-slot:activator="{ props: activatorProps }">
       <v-btn
         v-bind="activatorProps"
-        :variant="props.variant === 'header' ? 'flat' : 'text'"
-        :color="props.variant === 'header' ? 'var(--v-theme-surface)' : undefined"
-        :rounded="props.variant === 'header' ? 'sm' : undefined"
+        :variant="(props.variant === 'header' || props.variant === 'chatbox') ? 'flat' : 'text'"
+        :color="(props.variant === 'header' || props.variant === 'chatbox') ? 'var(--v-theme-surface)' : undefined"
+        :rounded="(props.variant === 'header' || props.variant === 'chatbox') ? 'sm' : undefined"
         icon
         size="small"
-        :class="['language-switcher', `language-switcher--${props.variant}`, props.variant === 'header' ? 'action-btn' : '']"
+        :class="['language-switcher', `language-switcher--${props.variant}`, (props.variant === 'header' || props.variant === 'chatbox') ? 'action-btn' : '']"
       >
         <v-icon 
           size="18"
@@ -51,7 +51,7 @@ import type { Locale } from '@/i18n/types'
 
 // 定义props来控制样式变体
 const props = withDefaults(defineProps<{
-  variant?: 'default' | 'header'
+  variant?: 'default' | 'header' | 'chatbox'
 }>(), {
   variant: 'default'
 })
@@ -99,6 +99,11 @@ const changeLanguage = async (langCode: string) => {
 /* Header变体样式 - 完全继承Vuetify和action-btn的默认样式 */
 .language-switcher--header {
   /* action-btn类已经处理了margin-right: 6px，不需要额外样式 */
+}
+
+/* ChatBox变体样式 - 与Header保持一致 */
+.language-switcher--chatbox {
+  /* 继承action-btn样式，与工具栏主题按钮保持一致 */
 }
 
 /* 深色模式下的悬停效果（仅对default变体） */

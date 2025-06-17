@@ -177,11 +177,11 @@ export default {
     // 安全访问翻译的计算属性
     messages() {
       return {
-        updateSuccess: this.tm('features.platform.messages.updateSuccess'),
-        addSuccess: this.tm('features.platform.messages.addSuccess'),
-        deleteSuccess: this.tm('features.platform.messages.deleteSuccess'),
-        statusUpdateSuccess: this.tm('features.platform.messages.statusUpdateSuccess'),
-        deleteConfirm: this.tm('features.platform.messages.deleteConfirm')
+        updateSuccess: this.tm('messages.updateSuccess'),
+        addSuccess: this.tm('messages.addSuccess'),
+        deleteSuccess: this.tm('messages.deleteSuccess'),
+        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
+        deleteConfirm: this.tm('messages.deleteConfirm')
       };
     }
   },
@@ -277,7 +277,7 @@ export default {
     },
 
     deletePlatform(platform) {
-      if (confirm(`${this.messages.deleteConfirm} ${platform.id} 吗?`)) {
+      if (confirm(`${this.messages.deleteConfirm} ${platform.id}?`)) {
         axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
           this.getConfig();
           this.$refs.wfr.check();

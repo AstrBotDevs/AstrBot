@@ -46,7 +46,8 @@
     "searchButton": "Search",
     "resultsTitle": "Search Results",
     "noResults": "No relevant memory content found",
-    "similarity": "Relevance"
+    "similarity": "Relevance",
+    "noTextContent": "No text content"
   },
   "addMemory": {
     "title": "Add Memory Data",
@@ -79,7 +80,8 @@
     "metadataValue": "Value",
     "loading": "Loading...",
     "close": "Close",
-    "noValue": "None"
+    "noValue": "None",
+    "unknown": "Unknown"
   },
   "messages": {
     "searchQueryRequired": "Please enter search keywords",
@@ -89,6 +91,7 @@
     "addSuccess": "Memory data added successfully!",
     "addError": "Failed to add memory data",
     "factDetailsError": "Failed to get memory details",
-    "metadataParseError": "Unable to parse metadata"
+    "metadataParseError": "Unable to parse metadata",
+    "relationNoMemoryData": "This relation has no associated memory data"
   }
 } 

@@ -26,6 +26,7 @@
   "uninstall": "Uninstall",
   "update": "Update",
   "language": "Language",
+  "locale": "en-US",
   "type": "Type",
   "press": "Press",
   "longPress": "Long press",

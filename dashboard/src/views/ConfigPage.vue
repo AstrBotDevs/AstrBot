@@ -157,11 +157,11 @@ export default {
     // 安全访问翻译的计算属性
     messages() {
       return {
-        loadError: this.tm('features.config.messages.loadError'),
-        saveSuccess: this.tm('features.config.messages.saveSuccess'),
-        saveError: this.tm('features.config.messages.saveError'),
-        configApplied: this.tm('features.config.messages.configApplied'),
-        configApplyError: this.tm('features.config.messages.configApplyError')
+        loadError: this.tm('messages.loadError'),
+        saveSuccess: this.tm('messages.saveSuccess'),
+        saveError: this.tm('messages.saveError'),
+        configApplied: this.tm('messages.configApplied'),
+        configApplyError: this.tm('messages.configApplyError')
       };
     }
   },

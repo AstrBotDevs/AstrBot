@@ -46,7 +46,8 @@
     "searchButton": "搜索",
     "resultsTitle": "搜索结果",
     "noResults": "未找到相关记忆内容",
-    "similarity": "相关度"
+    "similarity": "相关度",
+    "noTextContent": "无文本内容"
   },
   "addMemory": {
     "title": "添加记忆数据",
@@ -79,7 +80,8 @@
     "metadataValue": "值",
     "loading": "加载中...",
     "close": "关闭",
-    "noValue": "无"
+    "noValue": "无",
+    "unknown": "未知"
   },
   "messages": {
     "searchQueryRequired": "请输入搜索关键词",
@@ -89,6 +91,7 @@
     "addSuccess": "记忆数据添加成功！",
     "addError": "添加记忆数据失败",
     "factDetailsError": "获取记忆详情失败",
-    "metadataParseError": "无法解析元数据"
+    "metadataParseError": "无法解析元数据",
+    "relationNoMemoryData": "该关系没有关联的记忆数据"
   }
 } 
