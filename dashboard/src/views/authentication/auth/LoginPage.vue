@@ -85,7 +85,7 @@ onMounted(() => {
         <v-card-text class="pa-2">
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
-            <v-divider vertical class="mx-1" style="height: 20px; opacity: 0.3;"></v-divider>
+            <v-divider vertical class="mx-1" style="height: 24px !important; opacity: 0.7 !important; align-self: center !important; border-color: rgba(94, 53, 177, 0.4) !important;"></v-divider>
             <v-btn
               @click="toggleTheme"
               class="theme-toggle-btn"
@@ -157,7 +157,7 @@ onMounted(() => {
         <v-card-text class="pa-2">
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
-            <v-divider vertical class="mx-1" style="height: 20px; opacity: 0.3;"></v-divider>
+            <v-divider vertical class="mx-1" style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(180, 148, 246, 0.8) !important;"></v-divider>
             <v-btn
               @click="toggleTheme"
               class="theme-toggle-btn"
@@ -399,12 +399,12 @@ onMounted(() => {
 }
 
 .custom-divider {
-  border-color: rgba(94, 53, 177, 0.1) !important;
+  border-color: rgba(94, 53, 177, 0.3) !important;
   opacity: 1;
 }
 
 .login-page-container-dark .custom-divider {
-  border-color: rgba(114, 46, 209, 0.08) !important;
+  border-color: rgba(180, 148, 246, 0.4) !important;
 }
 
 .loginBox {
