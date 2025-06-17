@@ -11,60 +11,60 @@
       style="min-width: 450px; border: 1px solid #eee; border-radius: 8px; padding: 16px; padding-bottom: 0px; margin-left: 16px; max-height: calc(100% - 40px);">
       <div>
         <!-- <span style="color: #333333;">可视化</span> -->
-        <h3>筛选</h3>
+        <h3>{{ tm('filters.title') }}</h3>
         <div style="margin-top: 8px;">
           <v-autocomplete v-model="searchUserId" density="compact" :items="userIdList" variant="outlined"
-            label="筛选用户 ID"></v-autocomplete>
+            :label="tm('filters.userIdLabel')"></v-autocomplete>
         </div>
         <div style="display: flex; gap: 8px;">
           <v-btn color="primary" @click="onNodeSelect" variant="tonal">
             <v-icon start>mdi-magnify</v-icon>
-            筛选
+            {{ tm('filters.filterButton') }}
           </v-btn>
           <v-btn color="secondary" @click="resetFilter" variant="tonal">
             <v-icon start>mdi-filter-remove</v-icon>
-            重置筛选
+            {{ tm('filters.resetButton') }}
           </v-btn>
           <v-btn color="primary" @click="refreshGraph" variant="tonal">
             <v-icon start>mdi-refresh</v-icon>
-            刷新图形
+            {{ tm('filters.refreshButton') }}
           </v-btn>
         </div>
       </div>
 
       <!-- 新增搜索记忆功能 -->
       <div class="mt-4">
-        <h3>搜索记忆</h3>
+        <h3>{{ tm('search.title') }}</h3>
         <v-card variant="outlined" class="mt-2 pa-3">
           <div>
-            <v-text-field v-model="searchMemoryUserId" label="用户 ID" variant="outlined" density="compact" hide-details
+            <v-text-field v-model="searchMemoryUserId" :label="tm('search.userIdLabel')" variant="outlined" density="compact" hide-details
               class="mb-2"></v-text-field>
-            <v-text-field v-model="searchQuery" label="输入关键词" variant="outlined" density="compact" hide-details
+            <v-text-field v-model="searchQuery" :label="tm('search.queryLabel')" variant="outlined" density="compact" hide-details
               @keyup.enter="searchMemory" class="mb-2"></v-text-field>
             <v-btn color="info" @click="searchMemory" :loading="isSearching" variant="tonal">
               <v-icon start>mdi-text-search</v-icon>
-              搜索
+              {{ tm('search.searchButton') }}
             </v-btn>
           </div>
 
           <!-- 新增搜索结果展示区域 -->
           <div v-if="searchResults.length > 0" class="mt-3">
             <v-divider class="mb-3"></v-divider>
-            <div class="text-subtitle-1 mb-2">搜索结果 ({{ searchResults.length }})</div>
+            <div class="text-subtitle-1 mb-2">{{ tm('search.resultsTitle') }} ({{ searchResults.length }})</div>
             <v-expansion-panels variant="accordion">
               <v-expansion-panel v-for="(result, index) in searchResults" :key="index">
                 <v-expansion-panel-title>
                   <div>
                     <span class="text-truncate d-inline-block" style="max-width: 300px;">{{ result.text.substring(0, 30)
                       }}...</span>
-                    <span class="ms-2 text-caption text-grey">(相关度: {{ (result.score * 100).toFixed(1) }}%)</span>
+                    <span class="ms-2 text-caption text-grey">({{ tm('search.similarity') }}: {{ (result.score * 100).toFixed(1) }}%)</span>
                   </div>
                 </v-expansion-panel-title>
                 <v-expansion-panel-text>
                   <div>
                     <div class="mb-2 text-body-1">{{ result.text }}</div>
                     <div class="d-flex">
-                      <span class="text-caption text-grey">文档ID: {{ result.doc_id }}</span>
+                      <span class="text-caption text-grey">{{ tm('factDialog.docId') }}: {{ result.doc_id }}</span>
                     </div>
                   </div>
                 </v-expansion-panel-text>
@@ -72,68 +72,68 @@
             </v-expansion-panels>
           </div>
           <div v-else-if="hasSearched" class="mt-3 text-center text-body-1 text-grey">
-            未找到相关记忆内容
+            {{ tm('search.noResults') }}
           </div>
         </v-card>
       </div>
 
       <!-- 新增添加记忆数据的表单 -->
       <div class="mt-4">
-        <h3>添加记忆数据</h3>
+        <h3>{{ tm('addMemory.title') }}</h3>
         <v-card variant="outlined" class="mt-2 pa-3">
           <v-form @submit.prevent="addMemoryData">
-            <v-textarea v-model="newMemoryText" label="输入文本内容" variant="outlined" rows="4" hide-details
+            <v-textarea v-model="newMemoryText" :label="tm('addMemory.textLabel')" variant="outlined" rows="4" hide-details
               class="mb-2"></v-textarea>
 
-            <v-text-field v-model="newMemoryUserId" label="用户 ID" variant="outlined" density="compact"
+            <v-text-field v-model="newMemoryUserId" :label="tm('addMemory.userIdLabel')" variant="outlined" density="compact"
               hide-details></v-text-field>
 
-            <v-switch v-model="needSummarize" color="primary" label="需要摘要" hide-details></v-switch>
+            <v-switch v-model="needSummarize" color="primary" :label="tm('addMemory.summarizeLabel')" hide-details></v-switch>
 
             <v-btn color="success" type="submit" :loading="isSubmitting" :disabled="!newMemoryText || !newMemoryUserId">
               <v-icon start>mdi-plus</v-icon>
-              添加数据
+              {{ tm('addMemory.addButton') }}
             </v-btn>
           </v-form>
         </v-card>
       </div>
 
       <div v-if="selectedNode" class="mt-4">
-        <h3>节点详情</h3>
+        <h3>{{ tm('nodeDetails.title') }}</h3>
         <v-card variant="outlined" class="mt-2 pa-3">
           <div v-if="selectedNode.id">
             <div class="d-flex justify-space-between">
-              <span class="text-subtitle-2">ID:</span>
+              <span class="text-subtitle-2">{{ tm('nodeDetails.id') }}:</span>
               <span>{{ selectedNode.id }}</span>
             </div>
           </div>
           <div v-if="selectedNode._label">
             <div class="d-flex justify-space-between">
-              <span class="text-subtitle-2">类型:</span>
+              <span class="text-subtitle-2">{{ tm('nodeDetails.type') }}:</span>
               <span>{{ selectedNode._label }}</span>
             </div>
           </div>
           <div v-if="selectedNode.name">
             <div class="d-flex justify-space-between">
-              <span class="text-subtitle-2">名称:</span>
+              <span class="text-subtitle-2">{{ tm('nodeDetails.name') }}:</span>
               <span>{{ selectedNode.name }}</span>
             </div>
           </div>
           <div v-if="selectedNode.user_id">
             <div class="d-flex justify-space-between">
-              <span class="text-subtitle-2">用户ID:</span>
+              <span class="text-subtitle-2">{{ tm('nodeDetails.userId') }}:</span>
               <span>{{ selectedNode.user_id }}</span>
             </div>
           </div>
           <div v-if="selectedNode.ts">
             <div class="d-flex justify-space-between">
-              <span class="text-subtitle-2">时间戳:</span>
+              <span class="text-subtitle-2">{{ tm('nodeDetails.timestamp') }}:</span>
               <span>{{ selectedNode.ts }}</span>
             </div>
           </div>
           <div v-if="selectedNode.type">
             <div class="d-flex justify-space-between">
-              <span class="text-subtitle-2">类型:</span>
+              <span class="text-subtitle-2">{{ tm('nodeDetails.type') }}:</span>
               <span>{{ selectedNode.type }}</span>
             </div>
           </div>
@@ -141,14 +141,14 @@
       </div>
 
       <div v-if="graphStats" class="mt-4">
-        <h3>图形统计</h3>
+        <h3>{{ tm('graphStats.title') }}</h3>
         <v-card variant="outlined" class="mt-2 pa-3">
           <div class="d-flex justify-space-between">
-            <span class="text-subtitle-2">节点数:</span>
+            <span class="text-subtitle-2">{{ tm('graphStats.nodeCount') }}:</span>
             <span>{{ graphStats.nodeCount }}</span>
           </div>
           <div class="d-flex justify-space-between">
-            <span class="text-subtitle-2">边数:</span>
+            <span class="text-subtitle-2">{{ tm('graphStats.edgeCount') }}:</span>
             <span>{{ graphStats.edgeCount }}</span>
           </div>
         </v-card>
@@ -158,7 +158,7 @@
         <v-card class="fact-detail-card">
           <v-card-title class="d-flex align-center bg-primary text-white px-4 py-3">
             <v-icon class="mr-2" color="white">mdi-memory</v-icon>
-            记忆事实
+            {{ tm('factDialog.title') }}
             <v-spacer></v-spacer>
             <v-btn icon variant="text" color="white" @click="showFactDialog = false">
               <v-icon>mdi-close</v-icon>
@@ -175,14 +175,14 @@
                 <v-col cols="6">
                   <div class="d-flex align-center mb-2">
                     <v-icon size="small" color="primary" class="mr-2">mdi-identifier</v-icon>
-                    <div class="text-subtitle-2">ID</div>
+                    <div class="text-subtitle-2">{{ tm('factDialog.id') }}</div>
                   </div>
                   <div class="text-body-2 text-grey pa-1">{{ selectedEdgeFactData.id }}</div>
                 </v-col>
                 <v-col cols="6">
                   <div class="d-flex align-center mb-2">
                     <v-icon size="small" color="primary" class="mr-2">mdi-file-document-outline</v-icon>
-                    <div class="text-subtitle-2">文档ID</div>
+                    <div class="text-subtitle-2">{{ tm('factDialog.docId') }}</div>
                   </div>
                   <div class="text-body-2 text-grey pa-1">{{ selectedEdgeFactData.doc_id }}</div>
                 </v-col>
@@ -193,14 +193,14 @@
                 <v-col cols="6">
                   <div class="d-flex align-center mb-2">
                     <v-icon size="small" color="primary" class="mr-2">mdi-calendar-plus</v-icon>
-                    <div class="text-subtitle-2">创建时间</div>
+                    <div class="text-subtitle-2">{{ tm('factDialog.createdAt') }}</div>
                   </div>
                   <div class="text-body-2 text-grey pa-1">{{ formatTime(selectedEdgeFactData.created_at) }}</div>
                 </v-col>
                 <v-col cols="6">
                   <div class="d-flex align-center mb-2">
                     <v-icon size="small" color="primary" class="mr-2">mdi-calendar-edit</v-icon>
-                    <div class="text-subtitle-2">更新时间</div>
+                    <div class="text-subtitle-2">{{ tm('factDialog.updatedAt') }}</div>
                   </div>
                   <div class="text-body-2 text-grey pa-1">{{ formatTime(selectedEdgeFactData.updated_at) }}</div>
                 </v-col>
@@ -210,14 +210,14 @@
               <div v-if="parsedMetadata && Object.keys(parsedMetadata).length > 0" class="mt-4">
                 <div class="d-flex align-center mb-2">
                   <v-icon size="small" color="primary" class="mr-2">mdi-database-cog</v-icon>
-                  <div class="text-subtitle-2">元数据</div>
+                  <div class="text-subtitle-2">{{ tm('factDialog.metadata') }}</div>
                 </div>
                 <v-card variant="outlined" class="metadata-table">
                   <v-table density="compact" hover>
                     <thead>
                       <tr>
-                        <th class="text-left">键</th>
-                        <th class="text-left">值</th>
+                        <th class="text-left">{{ tm('factDialog.metadataKey') }}</th>
+                        <th class="text-left">{{ tm('factDialog.metadataValue') }}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -233,7 +233,7 @@
             
             <div v-else class="text-center py-6">
               <v-progress-circular indeterminate color="primary" size="50" width="5"></v-progress-circular>
-              <div class="mt-3 text-body-1">加载中...</div>
+              <div class="mt-3 text-body-1">{{ tm('factDialog.loading') }}</div>
             </div>
           </v-card-text>
           
@@ -241,7 +241,7 @@
           
           <v-card-actions class="pa-4" v-if="selectedEdgeFactData">
             <v-btn block color="primary" variant="tonal" @click="showFactDialog = false">
-              关闭
+              {{ tm('factDialog.close') }}
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -253,9 +253,14 @@
 <script>
 import axios from 'axios';
 import * as d3 from "d3"; // npm install d3
+import { useModuleI18n } from '@/i18n/composables';
 
 export default {
   name: 'LongTermMemory',
+  setup() {
+    const { tm } = useModuleI18n('features/alkaid/memory');
+    return { tm };
+  },
   data() {
     return {
       simulation: null,
@@ -334,7 +339,7 @@ export default {
     // 添加搜索记忆方法
     searchMemory() {
       if (!this.searchQuery.trim()) {
-        this.$toast.warning('请输入搜索关键词');
+        this.$toast.warning(this.tm('messages.searchQueryRequired'));
         return;
       }
 
@@ -367,17 +372,17 @@ export default {
             });
 
             if (this.searchResults.length === 0) {
-              this.$toast.info('未找到相关记忆内容');
+              this.$toast.info(this.tm('messages.searchNoResults'));
             } else {
-              this.$toast.success(`找到 ${this.searchResults.length} 条相关记忆`);
+              this.$toast.success(this.tm('messages.searchSuccess', { count: this.searchResults.length }));
             }
           } else {
-            this.$toast.error('搜索失败: ' + response.data.message);
+            this.$toast.error(this.tm('messages.searchError') + ': ' + response.data.message);
           }
         })
         .catch(error => {
           console.error('搜索记忆数据失败:', error);
-          this.$toast.error('搜索失败: ' + (error.response?.data?.message || error.message));
+          this.$toast.error(this.tm('messages.searchError') + ': ' + (error.response?.data?.message || error.message));
         })
         .finally(() => {
           this.isSearching = false;
@@ -409,11 +414,11 @@ export default {
           // this.needSummarize = false;
 
           // 显示成功消息
-          this.$toast.success('记忆数据添加成功！');
+          this.$toast.success(this.tm('messages.addSuccess'));
         })
         .catch(error => {
           console.error('添加记忆数据失败:', error);
-          this.$toast.error('添加记忆数据失败: ' + (error.response?.data?.message || error.message));
+          this.$toast.error(this.tm('messages.addError') + ': ' + (error.response?.data?.message || error.message));
         })
         .finally(() => {
           this.isSubmitting = false;
@@ -540,12 +545,12 @@ export default {
             this.parsedMetadata = this.parseMetadata(this.selectedEdgeFactData.metadata);
             this.showFactDialog = true;
           } else {
-            this.$toast.error('获取记忆详情失败: ' + response.data.message);
+            this.$toast.error(this.tm('messages.factDetailsError') + ': ' + response.data.message);
           }
         })
         .catch(error => {
           console.error('获取记忆详情失败:', error);
-          this.$toast.error('获取记忆详情失败: ' + (error.response?.data?.message || error.message));
+          this.$toast.error(this.tm('messages.factDetailsError') + ': ' + (error.response?.data?.message || error.message));
         })
         .finally(() => {
           this.isLoadingFactData = false;
@@ -574,13 +579,13 @@ export default {
         return { value: String(metadata) };
       } catch (e) {
         console.error('解析元数据出错:', e);
-        return { error: '无法解析元数据' };
+        return { error: this.tm('messages.metadataParseError') };
       }
     },
     
     // 格式化元数据值
     formatMetadataValue(value) {
-      if (value === null || value === undefined) return '无';
+      if (value === null || value === undefined) return this.tm('factDialog.noValue');
       
       if (typeof value === 'object') {
         return JSON.stringify(value);

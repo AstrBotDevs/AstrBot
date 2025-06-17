@@ -177,11 +177,11 @@ export default {
     // 安全访问翻译的计算属性
     messages() {
       return {
-        updateSuccess: "更新成功!",
-        addSuccess: "添加成功!",
-        deleteSuccess: "删除成功!",
-        statusUpdateSuccess: "状态更新成功!",
-        deleteConfirm: "确定要删除平台适配器"
+        updateSuccess: this.tm('features.platform.messages.updateSuccess'),
+        addSuccess: this.tm('features.platform.messages.addSuccess'),
+        deleteSuccess: this.tm('features.platform.messages.deleteSuccess'),
+        statusUpdateSuccess: this.tm('features.platform.messages.statusUpdateSuccess'),
+        deleteConfirm: this.tm('features.platform.messages.deleteConfirm')
       };
     }
   },

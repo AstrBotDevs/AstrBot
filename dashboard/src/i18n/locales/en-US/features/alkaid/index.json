@@ -22,5 +22,23 @@
     "beta": "Beta",
     "stable": "Stable",
     "deprecated": "Deprecated"
+  },
+  "sigma": {
+    "subtitle": "AstrBot Experimental Project",
+    "visualization": "Visualization",
+    "filterUserId": "Filter User ID",
+    "filter": "Filter",
+    "resetFilter": "Reset Filter",
+    "refreshGraph": "Refresh Graph",
+    "nodeDetails": "Node Details",
+    "id": "ID",
+    "type": "Type",
+    "name": "Name",
+    "userId": "User ID",
+    "timestamp": "Timestamp",
+    "graphStats": "Graph Statistics",
+    "nodeCount": "Node Count",
+    "edgeCount": "Edge Count",
+    "inDevelopment": "Under Development"
   }
 } 
