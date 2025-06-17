@@ -652,7 +652,11 @@ class PluginManager:
 
         plugin_info = None
         if plugin:
-            plugin_info = {"repo": plugin.repo, "readme": cleaned_content}
+            plugin_info = {
+                "repo": plugin.repo,
+                "readme": cleaned_content,
+                "name": plugin.name,
+            }
 
         return plugin_info
 
@@ -847,6 +851,10 @@ class PluginManager:
 
         plugin_info = None
         if plugin:
-            plugin_info = {"repo": plugin.repo, "readme": readme_content}
+            plugin_info = {
+                "repo": plugin.repo,
+                "readme": readme_content,
+                "name": plugin.name,
+            }
 
         return plugin_info

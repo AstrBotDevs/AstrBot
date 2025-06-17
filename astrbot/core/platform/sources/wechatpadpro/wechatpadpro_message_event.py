@@ -81,12 +81,16 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
             # logger.info(f"已添加 @ 信息: {message_text}")
         else:
             message_text = text
+        if self.get_group_id() and "#" in self.session_id:
+            session_id = self.session_id.split("#")[0]
+        else:
+            session_id = self.session_id
         payload = {
             "MsgItem": [
                 {
                     "MsgType": 1,
                     "TextContent": message_text,
-                    "ToUserName": self.session_id,
+                    "ToUserName": session_id,
                 }
             ]
         }

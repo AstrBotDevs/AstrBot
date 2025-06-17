@@ -41,7 +41,7 @@ const sidebarItem: menu[] = [
     to: '/config',
   },
   {
-    title: '插件管理',
+    title: '插件',
     icon: 'mdi-puzzle',
     to: '/extension'
   },
@@ -51,7 +51,7 @@ const sidebarItem: menu[] = [
     to: '/chat'
   },
   {
-    title: '对话数据库',
+    title: '对话数据',
     icon: 'mdi-database',
     to: '/conversation'
   },

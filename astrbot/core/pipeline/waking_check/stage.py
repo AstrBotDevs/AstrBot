@@ -4,7 +4,7 @@ from astrbot import logger
 from typing import Union, AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
-from astrbot.core.message.components import At, AtAll
+from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
 from astrbot.core.star.filter.permission import PermissionTypeFilter
@@ -81,11 +81,19 @@ class WakingCheckStage(Stage):
                 event.message_str = event.message_str[len(wake_prefix) :].strip()
                 break
         if not is_wake:
-            # 检查是否有 at 消息
+            # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
             for message in messages:
-                if (isinstance(message, At) and (
-                    str(message.qq) == str(event.get_self_id())
-                )) or (isinstance(message, AtAll) and not self.ignore_at_all):
+                if (
+                    (
+                        isinstance(message, At)
+                        and (str(message.qq) == str(event.get_self_id()))
+                    )
+                    or (isinstance(message, AtAll) and not self.ignore_at_all)
+                    or (
+                        isinstance(message, Reply)
+                        and str(message.sender_id) == str(event.get_self_id())
+                    )
+                ):
                     is_wake = True
                     event.is_wake = True
                     wake_prefix = ""

@@ -1,16 +1,16 @@
 <script setup>
 import ExtensionCard from '@/components/shared/ExtensionCard.vue';
-import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
 import axios from 'axios';
 import { useCommonStore } from '@/stores/common';
 
-// 将所有状态和方法迁移到 setup 语法中
 import { ref, computed, onMounted, reactive } from 'vue';
 
+
 const commonStore = useCommonStore();
+const activeTab = ref('installed');
 const extension_data = reactive({
   data: [],
   message: ""
@@ -34,7 +34,6 @@ const loadingDialog = reactive({
 const showPluginInfoDialog = ref(false);
 const selectedPlugin = ref({});
 const curr_namespace = ref("");
-const wfr = ref(null);
 
 const readmeDialog = reactive({
   show: false,
@@ -55,6 +54,14 @@ const isListView = ref(false);
 const pluginSearch = ref("");
 const loading_ = ref(false);
 
+// 插件市场相关
+const extension_url = ref("");
+const dialog = ref(false);
+const upload_file = ref(null);
+const showPluginFullName = ref(false);
+const marketSearch = ref("");
+const filterKeys = ['name', 'desc', 'author'];
+
 const plugin_handler_info_headers = [
   { title: '行为类型', key: 'event_type_h' },
   { title: '描述', key: 'desc', maxWidth: '250px' },
@@ -71,6 +78,19 @@ const pluginHeaders = [
   { title: '状态', key: 'status', width: '80px' },
   { title: '操作', key: 'actions', sortable: false, width: '220px' }
 ];
+
+
+// 插件市场表头
+const pluginMarketHeaders = [
+  { title: '名称', key: 'name', maxWidth: '200px' },
+  { title: '描述', key: 'desc', maxWidth: '250px' },
+  { title: '作者', key: 'author', maxWidth: '90px' },
+  { title: 'Star数', key: 'stars', maxWidth: '80px' },
+  { title: '最近更新', key: 'updated_at', maxWidth: '100px' },
+  { title: '标签', key: 'tags', maxWidth: '100px' },
+  { title: '操作', key: 'actions', sortable: false }
+];
+
 
 // 过滤要显示的插件
 const filteredExtensions = computed(() => {
@@ -92,6 +112,10 @@ const filteredPlugins = computed(() => {
       plugin.desc?.toLowerCase().includes(search) ||
       plugin.author?.toLowerCase().includes(search);
   });
+});
+
+const pinnedPlugins = computed(() => {
+  return pluginMarketData.value.filter(plugin => plugin?.pinned);
 });
 
 // 方法
@@ -385,6 +409,116 @@ const toggleAllPluginsForPlatform = (platformName) => {
   });
 };
 
+const open = (link) => {
+  if (link) {
+    window.open(link, '_blank');
+  }
+};
+
+// 插件市场显示完整插件名称
+const trimExtensionName = () => {
+  pluginMarketData.value.forEach(plugin => {
+    if (plugin.name) {
+      let name = plugin.name.trim().toLowerCase();
+      if (name.startsWith("astrbot_plugin_")) {
+        plugin.trimmedName = name.substring(15);
+      } else if (name.startsWith("astrbot_") || name.startsWith("astrbot-")) {
+        plugin.trimmedName = name.substring(8);
+      } else plugin.trimmedName = plugin.name;
+    }
+  });
+};
+
+const checkAlreadyInstalled = () => {
+  const installedRepos = new Set(extension_data.data.map(ext => ext.repo?.toLowerCase()));
+  const installedNames = new Set(extension_data.data.map(ext => ext.name));
+
+  for (let i = 0; i < pluginMarketData.value.length; i++) {
+    const plugin = pluginMarketData.value[i];
+    plugin.installed = installedRepos.has(plugin.repo?.toLowerCase()) || installedNames.has(plugin.name);
+  }
+
+  let installed = [];
+  let notInstalled = [];
+  for (let i = 0; i < pluginMarketData.value.length; i++) {
+    if (pluginMarketData.value[i].installed) {
+      installed.push(pluginMarketData.value[i]);
+    } else {
+      notInstalled.push(pluginMarketData.value[i]);
+    }
+  }
+  pluginMarketData.value = notInstalled.concat(installed);
+};
+
+const newExtension = async () => {
+  if (extension_url.value === "" && upload_file.value === null) {
+    toast("请填写插件链接或上传插件文件", "error");
+    return;
+  }
+
+  if (extension_url.value !== "" && upload_file.value !== null) {
+    toast("请不要同时填写插件链接和上传插件文件", "error");
+    return;
+  }
+  loading_.value = true;
+  loadingDialog.show = true;
+  if (upload_file.value !== null) {
+    toast("正在从文件安装插件", "primary");
+    const formData = new FormData();
+    formData.append('file', upload_file.value);
+    axios.post('/api/plugin/install-upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }).then(async (res) => {
+      loading_.value = false;
+      if (res.data.status === "error") {
+        onLoadingDialogResult(2, res.data.message, -1);
+        return;
+      }
+      upload_file.value = null;
+      onLoadingDialogResult(1, res.data.message);
+      dialog.value = false;
+      await getExtensions();
+
+      viewReadme({
+        name: res.data.data.name,
+        repo: res.data.data.repo || null
+      });
+    }).catch((err) => {
+      loading_.value = false;
+      onLoadingDialogResult(2, err, -1);
+    });
+  } else {
+    toast("正在从链接 " + extension_url.value + " 安装插件...", "primary");
+    axios.post('/api/plugin/install',
+      {
+        url: extension_url.value,
+        proxy: localStorage.getItem('selectedGitHubProxy') || ""
+      }).then(async (res) => {
+        loading_.value = false;
+        toast(res.data.message, res.data.status === "ok" ? "success" : "error");
+        if (res.data.status === "error") {
+          onLoadingDialogResult(2, res.data.message, -1);
+          return;
+        }
+        extension_url.value = "";
+        onLoadingDialogResult(1, res.data.message);
+        dialog.value = false;
+        await getExtensions();
+
+        viewReadme({
+          name: res.data.data.name,
+          repo: res.data.data.repo || null
+        });
+      }).catch((err) => {
+        loading_.value = false;
+        toast("安装插件失败: " + err, "error");
+        onLoadingDialogResult(2, err, -1);
+      });
+  }
+};
+
 // 生命周期
 onMounted(async () => {
   await getExtensions();
@@ -399,11 +533,15 @@ onMounted(async () => {
   try {
     const data = await commonStore.getPluginCollections();
     pluginMarketData.value = data;
+    trimExtensionName();
+    checkAlreadyInstalled();
     checkUpdate();
   } catch (err) {
     console.error("获取插件市场数据失败:", err);
   }
 });
+
+
 </script>
 
 <template>
@@ -417,205 +555,300 @@ onMounted(async () => {
             </div>
           </template>
           <v-card-title class="text-h4 font-weight-bold">
-            已安装的插件
+            AstrBot 插件
           </v-card-title>
           <v-card-subtitle class="text-subtitle-1 mt-1 text-medium-emphasis">
-            管理已经安装的所有插件
+            管理、安装 AstrBot 插件
           </v-card-subtitle>
         </v-card-item>
 
-        <v-card-text class="pt-2">
-          <v-row class="mb-4">
-            <v-col cols="12" sm="6" md="6" class="d-flex align-center">
-              <v-btn-group variant="outlined" density="comfortable" color="primary">
-                <v-btn @click="isListView = false" :color="!isListView ? 'primary' : undefined"
-                  :variant="!isListView ? 'flat' : 'outlined'">
-                  <v-icon>mdi-view-grid</v-icon>
-                </v-btn>
-                <v-btn @click="isListView = true" :color="isListView ? 'primary' : undefined"
-                  :variant="isListView ? 'flat' : 'outlined'">
-                  <v-icon>mdi-view-list</v-icon>
-                </v-btn>
-              </v-btn-group>
+        <!-- 标签页 -->
+        <v-card-text>
 
-              <v-btn class="ml-2" @click="toggleShowReserved" prepend-icon="mdi-eye-settings-outline"
-                :color="showReserved ? 'primary' : undefined" :variant="showReserved ? 'flat' : 'outlined'">
-                {{ showReserved ? '隐藏系统插件' : '显示系统插件' }}
-              </v-btn>
-
-              <v-btn class="ml-2" prepend-icon="mdi-tune-vertical" color="primary" variant="outlined"
-                @click="getPlatformEnableConfig">
-                平台命令配置
-              </v-btn>
-            </v-col>
-
-            <v-col cols="12" sm="auto" md="6" class="ml-auto">
-              <div class="search-container rounded-lg">
-
-                <v-text-field v-model="pluginSearch" density="compact" label="Search" prepend-inner-icon="mdi-magnify"
-                  variant="solo-filled" flat hide-details single-line></v-text-field>
-              </div>
+          <div class="d-flex align-center mb-2" style="justify-content: space-between;">
+            <v-tabs v-model="activeTab" color="primary" class="mb-4">
+              <v-tab value="installed">
+                <v-icon class="mr-2">mdi-puzzle</v-icon>
+                已安装插件
+              </v-tab>
+              <v-tab value="market">
+                <v-icon class="mr-2">mdi-store</v-icon>
+                插件市场
+              </v-tab>
+            </v-tabs>
 
 
+            <v-text-field v-if="activeTab == 'market'" style="max-width: 300px;" v-model="marketSearch" density="compact"
+              label="Search" prepend-inner-icon="mdi-magnify" variant="solo-filled" flat hide-details
+              single-line></v-text-field>
+            <v-text-field  v-else style="max-width: 300px;" v-model="pluginSearch" density="compact" label="Search" prepend-inner-icon="mdi-magnify"
+              variant="solo-filled" flat hide-details single-line></v-text-field>
 
-              <v-dialog max-width="500px" v-if="extension_data.message">
-                <template v-slot:activator="{ props }">
-                  <v-btn v-bind="props" icon size="small" color="error" class="ml-2" variant="tonal">
-                    <v-icon>mdi-alert-circle</v-icon>
-                    <v-badge dot color="error" floating></v-badge>
+          </div>
+
+
+          <!-- 已安装插件标签页内容 -->
+          <v-tab-item v-show="activeTab === 'installed'">
+            <v-row class="mb-4">
+              <v-col cols="12" sm="6" md="6" class="d-flex align-center">
+                <v-btn-group variant="outlined" density="comfortable" color="primary">
+                  <v-btn @click="isListView = false" :color="!isListView ? 'primary' : undefined"
+                    :variant="!isListView ? 'flat' : 'outlined'">
+                    <v-icon>mdi-view-grid</v-icon>
                   </v-btn>
-                </template>
-                <template v-slot:default="{ isActive }">
-                  <v-card class="rounded-lg">
-                    <v-card-title class="headline d-flex align-center">
-                      <v-icon color="error" class="mr-2">mdi-alert-circle</v-icon>
-                      错误信息
-                    </v-card-title>
-                    <v-card-text>
-                      <p class="text-body-1">{{ extension_data.message }}</p>
-                      <p class="text-caption mt-2">详情请检查控制台</p>
-                    </v-card-text>
-                    <v-card-actions>
-                      <v-spacer></v-spacer>
-                      <v-btn color="primary" @click="isActive.value = false">关闭</v-btn>
-                    </v-card-actions>
-                  </v-card>
-                </template>
-              </v-dialog>
-            </v-col>
-          </v-row>
+                  <v-btn @click="isListView = true" :color="isListView ? 'primary' : undefined"
+                    :variant="isListView ? 'flat' : 'outlined'">
+                    <v-icon>mdi-view-list</v-icon>
+                  </v-btn>
+                </v-btn-group>
 
-          <v-fade-transition hide-on-leave>
-            <!-- 表格视图 -->
-            <div v-if="isListView">
-              <v-card class="rounded-lg overflow-hidden elevation-1">
-                <v-data-table :headers="pluginHeaders" :items="filteredPlugins" :loading="loading_" item-key="name"
-                  hover>
-                  <template v-slot:loader>
-                    <v-row class="py-8 d-flex align-center justify-center">
-                      <v-progress-circular indeterminate color="primary"></v-progress-circular>
-                      <span class="ml-2">加载中...</span>
-                    </v-row>
+                <v-btn class="ml-2" @click="toggleShowReserved" prepend-icon="mdi-eye-settings-outline"
+                  :color="showReserved ? 'primary' : undefined" :variant="showReserved ? 'flat' : 'outlined'">
+                  {{ showReserved ? '隐藏系统插件' : '显示系统插件' }}
+                </v-btn>
+
+                <v-btn class="ml-2" prepend-icon="mdi-tune-vertical" color="primary" variant="outlined"
+                  @click="getPlatformEnableConfig">
+                  平台命令配置
+                </v-btn>
+              </v-col>
+
+              <v-col cols="12" sm="auto" md="6" class="ml-auto">
+                <v-dialog max-width="500px" v-if="extension_data.message">
+                  <template v-slot:activator="{ props }">
+                    <v-btn v-bind="props" icon size="small" color="error" class="ml-2" variant="tonal">
+                      <v-icon>mdi-alert-circle</v-icon>
+                      <v-badge dot color="error" floating></v-badge>
+                    </v-btn>
                   </template>
+                  <template v-slot:default="{ isActive }">
+                    <v-card class="rounded-lg">
+                      <v-card-title class="headline d-flex align-center">
+                        <v-icon color="error" class="mr-2">mdi-alert-circle</v-icon>
+                        错误信息
+                      </v-card-title>
+                      <v-card-text>
+                        <p class="text-body-1">{{ extension_data.message }}</p>
+                        <p class="text-caption mt-2">详情请检查控制台</p>
+                      </v-card-text>
+                      <v-card-actions>
+                        <v-spacer></v-spacer>
+                        <v-btn color="primary" @click="isActive.value = false">关闭</v-btn>
+                      </v-card-actions>
+                    </v-card>
+                  </template>
+                </v-dialog>
+              </v-col>
+            </v-row>
 
-                  <template v-slot:item.name="{ item }">
-                    <div class="d-flex align-center py-2">
-                      <div>
-                        <div class="text-subtitle-1 font-weight-medium">{{ item.name }}</div>
-                        <div v-if="item.reserved" class="d-flex align-center mt-1">
-                          <v-chip color="primary" size="x-small" class="font-weight-medium">系统</v-chip>
+            <v-fade-transition hide-on-leave>
+              <!-- 表格视图 -->
+              <div v-if="isListView">
+                <v-card class="rounded-lg overflow-hidden elevation-1">
+                  <v-data-table :headers="pluginHeaders" :items="filteredPlugins" :loading="loading_" item-key="name"
+                    hover>
+                    <template v-slot:loader>
+                      <v-row class="py-8 d-flex align-center justify-center">
+                        <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                        <span class="ml-2">加载中...</span>
+                      </v-row>
+                    </template>
+
+                    <template v-slot:item.name="{ item }">
+                      <div class="d-flex align-center py-2">
+                        <div>
+                          <div class="text-subtitle-1 font-weight-medium">{{ item.name }}</div>
+                          <div v-if="item.reserved" class="d-flex align-center mt-1">
+                            <v-chip color="primary" size="x-small" class="font-weight-medium">系统</v-chip>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </template>
+                    </template>
 
-                  <template v-slot:item.desc="{ item }">
-                    <div class="text-body-2 text-medium-emphasis">{{ item.desc }}</div>
-                  </template>
+                    <template v-slot:item.desc="{ item }">
+                      <div class="text-body-2 text-medium-emphasis">{{ item.desc }}</div>
+                    </template>
 
-                  <template v-slot:item.version="{ item }">
-                    <div class="d-flex align-center">
-                      <span class="text-body-2">{{ item.version }}</span>
-                      <v-icon v-if="item.has_update" color="warning" size="small" class="ml-1">mdi-alert</v-icon>
-                      <v-tooltip v-if="item.has_update" activator="parent">
-                        <span>有新版本: {{ item.online_version }}</span>
-                      </v-tooltip>
-                    </div>
-                  </template>
+                    <template v-slot:item.version="{ item }">
+                      <div class="d-flex align-center">
+                        <span class="text-body-2">{{ item.version }}</span>
+                        <v-icon v-if="item.has_update" color="warning" size="small" class="ml-1">mdi-alert</v-icon>
+                        <v-tooltip v-if="item.has_update" activator="parent">
+                          <span>有新版本: {{ item.online_version }}</span>
+                        </v-tooltip>
+                      </div>
+                    </template>
 
-                  <template v-slot:item.author="{ item }">
-                    <div class="text-body-2">{{ item.author }}</div>
-                  </template>
+                    <template v-slot:item.author="{ item }">
+                      <div class="text-body-2">{{ item.author }}</div>
+                    </template>
 
-                  <template v-slot:item.status="{ item }">
-                    <v-chip :color="item.activated ? 'success' : 'error'" size="small" class="font-weight-medium"
-                      :variant="item.activated ? 'flat' : 'outlined'">
-                      {{ item.activated ? '启用' : '禁用' }}
-                    </v-chip>
-                  </template>
+                    <template v-slot:item.status="{ item }">
+                      <v-chip :color="item.activated ? 'success' : 'error'" size="small" class="font-weight-medium"
+                        :variant="item.activated ? 'flat' : 'outlined'">
+                        {{ item.activated ? '启用' : '禁用' }}
+                      </v-chip>
+                    </template>
 
-                  <template v-slot:item.actions="{ item }">
-                    <div class="d-flex align-center">
-                      <v-btn-group density="comfortable" variant="text" color="primary">
-                        <v-btn v-if="!item.activated" icon size="small" color="success" @click="pluginOn(item)">
-                          <v-icon>mdi-play</v-icon>
-                          <v-tooltip activator="parent" location="top">点击启用</v-tooltip>
-                        </v-btn>
-                        <v-btn v-else icon size="small" color="error" @click="pluginOff(item)">
-                          <v-icon>mdi-pause</v-icon>
-                          <v-tooltip activator="parent" location="top">点击禁用</v-tooltip>
-                        </v-btn>
+                    <template v-slot:item.actions="{ item }">
+                      <div class="d-flex align-center">
+                        <v-btn-group density="comfortable" variant="text" color="primary">
+                          <v-btn v-if="!item.activated" icon size="small" color="success" @click="pluginOn(item)">
+                            <v-icon>mdi-play</v-icon>
+                            <v-tooltip activator="parent" location="top">点击启用</v-tooltip>
+                          </v-btn>
+                          <v-btn v-else icon size="small" color="error" @click="pluginOff(item)">
+                            <v-icon>mdi-pause</v-icon>
+                            <v-tooltip activator="parent" location="top">点击禁用</v-tooltip>
+                          </v-btn>
 
-                        <v-btn icon size="small" color="info" @click="reloadPlugin(item.name)">
-                          <v-icon>mdi-refresh</v-icon>
-                          <v-tooltip activator="parent" location="top">重载</v-tooltip>
-                        </v-btn>
+                          <v-btn icon size="small" color="info" @click="reloadPlugin(item.name)">
+                            <v-icon>mdi-refresh</v-icon>
+                            <v-tooltip activator="parent" location="top">重载</v-tooltip>
+                          </v-btn>
 
-                        <v-btn icon size="small" @click="openExtensionConfig(item.name)">
-                          <v-icon>mdi-cog</v-icon>
-                          <v-tooltip activator="parent" location="top">配置</v-tooltip>
-                        </v-btn>
+                          <v-btn icon size="small" @click="openExtensionConfig(item.name)">
+                            <v-icon>mdi-cog</v-icon>
+                            <v-tooltip activator="parent" location="top">配置</v-tooltip>
+                          </v-btn>
 
-                        <v-btn icon size="small" @click="showPluginInfo(item)">
-                          <v-icon>mdi-information</v-icon>
-                          <v-tooltip activator="parent" location="top">行为</v-tooltip>
-                        </v-btn>
+                          <v-btn icon size="small" @click="showPluginInfo(item)">
+                            <v-icon>mdi-information</v-icon>
+                            <v-tooltip activator="parent" location="top">行为</v-tooltip>
+                          </v-btn>
 
-                        <v-btn v-if="item.repo" icon size="small" @click="viewReadme(item)">
-                          <v-icon>mdi-book-open-page-variant</v-icon>
-                          <v-tooltip activator="parent" location="top">文档</v-tooltip>
-                        </v-btn>
+                          <v-btn v-if="item.repo" icon size="small" @click="viewReadme(item)">
+                            <v-icon>mdi-book-open-page-variant</v-icon>
+                            <v-tooltip activator="parent" location="top">文档</v-tooltip>
+                          </v-btn>
 
-                        <v-btn icon size="small" color="warning"
-                          @click="updateExtension(item.name)" :v-show="item.has_update">
-                          <v-icon>mdi-update</v-icon>
-                          <v-tooltip activator="parent" location="top">更新</v-tooltip>
-                        </v-btn>
+                          <v-btn icon size="small" color="warning" @click="updateExtension(item.name)"
+                            :v-show="item.has_update">
+                            <v-icon>mdi-update</v-icon>
+                            <v-tooltip activator="parent" location="top">更新</v-tooltip>
+                          </v-btn>
 
-                        <v-btn icon size="small" color="error"
-                          @click="uninstallExtension(item.name)" :disabled="item.reserved">
-                          <v-icon>mdi-delete</v-icon>
-                          <v-tooltip activator="parent" location="top">卸载</v-tooltip>
-                        </v-btn>
-                      </v-btn-group>
+                          <v-btn icon size="small" color="error" @click="uninstallExtension(item.name)"
+                            :disabled="item.reserved">
+                            <v-icon>mdi-delete</v-icon>
+                            <v-tooltip activator="parent" location="top">卸载</v-tooltip>
+                          </v-btn>
+                        </v-btn-group>
 
 
-                    </div>
-                  </template>
+                      </div>
+                    </template>
 
-                  <template v-slot:no-data>
-                    <div class="text-center pa-8">
-                      <v-icon size="64" color="info" class="mb-4">mdi-puzzle-outline</v-icon>
-                      <div class="text-h5 mb-2">暂无插件</div>
-                      <div class="text-body-1 mb-4">尝试安装插件或者显示系统插件</div>
-                    </div>
-                  </template>
-                </v-data-table>
-              </v-card>
-            </div>
+                    <template v-slot:no-data>
+                      <div class="text-center pa-8">
+                        <v-icon size="64" color="info" class="mb-4">mdi-puzzle-outline</v-icon>
+                        <div class="text-h5 mb-2">暂无插件</div>
+                        <div class="text-body-1 mb-4">尝试安装插件或者显示系统插件</div>
+                      </div>
+                    </template>
+                  </v-data-table>
+                </v-card>
+              </div>
 
-            <!-- 卡片视图 -->
-            <div v-else>
-              <v-row v-if="filteredPlugins.length === 0" class="text-center">
-                <v-col cols="12" class="pa-8">
-                  <v-icon size="64" color="info" class="mb-4">mdi-puzzle-outline</v-icon>
-                  <div class="text-h5 mb-2">暂无插件</div>
-                  <div class="text-body-1 mb-4">尝试安装插件或者显示系统插件</div>
-                </v-col>
-              </v-row>
+              <!-- 卡片视图 -->
+              <div v-else>
+                <v-row v-if="filteredPlugins.length === 0" class="text-center">
+                  <v-col cols="12" class="pa-8">
+                    <v-icon size="64" color="info" class="mb-4">mdi-puzzle-outline</v-icon>
+                    <div class="text-h5 mb-2">暂无插件</div>
+                    <div class="text-body-1 mb-4">尝试安装插件或者显示系统插件</div>
+                  </v-col>
+                </v-row>
 
-              <v-row>
-                <v-col cols="12" md="6" lg="4" v-for="extension in filteredPlugins" :key="extension.name" class="pb-4">
-                  <ExtensionCard :extension="extension" class="h-120 rounded-lg"
-                    @configure="openExtensionConfig(extension.name)" @uninstall="uninstallExtension(extension.name)"
-                    @update="updateExtension(extension.name)" @reload="reloadPlugin(extension.name)"
-                    @toggle-activation="extension.activated ? pluginOff(extension) : pluginOn(extension)"
-                    @view-handlers="showPluginInfo(extension)" @view-readme="viewReadme(extension)">
+                <v-row>
+                  <v-col cols="12" md="6" lg="4" v-for="extension in filteredPlugins" :key="extension.name"
+                    class="pb-4">
+                    <ExtensionCard :extension="extension" class="h-120 rounded-lg"
+                      @configure="openExtensionConfig(extension.name)" @uninstall="uninstallExtension(extension.name)"
+                      @update="updateExtension(extension.name)" @reload="reloadPlugin(extension.name)"
+                      @toggle-activation="extension.activated ? pluginOff(extension) : pluginOn(extension)"
+                      @view-handlers="showPluginInfo(extension)" @view-readme="viewReadme(extension)">
+                    </ExtensionCard>
+                  </v-col>
+                </v-row>
+              </div>
+            </v-fade-transition>
+          </v-tab-item>
+
+          <!-- 插件市场标签页内容 -->
+          <v-tab-item v-show="activeTab === 'market'">
+
+            <!-- <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small> -->
+
+            <div v-if="pinnedPlugins.length > 0" class="mt-4">
+              <h2>🥳 推荐</h2>
+              <v-row style="margin-top: 8px;">
+                <v-col cols="12" md="6" lg="6" v-for="plugin in pinnedPlugins" :key="plugin.name">
+                  <ExtensionCard :extension="plugin" class="h-120 rounded-lg" market-mode="true" :highlight="true"
+                    @install="extension_url = plugin.repo; newExtension()" @view-readme="open(plugin.repo)">
                   </ExtensionCard>
                 </v-col>
               </v-row>
             </div>
-          </v-fade-transition>
+
+            <div class="mt-4">
+              <div class="d-flex align-center mb-2" style="justify-content: space-between;">
+                <h2>📦 全部插件</h2>
+                <v-switch v-model="showPluginFullName" label="完整名称" hide-details density="compact"
+                  style="margin-left: 12px" />
+              </div>
+
+              <v-col cols="12" md="12" style="padding: 0px;">
+                <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
+                  :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys">
+                  <template v-slot:item.name="{ item }">
+                    <div class="d-flex align-center"
+                      style="overflow-x: auto; scrollbar-width: thin; scrollbar-track-color: transparent;">
+                      <img v-if="item.logo" :src="item.logo"
+                        style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
+                        alt="logo">
+                      <span v-if="item?.repo"><a :href="item?.repo"
+                          style="color: var(--v-theme-primaryText, #000); text-decoration:none">{{
+                            showPluginFullName ? item.name : item.trimmedName }}</a></span>
+                      <span v-else>{{ showPluginFullName ? item.name : item.trimmedName }}</span>
+                    </div>
+                  </template>
+
+                  <template v-slot:item.desc="{ item }">
+                    <div style="font-size: 13px;">
+                      {{ item.desc }}
+                    </div>
+                  </template>
+                  <template v-slot:item.author="{ item }">
+                    <div style="font-size: 12px;">
+                      <span v-if="item?.social_link"><a :href="item?.social_link">{{ item.author }}</a></span>
+                      <span v-else>{{ item.author }}</span>
+                    </div>
+                  </template>
+                  <template v-slot:item.stars="{ item }">
+                    <span>{{ item.stars }}</span>
+                  </template>
+                  <template v-slot:item.updated_at="{ item }">
+                    <span>{{ new Date(item.updated_at).toLocaleString() }}</span>
+                  </template>
+                  <template v-slot:item.tags="{ item }">
+                    <span v-if="item.tags.length === 0">-</span>
+                    <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="x-small">
+                      {{ tag }}</v-chip>
+                  </template>
+                  <template v-slot:item.actions="{ item }">
+                    <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" variant="flat"
+                      @click="extension_url = item.repo; newExtension()">
+                      <v-icon>mdi-download</v-icon></v-btn>
+                    <v-btn v-else class="text-none mr-2" size="x-small" variant="flat" border
+                      disabled><v-icon>mdi-check</v-icon></v-btn>
+                    <v-btn class="text-none mr-2" size="x-small" variant="flat" border
+                      @click="open(item.repo)"><v-icon>mdi-help</v-icon></v-btn>
+                  </template>
+                </v-data-table>
+              </v-col>
+            </div>
+          </v-tab-item>
 
           <v-row v-if="loading_">
             <v-col cols="12" class="d-flex justify-center">
@@ -624,6 +857,11 @@ onMounted(async () => {
           </v-row>
         </v-card-text>
       </v-card>
+    </v-col>
+
+    <v-col v-if="activeTab === 'market'" style="margin-bottom: 16px;" cols="12" md="12">
+      <small><a href="https://astrbot.app/dev/plugin.html">插件开发文档</a></small> |
+      <small> <a href="https://github.com/Soulter/AstrBot_Plugins_Collection">提交插件仓库</a></small>
     </v-col>
   </v-row>
 
@@ -795,8 +1033,6 @@ onMounted(async () => {
   <v-snackbar :timeout="2000" elevation="24" :color="snack_success" v-model="snack_show">
     {{ snack_message }}
   </v-snackbar>
-
-  <WaitingForRestart ref="wfr"></WaitingForRestart>
 
   <ReadmeDialog v-model:show="readmeDialog.show" :plugin-name="readmeDialog.pluginName"
     :repo-url="readmeDialog.repoUrl" />
