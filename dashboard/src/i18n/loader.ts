@@ -197,6 +197,7 @@ export class I18nLoader {
    */
   private mergeModules(modules: any[], moduleNames: string[]): any {
     const result: any = {};
+    const pathRegistry = new Map<string, string>();
     
     modules.forEach((module, index) => {
       const moduleName = moduleNames[index];
@@ -211,8 +212,19 @@ export class I18nLoader {
         current = current[nameParts[i]];
       }
       
-      // 设置最终值
+      // 冲突检测：检查最终键是否已存在
       const finalKey = nameParts[nameParts.length - 1];
+      const fullPath = nameParts.join('.');
+      
+      if (current[finalKey] && pathRegistry.has(fullPath)) {
+        const existingModule = pathRegistry.get(fullPath);
+        console.warn(`⚠️ I18n模块路径冲突: "${fullPath}" 已被模块 "${existingModule}" 占用，模块 "${moduleName}" 可能会覆盖部分键值`);
+      }
+      
+      // 记录路径和模块名的映射
+      pathRegistry.set(fullPath, moduleName);
+      
+      // 设置最终值（保持原有的浅合并行为）
       current[finalKey] = { ...current[finalKey], ...module };
     });
 
