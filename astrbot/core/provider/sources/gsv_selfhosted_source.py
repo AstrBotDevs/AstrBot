@@ -36,19 +36,20 @@ class ProviderGSVTTS(TTSProvider):
             for key, value in provider_config.get("gsv_default_parms", {}).items()
         }
         self.timeout = provider_config.get("timeout", 60)
+        self._session: aiohttp.ClientSession | None = None
+
+
+    async def initialize(self):
+        """异步初始化：在 ProviderManager 中被调用"""
         self._session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=self.timeout)
         )
-        asyncio.create_task(self._async_init()).add_done_callback(
-            self._handle_init_exception
-        )
-
-    async def _async_init(self):
-        await self._set_model_weights()
-
-    def _handle_init_exception(self, task: asyncio.Task):
-        if task.exception():
-            logger.error(f"[GSV TTS] 初始化失败：{task.exception()}")
+        try:
+            await self._set_model_weights()
+            logger.info("[GSV TTS] 初始化完成")
+        except Exception as e:
+            logger.error(f"[GSV TTS] 初始化失败：{e}")
+            raise
 
     def get_session(self) -> aiohttp.ClientSession:
         if not self._session or self._session.closed:
@@ -138,10 +139,10 @@ class ProviderGSVTTS(TTSProvider):
         # TODO: 在此处添加情绪分析，例如 params["emotion"] = detect_emotion(text)
         return params
 
-    async def shutdown(self):
+    async def terminate(self):
+        """终止释放资源：在 ProviderManager 中被调用"""
         if self._session and not self._session.closed:
             await self._session.close()
+            logger.info("[GSV TTS] Session 已关闭")
 
-    def __del__(self):
-        if hasattr(self, "_session") and self._session and not self._session.closed:
-            logger.warning("[GSV TTS] ProviderGSVTTS 已被销毁但 session 未关闭，请确保调用 shutdown()")
+
