@@ -405,6 +405,16 @@ export default {
     }
   },
 
+  watch: {
+    showKeyConfirm(newValue) {
+      // 当对话框关闭时，如果 Promise 还在等待，则拒绝它以防止内存泄漏
+      if (!newValue && this.keyConfirmResolve) {
+        this.keyConfirmResolve(false);
+        this.keyConfirmResolve = null;
+      }
+    }
+  },
+
   computed: {
     // 根据选择的标签过滤提供商列表
     filteredProviders() {
@@ -598,14 +608,14 @@ export default {
       }
 
       this.loading = true;
+      const wasUpdating = this.updatingMode;
       try {
-        if (this.updatingMode) {
+        if (wasUpdating) {
           const res = await axios.post('/api/config/provider/update', {
             id: this.newSelectedProviderName,
             config: this.newSelectedProviderConfig
           });
           this.showSuccess(res.data.message || "更新成功!");
-          this.updatingMode = false;
         } else {
           const res = await axios.post('/api/config/provider/new', this.newSelectedProviderConfig);
           this.showSuccess(res.data.message || "添加成功!");
@@ -616,6 +626,9 @@ export default {
         this.showError(err.response?.data?.message || err.message);
       } finally {
         this.loading = false;
+        if (wasUpdating) {
+          this.updatingMode = false;
+        }
       }
     },
 
