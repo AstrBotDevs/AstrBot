@@ -106,7 +106,7 @@ class ProviderGSVTTS(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         """实现 TTS 核心方法，根据文本内容自动切换情绪"""
-        if not text:
+        if not text.strip():
             raise ValueError("[GSV TTS] TTS 文本不能为空")
 
         endpoint = f"{self.api_base}/tts"
