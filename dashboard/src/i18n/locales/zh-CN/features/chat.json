@@ -52,10 +52,24 @@
   "modes": {
     "darkMode": "切换到夜间模式",
     "lightMode": "切换到日间模式"
-  },
-  "shortcuts": {
+  },  "shortcuts": {
     "help": "获取帮助",
     "voiceRecord": "录制语音",
     "pasteImage": "粘贴图片"
+  },
+  "connection": {
+    "title": "连接状态提醒",
+    "message": "系统检测到聊天连接需要重新建立。",
+    "reasons": "这可能是因为：",
+    "reasonWindowResize": "切换了聊天窗口大小（正常现象）",
+    "reasonMultipleTabs": "在其他标签页中打开了聊天页面",
+    "reasonNetworkIssue": "网络连接临时中断",
+    "notice": "注意：为了确保消息正确接收，系统只允许同时保持一个聊天连接。如果您在多个标签页中使用聊天功能，建议只保留一个页面。",
+    "understand": "我知道了",
+    "status": {
+      "reconnecting": "正在重新连接...",
+      "reconnected": "聊天连接已重新建立",
+      "failed": "连接失败，请刷新页面重试"
+    }
   }
 } 

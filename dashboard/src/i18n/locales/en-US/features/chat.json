@@ -52,10 +52,24 @@
   "modes": {
     "darkMode": "Switch to Dark Mode",
     "lightMode": "Switch to Light Mode"
-  },
-  "shortcuts": {
+  },  "shortcuts": {
     "help": "Get Help",
     "voiceRecord": "Record Voice",
     "pasteImage": "Paste Image"
+  },
+  "connection": {
+    "title": "Connection Status Notice",
+    "message": "The system detected that the chat connection needs to be re-established.",
+    "reasons": "This may be due to:",
+    "reasonWindowResize": "Switching chat window size (normal behavior)",
+    "reasonMultipleTabs": "Opening chat pages in other tabs",
+    "reasonNetworkIssue": "Temporary network interruption",
+    "notice": "Note: To ensure proper message delivery, the system only allows one active chat connection at a time. If you're using chat in multiple tabs, please keep only one page open.",
+    "understand": "Got it",
+    "status": {
+      "reconnecting": "Reconnecting...",
+      "reconnected": "Chat connection re-established",
+      "failed": "Connection failed, please refresh the page"
+    }
   }
 } 

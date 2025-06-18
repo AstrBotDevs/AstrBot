@@ -161,7 +161,7 @@
                             </div>
                             <div class="welcome-hint">
                                 <span>{{ t('core.common.longPress') }}</span>
-                                <code>Ctrl</code>
+                                <code>Ctrl + A</code>
                                 <span>{{ tm('shortcuts.voiceRecord') }} 🎤</span>
                             </div>
                             <div class="welcome-hint">
@@ -265,9 +265,7 @@
                 </div>
             </div>
         </v-card-text>
-    </v-card>
-
-    <!-- 编辑对话标题对话框 -->
+    </v-card>    <!-- 编辑对话标题对话框 -->
     <v-dialog v-model="editTitleDialog" max-width="400">
         <v-card>
             <v-card-title class="dialog-title">{{ tm('actions.editTitle') }}</v-card-title>
@@ -281,7 +279,49 @@
                 <v-btn text @click="saveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
             </v-card-actions>
         </v-card>
+    </v-dialog>    <!-- 连接冲突提示对话框 -->
+    <v-dialog v-model="connectionConflictDialog" max-width="500" persistent>
+        <v-card>
+            <v-card-title class="dialog-title d-flex align-center">
+                <v-icon color="info" class="mr-2">mdi-information-outline</v-icon>
+                {{ tm('connection.title') }}
+            </v-card-title>
+            <v-card-text>
+                <div class="text-body-1 mb-3">
+                    {{ tm('connection.message') }}
+                </div>
+                <div class="text-body-2 text-medium-emphasis mb-3">
+                    {{ tm('connection.reasons') }}
+                    <ul class="mt-2">
+                        <li>{{ tm('connection.reasonWindowResize') }}</li>
+                        <li>{{ tm('connection.reasonMultipleTabs') }}</li>
+                        <li>{{ tm('connection.reasonNetworkIssue') }}</li>
+                    </ul>
+                </div>
+                <div class="text-body-2 text-medium-emphasis">
+                    <strong>{{ tm('connection.notice') }}</strong>
+                </div>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn text @click="connectionConflictDialog = false" color="primary">{{ tm('connection.understand') }}</v-btn>
+            </v-card-actions>
+        </v-card>
     </v-dialog>
+
+    <!-- 连接状态消息提示 -->
+    <v-snackbar 
+        v-model="connectionStatusSnackbar" 
+        :color="connectionStatusColor" 
+        :timeout="4000"
+        location="top"
+    >
+        <v-icon class="mr-2">
+            {{ connectionStatusColor === 'success' ? 'mdi-check-circle' : 
+               connectionStatusColor === 'warning' ? 'mdi-alert-circle' : 'mdi-information' }}
+        </v-icon>
+        {{ connectionStatusMessage }}
+    </v-snackbar>
 </template>
 
 <script>
@@ -343,7 +383,8 @@ export default {
             eventSourceReader: null,
             sseReconnecting: false, // 添加重连状态标志
 
-            // Ctrl键长按相关变量
+            
+            // // Ctrl键长按相关变量
             ctrlKeyDown: false,
             ctrlKeyTimer: null,
             ctrlKeyLongPressThreshold: 300, // 长按阈值，单位毫秒
@@ -360,9 +401,11 @@ export default {
             sidebarHovered: false,
             sidebarHoverTimer: null,
             sidebarHoverExpanded: false,
-            sidebarHoverDelay: 100, // 悬停延迟，单位毫秒
-
-            pendingCid: null, // Store pending conversation ID for route handling
+            sidebarHoverDelay: 100, // 悬停延迟，单位毫秒            pendingCid: null, // Store pending conversation ID for route handling            // 连接状态提示相关
+            connectionConflictDialog: false,
+            connectionStatusSnackbar: false,
+            connectionStatusMessage: '',
+            connectionStatusColor: 'info',
         }
     },
     
@@ -382,9 +425,7 @@ export default {
         '$route': {
             immediate: true,
             handler(to, from) {
-                console.log('Route changed:', to.path, 'from:', from?.path);
-                
-                // 如果是从不同的路由模式切换（chat <-> chatbox），重新建立SSE连接
+                console.log('Route changed:', to.path, 'from:', from?.path);                // 如果是从不同的路由模式切换（chat <-> chatbox），重新建立SSE连接
                 if (from && 
                     ((from.path.startsWith('/chat') && to.path.startsWith('/chatbox')) ||
                      (from.path.startsWith('/chatbox') && to.path.startsWith('/chat')))) {
@@ -468,9 +509,20 @@ export default {
 
         // Cleanup blob URLs
         this.cleanupMediaCache();
-    },
-
+    },    
     methods: {
+        // 显示连接冲突对话框
+        showConnectionConflictDialog() {
+            this.connectionConflictDialog = true;
+        },
+
+        // 显示连接状态消息
+        showConnectionStatus(message, color = 'info') {
+            this.connectionStatusMessage = message;
+            this.connectionStatusColor = color;
+            this.connectionStatusSnackbar = true;
+        },
+
         toggleTheme() {
             const customizer = useCustomizerStore();
             const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
@@ -635,16 +687,18 @@ export default {
                     }
 
                     const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-
+                    const decoder = new TextDecoder();                    
                     this.eventSource = reader;
                     this.eventSourceReader = reader;
                     this.sseReconnecting = false;
 
                     let in_streaming = false;
-                    let message_obj = null;
-
+                    let message_obj = null;                    
                     console.log('SSE连接已建立');
+                    // 显示连接成功状态
+                    if (retryCount > 0) {
+                        this.showConnectionStatus(this.tm('connection.status.reconnected'), 'success');
+                    }
 
                     while (true) {
                         try {
@@ -668,14 +722,13 @@ export default {
                                     continue;
                                 }
 
-                                console.log(line);
-
-                                // 处理后端错误响应格式
+                                console.log(line);                                // 处理后端错误响应格式
                                 if (line.startsWith('{"status":"error"')) {
                                     try {
                                         const errorObj = JSON.parse(line);
                                         if (errorObj.message === 'Already connected') {
-                                            console.log('检测到连接冲突，等待后重试...');
+                                            console.log('检测到连接冲突，显示提示对话框...');
+                                            this.showConnectionConflictDialog();
                                             throw new Error('CONNECTION_CONFLICT');
                                         }
                                         console.error('后端错误:', errorObj.message);
@@ -781,16 +834,17 @@ export default {
                 } catch (error) {
                     console.error(`SSE连接错误 (尝试 ${retryCount + 1}):`, error);
                     
-                    retryCount++;
-                    
+                    retryCount++;                    
                     if (error.message === 'CONNECTION_CONFLICT' && retryCount < maxRetries) {
                         console.log(`连接冲突，等待 ${2000 * retryCount}ms 后重试...`);
+                        this.showConnectionStatus(`${this.tm('connection.status.reconnecting')} (${retryCount}/${maxRetries})`, 'warning');
                         await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
                         continue;
                     }
                     
                     if (retryCount >= maxRetries) {
                         console.error('SSE连接重试次数已达上限');
+                        this.showConnectionStatus(this.tm('connection.status.failed'), 'error');
                         this.sseReconnecting = false;
                         break;
                     }
@@ -1097,10 +1151,11 @@ export default {
                 const container = this.$refs.messageContainer;
                 container.scrollTop = container.scrollHeight;
             });
-        },
-
+        },        
         handleInputKeyDown(e) {
-            if (e.keyCode === 17) { // Ctrl键
+            if (e.ctrlKey && e.keyCode === 65) { // Ctrl+A组合键
+                e.preventDefault(); // 防止默认的全选行为
+                
                 // 防止重复触发
                 if (this.ctrlKeyDown) return;
 
@@ -1113,10 +1168,8 @@ export default {
                     }
                 }, this.ctrlKeyLongPressThreshold);
             }
-        },
-
-        handleInputKeyUp(e) {
-            if (e.keyCode === 17) { // Ctrl键
+        },        handleInputKeyUp(e) {
+            if (e.keyCode === 65) { // A键释放
                 this.ctrlKeyDown = false;
 
                 // 清除定时器
