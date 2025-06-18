@@ -94,20 +94,82 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 pip install uv
 ```
 
+[官网](https://docs.astral.sh/uv/)推荐的安装方式：
+
+linux / macos：
+
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+wget -qO- https://astral.sh/uv/install.sh | sh
+```
+
+windows:
+
+```pwsh
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+[确保在PATH中]
+```bash
+uv tool update-shell
+```
+
+
 通过 Git Clone 安装 AstrBot：
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
+git clone https://github.com/AstrBotDevs/AstrBot && mkdir -p astrbot && cd AstrBot # 或者 uv tool install https://github.com/AstrBotDevs/AstrBot.git && mkdir astrbot && cd astrbot && astrbot run
 uv run main.py
 ```
 
-或者，直接通过 uvx 安装 AstrBot：
+通过uv安装 Astrbot:
+
+```bash
+uv tool install astrbot
+```
+
+初始化：
+
+```bash
+mkdir astrbot && cd astrbot  # mkdir astrbot ; cd astrbot
+```
+
+
+运行：
+
+```bash
+astrbot run
+```
+
+或者，直接通过 uvx 临时运行 AstrBot：
 
 ```bash
 mkdir astrbot && cd astrbot
 uvx astrbot init
 # uvx astrbot run
 ```
+
+或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
+
+
+一键安装并运行：
+
+linux && macos && windows:
+
+```bash
+uv tool install astrbot && mkdir -p astrbot && cd astrbot && astrbot init && astrbot run
+```
+
+后续更新：
+
+```bash
+uv tool update astrbot
+```
+
+> [!TIP]
+> 如果你在使用python3.13 很有可能安装不上，请使用 -p 3.12 或者更低版本
+> 例如 uv tool install astrbot -p 3.12
 
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
