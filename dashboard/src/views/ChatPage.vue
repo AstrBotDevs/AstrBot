@@ -161,7 +161,7 @@
                             </div>
                             <div class="welcome-hint">
                                 <span>{{ t('core.common.longPress') }}</span>
-                                <code>Ctrl + A</code>
+                                <code>Ctrl + B</code>
                                 <span>{{ tm('shortcuts.voiceRecord') }} 🎤</span>
                             </div>
                             <div class="welcome-hint">
@@ -265,7 +265,8 @@
                 </div>
             </div>
         </v-card-text>
-    </v-card>    <!-- 编辑对话标题对话框 -->
+    </v-card>    
+    <!-- 编辑对话标题对话框 -->
     <v-dialog v-model="editTitleDialog" max-width="400">
         <v-card>
             <v-card-title class="dialog-title">{{ tm('actions.editTitle') }}</v-card-title>
@@ -401,7 +402,9 @@ export default {
             sidebarHovered: false,
             sidebarHoverTimer: null,
             sidebarHoverExpanded: false,
-            sidebarHoverDelay: 100, // 悬停延迟，单位毫秒            pendingCid: null, // Store pending conversation ID for route handling            // 连接状态提示相关
+            sidebarHoverDelay: 100, // 悬停延迟，单位毫秒            
+            pendingCid: null, // Store pending conversation ID for route handling            
+            // 连接状态提示相关
             connectionConflictDialog: false,
             connectionStatusSnackbar: false,
             connectionStatusMessage: '',
@@ -1153,8 +1156,8 @@ export default {
             });
         },        
         handleInputKeyDown(e) {
-            if (e.ctrlKey && e.keyCode === 65) { // Ctrl+A组合键
-                e.preventDefault(); // 防止默认的全选行为
+            if (e.ctrlKey && e.keyCode === 66) { // Ctrl+B组合键
+                e.preventDefault(); // 防止默认行为
                 
                 // 防止重复触发
                 if (this.ctrlKeyDown) return;
@@ -1168,8 +1171,9 @@ export default {
                     }
                 }, this.ctrlKeyLongPressThreshold);
             }
-        },        handleInputKeyUp(e) {
-            if (e.keyCode === 65) { // A键释放
+        },        
+        handleInputKeyUp(e) {
+            if (e.keyCode === 66) { // B键释放
                 this.ctrlKeyDown = false;
 
                 // 清除定时器
