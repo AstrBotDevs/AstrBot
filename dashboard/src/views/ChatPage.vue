@@ -1,5 +1,3 @@
-
-
 <template>
     <v-card class="chat-page-card">
         <v-card-text class="chat-page-container">
@@ -290,6 +288,7 @@
 import { router } from '@/router';
 import axios from 'axios';
 import { marked } from 'marked';
+import { ref } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
@@ -308,15 +307,16 @@ export default {
             type: Boolean,
             default: false
         }
-    },
-    setup() {
+    },    setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/chat');
         
         return {
             t,
             tm,
-            router
+            router,
+            marked,
+            ref
         };
     },
     data() {
@@ -340,6 +340,8 @@ export default {
             statusText: '',
 
             eventSource: null,
+            eventSourceReader: null,
+            sseReconnecting: false, // 添加重连状态标志
 
             // Ctrl键长按相关变量
             ctrlKeyDown: false,
@@ -379,9 +381,18 @@ export default {
         // Watch for route changes to handle direct navigation to /chat/<cid>
         '$route': {
             immediate: true,
-            handler(to) {
-                console.log('Route changed:', to.path);
-                // Check if the route matches /chat/<cid> pattern
+            handler(to, from) {
+                console.log('Route changed:', to.path, 'from:', from?.path);
+                
+                // 如果是从不同的路由模式切换（chat <-> chatbox），重新建立SSE连接
+                if (from && 
+                    ((from.path.startsWith('/chat') && to.path.startsWith('/chatbox')) ||
+                     (from.path.startsWith('/chatbox') && to.path.startsWith('/chat')))) {
+                    console.log('Route mode changed, reconnecting SSE...');
+                    this.reconnectSSE();
+                }
+                
+                // Check if the route matches /chat/<cid> or /chatbox/<cid> pattern
                 if (to.path.startsWith('/chat/') || to.path.startsWith('/chatbox/')) {
                     const pathCid = to.path.split('/')[2];
                     console.log('Path CID:', pathCid);
@@ -427,7 +438,10 @@ export default {
         inputField.addEventListener('keydown', function (e) {
             if (e.keyCode == 13 && !e.shiftKey) {
                 e.preventDefault();
-                this.sendMessage();
+                // 检查是否有内容可发送
+                if (this.canSendMessage()) {
+                    this.sendMessage();
+                }
             }
         }.bind(this));
 
@@ -442,11 +456,8 @@ export default {
     },
 
     beforeUnmount() {
-        if (this.eventSource) {
-            this.eventSource.cancel();
-            console.log('SSE连接已断开');
-        }
-
+        this.disconnectSSE();
+        
         // 移除keyup事件监听
         document.removeEventListener('keyup', this.handleInputKeyUp);
 
@@ -555,126 +566,244 @@ export default {
             }
         },
 
-        async startListeningEvent() {
-            const response = await fetch('/api/chat/listen', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+        // 断开SSE连接
+        disconnectSSE() {
+            if (this.eventSourceReader) {
+                try {
+                    this.eventSourceReader.cancel();
+                    console.log('SSE Reader cancelled');
+                } catch (error) {
+                    console.warn('Error cancelling SSE reader:', error);
                 }
-            })
+                this.eventSourceReader = null;
+            }
+            
+            if (this.eventSource) {
+                try {
+                    this.eventSource.cancel();
+                    console.log('SSE连接已断开');
+                } catch (error) {
+                    console.warn('Error cancelling SSE:', error);
+                }
+                this.eventSource = null;
+            }
+        },
 
-            if (!response.ok) {
-                console.error('SSE连接失败:', response.statusText);
+        // 重新连接SSE
+        async reconnectSSE() {
+            if (this.sseReconnecting) {
+                console.log('SSE reconnection already in progress');
                 return;
             }
+            
+            this.sseReconnecting = true;
+            console.log('Reconnecting SSE...');
+            this.disconnectSSE();
+            
+            // 等待更长时间确保后端连接完全清理
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            this.startListeningEvent();
+        },
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-
-            this.eventSource = reader
-
-            let in_streaming = false
-            let message_obj = null
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) {
-                    console.log('SSE连接关闭');
-                    break;
-                }
-
-                const chunk = decoder.decode(value, { stream: true });
-
-                // 可能有多行
-
-                let lines = chunk.split('\n\n');
-
-                console.log('SSE数据:', lines);
-
-                for (let i = 0; i < lines.length; i++) {
-                    let line = lines[i].trim();
-
-                    if (!line) {
-                        continue;
-                    }
-
-                    console.log(line)
-
-                    // data: {"type": "plain", "data": "helloworld"}
-                    let chunk_json;
-                    try {
-                        chunk_json = JSON.parse(line.replace('data: ', ''));
-                    } catch (parseError) {
-                        console.warn('JSON解析失败:', line, parseError);
-                        continue;
-                    }
-
-                    // 检查解析后的数据是否有效
-                    if (!chunk_json || typeof chunk_json !== 'object') {
-                        console.warn('无效的数据对象:', chunk_json);
-                        continue;
-                    }
-
-                    // 检查是否有type字段
-                    if (!chunk_json.hasOwnProperty('type')) {
-                        console.warn('数据缺少type字段:', chunk_json);
-                        continue;
-                    }
-
-                    if (chunk_json.type === 'heartbeat') {
-                        continue; // 心跳包
-                    }
-                    if (chunk_json.type === 'error') {
-                        console.error('Error received:', chunk_json.data);
-                        continue;
-                    }
-
-                    if (chunk_json.type === 'image') {
-                        let img = chunk_json.data.replace('[IMAGE]', '');
-                        const imageUrl = await this.getMediaFile(img);
-                        let bot_resp = {
-                            type: 'bot',
-                            message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+        async startListeningEvent() {
+            // 确保之前的连接已断开
+            this.disconnectSSE();
+            
+            // 如果正在重连过程中，等待一下
+            if (this.sseReconnecting) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            let retryCount = 0;
+            const maxRetries = 3;
+            
+            while (retryCount < maxRetries) {
+                try {
+                    console.log(`尝试建立SSE连接 (${retryCount + 1}/${maxRetries})`);
+                    
+                    const response = await fetch('/api/chat/listen', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + localStorage.getItem('token')
                         }
-                        this.messages.push(bot_resp);
-                    } else if (chunk_json.type === 'record') {
-                        let audio = chunk_json.data.replace('[RECORD]', '');
-                        const audioUrl = await this.getMediaFile(audio);
-                        let bot_resp = {
-                            type: 'bot',
-                            message: `<audio controls class="audio-player">
-                    <source src="${audioUrl}" type="audio/wav">
-                    ${this.t('messages.errors.browser.audioNotSupported')}
-                  </audio>`
-                        }
-                        this.messages.push(bot_resp);
-                    } else if (chunk_json.type === 'plain') {
-                        if (!in_streaming) {
-                            message_obj = {
-                                type: 'bot',
-                                message: ref(chunk_json.data),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`SSE连接失败: ${response.statusText}`);
+                    }
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+
+                    this.eventSource = reader;
+                    this.eventSourceReader = reader;
+                    this.sseReconnecting = false;
+
+                    let in_streaming = false;
+                    let message_obj = null;
+
+                    console.log('SSE连接已建立');
+
+                    while (true) {
+                        try {
+                            const { done, value } = await reader.read();
+                            if (done) {
+                                console.log('SSE连接正常关闭');
+                                break;
                             }
-                            this.messages.push(message_obj);
-                            in_streaming = true;
-                        } else {
-                            message_obj.message.value += chunk_json.data;
+
+                            const chunk = decoder.decode(value, { stream: true });
+
+                            // 可能有多行
+                            let lines = chunk.split('\n\n');
+
+                            console.log('SSE数据:', lines);
+
+                            for (let i = 0; i < lines.length; i++) {
+                                let line = lines[i].trim();
+
+                                if (!line) {
+                                    continue;
+                                }
+
+                                console.log(line);
+
+                                // 处理后端错误响应格式
+                                if (line.startsWith('{"status":"error"')) {
+                                    try {
+                                        const errorObj = JSON.parse(line);
+                                        if (errorObj.message === 'Already connected') {
+                                            console.log('检测到连接冲突，等待后重试...');
+                                            throw new Error('CONNECTION_CONFLICT');
+                                        }
+                                        console.error('后端错误:', errorObj.message);
+                                        continue;
+                                    } catch (parseError) {
+                                        if (parseError.message === 'CONNECTION_CONFLICT') {
+                                            throw parseError;
+                                        }
+                                        console.warn('解析错误响应失败:', line);
+                                        continue;
+                                    }
+                                }
+
+                                // data: {"type": "plain", "data": "helloworld"}
+                                let chunk_json;
+                                try {
+                                    chunk_json = JSON.parse(line.replace('data: ', ''));
+                                } catch (parseError) {
+                                    console.warn('JSON解析失败:', line, parseError);
+                                    continue;
+                                }
+
+                                // 检查解析后的数据是否有效
+                                if (!chunk_json || typeof chunk_json !== 'object') {
+                                    console.warn('无效的数据对象:', chunk_json);
+                                    continue;
+                                }
+
+                                // 检查是否有type字段
+                                if (!chunk_json.hasOwnProperty('type')) {
+                                    console.warn('数据缺少type字段:', chunk_json);
+                                    continue;
+                                }
+
+                                if (chunk_json.type === 'heartbeat') {
+                                    continue; // 心跳包
+                                }
+                                if (chunk_json.type === 'error') {
+                                    console.error('Error received:', chunk_json.data);
+                                    continue;
+                                }
+
+                                if (chunk_json.type === 'image') {
+                                    let img = chunk_json.data.replace('[IMAGE]', '');
+                                    const imageUrl = await this.getMediaFile(img);
+                                    let bot_resp = {
+                                        type: 'bot',
+                                        message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                                    }
+                                    this.messages.push(bot_resp);
+                                } else if (chunk_json.type === 'record') {
+                                    let audio = chunk_json.data.replace('[RECORD]', '');
+                                    const audioUrl = await this.getMediaFile(audio);
+                                    let bot_resp = {
+                                        type: 'bot',
+                                        message: `<audio controls class="audio-player">
+                                <source src="${audioUrl}" type="audio/wav">
+                                ${this.t('messages.errors.browser.audioNotSupported')}
+                              </audio>`
+                                    }
+                                    this.messages.push(bot_resp);
+                                } else if (chunk_json.type === 'plain') {
+                                    if (!in_streaming) {
+                                        message_obj = {
+                                            type: 'bot',
+                                            message: this.ref(chunk_json.data),
+                                        }
+                                        this.messages.push(message_obj);
+                                        in_streaming = true;
+                                    } else {
+                                        message_obj.message.value += chunk_json.data;
+                                    }
+                                } else if (chunk_json.type === 'end') {
+                                    in_streaming = false;
+                                    continue;
+                                } else if (chunk_json.type === 'update_title') {
+                                    // 更新对话标题
+                                    const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
+                                    if (conversation) {
+                                        conversation.title = chunk_json.data;
+                                    }
+                                } else {
+                                    console.warn('未知数据类型:', chunk_json.type);
+                                }
+                                this.scrollToBottom();
+                            }
+                        } catch (readError) {
+                            if (readError.name === 'AbortError') {
+                                console.log('SSE连接被取消');
+                                break;
+                            }
+                            if (readError.message === 'CONNECTION_CONFLICT') {
+                                throw readError;
+                            }
+                            console.error('SSE读取错误:', readError);
+                            break;
                         }
-                    } else if (chunk_json.type === 'end') {
-                        in_streaming = false;
-                        continue;
-                    } else if (chunk_json.type === 'update_title') {
-                        // 更新对话标题
-                        const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
-                        if (conversation) {
-                            conversation.title = chunk_json.data;
-                        }
-                    } else {
-                        console.warn('未知数据类型:', chunk_json.type);
                     }
-                    this.scrollToBottom();
+                    
+                    // 如果成功连接并正常结束，跳出重试循环
+                    break;
+                    
+                } catch (error) {
+                    console.error(`SSE连接错误 (尝试 ${retryCount + 1}):`, error);
+                    
+                    retryCount++;
+                    
+                    if (error.message === 'CONNECTION_CONFLICT' && retryCount < maxRetries) {
+                        console.log(`连接冲突，等待 ${2000 * retryCount}ms 后重试...`);
+                        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+                        continue;
+                    }
+                    
+                    if (retryCount >= maxRetries) {
+                        console.error('SSE连接重试次数已达上限');
+                        this.sseReconnecting = false;
+                        break;
+                    }
+                    
+                    // 等待一段时间后重试
+                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                } finally {
+                    this.eventSource = null;
+                    this.eventSourceReader = null;
                 }
             }
+            
+            this.sseReconnecting = false;
         },
 
         removeAudio() {
@@ -884,7 +1013,20 @@ export default {
             });
         },
 
+        // 检查是否可以发送消息
+        canSendMessage() {
+            return (this.prompt && this.prompt.trim()) || 
+                   this.stagedImagesName.length > 0 || 
+                   this.stagedAudioUrl;
+        },
+
         async sendMessage() {
+            // 检查是否有内容可发送
+            if (!this.canSendMessage()) {
+                console.log('没有内容可发送');
+                return;
+            }
+
             if (this.currCid == '') {
                 const cid = await this.newConversation();
                 // URL is already updated in newConversation method
@@ -893,7 +1035,7 @@ export default {
             // Create a message object with actual URLs for display
             const userMessage = {
                 type: 'user',
-                message: this.prompt,
+                message: this.prompt.trim(), // 使用 trim() 去除前后空格
                 image_url: [],
                 audio_url: null
             };
@@ -932,20 +1074,22 @@ export default {
                     'Authorization': 'Bearer ' + localStorage.getItem('token')
                 },
                 body: JSON.stringify({
-                    message: this.prompt,
+                    message: this.prompt.trim(), // 确保发送的消息已去除前后空格
                     conversation_id: this.currCid,
-                    image_url: this.stagedImagesName, // Already contains just filenames
-                    audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : [] // Already contains just filename
+                    image_url: this.stagedImagesName,
+                    audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : []
                 })
             })
                 .then(response => {
                     this.prompt = '';
                     this.stagedImagesName = [];
+                    this.stagedImagesUrl = [];
                     this.stagedAudioUrl = "";
                     this.loadingChat = false;
                 })
                 .catch(err => {
                     console.error(err);
+                    this.loadingChat = false;
                 });
         },
         scrollToBottom() {
