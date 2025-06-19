@@ -281,31 +281,60 @@
             </v-card-actions>
         </v-card>
     </v-dialog>    <!-- 连接冲突提示对话框 -->
-    <v-dialog v-model="connectionConflictDialog" max-width="500" persistent>
-        <v-card>
-            <v-card-title class="dialog-title d-flex align-center">
-                <v-icon color="info" class="mr-2">mdi-information-outline</v-icon>
-                {{ tm('connection.title') }}
-            </v-card-title>
-            <v-card-text>
-                <div class="text-body-1 mb-3">
+    <v-dialog v-model="connectionConflictDialog" max-width="600" persistent>
+        <v-card class="rounded-lg">            
+            <v-toolbar color="primary" density="comfortable" flat>
+                <v-icon color="white" class="ml-4 mr-2">mdi-information-outline</v-icon>
+                <v-toolbar-title class="text-white">{{ tm('connection.title') }}</v-toolbar-title>
+                <v-spacer></v-spacer>
+                <v-btn icon @click="connectionConflictDialog = false" variant="text" color="white">
+                    <v-icon>mdi-close</v-icon>
+                </v-btn>
+            </v-toolbar>
+
+            <v-card-text class="pa-6">
+                <div class="text-body-1 mb-4">
                     {{ tm('connection.message') }}
                 </div>
-                <div class="text-body-2 text-medium-emphasis mb-3">
-                    {{ tm('connection.reasons') }}
-                    <ul class="mt-2">
-                        <li>{{ tm('connection.reasonWindowResize') }}</li>
-                        <li>{{ tm('connection.reasonMultipleTabs') }}</li>
-                        <li>{{ tm('connection.reasonNetworkIssue') }}</li>
+                
+                <v-alert 
+                    type="info" 
+                    variant="tonal" 
+                    class="mb-4"
+                    icon="mdi-lightbulb-outline"
+                >
+                    <div class="text-body-2 mb-2">
+                        <strong>{{ tm('connection.reasons') }}</strong>
+                    </div>
+                    <ul class="ml-4">
+                        <li class="mb-1">{{ tm('connection.reasonWindowResize') }}</li>
+                        <li class="mb-1">{{ tm('connection.reasonMultipleTabs') }}</li>
+                        <li class="mb-1">{{ tm('connection.reasonNetworkIssue') }}</li>
                     </ul>
-                </div>
-                <div class="text-body-2 text-medium-emphasis">
-                    <strong>{{ tm('connection.notice') }}</strong>
-                </div>
+                </v-alert>
+
+                <v-alert 
+                    type="warning" 
+                    variant="tonal" 
+                    icon="mdi-alert-circle-outline"
+                    class="mb-0"
+                >
+                    <div class="text-body-2">
+                        {{ tm('connection.notice') }}
+                    </div>
+                </v-alert>
             </v-card-text>
-            <v-card-actions>
+
+            <v-card-actions class="px-6 pb-4">
                 <v-spacer></v-spacer>
-                <v-btn text @click="connectionConflictDialog = false" color="primary">{{ tm('connection.understand') }}</v-btn>
+                <v-btn 
+                    color="primary" 
+                    variant="elevated"
+                    @click="connectionConflictDialog = false"
+                    class="px-6"
+                >
+                    {{ tm('connection.understand') }}
+                </v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
