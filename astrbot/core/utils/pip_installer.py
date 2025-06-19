@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import sys
 
 logger = logging.getLogger("astrbot")
 
@@ -31,7 +32,10 @@ class PipInstaller:
         logger.info(f"Pip 包管理器: pip {' '.join(args)}")
         try:
             process = await asyncio.create_subprocess_exec(
-                "pip", *args,
+                sys.executable,
+                "-m",
+                "pip",
+                *args,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
@@ -47,6 +51,7 @@ class PipInstaller:
         except FileNotFoundError:
             # 没有 pip
             from pip import main as pip_main
+
             result_code = await asyncio.to_thread(pip_main, args)
 
             # 清除 pip.main 导致的多余的 logging handlers
