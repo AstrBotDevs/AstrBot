@@ -5,10 +5,10 @@
             <v-row>
                 <v-col cols="12">
                     <h1 class="text-h4 font-weight-bold mb-2">
-                        <v-icon size="x-large" color="primary" class="me-2">mdi-chat-processing</v-icon>对话管理
+                        <v-icon size="x-large" color="primary" class="me-2">mdi-chat-processing</v-icon>{{ tm('title') }}
                     </h1>
                     <p class="text-subtitle-1 text-medium-emphasis mb-4">
-                        管理和查看用户对话历史记录
+                        {{ tm('subtitle') }}
                     </p>
                 </v-col>
             </v-row>
@@ -17,10 +17,10 @@
             <v-card class="mb-4" elevation="2">
                 <v-card-title class="d-flex align-center py-3 px-4">
                     <v-icon color="primary" class="me-2">mdi-filter-variant</v-icon>
-                    <span class="text-h6">筛选条件</span>
+                    <span class="text-h6">{{ tm('filters.title') }}</span>
                     <v-spacer></v-spacer>
                     <v-btn color="primary" variant="text" @click="resetFilters" class="ml-2">
-                        <v-icon class="mr-1">mdi-refresh</v-icon>重置
+                        <v-icon class="mr-1">mdi-refresh</v-icon>{{ tm('filters.reset') }}
                     </v-btn>
                 </v-card-title>
 
@@ -29,7 +29,7 @@
                 <v-card-text class="py-4">
                     <v-row>
                         <v-col cols="12" sm="6" md="4">
-                            <v-select v-model="platformFilter" label="平台" :items="availablePlatforms" chips multiple
+                            <v-select v-model="platformFilter" :label="tm('filters.platform')" :items="availablePlatforms" chips multiple
                                 clearable variant="outlined" density="compact" hide-details>
                                 <template v-slot:selection="{ item }">
                                     <v-chip size="small" :color="getPlatformColor(item.value)" label>
@@ -40,7 +40,7 @@
                         </v-col>
 
                         <v-col cols="12" sm="6" md="4">
-                            <v-select v-model="messageTypeFilter" label="类型" :items="messageTypeItems" chips multiple
+                            <v-select v-model="messageTypeFilter" :label="tm('filters.type')" :items="messageTypeItems" chips multiple
                                 clearable variant="outlined" density="compact" hide-details>
                                 <template v-slot:selection="{ item }">
                                     <v-chip size="small" :color="getMessageTypeColor(item.value)" variant="outlined"
@@ -52,7 +52,7 @@
                         </v-col>
 
                         <v-col cols="12" sm="12" md="4">
-                            <v-text-field v-model="search" prepend-inner-icon="mdi-magnify" label="搜索关键词" hide-details
+                            <v-text-field v-model="search" prepend-inner-icon="mdi-magnify" :label="tm('filters.search')" hide-details
                                 density="compact" variant="outlined" clearable></v-text-field>
                         </v-col>
                     </v-row>
@@ -63,32 +63,32 @@
             <v-card class="mb-6" elevation="2">
                 <v-card-title class="d-flex align-center py-3 px-4">
                     <v-icon color="primary" class="me-2">mdi-message</v-icon>
-                    <span class="text-h6">对话历史</span>
+                    <span class="text-h6">{{ tm('history.title') }}</span>
                     <v-chip color="info" size="small" class="ml-2">{{ pagination.total || 0 }}</v-chip>
                     <v-spacer></v-spacer>
                     <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="fetchConversations"
                         :loading="loading">
-                        刷新
+                        {{ tm('history.refresh') }}
                     </v-btn>
                 </v-card-title>
 
                 <v-divider></v-divider>
 
                 <v-card-text class="pa-0">
-                    <v-data-table :headers="headers" :items="conversations" :loading="loading" density="comfortable"
+                    <v-data-table :headers="tableHeaders" :items="conversations" :loading="loading" density="comfortable"
                         hide-default-footer items-per-page="10" class="elevation-0"
                         :items-per-page="pagination.page_size" :items-per-page-options="[10, 20, 50, 100]"
                         @update:options="handleTableOptions">
                         <template v-slot:item.title="{ item }">
                             <div class="d-flex align-center">
                                 <v-icon color="primary" class="mr-2">mdi-chat</v-icon>
-                                <span>{{ item.title || '无标题对话' }}</span>
+                                <span>{{ item.title || tm('status.noTitle') }}</span>
                             </div>
                         </template>
 
                         <template v-slot:item.platform="{ item }">
                             <v-chip :color="getPlatformColor(item.sessionInfo.platform)" size="small" label>
-                                {{ item.sessionInfo.platform || '未知' }}
+                                {{ item.sessionInfo.platform || tm('status.unknown') }}
                             </v-chip>
                         </template>
 
@@ -100,7 +100,7 @@
                         </template>
 
                         <template v-slot:item.sessionId="{ item }">
-                            <span>{{ item.sessionInfo.sessionId || '未知' }}</span>
+                            <span>{{ item.sessionInfo.sessionId || tm('status.unknown') }}</span>
                         </template>
 
                         <template v-slot:item.created_at="{ item }">
@@ -115,15 +115,15 @@
                             <div class="actions-wrapper">
                                 <v-btn color="primary" variant="flat" size="small" class="action-button"
                                     @click="viewConversation(item)">
-                                    <v-icon class="mr-1">mdi-eye</v-icon>查看
+                                    <v-icon class="mr-1">mdi-eye</v-icon>{{ tm('actions.view') }}
                                 </v-btn>
                                 <v-btn color="warning" variant="flat" size="small" class="action-button"
                                     @click="editConversation(item)">
-                                    <v-icon class="mr-1">mdi-pencil</v-icon>编辑
+                                    <v-icon class="mr-1">mdi-pencil</v-icon>{{ tm('actions.edit') }}
                                 </v-btn>
                                 <v-btn color="error" variant="flat" size="small" class="action-button"
                                     @click="confirmDeleteConversation(item)">
-                                    <v-icon class="mr-1">mdi-delete</v-icon>删除
+                                    <v-icon class="mr-1">mdi-delete</v-icon>{{ tm('actions.delete') }}
                                 </v-btn>
                             </div>
                         </template>
@@ -131,7 +131,7 @@
                         <template v-slot:no-data>
                             <div class="d-flex flex-column align-center py-6">
                                 <v-icon size="64" color="grey lighten-1">mdi-chat-remove</v-icon>
-                                <span class="text-subtitle-1 text-disabled mt-3">暂无对话记录</span>
+                                <span class="text-subtitle-1 text-disabled mt-3">{{ tm('status.noData') }}</span>
                             </div>
                         </template>
                     </v-data-table>
@@ -150,7 +150,7 @@
             <v-card class="conversation-detail-card">
                 <v-card-title class="bg-primary text-white py-3 d-flex align-center">
                     <v-icon color="white" class="me-2">mdi-eye</v-icon>
-                    <span class="text-truncate">{{ selectedConversation?.title || '无标题对话' }}</span>
+                    <span class="text-truncate">{{ selectedConversation?.title || tm('status.noTitle') }}</span>
                     <v-spacer></v-spacer>
 
                     <div class="d-flex align-center" v-if="selectedConversation?.sessionInfo">
@@ -170,12 +170,12 @@
                         <v-btn color="secondary" variant="tonal" size="small" class="mr-2"
                             @click="isEditingHistory = !isEditingHistory">
                             <v-icon class="mr-1">{{ isEditingHistory ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
-                            {{ isEditingHistory ? '预览模式' : '编辑对话' }}
+                            {{ isEditingHistory ? tm('dialogs.view.previewMode') : tm('dialogs.view.editMode') }}
                         </v-btn>
                         <v-btn v-if="isEditingHistory" color="success" variant="tonal" size="small"
                             :loading="savingHistory" @click="saveHistoryChanges">
                             <v-icon class="mr-1">mdi-content-save</v-icon>
-                            保存修改
+                            {{ tm('dialogs.view.saveChanges') }}
                         </v-btn>
                     </div>
 
@@ -196,7 +196,7 @@
                         <!-- 空对话提示 -->
                         <div v-if="conversationHistory.length === 0" class="text-center py-5">
                             <v-icon size="48" color="grey">mdi-chat-remove</v-icon>
-                            <p class="text-disabled mt-2">对话内容为空</p>
+                            <p class="text-disabled mt-2">{{ tm('status.emptyContent') }}</p>
                         </div>
 
                         <!-- 消息列表 -->
@@ -219,7 +219,7 @@
                                         <div class="audio-attachment" v-if="msg.audio_url">
                                             <audio controls class="audio-player">
                                                 <source :src="msg.audio_url" type="audio/wav">
-                                                您的浏览器不支持音频播放。
+                                                {{ tm('status.audioNotSupported') }}
                                             </audio>
                                         </div>
                                     </div>
@@ -247,7 +247,7 @@
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
                     <v-btn variant="text" @click="closeHistoryDialog">
-                        关闭
+                        {{ tm('dialogs.view.close') }}
                     </v-btn>
                 </v-card-actions>
             </v-card>
@@ -258,12 +258,12 @@
             <v-card>
                 <v-card-title class="bg-primary text-white py-3">
                     <v-icon color="white" class="me-2">mdi-pencil</v-icon>
-                    <span>编辑对话信息</span>
+                    <span>{{ tm('dialogs.edit.title') }}</span>
                 </v-card-title>
 
                 <v-card-text class="py-4">
                     <v-form ref="form" v-model="valid">
-                        <v-text-field v-model="editedItem.title" label="对话标题" placeholder="输入对话标题" variant="outlined"
+                        <v-text-field v-model="editedItem.title" :label="tm('dialogs.edit.titleLabel')" :placeholder="tm('dialogs.edit.titlePlaceholder')" variant="outlined"
                             density="comfortable" class="mb-3"></v-text-field>
                     </v-form>
                 </v-card-text>
@@ -273,10 +273,10 @@
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
                     <v-btn variant="text" @click="dialogEdit = false" :disabled="loading">
-                        取消
+                        {{ tm('dialogs.edit.cancel') }}
                     </v-btn>
                     <v-btn color="primary" @click="saveConversation" :loading="loading">
-                        保存
+                        {{ tm('dialogs.edit.save') }}
                     </v-btn>
                 </v-card-actions>
             </v-card>
@@ -287,11 +287,11 @@
             <v-card>
                 <v-card-title class="bg-error text-white py-3">
                     <v-icon color="white" class="me-2">mdi-alert</v-icon>
-                    <span>确认删除</span>
+                    <span>{{ tm('dialogs.delete.title') }}</span>
                 </v-card-title>
 
                 <v-card-text class="py-4">
-                    <p>确定要删除对话 <strong>{{ selectedConversation?.title || '无标题对话' }}</strong> 吗？此操作不可恢复。</p>
+                    <p>{{ tm('dialogs.delete.message', { title: selectedConversation?.title || tm('status.noTitle') }) }}</p>
                 </v-card-text>
 
                 <v-divider></v-divider>
@@ -299,10 +299,10 @@
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
                     <v-btn variant="text" @click="dialogDelete = false" :disabled="loading">
-                        取消
+                        {{ tm('dialogs.delete.cancel') }}
                     </v-btn>
                     <v-btn color="error" @click="deleteConversation" :loading="loading">
-                        删除
+                        {{ tm('dialogs.delete.confirm') }}
                     </v-btn>
                 </v-card-actions>
             </v-card>
@@ -320,6 +320,7 @@ import axios from 'axios';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import { marked } from 'marked';
 import { useCommonStore } from '@/stores/common';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 
 marked.setOptions({
     breaks: true
@@ -331,20 +332,23 @@ export default {
         VueMonacoEditor
     },
 
+    setup() {
+        const { t, locale } = useI18n();
+        const { tm } = useModuleI18n('features/conversation');
+        
+        return {
+            t,
+            tm,
+            locale
+        };
+    },
+
     data() {
         return {
             // 表格数据
             conversations: [],
             search: '',
-            headers: [
-                { title: '对话标题', key: 'title', sortable: true },
-                { title: '平台', key: 'platform', sortable: true, width: '120px' },
-                { title: '类型', key: 'messageType', sortable: true, width: '100px' },
-                { title: 'ID', key: 'sessionId', sortable: true, width: '100px' },
-                { title: '创建时间', key: 'created_at', sortable: true, width: '180px' },
-                { title: '更新时间', key: 'updated_at', sortable: true, width: '180px' },
-                { title: '操作', key: 'actions', sortable: false, align: 'center', width: '240px' }
-            ],
+            headers: [],
 
             // 筛选条件
             platformFilter: [],
@@ -443,6 +447,19 @@ export default {
     },
 
     computed: {
+        // 动态表头
+        tableHeaders() {
+            return [
+                { title: this.tm('table.headers.title'), key: 'title', sortable: true },
+                { title: this.tm('table.headers.platform'), key: 'platform', sortable: true, width: '120px' },
+                { title: this.tm('table.headers.type'), key: 'messageType', sortable: true, width: '100px' },
+                { title: this.tm('table.headers.sessionId'), key: 'sessionId', sortable: true, width: '100px' },
+                { title: this.tm('table.headers.createdAt'), key: 'created_at', sortable: true, width: '180px' },
+                { title: this.tm('table.headers.updatedAt'), key: 'updated_at', sortable: true, width: '180px' },
+                { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, align: 'center', width: '240px' }
+            ];
+        },
+
         // 可用平台列表
         availablePlatforms() {
             const platforms = []
@@ -462,8 +479,8 @@ export default {
         // 可用消息类型列表
         messageTypeItems() {
             return [
-                { title: '群聊', value: 'GroupMessage' },
-                { title: '私聊', value: 'FriendMessage' },
+                { title: this.tm('messageTypes.group'), value: 'GroupMessage' },
+                { title: this.tm('messageTypes.friend'), value: 'FriendMessage' },
             ];
         },
 
@@ -492,7 +509,7 @@ export default {
         this.fetchConversations();
     },
 
-    _methods: {
+    methods: {
         // Monaco编辑器挂载后的回调
         onMonacoMounted(editor) {
             this.monacoEditor = editor;
@@ -572,9 +589,9 @@ export default {
         // 获取消息类型的显示文本
         getMessageTypeDisplay(messageType) {
             const typeMap = {
-                'GroupMessage': '群聊',
-                'FriendMessage': '私聊',
-                'default': '未知'
+                'GroupMessage': this.tm('messageTypes.group'),
+                'FriendMessage': this.tm('messageTypes.friend'),
+                'default': this.tm('messageTypes.unknown')
             };
 
             return typeMap[messageType] || typeMap.default;
@@ -620,7 +637,7 @@ export default {
 
                     if (!data || !data.conversations) {
                         console.error('API 返回数据格式不符合预期:', data);
-                        this.showErrorMessage('API 返回数据格式不符合预期');
+                        this.showErrorMessage(this.tm('messages.fetchError'));
                         return;
                     }
 
@@ -643,7 +660,7 @@ export default {
                         console.warn('API 响应中没有分页信息');
                     }
                 } else {
-                    this.showErrorMessage(response.data.message || '获取对话列表失败');
+                    this.showErrorMessage(response.data.message || this.tm('messages.fetchError'));
                 }
             } catch (error) {
                 console.error('获取对话列表出错:', error);
@@ -651,7 +668,7 @@ export default {
                     console.error('错误响应数据:', error.response.data);
                     console.error('错误状态码:', error.response.status);
                 }
-                this.showErrorMessage(error.response?.data?.message || error.message || '获取对话列表失败');
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.fetchError'));
             } finally {
                 // this.loading = false;
                 setTimeout(() => {
@@ -685,11 +702,11 @@ export default {
                     }
                     this.dialogView = true;
                 } else {
-                    this.showErrorMessage(response.data.message || '获取对话详情失败');
+                    this.showErrorMessage(response.data.message || this.tm('messages.historyError'));
                 }
             } catch (error) {
                 console.error('获取对话详情出错:', error);
-                this.showErrorMessage(error.response?.data?.message || error.message || '获取对话详情失败');
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.historyError'));
             } finally {
                 this.loading = false;
             }
@@ -707,7 +724,7 @@ export default {
                 try {
                     historyJson = JSON.parse(this.editedHistory);
                 } catch (e) {
-                    this.showErrorMessage('JSON格式错误，请检查您的输入');
+                    this.showErrorMessage(this.tm('messages.invalidJson'));
                     return;
                 }
 
@@ -719,14 +736,14 @@ export default {
 
                 if (response.data.status === "ok") {
                     this.conversationHistory = historyJson;
-                    this.showSuccessMessage('对话历史更新成功');
+                    this.showSuccessMessage(this.tm('messages.historySaveSuccess'));
                     this.isEditingHistory = false;
                 } else {
-                    this.showErrorMessage(response.data.message || '更新对话历史失败');
+                    this.showErrorMessage(response.data.message || this.tm('messages.historySaveError'));
                 }
             } catch (error) {
                 console.error('更新对话历史出错:', error);
-                this.showErrorMessage(error.response?.data?.message || error.message || '更新对话历史失败');
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.historySaveError'));
             } finally {
                 this.savingHistory = false;
             }
@@ -735,7 +752,7 @@ export default {
         // 关闭对话历史对话框
         closeHistoryDialog() {
             if (this.isEditingHistory) {
-                if (confirm('您有未保存的更改，确定要关闭吗？')) {
+                if (confirm(this.tm('dialogs.view.confirmClose'))) {
                     this.dialogView = false;
                 }
             } else {
@@ -772,15 +789,15 @@ export default {
                     }
 
                     this.dialogEdit = false;
-                    this.showSuccessMessage('对话信息更新成功');
+                    this.showSuccessMessage(this.tm('messages.saveSuccess'));
 
                     // 刷新数据
                     this.fetchConversations();
                 } else {
-                    this.showErrorMessage(response.data.message || '更新对话信息失败');
+                    this.showErrorMessage(response.data.message || this.tm('messages.saveError'));
                 }
             } catch (error) {
-                this.showErrorMessage(error.response?.data?.message || error.message || '更新对话信息失败');
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.saveError'));
             } finally {
                 this.loading = false;
             }
@@ -810,12 +827,12 @@ export default {
                     }
 
                     this.dialogDelete = false;
-                    this.showSuccessMessage('对话删除成功');
+                    this.showSuccessMessage(this.tm('messages.deleteSuccess'));
                 } else {
-                    this.showErrorMessage(response.data.message || '删除对话失败');
+                    this.showErrorMessage(response.data.message || this.tm('messages.deleteError'));
                 }
             } catch (error) {
-                this.showErrorMessage(error.response?.data?.message || error.message || '删除对话失败');
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.deleteError'));
             } finally {
                 this.loading = false;
             }
@@ -823,10 +840,11 @@ export default {
 
         // 格式化时间戳
         formatTimestamp(timestamp) {
-            if (!timestamp) return '未知时间';
+            if (!timestamp) return this.tm('status.unknown');
 
             const date = new Date(timestamp * 1000);
-            return new Intl.DateTimeFormat('zh-CN', {
+            const locale = this.locale || 'zh-CN';
+            return new Intl.DateTimeFormat(locale, {
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit',
@@ -860,7 +878,7 @@ export default {
             } else if (typeof content === 'string') {
                 // 处理字符串内容
                 final_content = content;
-            } else if (!final_content) return '空消息';
+            } else if (!final_content) return this.tm('status.emptyContent');
             // 使用marked处理Markdown格式
             return marked(final_content);
         },
@@ -878,13 +896,7 @@ export default {
             this.messageType = 'error';
             this.showMessage = true;
         }
-    },
-    get methods() {
-        return this._methods;
-    },
-    set methods(value) {
-        this._methods = value;
-    },
+    }
 }
 </script>
 

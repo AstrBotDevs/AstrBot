@@ -1,0 +1,18 @@
+{
+  "network": {
+    "title": "Network",
+    "githubProxy": {
+      "title": "GitHub Proxy Address",
+      "subtitle": "Set the GitHub proxy address used when downloading plugins or updating AstrBot. This is effective in mainland China's network environment. Can be customized, input takes effect in real time. All addresses do not guarantee stability. If errors occur when updating plugins/projects, please first check if the proxy address is working properly.",
+      "label": "Select GitHub Proxy Address"
+    }
+  },
+  "system": {
+    "title": "System",
+    "restart": {
+      "title": "Restart",
+      "subtitle": "Restart AstrBot",
+      "button": "Restart"
+    }
+  }
+} 

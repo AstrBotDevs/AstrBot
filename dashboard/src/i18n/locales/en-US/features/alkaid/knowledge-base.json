@@ -1,0 +1,136 @@
+{
+  "title": "Knowledge Base",
+  "subtitle": "Manage and query knowledge base content",
+  "upload": {
+    "title": "Upload Documents",
+    "selectFiles": "Select Files",
+    "supportedFormats": "Supported Formats",
+    "dragDrop": "Drag files here",
+    "processing": "Processing...",
+    "success": "Upload Successful",
+    "error": "Upload Failed"
+  },
+  "search": {
+    "placeholder": "Search knowledge base...",
+    "results": "Search Results",
+    "noResults": "No relevant content found",
+    "searching": "Searching..."
+  },
+  "documents": {
+    "title": "Document List",
+    "name": "Document Name",
+    "size": "Size",
+    "uploadTime": "Upload Time",
+    "status": "Status",
+    "actions": "Actions"
+  },
+  "management": {
+    "delete": "Delete",
+    "preview": "Preview",
+    "download": "Download",
+    "reindex": "Reindex"
+  },
+  "notInstalled": {
+    "title": "Knowledge base plugin is not installed yet",
+    "install": "Install now"
+  },
+  "empty": {
+    "title": "No knowledge base yet, create one now! 🙂",
+    "create": "Create Knowledge Base"
+  },
+  "list": {
+    "title": "Knowledge Base List",
+    "create": "Create Knowledge Base",
+    "config": "Configure",
+    "knowledgeCount": "knowledge items",
+    "tips": "Tips: Learn how to use through /kb command in chat page!"
+  },
+  "createDialog": {
+    "title": "Create New Knowledge Base",
+    "nameLabel": "Knowledge Base Name",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Brief description of the knowledge base...",
+    "embeddingModelLabel": "Embedding Model",
+    "providerInfo": "Provider ID: {id} | Embedding Model Dimensions: {dimensions}",
+    "tips": "Tips: Once you choose an embedding model for a knowledge base, please do not modify the provider's model or vector dimension information, otherwise it will seriously affect the recall rate of the knowledge base or even cause errors.",
+    "cancel": "Cancel",
+    "create": "Create"
+  },
+  "emojiPicker": {
+    "title": "Select Emoji",
+    "close": "Close",
+    "categories": {
+      "emotions": "Smileys and Emotions",
+      "animals": "Animals and Nature",
+      "food": "Food and Drink",
+      "activities": "Activities and Objects",
+      "travel": "Travel and Places",
+      "symbols": "Symbols and Flags"
+    }
+  },
+  "contentDialog": {
+    "title": "Knowledge Base Management",
+    "embeddingModel": "Embedding Model",
+    "vectorDimension": "Vector Dimension",
+    "usage": "Usage: Enter \"/kb use {name}\" in the chat page",
+    "tabs": {
+      "upload": "Upload Files",
+      "search": "Search Content"
+    }
+  },
+  "upload": {
+    "title": "Upload Files to Knowledge Base",
+    "subtitle": "Supports txt, pdf, word, excel and other formats",
+    "dropzone": "Drag and drop files here or click to upload",
+    "chunkSettings": {
+      "title": "Chunk Settings",
+      "tooltip": "Chunk size determines the size of each text block, overlap length determines the overlap between adjacent text blocks.\nSmaller chunks are more precise but increase quantity, appropriate overlap can improve retrieval accuracy.",
+      "chunkSizeLabel": "Chunk Size",
+      "chunkSizeHint": "Control the size of each text block, leave empty to use default value",
+      "overlapLabel": "Overlap Length",
+      "overlapHint": "Control the overlap between adjacent text blocks, leave empty to use default value"
+    },
+    "upload": "Upload File",
+    "uploading": "Uploading..."
+  },
+  "search": {
+    "queryLabel": "Search Knowledge Base Content",
+    "queryPlaceholder": "Enter keywords to search knowledge base content...",
+    "resultCountLabel": "Result Count",
+    "searching": "Searching...",
+    "resultsTitle": "Search Results",
+    "relevance": "Relevance",
+    "noResults": "No matching content found"
+  },
+  "deleteDialog": {
+    "title": "Confirm Delete",
+    "confirmText": "Are you sure you want to delete knowledge base {name}?",
+    "warning": "This operation is irreversible, all knowledge base content will be permanently deleted.",
+    "cancel": "Cancel",
+    "delete": "Delete"
+  },
+  "messages": {
+    "pluginNotAvailable": "Plugin not installed or unavailable",
+    "checkPluginFailed": "Failed to check plugin",
+    "installFailed": "Installation failed",
+    "installPluginFailed": "Failed to install plugin",
+    "getKnowledgeBaseListFailed": "Failed to get knowledge base list",
+    "knowledgeBaseCreated": "Knowledge base created successfully",
+    "createFailed": "Creation failed",
+    "createKnowledgeBaseFailed": "Failed to create knowledge base",
+    "pleaseEnterKnowledgeBaseName": "Please enter knowledge base name",
+    "pleaseSelectFile": "Please select a file first",
+    "operationSuccess": "Operation successful: {message}",
+    "uploadFailed": "Upload failed",
+    "fileUploadFailed": "File upload failed",
+    "pleaseEnterSearchContent": "Please enter search content",
+    "noMatchingContent": "No matching content found",
+    "searchFailed": "Search failed",
+    "searchKnowledgeBaseFailed": "Failed to search knowledge base",
+    "deleteTargetNotExists": "Delete target does not exist",
+    "knowledgeBaseDeleted": "Knowledge base deleted successfully",
+    "deleteFailed": "Deletion failed",
+    "deleteKnowledgeBaseFailed": "Failed to delete knowledge base",
+    "getEmbeddingModelListFailed": "Failed to get embedding model list"
+  }
+} 

@@ -3,8 +3,8 @@
     <v-card-text>
       <div class="chart-header">
         <div>
-          <div class="chart-title">消息趋势分析</div>
-          <div class="chart-subtitle">跟踪消息数量随时间的变化</div>
+          <div class="chart-title">{{ t('charts.messageTrend.title') }}</div>
+          <div class="chart-subtitle">{{ t('charts.messageTrend.subtitle') }}</div>
         </div>
         
         <v-select 
@@ -32,17 +32,17 @@
       
       <div class="chart-stats">
         <div class="stat-box">
-          <div class="stat-label">总消息数</div>
+          <div class="stat-label">{{ t('charts.messageTrend.totalMessages') }}</div>
           <div class="stat-number">{{ totalMessages }}</div>
         </div>
         
         <div class="stat-box">
-          <div class="stat-label">平均每天</div>
+          <div class="stat-label">{{ t('charts.messageTrend.dailyAverage') }}</div>
           <div class="stat-number">{{ dailyAverage }}</div>
         </div>
         
         <div class="stat-box" :class="{'trend-up': growthRate > 0, 'trend-down': growthRate < 0}">
-          <div class="stat-label">增长率</div>
+          <div class="stat-label">{{ t('charts.messageTrend.growthRate') }}</div>
           <div class="stat-number">
             <v-icon size="small" :icon="growthRate > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'"></v-icon>
             {{ Math.abs(growthRate) }}%
@@ -53,7 +53,7 @@
       <div class="chart-container">
         <div v-if="loading" class="loading-overlay">
           <v-progress-circular indeterminate color="primary"></v-progress-circular>
-          <div class="loading-text">加载中...</div>
+          <div class="loading-text">{{ t('status.loading') }}</div>
         </div>
         <apexchart 
           type="area" 
@@ -70,22 +70,23 @@
 <script>
 import axios from 'axios';
 import {useCustomizerStore} from "@/stores/customizer";
+import { useModuleI18n } from '@/i18n/composables';
 
 export default {
   name: 'MessageStat',
   props: ['stat'],
-  data: () => ({
+  setup() {
+    const { tm: t } = useModuleI18n('features/dashboard');
+    return { t };
+  },
+  data() {
+    return {
     totalMessages: '0',
     dailyAverage: '0',
     growthRate: 0,
     loading: false,
-    selectedTimeRange: { label: '过去 1 天', value: 86400 },
-    timeRanges: [
-      { label: '过去 1 天', value: 86400 },
-      { label: '过去 3 天', value: 259200 },
-      { label: '过去 7 天', value: 604800 },
-      { label: '过去 30 天', value: 2592000 },
-    ],
+    selectedTimeRange: null,
+    timeRanges: [],
     
     chartOptions: {
       chart: {
@@ -136,14 +137,14 @@ export default {
         },
         y: {
           title: {
-            formatter: () => '消息条数 '
+            formatter: () => ''
           }
         },
       },
       xaxis: {
         type: 'datetime',
         title: {
-          text: '时间'
+          text: ''
         },
         labels: {
           formatter: function (value) {
@@ -161,7 +162,7 @@ export default {
       },
       yaxis: {
         title: {
-          text: '消息条数'
+          text: ''
         },
         min: function(min) {
           return min < 10 ? 0 : Math.floor(min * 0.8);
@@ -185,15 +186,31 @@ export default {
     
     chartSeries: [
       {
-        name: '消息条数',
+        name: '',
         data: []
       }
     ],
     
     messageTimeSeries: []
-  }),
+    };
+  },
 
   mounted() {
+    // 初始化时间范围选项
+    this.timeRanges = [
+      { label: this.t('charts.messageTrend.timeRanges.1day'), value: 86400 },
+      { label: this.t('charts.messageTrend.timeRanges.3days'), value: 259200 },
+      { label: this.t('charts.messageTrend.timeRanges.1week'), value: 604800 },
+      { label: this.t('charts.messageTrend.timeRanges.1month'), value: 2592000 },
+    ];
+    this.selectedTimeRange = this.timeRanges[0];
+    
+    // 设置图表翻译文本
+    this.chartOptions.tooltip.y.title.formatter = () => this.t('charts.messageTrend.messageCount') + ' ';
+    this.chartOptions.xaxis.title.text = this.t('charts.messageTrend.timeLabel');
+    this.chartOptions.yaxis.title.text = this.t('charts.messageTrend.messageCount');
+    this.chartSeries[0].name = this.t('charts.messageTrend.messageCount');
+    
     // 初始加载
     this.fetchMessageSeries();
   },
@@ -215,7 +232,7 @@ export default {
           this.processTimeSeriesData();
         }
       } catch (error) {
-        console.error('获取消息趋势数据失败:', error);
+        console.error(this.t('status.dataError'), error);
       } finally {
         this.loading = false;
       }

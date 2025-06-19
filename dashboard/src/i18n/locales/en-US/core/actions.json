@@ -1,0 +1,22 @@
+{
+  "create": "Create",
+  "read": "Read",
+  "update": "Update",
+  "delete": "Delete",
+  "search": "Search",
+  "filter": "Filter",
+  "sort": "Sort",
+  "export": "Export",
+  "import": "Import",
+  "backup": "Backup",
+  "restore": "Restore",
+  "copy": "Copy",
+  "paste": "Paste",
+  "cut": "Cut",
+  "undo": "Undo",
+  "redo": "Redo",
+  "refresh": "Refresh",
+  "submit": "Submit",
+  "reset": "Reset",
+  "clear": "Clear"
+} 

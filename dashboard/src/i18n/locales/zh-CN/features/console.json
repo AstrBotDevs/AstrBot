@@ -1,0 +1,15 @@
+{
+  "title": "控制台",
+  "autoScroll": {
+    "enabled": "自动滚动已开启",
+    "disabled": "自动滚动已关闭"
+  },
+  "pipInstall": {
+    "button": "安装 pip 库",
+    "dialogTitle": "安装 Pip 库",
+    "packageLabel": "*库名，如 llmtuner",
+    "mirrorLabel": "强制 PyPI 软件仓库链接（可选）",
+    "mirrorHint": "强制 PyPI 软件仓库链接 > 配置项 `PyPI 软件仓库地址`",
+    "installButton": "安装"
+  }
+}

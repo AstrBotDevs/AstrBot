@@ -7,11 +7,11 @@
         </div>
         
         <div class="stat-content">
-          <div class="stat-title">消息平台</div>
+          <div class="stat-title">{{ t('stats.onlinePlatform.title') }}</div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">{{ stat.platform_count || 0 }}</h2>
           </div>
-          <div class="stat-subtitle">已连接的消息平台数量</div>
+          <div class="stat-subtitle">{{ t('stats.onlinePlatform.subtitle') }}</div>
         </div>
       </div>
     </v-card-text>
@@ -19,9 +19,15 @@
 </template>
 
 <script>
+import { useModuleI18n } from '@/i18n/composables';
+
 export default {
   name: 'OnlinePlatform',
-  props: ['stat']
+  props: ['stat'],
+  setup() {
+    const { tm: t } = useModuleI18n('features/dashboard');
+    return { t };
+  }
 };
 </script>
 

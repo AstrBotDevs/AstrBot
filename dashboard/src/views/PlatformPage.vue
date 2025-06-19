@@ -5,10 +5,10 @@
       <v-row>
         <v-col cols="12">
           <h1 class="text-h4 font-weight-bold mb-2">
-            <v-icon size="x-large" color="primary" class="me-2">mdi-connection</v-icon>平台适配器管理
+            <v-icon size="x-large" color="primary" class="me-2">mdi-connection</v-icon>{{ tm('title') }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
-            管理机器人的平台适配器，连接到不同的聊天平台
+            {{ tm('subtitle') }}
           </p>
         </v-col>
       </v-row>
@@ -17,13 +17,13 @@
       <v-card class="mb-6" elevation="2">
         <v-card-title class="d-flex align-center py-3 px-4">
           <v-icon color="primary" class="me-2">mdi-apps</v-icon>
-          <span class="text-h6">平台适配器</span>
+          <span class="text-h6">{{ tm('adapters') }}</span>
           <v-chip color="info" size="small" class="ml-2">{{ config_data.platform?.length || 0 }}</v-chip>
           <v-spacer></v-spacer>
           <v-menu>
             <template v-slot:activator="{ props }">
               <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" v-bind="props">
-                新增适配器
+                {{ tm('addAdapter') }}
               </v-btn>
             </template>
             <v-list @update:selected="addFromDefaultConfigTmpl($event)">
@@ -47,7 +47,7 @@
             title-field="id" 
             enabled-field="enable"
             empty-icon="mdi-connection"
-            empty-text="暂无平台适配器，点击 新增适配器 添加"
+            :empty-text="tm('emptyText')"
             @toggle-enabled="platformStatusChange"
             @delete="deletePlatform"
             @edit="editPlatform"
@@ -56,13 +56,13 @@
               <div class="d-flex align-center mb-2">
                 <v-icon size="small" color="grey" class="me-2">mdi-tag</v-icon>
                 <span class="text-caption text-medium-emphasis">
-                  适配器类型: 
+                  {{ tm('details.adapterType') }}: 
                   <v-chip size="x-small" color="primary" class="ml-1">{{ item.type }}</v-chip>
                 </span>
               </div>
               <div v-if="item.token" class="d-flex align-center mb-2">
                 <v-icon size="small" color="grey" class="me-2">mdi-key</v-icon>
-                <span class="text-caption text-medium-emphasis">Token: ••••••••</span>
+                <span class="text-caption text-medium-emphasis">{{ tm('details.token') }}: ••••••••</span>
               </div>
               <div v-if="item.description" class="d-flex align-center">
                 <v-icon size="small" color="grey" class="me-2">mdi-information-outline</v-icon>
@@ -77,10 +77,10 @@
       <v-card elevation="2">
         <v-card-title class="d-flex align-center py-3 px-4">
           <v-icon color="primary" class="me-2">mdi-console-line</v-icon>
-          <span class="text-h6">平台日志</span>
+          <span class="text-h6">{{ tm('logs.title') }}</span>
           <v-spacer></v-spacer>
           <v-btn variant="text" color="primary" @click="showConsole = !showConsole">
-            {{ showConsole ? '收起' : '展开' }}
+            {{ showConsole ? tm('logs.collapse') : tm('logs.expand') }}
             <v-icon>{{ showConsole ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
           </v-btn>
         </v-card-title>
@@ -100,7 +100,7 @@
       <v-card>
         <v-card-title class="bg-primary text-white py-3">
           <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
-          <span>{{ updatingMode ? '编辑' : '新增' }} {{ newSelectedPlatformName }} 平台适配器</span>
+          <span>{{ updatingMode ? tm('dialog.edit') : tm('dialog.add') }} {{ newSelectedPlatformName }} {{ tm('dialog.adapter') }}</span>
         </v-card-title>
         
         <v-card-text class="py-4">
@@ -113,7 +113,7 @@
             <v-col cols="12" md="4" class="d-flex flex-column align-end">
               <v-btn :loading="iframeLoading" @click="refreshIframe" variant="tonal" color="primary">
                 <v-icon>mdi-refresh</v-icon>
-                刷新
+                {{ tm('dialog.refresh') }}
               </v-btn>
               <iframe v-show="!iframeLoading"
                 :src="store.getTutorialLink(newSelectedPlatformConfig.type)"
@@ -128,10 +128,10 @@
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showPlatformCfg = false" :disabled="loading">
-            取消
+            {{ tm('dialog.cancel') }}
           </v-btn>
           <v-btn color="primary" @click="newPlatform" :loading="loading">
-            保存
+            {{ tm('dialog.save') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -154,6 +154,7 @@ import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCardGrid from '@/components/shared/ItemCardGrid.vue';
 import { useCommonStore } from '@/stores/common';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 
 export default {
   name: 'PlatformPage',
@@ -162,6 +163,27 @@ export default {
     WaitingForRestart,
     ConsoleDisplayer,
     ItemCardGrid
+  },
+  setup() {
+    const { t } = useI18n();
+    const { tm } = useModuleI18n('features/platform');
+    
+    return {
+      t,
+      tm
+    };
+  },
+  computed: {
+    // 安全访问翻译的计算属性
+    messages() {
+      return {
+        updateSuccess: this.tm('messages.updateSuccess'),
+        addSuccess: this.tm('messages.addSuccess'),
+        deleteSuccess: this.tm('messages.deleteSuccess'),
+        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
+        deleteConfirm: this.tm('messages.deleteConfirm')
+      };
+    }
   },
   data() {
     return {
@@ -235,7 +257,7 @@ export default {
           this.showPlatformCfg = false;
           this.getConfig();
           this.$refs.wfr.check();
-          this.showSuccess(res.data.message || "更新成功!");
+          this.showSuccess(res.data.message || this.messages.updateSuccess);
         }).catch((err) => {
           this.loading = false;
           this.showError(err.response?.data?.message || err.message);
@@ -246,7 +268,7 @@ export default {
           this.loading = false;
           this.showPlatformCfg = false;
           this.getConfig();
-          this.showSuccess(res.data.message || "添加成功!");
+          this.showSuccess(res.data.message || this.messages.addSuccess);
         }).catch((err) => {
           this.loading = false;
           this.showError(err.response?.data?.message || err.message);
@@ -255,11 +277,11 @@ export default {
     },
 
     deletePlatform(platform) {
-      if (confirm(`确定要删除平台适配器 ${platform.id} 吗?`)) {
+      if (confirm(`${this.messages.deleteConfirm} ${platform.id}?`)) {
         axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
           this.getConfig();
           this.$refs.wfr.check();
-          this.showSuccess(res.data.message || "删除成功!");
+          this.showSuccess(res.data.message || this.messages.deleteSuccess);
         }).catch((err) => {
           this.showError(err.response?.data?.message || err.message);
         });
@@ -275,7 +297,7 @@ export default {
       }).then((res) => {
         this.getConfig();
         this.$refs.wfr.check();
-        this.showSuccess(res.data.message || "状态更新成功!");
+        this.showSuccess(res.data.message || this.messages.statusUpdateSuccess);
       }).catch((err) => {
         platform.enable = !platform.enable; // 发生错误时回滚状态
         this.showError(err.response?.data?.message || err.message);

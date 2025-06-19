@@ -7,7 +7,7 @@
         </div>
         
         <div class="stat-content">
-          <div class="stat-title">内存占用</div>
+          <div class="stat-title">{{ t('stats.memoryUsage.title') }}</div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">{{ stat.memory?.process || 0 }} <span class="memory-unit">MiB / {{ stat.memory?.system || 0 }} MiB</span></h2>
             <v-chip :color="memoryStatus.color" size="x-small" class="status-chip">
@@ -19,7 +19,7 @@
       
       <div class="metrics-container">
         <div class="metric-item">
-          <div class="metric-label">CPU 负载</div>
+          <div class="metric-label">{{ t('stats.memoryUsage.cpuLoad') }}</div>
           <div class="metric-value">{{ stat.cpu_percent || '0' }}%</div>
         </div>
       </div>
@@ -28,9 +28,15 @@
 </template>
 
 <script>
+import { useModuleI18n } from '@/i18n/composables';
+
 export default {
   name: 'MemoryUsage',
   props: ['stat'],
+  setup() {
+    const { tm: t } = useModuleI18n('features/dashboard');
+    return { t };
+  },
   computed: {
     memoryPercentage() {
       if (!this.stat.memory || !this.stat.memory.process || !this.stat.memory.system) return 0;
@@ -39,11 +45,11 @@ export default {
     memoryStatus() {
       const percentage = this.memoryPercentage;
       if (percentage < 30) {
-        return { color: 'success', label: '良好' };
+        return { color: 'success', label: this.t('stats.memoryUsage.status.good') };
       } else if (percentage < 70) {
-        return { color: 'warning', label: '正常' };
+        return { color: 'warning', label: this.t('stats.memoryUsage.status.normal') };
       } else {
-        return { color: 'error', label: '偏高' };
+        return { color: 'error', label: this.t('stats.memoryUsage.status.high') };
       }
     }
   }

@@ -1,0 +1,18 @@
+{
+  "dashboard": "统计",
+  "platforms": "消息平台",
+  "providers": "服务提供商",
+  "toolUse": "MCP",
+  "config": "配置文件",
+  "extension": "插件管理",
+  "extensionMarketplace": "插件市场",
+  "chat": "聊天",
+  "conversation": "对话数据库",
+  "console": "控制台",
+  "alkaid": "Alkaid",
+  "about": "关于",
+  "settings": "设置",
+  "documentation": "官方文档",
+  "github": "GitHub",
+  "drag": "拖拽"
+} 

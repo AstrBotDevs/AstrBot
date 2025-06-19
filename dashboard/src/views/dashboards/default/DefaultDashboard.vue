@@ -1,8 +1,8 @@
 <template>
   <div class="dashboard-container">
     <div class="dashboard-header">
-      <h1 class="dashboard-title">控制台</h1>
-      <div class="dashboard-subtitle">实时监控和统计数据</div>
+      <h1 class="dashboard-title">{{ t('title') }}</h1>
+      <div class="dashboard-subtitle">{{ t('subtitle') }}</div>
     </div>
     
     <v-slide-y-transition>
@@ -58,7 +58,7 @@
     </v-row>
     <div class="dashboard-footer">
       <v-chip size="small" color="primary" variant="flat" prepend-icon="mdi-refresh">
-        最后更新: {{ lastUpdated }}
+        {{ t('lastUpdate') }}: {{ lastUpdated }}
       </v-chip>
       <v-btn 
         icon="mdi-refresh" 
@@ -82,6 +82,7 @@ import MemoryUsage from './components/MemoryUsage.vue';
 import MessageStat from './components/MessageStat.vue';
 import PlatformStat from './components/PlatformStat.vue';
 import axios from 'axios';
+import { useModuleI18n } from '@/i18n/composables';
 
 export default {
   name: 'DefaultDashboard',
@@ -93,17 +94,24 @@ export default {
     MessageStat,
     PlatformStat,
   },
-  data: () => ({
-    stat: {},
-    noticeTitle: '',
-    noticeContent: '',
-    noticeType: '',
-    lastUpdated: '加载中...',
-    refreshInterval: null,
-    isRefreshing: false
-  }),
+  setup() {
+    const { tm: t } = useModuleI18n('features/dashboard');
+    return { t };
+  },
+  data() {
+    return {
+      stat: {},
+      noticeTitle: '',
+      noticeContent: '',
+      noticeType: '',
+      lastUpdated: '',
+      refreshInterval: null,
+      isRefreshing: false
+    };
+  },
 
   mounted() {
+    this.lastUpdated = this.t('status.loading');
     this.fetchData();
     this.fetchNotice();
     
@@ -129,7 +137,7 @@ export default {
         this.lastUpdated = new Date().toLocaleTimeString();
         console.log('Dashboard data:', this.stat);
       } catch (error) {
-        console.error('获取数据失败:', error);
+        console.error(this.t('status.dataError'), error);
       } finally {
         this.isRefreshing = false;
       }
@@ -145,7 +153,7 @@ export default {
           this.noticeType = data['dashboard-notice'].type;
         }
       }).catch(error => {
-        console.error('获取公告失败:', error);
+        console.error(this.t('status.noticeError'), error);
       });
     }
   }

@@ -1,23 +1,3 @@
-<script setup>
-import { router } from '@/router';
-import axios from 'axios';
-import { marked } from 'marked';
-import { ref } from 'vue';
-import { defineProps } from 'vue';
-import { useCustomizerStore } from '@/stores/customizer';
-
-marked.setOptions({
-    breaks: true
-});
-
-const props = defineProps({
-    chatboxMode: {
-        type: Boolean,
-        default: false
-    }
-});
-</script>
-
 <template>
     <v-card class="chat-page-card">
         <v-card-text class="chat-page-container">
@@ -25,7 +5,7 @@ const props = defineProps({
                 <div class="sidebar-panel" :class="{ 'sidebar-collapsed': sidebarCollapsed }"
                     @mouseenter="handleSidebarMouseEnter" @mouseleave="handleSidebarMouseLeave">
 
-                    <div style="display: flex; align-items: center; justify-content: center; padding: 16px; padding-bottom: 0px;" v-if="props.chatboxMode">
+                    <div style="display: flex; align-items: center; justify-content: center; padding: 16px; padding-bottom: 0px;" v-if="chatboxMode">
                         <img width="50" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
                         <span v-if="!sidebarCollapsed" style="font-weight: 1000; font-size: 26px; margin-left: 8px;" class="text-secondary">AstrBot</span>
                     </div>
@@ -41,7 +21,7 @@ const props = defineProps({
 
                     <div style="padding: 16px; padding-top: 8px;">
                         <v-btn block variant="text" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus" style="box-shadow: 0 1px 2px rgba(0,0,0,0.1); background-color: transparent !important; border-radius: 4px;">创建对话</v-btn>
+                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus" style="box-shadow: 0 1px 2px rgba(0,0,0,0.1); background-color: transparent !important; border-radius: 4px;">{{ tm('actions.newChat') }}</v-btn>
                         <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currCid" v-if="sidebarCollapsed"
                             elevation="0"></v-btn>
                     </div>
@@ -57,7 +37,7 @@ const props = defineProps({
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                     rounded="lg" class="conversation-item" active-color="secondary">
                                     <v-list-item-title v-if="!sidebarCollapsed" class="conversation-title">{{ item.title
-                                        || '新对话' }}</v-list-item-title>
+                                        || tm('conversation.newConversation') }}</v-list-item-title>
                                     <!-- <v-list-item-subtitle v-if="!sidebarCollapsed" class="timestamp">{{
                                         formatDate(item.updated_at)
                                         }}</v-list-item-subtitle> -->
@@ -74,7 +54,7 @@ const props = defineProps({
                             <div class="no-conversations" v-if="conversations.length === 0">
                                 <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
                                 <div class="no-conversations-text" v-if="!sidebarCollapsed || sidebarHoverExpanded">
-                                    暂无对话历史</div>
+                                    {{ tm('conversation.noHistory') }}</div>
                             </div>
                         </v-fade-transition>
                     </div>
@@ -85,7 +65,7 @@ const props = defineProps({
                     <div style="padding: 16px;" :class="{ 'fade-in': sidebarHoverExpanded }"
                         v-if="!sidebarCollapsed">
                         <div class="sidebar-section-title">
-                            系统状态
+                            {{ tm('conversation.systemStatus') }}
                         </div>
                         <div class="status-chips">
                             <v-chip class="status-chip" :color="status?.llm_enabled ? 'primary' : 'grey-lighten-2'"
@@ -94,7 +74,7 @@ const props = defineProps({
                                     <v-icon :icon="status?.llm_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
                                         size="x-small"></v-icon>
                                 </template>
-                                <span>LLM 服务</span>
+                                <span>{{ tm('conversation.llmService') }}</span>
                             </v-chip>
 
                             <v-chip class="status-chip" :color="status?.stt_enabled ? 'success' : 'grey-lighten-2'"
@@ -103,7 +83,7 @@ const props = defineProps({
                                     <v-icon :icon="status?.stt_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
                                         size="x-small"></v-icon>
                                 </template>
-                                <span>语音转文本</span>
+                                <span>{{ tm('conversation.speechToText') }}</span>
                             </v-chip>
                         </div>
 
@@ -119,7 +99,7 @@ const props = defineProps({
                                 <v-btn variant="outlined" rounded="sm" class="delete-chat-btn"
                                     @click="deleteConversation(currCid)" color="error" density="comfortable" size="small">
                                     <v-icon start size="small">mdi-delete</v-icon>
-                                    删除此对话
+                                    {{ tm('actions.deleteChat') }}
                                 </v-btn>
                             </div>
                         </transition>
@@ -131,19 +111,25 @@ const props = defineProps({
 
                     <div class="conversation-header fade-in">
                         <div class="conversation-header-content" v-if="currCid && getCurrentConversation">
-                            <h2 class="conversation-header-title">{{ getCurrentConversation.title || '新对话' }}</h2>
+                            <h2 class="conversation-header-title">{{ getCurrentConversation.title || tm('conversation.newConversation') }}</h2>
                             <div class="conversation-header-time">{{ formatDate(getCurrentConversation.updated_at) }}</div>
                         </div>
                         <div class="conversation-header-actions">
                             <!-- router 推送到 /chatbox -->
-                            <v-tooltip text="全屏模式" v-if="!props.chatboxMode">
+                            <v-tooltip :text="tm('actions.fullscreen')" v-if="!chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-icon v-bind="props" @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')"
                                         class="fullscreen-icon">mdi-fullscreen</v-icon>
                                 </template>
                             </v-tooltip>
+                            <!-- 语言切换按钮 -->
+                            <v-tooltip :text="t('core.common.language')" v-if="chatboxMode">
+                                <template v-slot:activator="{ props }">
+                                    <LanguageSwitcher variant="chatbox" />
+                                </template>
+                            </v-tooltip>
                             <!-- 主题切换按钮 -->
-                            <v-tooltip :text="isDark ? '切换到日间模式' : '切换到夜间模式'" v-if="props.chatboxMode">
+                            <v-tooltip :text="isDark ? tm('modes.lightMode') : tm('modes.darkMode')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon" variant="text">
                                         <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
@@ -151,7 +137,7 @@ const props = defineProps({
                                 </template>
                             </v-tooltip>
                             <!-- router 推送到 /chat -->
-                            <v-tooltip text="退出全屏" v-if="props.chatboxMode">
+                            <v-tooltip :text="tm('actions.exitFullscreen')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-icon v-bind="props" @click="router.push(currCid ? `/chat/${currCid}` : '/chat')"
                                         class="fullscreen-icon">mdi-fullscreen-exit</v-icon>
@@ -169,19 +155,19 @@ const props = defineProps({
                                 <span class="bot-name">AstrBot ⭐</span>
                             </div>
                             <div class="welcome-hint">
-                                <span>输入</span>
+                                <span>{{ t('core.common.type') }}</span>
                                 <code>help</code>
-                                <span>获取帮助 😊</span>
+                                <span>{{ tm('shortcuts.help') }} 😊</span>
                             </div>
                             <div class="welcome-hint">
-                                <span>长按</span>
-                                <code>Ctrl</code>
-                                <span>录制语音 🎤</span>
+                                <span>{{ t('core.common.longPress') }}</span>
+                                <code>Ctrl + B</code>
+                                <span>{{ tm('shortcuts.voiceRecord') }} 🎤</span>
                             </div>
                             <div class="welcome-hint">
-                                <span>按</span>
+                                <span>{{ t('core.common.press') }}</span>
                                 <code>Ctrl + V</code>
-                                <span>粘贴图片 🏞️</span>
+                                <span>{{ tm('shortcuts.pasteImage') }} 🏞️</span>
                             </div>
                         </div>
 
@@ -205,7 +191,7 @@ const props = defineProps({
                                         <div class="audio-attachment" v-if="msg.audio_url && msg.audio_url.length > 0">
                                             <audio controls class="audio-player">
                                                 <source :src="msg.audio_url" type="audio/wav">
-                                                您的浏览器不支持音频播放。
+                                                {{ t('messages.errors.browser.audioNotSupported') }}
                                             </audio>
                                         </div>
                                     </div>
@@ -230,7 +216,7 @@ const props = defineProps({
                     <!-- 输入区域 -->
                     <div class="input-area fade-in">
                         <v-text-field autocomplete="off" id="input-field" variant="outlined" v-model="prompt"
-                            :label="inputFieldLabel" placeholder="开始输入..." :loading="loadingChat"
+                            :label="inputFieldLabel" :placeholder="tm('input.placeholder')" :loading="loadingChat"
                             clear-icon="mdi-close-circle" clearable @click:clear="clearMessage" class="message-input"
                             @keydown="handleInputKeyDown" hide-details>
                             <template v-slot:loader>
@@ -239,7 +225,7 @@ const props = defineProps({
                             </template>
 
                             <template v-slot:append>
-                                <v-tooltip text="发送">
+                                <v-tooltip :text="tm('input.send')">
                                     <template v-slot:activator="{ props }">
                                         <v-btn v-bind="props" @click="sendMessage" class="send-btn" icon="mdi-send"
                                             variant="text" color="deep-purple"
@@ -247,7 +233,7 @@ const props = defineProps({
                                     </template>
                                 </v-tooltip>
 
-                                <v-tooltip text="语音输入">
+                                <v-tooltip :text="tm('input.voice')">
                                     <template v-slot:activator="{ props }">
                                         <v-btn v-bind="props" @click="isRecording ? stopRecording() : startRecording()"
                                             class="record-btn"
@@ -269,7 +255,7 @@ const props = defineProps({
                             <div v-if="stagedAudioUrl" class="audio-preview">
                                 <v-chip color="deep-purple-lighten-4" class="audio-chip">
                                     <v-icon start icon="mdi-microphone" size="small"></v-icon>
-                                    新录音
+                                    {{ tm('voice.recording') }}
                                 </v-chip>
                                 <v-btn @click="removeAudio" class="remove-attachment-btn" icon="mdi-close" size="small"
                                     color="error" variant="text" />
@@ -279,29 +265,129 @@ const props = defineProps({
                 </div>
             </div>
         </v-card-text>
-    </v-card>
-
+    </v-card>    
     <!-- 编辑对话标题对话框 -->
     <v-dialog v-model="editTitleDialog" max-width="400">
         <v-card>
-            <v-card-title class="dialog-title">编辑对话标题</v-card-title>
+            <v-card-title class="dialog-title">{{ tm('actions.editTitle') }}</v-card-title>
             <v-card-text>
-                <v-text-field v-model="editingTitle" label="对话标题" variant="outlined" hide-details class="mt-2"
+                                    <v-text-field v-model="editingTitle" :label="tm('conversation.newConversation')" variant="outlined" hide-details class="mt-2"
                     @keyup.enter="saveTitle" autofocus />
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
-                <v-btn text @click="editTitleDialog = false" color="grey-darken-1">取消</v-btn>
-                <v-btn text @click="saveTitle" color="primary">保存</v-btn>
+                <v-btn text @click="editTitleDialog = false" color="grey-darken-1">{{ t('core.common.cancel') }}</v-btn>
+                <v-btn text @click="saveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>    <!-- 连接冲突提示对话框 -->
+    <v-dialog v-model="connectionConflictDialog" max-width="600" persistent>
+        <v-card class="rounded-lg">            
+            <v-toolbar color="primary" density="comfortable" flat>
+                <v-icon color="white" class="ml-4 mr-2">mdi-information-outline</v-icon>
+                <v-toolbar-title class="text-white">{{ tm('connection.title') }}</v-toolbar-title>
+                <v-spacer></v-spacer>
+                <v-btn icon @click="connectionConflictDialog = false" variant="text" color="white">
+                    <v-icon>mdi-close</v-icon>
+                </v-btn>
+            </v-toolbar>
+
+            <v-card-text class="pa-6">
+                <div class="text-body-1 mb-4">
+                    {{ tm('connection.message') }}
+                </div>
+                
+                <v-alert 
+                    type="info" 
+                    variant="tonal" 
+                    class="mb-4"
+                    icon="mdi-lightbulb-outline"
+                >
+                    <div class="text-body-2 mb-2">
+                        <strong>{{ tm('connection.reasons') }}</strong>
+                    </div>
+                    <ul class="ml-4">
+                        <li class="mb-1">{{ tm('connection.reasonWindowResize') }}</li>
+                        <li class="mb-1">{{ tm('connection.reasonMultipleTabs') }}</li>
+                        <li class="mb-1">{{ tm('connection.reasonNetworkIssue') }}</li>
+                    </ul>
+                </v-alert>
+
+                <v-alert 
+                    type="warning" 
+                    variant="tonal" 
+                    icon="mdi-alert-circle-outline"
+                    class="mb-0"
+                >
+                    <div class="text-body-2">
+                        {{ tm('connection.notice') }}
+                    </div>
+                </v-alert>
+            </v-card-text>
+
+            <v-card-actions class="px-6 pb-4">
+                <v-spacer></v-spacer>
+                <v-btn 
+                    color="primary" 
+                    variant="elevated"
+                    @click="connectionConflictDialog = false"
+                    class="px-6"
+                >
+                    {{ tm('connection.understand') }}
+                </v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
+
+    <!-- 连接状态消息提示 -->
+    <v-snackbar 
+        v-model="connectionStatusSnackbar" 
+        :color="connectionStatusColor" 
+        :timeout="4000"
+        location="top"
+    >
+        <v-icon class="mr-2">
+            {{ connectionStatusColor === 'success' ? 'mdi-check-circle' : 
+               connectionStatusColor === 'warning' ? 'mdi-alert-circle' : 'mdi-information' }}
+        </v-icon>
+        {{ connectionStatusMessage }}
+    </v-snackbar>
 </template>
 
 <script>
+import { router } from '@/router';
+import axios from 'axios';
+import { marked } from 'marked';
+import { ref } from 'vue';
+import { useCustomizerStore } from '@/stores/customizer';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
+import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
+
+marked.setOptions({
+    breaks: true
+});
+
 export default {
     name: 'ChatPage',
     components: {
+        LanguageSwitcher
+    },
+    props: {
+        chatboxMode: {
+            type: Boolean,
+            default: false
+        }
+    },    setup() {
+        const { t } = useI18n();
+        const { tm } = useModuleI18n('features/chat');
+        
+        return {
+            t,
+            tm,
+            router,
+            marked,
+            ref
+        };
     },
     data() {
         return {
@@ -313,7 +399,7 @@ export default {
             stagedImagesUrl: [], // 用于存储图片的blob URL数组
             loadingChat: false,
 
-            inputFieldLabel: '聊天吧!',
+            inputFieldLabel: '',
 
             isRecording: false,
             audioChunks: [],
@@ -324,8 +410,11 @@ export default {
             statusText: '',
 
             eventSource: null,
+            eventSourceReader: null,
+            sseReconnecting: false, // 添加重连状态标志
 
-            // Ctrl键长按相关变量
+            
+            // // Ctrl键长按相关变量
             ctrlKeyDown: false,
             ctrlKeyTimer: null,
             ctrlKeyLongPressThreshold: 300, // 长按阈值，单位毫秒
@@ -342,9 +431,13 @@ export default {
             sidebarHovered: false,
             sidebarHoverTimer: null,
             sidebarHoverExpanded: false,
-            sidebarHoverDelay: 100, // 悬停延迟，单位毫秒
-
-            pendingCid: null, // Store pending conversation ID for route handling
+            sidebarHoverDelay: 100, // 悬停延迟，单位毫秒            
+            pendingCid: null, // Store pending conversation ID for route handling            
+            // 连接状态提示相关
+            connectionConflictDialog: false,
+            connectionStatusSnackbar: false,
+            connectionStatusMessage: '',
+            connectionStatusColor: 'info',
         }
     },
     
@@ -363,9 +456,16 @@ export default {
         // Watch for route changes to handle direct navigation to /chat/<cid>
         '$route': {
             immediate: true,
-            handler(to) {
-                console.log('Route changed:', to.path);
-                // Check if the route matches /chat/<cid> pattern
+            handler(to, from) {
+                console.log('Route changed:', to.path, 'from:', from?.path);                // 如果是从不同的路由模式切换（chat <-> chatbox），重新建立SSE连接
+                if (from && 
+                    ((from.path.startsWith('/chat') && to.path.startsWith('/chatbox')) ||
+                     (from.path.startsWith('/chatbox') && to.path.startsWith('/chat')))) {
+                    console.log('Route mode changed, reconnecting SSE...');
+                    this.reconnectSSE();
+                }
+                
+                // Check if the route matches /chat/<cid> or /chatbox/<cid> pattern
                 if (to.path.startsWith('/chat/') || to.path.startsWith('/chatbox/')) {
                     const pathCid = to.path.split('/')[2];
                     console.log('Path CID:', pathCid);
@@ -401,6 +501,8 @@ export default {
 
     mounted() {
         // Theme is now handled globally by the customizer store.
+        // 设置输入框标签
+        this.inputFieldLabel = this.tm('input.chatPrompt');
         this.startListeningEvent();
         this.checkStatus();
         this.getConversations();
@@ -409,7 +511,10 @@ export default {
         inputField.addEventListener('keydown', function (e) {
             if (e.keyCode == 13 && !e.shiftKey) {
                 e.preventDefault();
-                this.sendMessage();
+                // 检查是否有内容可发送
+                if (this.canSendMessage()) {
+                    this.sendMessage();
+                }
             }
         }.bind(this));
 
@@ -424,11 +529,8 @@ export default {
     },
 
     beforeUnmount() {
-        if (this.eventSource) {
-            this.eventSource.cancel();
-            console.log('SSE连接已断开');
-        }
-
+        this.disconnectSSE();
+        
         // 移除keyup事件监听
         document.removeEventListener('keyup', this.handleInputKeyUp);
 
@@ -439,9 +541,20 @@ export default {
 
         // Cleanup blob URLs
         this.cleanupMediaCache();
-    },
-
+    },    
     methods: {
+        // 显示连接冲突对话框
+        showConnectionConflictDialog() {
+            this.connectionConflictDialog = true;
+        },
+
+        // 显示连接状态消息
+        showConnectionStatus(message, color = 'info') {
+            this.connectionStatusMessage = message;
+            this.connectionStatusColor = color;
+            this.connectionStatusSnackbar = true;
+        },
+
         toggleTheme() {
             const customizer = useCustomizerStore();
             const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
@@ -537,108 +650,246 @@ export default {
             }
         },
 
-        async startListeningEvent() {
-            const response = await fetch('/api/chat/listen', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+        // 断开SSE连接
+        disconnectSSE() {
+            if (this.eventSourceReader) {
+                try {
+                    this.eventSourceReader.cancel();
+                    console.log('SSE Reader cancelled');
+                } catch (error) {
+                    console.warn('Error cancelling SSE reader:', error);
                 }
-            })
+                this.eventSourceReader = null;
+            }
+            
+            if (this.eventSource) {
+                try {
+                    this.eventSource.cancel();
+                    console.log('SSE连接已断开');
+                } catch (error) {
+                    console.warn('Error cancelling SSE:', error);
+                }
+                this.eventSource = null;
+            }
+        },
 
-            if (!response.ok) {
-                console.error('SSE连接失败:', response.statusText);
+        // 重新连接SSE
+        async reconnectSSE() {
+            if (this.sseReconnecting) {
+                console.log('SSE reconnection already in progress');
                 return;
             }
+            
+            this.sseReconnecting = true;
+            console.log('Reconnecting SSE...');
+            this.disconnectSSE();
+            
+            // 等待更长时间确保后端连接完全清理
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            this.startListeningEvent();
+        },
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-
-            this.eventSource = reader
-
-            let in_streaming = false
-            let message_obj = null
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) {
-                    console.log('SSE连接关闭');
-                    break;
-                }
-
-                const chunk = decoder.decode(value, { stream: true });
-
-                // 可能有多行
-
-                let lines = chunk.split('\n\n');
-
-                console.log('SSE数据:', lines);
-
-                for (let i = 0; i < lines.length; i++) {
-                    let line = lines[i].trim();
-
-                    if (!line) {
-                        continue;
-                    }
-
-                    console.log(line)
-
-                    // data: {"type": "plain", "data": "helloworld"}
-                    let chunk_json = JSON.parse(line.replace('data: ', ''));
-
-                    if (chunk_json.type === 'heartbeat') {
-                        continue; // 心跳包
-                    }
-                    if (chunk_json.type === 'error') {
-                        console.error('Error received:', chunk_json.data);
-                        continue;
-                    }
-
-                    if (chunk_json.type === 'image') {
-                        let img = chunk_json.data.replace('[IMAGE]', '');
-                        const imageUrl = await this.getMediaFile(img);
-                        let bot_resp = {
-                            type: 'bot',
-                            message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+        async startListeningEvent() {
+            // 确保之前的连接已断开
+            this.disconnectSSE();
+            
+            // 如果正在重连过程中，等待一下
+            if (this.sseReconnecting) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            let retryCount = 0;
+            const maxRetries = 3;
+            
+            while (retryCount < maxRetries) {
+                try {
+                    console.log(`尝试建立SSE连接 (${retryCount + 1}/${maxRetries})`);
+                    
+                    const response = await fetch('/api/chat/listen', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + localStorage.getItem('token')
                         }
-                        this.messages.push(bot_resp);
-                    } else if (chunk_json.type === 'record') {
-                        let audio = chunk_json.data.replace('[RECORD]', '');
-                        const audioUrl = await this.getMediaFile(audio);
-                        let bot_resp = {
-                            type: 'bot',
-                            message: `<audio controls class="audio-player">
-                    <source src="${audioUrl}" type="audio/wav">
-                    您的浏览器不支持音频播放。
-                  </audio>`
-                        }
-                        this.messages.push(bot_resp);
-                    } else if (chunk_json.type === 'plain') {
-                        if (!in_streaming) {
-                            message_obj = {
-                                type: 'bot',
-                                message: ref(chunk_json.data),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`SSE连接失败: ${response.statusText}`);
+                    }
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();                    
+                    this.eventSource = reader;
+                    this.eventSourceReader = reader;
+                    this.sseReconnecting = false;
+
+                    let in_streaming = false;
+                    let message_obj = null;                    
+                    console.log('SSE连接已建立');
+                    // 显示连接成功状态
+                    if (retryCount > 0) {
+                        this.showConnectionStatus(this.tm('connection.status.reconnected'), 'success');
+                    }
+
+                    while (true) {
+                        try {
+                            const { done, value } = await reader.read();
+                            if (done) {
+                                console.log('SSE连接正常关闭');
+                                break;
                             }
-                            this.messages.push(message_obj);
-                            in_streaming = true;
-                        } else {
-                            message_obj.message.value += chunk_json.data;
+
+                            const chunk = decoder.decode(value, { stream: true });
+
+                            // 可能有多行
+                            let lines = chunk.split('\n\n');
+
+                            console.log('SSE数据:', lines);
+
+                            for (let i = 0; i < lines.length; i++) {
+                                let line = lines[i].trim();
+
+                                if (!line) {
+                                    continue;
+                                }
+
+                                console.log(line);                                // 处理后端错误响应格式
+                                if (line.startsWith('{"status":"error"')) {
+                                    try {
+                                        const errorObj = JSON.parse(line);
+                                        if (errorObj.message === 'Already connected') {
+                                            console.log('检测到连接冲突，显示提示对话框...');
+                                            this.showConnectionConflictDialog();
+                                            throw new Error('CONNECTION_CONFLICT');
+                                        }
+                                        console.error('后端错误:', errorObj.message);
+                                        continue;
+                                    } catch (parseError) {
+                                        if (parseError.message === 'CONNECTION_CONFLICT') {
+                                            throw parseError;
+                                        }
+                                        console.warn('解析错误响应失败:', line);
+                                        continue;
+                                    }
+                                }
+
+                                // data: {"type": "plain", "data": "helloworld"}
+                                let chunk_json;
+                                try {
+                                    chunk_json = JSON.parse(line.replace('data: ', ''));
+                                } catch (parseError) {
+                                    console.warn('JSON解析失败:', line, parseError);
+                                    continue;
+                                }
+
+                                // 检查解析后的数据是否有效
+                                if (!chunk_json || typeof chunk_json !== 'object') {
+                                    console.warn('无效的数据对象:', chunk_json);
+                                    continue;
+                                }
+
+                                // 检查是否有type字段
+                                if (!chunk_json.hasOwnProperty('type')) {
+                                    console.warn('数据缺少type字段:', chunk_json);
+                                    continue;
+                                }
+
+                                if (chunk_json.type === 'heartbeat') {
+                                    continue; // 心跳包
+                                }
+                                if (chunk_json.type === 'error') {
+                                    console.error('Error received:', chunk_json.data);
+                                    continue;
+                                }
+
+                                if (chunk_json.type === 'image') {
+                                    let img = chunk_json.data.replace('[IMAGE]', '');
+                                    const imageUrl = await this.getMediaFile(img);
+                                    let bot_resp = {
+                                        type: 'bot',
+                                        message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                                    }
+                                    this.messages.push(bot_resp);
+                                } else if (chunk_json.type === 'record') {
+                                    let audio = chunk_json.data.replace('[RECORD]', '');
+                                    const audioUrl = await this.getMediaFile(audio);
+                                    let bot_resp = {
+                                        type: 'bot',
+                                        message: `<audio controls class="audio-player">
+                                <source src="${audioUrl}" type="audio/wav">
+                                ${this.t('messages.errors.browser.audioNotSupported')}
+                              </audio>`
+                                    }
+                                    this.messages.push(bot_resp);
+                                } else if (chunk_json.type === 'plain') {
+                                    if (!in_streaming) {
+                                        message_obj = {
+                                            type: 'bot',
+                                            message: this.ref(chunk_json.data),
+                                        }
+                                        this.messages.push(message_obj);
+                                        in_streaming = true;
+                                    } else {
+                                        message_obj.message.value += chunk_json.data;
+                                    }
+                                } else if (chunk_json.type === 'end') {
+                                    in_streaming = false;
+                                    continue;
+                                } else if (chunk_json.type === 'update_title') {
+                                    // 更新对话标题
+                                    const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
+                                    if (conversation) {
+                                        conversation.title = chunk_json.data;
+                                    }
+                                } else {
+                                    console.warn('未知数据类型:', chunk_json.type);
+                                }
+                                this.scrollToBottom();
+                            }
+                        } catch (readError) {
+                            if (readError.name === 'AbortError') {
+                                console.log('SSE连接被取消');
+                                break;
+                            }
+                            if (readError.message === 'CONNECTION_CONFLICT') {
+                                throw readError;
+                            }
+                            console.error('SSE读取错误:', readError);
+                            break;
                         }
-                    } else if (chunk_json.type === 'end') {
-                        in_streaming = false;
-                        continue;
-                    } else if (chunk_json.type === 'update_title') {
-                        // 更新对话标题
-                        const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
-                        if (conversation) {
-                            conversation.title = chunk_json.data;
-                        }
-                    } else {
-                        console.warn('未知数据类型:', chunk_json.type);
                     }
-                    this.scrollToBottom();
+                    
+                    // 如果成功连接并正常结束，跳出重试循环
+                    break;
+                    
+                } catch (error) {
+                    console.error(`SSE连接错误 (尝试 ${retryCount + 1}):`, error);
+                    
+                    retryCount++;                    
+                    if (error.message === 'CONNECTION_CONFLICT' && retryCount < maxRetries) {
+                        console.log(`连接冲突，等待 ${2000 * retryCount}ms 后重试...`);
+                        this.showConnectionStatus(`${this.tm('connection.status.reconnecting')} (${retryCount}/${maxRetries})`, 'warning');
+                        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+                        continue;
+                    }
+                    
+                    if (retryCount >= maxRetries) {
+                        console.error('SSE连接重试次数已达上限');
+                        this.showConnectionStatus(this.tm('connection.status.failed'), 'error');
+                        this.sseReconnecting = false;
+                        break;
+                    }
+                    
+                    // 等待一段时间后重试
+                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                } finally {
+                    this.eventSource = null;
+                    this.eventSourceReader = null;
                 }
             }
+            
+            this.sseReconnecting = false;
         },
 
         removeAudio() {
@@ -662,12 +913,12 @@ export default {
             };
             this.mediaRecorder.start();
             this.isRecording = true;
-            this.inputFieldLabel = "录音中，请说话...";
+            this.inputFieldLabel = this.tm('input.recordingPrompt');
         },
 
         async stopRecording() {
             this.isRecording = false;
-            this.inputFieldLabel = "聊天吧!";
+            this.inputFieldLabel = this.tm('input.chatPrompt');
             this.mediaRecorder.stop();
             this.mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
@@ -756,9 +1007,9 @@ export default {
             // Update the URL to reflect the selected conversation
             if (this.$route.path !== `/chat/${cid[0]}` && this.$route.path !== `/chatbox/${cid[0]}`) {
                 if (this.$route.path.startsWith('/chatbox')) {
-                    router.push(`/chatbox/${cid[0]}`);
+                    this.$router.push(`/chatbox/${cid[0]}`);
                 } else {
-                    router.push(`/chat/${cid[0]}`);
+                    this.$router.push(`/chat/${cid[0]}`);
                 }
             }
 
@@ -777,7 +1028,7 @@ export default {
                         const audioUrl = await this.getMediaFile(audio);
                         message[i].message = `<audio controls class="audio-player">
                                     <source src="${audioUrl}" type="audio/wav">
-                                    您的浏览器不支持音频播放。
+                                    ${this.t('messages.errors.browser.audioNotSupported')}
                                   </audio>`
                     }
                     if (message[i].image_url && message[i].image_url.length > 0) {
@@ -800,9 +1051,9 @@ export default {
                 this.currCid = cid;
                 // Update the URL to reflect the new conversation
                 if (this.$route.path.startsWith('/chatbox')) {
-                    router.push(`/chatbox/${cid}`);
+                    this.$router.push(`/chatbox/${cid}`);
                 } else {
-                    router.push(`/chat/${cid}`);
+                    this.$router.push(`/chat/${cid}`);
                 }
                 this.getConversations();
                 return cid;
@@ -816,9 +1067,9 @@ export default {
             this.currCid = '';
             this.messages = [];
             if (this.$route.path.startsWith('/chatbox')) {
-                router.push('/chatbox');
+                this.$router.push('/chatbox');
             } else {
-                router.push('/chat');
+                this.$router.push('/chat');
             }
         },
 
@@ -833,7 +1084,9 @@ export default {
                 second: '2-digit',
                 hour12: false
             };
-            return date.toLocaleString('zh-CN', options).replace(/\//g, '-').replace(/, /g, ' ');
+            // 使用当前语言环境的locale
+            const locale = this.t('core.common.locale') || 'zh-CN';
+            return date.toLocaleString(locale, options).replace(/\//g, '-').replace(/, /g, ' ');
         },
 
         deleteConversation(cid) {
@@ -846,7 +1099,20 @@ export default {
             });
         },
 
+        // 检查是否可以发送消息
+        canSendMessage() {
+            return (this.prompt && this.prompt.trim()) || 
+                   this.stagedImagesName.length > 0 || 
+                   this.stagedAudioUrl;
+        },
+
         async sendMessage() {
+            // 检查是否有内容可发送
+            if (!this.canSendMessage()) {
+                console.log('没有内容可发送');
+                return;
+            }
+
             if (this.currCid == '') {
                 const cid = await this.newConversation();
                 // URL is already updated in newConversation method
@@ -855,7 +1121,7 @@ export default {
             // Create a message object with actual URLs for display
             const userMessage = {
                 type: 'user',
-                message: this.prompt,
+                message: this.prompt.trim(), // 使用 trim() 去除前后空格
                 image_url: [],
                 audio_url: null
             };
@@ -894,20 +1160,22 @@ export default {
                     'Authorization': 'Bearer ' + localStorage.getItem('token')
                 },
                 body: JSON.stringify({
-                    message: this.prompt,
+                    message: this.prompt.trim(), // 确保发送的消息已去除前后空格
                     conversation_id: this.currCid,
-                    image_url: this.stagedImagesName, // Already contains just filenames
-                    audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : [] // Already contains just filename
+                    image_url: this.stagedImagesName,
+                    audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : []
                 })
             })
                 .then(response => {
                     this.prompt = '';
                     this.stagedImagesName = [];
+                    this.stagedImagesUrl = [];
                     this.stagedAudioUrl = "";
                     this.loadingChat = false;
                 })
                 .catch(err => {
                     console.error(err);
+                    this.loadingChat = false;
                 });
         },
         scrollToBottom() {
@@ -915,10 +1183,11 @@ export default {
                 const container = this.$refs.messageContainer;
                 container.scrollTop = container.scrollHeight;
             });
-        },
-
+        },        
         handleInputKeyDown(e) {
-            if (e.keyCode === 17) { // Ctrl键
+            if (e.ctrlKey && e.keyCode === 66) { // Ctrl+B组合键
+                e.preventDefault(); // 防止默认行为
+                
                 // 防止重复触发
                 if (this.ctrlKeyDown) return;
 
@@ -931,10 +1200,9 @@ export default {
                     }
                 }, this.ctrlKeyLongPressThreshold);
             }
-        },
-
+        },        
         handleInputKeyUp(e) {
-            if (e.keyCode === 17) { // Ctrl键
+            if (e.keyCode === 66) { // B键释放
                 this.ctrlKeyDown = false;
 
                 // 清除定时器

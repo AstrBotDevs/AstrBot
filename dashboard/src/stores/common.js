@@ -155,7 +155,6 @@ export const useCommonStore = defineStore({
           return data;
         })
         .catch((err) => {
-          this.toast("获取插件市场数据失败: " + err, "error");
           return Promise.reject(err);
         });
     },

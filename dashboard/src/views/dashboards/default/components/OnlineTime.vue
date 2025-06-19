@@ -8,15 +8,15 @@
           </div>
           
           <div class="stat-content">
-            <div class="stat-title">运行时间</div>
-            <h3 class="uptime-value">{{ stat.running || '加载中...' }}</h3>
+            <div class="stat-title">{{ tm('features.dashboard.status.uptime') }}</div>
+            <h3 class="uptime-value">{{ stat.running || tm('features.dashboard.status.loading') }}</h3>
           </div>
           
           <v-spacer></v-spacer>
           
           <div class="uptime-status">
             <v-icon icon="mdi-circle" size="10" color="success" class="blink-animation"></v-icon>
-            <span class="status-text">在线</span>
+            <span class="status-text">{{ tm('features.dashboard.status.online') }}</span>
           </div>
         </div>
       </v-card-text>
@@ -30,7 +30,7 @@
           </div>
           
           <div class="stat-content">
-            <div class="stat-title">内存占用</div>
+            <div class="stat-title">{{ tm('features.dashboard.status.memoryUsage') }}</div>
             <div class="memory-values">
               <h3 class="memory-value">{{ stat.memory?.process || 0 }} <span class="memory-unit">MiB</span></h3>
               <span class="memory-separator">/</span>
@@ -53,13 +53,19 @@
 </template>
 
 <script>
+import { useModuleI18n } from '@/i18n/composables';
+
 export default {
   name: 'OnlineTime',
+  setup() {
+    const { tm } = useModuleI18n('features/dashboard');
+    return { tm };
+  },
   props: ['stat'],
   data: () => ({
     stat: {
       memory: { process: 0, system: 0 },
-      running: "加载中...",
+      running: "",
     },
   }),
   computed: {

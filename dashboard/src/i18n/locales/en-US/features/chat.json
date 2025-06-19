@@ -1,0 +1,75 @@
+{
+  "title": "Let's Chat!",
+  "subtitle": "Chat with AI Assistant",
+  "input": {
+    "placeholder": "Start typing...",
+    "send": "Send",
+    "clear": "Clear",
+    "upload": "Upload File",
+    "voice": "Voice Input",
+    "recordingPrompt": "Recording, please speak...",
+    "chatPrompt": "Let's chat!"
+  },
+  "message": {
+    "user": "User",
+    "assistant": "Assistant",
+    "system": "System",
+    "error": "Error Message",
+    "loading": "Thinking..."
+  },
+  "voice": {
+    "start": "Start Recording",
+    "stop": "Stop Recording",
+    "recording": "New Recording",
+    "processing": "Processing...",
+    "error": "Recording Failed"
+  },
+  "welcome": {
+    "title": "Welcome to AstrBot",
+    "subtitle": "Your Intelligent Chat Assistant",
+    "quickActions": "Quick Actions",
+    "examples": "Example Questions"
+  },
+  "actions": {
+    "copy": "Copy",
+    "regenerate": "Regenerate",
+    "like": "Like",
+    "dislike": "Dislike",
+    "share": "Share",
+    "newChat": "New Chat",
+    "deleteChat": "Delete this conversation",
+    "editTitle": "Edit Title",
+    "fullscreen": "Fullscreen Mode",
+    "exitFullscreen": "Exit Fullscreen"
+  },
+  "conversation": {
+    "newConversation": "New Conversation",
+    "noHistory": "No conversation history",
+    "systemStatus": "System Status",
+    "llmService": "LLM Service",
+    "speechToText": "Speech to Text"
+  },
+  "modes": {
+    "darkMode": "Switch to Dark Mode",
+    "lightMode": "Switch to Light Mode"
+  },  "shortcuts": {
+    "help": "Get Help",
+    "voiceRecord": "Record Voice",
+    "pasteImage": "Paste Image"
+  },
+  "connection": {
+    "title": "Connection Status Notice",
+    "message": "The system detected that the chat connection needs to be re-established.",
+    "reasons": "This may be due to:",
+    "reasonWindowResize": "Switching chat window size (normal behavior)",
+    "reasonMultipleTabs": "Opening chat pages in other tabs",
+    "reasonNetworkIssue": "Temporary network interruption",
+    "notice": "Note: To ensure proper message delivery, the system only allows one active chat connection at a time. If you're using chat in multiple tabs, please keep only one page open.",
+    "understand": "Got it",
+    "status": {
+      "reconnecting": "Reconnecting...",
+      "reconnected": "Chat connection re-established",
+      "failed": "Connection failed, please refresh the page"
+    }
+  }
+} 

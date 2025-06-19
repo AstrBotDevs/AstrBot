@@ -1,0 +1,23 @@
+{
+  "operation": {
+    "saved": "保存成功",
+    "created": "创建成功",
+    "updated": "更新成功",
+    "deleted": "删除成功",
+    "uploaded": "上传成功",
+    "downloaded": "下载成功",
+    "imported": "导入成功",
+    "exported": "导出成功",
+    "copied": "复制成功",
+    "sent": "发送成功"
+  },
+  "connection": {
+    "connected": "连接成功",
+    "authenticated": "登录成功",
+    "synchronized": "同步成功"
+  },
+  "validation": {
+    "valid": "验证通过",
+    "completed": "操作完成"
+  }
+} 

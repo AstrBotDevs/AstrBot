@@ -4,6 +4,9 @@ import { useAuthStore } from '@/stores/auth';
 import { Form } from 'vee-validate';
 import md5 from 'js-md5';
 import {useCustomizerStore} from "@/stores/customizer";
+import { useModuleI18n } from '@/i18n/composables';
+
+const { tm: t } = useModuleI18n('features/auth');
 
 const valid = ref(false);
 const show1 = ref(false);
@@ -40,7 +43,7 @@ async function validate(values: any, { setErrors }: any) {
   <Form @submit="validate" class="mt-4 login-form" v-slot="{ errors, isSubmitting }">
     <v-text-field 
       v-model="username" 
-      label="用户名" 
+      :label="t('username')" 
       class="mb-6 input-field" 
       required 
       density="comfortable"
@@ -53,7 +56,7 @@ async function validate(values: any, { setErrors }: any) {
     
     <v-text-field 
       v-model="password" 
-      label="密码" 
+      :label="t('password')" 
       required 
       density="comfortable" 
       variant="outlined"
@@ -79,7 +82,7 @@ async function validate(values: any, { setErrors }: any) {
       elevation="2"
 
     >
-      <span class="login-btn-text">登录</span>
+      <span class="login-btn-text">{{ t('login') }}</span>
     </v-btn>
     
     <div v-if="errors.apiError" class="mt-4 error-container">

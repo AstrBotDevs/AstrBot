@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, inject } from 'vue';
 import {useCustomizerStore} from "@/stores/customizer";
+import { useModuleI18n } from '@/i18n/composables';
 
 const props = defineProps({
   extension: {
@@ -31,6 +32,9 @@ const emit = defineEmits([
 
 const reveal = ref(false);
 
+// 国际化
+const { tm } = useModuleI18n('features/extension');
+
 // 操作函数
 const configure = () => {
   emit('configure', props.extension);
@@ -47,13 +51,13 @@ const reloadExtension = () => {
 const $confirm = inject("$confirm");
 const uninstallExtension = async () => {
   if (typeof $confirm !== "function") {
-    console.error("$confirm 未正确注册");
+    console.error(tm("card.errors.confirmNotRegistered"));
     return;
   }
 
   const confirmed = await $confirm({
-    title: "删除确认",
-    message: "你确定要删除当前插件吗？",
+    title: tm("dialogs.uninstall.title"),
+    message: tm("dialogs.uninstall.message"),
   });
 
   if (confirmed) {
@@ -90,13 +94,13 @@ const viewReadme = () => {
             <template v-slot:activator="{ props: tooltipProps }">
               <v-icon v-bind="tooltipProps" color="warning" class="ml-2" icon="mdi-update" size="small"></v-icon>
             </template>
-            <span>有新版本可用: {{ extension.online_version }}</span>
+            <span>{{ tm("card.status.hasUpdate") }}: {{ extension.online_version }}</span>
           </v-tooltip>
           <v-tooltip location="top" v-if="!extension.activated && !marketMode">
             <template v-slot:activator="{ props: tooltipProps }">
               <v-icon v-bind="tooltipProps" color="error" class="ml-2" icon="mdi-cancel" size="small"></v-icon>
             </template>
-            <span>该插件已经被禁用</span>
+            <span>{{ tm("card.status.disabled") }}</span>
           </v-tooltip>
         </p>
 
@@ -111,7 +115,7 @@ const viewReadme = () => {
           </v-chip>
           <v-chip color="primary" label size="small" class="ml-2" v-if="extension.handlers?.length">
             <v-icon icon="mdi-cogs" start></v-icon>
-            {{ extension.handlers?.length }}个行为
+            {{ extension.handlers?.length }}{{ tm("card.status.handlersCount") }}
           </v-chip>
         </div>
 
@@ -127,16 +131,16 @@ const viewReadme = () => {
           borderRadius: '8px',
           objectFit: 'cover',
           objectPosition: 'center'
-        }" alt="logo" />
+        }" :alt="tm('card.alt.logo')" />
       </div>
     </v-card-text>
 
     <v-card-actions style="margin-left: 0px; gap: 2px;">
-      <v-btn color="teal-accent-4" text="查看文档" variant="text" @click="viewReadme"></v-btn>
-      <v-btn v-if="!marketMode" color="teal-accent-4" text="操作" variant="text" @click="reveal = true"></v-btn>
-      <v-btn v-if="marketMode && !extension?.installed" color="teal-accent-4" text="安装" variant="text"
+      <v-btn color="teal-accent-4" :text="tm('buttons.viewDocs')" variant="text" @click="viewReadme"></v-btn>
+      <v-btn v-if="!marketMode" color="teal-accent-4" :text="tm('buttons.actions')" variant="text" @click="reveal = true"></v-btn>
+      <v-btn v-if="marketMode && !extension?.installed" color="teal-accent-4" :text="tm('buttons.install')" variant="text"
         @click="emit('install', extension)"></v-btn>
-      <v-btn v-if="marketMode && extension?.installed" color="teal-accent-4" text="已安装" variant="text" disabled></v-btn>
+      <v-btn v-if="marketMode && extension?.installed" color="teal-accent-4" :text="tm('status.installed')" variant="text" disabled></v-btn>
     </v-card-actions>
 
     <v-expand-transition v-if="!marketMode">
@@ -145,7 +149,7 @@ const viewReadme = () => {
         <v-card-text style="overflow-y: auto;">
           <div class="d-flex align-center mb-4">
             <img v-if="extension.logo" :src="extension.logo"
-              style="height: 50px; width: 50px; border-radius: 8px; margin-right: 16px;" alt="扩展图标" />
+              style="height: 50px; width: 50px; border-radius: 8px; margin-right: 16px;" :alt="tm('card.alt.extensionIcon')" />
             <h3>{{ extension.name }}</h3>
           </div>
 
@@ -159,39 +163,39 @@ const viewReadme = () => {
           }">
             <v-btn prepend-icon="mdi-cog" color="primary" variant="tonal" @click="configure"
               :block="$vuetify.display.xs">
-              插件配置
+              {{ tm("card.actions.pluginConfig") }}
             </v-btn>
 
             <v-btn prepend-icon="mdi-delete" color="error" variant="tonal" @click="uninstallExtension"
               :block="$vuetify.display.xs">
-              卸载插件
+              {{ tm("card.actions.uninstallPlugin") }}
             </v-btn>
 
             <v-btn prepend-icon="mdi-reload" color="primary" variant="tonal" @click="reloadExtension"
               :block="$vuetify.display.xs">
-              重载插件
+              {{ tm("card.actions.reloadPlugin") }}
             </v-btn>
 
             <v-btn :prepend-icon="extension.activated ? 'mdi-cancel' : 'mdi-check-circle'"
               :color="extension.activated ? 'error' : 'success'" variant="tonal" @click="toggleActivation"
               :block="$vuetify.display.xs">
-              {{ extension.activated ? '禁用' : '启用' }}插件
+              {{ extension.activated ? tm('buttons.disable') : tm('buttons.enable') }}{{ tm("card.actions.togglePlugin") }}
             </v-btn>
 
             <v-btn prepend-icon="mdi-cogs" color="info" variant="tonal" @click="viewHandlers"
               :block="$vuetify.display.xs">
-              查看行为 ({{ extension.handlers.length }})
+              {{ tm("card.actions.viewHandlers") }} ({{ extension.handlers.length }})
             </v-btn>
 
             <v-btn prepend-icon="mdi-update" color="primary" variant="tonal" :disabled="!extension?.has_update "
               @click="updateExtension" :block="$vuetify.display.xs">
-              更新到 {{ extension.online_version || extension.version }}
+              {{ tm("card.actions.updateTo") }} {{ extension.online_version || extension.version }}
             </v-btn>
           </div>
         </v-card-text>
 
         <v-card-actions class="pt-0 d-flex justify-center">
-          <v-btn color="teal-accent-4" text="返回" variant="text" @click="reveal = false"></v-btn>
+          <v-btn color="teal-accent-4" :text="tm('buttons.back')" variant="text" @click="reveal = false"></v-btn>
         </v-card-actions>
       </v-card>
     </v-expand-transition>

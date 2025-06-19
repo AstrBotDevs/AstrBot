@@ -3,12 +3,15 @@ import {ref, computed} from 'vue';
 import {useCustomizerStore} from '@/stores/customizer';
 import axios from 'axios';
 import Logo from '@/components/shared/Logo.vue';
+import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import {md5} from 'js-md5';
 import {useAuthStore} from '@/stores/auth';
 import {useCommonStore} from '@/stores/common';
 import {marked} from 'marked';
+import { useI18n } from '@/i18n/composables';
 
 const customizer = useCustomizerStore();
+const { t } = useI18n();
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
@@ -31,23 +34,23 @@ let installLoading = ref(false);
 
 let tab = ref(0);
 
-let releasesHeader = [
-  {title: '标签', key: 'tag_name'},
-  {title: '发布时间', key: 'published_at'},
-  {title: '内容', key: 'body'},
-  {title: '源码地址', key: 'zipball_url'},
-  {title: '操作', key: 'switch'}
-];
+const releasesHeader = computed(() => [
+  {title: t('core.header.updateDialog.table.tag'), key: 'tag_name'},
+  {title: t('core.header.updateDialog.table.publishDate'), key: 'published_at'},
+  {title: t('core.header.updateDialog.table.content'), key: 'body'},
+  {title: t('core.header.updateDialog.table.sourceUrl'), key: 'zipball_url'},
+  {title: t('core.header.updateDialog.table.actions'), key: 'switch'}
+]);
 
 // Form validation
 const formValid = ref(true);
-const passwordRules = [
-  (v: string) => !!v || '请输入密码',
-  (v: string) => v.length >= 8 || '密码长度至少 8 位'
-];
-const usernameRules = [
-  (v: string) => !v || v.length >= 3 || '用户名长度至少3位'
-];
+const passwordRules = computed(() => [
+  (v: string) => !!v || t('core.header.accountDialog.validation.passwordRequired'),
+  (v: string) => v.length >= 8 || t('core.header.accountDialog.validation.passwordMinLength')
+]);
+const usernameRules = computed(() => [
+  (v: string) => !v || v.length >= 3 || t('core.header.accountDialog.validation.usernameMinLength')
+]);
 
 // 显示密码相关
 const showPassword = ref(false);
@@ -103,7 +106,7 @@ function accountEdit() {
       .catch((err) => {
         console.log(err);
         accountEditStatus.value.error = true;
-        accountEditStatus.value.message = typeof err === 'string' ? err : '修改失败，请重试';
+        accountEditStatus.value.message = typeof err === 'string' ? err : t('core.header.accountDialog.messages.updateFailed');
         password.value = '';
         newPassword.value = '';
       })
@@ -132,21 +135,21 @@ function getVersion() {
 }
 
 function checkUpdate() {
-  updateStatus.value = '正在检查更新...';
+  updateStatus.value = t('core.header.updateDialog.status.checking');
   axios.get('/api/update/check')
       .then((res) => {
         hasNewVersion.value = res.data.data.has_new_version;
 
         if (res.data.data.has_new_version) {
           releaseMessage.value = res.data.message;
-          updateStatus.value = '有新版本！';
+          updateStatus.value = t('core.header.version.hasNewVersion');
         } else {
           updateStatus.value = res.data.message;
         }
         dashboardHasNewVersion.value = res.data.data.dashboard_has_new_version;
       })
       .catch((err) => {
-        if (err.response.status == 401) {
+        if (err.response && err.response.status == 401) {
           console.log("401");
           const authStore = useAuthStore();
           authStore.logout();
@@ -191,7 +194,7 @@ function getDevCommits() {
 }
 
 function switchVersion(version: string) {
-  updateStatus.value = '正在切换版本...';
+  updateStatus.value = t('core.header.updateDialog.status.switching');
   installLoading.value = true;
   axios.post('/api/update/do', {
     version: version,
@@ -214,7 +217,7 @@ function switchVersion(version: string) {
 }
 
 function updateDashboard() {
-  updateStatus.value = '正在更新...';
+  updateStatus.value = t('core.header.updateDialog.status.updating');
   axios.post('/api/update/dashboard')
       .then((res) => {
         updateStatus.value = res.data.message;
@@ -273,12 +276,15 @@ commonStore.getStartTime();
     <!-- 版本提示信息 - 在手机上隐藏 -->
     <div class="mr-4 hidden-xs">
       <small v-if="hasNewVersion">
-        AstrBot 有新版本！
+        {{ t('core.header.version.hasNewVersion') }}
       </small>
       <small v-else-if="dashboardHasNewVersion">
-        WebUI 有新版本！
+        {{ t('core.header.version.dashboardHasNewVersion') }}
       </small>
     </div>
+
+    <!-- 语言切换器 -->
+    <LanguageSwitcher variant="header" />
 
     <!-- 主题切换按钮 -->
     <v-btn size="small" @click="toggleDarkMode();" class="action-btn" 
@@ -293,12 +299,12 @@ commonStore.getStartTime();
         <v-btn size="small" @click="checkUpdate(); getReleases(); getDevCommits();" class="action-btn"
                color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props">
           <v-icon class="hidden-sm-and-up">mdi-update</v-icon>
-          <span class="hidden-xs">更新</span>
+          <span class="hidden-xs">{{ t('core.header.buttons.update') }}</span>
         </v-btn>
       </template>
       <v-card>
         <v-card-title class="mobile-card-title">
-          <span class="text-h5">更新 AstrBot</span>
+          <span class="text-h5">{{ t('core.header.updateDialog.title') }}</span>
           <v-btn v-if="$vuetify.display.xs" icon @click="updateStatusDialog = false">
             <v-icon>mdi-close</v-icon>
           </v-btn>
@@ -318,16 +324,14 @@ commonStore.getStartTime();
             </div>
 
             <div class="mb-4 mt-4">
-              <small>💡 TIP: 跳到旧版本或者切换到某个版本不会重新下载管理面板文件，这可能会造成部分数据显示错误。您可在 <a
-                  href="https://github.com/Soulter/AstrBot/releases">此处</a>
-                找到对应的面板文件 dist.zip，解压后替换 data/dist 文件夹即可。当然，前端源代码在 dashboard 目录下，你也可以自己使用
-                npm install 和 npm build
-                构建。</small>
+              <small>{{ t('core.header.updateDialog.tip') }} <a
+                  href="https://github.com/Soulter/AstrBot/releases">{{ t('core.header.updateDialog.tipLink') }}</a>
+                {{ t('core.header.updateDialog.tipContinue') }}</small>
             </div>
 
             <v-tabs v-model="tab">
-              <v-tab value="0">😊 正式版</v-tab>
-              <v-tab value="1">🧐 开发版(master 分支)</v-tab>
+              <v-tab value="0">{{ t('core.header.updateDialog.tabs.release') }}</v-tab>
+              <v-tab value="1">{{ t('core.header.updateDialog.tabs.dev') }}</v-tab>
             </v-tabs>
             <v-tabs-window v-model="tab">
 
@@ -335,25 +339,24 @@ commonStore.getStartTime();
               <v-tabs-window-item key="0" v-show="tab == 0">
                 <v-btn class="mt-4 mb-4" @click="switchVersion('latest')" color="primary" style="border-radius: 10px;"
                        :disabled="!hasNewVersion">
-                  更新到最新版本
+                  {{ t('core.header.updateDialog.updateToLatest') }}
                 </v-btn>
                 <div class="mb-4">
-                  <small>`更新到最新版本` 按钮会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker
-                    部署，也可以重新拉取镜像或者使用 <a
-                        href="https://containrrr.dev/watchtower/usage-overview/">watchtower</a> 来自动监控拉取。</small>
+                  <small>{{ t('core.header.updateDialog.dockerTip') }} <a
+                        href="https://containrrr.dev/watchtower/usage-overview/">{{ t('core.header.updateDialog.dockerTipLink') }}</a> {{ t('core.header.updateDialog.dockerTipContinue') }}</small>
                 </div>
 
                 <v-data-table :headers="releasesHeader" :items="releases" item-key="name">
                   <template v-slot:item.body="{ item }: { item: { body: string } }">
                     <v-tooltip :text="item.body">
                       <template v-slot:activator="{ props }">
-                        <v-btn v-bind="props" rounded="xl" variant="tonal" color="primary" size="small">查看</v-btn>
+                        <v-btn v-bind="props" rounded="xl" variant="tonal" color="primary" size="small">{{ t('core.header.updateDialog.table.view') }}</v-btn>
                       </template>
                     </v-tooltip>
                   </template>
                   <template v-slot:item.switch="{ item }: { item: { tag_name: string } }">
                     <v-btn @click="switchVersion(item.tag_name)" rounded="xl" variant="plain" color="primary">
-                      切换
+                      {{ t('core.header.updateDialog.table.switch') }}
                     </v-btn>
                   </template>
                 </v-data-table>
@@ -363,11 +366,16 @@ commonStore.getStartTime();
               <v-tabs-window-item key="1" v-show="tab == 1">
                 <div style="margin-top: 16px;">
                   <v-data-table
-                      :headers="[{ title: 'SHA', key: 'sha' }, { title: '日期', key: 'date' }, { title: '信息', key: 'message' }, { title: '操作', key: 'switch' }]"
+                      :headers="[
+                        { title: t('core.header.updateDialog.table.sha'), key: 'sha' }, 
+                        { title: t('core.header.updateDialog.table.date'), key: 'date' }, 
+                        { title: t('core.header.updateDialog.table.message'), key: 'message' }, 
+                        { title: t('core.header.updateDialog.table.actions'), key: 'switch' }
+                      ]"
                       :items="devCommits" item-key="sha">
                     <template v-slot:item.switch="{ item }: { item: { sha: string } }">
                       <v-btn @click="switchVersion(item.sha)" rounded="xl" variant="plain" color="primary">
-                        切换
+                        {{ t('core.header.updateDialog.table.switch') }}
                       </v-btn>
                     </template>
                   </v-data-table>
@@ -376,42 +384,40 @@ commonStore.getStartTime();
 
             </v-tabs-window>
 
-            <h3 class="mb-4">手动输入版本号或 Commit SHA</h3>
+            <h3 class="mb-4">{{ t('core.header.updateDialog.manualInput.title') }}</h3>
 
-            <v-text-field label="输入版本号或 master 分支下的 commit hash。" v-model="version" required
+            <v-text-field :label="t('core.header.updateDialog.manualInput.placeholder')" v-model="version" required
                           variant="outlined"></v-text-field>
             <div class="mb-4">
-              <small>如 v3.3.16 (不带 SHA) 或 42e5ec5d80b93b6bfe8b566754d45ffac4c3fe0b</small>
+              <small>{{ t('core.header.updateDialog.manualInput.hint') }}</small>
               <br>
-              <a href="https://github.com/Soulter/AstrBot/commits/master"><small>查看 master 分支提交记录（点击右边的
-                copy
-                即可复制）</small></a>
+              <a href="https://github.com/Soulter/AstrBot/commits/master"><small>{{ t('core.header.updateDialog.manualInput.linkText') }}</small></a>
             </div>
             <v-btn color="error" style="border-radius: 10px;" @click="switchVersion(version)">
-              确定切换
+              {{ t('core.header.updateDialog.manualInput.confirm') }}
             </v-btn>
 
             <v-divider class="mt-4 mb-4"></v-divider>
             <div style="margin-top: 16px;">
-              <h3 class="mb-4">单独更新管理面板到最新版本</h3>
+              <h3 class="mb-4">{{ t('core.header.updateDialog.dashboardUpdate.title') }}</h3>
               <div class="mb-4">
-                <small>当前版本 {{ dashboardCurrentVersion }}</small>
+                <small>{{ t('core.header.updateDialog.dashboardUpdate.currentVersion') }} {{ dashboardCurrentVersion }}</small>
                 <br>
 
               </div>
 
               <div class="mb-4">
                 <p v-if="dashboardHasNewVersion">
-                  有新版本！
+                  {{ t('core.header.updateDialog.dashboardUpdate.hasNewVersion') }}
                 </p>
                 <p v-else="dashboardHasNewVersion">
-                  已经是最新版本了。
+                  {{ t('core.header.updateDialog.dashboardUpdate.isLatest') }}
                 </p>
               </div>
 
               <v-btn color="primary" style="border-radius: 10px;" @click="updateDashboard()"
                      :disabled="!dashboardHasNewVersion">
-                下载并更新
+                {{ t('core.header.updateDialog.dashboardUpdate.downloadAndUpdate') }}
               </v-btn>
             </div>
           </v-container>
@@ -419,7 +425,7 @@ commonStore.getStartTime();
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="blue-darken-1" variant="text" @click="updateStatusDialog = false">
-            关闭
+            {{ t('core.common.close') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -430,13 +436,13 @@ commonStore.getStartTime();
       <template v-slot:activator="{ props }">
         <v-btn size="small" class="action-btn mr-4" color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props">
           <v-icon>mdi-account</v-icon>
-          <span class="hidden-xs ml-1">账户</span>
+          <span class="hidden-xs ml-1">{{ t('core.header.buttons.account') }}</span>
         </v-btn>
       </template>
       <v-card class="account-dialog">
         <v-card-text class="py-6">
           <div class="d-flex flex-column align-center mb-6">
-            <logo title="AstrBot 仪表盘" subtitle="修改账户"></logo>
+            <logo :title="t('core.header.logoTitle')" :subtitle="t('core.header.accountDialog.title')"></logo>
           </div>
           <v-alert 
             v-if="accountWarning" 
@@ -445,7 +451,7 @@ commonStore.getStartTime();
             border="start"
             class="mb-4"
           >
-            <strong>安全提醒:</strong> 请修改默认密码以确保账户安全
+            <strong>{{ t('core.header.accountDialog.securityWarning') }}</strong>
           </v-alert>
 
           <v-alert
@@ -473,7 +479,7 @@ commonStore.getStartTime();
               v-model="password"
               :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
               :type="showPassword ? 'text' : 'password'"
-              label="当前密码"
+              :label="t('core.header.accountDialog.form.currentPassword')"
               variant="outlined"
               required
               clearable
@@ -488,13 +494,13 @@ commonStore.getStartTime();
               :append-inner-icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'"
               :type="showNewPassword ? 'text' : 'password'"
               :rules="passwordRules"
-              label="新密码"
+              :label="t('core.header.accountDialog.form.newPassword')"
               variant="outlined"
               required
               clearable
               @click:append-inner="showNewPassword = !showNewPassword"
               prepend-inner-icon="mdi-lock-plus-outline"
-              hint="密码长度至少 8 位"
+              :hint="t('core.header.accountDialog.form.passwordHint')"
               persistent-hint
               class="mb-4"
             ></v-text-field>
@@ -502,18 +508,18 @@ commonStore.getStartTime();
             <v-text-field
               v-model="newUsername"
               :rules="usernameRules"
-              label="新用户名 (可选)"
+              :label="t('core.header.accountDialog.form.newUsername')"
               variant="outlined"
               clearable
               prepend-inner-icon="mdi-account-edit-outline"
-              hint="留空表示不修改用户名"
+              :hint="t('core.header.accountDialog.form.usernameHint')"
               persistent-hint
               class="mb-3"
             ></v-text-field>
           </v-form>
           
           <div class="text-caption text-medium-emphasis mt-2">
-            默认用户名和密码均为 astrbot
+            {{ t('core.header.accountDialog.form.defaultCredentials') }}
           </div>
         </v-card-text>
         
@@ -528,7 +534,7 @@ commonStore.getStartTime();
             @click="dialog = false"
             :disabled="accountEditStatus.loading"
           >
-            取消
+            {{ t('core.header.accountDialog.actions.cancel') }}
           </v-btn>
           <v-btn
             color="primary"
@@ -537,7 +543,7 @@ commonStore.getStartTime();
             :disabled="!formValid"
             prepend-icon="mdi-content-save"
           >
-            保存修改
+            {{ t('core.header.accountDialog.actions.save') }}
           </v-btn>
         </v-card-actions>
       </v-card>

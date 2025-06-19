@@ -9,7 +9,7 @@ const customizer = useCustomizerStore();
         <div
             style="height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
             <div id="container">
-                <ChatPage chatbox-mode="true"></ChatPage>
+                <ChatPage :chatbox-mode="true"></ChatPage>
             </div>
         </div>
     </v-app>

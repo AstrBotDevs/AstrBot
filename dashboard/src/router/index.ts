@@ -1,11 +1,11 @@
-import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHashHistory } from 'vue-router';
 import MainRoutes from './MainRoutes';
 import AuthRoutes from './AuthRoutes';
 import ChatBoxRoutes from './ChatBoxRoutes';
 import { useAuthStore } from '@/stores/auth';
 
 export const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: [
     MainRoutes,
     AuthRoutes,
@@ -26,7 +26,7 @@ router.beforeEach(async (to, from, next) => {
   const authRequired = !publicPages.includes(to.path);
   const auth: AuthStore = useAuthStore();
 
-  // 如果用户已登录且试图访问登录页面，则重定向到首页或之前尝试访问的页面
+  // 如果用户已登录且试图访问登录页面，则重定向到首页
   if (to.path === '/auth/login' && auth.has_token()) {
     return next(auth.returnUrl || '/');
   }

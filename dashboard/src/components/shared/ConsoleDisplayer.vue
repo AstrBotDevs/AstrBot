@@ -51,7 +51,7 @@ export default {
   props: {
     historyNum: {
       type: String,
-      default: -1
+      default: "-1"
     },
     showLevelBtns: {
       type: Boolean,

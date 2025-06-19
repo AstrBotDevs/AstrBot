@@ -7,11 +7,11 @@
         </div>
         
         <div class="stat-content">
-          <div class="stat-title">运行时间</div>
+          <div class="stat-title">{{ t('stats.runningTime.title') }}</div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">{{ formattedTime }}</h2>
           </div>
-          <div class="stat-subtitle">AstrBot 运行时间</div>
+          <div class="stat-subtitle">{{ t('stats.runningTime.subtitle') }}</div>
         </div>
       </div>
     </v-card-text>
@@ -19,12 +19,18 @@
 </template>
 
 <script>
+import { useModuleI18n } from '@/i18n/composables';
+
 export default {
   name: 'RunningTime',
   props: ['stat'],
+  setup() {
+    const { tm: t } = useModuleI18n('features/dashboard');
+    return { t };
+  },
   computed: {
     formattedTime() {
-      return this.stat?.running || '加载中...';
+      return this.stat?.running || this.t('status.loading');
     }
   }
 };

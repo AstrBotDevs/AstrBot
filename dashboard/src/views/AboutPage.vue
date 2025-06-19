@@ -10,16 +10,16 @@
                             <img v-if="selectedLogo == 1" width="280" src="@/assets/images/logo-normal.svg" alt="AstrBot Logo" class="fade-in">
                         </div>
                         <div class="title-container">
-                            <h1 class="text-h2 font-weight-bold">AstrBot</h1>
-                            <p class="text-subtitle-1" style="color: var(--v-theme-secondaryText);">A project out of interests and loves ❤️</p>
+                            <h1 class="text-h2 font-weight-bold">{{ tm('hero.title') }}</h1>
+                            <p class="text-subtitle-1" style="color: var(--v-theme-secondaryText);">{{ tm('hero.subtitle') }}</p>
                             <div class="action-buttons">
                                 <v-btn @click="open('https://github.com/Soulter/AstrBot')"
                                     color="primary" variant="elevated" prepend-icon="mdi-star">
-                                    Star 这个项目! 🌟
+                                    {{ tm('hero.starButton') }}
                                 </v-btn>
                                 <v-btn class="ml-4" @click="open('https://github.com/Soulter/AstrBot/issues')"
                                     color="secondary" variant="elevated" prepend-icon="mdi-comment-question">
-                                    提交 Issue
+                                    {{ tm('hero.issueButton') }}
                                 </v-btn>
                             </div>
                         </div>
@@ -31,12 +31,12 @@
                     <v-container>
                         <v-row justify="center" align="center">
                             <v-col cols="12" md="6" class="pr-md-8 contributors-info">
-                                <h2 class="text-h4 font-weight-medium">贡献者</h2>
+                                <h2 class="text-h4 font-weight-medium">{{ tm('contributors.title') }}</h2>
                                 <p class="mb-4 text-body-1" style="color: var(--v-theme-secondaryText);">
-                                    本项目由众多开源社区成员共同维护。感谢每一位贡献者的付出！
+                                    {{ tm('contributors.description') }}
                                 </p>
                                 <p class="text-body-1" style="color: var(--v-theme-secondaryText);">
-                                    <a href="https://github.com/Soulter/AstrBot/graphs/contributors" class="text-decoration-none custom-link">查看 AstrBot 贡献者</a>
+                                    <a href="https://github.com/Soulter/AstrBot/graphs/contributors" class="text-decoration-none custom-link">{{ tm('contributors.viewLink') }}</a>
                                 </p>
                             </v-col>
                             <v-col cols="12" md="6">
@@ -60,11 +60,11 @@
                     <v-container>
                         <v-row justify="center" align="center" class="flex-md-row-reverse">
                             <v-col cols="12" md="6" class="pl-md-8 stats-info">
-                                <h2 class="text-h4 font-weight-medium">全球部署</h2>
+                                <h2 class="text-h4 font-weight-medium">{{ tm('stats.title') }}</h2>
                                 
                                 <div class="license-container mt-8">
                                     <img v-bind="props" src="https://www.gnu.org/graphics/agplv3-with-text-100x42.png" style="cursor: pointer;"/>
-                                    <p class="text-caption mt-2" style="color: var(--v-theme-secondaryText);">AstrBot 采用 AGPL v3 协议开源</p>
+                                    <p class="text-caption mt-2" style="color: var(--v-theme-secondaryText);">{{ tm('stats.license') }}</p>
                                 </div>
                             </v-col>
                             <v-col cols="12" md="6">
@@ -89,9 +89,14 @@
 
 <script>
 import {useCustomizerStore} from "@/stores/customizer";
+import { useModuleI18n } from '@/i18n/composables';
 
 export default {
     name: 'AboutPage',
+    setup() {
+        const { tm } = useModuleI18n('features/about');
+        return { tm };
+    },
     data() {
         return {
             selectedLogo: 0
