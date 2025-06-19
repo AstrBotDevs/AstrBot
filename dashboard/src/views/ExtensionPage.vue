@@ -1015,10 +1015,13 @@ onMounted(async () => {
 
         <div style="margin-top: 32px;">
           <h3>{{ tm('dialogs.loading.logs') }}</h3>
-          <ConsoleDisplayer historyNum="10" style="height: 200px; margin-top: 16px;"></ConsoleDisplayer>
+          <ConsoleDisplayer historyNum="10" style="height: 200px; margin-top: 16px; margin-bottom: 24px;"></ConsoleDisplayer>
         </div>
       </v-card-text>
-      <v-card-actions>
+      
+      <v-divider></v-divider>
+      
+      <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
         <v-btn color="blue-darken-1" variant="text" @click="resetLoadingDialog">{{ tm('buttons.close') }}</v-btn>
       </v-card-actions>
