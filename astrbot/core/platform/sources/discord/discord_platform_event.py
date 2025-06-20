@@ -67,10 +67,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
         """获取当前事件对应的频道对象"""
         try:
             channel_id = int(self.session_id)
-            channel = self.client.get_channel(
+            return self.client.get_channel(
                 channel_id
             ) or await self.client.fetch_channel(channel_id)
-            return channel
         except (ValueError, discord.errors.NotFound, discord.errors.Forbidden):
             logger.error(f"[Discord] 无法获取频道 {self.session_id}")
             return None
@@ -81,9 +80,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
     ) -> tuple[str, list[discord.File], Optional[discord.ui.View], list[discord.Embed]]:
         """将 MessageChain 解析为 Discord 发送所需的内容"""
         try:
-            from .discord_platform_adapter import DiscordEmbed, DiscordView
+            from .components import DiscordEmbed, DiscordView
         except ImportError:
-            from discord_platform_adapter import DiscordEmbed, DiscordView
+            from components import DiscordEmbed, DiscordView
 
         plain_text_parts = []
         files = []
@@ -164,9 +163,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
 
         # 合并文本内容
         content = "\n".join(plain_text_parts)
-        if len(content) > 20000:
-            logger.warning("[Discord] 消息内容超过20000字符，将被截断。")
-            content = content[:20000]
+        if len(content) > 2000:
+            logger.warning("[Discord] 消息内容超过2000字符，将被截断。")
+            content = content[:2000]
 
         return content, files, view, embeds
 
