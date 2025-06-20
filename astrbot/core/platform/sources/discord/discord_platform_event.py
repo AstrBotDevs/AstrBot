@@ -1,0 +1,250 @@
+import asyncio
+import discord
+import base64
+from io import BytesIO
+from pathlib import Path
+from typing import Optional
+
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.api.message_components import Plain, Image, File, BaseMessageComponent
+from astrbot.core.utils.io import download_image_by_url
+from astrbot import logger
+
+
+# 自定义Discord视图组件（兼容旧版本）
+class DiscordViewComponent(BaseMessageComponent):
+    type: str = "discord_view"
+
+    def __init__(self, view: discord.ui.View):
+        self.view = view
+
+
+class DiscordPlatformEvent(AstrMessageEvent):
+    def __init__(
+        self,
+        message_str: str,
+        message_obj: AstrBotMessage,
+        platform_meta: PlatformMetadata,
+        session_id: str,
+        client,
+    ):
+        super().__init__(message_str, message_obj, platform_meta, session_id)
+        self.client = client
+
+    async def send(self, message: MessageChain):
+        """发送消息到Discord平台"""
+        try:
+            channel = await self._get_channel()
+            if not channel:
+                logger.error(f"[Discord] 无法获取频道 {self.session_id}")
+                return
+
+            # 解析消息链
+            content, files, view, embeds = await self._parse_to_discord(message)
+
+            # Discord 不允许发送完全空的消息
+            if not content and not files and not view and not embeds:
+                logger.debug("[Discord] 尝试发送空消息，已忽略。")
+                return
+
+            # 发送消息
+            await channel.send(
+                content=content or None,
+                files=files or None,
+                view=view or None,
+                embeds=embeds or None,
+            )
+
+        except discord.errors.HTTPException as e:
+            logger.error(f"[Discord] 发送消息失败: {e.status} {e.code} - {e.text}")
+        except Exception as e:
+            logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
+
+        await super().send(message)
+
+    async def _get_channel(self) -> Optional[discord.abc.Messageable]:
+        """获取当前事件对应的频道对象"""
+        try:
+            channel_id = int(self.session_id)
+            channel = self.client.get_channel(
+                channel_id
+            ) or await self.client.fetch_channel(channel_id)
+            return channel
+        except (ValueError, discord.errors.NotFound, discord.errors.Forbidden):
+            logger.error(f"[Discord] 无法获取频道 {self.session_id}")
+            return None
+
+    async def _parse_to_discord(
+        self,
+        message: MessageChain,
+    ) -> tuple[str, list[discord.File], Optional[discord.ui.View], list[discord.Embed]]:
+        """将 MessageChain 解析为 Discord 发送所需的内容"""
+        try:
+            from .discord_platform_adapter import DiscordEmbed, DiscordView
+        except ImportError:
+            from discord_platform_adapter import DiscordEmbed, DiscordView
+
+        plain_text_parts = []
+        files = []
+        view = None
+        embeds = []
+
+        for i in message.chain:  # 遍历消息链
+            if isinstance(i, Plain):  # 如果是文字类型的
+                plain_text_parts.append(i.text)
+            elif isinstance(i, Image):  # 如果是图片类型的
+                try:
+                    discord_file = None
+                    # 优先使用组件指定的filename，否则从路径推断，最后使用默认值
+                    filename = i.filename
+
+                    async def process_local_path(p_str: str) -> Optional[discord.File]:
+                        nonlocal filename
+                        path = Path(p_str)
+                        if not await asyncio.to_thread(path.exists):
+                            logger.warning(f"[Discord] 图片文件不存在: {p_str}")
+                            return None
+
+                        if not filename:  # 如果没有指定filename，则从路径推断
+                            filename = path.name
+
+                        file_bytes = await asyncio.to_thread(path.read_bytes)
+                        return discord.File(BytesIO(file_bytes), filename=filename)
+
+                    if i.file.startswith("file:///"):
+                        discord_file = await process_local_path(i.file[8:])
+                    elif i.file.startswith("http"):
+                        downloaded_path_str = await download_image_by_url(i.file)
+                        if downloaded_path_str:
+                            discord_file = await process_local_path(downloaded_path_str)
+                    elif i.file.startswith("base64://"):
+                        img_bytes = base64.b64decode(i.file.split("base64://")[1])
+                        discord_file = discord.File(
+                            BytesIO(img_bytes), filename=filename or "image.png"
+                        )
+                    else:  # Treat as a local path
+                        discord_file = await process_local_path(i.file)
+
+                    if discord_file:
+                        files.append(discord_file)
+
+                except Exception as e:
+                    logger.warning(f"[Discord] 处理图片失败: {i.file}, 错误: {e}")
+            elif isinstance(i, File):
+                try:
+                    file_path_str = await i.get_file()
+                    if file_path_str:
+                        path = Path(file_path_str)
+                        if await asyncio.to_thread(path.exists):
+                            file_bytes = await asyncio.to_thread(path.read_bytes)
+                            files.append(
+                                discord.File(BytesIO(file_bytes), filename=i.name)
+                            )
+                        else:
+                            logger.warning(
+                                f"[Discord] 获取文件失败，路径不存在: {file_path_str}"
+                            )
+                    else:
+                        logger.warning(f"[Discord] 获取文件失败: {i.name}")
+                except Exception as e:
+                    logger.warning(f"[Discord] 处理文件失败: {i.name}, 错误: {e}")
+            elif isinstance(i, DiscordEmbed):
+                # Discord Embed消息
+                embeds.append(i.to_discord_embed())
+            elif isinstance(i, DiscordView):
+                # Discord视图组件（按钮、选择菜单等）
+                view = i.to_discord_view()
+            elif isinstance(i, DiscordViewComponent):
+                # 如果消息链中包含Discord视图组件（兼容旧版本）
+                if isinstance(i.view, discord.ui.View):
+                    view = i.view
+            else:
+                logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
+
+        # 合并文本内容
+        content = "\n".join(plain_text_parts)
+        if len(content) > 20000:
+            logger.warning("[Discord] 消息内容超过20000字符，将被截断。")
+            content = content[:20000]
+
+        return content, files, view, embeds
+
+    async def reply(self, message: MessageChain):
+        """回复消息（如果原消息存在）"""
+        try:
+            if hasattr(self.message_obj, "raw_message") and hasattr(
+                self.message_obj.raw_message, "reply"
+            ):
+                # 解析消息链
+                content, files, view, embeds = await self._parse_to_discord(message)
+
+                # 使用Discord的回复功能
+                await self.message_obj.raw_message.reply(
+                    content=content or None,
+                    files=files or None,
+                    view=view or None,
+                    embeds=embeds or None,
+                )
+            else:
+                # 如果无法回复，使用普通发送
+                await self.send(message)
+        except Exception as e:
+            logger.error(f"[Discord] 回复消息失败: {e}")
+            # 回退到普通发送
+            await self.send(message)
+
+    async def react(self, emoji: str):
+        """对原消息添加反应"""
+        try:
+            if hasattr(self.message_obj, "raw_message") and hasattr(
+                self.message_obj.raw_message, "add_reaction"
+            ):
+                await self.message_obj.raw_message.add_reaction(emoji)
+        except Exception as e:
+            logger.error(f"[Discord] 添加反应失败: {e}")
+
+    def is_slash_command(self) -> bool:
+        """判断是否为斜杠命令"""
+        return (
+            hasattr(self.message_obj, "raw_message")
+            and hasattr(self.message_obj.raw_message, "type")
+            and self.message_obj.raw_message.type
+            == discord.InteractionType.application_command
+        )
+
+    def is_button_interaction(self) -> bool:
+        """判断是否为按钮交互"""
+        return (
+            hasattr(self.message_obj, "raw_message")
+            and hasattr(self.message_obj.raw_message, "type")
+            and self.message_obj.raw_message.type == discord.InteractionType.component
+        )
+
+    def get_interaction_custom_id(self) -> str:
+        """获取交互组件的custom_id"""
+        if self.is_button_interaction():
+            try:
+                return self.message_obj.raw_message.data.get("custom_id", "")
+            except Exception:
+                pass
+        return ""
+
+    def is_mentioned(self) -> bool:
+        """判断机器人是否被@"""
+        if hasattr(self.message_obj, "raw_message") and hasattr(
+            self.message_obj.raw_message, "mentions"
+        ):
+            return any(
+                mention.id == int(self.message_obj.self_id)
+                for mention in self.message_obj.raw_message.mentions
+            )
+        return False
+
+    def get_mention_clean_content(self) -> str:
+        """获取去除@后的清洁内容"""
+        if hasattr(self.message_obj, "raw_message") and hasattr(
+            self.message_obj.raw_message, "clean_content"
+        ):
+            return self.message_obj.raw_message.clean_content
+        return self.message_str
