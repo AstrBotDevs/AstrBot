@@ -37,4 +37,6 @@ watchfiles
 websockets
 faiss-cpu
 aiosqlite
-nh3
+nh3pysocks
+httpx[socks]
+pysocks
