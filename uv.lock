@@ -243,7 +243,7 @@ dependencies = [
     { name = "quart" },
     { name = "readability-lxml" },
     { name = "silk-python" },
-    { name = "slack-bolt" },
+    { name = "slack-sdk" },
     { name = "telegramify-markdown" },
     { name = "watchfiles" },
     { name = "websockets" },
@@ -288,7 +288,7 @@ requires-dist = [
     { name = "quart", specifier = ">=0.20.0" },
     { name = "readability-lxml", specifier = ">=0.8.4.1" },
     { name = "silk-python", specifier = ">=0.2.6" },
-    { name = "slack-bolt", specifier = ">=1.23.0" },
+    { name = "slack-sdk", specifier = ">=3.35.0" },
     { name = "telegramify-markdown", specifier = ">=0.5.1" },
     { name = "watchfiles", specifier = ">=1.0.5" },
     { name = "websockets", specifier = ">=15.0.1" },
@@ -2077,18 +2077,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050 },
-]
-
-[[package]]
-name = "slack-bolt"
-version = "1.23.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "slack-sdk" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a5/c9/7421458765061cb98e01a12d6cadc273ee35e75856b0073ec7c3efa5cf46/slack_bolt-1.23.0.tar.gz", hash = "sha256:3d2c3eb13131407a94f925eb22b180d352c2d97b808303ef92b7a46d6508c843", size = 130659 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c8/48/6f435d702a680307488c7d8d3bd6e12552bbf2ff3e0eb67ccb7d0850d122/slack_bolt-1.23.0-py2.py3-none-any.whl", hash = "sha256:6d6ae39d80c964c362505ae4e587eed2b26dbc3a9f0cb76af1150c30fb670488", size = 229691 },
 ]
 
 [[package]]
