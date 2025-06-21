@@ -39,3 +39,4 @@ faiss-cpu
 aiosqlite
 nh3
 py-cord[speed]>=2.6.1
+slack-sdk

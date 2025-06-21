@@ -231,9 +231,42 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "discord_token": "在此处填入你的Discord Bot Token",
                         "discord_proxy": "",
-                    }
+                    },
+                    "slack": {
+                        "id": "slack",
+                        "type": "slack",
+                        "enable": False,
+                        "bot_token": "",
+                        "app_token": "",
+                        "signing_secret": "",
+                        "slack_connection_mode": "socket",  # webhook, socket
+                        "slack_webhook_host": "0.0.0.0",
+                        "slack_webhook_port": 6197,
+                        "slack_webhook_path": "/astrbot-slack-webhook/callback",
+                    },
                 },
                 "items": {
+                    "slack_connection_mode": {
+                        "description": "Slack Connection Mode",
+                        "type": "string",
+                        "options": ["webhook", "socket"],
+                        "hint": "The connection mode for Slack. `webhook` uses a webhook server, `socket` uses Slack's Socket Mode.",
+                    },
+                    "slack_webhook_host": {
+                        "description": "Slack Webhook Host",
+                        "type": "string",
+                        "hint": "Only valid when Slack connection mode is `webhook`.",
+                    },
+                    "slack_webhook_port": {
+                        "description": "Slack Webhook Port",
+                        "type": "int",
+                        "hint": "Only valid when Slack connection mode is `webhook`.",
+                    },
+                    "slack_webhook_path": {
+                        "description": "Slack Webhook Path",
+                        "type": "string",
+                        "hint": "Only valid when Slack connection mode is `webhook`.",
+                    },
                     "active_send_mode": {
                         "description": "是否换用主动发送接口",
                         "type": "bool",

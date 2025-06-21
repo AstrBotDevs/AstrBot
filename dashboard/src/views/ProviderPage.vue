@@ -306,6 +306,24 @@
     </v-snackbar>
 
     <WaitingForRestart ref="wfr"></WaitingForRestart>
+
+    <!-- Key为空的确认对话框 -->
+    <v-dialog v-model="showKeyConfirm" max-width="450" persistent>
+      <v-card>
+        <v-card-title class="text-h6 bg-error d-flex align-center">
+          <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
+          确认保存
+        </v-card-title>
+        <v-card-text class="py-4 text-body-1 text-medium-emphasis">
+          您没有填写 API Key，确定要保存吗？这可能会导致该服务提供商无法正常工作。
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="handleKeyConfirm(false)">取消</v-btn>
+          <v-btn color="error" variant="flat" @click="handleKeyConfirm(true)">确定</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -335,6 +353,10 @@ export default {
       showSettingsDialog: false,
       sessionSeparationEnabled: false,
       sessionSettingLoading: false,
+
+      // Key确认对话框
+      showKeyConfirm: false,
+      keyConfirmResolve: null,
 
       newSelectedProviderName: '',
       newSelectedProviderConfig: {},
@@ -379,6 +401,16 @@ export default {
         "azure_tts": "text_to_speech",
         "minimax_tts_api": "text_to_speech",
         "volcengine_tts": "text_to_speech",
+      }
+    }
+  },
+
+  watch: {
+    showKeyConfirm(newValue) {
+      // 当对话框关闭时，如果 Promise 还在等待，则拒绝它以防止内存泄漏
+      if (!newValue && this.keyConfirmResolve) {
+        this.keyConfirmResolve(false);
+        this.keyConfirmResolve = null;
       }
     }
   },
@@ -563,32 +595,40 @@ export default {
       this.updatingMode = true;
     },
 
-    newProvider() {
+    async newProvider() {
+      // 检查 key 是否为空
+      if (
+        'key' in this.newSelectedProviderConfig &&
+        (!this.newSelectedProviderConfig.key || this.newSelectedProviderConfig.key.length === 0)
+      ) {
+        const confirmed = await this.confirmEmptyKey();
+        if (!confirmed) {
+          return; // 如果用户取消，则中止保存
+        }
+      }
+
       this.loading = true;
-      if (this.updatingMode) {
-        axios.post('/api/config/provider/update', {
-          id: this.newSelectedProviderName,
-          config: this.newSelectedProviderConfig
-        }).then((res) => {
-          this.loading = false;
-          this.showProviderCfg = false;
-          this.getConfig();
+      const wasUpdating = this.updatingMode;
+      try {
+        if (wasUpdating) {
+          const res = await axios.post('/api/config/provider/update', {
+            id: this.newSelectedProviderName,
+            config: this.newSelectedProviderConfig
+          });
           this.showSuccess(res.data.message || "更新成功!");
-        }).catch((err) => {
-          this.loading = false;
-          this.showError(err.response?.data?.message || err.message);
-        });
-        this.updatingMode = false;
-      } else {
-        axios.post('/api/config/provider/new', this.newSelectedProviderConfig).then((res) => {
-          this.loading = false;
-          this.showProviderCfg = false;
-          this.getConfig();
+        } else {
+          const res = await axios.post('/api/config/provider/new', this.newSelectedProviderConfig);
           this.showSuccess(res.data.message || "添加成功!");
-        }).catch((err) => {
-          this.loading = false;
-          this.showError(err.response?.data?.message || err.message);
-        });
+        }
+        this.showProviderCfg = false;
+        this.getConfig();
+      } catch (err) {
+        this.showError(err.response?.data?.message || err.message);
+      } finally {
+        this.loading = false;
+        if (wasUpdating) {
+          this.updatingMode = false;
+        }
       }
     },
 
@@ -670,7 +710,21 @@ export default {
         this.loadingStatus = false;
         this.showError(err.response?.data?.message || err.message);
       });
-    }
+    },
+
+    confirmEmptyKey() {
+      this.showKeyConfirm = true;
+      return new Promise((resolve) => {
+        this.keyConfirmResolve = resolve;
+      });
+    },
+
+    handleKeyConfirm(confirmed) {
+      if (this.keyConfirmResolve) {
+        this.keyConfirmResolve(confirmed);
+      }
+      this.showKeyConfirm = false;
+    },
   }
 }
 </script>
