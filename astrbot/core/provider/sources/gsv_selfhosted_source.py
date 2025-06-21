@@ -1,4 +1,3 @@
-
 import asyncio
 import os
 import uuid
@@ -13,7 +12,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 @register_provider_adapter(
     provider_type_name="gsv_tts_selfhost",
-    desc=" GPT-SoVITS TTS(本地加载)",
+    desc="GPT-SoVITS TTS(本地加载)",
     provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderGSVTTS(TTSProvider):
@@ -38,7 +37,6 @@ class ProviderGSVTTS(TTSProvider):
         self.timeout = provider_config.get("timeout", 60)
         self._session: aiohttp.ClientSession | None = None
 
-
     async def initialize(self):
         """异步初始化：在 ProviderManager 中被调用"""
         self._session = aiohttp.ClientSession(
@@ -53,10 +51,14 @@ class ProviderGSVTTS(TTSProvider):
 
     def get_session(self) -> aiohttp.ClientSession:
         if not self._session or self._session.closed:
-            raise RuntimeError("[GSV TTS] Provider HTTP session is not ready or closed.")
+            raise RuntimeError(
+                "[GSV TTS] Provider HTTP session is not ready or closed."
+            )
         return self._session
 
-    async def _make_request(self, endpoint: str, params=None, retries: int = 3) -> bytes | None:
+    async def _make_request(
+        self, endpoint: str, params=None, retries: int = 3
+    ) -> bytes | None:
         """发起请求"""
         for attempt in range(retries):
             logger.debug(f"[GSV TTS] 请求地址：{endpoint}，参数：{params}")
@@ -144,5 +146,3 @@ class ProviderGSVTTS(TTSProvider):
         if self._session and not self._session.closed:
             await self._session.close()
             logger.info("[GSV TTS] Session 已关闭")
-
-
