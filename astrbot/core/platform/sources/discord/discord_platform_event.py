@@ -8,7 +8,6 @@ from typing import Optional
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image, File, BaseMessageComponent
-from astrbot.core.utils.io import download_image_by_url
 from astrbot import logger
 
 

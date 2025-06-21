@@ -13,12 +13,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import DiscordBotClient
-
-try:
-    from .discord_platform_event import DiscordPlatformEvent
-except ImportError:
-    # 如果相对导入失败，尝试绝对导入
-    from discord_platform_event import DiscordPlatformEvent
+from .discord_platform_event import DiscordPlatformEvent
 
 
 # 注册平台适配器
@@ -52,7 +47,7 @@ class DiscordPlatformAdapter(Platform):
         """返回平台元数据"""
         return PlatformMetadata(
             "discord",
-            "Discord 适配器 (基于 Pycord)",
+            "Discord 适配器",
             id=self.config.get("id"),
             default_config_tmpl=self.config,
         )
@@ -70,16 +65,13 @@ class DiscordPlatformAdapter(Platform):
 
         # 初始化 Discord 客户端
         token = str(self.config.get("discord_token"))
-        if not token or "在此处" in token:
+        if not token:
             logger.error("[Discord] Bot Token 未配置。请在配置文件中正确设置 token。")
             return
 
         proxy = self.config.get("discord_proxy") or None
         self.client = DiscordBotClient(token, proxy)
         self.client.on_message_received = on_received
-
-        # 注册已登记的命令处理器
-        self._register_handlers()
 
         try:
             await self.client.start_polling()
@@ -89,12 +81,6 @@ class DiscordPlatformAdapter(Platform):
             logger.warning("[Discord] 与 Discord 的连接已关闭。")
         except Exception as e:
             logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
-
-    def _register_handlers(self):
-        """注册命令处理器"""
-        # 这里可以扫描插件中使用装饰器的方法并注册
-        # 由于AstrBot的插件系统，这部分需要在插件加载时处理
-        pass
 
     def _determine_message_type(
         self, channel, guild_id=None
@@ -111,7 +97,7 @@ class DiscordPlatformAdapter(Platform):
 
     def _convert_interaction_to_abm(self, data: dict) -> AstrBotMessage:
         """将交互事件转换为 AstrBotMessage"""
-        interaction = data["interaction"]
+        interaction: discord.Interaction = data["interaction"]
         abm = AstrBotMessage()
 
         abm.type, abm.group_id = self._determine_message_type(
@@ -137,7 +123,7 @@ class DiscordPlatformAdapter(Platform):
 
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
-        message = data["message"]
+        message: discord.Message = data["message"]
         is_mentioned = data.get("is_mentioned", False)
 
         content = message.content

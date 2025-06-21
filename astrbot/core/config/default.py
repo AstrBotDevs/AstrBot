@@ -229,7 +229,7 @@ CONFIG_METADATA_2 = {
                         "id": "discord",
                         "type": "discord",
                         "enable": False,
-                        "discord_token": "在此处填入你的Discord Bot Token",
+                        "discord_token": "",
                         "discord_proxy": "",
                     },
                     "slack": {
