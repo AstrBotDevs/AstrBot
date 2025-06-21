@@ -1458,10 +1458,3 @@ UID: {user_id} 此 ID 可用于设置管理员。
         plugin_cfg["reset"] = reset_cfg
         alter_cmd_cfg["astrbot"] = plugin_cfg
         sp.put("alter_cmd", alter_cmd_cfg)
-
-    @filter.command("test")
-    async def test_command(self, event: AstrMessageEvent):
-        """测试指令"""
-        # 这里可以添加任何测试逻辑
-        from astrbot.api.message_components import File
-        yield event.chain_result([File(name="test.txt", file="pyproject.toml", url="pyproject.toml")])
