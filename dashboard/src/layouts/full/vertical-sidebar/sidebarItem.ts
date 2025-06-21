@@ -56,6 +56,11 @@ const sidebarItem: menu[] = [
     to: '/conversation'
   },
   {
+    title: '会话管理',
+    icon: 'mdi-account-group',
+    to: '/session-management'
+  },
+  {
     title: '控制台',
     icon: 'mdi-console',
     to: '/console'

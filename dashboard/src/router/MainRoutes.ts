@@ -45,11 +45,15 @@ const MainRoutes = {
       name: 'Default',
       path: '/dashboard/default',
       component: () => import('@/views/dashboards/default/DefaultDashboard.vue')
-    },
-    {
+    },    {
       name: 'Conversation',
       path: '/conversation',
       component: () => import('@/views/ConversationPage.vue')
+    },
+    {
+      name: 'SessionManagement',
+      path: '/session-management',
+      component: () => import('@/views/SessionManagementPage.vue')
     },
     {
       name: 'Console',
@@ -81,15 +85,7 @@ const MainRoutes = {
     {
       name: 'Chat',
       path: '/chat',
-      component: () => import('@/views/ChatPage.vue'),
-      children: [
-        {
-          path: ':conversationId',
-          name: 'ChatDetail',
-          component: () => import('@/views/ChatPage.vue'),
-          props: true
-        }
-      ]
+      component: () => import('@/views/ChatPage.vue')
     },
     {
       name: 'Settings',
