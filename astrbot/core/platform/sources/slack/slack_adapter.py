@@ -173,8 +173,7 @@ class SlackAdapter(Platform):
                         abm.message.append(At(qq=mention, name=""))
 
                 # 清理消息文本中的@标记
-                clean_text = re.sub(r"<@[^>]+>", "", message_text).strip()
-                if clean_text:
+                if clean_text := re.sub(r"<@[^>]+>", "", message_text).strip():
                     abm.message.append(Plain(text=clean_text))
             else:
                 abm.message.append(Plain(text=message_text))

@@ -34,7 +34,7 @@ class SlackMessageEvent(AstrMessageEvent):
             return {"type": "section", "text": {"type": "mrkdwn", "text": segment.text}}
         elif isinstance(segment, Image):
             # upload file
-            url = segment.url if segment.url else segment.file
+            url = segment.url or segment.file
             if url.startswith("http"):
                 return {
                     "type": "image",
@@ -63,7 +63,7 @@ class SlackMessageEvent(AstrMessageEvent):
             }
         elif isinstance(segment, File):
             # upload file
-            url = segment.url if segment.url else segment.file
+            url = segment.url or segment.file
             response = await web_client.files_upload_v2(
                 file=url,
                 filename=segment.name or "file",
@@ -113,7 +113,7 @@ class SlackMessageEvent(AstrMessageEvent):
                 {"type": "section", "text": {"type": "mrkdwn", "text": text_content}}
             )
 
-        return blocks, text_content if not blocks else ""
+        return blocks, "" if blocks else text_content
 
     async def send(self, message: MessageChain):
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
@@ -126,14 +126,14 @@ class SlackMessageEvent(AstrMessageEvent):
                 await self.web_client.chat_postMessage(
                     channel=self.get_group_id(),
                     text=text,
-                    blocks=blocks if blocks else None,
+                    blocks=blocks or None,
                 )
             else:
                 # 发送私信
                 await self.web_client.chat_postMessage(
                     channel=self.get_sender_id(),
                     text=text,
-                    blocks=blocks if blocks else None,
+                    blocks=blocks or None,
                 )
         except Exception:
             # 如果块发送失败，尝试只发送文本
@@ -225,7 +225,7 @@ class SlackMessageEvent(AstrMessageEvent):
                     members.append(MessageMember(user_id=member_id, nickname=member_id))
 
             channel_data = channel_info["channel"]
-            group = Group(
+            return Group(
                 group_id=channel_id,
                 group_name=channel_data.get("name", ""),
                 group_avatar="",
@@ -233,7 +233,5 @@ class SlackMessageEvent(AstrMessageEvent):
                 group_owner=channel_data.get("creator", ""),
                 members=members,
             )
-
-            return group
         except Exception:
             return None
