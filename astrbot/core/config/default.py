@@ -225,6 +225,13 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                     },
+                    "discord":{
+                        "id": "discord",
+                        "type": "discord",
+                        "enable": False,
+                        "discord_token": "",
+                        "discord_proxy": "",
+                    },
                     "slack": {
                         "id": "slack",
                         "type": "slack",
@@ -356,6 +363,16 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                         "obvious_hint": True,
+                    },
+                    "discord_token":{
+                        "description": "Discord Bot Token",
+                        "type": "string",
+                        "hint": "在此处填入你的Discord Bot Token"
+                    },
+                    "discord_proxy":{
+                        "description": "Discord 代理地址",
+                        "type": "string",
+                        "hint": "可选的代理地址：http://ip:port"
                     },
                 },
             },

@@ -77,7 +77,13 @@ class PlatformManager:
                 case "wecom":
                     from .sources.wecom.wecom_adapter import WecomPlatformAdapter  # noqa: F401
                 case "weixin_official_account":
-                    from .sources.weixin_official_account.weixin_offacc_adapter import WeixinOfficialAccountPlatformAdapter # noqa
+                    from .sources.weixin_official_account.weixin_offacc_adapter import (
+                        WeixinOfficialAccountPlatformAdapter,  # noqa
+                    )
+                case "discord":
+                    from .sources.discord.discord_platform_adapter import (
+                        DiscordPlatformAdapter,  # noqa: F401
+                    )
                 case "slack":
                     from .sources.slack.slack_adapter import SlackAdapter  # noqa: F401
         except (ImportError, ModuleNotFoundError) as e:
