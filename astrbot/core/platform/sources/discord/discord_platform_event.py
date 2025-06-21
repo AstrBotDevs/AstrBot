@@ -9,6 +9,8 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image, File, BaseMessageComponent
 from astrbot import logger
+from .client import DiscordBotClient
+from .components import DiscordEmbed, DiscordView
 
 
 # 自定义Discord视图组件（兼容旧版本）
@@ -26,7 +28,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
-        client,
+        client: DiscordBotClient,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
@@ -78,11 +80,6 @@ class DiscordPlatformEvent(AstrMessageEvent):
         message: MessageChain,
     ) -> tuple[str, list[discord.File], Optional[discord.ui.View], list[discord.Embed]]:
         """将 MessageChain 解析为 Discord 发送所需的内容"""
-        try:
-            from .components import DiscordEmbed, DiscordView
-        except ImportError:
-            from components import DiscordEmbed, DiscordView
-
         plain_text_parts = []
         files = []
         view = None
