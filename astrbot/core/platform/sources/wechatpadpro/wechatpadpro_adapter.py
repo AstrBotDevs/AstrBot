@@ -554,35 +554,6 @@ class WeChatPadProAdapter(Platform):
                 logger.error(f"获取群成员详情时发生错误: {e}")
                 return None
 
-    # async def _download_raw_image(
-    #     self, from_user_name: str, to_user_name: str, msg_id: int
-    # ):
-    #     """下载原始图片。"""
-    #     url = f"{self.base_url}/message/GetMsgBigImg"
-    #     params = {"key": self.auth_key}
-    #     payload = {
-    #         "CompressType": 0,
-    #         "FromUserName": from_user_name,
-    #         "MsgId": msg_id,
-    #         "Section": {"DataLen": 61440, "StartPos": 0},
-    #         "ToUserName": to_user_name,
-    #         "TotalLen": 0,
-    #     }
-    #     async with aiohttp.ClientSession() as session:
-    #         try:
-    #             async with session.post(url, params=params, json=payload) as response:
-    #                 if response.status == 200:
-    #                     return await response.json()
-    #                 else:
-    #                     logger.error(f"下载图片失败: {response.status}")
-    #                     return None
-    #         except aiohttp.ClientConnectorError as e:
-    #             logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
-    #             return None
-    #         except Exception as e:
-    #             logger.error(f"下载图片时发生错误: {e}")
-    #             return None
-
     async def _download_raw_image(
             self, from_user_name: str, to_user_name: str, msg_id: int
     ) -> str | None:
