@@ -15,8 +15,6 @@ cookies.json
 logs/
 addons/plugins
 .coverage
-
-
 tests/astrbot_plugin_openai
 chroma
 dashboard/node_modules/
@@ -30,4 +28,3 @@ packages/python_interpreter/workplace
 .conda/
 .idea
 pytest.ini
-.astrbot

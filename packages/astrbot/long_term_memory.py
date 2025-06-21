@@ -121,9 +121,13 @@ class LongTermMemory:
 
         if self.enable_active_reply:
             prompt = req.prompt
-            req.prompt = f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
-            req.prompt += f"\nNow, a new message is coming: `{prompt}`. Please react to it. Only output your response and do not output any other information."
-            req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
+            req.prompt = f"You are now in a chatroom.\
+                  The chat history is as follows:\n{chats_str}"
+            req.prompt += f"\nNow, a new message is coming: `{prompt}`.\
+                  Please react to it. Only output your response \
+                    and do not output any other information."
+            req.contexts = []
+            # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
         else:
             req.system_prompt += (
                 "You are now in a chatroom. The chat history is as follows: \n"
@@ -135,7 +139,9 @@ class LongTermMemory:
             return
 
         if event.get_result() and event.get_result().is_llm_result():
-            final_message = f"[AstrBot/{datetime.datetime.now().strftime('%H:%M:%S')}]: {event.get_result().get_plain_text()}"
+            final_message = f"[AstrBot/{datetime.datetime.now().\
+                                        strftime('%H:%M:%S')}]: \
+                                            {event.get_result().get_plain_text()}"
             logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
             self.session_chats[event.unified_msg_origin].append(final_message)
             if len(self.session_chats[event.unified_msg_origin]) > self.max_cnt:

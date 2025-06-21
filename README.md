@@ -23,25 +23,23 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://astrbot.app/">查看文档</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
+
 </div>
 
 AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用的插件系统和完善的大语言模型（LLM）接入功能的聊天机器人及开发框架。
 
-
 <!-- [![codecov](https://img.shields.io/codecov/c/github/soulter/astrbot?style=for-the-badge)](https://codecov.io/gh/Soulter/AstrBot)
  -->
 
-> [!WARNING]
-> 
-> 请务必修改默认密码以及保证 AstrBot 版本 >= 3.5.13。
+> 个人微信接入所依赖的开源项目 Gewechat 近期已停止维护，`v3.5.10` 已经支持接入 WeChatPadPro 替换 gewechat 方式。详见文档 [WeChatPadPro](https://astrbot.app/deploy/platform/wechat/wechatpadpro.html)
 
 ## ✨ 近期更新
 
 <details><summary>1. AstrBot 现已自带知识库能力</summary>
 
- 📚 详见[文档](https://astrbot.app/use/knowledge-base.html)
+📚 详见[文档](https://astrbot.app/use/knowledge-base.html)
 
- ![image](https://github.com/user-attachments/assets/28b639b0-bb5c-4958-8e94-92ae8cfd1ab4)
+![image](https://github.com/user-attachments/assets/28b639b0-bb5c-4958-8e94-92ae8cfd1ab4)
 
 </details>
 
@@ -61,7 +59,7 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 > [!TIP]
 > WebUI 在线体验 Demo: [https://demo.astrbot.app/](https://demo.astrbot.app/)
-> 
+>
 > 用户名: `astrbot`, 密码: `astrbot`。
 
 ## ✨ 使用方式
@@ -90,18 +88,54 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 首先，安装 uv：
 
+[官网](https://docs.astral.sh/uv/)推荐的安装方式：
+
+linux / macos：
+
+
 ```bash
-pip install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+wget -qO- https://astral.sh/uv/install.sh | sh
 ```
+
+windows:
+
+```pwsh
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+[确保在PATH中]
+```bash
+uv tool update-shell
+```
+
 
 通过 Git Clone 安装 AstrBot：
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
+git clone https://github.com/AstrBotDevs/AstrBot && mkdir -p astrbot && cd AstrBot # 或者 uv tool install https://github.com/AstrBotDevs/AstrBot.git && mkdir astrbot && cd astrbot && astrbot run
 uv run main.py
 ```
 
-或者，直接通过 uvx 安装 AstrBot：
+通过uv安装 Astrbot:
+
+```bash
+uv tool install astrbot # 不建议使用pip install astrbot 可能会导致意外情况
+```
+
+初始化：
+
+```bash
+mkdir astrbot && cd astrbot  # mkdir astrbot ; cd astrbot
+```
+
+运行：
+
+```bash
+astrbot run
+```
+
+或者，直接通过 uvx 临时运行 AstrBot：
 
 ```bash
 mkdir astrbot && cd astrbot
@@ -111,51 +145,71 @@ uvx astrbot init
 
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
+
+一键安装并运行：
+
+linux && macos && windows:
+
+```bash
+uv tool install astrbot && mkdir -p astrbot && cd astrbot && astrbot init && astrbot run
+```
+
+后续更新：
+
+```bash
+uv tool update astrbot
+```
+
+> [!TIP]
+> 如果你在使用python3.13 很有可能安装不上，请使用 -p 3.12 或者更低版本
+> 例如 uv tool install astrbot -p 3.12
+
 #### Replit 部署
 
 [![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
 
 ## ⚡ 消息平台支持情况
 
-| 平台    | 支持性 | 详情 | 消息类型 |
-| -------- | ------- | ------- | ------ |
-| QQ(官方机器人接口) | ✔    | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片 |
-| QQ(OneBot)      | ✔    | 私聊、群聊 | 文字、图片、语音 |
-| 微信个人号    | ✔    | 微信个人号私聊、群聊 | 文字、图片、语音 |
-| Telegram   | ✔    | 私聊、群聊 | 文字、图片 |
-| 企业微信    | ✔    | 私聊 | 文字、图片、语音 |
-| 微信客服    | ✔    | 私聊 | 文字、图片 |
-| 飞书   | ✔    | 私聊、群聊 | 文字、图片 |
-| 钉钉   | ✔    | 私聊、群聊 | 文字、图片 |
-| 微信对话开放平台 | 🚧    | 计划内 | - |
-| Discord   | 🚧    | 计划内 | - |
-| WhatsApp   | 🚧    | 计划内 | - |
-| 小爱音响   | 🚧    | 计划内 | - |
+
+| 平台               | 支持性 | 详情                          | 消息类型         |
+| -------------------- | -------- | ------------------------------- | ------------------ |
+| QQ(官方机器人接口) | ✔     | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片       |
+| QQ(OneBot)         | ✔     | 私聊、群聊                    | 文字、图片、语音 |
+| 微信个人号         | ✔     | 微信个人号私聊、群聊          | 文字、图片、语音 |
+| Telegram           | ✔     | 私聊、群聊                    | 文字、图片       |
+| 企业微信           | ✔     | 私聊                          | 文字、图片、语音 |
+| 微信客服           | ✔     | 私聊                          | 文字、图片       |
+| 飞书               | ✔     | 私聊、群聊                    | 文字、图片       |
+| 钉钉               | ✔     | 私聊、群聊                    | 文字、图片       |
+| 微信对话开放平台   | 🚧     | 计划内                        | -                |
+| Discord            | 🚧     | 计划内                        | -                |
+| WhatsApp           | 🚧     | 计划内                        | -                |
+| 小爱音响           | 🚧     | 计划内                        | -                |
 
 ## ⚡ 提供商支持情况
 
-| 名称    | 支持性 | 类型 | 备注 |
-| -------- | ------- | ------- | ------- |
-| OpenAI API | ✔    | 文本生成 | 也支持 DeepSeek、Google Gemini、GLM、Kimi、xAI 等兼容 OpenAI API 的服务 |
-| Claude API | ✔    | 文本生成 |  |
-| Google Gemini API | ✔    | 文本生成 |  |
-| Dify | ✔    | LLMOps |  |
-| 阿里云百炼应用 | ✔    | LLMOps |  |
-| Ollama | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
-| LM Studio | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
-| LLMTuner | ✔    | 模型加载器 | 本地加载 lora 等微调模型 |
-| 硅基流动 | ✔    | 模型 API 服务平台 |  |
-| PPIO 派欧云 | ✔    | 模型 API 服务平台 |  |
-| OneAPI | ✔    | LLM 分发系统 |  |
-| Whisper | ✔    | 语音转文本 | 支持 API、本地部署 |
-| SenseVoice | ✔    | 语音转文本 | 本地部署 |
-| OpenAI TTS API | ✔    | 文本转语音 |  |
-| GSVI | ✔    | 文本转语音 | GPT-Sovits-Inference |
-| FishAudio | ✔    | 文本转语音 | GPT-Sovits 作者参与的项目 |
-| Edge TTS | ✔    | 文本转语音 | Edge 浏览器的免费 TTS |
-| 阿里云百炼 TTS | ✔    | 文本转语音 |  |
-| Azure TTS | ✔    | 文本转语音 | Microsoft Azure TTS |
 
+| 名称              | 支持性 | 类型              | 备注                                                                    |
+| ------------------- | -------- | ------------------- | ------------------------------------------------------------------------- |
+| OpenAI API        | ✔     | 文本生成          | 也支持 DeepSeek、Google Gemini、GLM、Kimi、xAI 等兼容 OpenAI API 的服务 |
+| Claude API        | ✔     | 文本生成          |                                                                         |
+| Google Gemini API | ✔     | 文本生成          |                                                                         |
+| Dify              | ✔     | LLMOps            |                                                                         |
+| 阿里云百炼应用    | ✔     | LLMOps            |                                                                         |
+| Ollama            | ✔     | 模型加载器        | 本地部署 DeepSeek、Llama 等开源语言模型                                 |
+| LM Studio         | ✔     | 模型加载器        | 本地部署 DeepSeek、Llama 等开源语言模型                                 |
+| LLMTuner          | ✔     | 模型加载器        | 本地加载 lora 等微调模型                                                |
+| 硅基流动          | ✔     | 模型 API 服务平台 |                                                                         |
+| PPIO 派欧云       | ✔     | 模型 API 服务平台 |                                                                         |
+| OneAPI            | ✔     | LLM 分发系统      |                                                                         |
+| Whisper           | ✔     | 语音转文本        | 支持 API、本地部署                                                      |
+| SenseVoice        | ✔     | 语音转文本        | 本地部署                                                                |
+| OpenAI TTS API    | ✔     | 文本转语音        |                                                                         |
+| GSVI              | ✔     | 文本转语音        | GPT-Sovits-Inference                                                    |
+| FishAudio         | ✔     | 文本转语音        | GPT-Sovits 作者参与的项目                                               |
+| Edge TTS          | ✔     | 文本转语音        | Edge 浏览器的免费 TTS                                                   |
+| 阿里云百炼 TTS    | ✔     | 文本转语音        |                                                                         |
+| Azure TTS         | ✔     | 文本转语音        | Microsoft Azure TTS                                                     |
 
 ## ❤️ 贡献
 
@@ -207,7 +261,6 @@ _✨ WebUI ✨_
 
 </details>
 
-
 ## ❤️ Special Thanks
 
 特别感谢所有 Contributors 和插件开发者对 AstrBot 的贡献 ❤️
@@ -223,11 +276,11 @@ _✨ WebUI ✨_
 
 ## ⭐ Star History
 
-> [!TIP] 
+> [!TIP]
 > 如果本项目对您的生活 / 工作产生了帮助，或者您关注本项目的未来发展，请给项目 Star，这是我维护这个开源项目的动力 <3
 
 <div align="center">
-    
+
 [![Star History Chart](https://api.star-history.com/svg?repos=soulter/astrbot&type=Date)](https://star-history.com/#soulter/astrbot&Date)
 
 </div>
@@ -239,4 +292,3 @@ _✨ WebUI ✨_
 3. Please ensure compliance with local laws and regulations when using this project.
 
 _私は、高性能ですから!_
-

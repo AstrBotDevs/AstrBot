@@ -10,10 +10,11 @@ dependencies = [
     "aiohttp>=3.11.18",
     "aiosqlite>=0.21.0",
     "anthropic>=0.51.0",
+    "anyio>=4.9.0",
     "apscheduler>=3.11.0",
     "beautifulsoup4>=4.13.4",
     "certifi>=2025.4.26",
-    "chardet~=5.1.0",
+    "chardet~=5.2.0",
     "colorlog>=6.9.0",
     "cryptography>=44.0.3",
     "dashscope>=1.23.2",
@@ -33,22 +34,23 @@ dependencies = [
     "pillow>=11.2.1",
     "pip>=25.1.1",
     "psutil>=5.8.0",
-    "pydantic~=2.10.3",
+    "pydantic~=2.11.7",
     "pydub>=0.25.1",
     "pyjwt>=2.10.1",
     "python-telegram-bot>=22.0",
     "qq-botpy>=1.2.1",
     "quart>=0.20.0",
     "readability-lxml>=0.8.4.1",
-    "silk-python>=0.2.6",
+    "silk-python",
     "telegramify-markdown>=0.5.1",
+    "toml>=0.10.2",
     "watchfiles>=1.0.5",
     "websockets>=15.0.1",
     "wechatpy>=1.8.18",
 ]
 
 [project.scripts]
-astrbot = "astrbot.cli.__main__:cli"
+astrbot = "astrbot.cli:cli"
 
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
@@ -59,19 +61,13 @@ exclude = [
   "astrbot/core/utils/t2i/local_strategy.py",
   "astrbot/api/all.py",
 ]
-line-length = 88
-lint.ignore = [
-    "F403", 
-    "F405", 
-    "E501",
-    "ASYNC230" # TODO: handle ASYNC230 in AstrBot
-]
-lint.select = [
-  "F", # Pyflakes
-  "W", # pycodestyle warnings
-  "E", # pycodestyle errors
-  "ASYNC", # flake8-async
-  "C4", # flake8-comprehensions
-  "Q", # flake8-quotes
-]
+line-length = 88 
+
 target-version = "py310"
+
+[tool.uv.sources]
+silk-python = { git = "https://github.com/synodriver/pysilk.git" }
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/astrbot"]
