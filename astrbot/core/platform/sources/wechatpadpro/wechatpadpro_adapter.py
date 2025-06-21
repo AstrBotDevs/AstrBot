@@ -2,9 +2,8 @@ import asyncio
 import base64
 import json
 import os
-import traceback
 import time
-from typing import Optional
+from typing import Optional, Any, Coroutine
 
 import aiohttp
 import anyio
@@ -159,6 +158,7 @@ class WeChatPadProAdapter(Platform):
             os.makedirs(data_dir, exist_ok=True)
             with open(self.credentials_file, "w") as f:
                 json.dump(credentials, f)
+            logger.info("成功保存 WeChatPadPro 凭据。")
         except Exception as e:
             logger.error(f"保存 WeChatPadPro 凭据失败: {e}")
 
@@ -166,8 +166,6 @@ class WeChatPadProAdapter(Platform):
         """
         检查 WeChatPadPro 设备是否在线。
         """
-        if not self.auth_key:
-            return False
         url = f"{self.base_url}/login/GetLoginStatus"
         params = {"key": self.auth_key}
 
@@ -186,15 +184,11 @@ class WeChatPadProAdapter(Platform):
                             logger.info("WeChatPadPro 设备不在线。")
                             return False
                         else:
-                            logger.error(f"未知的在线状态: {response_data}")
+                            logger.error(f"未知的在线状态: {login_state:}")
                             return False
                     # Code == 300 为微信退出状态。
                     elif response.status == 200 and response_data.get("Code") == 300:
                         logger.info("WeChatPadPro 设备已退出。")
-                        return False
-                    elif response.status == 200 and response_data.get("Code") == -2:
-                        # 该链接不存在
-                        self.auth_key = None
                         return False
                     else:
                         logger.error(
@@ -207,7 +201,6 @@ class WeChatPadProAdapter(Platform):
                 return False
             except Exception as e:
                 logger.error(f"检查在线状态时发生错误: {e}")
-                logger.error(traceback.format_exc())
                 return False
 
     async def generate_auth_key(self):
@@ -231,7 +224,7 @@ class WeChatPadProAdapter(Platform):
                             and len(response_data["Data"]) > 0
                         ):
                             self.auth_key = response_data["Data"][0]
-                            logger.info(f"成功获取授权码 {self.auth_key[:8]}...")
+                            logger.info("成功获取授权码")
                         else:
                             logger.error(
                                 f"生成授权码成功但未找到授权码: {response_data}"
@@ -257,6 +250,7 @@ class WeChatPadProAdapter(Platform):
             try:
                 async with session.post(url, params=params, json=payload) as response:
                     response_data = await response.json()
+                    # 修正成功判断条件和数据提取路径
                     if response.status == 200 and response_data.get("Code") == 200:
                         # 二维码地址在 Data.QrCodeUrl 字段中
                         if response_data.get("Data") and response_data["Data"].get(
@@ -268,13 +262,6 @@ class WeChatPadProAdapter(Platform):
                                 f"获取登录二维码成功但未找到二维码地址: {response_data}"
                             )
                             return None
-                    elif "该 key 无效" in response_data.get("Text"):
-                        logger.error(
-                            "授权码无效，已经清除。请重新启动 AstrBot 或者本消息适配器。原因也可能是 WeChatPadPro 的 MySQL 服务没有启动成功，请检查 WeChatPadPro 服务的日志。"
-                        )
-                        self.auth_key = None
-                        self.save_credentials()
-                        return None
                     else:
                         logger.error(
                             f"获取登录二维码失败: {response.status}, {response_data}"
@@ -367,7 +354,7 @@ class WeChatPadProAdapter(Platform):
         while True:
             try:
                 async with websockets.connect(ws_url) as websocket:
-                    logger.debug("WebSocket 连接成功。")
+                    logger.info("WebSocket 连接成功。")
                     # 设置空闲超时重连
                     wait_time = (
                         self.active_message_poll_interval
@@ -382,7 +369,7 @@ class WeChatPadProAdapter(Platform):
                             # logger.debug(message) # 不显示原始消息内容
                             asyncio.create_task(self.handle_websocket_message(message))
                         except asyncio.TimeoutError:
-                            logger.debug(f"WebSocket 连接空闲超过 {wait_time} s")
+                            logger.warning(f"WebSocket 连接空闲超过 {wait_time} s")
                             break
                         except websockets.exceptions.ConnectionClosedOK:
                             logger.info("WebSocket 连接正常关闭。")
@@ -505,7 +492,7 @@ class WeChatPadProAdapter(Platform):
 
             # 对于群聊，session_id 可以是群聊 ID 或发送者 ID + 群聊 ID (如果 unique_session 为 True)
             if self.unique_session:
-                abm.session_id = f"{from_user_name}#{abm.sender.user_id}"
+                abm.session_id = f"{from_user_name}_{to_user_name}"
             else:
                 abm.session_id = from_user_name
 
@@ -567,34 +554,125 @@ class WeChatPadProAdapter(Platform):
                 logger.error(f"获取群成员详情时发生错误: {e}")
                 return None
 
+    # async def _download_raw_image(
+    #     self, from_user_name: str, to_user_name: str, msg_id: int
+    # ):
+    #     """下载原始图片。"""
+    #     url = f"{self.base_url}/message/GetMsgBigImg"
+    #     params = {"key": self.auth_key}
+    #     payload = {
+    #         "CompressType": 0,
+    #         "FromUserName": from_user_name,
+    #         "MsgId": msg_id,
+    #         "Section": {"DataLen": 61440, "StartPos": 0},
+    #         "ToUserName": to_user_name,
+    #         "TotalLen": 0,
+    #     }
+    #     async with aiohttp.ClientSession() as session:
+    #         try:
+    #             async with session.post(url, params=params, json=payload) as response:
+    #                 if response.status == 200:
+    #                     return await response.json()
+    #                 else:
+    #                     logger.error(f"下载图片失败: {response.status}")
+    #                     return None
+    #         except aiohttp.ClientConnectorError as e:
+    #             logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
+    #             return None
+    #         except Exception as e:
+    #             logger.error(f"下载图片时发生错误: {e}")
+    #             return None
+
     async def _download_raw_image(
-        self, from_user_name: str, to_user_name: str, msg_id: int
-    ):
-        """下载原始图片。"""
+            self, from_user_name: str, to_user_name: str, msg_id: int
+    ) -> str | None:
+        """下载原始图片（修复优化版）"""
         url = f"{self.base_url}/message/GetMsgBigImg"
         params = {"key": self.auth_key}
-        payload = {
-            "CompressType": 0,
-            "FromUserName": from_user_name,
-            "MsgId": msg_id,
-            "Section": {"DataLen": 61440, "StartPos": 0},
-            "ToUserName": to_user_name,
-            "TotalLen": 0,
-        }
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(url, params=params, json=payload) as response:
-                    if response.status == 200:
-                        return await response.json()
-                    else:
-                        logger.error(f"下载图片失败: {response.status}")
+        start_pos = 0
+        total_len = None
+        max_retries = 3
+        retry_delay = 1.0
+        image_data = bytearray()  # 使用字节数组存储原始数据
+        log_interval = 1024 * 1024  # 1MB日志间隔
+
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+            while total_len is None or start_pos < total_len:
+                payload = {
+                    "CompressType": 0,
+                    "FromUserName": from_user_name,
+                    "MsgId": msg_id,
+                    "Section": {"DataLen": 65536, "StartPos": start_pos},
+                    "ToUserName": to_user_name,
+                    "TotalLen": total_len or 0
+                }
+
+                # 统一重试机制
+                for attempt in range(max_retries + 1):
+                    try:
+                        async with session.post(url, params=params, json=payload) as response:
+                            if response.status != 200:
+                                if attempt >= max_retries:
+                                    logger.error(f"最终HTTP失败: {response.status}")
+                                    return None
+                                delay = retry_delay * (2 ** attempt)
+                                logger.warning(f"HTTP错误重试 {attempt + 1}/{max_retries}")
+                                await asyncio.sleep(delay)
+                                continue
+
+                            data_json = await response.json()
+                            break
+                    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                        if attempt >= max_retries:
+                            logger.error(f"最终网络错误: {type(e).__name__}")
+                            return None
+                        delay = retry_delay * (2 ** attempt)
+                        logger.warning(f"网络错误重试 {attempt + 1}/{max_retries}")
+                        await asyncio.sleep(delay)
+                else:
+                    return None  # 所有重试均失败
+
+                # 优化数据缓冲区获取逻辑
+                data_buffer = (
+                        data_json.get("Data", {}).get("Buffer") or
+                        data_json.get("Buffer") or
+                        data_json.get("Data", {}).get("Data", {}).get("Buffer")
+                )
+
+                if not data_buffer:
+                    logger.error("响应中缺少图片数据")
+                    return None
+
+                # BASE64解码并合并数据
+                try:
+                    chunk_data = base64.b64decode(data_buffer)
+                    if not chunk_data:
+                        logger.error("接收到空数据块")
                         return None
-            except aiohttp.ClientConnectorError as e:
-                logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
-                return None
-            except Exception as e:
-                logger.error(f"下载图片时发生错误: {e}")
-                return None
+
+                    image_data.extend(chunk_data)
+                    chunk_size = len(chunk_data)
+                    start_pos += chunk_size
+
+                    # 首次请求时获取总长度
+                    if total_len is None:
+                        total_len = data_json.get("Data", {}).get("TotalLen")
+                        if not total_len or total_len <= 0:
+                            logger.error("无效的图片总长度")
+                            return None
+                        logger.info(f"图片总长度: {total_len} 字节")
+
+                    # 优化进度日志（减少日志调用）
+                    if start_pos % log_interval < chunk_size or start_pos == total_len:
+                        logger.info(f"下载进度: {start_pos}/{total_len} ({start_pos / total_len:.1%})")
+
+                except Exception as e:
+                    logger.error(f"Base64解码失败: {e}")
+                    return None
+
+        logger.info(f"图片下载完成，大小: {len(image_data)} 字节")
+        # 直接返回base64编码结果，避免中间bytes转换
+        return base64.b64encode(image_data).decode()
 
     async def download_voice(
         self, to_user_name: str, new_msg_id: str, bufid: str, length: int
@@ -644,11 +722,7 @@ class WeChatPadProAdapter(Platform):
                     # wechatpadpro 的格式: <atuserlist>wxid</atuserlist>
                     # gewechat 的格式: <atuserlist><![CDATA[wxid]]></atuserlist>
                     msg_source = raw_message.get("msg_source", "")
-                    if (
-                        f"<atuserlist>{abm.self_id}</atuserlist>" in msg_source
-                        or f"<atuserlist>{abm.self_id}," in msg_source
-                        or f",{abm.self_id}</atuserlist>" in msg_source
-                    ):
+                    if f"<atuserlist>{abm.self_id}</atuserlist>" in msg_source or f"<atuserlist>{abm.self_id}," in msg_source or f",{abm.self_id}</atuserlist>" in msg_source:
                         at_me = True
 
                     # 也检查 push_content 中是否有@提示
@@ -658,28 +732,19 @@ class WeChatPadProAdapter(Platform):
 
                     if at_me:
                         # 被@了，在消息开头插入At组件（参考gewechat的做法）
-                        bot_nickname = await self._get_group_member_nickname(
-                            abm.group_id, abm.self_id
-                        )
-                        abm.message.insert(
-                            0, At(qq=abm.self_id, name=bot_nickname or abm.self_id)
-                        )
+                        bot_nickname = await self._get_group_member_nickname(abm.group_id, abm.self_id)
+                        abm.message.insert(0, At(qq=abm.self_id, name=bot_nickname or abm.self_id))
 
                         # 只有当消息内容不仅仅是@时才添加Plain组件
                         if "\u2005" in message_content:
                             # 检查@之后是否还有其他内容
                             parts = message_content.split("\u2005")
-                            if len(parts) > 1 and any(
-                                part.strip() for part in parts[1:]
-                            ):
+                            if len(parts) > 1 and any(part.strip() for part in parts[1:]):
                                 abm.message.append(Plain(message_content))
                         else:
                             # 检查是否只包含@机器人
                             is_pure_at = False
-                            if (
-                                bot_nickname
-                                and message_content.strip() == f"@{bot_nickname}"
-                            ):
+                            if bot_nickname and message_content.strip() == f"@{bot_nickname}":
                                 is_pure_at = True
                             if not is_pure_at:
                                 abm.message.append(Plain(message_content))
@@ -714,12 +779,16 @@ class WeChatPadProAdapter(Platform):
             from_user_name = raw_message.get("from_user_name", {}).get("str", "")
             to_user_name = raw_message.get("to_user_name", {}).get("str", "")
             msg_id = raw_message.get("msg_id")
-            image_resp = await self._download_raw_image(
-                from_user_name, to_user_name, msg_id
-            )
-            image_bs64_data = (
-                image_resp.get("Data", {}).get("Data", {}).get("Buffer", None)
-            )
+            # image_resp = await self._download_raw_image(
+            #     from_user_name, to_user_name, msg_id
+            # )
+            # image_bs64_data = (
+            #     image_resp.get("Data", {}).get("Data", {}).get("Buffer", "")
+            # )
+            image_bs64_data = await self._download_raw_image(from_user_name, to_user_name, msg_id)
+            image_bs64_data = str(image_bs64_data)
+            logger.debug(f"传入前base64编码：{image_bs64_data}")
+            # image_bs64_data = raw_message.get("img_buf", {}).get("buffer", "")
             if image_bs64_data:
                 abm.message.append(Image.fromBase64(image_bs64_data))
                 # 缓存图片，以便引用消息可以查找
@@ -832,10 +901,7 @@ class WeChatPadProAdapter(Platform):
         # 根据 session_id 判断消息类型
         if "@chatroom" in session.session_id:
             dummy_message_obj.type = MessageType.GROUP_MESSAGE
-            if "#" in session.session_id:
-                dummy_message_obj.group_id = session.session_id.split("#")[0]
-            else:
-                dummy_message_obj.group_id = session.session_id
+            dummy_message_obj.group_id = session.session_id
             dummy_message_obj.sender = MessageMember(user_id="", nickname="")
         else:
             dummy_message_obj.type = MessageType.FRIEND_MESSAGE
