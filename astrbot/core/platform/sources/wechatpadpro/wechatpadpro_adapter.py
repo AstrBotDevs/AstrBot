@@ -79,6 +79,29 @@ class WeChatPadProAdapter(Platform):
         # 设置文本缓存大小限制
         self.max_text_cache = 100
 
+    async def _retry_request(self, session, url, params, payload, max_retries=3, retry_delay=1.0):
+        """统一的重试请求逻辑"""
+        for attempt in range(max_retries + 1):
+            try:
+                async with session.post(url, params=params, json=payload) as response:
+                    if response.status != 200:
+                        if attempt >= max_retries:
+                            logger.error(f"最终HTTP失败: {response.status}")
+                            return None
+                        delay = retry_delay * (2 ** attempt)
+                        logger.warning(f"HTTP错误重试 {attempt + 1}/{max_retries}")
+                        await asyncio.sleep(delay)
+                        continue
+                    return await response.json()
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                if attempt >= max_retries:
+                    logger.error(f"最终网络错误: {type(e).__name__}")
+                    return None
+                delay = retry_delay * (2 ** attempt)
+                logger.warning(f"网络错误重试 {attempt + 1}/{max_retries}")
+                await asyncio.sleep(delay)
+        return None
+
     async def run(self) -> None:
         """
         启动平台适配器的运行实例。
@@ -562,8 +585,6 @@ class WeChatPadProAdapter(Platform):
         params = {"key": self.auth_key}
         start_pos = 0
         total_len = None
-        max_retries = 3
-        retry_delay = 1.0
         image_data = bytearray()  # 使用字节数组存储原始数据
         log_interval = 1024 * 1024  # 1MB日志间隔
 
@@ -578,30 +599,9 @@ class WeChatPadProAdapter(Platform):
                     "TotalLen": total_len or 0
                 }
 
-                # 统一重试机制
-                for attempt in range(max_retries + 1):
-                    try:
-                        async with session.post(url, params=params, json=payload) as response:
-                            if response.status != 200:
-                                if attempt >= max_retries:
-                                    logger.error(f"最终HTTP失败: {response.status}")
-                                    return None
-                                delay = retry_delay * (2 ** attempt)
-                                logger.warning(f"HTTP错误重试 {attempt + 1}/{max_retries}")
-                                await asyncio.sleep(delay)
-                                continue
-
-                            data_json = await response.json()
-                            break
-                    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                        if attempt >= max_retries:
-                            logger.error(f"最终网络错误: {type(e).__name__}")
-                            return None
-                        delay = retry_delay * (2 ** attempt)
-                        logger.warning(f"网络错误重试 {attempt + 1}/{max_retries}")
-                        await asyncio.sleep(delay)
-                else:
-                    return None  # 所有重试均失败
+                data_json = await self._retry_request(session, url, params, payload)
+                if not data_json:
+                    return None
 
                 # 优化数据缓冲区获取逻辑
                 data_buffer = (
@@ -642,7 +642,6 @@ class WeChatPadProAdapter(Platform):
                     return None
 
         logger.info(f"图片下载完成，大小: {len(image_data)} 字节")
-        # 直接返回base64编码结果，避免中间bytes转换
         return base64.b64encode(image_data).decode()
 
     async def download_voice(
