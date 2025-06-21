@@ -41,6 +41,7 @@ dependencies = [
     "quart>=0.20.0",
     "readability-lxml>=0.8.4.1",
     "silk-python>=0.2.6",
+    "slack-bolt>=1.23.0",
     "telegramify-markdown>=0.5.1",
     "watchfiles>=1.0.5",
     "websockets>=15.0.1",
