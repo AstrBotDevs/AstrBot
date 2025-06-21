@@ -118,7 +118,9 @@ class DiscordPlatformAdapter(Platform):
             interaction.channel, interaction.guild_id
         )
 
-        abm.message_str = data["content"]
+        # 对于交互事件，message_str 通常没有意义，且可能导致被闲聊等通用插件错误响应。
+        # 将其清空，以确保只有专门的指令处理器会响应。
+        abm.message_str = ""
         abm.sender = MessageMember(
             user_id=str(interaction.user.id), nickname=interaction.user.display_name
         )
@@ -137,12 +139,32 @@ class DiscordPlatformAdapter(Platform):
         """将普通消息转换为 AstrBotMessage"""
         message = data["message"]
         is_mentioned = data.get("is_mentioned", False)
-        clean_content = data.get("clean_content", message.content)
+
+        content = message.content
+
+        # 如果机器人被@，移除@部分
+        if (
+            is_mentioned
+            and self.client
+            and self.client.user
+            and self.client.user in message.mentions
+        ):
+            # 构建机器人的@字符串，格式为 <@USER_ID> 或 <@!USER_ID>
+            mention_str = f"<@{self.client.user.id}>"
+            mention_str_nickname = (
+                f"<@!{self.client.user.id}>"  # 有些客户端会使用带!的格式
+            )
+
+            if content.startswith(mention_str):
+                content = content[len(mention_str) :].lstrip()
+            elif content.startswith(mention_str_nickname):
+                content = content[len(mention_str_nickname) :].lstrip()
+
         abm = AstrBotMessage()
 
         abm.type, abm.group_id = self._determine_message_type(message.channel)
 
-        abm.message_str = clean_content if is_mentioned else message.content
+        abm.message_str = content
         abm.sender = MessageMember(
             user_id=str(message.author.id), nickname=message.author.display_name
         )
@@ -190,7 +212,9 @@ class DiscordPlatformAdapter(Platform):
 
         # 如果是被@的消息，设置为唤醒状态
         if (
-            hasattr(message.raw_message, "mentions")
+            self.client
+            and self.client.user
+            and hasattr(message.raw_message, "mentions")
             and self.client.user in message.raw_message.mentions
         ):
             message_event.is_wake = True

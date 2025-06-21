@@ -92,44 +92,84 @@ class DiscordPlatformEvent(AstrMessageEvent):
         for i in message.chain:  # 遍历消息链
             if isinstance(i, Plain):  # 如果是文字类型的
                 plain_text_parts.append(i.text)
-            elif isinstance(i, Image):  # 如果是图片类型的
+            elif isinstance(i, Image):
+                logger.debug(f"[Discord] 开始处理 Image 组件: {i}")
                 try:
+                    filename = getattr(i, "filename", None)
+                    file_content = getattr(i, "file", None)
+
+                    if not file_content:
+                        logger.warning(f"[Discord] Image 组件没有 file 属性: {i}")
+                        continue
+
                     discord_file = None
-                    # 优先使用组件指定的filename，否则从路径推断，最后使用默认值
-                    filename = i.filename
 
-                    async def process_local_path(p_str: str) -> Optional[discord.File]:
-                        nonlocal filename
-                        path = Path(p_str)
-                        if not await asyncio.to_thread(path.exists):
-                            logger.warning(f"[Discord] 图片文件不存在: {p_str}")
-                            return None
+                    # 1. URL
+                    if file_content.startswith("http"):
+                        logger.debug(f"[Discord] 处理 URL 图片: {file_content}")
+                        embed = discord.Embed().set_image(url=file_content)
+                        embeds.append(embed)
+                        continue
 
-                        if not filename:  # 如果没有指定filename，则从路径推断
-                            filename = path.name
+                    # 2. File URI
+                    elif file_content.startswith("file:///"):
+                        logger.debug(f"[Discord] 处理 File URI: {file_content}")
+                        path = Path(file_content[8:])
+                        if await asyncio.to_thread(path.exists):
+                            file_bytes = await asyncio.to_thread(path.read_bytes)
+                            discord_file = discord.File(
+                                BytesIO(file_bytes), filename=filename or path.name
+                            )
+                        else:
+                            logger.warning(f"[Discord] 图片文件不存在: {path}")
 
-                        file_bytes = await asyncio.to_thread(path.read_bytes)
-                        return discord.File(BytesIO(file_bytes), filename=filename)
-
-                    if i.file.startswith("file:///"):
-                        discord_file = await process_local_path(i.file[8:])
-                    elif i.file.startswith("http"):
-                        downloaded_path_str = await download_image_by_url(i.file)
-                        if downloaded_path_str:
-                            discord_file = await process_local_path(downloaded_path_str)
-                    elif i.file.startswith("base64://"):
-                        img_bytes = base64.b64decode(i.file.split("base64://")[1])
+                    # 3. Base64 URI
+                    elif file_content.startswith("base64://"):
+                        logger.debug("[Discord] 处理 Base64 URI")
+                        b64_data = file_content.split("base64://", 1)[1]
+                        missing_padding = len(b64_data) % 4
+                        if missing_padding:
+                            b64_data += "=" * (4 - missing_padding)
+                        img_bytes = base64.b64decode(b64_data)
                         discord_file = discord.File(
                             BytesIO(img_bytes), filename=filename or "image.png"
                         )
-                    else:  # Treat as a local path
-                        discord_file = await process_local_path(i.file)
+
+                    # 4. 裸 Base64 或本地路径
+                    else:
+                        try:
+                            logger.debug("[Discord] 尝试作为裸 Base64 处理")
+                            b64_data = file_content
+                            missing_padding = len(b64_data) % 4
+                            if missing_padding:
+                                b64_data += "=" * (4 - missing_padding)
+                            img_bytes = base64.b64decode(b64_data)
+                            discord_file = discord.File(
+                                BytesIO(img_bytes), filename=filename or "image.png"
+                            )
+                        except (ValueError, TypeError, base64.binascii.Error):
+                            logger.debug(
+                                f"[Discord] 裸 Base64 解码失败，作为本地路径处理: {file_content}"
+                            )
+                            path = Path(file_content)
+                            if await asyncio.to_thread(path.exists):
+                                file_bytes = await asyncio.to_thread(path.read_bytes)
+                                discord_file = discord.File(
+                                    BytesIO(file_bytes), filename=filename or path.name
+                                )
+                            else:
+                                logger.warning(f"[Discord] 图片文件不存在: {path}")
 
                     if discord_file:
                         files.append(discord_file)
 
-                except Exception as e:
-                    logger.warning(f"[Discord] 处理图片失败: {i.file}, 错误: {e}")
+                except Exception:
+                    # 使用 getattr 来安全地访问 i.file，以防 i 本身就是问题
+                    file_info = getattr(i, "file", "未知")
+                    logger.error(
+                        f"[Discord] 处理图片时发生未知严重错误: {file_info}",
+                        exc_info=True,
+                    )
             elif isinstance(i, File):
                 try:
                     file_path_str = await i.get_file()
