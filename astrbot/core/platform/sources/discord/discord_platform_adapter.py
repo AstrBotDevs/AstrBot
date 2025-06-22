@@ -1,5 +1,7 @@
 import asyncio
 import discord
+import sys
+import re
 from discord.abc import Messageable
 from discord.channel import DMChannel
 from astrbot.api.platform import (
@@ -16,14 +18,12 @@ from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
-import sys
-from functools import partial
-from typing import Any, Dict, List, Tuple, Type
-from astrbot.core.star.filter.command import CommandFilter, GreedyStr
+
+from typing import Any, Tuple
+from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
-import re
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -43,8 +43,7 @@ class DiscordPlatformAdapter(Platform):
         self.client_self_id = None
         self.registered_handlers = []
         # 指令注册相关
-        self.enable_command_register = self.config.get(
-            "discord_command_register", True)
+        self.enable_command_register = self.config.get("discord_command_register", True)
         self.guild_id = self.config.get("discord_guild_id_for_debug", None)
         self.activity_name = self.config.get("discord_activity_name", None)
 
@@ -65,17 +64,20 @@ class DiscordPlatformAdapter(Platform):
         except (ValueError, TypeError):
             logger.warning(f"[Discord] Invalid channel ID format: {channel_id_str}")
 
-
         if channel:
             message_obj.type = self._get_message_type(channel)
             message_obj.group_id = self._get_channel_id(channel)
         else:
-            logger.warning(f"[Discord] Can't get channel info for {channel_id_str}, will guess message type.")
+            logger.warning(
+                f"[Discord] Can't get channel info for {channel_id_str}, will guess message type."
+            )
             message_obj.type = MessageType.GROUP_MESSAGE
             message_obj.group_id = session.session_id
 
         message_obj.message_str = message_chain.get_plain_text()
-        message_obj.sender = MessageMember(user_id=str(self.client_self_id), nickname=self.client.user.display_name)
+        message_obj.sender = MessageMember(
+            user_id=str(self.client_self_id), nickname=self.client.user.display_name
+        )
         message_obj.self_id = self.client_self_id
         message_obj.session_id = session.session_id
         message_obj.message = message_chain
@@ -127,7 +129,10 @@ class DiscordPlatformAdapter(Platform):
             if self.enable_command_register:
                 await self._collect_and_register_commands()
             if self.activity_name:
-                await self.client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name=self.activity_name))
+                await self.client.change_presence(
+                    status=discord.Status.online,
+                    activity=discord.CustomActivity(name=self.activity_name),
+                )
 
         self.client.on_ready_once_callback = callback
 
@@ -140,7 +145,9 @@ class DiscordPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
 
-    def _get_message_type(self, channel: Messageable, guild_id: int | None = None) -> MessageType:
+    def _get_message_type(
+        self, channel: Messageable, guild_id: int | None = None
+    ) -> MessageType:
         """根据 channel 对象和 guild_id 判断消息类型"""
         if guild_id is not None:
             return MessageType.GROUP_MESSAGE
@@ -173,9 +180,9 @@ class DiscordPlatformAdapter(Platform):
             )
 
             if content.startswith(mention_str):
-                content = content[len(mention_str):].lstrip()
+                content = content[len(mention_str) :].lstrip()
             elif content.startswith(mention_str_nickname):
-                content = content[len(mention_str_nickname):].lstrip()
+                content = content[len(mention_str_nickname) :].lstrip()
 
         abm = AstrBotMessage()
 
@@ -256,7 +263,9 @@ class DiscordPlatformAdapter(Platform):
             try:
                 # 传入空的列表来清除所有全局指令
                 # 如果指定了 guild_id，则只清除该服务器的指令
-                await self.client.sync_commands(commands=[], guild_ids=[self.guild_id] if self.guild_id else None)
+                await self.client.sync_commands(
+                    commands=[], guild_ids=[self.guild_id] if self.guild_id else None
+                )
                 logger.info("[Discord] 指令清理完成。")
             except Exception as e:
                 logger.error(f"[Discord] 清理指令时发生错误: {e}", exc_info=True)
@@ -310,7 +319,8 @@ class DiscordPlatformAdapter(Platform):
 
         if registered_commands:
             logger.info(
-                f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}")
+                f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}"
+            )
         else:
             logger.info("[Discord] 没有发现可注册的指令。")
 
@@ -321,6 +331,7 @@ class DiscordPlatformAdapter(Platform):
 
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
+
         async def dynamic_callback(ctx: discord.ApplicationContext, params: str = None):
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] 回调函数触发: {cmd_name}")
@@ -328,7 +339,7 @@ class DiscordPlatformAdapter(Platform):
             logger.debug(f"[Discord] 回调函数参数: {params}")
             message_str_for_filter = cmd_name
             if params:
-                message_str_for_filter += " " + params
+                message_str_for_filter += f" {params}"
 
             logger.debug(
                 f"[Discord] 斜杠指令 '{cmd_name}' 被触发。 "
@@ -369,12 +380,15 @@ class DiscordPlatformAdapter(Platform):
     ) -> Tuple[str, str, CommandFilter] | None:
         """从事件过滤器中提取指令信息"""
         cmd_name = None
-        is_group = False
+        # is_group = False
         cmd_filter_instance = None
 
         if isinstance(event_filter, CommandFilter):
             # 暂不支持子指令注册为斜杠指令
-            if event_filter.parent_command_names and event_filter.parent_command_names != [""]:
+            if (
+                event_filter.parent_command_names
+                and event_filter.parent_command_names != [""]
+            ):
                 return None
             cmd_name = event_filter.command_name
             cmd_filter_instance = event_filter
@@ -393,6 +407,6 @@ class DiscordPlatformAdapter(Platform):
 
         description = handler_metadata.desc or f"指令: {cmd_name}"
         if len(description) > 100:
-            description = description[:97] + "..."
+            description = f"{description[:97]}..."
 
         return cmd_name, description, cmd_filter_instance
