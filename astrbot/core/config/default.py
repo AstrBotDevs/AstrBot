@@ -5,7 +5,7 @@
 import os
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.15"
+VERSION = "3.5.16"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
@@ -126,7 +126,7 @@ CONFIG_METADATA_2 = {
                 "description": "消息平台适配器",
                 "type": "list",
                 "config_template": {
-                    "qq_official(QQ)": {
+                    "QQ 官方机器人(WebSocket)": {
                         "id": "default",
                         "type": "qq_official",
                         "enable": False,
@@ -135,7 +135,7 @@ CONFIG_METADATA_2 = {
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
                     },
-                    "qq_official_webhook(QQ)": {
+                    "QQ 官方机器人(Webhook)": {
                         "id": "default",
                         "type": "qq_official_webhook",
                         "enable": False,
@@ -144,7 +144,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
-                    "aiocqhttp(OneBotv11)": {
+                    "QQ 个人号(aiocqhttp)": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
@@ -152,7 +152,7 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "gewechat(微信)": {
+                    "微信个人号(Gewechat)": {
                         "id": "gwchat",
                         "type": "gewechat",
                         "enable": False,
@@ -161,7 +161,7 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
-                    "wechatpadpro(微信)": {
+                    "微信个人号(WeChatPadPro)": {
                         "id": "wechatpadpro",
                         "type": "wechatpadpro",
                         "enable": False,
@@ -171,7 +171,7 @@ CONFIG_METADATA_2 = {
                         "wpp_active_message_poll": False,
                         "wpp_active_message_poll_interval": 3,
                     },
-                    "weixin_official_account(微信公众平台)": {
+                    "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
                         "enable": False,
@@ -184,7 +184,7 @@ CONFIG_METADATA_2 = {
                         "port": 6194,
                         "active_send_mode": False,
                     },
-                    "wecom(企业微信)": {
+                    "企业微信(含微信客服)": {
                         "id": "wecom",
                         "type": "wecom",
                         "enable": False,
@@ -197,7 +197,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
-                    "lark(飞书)": {
+                    "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
                         "enable": False,
@@ -206,14 +206,14 @@ CONFIG_METADATA_2 = {
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
                     },
-                    "dingtalk(钉钉)": {
+                    "钉钉(DingTalk)": {
                         "id": "dingtalk",
                         "type": "dingtalk",
                         "enable": False,
                         "client_id": "",
                         "client_secret": "",
                     },
-                    "telegram": {
+                    "Telegram": {
                         "id": "telegram",
                         "type": "telegram",
                         "enable": False,
@@ -225,7 +225,7 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                     },
-                    "discord": {
+                    "Discord": {
                         "id": "discord",
                         "type": "discord",
                         "enable": False,
@@ -235,7 +235,7 @@ CONFIG_METADATA_2 = {
                         "discord_guild_id_for_debug": "",
                         "discord_activity_name": "",
                     },
-                    "slack": {
+                    "Slack": {
                         "id": "slack",
                         "type": "slack",
                         "enable": False,
