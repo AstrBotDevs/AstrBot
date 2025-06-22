@@ -107,7 +107,7 @@ function saveEditedContent() {
                     color="primary"
                     class="editor-fullscreen-btn"
                     @click="openEditorDialog(key, iterable, metadata[metadataKey].items[key]?.editor_theme, metadata[metadataKey].items[key]?.editor_language)"
-                    title="全屏编辑"
+                    :title="t('core.common.editor.fullscreen')"
                   >
                     <v-icon>mdi-fullscreen</v-icon>
                   </v-btn>
@@ -288,10 +288,10 @@ function saveEditedContent() {
         <v-btn icon @click="dialog = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
-        <v-toolbar-title>编辑内容 - {{ currentEditingKey }}</v-toolbar-title>
+        <v-toolbar-title>{{ t('core.common.editor.editingTitle') }} - {{ currentEditingKey }}</v-toolbar-title>
         <v-spacer></v-spacer>
         <v-toolbar-items>
-          <v-btn variant="text" @click="saveEditedContent">保存</v-btn>
+          <v-btn variant="text" @click="saveEditedContent">{{ t('core.common.save') }}</v-btn>
         </v-toolbar-items>
       </v-toolbar>
       <v-card-text class="pa-0">
@@ -309,11 +309,16 @@ function saveEditedContent() {
 
 <script>
 import ListConfigItem from './ListConfigItem.vue';
+import { useI18n } from '@/i18n/composables';
 
 export default {
   name: 'AstrBotConfig',
   components: {
     ListConfigItem
+  },
+  setup() {
+    const { t } = useI18n();
+    return { t };
   },
   props: {
     metadata: {

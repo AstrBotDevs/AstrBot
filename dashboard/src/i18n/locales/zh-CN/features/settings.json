@@ -1,0 +1,18 @@
+{
+  "network": {
+    "title": "网络",
+    "githubProxy": {
+      "title": "GitHub 加速地址",
+      "subtitle": "设置下载插件或者更新 AstrBot 时所用的 GitHub 加速地址。这在中国大陆的网络环境有效。可以自定义，输入结果实时生效。所有地址均不保证稳定性，如果在更新插件/项目时出现报错，请首先检查加速地址是否能正常使用。",
+      "label": "选择 GitHub 加速地址"
+    }
+  },
+  "system": {
+    "title": "系统",
+    "restart": {
+      "title": "重启",
+      "subtitle": "重启 AstrBot",
+      "button": "重启"
+    }
+  }
+} 

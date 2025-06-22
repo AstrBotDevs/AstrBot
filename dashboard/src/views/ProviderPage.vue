@@ -5,10 +5,10 @@
       <v-row>
         <v-col cols="12">
           <h1 class="text-h4 font-weight-bold mb-2">
-            <v-icon size="x-large" color="primary" class="me-2">mdi-creation</v-icon>服务提供商管理
+            <v-icon size="x-large" color="primary" class="me-2">mdi-creation</v-icon>{{ tm('title') }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
-            管理模型服务提供商
+            {{ tm('subtitle') }}
           </p>
         </v-col>
       </v-row>
@@ -17,14 +17,14 @@
       <v-card class="mb-6" elevation="2">
         <v-card-title class="d-flex align-center py-3 px-4">
           <v-icon color="primary" class="me-2">mdi-api</v-icon>
-          <span class="text-h6">服务提供商</span>
+          <span class="text-h6">{{ tm('providers.title') }}</span>
           <v-chip color="info" size="small" class="ml-2">{{ config_data.provider?.length || 0 }}</v-chip>
           <v-spacer></v-spacer>
           <v-btn color="success" prepend-icon="mdi-cog" variant="tonal" class="me-2" @click="showSettingsDialog = true">
-            设置
+            {{ tm('providers.settings') }}
           </v-btn>
           <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true">
-            新增服务提供商
+            {{ tm('providers.addProvider') }}
           </v-btn>
         </v-card-title>
 
@@ -35,23 +35,23 @@
           <v-tabs v-model="activeProviderTypeTab" bg-color="transparent">
             <v-tab value="all" class="font-weight-medium px-3">
               <v-icon start>mdi-filter-variant</v-icon>
-              全部
+              {{ tm('providers.tabs.all') }}
             </v-tab>
             <v-tab value="chat_completion" class="font-weight-medium px-3">
               <v-icon start>mdi-message-text</v-icon>
-              基本对话
+              {{ tm('providers.tabs.chatCompletion') }}
             </v-tab>
             <v-tab value="speech_to_text" class="font-weight-medium px-3">
               <v-icon start>mdi-microphone-message</v-icon>
-              语音转文字
+              {{ tm('providers.tabs.speechToText') }}
             </v-tab>
             <v-tab value="text_to_speech" class="font-weight-medium px-3">
               <v-icon start>mdi-volume-high</v-icon>
-              文字转语音
+              {{ tm('providers.tabs.textToSpeech') }}
             </v-tab>
             <v-tab value="embedding" class="font-weight-medium px-3">
               <v-icon start>mdi-code-json</v-icon>
-              Embedding
+              {{ tm('providers.tabs.embedding') }}
             </v-tab>
           </v-tabs>
         </v-card-text>
@@ -71,7 +71,7 @@
               <div class="d-flex align-center mb-2">
                 <v-icon size="small" color="grey" class="me-2">mdi-tag</v-icon>
                 <span class="text-caption text-medium-emphasis">
-                  提供商类型:
+                  {{ tm('providers.providerType') }}:
                   <v-chip size="x-small" color="primary" class="ml-1">{{ item.type }}</v-chip>
                 </span>
               </div>
@@ -94,22 +94,22 @@
       <v-card class="mb-6" elevation="2">
         <v-card-title class="d-flex align-center py-3 px-4">
           <v-icon color="primary" class="me-2">mdi-heart-pulse</v-icon>
-          <span class="text-h6">供应商可用性</span>
+          <span class="text-h6">{{ tm('availability.title') }}</span>
           <v-spacer></v-spacer>
           <v-btn color="primary" variant="tonal" :loading="loadingStatus" @click="fetchProviderStatus">
             <v-icon left>mdi-refresh</v-icon>
-            刷新状态
+            {{ tm('availability.refresh') }}
           </v-btn>
         </v-card-title>
         <v-card-subtitle class="px-4 py-1 text-caption text-medium-emphasis">
-          通过测试模型对话可用性判断，可能产生API费用
+          {{ tm('availability.subtitle') }}
         </v-card-subtitle>
 
         <v-divider></v-divider>
 
         <v-card-text class="px-4 py-3">
           <v-alert v-if="providerStatuses.length === 0" type="info" variant="tonal">
-            点击"刷新状态"按钮获取供应商可用性
+            {{ tm('availability.noData') }}
           </v-alert>
           
           <v-container v-else class="pa-0">
@@ -122,11 +122,11 @@
                     </v-icon>
                     <span class="font-weight-bold">{{ status.id }}</span>
                     <v-chip :color="status.status === 'available' ? 'success' : 'error'" size="small" class="ml-2">
-                      {{ status.status === 'available' ? '可用' : '不可用' }}
+                      {{ status.status === 'available' ? tm('availability.available') : tm('availability.unavailable') }}
                     </v-chip>
                   </v-card-item>
                   <v-card-text v-if="status.status === 'unavailable'" class="text-caption text-medium-emphasis">
-                    <span class="font-weight-bold">错误信息:</span> {{ status.error }}
+                    <span class="font-weight-bold">{{ tm('availability.errorMessage') }}:</span> {{ status.error }}
                   </v-card-text>
                 </v-card>
               </v-col>
@@ -139,10 +139,10 @@
       <v-card elevation="2">
         <v-card-title class="d-flex align-center py-3 px-4">
           <v-icon color="primary" class="me-2">mdi-console-line</v-icon>
-          <span class="text-h6">服务日志</span>
+          <span class="text-h6">{{ tm('logs.title') }}</span>
           <v-spacer></v-spacer>
           <v-btn variant="text" color="primary" @click="showConsole = !showConsole">
-            {{ showConsole ? '收起' : '展开' }}
+            {{ showConsole ? tm('logs.collapse') : tm('logs.expand') }}
             <v-icon>{{ showConsole ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
           </v-btn>
         </v-card-title>
@@ -162,7 +162,7 @@
       <v-card class="provider-selection-dialog">
         <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
           <v-icon color="white" class="me-2">mdi-plus-circle</v-icon>
-          <span>服务提供商</span>
+          <span>{{ tm('dialogs.addProvider.title') }}</span>
           <v-spacer></v-spacer>
           <v-btn icon variant="text" color="white" @click="showAddProviderDialog = false">
             <v-icon>mdi-close</v-icon>
@@ -173,19 +173,19 @@
           <v-tabs v-model="activeProviderTab" grow slider-color="primary" bg-color="background">
             <v-tab value="chat_completion" class="font-weight-medium px-3">
               <v-icon start>mdi-message-text</v-icon>
-              基本
+              {{ tm('dialogs.addProvider.tabs.basic') }}
             </v-tab>
             <v-tab value="speech_to_text" class="font-weight-medium px-3">
               <v-icon start>mdi-microphone-message</v-icon>
-              语音转文字
+              {{ tm('dialogs.addProvider.tabs.speechToText') }}
             </v-tab>
             <v-tab value="text_to_speech" class="font-weight-medium px-3">
               <v-icon start>mdi-volume-high</v-icon>
-              文字转语音
+              {{ tm('dialogs.addProvider.tabs.textToSpeech') }}
             </v-tab>
             <v-tab value="embedding" class="font-weight-medium px-3">
               <v-icon start>mdi-code-json</v-icon>
-              Embedding
+              {{ tm('dialogs.addProvider.tabs.embedding') }}
             </v-tab>
           </v-tabs>
 
@@ -216,7 +216,7 @@
                 </v-col>
                 <v-col v-if="Object.keys(getTemplatesByType(tabType)).length === 0" cols="12">
                   <v-alert type="info" variant="tonal">
-                    暂无{{ getTabTypeName(tabType) }}类型的提供商模板
+                    {{ tm('dialogs.addProvider.noTemplates', { type: getTabTypeName(tabType) }) }}
                   </v-alert>
                 </v-col>
               </v-row>
@@ -231,7 +231,7 @@
       <v-card>
         <v-card-title class="bg-primary text-white py-3">
           <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
-          <span>{{ updatingMode ? '编辑' : '新增' }} {{ newSelectedProviderName }} 服务提供商</span>
+          <span>{{ updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') }} {{ newSelectedProviderName }} {{ tm('dialogs.config.provider') }}</span>
         </v-card-title>
 
         <v-card-text class="py-4">
@@ -247,10 +247,10 @@
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showProviderCfg = false" :disabled="loading">
-            取消
+            {{ tm('dialogs.config.cancel') }}
           </v-btn>
           <v-btn color="primary" @click="newProvider" :loading="loading">
-            保存
+            {{ tm('dialogs.config.save') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -261,7 +261,7 @@
       <v-card>
         <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
           <v-icon color="white" class="me-2">mdi-cog</v-icon>
-          <span>服务提供商设置</span>
+          <span>{{ tm('dialogs.settings.title') }}</span>
           <v-spacer></v-spacer>
           <v-btn icon variant="text" color="white" @click="showSettingsDialog = false">
             <v-icon>mdi-close</v-icon>
@@ -281,8 +281,8 @@
               >
                 <template v-slot:label>
                   <div>
-                    <div class="text-subtitle-1">启用提供商会话隔离</div>
-                    <div class="text-caption text-medium-emphasis">不同会话将可独立选择文本生成、TTS、STT 等服务提供商。</div>
+                    <div class="text-subtitle-1">{{ tm('dialogs.settings.sessionSeparation.title') }}</div>
+                    <div class="text-caption text-medium-emphasis">{{ tm('dialogs.settings.sessionSeparation.description') }}</div>
                   </div>
                 </template>
               </v-switch>
@@ -293,7 +293,7 @@
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showSettingsDialog = false">
-            关闭
+            {{ tm('dialogs.settings.close') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -333,6 +333,7 @@ import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCardGrid from '@/components/shared/ItemCardGrid.vue';
+import { useModuleI18n } from '@/i18n/composables';
 
 export default {
   name: 'ProviderPage',
@@ -341,6 +342,10 @@ export default {
     WaitingForRestart,
     ConsoleDisplayer,
     ItemCardGrid
+  },
+  setup() {
+    const { tm } = useModuleI18n('features/provider');
+    return { tm };
   },
   data() {
     return {
@@ -416,6 +421,35 @@ export default {
   },
 
   computed: {
+    // 翻译消息的计算属性
+    messages() {
+      return {
+        emptyText: {
+          all: this.tm('providers.empty.all'),
+          typed: this.tm('providers.empty.typed')
+        },
+        tabTypes: {
+          'chat_completion': this.tm('providers.tabs.chatCompletion'),
+          'speech_to_text': this.tm('providers.tabs.speechToText'),
+          'text_to_speech': this.tm('providers.tabs.textToSpeech'),
+          'embedding': this.tm('providers.tabs.embedding')
+        },
+        success: {
+          update: this.tm('messages.success.update'),
+          add: this.tm('messages.success.add'),
+          delete: this.tm('messages.success.delete'),
+          statusUpdate: this.tm('messages.success.statusUpdate'),
+          sessionSeparation: this.tm('messages.success.sessionSeparation')
+        },
+        error: {
+          sessionSeparation: this.tm('messages.error.sessionSeparation')
+        },
+        confirm: {
+          delete: this.tm('messages.confirm.delete')
+        }
+      };
+    },
+    
     // 根据选择的标签过滤提供商列表
     filteredProviders() {
       if (!this.config_data.provider || this.activeProviderTypeTab === 'all') {
@@ -454,9 +488,9 @@ export default {
     // 获取空列表文本
     getEmptyText() {
       if (this.activeProviderTypeTab === 'all') {
-        return "暂无服务提供商，点击 新增服务提供商 添加";
+        return this.messages.emptyText.all;
       } else {
-        return `暂无${this.getTabTypeName(this.activeProviderTypeTab)}类型的服务提供商，点击 新增服务提供商 添加`;
+        return this.tm('providers.empty.typed', { type: this.getTabTypeName(this.activeProviderTypeTab) });
       }
     },
 
@@ -508,21 +542,15 @@ export default {
 
     // 获取Tab类型的中文名称
     getTabTypeName(tabType) {
-      const names = {
-        'chat_completion': '基本对话',
-        'speech_to_text': '语音转文本',
-        'text_to_speech': '文本转语音',
-        'embedding': 'Embedding'
-      };
-      return names[tabType] || tabType;
+      return this.messages.tabTypes[tabType] || tabType;
     },
 
     // 获取提供商简介
     getProviderDescription(template, name) {
       if (name == 'OpenAI') {
-        return `${template.type} 服务提供商。同时也支持所有兼容 OpenAI API 的模型提供商。`;
+        return this.tm('providers.description.openai', { type: template.type });
       }
-      return `${template.type} 服务提供商`;
+      return this.tm('providers.description.default', { type: template.type });
     },
 
     // 选择提供商模板
@@ -633,10 +661,10 @@ export default {
     },
 
     deleteProvider(provider) {
-      if (confirm(`确定要删除服务提供商 ${provider.id} 吗?`)) {
+      if (confirm(this.tm('messages.confirm.delete', { id: provider.id }))) {
         axios.post('/api/config/provider/delete', { id: provider.id }).then((res) => {
           this.getConfig();
-          this.showSuccess(res.data.message || "删除成功!");
+          this.showSuccess(res.data.message || this.messages.success.delete);
         }).catch((err) => {
           this.showError(err.response?.data?.message || err.message);
         });
@@ -651,7 +679,7 @@ export default {
         config: provider
       }).then((res) => {
         this.getConfig();
-        this.showSuccess(res.data.message || "状态更新成功!");
+        this.showSuccess(res.data.message || this.messages.success.statusUpdate);
       }).catch((err) => {
         provider.enable = !provider.enable; // 发生错误时回滚状态
         this.showError(err.response?.data?.message || err.message);
@@ -665,7 +693,7 @@ export default {
           this.sessionSeparationEnabled = res.data.data.enable;
         }
       }).catch((err) => {
-        this.showError(err.response?.data?.message || "获取会话隔离配置失败");
+        this.showError(err.response?.data?.message || this.messages.error.sessionSeparation);
       });
     },
 
@@ -675,7 +703,7 @@ export default {
       axios.post('/api/config/provider/set_session_seperate', {
         enable: this.sessionSeparationEnabled
       }).then((res) => {
-        this.showSuccess(res.data.message || "会话隔离设置已更新");
+        this.showSuccess(res.data.message || this.messages.success.sessionSeparation);
         this.sessionSettingLoading = false;
       }).catch((err) => {
         this.sessionSeparationEnabled = !this.sessionSeparationEnabled; // 发生错误时回滚状态
@@ -703,7 +731,7 @@ export default {
         if (res.data && res.data.status === 'ok') {
           this.providerStatuses = res.data.data || [];
         } else {
-          this.showError(res.data?.message || "获取供应商状态失败");
+          this.showError(res.data?.message || this.tm('messages.error.fetchStatus'));
         }
         this.loadingStatus = false;
       }).catch((err) => {

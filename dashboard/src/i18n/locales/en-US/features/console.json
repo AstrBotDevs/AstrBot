@@ -1,0 +1,15 @@
+{
+  "title": "Console",
+  "autoScroll": {
+    "enabled": "Auto-scroll enabled",
+    "disabled": "Auto-scroll disabled"
+  },
+  "pipInstall": {
+    "button": "Install pip Package",
+    "dialogTitle": "Install Pip Package",
+    "packageLabel": "*Package name, e.g. llmtuner",
+    "mirrorLabel": "Force PyPI repository URL (optional)",
+    "mirrorHint": "Force PyPI repository URL > Config item `PyPI Repository Address`",
+    "installButton": "Install"
+  }
+} 

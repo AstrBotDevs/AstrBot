@@ -1,10 +1,4 @@
-<script setup>
-import axios from 'axios';
-import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
-import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import config from '@/config';
-</script>
+
 
 <template>
   <v-card style="margin-bottom: 16px;">
@@ -17,11 +11,10 @@ import config from '@/config';
           <v-btn icon="mdi-code-json" style="width: 80px;" :color="editorTab === 1 ? 'primary' : ''"
             @click="configToString(); editorTab = 1;"></v-btn>
         </v-btn-group>
-        <v-btn v-if="editorTab === 1" style="margin-left: 16px;" size="small" @click="configToString()">回到更改前的代码</v-btn>
+        <v-btn v-if="editorTab === 1" style="margin-left: 16px;" size="small" @click="configToString()">{{ tm('editor.revertCode') }}</v-btn>
         <v-btn v-if="editorTab === 1 && config_data_has_changed" style="margin-left: 16px;" size="small"
-          @click="applyStrConfig()">应用此配置</v-btn>
-        <small v-if="editorTab === 1" style="margin-left: 16px;">💡 `应用此配置` 将配置暂存并应用到可视化。如要保存，需<span
-            style="font-weight: 1000;">再</span>点击右下角保存按钮。</small>
+          @click="applyStrConfig()">{{ tm('editor.applyConfig') }}</v-btn>
+        <small v-if="editorTab === 1" style="margin-left: 16px;">💡 {{ tm('editor.applyTip') }}</small>
       </div>
 
     </v-card-text>
@@ -76,7 +69,7 @@ import config from '@/config';
                   v-show="config_template_tab === index" :key="index" :value="index">
                   <div style="padding: 16px;">
                     <v-btn variant="tonal" rounded="xl" color="error" @click="deleteItem(key2, index)">
-                      删除这项
+                      {{ tm('actions.delete') }}
                     </v-btn>
 
                     <AstrBotConfig :metadata="metadata[key]['metadata']" :iterable="config_item" :metadataKey="key2">
@@ -106,9 +99,11 @@ import config from '@/config';
 
 
       <div style="margin-left: 16px; padding-bottom: 16px">
-        <small>不了解配置？请见 <a href="https://astrbot.app/">官方文档</a>
-          或 <a
-            href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft">加群询问</a>。</small>
+        <small>{{ tm('help.helpPrefix') }} 
+          <a href="https://astrbot.app/" target="_blank">{{ tm('help.documentation') }}</a>
+          {{ tm('help.helpMiddle') }} 
+          <a href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft" target="_blank">{{ tm('help.support') }}</a>{{ tm('help.helpSuffix') }}
+        </small>
       </div>
 
     </v-tabs-window>
@@ -134,6 +129,12 @@ import config from '@/config';
 
 
 <script>
+import axios from 'axios';
+import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
+import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
+import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
+import config from '@/config';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 
 export default {
   name: 'ConfigPage',
@@ -141,6 +142,28 @@ export default {
     AstrBotConfig,
     VueMonacoEditor,
     WaitingForRestart
+  },
+  setup() {
+    const { t } = useI18n();
+    const { tm } = useModuleI18n('features/config');
+    
+    return {
+      t,
+      tm
+    };
+  },
+
+  computed: {
+    // 安全访问翻译的计算属性
+    messages() {
+      return {
+        loadError: this.tm('messages.loadError'),
+        saveSuccess: this.tm('messages.saveSuccess'),
+        saveError: this.tm('messages.saveError'),
+        configApplied: this.tm('messages.configApplied'),
+        configApplyError: this.tm('messages.configApplyError')
+      };
+    }
   },
   watch: {
     config_data_str: function (val) {
@@ -181,26 +204,26 @@ export default {
         this.provider_config_tmpl = res.data.data.provider_config_tmpl;
         this.adapter_config_tmpl = res.data.data.adapter_config_tmpl;
       }).catch((err) => {
-        save_message = err;
-        save_message_snack = true;
-        save_message_success = "error";
+        this.save_message = this.messages.loadError;
+        this.save_message_snack = true;
+        this.save_message_success = "error";
       });
     },
     updateConfig() {
       if (!this.fetched) return;
       axios.post('/api/config/astrbot/update', this.config_data).then((res) => {
         if (res.data.status === "ok") {
-          this.save_message = res.data.message;
+          this.save_message = res.data.message || this.messages.saveSuccess;
           this.save_message_snack = true;
           this.save_message_success = "success";
           this.$refs.wfr.check();
         } else {
-          this.save_message = res.data.message;
+          this.save_message = res.data.message || this.messages.saveError;
           this.save_message_snack = true;
           this.save_message_success = "error";
         }
       }).catch((err) => {
-        this.save_message = err;
+        this.save_message = this.messages.saveError;
         this.save_message_snack = true;
         this.save_message_success = "error";
       });
@@ -214,11 +237,11 @@ export default {
         this.config_data = JSON.parse(this.config_data_str);
         this.config_data_has_changed = false;
         this.save_message_success = "success";
-        this.save_message = "配置成功应用。如要保存，需再点击右下角保存按钮。";
+        this.save_message = this.messages.configApplied;
         this.save_message_snack = true;
       } catch (e) {
         this.save_message_success = "error";
-        this.save_message = "配置未应用，Json 格式错误。";
+        this.save_message = this.messages.configApplyError;
         this.save_message_snack = true;
       }
     },

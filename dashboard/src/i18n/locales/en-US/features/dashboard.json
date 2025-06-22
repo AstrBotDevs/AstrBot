@@ -1,0 +1,64 @@
+{
+  "title": "Dashboard",
+  "subtitle": "Real-time monitoring and statistics",
+  "lastUpdate": "Last updated",
+  "status": {
+    "loading": "Loading...",
+    "dataError": "Failed to fetch data",
+    "noticeError": "Failed to fetch notice",
+    "online": "Online",
+    "uptime": "Uptime",
+    "memoryUsage": "Memory Usage"
+  },
+  "stats": {
+    "totalMessage": {
+      "title": "Total Messages",
+      "subtitle": "Total messages sent from all platforms"
+    },
+    "onlinePlatform": {
+      "title": "Platforms",
+      "subtitle": "Number of connected platforms"
+    },
+    "runningTime": {
+      "title": "Uptime",
+      "subtitle": "System uptime duration"
+    },
+    "memoryUsage": {
+      "title": "Memory Usage",
+      "subtitle": "System memory usage status",
+      "cpuLoad": "CPU Load",
+      "status": {
+        "good": "Good",
+        "normal": "Normal",
+        "high": "High"
+      }
+    }
+  },
+  "charts": {
+    "messageTrend": {
+      "title": "Message Trend Analysis",
+      "subtitle": "Track message count changes over time",
+      "totalMessages": "Total Messages",
+      "dailyAverage": "Daily Average",
+      "growthRate": "Growth Rate",
+      "timeLabel": "Time",
+      "messageCount": "Message Count",
+      "timeRanges": {
+        "1day": "Past 1 Day",
+        "3days": "Past 3 Days",
+        "1week": "Past 1 Week",
+        "1month": "Past 1 Month"
+      }
+    },
+    "platformStat": {
+      "title": "Platform Message Statistics",
+      "subtitle": "Message count distribution by platform",
+      "total": "Total",
+      "noData": "No platform data available",
+      "messageUnit": "msgs",
+      "platformCount": "Platforms",
+      "mostActive": "Most Active",
+      "totalPercentage": "Total Percentage"
+    }
+  }
+} 
