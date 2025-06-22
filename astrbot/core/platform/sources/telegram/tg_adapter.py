@@ -85,10 +85,23 @@ class TelegramPlatformAdapter(Platform):
 
     @override
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+            self, session: MessageSesion, message_chain: MessageChain
     ):
         from_username = session.session_id
-        await TelegramPlatformEvent.send_with_client(
+
+        message_obj = AstrBotMessage()
+        message_obj.type = session.message_type
+        message_obj.message = message_chain.get_plain_text()
+
+        telegram_event = TelegramPlatformEvent(
+            message_str=message_chain.get_plain_text(),
+            message_obj=message_obj,
+            platform_meta=self.meta(),
+            session_id=session.session_id,
+            client=self.client,
+        )
+
+        await telegram_event.send_with_client(
             self.client, message_chain, from_username
         )
         await super().send_by_session(session, message_chain)
