@@ -225,12 +225,15 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                     },
-                    "discord":{
+                    "discord": {
                         "id": "discord",
                         "type": "discord",
                         "enable": False,
                         "discord_token": "",
                         "discord_proxy": "",
+                        "discord_command_register": True,
+                        "discord_guild_id_for_debug": "",
+                        "discord_activity_name": "",
                     },
                     "slack": {
                         "id": "slack",
@@ -373,6 +376,19 @@ CONFIG_METADATA_2 = {
                         "description": "Discord 代理地址",
                         "type": "string",
                         "hint": "可选的代理地址：http://ip:port"
+                    },
+                    "discord_command_register": {
+                        "description": "是否自动将插件指令注册为 Discord 斜杠指令",
+                        "type": "bool",
+                    },
+                    "discord_activity_name": {
+                        "description": "Discord 活动名称",
+                        "type": "string",
+                        "hint": "可选的 Discord 活动名称。留空则不设置活动。",
+                    },
+                    "discord_guild_id_for_debug": {
+                        "description": "【开发用】指定一个服务器(Guild)ID。在此服务器注册的指令会立刻生效，便于调试。留空则注册为全局指令。",
+                        "type": "string",
                     },
                 },
             },
