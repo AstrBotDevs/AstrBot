@@ -18,8 +18,8 @@
       "typed": "No {type} type service providers available, click Add Provider to add one"
     },
     "description": {
-      "openai": "{type} service provider. Also supports all OpenAI API compatible model providers.",
-      "default": "{type} service provider"
+      "openai": "Supports all OpenAI API compatible providers.",
+      "default": ""
     }
   },
   "availability": {
