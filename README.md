@@ -117,24 +117,24 @@ uvx astrbot init
 
 ## ⚡ 消息平台支持情况
 
-| 平台    | 支持性 | 详情 | 消息类型 |
-| -------- | ------- | ------- | ------ |
-| QQ(官方机器人接口) | ✔    | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片 |
-| QQ(OneBot)      | ✔    | 私聊、群聊 | 文字、图片、语音、文件等 |
-| 微信个人号    | ✔    | 私聊、群聊 | 文字、图片、语音 |
-| Telegram   | ✔    | 私聊、群聊 | 文字、图片 |
-| 企业微信    | ✔    | 私聊 | 文字、图片、语音 |
-| 微信客服    | ✔    | 私聊 | 文字、图片、语音 |
-| 微信公众号    | ✔    | 私聊 | 文字、图片、语音 |
-| 飞书   | ✔    | 私聊、群聊 | 文字、图片 |
-| 钉钉   | ✔    | 私聊、群聊 | 文字、图片 |
-| Slack   | ✔    | 所有 | 文字、图片、文件 |
-| Discord   | ✔    | 所有 | 文字、图片、文件 |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    | 所有 | 文字、图片等 |
-| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    | 所有 | 文字、图片等 |
-| 微信对话开放平台 | 🚧    | 计划内 | - |
-| WhatsApp   | 🚧    | 计划内 | - |
-| 小爱音响   | 🚧    | 计划内 | - |
+| 平台    | 支持性 |
+| -------- | ------- |
+| QQ(官方机器人接口) | ✔    |
+| QQ(OneBot)      | ✔    |
+| 微信个人号    | ✔    |
+| Telegram   | ✔    |
+| 企业微信    | ✔    |
+| 微信客服    | ✔    |
+| 微信公众号    | ✔    |
+| 飞书   | ✔    |
+| 钉钉   | ✔    |
+| Slack   | ✔    |
+| Discord   | ✔    |
+| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
+| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
+| 微信对话开放平台 | 🚧    |
+| WhatsApp   | 🚧    |
+| 小爱音响   | 🚧    |
 
 ## ⚡ 提供商支持情况
 
@@ -155,6 +155,7 @@ uvx astrbot init
 | SenseVoice | ✔    | 语音转文本 | 本地部署 |
 | OpenAI TTS API | ✔    | 文本转语音 |  |
 | GSVI | ✔    | 文本转语音 | GPT-Sovits-Inference |
+| GPT-SoVITs | ✔    | 文本转语音 | GPT-Sovits-Inference |
 | FishAudio | ✔    | 文本转语音 | GPT-Sovits 作者参与的项目 |
 | Edge TTS | ✔    | 文本转语音 | Edge 浏览器的免费 TTS |
 | 阿里云百炼 TTS | ✔    | 文本转语音 |  |
