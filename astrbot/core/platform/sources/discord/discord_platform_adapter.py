@@ -1,5 +1,9 @@
 import asyncio
 import discord
+import sys
+import re
+from discord.abc import Messageable
+from discord.channel import DMChannel
 from astrbot.api.platform import (
     Platform,
     AstrBotMessage,
@@ -15,6 +19,17 @@ from astrbot import logger
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
 
+from typing import Any, Tuple
+from astrbot.core.star.filter.command import CommandFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
+
 
 # 注册平台适配器
 @register_platform_adapter("discord", "Discord 适配器 (基于 Pycord)")
@@ -27,15 +42,50 @@ class DiscordPlatformAdapter(Platform):
         self.settings = platform_settings
         self.client_self_id = None
         self.registered_handlers = []
+        # 指令注册相关
+        self.enable_command_register = self.config.get("discord_command_register", True)
+        self.guild_id = self.config.get("discord_guild_id_for_debug", None)
+        self.activity_name = self.config.get("discord_activity_name", None)
 
+    @override
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
     ):
         """通过会话发送消息"""
+        # 创建一个 message_obj 以便在 event 中使用
+        message_obj = AstrBotMessage()
+        if "_" in session.session_id:
+            session.session_id = session.session_id.split("_")[1]
+        channel_id_str = session.session_id
+        channel = None
+        try:
+            channel_id = int(channel_id_str)
+            channel = self.client.get_channel(channel_id)
+        except (ValueError, TypeError):
+            logger.warning(f"[Discord] Invalid channel ID format: {channel_id_str}")
+
+        if channel:
+            message_obj.type = self._get_message_type(channel)
+            message_obj.group_id = self._get_channel_id(channel)
+        else:
+            logger.warning(
+                f"[Discord] Can't get channel info for {channel_id_str}, will guess message type."
+            )
+            message_obj.type = MessageType.GROUP_MESSAGE
+            message_obj.group_id = session.session_id
+
+        message_obj.message_str = message_chain.get_plain_text()
+        message_obj.sender = MessageMember(
+            user_id=str(self.client_self_id), nickname=self.client.user.display_name
+        )
+        message_obj.self_id = self.client_self_id
+        message_obj.session_id = session.session_id
+        message_obj.message = message_chain
+
         # 创建临时事件对象来发送消息
         temp_event = DiscordPlatformEvent(
-            message_str="",
-            message_obj=None,
+            message_str=message_chain.get_plain_text(),
+            message_obj=message_obj,
             platform_meta=self.meta(),
             session_id=session.session_id,
             client=self.client,
@@ -43,6 +93,7 @@ class DiscordPlatformAdapter(Platform):
         await temp_event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
+    @override
     def meta(self) -> PlatformMetadata:
         """返回平台元数据"""
         return PlatformMetadata(
@@ -52,6 +103,7 @@ class DiscordPlatformAdapter(Platform):
             default_config_tmpl=self.config,
         )
 
+    @override
     async def run(self):
         """主要运行逻辑"""
 
@@ -73,6 +125,17 @@ class DiscordPlatformAdapter(Platform):
         self.client = DiscordBotClient(token, proxy)
         self.client.on_message_received = on_received
 
+        async def callback():
+            if self.enable_command_register:
+                await self._collect_and_register_commands()
+            if self.activity_name:
+                await self.client.change_presence(
+                    status=discord.Status.online,
+                    activity=discord.CustomActivity(name=self.activity_name),
+                )
+
+        self.client.on_ready_once_callback = callback
+
         try:
             await self.client.start_polling()
         except discord.errors.LoginFailure:
@@ -82,44 +145,19 @@ class DiscordPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
 
-    def _determine_message_type(
-        self, channel, guild_id=None
-    ) -> tuple[MessageType, str]:
-        """判断消息类型和群组ID"""
-        if guild_id is None and (
-            isinstance(channel, discord.DMChannel)
-            or getattr(channel, "guild", None) is None
-        ):
-            return MessageType.FRIEND_MESSAGE, ""
+    def _get_message_type(
+        self, channel: Messageable, guild_id: int | None = None
+    ) -> MessageType:
+        """根据 channel 对象和 guild_id 判断消息类型"""
+        if guild_id is not None:
+            return MessageType.GROUP_MESSAGE
+        if isinstance(channel, DMChannel) or getattr(channel, "guild", None) is None:
+            return MessageType.FRIEND_MESSAGE
+        return MessageType.GROUP_MESSAGE
 
-        gid = guild_id or getattr(channel, "guild", None).id
-        return MessageType.GROUP_MESSAGE, str(gid)
-
-    def _convert_interaction_to_abm(self, data: dict) -> AstrBotMessage:
-        """将交互事件转换为 AstrBotMessage"""
-        interaction: discord.Interaction = data["interaction"]
-        abm = AstrBotMessage()
-
-        abm.type, abm.group_id = self._determine_message_type(
-            interaction.channel, interaction.guild_id
-        )
-
-        # 对于交互事件，message_str 通常没有意义，且可能导致被闲聊等通用插件错误响应。
-        # 将其清空，以确保只有专门的指令处理器会响应。
-        abm.message_str = ""
-        abm.sender = MessageMember(
-            user_id=str(interaction.user.id), nickname=interaction.user.display_name
-        )
-        abm.message = [Plain(text=data["content"])]
-        abm.raw_message = interaction
-        abm.self_id = self.client_self_id
-        abm.session_id = (
-            str(interaction.channel_id)
-            if interaction.channel_id
-            else str(interaction.user.id)
-        )
-        abm.message_id = str(interaction.id)
-        return abm
+    def _get_channel_id(self, channel: Messageable) -> str:
+        """根据 channel 对象获取ID"""
+        return str(getattr(channel, "id", None))
 
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
@@ -148,7 +186,8 @@ class DiscordPlatformAdapter(Platform):
 
         abm = AstrBotMessage()
 
-        abm.type, abm.group_id = self._determine_message_type(message.channel)
+        abm.type = self._get_message_type(message.channel)
+        abm.group_id = self._get_channel_id(message.channel)
 
         abm.message_str = content
         abm.sender = MessageMember(
@@ -181,12 +220,10 @@ class DiscordPlatformAdapter(Platform):
 
     async def convert_message(self, data: dict) -> AstrBotMessage:
         """将平台消息转换成 AstrBotMessage"""
-        if data.get("type") in ["interaction", "slash_command"]:
-            return self._convert_interaction_to_abm(data)
-        else:
-            return self._convert_message_to_abm(data)
+        # 由于 on_interaction 已被禁用，我们只处理普通消息
+        return self._convert_message_to_abm(data)
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None):
         """处理消息"""
         message_event = DiscordPlatformEvent(
             message_str=message.message_str,
@@ -194,23 +231,45 @@ class DiscordPlatformAdapter(Platform):
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
+            interaction_followup_webhook=followup_webhook,
         )
 
-        # 如果是被@的消息，设置为唤醒状态
-        if (
+        # 检查是否为斜杠指令
+        is_slash_command = message_event.interaction_followup_webhook is not None
+
+        # 检查是否被@
+        is_mention = (
             self.client
             and self.client.user
             and hasattr(message.raw_message, "mentions")
             and self.client.user in message.raw_message.mentions
-        ):
+        )
+
+        # 如果是斜杠指令或被@的消息，设置为唤醒状态
+        if is_slash_command or is_mention:
             message_event.is_wake = True
             message_event.is_at_or_wake_command = True
 
         self.commit_event(message_event)
 
+    @override
     async def terminate(self):
         """终止适配器"""
         logger.info("[Discord] 正在终止适配器...")
+
+        # 清理指令
+        if self.enable_command_register and self.client:
+            logger.info("[Discord] 正在清理已注册的斜杠指令...")
+            try:
+                # 传入空的列表来清除所有全局指令
+                # 如果指定了 guild_id，则只清除该服务器的指令
+                await self.client.sync_commands(
+                    commands=[], guild_ids=[self.guild_id] if self.guild_id else None
+                )
+                logger.info("[Discord] 指令清理完成。")
+            except Exception as e:
+                logger.error(f"[Discord] 清理指令时发生错误: {e}", exc_info=True)
+
         if self.client and hasattr(self.client, "close"):
             await self.client.close()
         logger.info("[Discord] 适配器已终止。")
@@ -218,3 +277,136 @@ class DiscordPlatformAdapter(Platform):
     def register_handler(self, handler_info):
         """注册处理器信息"""
         self.registered_handlers.append(handler_info)
+
+    async def _collect_and_register_commands(self):
+        """收集所有指令并注册到Discord"""
+        logger.info("[Discord] 开始收集并注册斜杠指令...")
+        registered_commands = []
+
+        for handler_md in star_handlers_registry:
+            if not star_map[handler_md.handler_module_path].activated:
+                continue
+            for event_filter in handler_md.event_filters:
+                cmd_info = self._extract_command_info(event_filter, handler_md)
+                if not cmd_info:
+                    continue
+
+                cmd_name, description, cmd_filter_instance = cmd_info
+
+                # 创建动态回调
+                callback = self._create_dynamic_callback(cmd_name)
+
+                # 创建一个通用的参数选项来接收所有文本输入
+                options = [
+                    discord.Option(
+                        name="params",
+                        description="指令的所有参数",
+                        type=discord.SlashCommandOptionType.string,
+                        required=False,
+                    )
+                ]
+
+                # 创建SlashCommand
+                slash_command = discord.SlashCommand(
+                    name=cmd_name,
+                    description=description,
+                    func=callback,
+                    options=options,
+                    guild_ids=[self.guild_id] if self.guild_id else None,
+                )
+                self.client.add_application_command(slash_command)
+                registered_commands.append(cmd_name)
+
+        if registered_commands:
+            logger.info(
+                f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}"
+            )
+        else:
+            logger.info("[Discord] 没有发现可注册的指令。")
+
+        # 使用 Pycord 的方法同步指令
+        # 注意：这可能需要一些时间，并且有频率限制
+        await self.client.sync_commands()
+        logger.info("[Discord] 指令同步完成。")
+
+    def _create_dynamic_callback(self, cmd_name: str):
+        """为每个指令动态创建一个异步回调函数"""
+
+        async def dynamic_callback(ctx: discord.ApplicationContext, params: str = None):
+            # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
+            logger.debug(f"[Discord] 回调函数触发: {cmd_name}")
+            logger.debug(f"[Discord] 回调函数参数: {ctx}")
+            logger.debug(f"[Discord] 回调函数参数: {params}")
+            message_str_for_filter = cmd_name
+            if params:
+                message_str_for_filter += f" {params}"
+
+            logger.debug(
+                f"[Discord] 斜杠指令 '{cmd_name}' 被触发。 "
+                f"原始参数: '{params}'. "
+                f"构建的指令字符串: '{message_str_for_filter}'"
+            )
+
+            # 尝试立即响应，防止超时
+            followup_webhook = None
+            try:
+                await ctx.defer()
+                followup_webhook = ctx.followup
+            except Exception as e:
+                logger.warning(f"[Discord] 指令 '{cmd_name}' defer 失败: {e}")
+
+            # 2. 构建 AstrBotMessage
+            abm = AstrBotMessage()
+            abm.type = self._get_message_type(ctx.channel, ctx.guild_id)
+            abm.group_id = self._get_channel_id(ctx.channel)
+            abm.message_str = message_str_for_filter
+            abm.sender = MessageMember(
+                user_id=str(ctx.author.id), nickname=ctx.author.display_name
+            )
+            abm.message = [Plain(text=message_str_for_filter)]
+            abm.raw_message = ctx.interaction
+            abm.self_id = self.client_self_id
+            abm.session_id = str(ctx.channel_id)
+            abm.message_id = str(ctx.interaction.id)
+
+            # 3. 将消息和 webhook 分别交给 handle_msg 处理
+            await self.handle_msg(abm, followup_webhook)
+
+        return dynamic_callback
+
+    @staticmethod
+    def _extract_command_info(
+        event_filter: Any, handler_metadata: StarHandlerMetadata
+    ) -> Tuple[str, str, CommandFilter] | None:
+        """从事件过滤器中提取指令信息"""
+        cmd_name = None
+        # is_group = False
+        cmd_filter_instance = None
+
+        if isinstance(event_filter, CommandFilter):
+            # 暂不支持子指令注册为斜杠指令
+            if (
+                event_filter.parent_command_names
+                and event_filter.parent_command_names != [""]
+            ):
+                return None
+            cmd_name = event_filter.command_name
+            cmd_filter_instance = event_filter
+
+        elif isinstance(event_filter, CommandGroupFilter):
+            # 暂不支持指令组直接注册为斜杠指令，因为它们没有 handle 方法
+            return None
+
+        if not cmd_name:
+            return None
+
+        # Discord 斜杠指令名称规范
+        if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
+            logger.debug(f"[Discord] 跳过不符合规范的指令: {cmd_name}")
+            return None
+
+        description = handler_metadata.desc or f"指令: {cmd_name}"
+        if len(description) > 100:
+            description = f"{description[:97]}..."
+
+        return cmd_name, description, cmd_filter_instance
