@@ -25,6 +25,9 @@ DEFAULT_CONFIG = {
         "id_whitelist_log": True,
         "wl_ignore_admin_on_group": True,
         "wl_ignore_admin_on_friend": True,
+        "enable_id_black_list": False,
+        "id_blacklist": [],
+        "id_blacklist_log": True,
         "reply_with_mention": False,
         "reply_with_quote": False,
         "path_mapping": [],
@@ -367,15 +370,15 @@ CONFIG_METADATA_2 = {
                         "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                         "obvious_hint": True,
                     },
-                    "discord_token":{
+                    "discord_token": {
                         "description": "Discord Bot Token",
                         "type": "string",
-                        "hint": "在此处填入你的Discord Bot Token"
+                        "hint": "在此处填入你的Discord Bot Token",
                     },
-                    "discord_proxy":{
+                    "discord_proxy": {
                         "description": "Discord 代理地址",
                         "type": "string",
-                        "hint": "可选的代理地址：http://ip:port"
+                        "hint": "可选的代理地址：http://ip:port",
                     },
                     "discord_command_register": {
                         "description": "是否自动将插件指令注册为 Discord 斜杠指令",
@@ -521,6 +524,22 @@ CONFIG_METADATA_2 = {
                         "description": "打印白名单日志",
                         "type": "bool",
                         "hint": "启用后，当一条消息没通过白名单时，会输出 INFO 级别的日志。",
+                    },
+                    "enable_id_black_list": {
+                        "description": "启用 ID 黑名单",
+                        "type": "bool",
+                    },
+                    "id_blacklist": {
+                        "description": "ID 黑名单",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "obvious_hint": True,
+                        "hint": "填写的 ID 的消息会被忽略，可使用 /bl 添加黑名单",
+                    },
+                    "id_blacklist_log": {
+                        "description": "打印黑名单日志",
+                        "type": "bool",
+                        "hint": "启用后，当一条消息在黑名单中时，会输出 INFO 级别的日志。",
                     },
                     "wl_ignore_admin_on_group": {
                         "description": "管理员群组消息无视 ID 白名单",

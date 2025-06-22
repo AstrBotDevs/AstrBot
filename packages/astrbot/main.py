@@ -1,4 +1,5 @@
 import os
+import asyncio
 import aiohttp
 import datetime
 import builtins
@@ -415,6 +416,56 @@ UID: {user_id} 此 ID 可用于设置管理员。
             event.set_result(MessageEventResult().message("删除白名单成功。"))
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("bl")
+    async def bl(self, event: AstrMessageEvent, uid: str = None):
+        """管理黑名单。bl <uid>|list"""
+        config = self.context.get_config()["platform_settings"]
+        if uid is None:
+            event.set_result(
+                MessageEventResult().message(
+                    "使用方法: /bl <id> 添加黑名单；/dbl <id> 删除黑名单；/bl list 查看黑名单。可通过 /sid 获取 ID。"
+                )
+            )
+            return
+
+        if uid == "list":
+            bl = config.get("id_blacklist", [])
+            msg = "黑名单：\n" + "\n".join(bl) if bl else "黑名单为空。"
+            event.set_result(MessageEventResult().message(msg))
+            return
+
+        if not config.get("enable_id_black_list", False):
+            event.set_result(MessageEventResult().message("黑名单功能未启用。"))
+            return
+
+        uid = str(uid)
+        bl = config.setdefault("id_blacklist", [])
+        if uid in bl:
+            event.set_result(MessageEventResult().message("该 ID 已在黑名单中。"))
+            return
+        bl.append(uid)
+        await self._async_save_config()
+        event.set_result(MessageEventResult().message("添加黑名单成功。"))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("dbl")
+    async def dbl(self, event: AstrMessageEvent, uid: str):
+        """删除黑名单。dbl <uid>"""
+        config = self.context.get_config()["platform_settings"]
+        if not config.get("enable_id_black_list", False):
+            event.set_result(MessageEventResult().message("黑名单功能未启用。"))
+            return
+        try:
+            config["id_blacklist"].remove(str(uid))
+            await self._async_save_config()
+            event.set_result(MessageEventResult().message("删除黑名单成功。"))
+        except ValueError:
+            event.set_result(MessageEventResult().message("此 ID 不在黑名单内。"))
+
+    async def _async_save_config(self):
+        await asyncio.to_thread(self.context.get_config().save_config)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")

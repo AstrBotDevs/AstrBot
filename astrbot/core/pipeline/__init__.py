@@ -4,6 +4,7 @@ from astrbot.core.message.message_event_result import (
 )
 
 from .waking_check.stage import WakingCheckStage
+from .blacklist_check.stage import BlacklistCheckStage
 from .whitelist_check.stage import WhitelistCheckStage
 from .rate_limit_check.stage import RateLimitStage
 from .content_safety_check.stage import ContentSafetyCheckStage
@@ -16,6 +17,7 @@ from .respond.stage import RespondStage
 # 管道阶段顺序
 STAGES_ORDER = [
     "WakingCheckStage",  # 检查是否需要唤醒
+    "BlacklistCheckStage",  # 检查黑名单
     "WhitelistCheckStage",  # 检查是否在群聊/私聊白名单
     "RateLimitStage",  # 检查会话是否超过频率限制
     "ContentSafetyCheckStage",  # 检查内容安全
@@ -28,6 +30,7 @@ STAGES_ORDER = [
 
 __all__ = [
     "WakingCheckStage",
+    "BlacklistCheckStage",
     "WhitelistCheckStage",
     "RateLimitStage",
     "ContentSafetyCheckStage",
