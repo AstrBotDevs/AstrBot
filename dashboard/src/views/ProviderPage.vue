@@ -198,20 +198,20 @@
                       :key="name"
                       cols="12" sm="6" md="4">
                   <v-card variant="outlined" hover class="provider-card" @click="selectProviderTemplate(name)">
-                    <v-card-item>
-                      <template v-slot:prepend>
-                        <v-avatar color="primary" variant="tonal" class="mr-3">
-                          <img :src="getProviderIcon(name)" v-if="getProviderIcon(name)" width="24" height="24">
-                          <span v-else style="font-weight: 1000;">
-                            {{ name[0].toUpperCase() }}
-                          </span>
-                        </v-avatar>
-                      </template>
-                      <v-card-title style="font-size: 15px;">{{ name }}</v-card-title>
-                    </v-card-item>
-                    <v-card-text class="text-caption text-medium-emphasis">
-                      {{ getProviderDescription(template, name) }}
-                    </v-card-text>
+                    <div class="provider-card-content">
+                      <div class="provider-card-text">
+                        <v-card-title class="provider-card-title">接入 {{ name }}</v-card-title>
+                        <v-card-text class="text-caption text-medium-emphasis provider-card-description">
+                          {{ getProviderDescription(template, name) }}
+                        </v-card-text>
+                      </div>
+                      <div class="provider-card-logo">
+                        <img :src="getProviderIcon(name)" v-if="getProviderIcon(name)" class="provider-logo-img">
+                        <div v-else class="provider-logo-fallback">
+                          {{ name[0].toUpperCase() }}
+                        </div>
+                      </div>
+                    </div>
                   </v-card>
                 </v-col>
                 <v-col v-if="Object.keys(getTemplatesByType(tabType)).length === 0" cols="12">
@@ -307,6 +307,23 @@
 
     <WaitingForRestart ref="wfr"></WaitingForRestart>
 
+    <!-- ID冲突确认对话框 -->
+    <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
+      <v-card>
+        <v-card-title class="text-h6 bg-warning d-flex align-center">
+          <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
+          ID 冲突警告
+        </v-card-title>
+        <v-card-text class="py-4 text-body-1 text-medium-emphasis">
+          检测到 ID "{{ conflictId }}" 重复。请使用一个新的 ID。
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">好的</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Key为空的确认对话框 -->
     <v-dialog v-model="showKeyConfirm" max-width="450" persistent>
       <v-card>
@@ -358,6 +375,11 @@ export default {
       showSettingsDialog: false,
       sessionSeparationEnabled: false,
       sessionSettingLoading: false,
+
+      // ID冲突确认对话框
+      showIdConflictDialog: false,
+      conflictId: '',
+      idConflictResolve: null,
 
       // Key确认对话框
       showKeyConfirm: false,
@@ -411,6 +433,13 @@ export default {
   },
 
   watch: {
+    showIdConflictDialog(newValue) {
+      // 当对话框关闭时，如果 Promise 还在等待，则拒绝它以防止内存泄漏
+      if (!newValue && this.idConflictResolve) {
+        this.idConflictResolve(false);
+        this.idConflictResolve = null;
+      }
+    },
     showKeyConfirm(newValue) {
       // 当对话框关闭时，如果 Promise 还在等待，则拒绝它以防止内存泄漏
       if (!newValue && this.keyConfirmResolve) {
@@ -645,6 +674,16 @@ export default {
           });
           this.showSuccess(res.data.message || "更新成功!");
         } else {
+          // 检查 ID 是否已存在
+          const existingProvider = this.config_data.provider?.find(p => p.id === this.newSelectedProviderConfig.id);
+          if (existingProvider) {
+            const confirmed = await this.confirmIdConflict(this.newSelectedProviderConfig.id);
+            if (!confirmed) {
+              this.loading = false;
+              return; // 如果用户取消，则中止保存
+            }
+          }
+
           const res = await axios.post('/api/config/provider/new', this.newSelectedProviderConfig);
           this.showSuccess(res.data.message || "添加成功!");
         }
@@ -753,6 +792,21 @@ export default {
       }
       this.showKeyConfirm = false;
     },
+
+    confirmIdConflict(id) {
+      this.conflictId = id;
+      this.showIdConflictDialog = true;
+      return new Promise((resolve) => {
+        this.idConflictResolve = resolve;
+      });
+    },
+
+    handleIdConflictConfirm(confirmed) {
+      if (this.idConflictResolve) {
+        this.idConflictResolve(confirmed);
+      }
+      this.showIdConflictDialog = false;
+    },
   }
 }
 </script>
@@ -772,12 +826,75 @@ export default {
   transition: all 0.3s ease;
   height: 100%;
   cursor: pointer;
+  overflow: hidden;
+  position: relative;
 }
 
 .provider-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 4px 25px 0 rgba(0, 0, 0, 0.05);
   border-color: var(--v-primary-base);
+}
+
+.provider-card-content {
+  display: flex;
+  align-items: center;
+  height: 100px;
+  padding: 16px;
+  position: relative;
+  z-index: 2;
+}
+
+.provider-card-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.provider-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.provider-card-description {
+  padding: 0;
+  margin: 0;
+}
+
+.provider-card-logo {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.provider-logo-img {
+  width: 60px;
+  height: 60px;
+  opacity: 0.6;
+  object-fit: contain;
+}
+
+.provider-logo-fallback {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background-color: var(--v-primary-base);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: bold;
+  opacity: 0.3;
 }
 
 .v-tabs {

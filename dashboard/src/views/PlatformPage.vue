@@ -20,43 +20,22 @@
           <span class="text-h6">{{ tm('adapters') }}</span>
           <v-chip color="info" size="small" class="ml-2">{{ config_data.platform?.length || 0 }}</v-chip>
           <v-spacer></v-spacer>
-          <v-menu>
-            <template v-slot:activator="{ props }">
-              <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" v-bind="props">
-                {{ tm('addAdapter') }}
-              </v-btn>
-            </template>
-            <v-list @update:selected="addFromDefaultConfigTmpl($event)">
-              <v-list-item 
-                v-for="(item, index) in metadata['platform_group']?.metadata?.platform?.config_template || {}" 
-                :key="index" 
-                rounded="xl" 
-                :value="index"
-              >
-                <v-list-item-title>{{ index }}</v-list-item-title>
-              </v-list-item>
-            </v-list>
-          </v-menu>
+          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddPlatformDialog = true">
+            {{ tm('addAdapter') }}
+          </v-btn>
         </v-card-title>
 
         <v-divider></v-divider>
 
         <v-card-text class="px-4 py-3">
-          <item-card-grid
-            :items="config_data.platform || []"
-            title-field="id" 
-            enabled-field="enable"
-            empty-icon="mdi-connection"
-            :empty-text="tm('emptyText')"
-            @toggle-enabled="platformStatusChange"
-            @delete="deletePlatform"
-            @edit="editPlatform"
-          >
+          <item-card-grid :items="config_data.platform || []" title-field="id" enabled-field="enable"
+            empty-icon="mdi-connection" :empty-text="tm('emptyText')" @toggle-enabled="platformStatusChange"
+            @delete="deletePlatform" @edit="editPlatform">
             <template v-slot:item-details="{ item }">
               <div class="d-flex align-center mb-2">
                 <v-icon size="small" color="grey" class="me-2">mdi-tag</v-icon>
                 <span class="text-caption text-medium-emphasis">
-                  {{ tm('details.adapterType') }}: 
+                  {{ tm('details.adapterType') }}:
                   <v-chip size="x-small" color="primary" class="ml-1">{{ item.type }}</v-chip>
                 </span>
               </div>
@@ -95,36 +74,79 @@
       </v-card>
     </v-container>
 
-    <!-- 配置对话框 -->
-    <v-dialog v-model="showPlatformCfg" persistent>
-      <v-card>
-        <v-card-title class="bg-primary text-white py-3">
-          <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
-          <span>{{ updatingMode ? tm('dialog.edit') : tm('dialog.add') }} {{ newSelectedPlatformName }} {{ tm('dialog.adapter') }}</span>
+    <!-- 添加平台适配器对话框 -->
+    <v-dialog v-model="showAddPlatformDialog" max-width="900px" min-height="80%">
+      <v-card class="platform-selection-dialog">
+        <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
+          <v-icon color="white" class="me-2">mdi-plus-circle</v-icon>
+          <span>{{ tm('dialog.addPlatform') }}</span>
+          <v-spacer></v-spacer>
+          <v-btn icon variant="text" color="white" @click="showAddPlatformDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
         </v-card-title>
-        
-        <v-card-text class="py-4">
-          <v-row>
-            <v-col cols="12" md="8">
-              <AstrBotConfig :iterable="newSelectedPlatformConfig"
-                :metadata="metadata['platform_group']?.metadata"
-                metadataKey="platform" />
+
+        <v-card-text class="pa-4" style="overflow-y: auto;">
+          <v-row class="mt-1">
+            <v-col v-for="(template, name) in metadata['platform_group']?.metadata?.platform?.config_template || {}"
+              :key="name" cols="12" sm="6" md="6">
+              <v-card variant="outlined" hover class="platform-card" @click="selectPlatformTemplate(name)">
+                <div class="platform-card-content">
+                  <div class="platform-card-text">
+                    <v-card-title class="platform-card-title">接入 {{ name }}</v-card-title>
+                    <v-card-text class="text-caption text-medium-emphasis platform-card-description">
+                      {{ getPlatformDescription(template, name) }}
+                    </v-card-text>
+                  </div>
+                  <div class="platform-card-logo">
+                    <img :src="getPlatformIcon(name)" v-if="getPlatformIcon(name)" class="platform-logo-img">
+                    <div v-else class="platform-logo-fallback">
+                      {{ name[0].toUpperCase() }}
+                    </div>
+                  </div>
+                </div>
+              </v-card>
             </v-col>
-            <v-col cols="12" md="4" class="d-flex flex-column align-end">
-              <v-btn :loading="iframeLoading" @click="refreshIframe" variant="tonal" color="primary">
-                <v-icon>mdi-refresh</v-icon>
-                {{ tm('dialog.refresh') }}
-              </v-btn>
-              <iframe v-show="!iframeLoading"
-                :src="store.getTutorialLink(newSelectedPlatformConfig.type)"
-                @load="iframeLoading = false" style="width: 100%; border: none; min-height: 400px; margin-top: 10px; flex: 1;">
-              </iframe>
+            <v-col
+              v-if="Object.keys(metadata['platform_group']?.metadata?.platform?.config_template || {}).length === 0"
+              cols="12">
+              <v-alert type="info" variant="tonal">
+                {{ tm('dialog.noTemplates') }}
+              </v-alert>
             </v-col>
           </v-row>
         </v-card-text>
-        
+      </v-card>
+    </v-dialog>
+
+    <!-- 配置对话框 -->
+    <v-dialog v-model="showPlatformCfg" persistent width="900px" max-width="90%">
+      <v-card>
+        <v-card-title class="bg-primary text-white py-3">
+          <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
+          <span>{{ updatingMode ? tm('dialog.edit') : tm('dialog.add') }} {{ newSelectedPlatformName }} {{
+            tm('dialog.adapter') }}</span>
+        </v-card-title>
+
+        <v-card-text class="py-4">
+          <v-row>
+            <v-col cols="12">
+              <AstrBotConfig :iterable="newSelectedPlatformConfig" :metadata="metadata['platform_group']?.metadata"
+                metadataKey="platform" />
+            </v-col>
+          </v-row>
+          <v-row class="mt-2">
+            <v-col cols="12" class="text-center">
+              <v-btn color="info" variant="outlined" @click="openTutorial">
+                <v-icon start>mdi-book-open-variant</v-icon>
+                查看接入教程
+              </v-btn>
+            </v-col>
+          </v-row>
+        </v-card-text>
+
         <v-divider></v-divider>
-        
+
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showPlatformCfg = false" :disabled="loading">
@@ -142,8 +164,25 @@
       location="top">
       {{ save_message }}
     </v-snackbar>
-    
+
     <WaitingForRestart ref="wfr"></WaitingForRestart>
+
+    <!-- ID冲突确认对话框 -->
+    <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
+      <v-card>
+        <v-card-title class="text-h6 bg-warning d-flex align-center">
+          <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
+          ID 冲突警告
+        </v-card-title>
+        <v-card-text class="py-4 text-body-1 text-medium-emphasis">
+          检测到 ID "{{ conflictId }}" 重复。请使用一个新的 ID。
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">好的</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -167,7 +206,7 @@ export default {
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n('features/platform');
-    
+
     return {
       t,
       tm
@@ -191,6 +230,7 @@ export default {
       fetched: false,
       metadata: {},
       showPlatformCfg: false,
+      showAddPlatformDialog: false,
 
       newSelectedPlatformName: '',
       newSelectedPlatformConfig: {},
@@ -203,9 +243,23 @@ export default {
       save_message_success: "success",
 
       showConsole: false,
-      iframeLoading: true,
+
+      // ID冲突确认对话框
+      showIdConflictDialog: false,
+      conflictId: '',
+      idConflictResolve: null,
 
       store: useCommonStore()
+    }
+  },
+
+  watch: {
+    showIdConflictDialog(newValue) {
+      // 当对话框关闭时，如果 Promise 还在等待，则拒绝它以防止内存泄漏
+      if (!newValue && this.idConflictResolve) {
+        this.idConflictResolve(false);
+        this.idConflictResolve = null;
+      }
     }
   },
 
@@ -214,12 +268,64 @@ export default {
   },
 
   methods: {
-    refreshIframe() {
-      this.iframeLoading = true;
-      const iframe = document.querySelector('iframe');
-      iframe.src = iframe.src + '?t=' + new Date().getTime();
+    openTutorial() {
+      const tutorialUrl = this.getTutorialLink(this.newSelectedPlatformConfig.type);
+      window.open(tutorialUrl, '_blank');
     },
-    
+
+    getPlatformIcon(name) {
+      if (name.includes('QQ')) {
+        return '/src/assets/images/platform_logos/qq.png'
+      } else if (name.includes('企业微信')) {
+        return '/src/assets/images/platform_logos/wecom.png'
+      } else if (name.includes('微信')) {
+        return '/src/assets/images/platform_logos/wechat.png';
+      } else if (name.includes('Lark')) {
+        return '/src/assets/images/platform_logos/lark.png';
+      } else if (name.includes('DingTalk')) {
+        return '/src/assets/images/platform_logos/dingtalk.svg';
+      } else if (name.includes('Telegram')) {
+        return '/src/assets/images/platform_logos/telegram.svg';
+      } else if (name.includes('Discord')) {
+        return '/src/assets/images/platform_logos/discord.svg';
+      } else if (name.includes('Slack')) {
+        return '/src/assets/images/platform_logos/slack.svg';
+      } else if (name.includes('kook')) {
+        return '/src/assets/images/platform_logos/kook.png';
+      } else if (name.includes('vocechat')) {
+        return '/src/assets/images/platform_logos/vocechat.png';
+      }
+    },
+
+    getTutorialLink(platform_type) {
+      let tutorial_map = {
+        "qq_official_webhook": "https://astrbot.app/deploy/platform/qqofficial/webhook.html",
+        "qq_official": "https://astrbot.app/deploy/platform/qqofficial/websockets.html",
+        "aiocqhttp": "https://astrbot.app/deploy/platform/aiocqhttp/napcat.html",
+        "wecom": "https://astrbot.app/deploy/platform/wecom.html",
+        "gewechat": "https://astrbot.app/deploy/platform/wechat/gewechat.html",
+        "lark": "https://astrbot.app/deploy/platform/lark.html",
+        "telegram": "https://astrbot.app/deploy/platform/telegram.html",
+        "dingtalk": "https://astrbot.app/deploy/platform/dingtalk.html",
+        "wechatpadpro": "https://astrbot.app/deploy/platform/wechat/wechatpadpro.html",
+        "weixin_official_account": "https://astrbot.app/deploy/platform/weixin-official-account.html",
+        "discord": "https://astrbot.app/deploy/platform/discord.html",
+        "slack": "https://astrbot.app/deploy/platform/slack.html",
+        "kook": "https://astrbot.app/deploy/platform/kook.html",
+        "vocechat": "https://astrbot.app/deploy/platform/vocechat.html",
+      }
+      return tutorial_map[platform_type] || "https://docs.astrbot.app";
+    },
+
+    getPlatformDescription(template, name) {
+      // special judge for community platforms
+      if (name.includes('vocechat')) {
+        return "由 @HikariFroya 提供。";
+      } else if (name.includes('kook')) {
+        return "由 @wuyan1003 提供。"
+      }
+    },
+
     getConfig() {
       axios.get('/api/config/get').then((res) => {
         this.config_data = res.data.data.config;
@@ -228,6 +334,17 @@ export default {
       }).catch((err) => {
         this.showError(err);
       });
+    },
+
+    // 添加一个新方法来选择平台模板
+    selectPlatformTemplate(name) {
+      this.newSelectedPlatformName = name;
+      this.showPlatformCfg = true;
+      this.updatingMode = false;
+      this.newSelectedPlatformConfig = JSON.parse(JSON.stringify(
+        this.metadata['platform_group']?.metadata?.platform?.config_template[name] || {}
+      ));
+      this.showAddPlatformDialog = false;
     },
 
     addFromDefaultConfigTmpl(index) {
@@ -264,16 +381,46 @@ export default {
         });
         this.updatingMode = false;
       } else {
-        axios.post('/api/config/platform/new', this.newSelectedPlatformConfig).then((res) => {
-          this.loading = false;
-          this.showPlatformCfg = false;
-          this.getConfig();
-          this.showSuccess(res.data.message || this.messages.addSuccess);
-        }).catch((err) => {
-          this.loading = false;
-          this.showError(err.response?.data?.message || err.message);
-        });
+        this.savePlatform();
       }
+    },
+
+    async savePlatform() {
+      // 检查 ID 是否已存在
+      const existingPlatform = this.config_data.platform?.find(p => p.id === this.newSelectedPlatformConfig.id);
+      if (existingPlatform) {
+        const confirmed = await this.confirmIdConflict(this.newSelectedPlatformConfig.id);
+        if (!confirmed) {
+          this.loading = false;
+          return; // 如果用户取消，则中止保存
+        }
+      }
+
+      try {
+        const res = await axios.post('/api/config/platform/new', this.newSelectedPlatformConfig);
+        this.loading = false;
+        this.showPlatformCfg = false;
+        this.getConfig();
+        this.showSuccess(res.data.message || this.messages.addSuccess);
+      } catch (err) {
+        this.loading = false;
+        this.showError(err.response?.data?.message || err.message);
+      }
+    },
+
+    confirmIdConflict(id) {
+      this.conflictId = id;
+      this.showIdConflictDialog = true;
+      return new Promise((resolve) => {
+        this.idConflictResolve = resolve;
+      });
+    },
+
+    handleIdConflictConfirm(confirmed) {
+      if (this.idConflictResolve) {
+        this.idConflictResolve(confirmed);
+      }
+      this.showIdConflictDialog = false;
     },
 
     deletePlatform(platform) {
@@ -290,7 +437,7 @@ export default {
 
     platformStatusChange(platform) {
       platform.enable = !platform.enable; // 切换状态
-      
+
       axios.post('/api/config/platform/update', {
         id: platform.id,
         config: platform
@@ -303,13 +450,13 @@ export default {
         this.showError(err.response?.data?.message || err.message);
       });
     },
-    
+
     showSuccess(message) {
       this.save_message = message;
       this.save_message_success = "success";
       this.save_message_snack = true;
     },
-    
+
     showError(message) {
       this.save_message = message;
       this.save_message_success = "error";
@@ -323,5 +470,85 @@ export default {
 .platform-page {
   padding: 20px;
   padding-top: 8px;
+}
+
+.platform-selection-dialog .v-card-title {
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
+
+.platform-card {
+  transition: all 0.3s ease;
+  height: 100%;
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+}
+
+.platform-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 25px 0 rgba(0, 0, 0, 0.05);
+  border-color: var(--v-primary-base);
+}
+
+.platform-card-content {
+  display: flex;
+  align-items: center;
+  height: 100px;
+  padding: 16px;
+  position: relative;
+  z-index: 2;
+}
+
+.platform-card-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.platform-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.platform-card-description {
+  padding: 0;
+  margin: 0;
+}
+
+.platform-card-logo {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.platform-logo-img {
+  max-width: 60px;
+  max-height: 60px;
+  opacity: 0.6;
+  object-fit: contain;
+}
+
+.platform-logo-fallback {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background-color: var(--v-primary-base);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: bold;
+  opacity: 0.3;
 }
 </style>

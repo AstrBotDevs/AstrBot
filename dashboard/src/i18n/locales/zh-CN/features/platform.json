@@ -20,7 +20,8 @@
     "adapter": "平台适配器",
     "refresh": "刷新",
     "cancel": "取消",
-    "save": "保存"
+    "save": "保存",
+    "addPlatform": "添加平台适配器"
   },
   "messages": {
     "updateSuccess": "更新成功!",

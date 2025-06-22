@@ -20,7 +20,8 @@
     "adapter": "Platform Adapter",
     "refresh": "Refresh",
     "cancel": "Cancel",
-    "save": "Save"
+    "save": "Save",
+    "addPlatform": "Add Platform Adapter"
   },
   "messages": {
     "updateSuccess": "Update successful!",
