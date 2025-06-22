@@ -1,5 +1,7 @@
 import asyncio
 import discord
+from discord.abc import Messageable
+from discord.channel import DMChannel
 from astrbot.api.platform import (
     Platform,
     AstrBotMessage,
@@ -51,10 +53,37 @@ class DiscordPlatformAdapter(Platform):
         self, session: MessageSesion, message_chain: MessageChain
     ):
         """通过会话发送消息"""
+        # 创建一个 message_obj 以便在 event 中使用
+        message_obj = AstrBotMessage()
+        if "_" in session.session_id:
+            session.session_id = session.session_id.split("_")[1]
+        channel_id_str = session.session_id
+        channel = None
+        try:
+            channel_id = int(channel_id_str)
+            channel = self.client.get_channel(channel_id)
+        except (ValueError, TypeError):
+            logger.warning(f"[Discord] Invalid channel ID format: {channel_id_str}")
+
+
+        if channel:
+            message_obj.type = self._get_message_type(channel)
+            message_obj.group_id = self._get_channel_id(channel)
+        else:
+            logger.warning(f"[Discord] Can't get channel info for {channel_id_str}, will guess message type.")
+            message_obj.type = MessageType.GROUP_MESSAGE
+            message_obj.group_id = session.session_id
+
+        message_obj.message_str = message_chain.get_plain_text()
+        message_obj.sender = MessageMember(user_id=str(self.client_self_id), nickname=self.client.user.display_name)
+        message_obj.self_id = self.client_self_id
+        message_obj.session_id = session.session_id
+        message_obj.message = message_chain
+
         # 创建临时事件对象来发送消息
         temp_event = DiscordPlatformEvent(
-            message_str="",
-            message_obj=None,
+            message_str=message_chain.get_plain_text(),
+            message_obj=message_obj,
             platform_meta=self.meta(),
             session_id=session.session_id,
             client=self.client,
@@ -111,18 +140,17 @@ class DiscordPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
 
-    def _determine_message_type(
-        self, channel, guild_id=None
-    ) -> tuple[MessageType, str]:
-        """判断消息类型和群组ID"""
-        if guild_id is None and (
-            isinstance(channel, discord.DMChannel)
-            or getattr(channel, "guild", None) is None
-        ):
-            return MessageType.FRIEND_MESSAGE, ""
+    def _get_message_type(self, channel: Messageable, guild_id: int | None = None) -> MessageType:
+        """根据 channel 对象和 guild_id 判断消息类型"""
+        if guild_id is not None:
+            return MessageType.GROUP_MESSAGE
+        if isinstance(channel, DMChannel) or getattr(channel, "guild", None) is None:
+            return MessageType.FRIEND_MESSAGE
+        return MessageType.GROUP_MESSAGE
 
-        gid = guild_id or getattr(channel, "guild", None).id
-        return MessageType.GROUP_MESSAGE, str(gid)
+    def _get_channel_id(self, channel: Messageable) -> str:
+        """根据 channel 对象获取ID"""
+        return str(getattr(channel, "id", None))
 
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
@@ -151,7 +179,8 @@ class DiscordPlatformAdapter(Platform):
 
         abm = AstrBotMessage()
 
-        abm.type, abm.group_id = self._determine_message_type(message.channel)
+        abm.type = self._get_message_type(message.channel)
+        abm.group_id = self._get_channel_id(message.channel)
 
         abm.message_str = content
         abm.sender = MessageMember(
@@ -317,9 +346,8 @@ class DiscordPlatformAdapter(Platform):
 
             # 2. 构建 AstrBotMessage
             abm = AstrBotMessage()
-            abm.type, abm.group_id = self._determine_message_type(
-                ctx.channel, ctx.guild_id
-            )
+            abm.type = self._get_message_type(ctx.channel, ctx.guild_id)
+            abm.group_id = self._get_channel_id(ctx.channel)
             abm.message_str = message_str_for_filter
             abm.sender = MessageMember(
                 user_id=str(ctx.author.id), nickname=ctx.author.display_name
