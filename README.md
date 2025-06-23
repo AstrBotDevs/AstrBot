@@ -237,7 +237,8 @@ _✨ WebUI ✨_
 
 </div>
 
-![10k-star-banner-credit-by-kevin](https://github.com/user-attachments/assets/2bde455e-0e47-4e04-988a-f2c3679fa84c)
+![10k-star-banner-credit-by-kevin](https://github.com/user-attachments/assets/c97fc5fb-20b9-4bc8-9998-c20b930ab097)
+
 
 ## Disclaimer
 
