@@ -21,7 +21,8 @@
     },
     "runningTime": {
       "title": "Uptime",
-      "subtitle": "System uptime duration"
+      "subtitle": "System uptime duration",
+      "format": "{hours}h {minutes}m {seconds}s"
     },
     "memoryUsage": {
       "title": "Memory Usage",
