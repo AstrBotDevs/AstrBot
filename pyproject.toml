@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "3.5.15"
+version = "3.5.17"
 description = "易上手的多平台 LLM 聊天机器人及开发框架"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -33,6 +33,7 @@ dependencies = [
     "pillow>=11.2.1",
     "pip>=25.1.1",
     "psutil>=5.8.0",
+    "py-cord>=2.6.1",
     "pydantic~=2.10.3",
     "pydub>=0.25.1",
     "pyjwt>=2.10.1",
@@ -41,6 +42,7 @@ dependencies = [
     "quart>=0.20.0",
     "readability-lxml>=0.8.4.1",
     "silk-python>=0.2.6",
+    "slack-sdk>=3.35.0",
     "telegramify-markdown>=0.5.1",
     "watchfiles>=1.0.5",
     "websockets>=15.0.1",

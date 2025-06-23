@@ -1,0 +1,44 @@
+{
+  "title": "Alkaid Laboratory",
+  "subtitle": "Explore cutting-edge AI features",
+  "comingSoon": "The world ahead, let's explore it later!",
+  "page": {
+    "title": "The Alkaid Project.",
+    "subtitle": "AstrBot Alpha Project",
+    "navigation": {
+      "knowledgeBase": "Knowledge Base",
+      "longTermMemory": "Long-term Memory",
+      "other": "..."
+    }
+  },
+  "features": {
+    "knowledgeBase": "Knowledge Base",
+    "longTermMemory": "Long-term Memory",
+    "advancedChat": "Advanced Chat",
+    "multiModal": "Multi-modal Interaction"
+  },
+  "status": {
+    "experimental": "Experimental",
+    "beta": "Beta",
+    "stable": "Stable",
+    "deprecated": "Deprecated"
+  },
+  "sigma": {
+    "subtitle": "AstrBot Experimental Project",
+    "visualization": "Visualization",
+    "filterUserId": "Filter User ID",
+    "filter": "Filter",
+    "resetFilter": "Reset Filter",
+    "refreshGraph": "Refresh Graph",
+    "nodeDetails": "Node Details",
+    "id": "ID",
+    "type": "Type",
+    "name": "Name",
+    "userId": "User ID",
+    "timestamp": "Timestamp",
+    "graphStats": "Graph Statistics",
+    "nodeCount": "Node Count",
+    "edgeCount": "Edge Count",
+    "inDevelopment": "Under Development"
+  }
+} 

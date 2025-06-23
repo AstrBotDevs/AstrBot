@@ -5,13 +5,14 @@
 import os
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.15"
+VERSION = "3.5.17"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
 DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
+        "plugin_enable":[],
         "unique_session": False,
         "rate_limit": {
             "time": 60,
@@ -102,6 +103,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "username": "astrbot",
         "password": "77b90590a8945a7d36c963981a307dc9",
+        "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
     },
@@ -126,7 +128,7 @@ CONFIG_METADATA_2 = {
                 "description": "消息平台适配器",
                 "type": "list",
                 "config_template": {
-                    "qq_official(QQ)": {
+                    "QQ 官方机器人(WebSocket)": {
                         "id": "default",
                         "type": "qq_official",
                         "enable": False,
@@ -135,7 +137,7 @@ CONFIG_METADATA_2 = {
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
                     },
-                    "qq_official_webhook(QQ)": {
+                    "QQ 官方机器人(Webhook)": {
                         "id": "default",
                         "type": "qq_official_webhook",
                         "enable": False,
@@ -144,7 +146,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
-                    "aiocqhttp(OneBotv11)": {
+                    "QQ 个人号(aiocqhttp)": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
@@ -152,7 +154,7 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "gewechat(微信)": {
+                    "微信个人号(Gewechat)": {
                         "id": "gwchat",
                         "type": "gewechat",
                         "enable": False,
@@ -161,7 +163,7 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
-                    "wechatpadpro(微信)": {
+                    "微信个人号(WeChatPadPro)": {
                         "id": "wechatpadpro",
                         "type": "wechatpadpro",
                         "enable": False,
@@ -171,7 +173,7 @@ CONFIG_METADATA_2 = {
                         "wpp_active_message_poll": False,
                         "wpp_active_message_poll_interval": 3,
                     },
-                    "weixin_official_account(微信公众平台)": {
+                    "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
                         "enable": False,
@@ -184,7 +186,7 @@ CONFIG_METADATA_2 = {
                         "port": 6194,
                         "active_send_mode": False,
                     },
-                    "wecom(企业微信)": {
+                    "企业微信(含微信客服)": {
                         "id": "wecom",
                         "type": "wecom",
                         "enable": False,
@@ -197,7 +199,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
-                    "lark(飞书)": {
+                    "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
                         "enable": False,
@@ -206,14 +208,14 @@ CONFIG_METADATA_2 = {
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
                     },
-                    "dingtalk(钉钉)": {
+                    "钉钉(DingTalk)": {
                         "id": "dingtalk",
                         "type": "dingtalk",
                         "enable": False,
                         "client_id": "",
                         "client_secret": "",
                     },
-                    "telegram": {
+                    "Telegram": {
                         "id": "telegram",
                         "type": "telegram",
                         "enable": False,
@@ -225,8 +227,51 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                     },
+                    "Discord": {
+                        "id": "discord",
+                        "type": "discord",
+                        "enable": False,
+                        "discord_token": "",
+                        "discord_proxy": "",
+                        "discord_command_register": True,
+                        "discord_guild_id_for_debug": "",
+                        "discord_activity_name": "",
+                    },
+                    "Slack": {
+                        "id": "slack",
+                        "type": "slack",
+                        "enable": False,
+                        "bot_token": "",
+                        "app_token": "",
+                        "signing_secret": "",
+                        "slack_connection_mode": "socket",  # webhook, socket
+                        "slack_webhook_host": "0.0.0.0",
+                        "slack_webhook_port": 6197,
+                        "slack_webhook_path": "/astrbot-slack-webhook/callback",
+                    },
                 },
                 "items": {
+                    "slack_connection_mode": {
+                        "description": "Slack Connection Mode",
+                        "type": "string",
+                        "options": ["webhook", "socket"],
+                        "hint": "The connection mode for Slack. `webhook` uses a webhook server, `socket` uses Slack's Socket Mode.",
+                    },
+                    "slack_webhook_host": {
+                        "description": "Slack Webhook Host",
+                        "type": "string",
+                        "hint": "Only valid when Slack connection mode is `webhook`.",
+                    },
+                    "slack_webhook_port": {
+                        "description": "Slack Webhook Port",
+                        "type": "int",
+                        "hint": "Only valid when Slack connection mode is `webhook`.",
+                    },
+                    "slack_webhook_path": {
+                        "description": "Slack Webhook Path",
+                        "type": "string",
+                        "hint": "Only valid when Slack connection mode is `webhook`.",
+                    },
                     "active_send_mode": {
                         "description": "是否换用主动发送接口",
                         "type": "bool",
@@ -323,6 +368,29 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                         "obvious_hint": True,
+                    },
+                    "discord_token": {
+                        "description": "Discord Bot Token",
+                        "type": "string",
+                        "hint": "在此处填入你的Discord Bot Token",
+                    },
+                    "discord_proxy": {
+                        "description": "Discord 代理地址",
+                        "type": "string",
+                        "hint": "可选的代理地址：http://ip:port",
+                    },
+                    "discord_command_register": {
+                        "description": "是否自动将插件指令注册为 Discord 斜杠指令",
+                        "type": "bool",
+                    },
+                    "discord_activity_name": {
+                        "description": "Discord 活动名称",
+                        "type": "string",
+                        "hint": "可选的 Discord 活动名称。留空则不设置活动。",
+                    },
+                    "discord_guild_id_for_debug": {
+                        "description": "【开发用】指定一个服务器(Guild)ID。在此服务器注册的指令会立刻生效，便于调试。留空则注册为全局指令。",
+                        "type": "string",
                     },
                 },
             },
@@ -800,6 +868,37 @@ CONFIG_METADATA_2 = {
                         "edge-tts-voice": "zh-CN-XiaoxiaoNeural",
                         "timeout": 20,
                     },
+                    "GSV TTS(本地加载)": {
+                        "id": "gsv_tts",
+                        "enable": False,
+                        "type": "gsv_tts_selfhost",
+                        "provider_type": "text_to_speech",
+                        "api_base": "http://127.0.0.1:9880",
+                        "gpt_weights_path": "",
+                        "sovits_weights_path": "",
+                        "timeout": 60,
+                        "gsv_default_parms": {
+                            "gsv_ref_audio_path": "",
+                            "gsv_prompt_text": "",
+                            "gsv_prompt_lang": "zh",
+                            "gsv_aux_ref_audio_paths": "",
+                            "gsv_text_lang": "zh",
+                            "gsv_top_k": 5,
+                            "gsv_top_p": 1.0,
+                            "gsv_temperature": 1.0,
+                            "gsv_text_split_method": "cut3",
+                            "gsv_batch_size": 1,
+                            "gsv_batch_threshold": 0.75,
+                            "gsv_split_bucket": True,
+                            "gsv_speed_factor": 1,
+                            "gsv_fragment_interval": 0.3,
+                            "gsv_streaming_mode": False,
+                            "gsv_seed": -1,
+                            "gsv_parallel_infer": True,
+                            "gsv_repetition_penalty": 1.35,
+                            "gsv_media_type": "wav",
+                        },
+                    },
                     "GSVI TTS(API)": {
                         "id": "gsvi_tts",
                         "type": "gsvi_tts_api",
@@ -901,6 +1000,130 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "gpt_weights_path": {
+                        "description": "GPT模型文件路径",
+                        "type": "string",
+                        "hint": "即“.ckpt”后缀的文件，请使用绝对路径，路径两端不要带双引号，不填则默认用GPT_SoVITS内置的SoVITS模型(建议直接在GPT_SoVITS中改默认模型)",
+                        "obvious_hint": True,
+                    },
+                    "sovits_weights_path": {
+                        "description": "SoVITS模型文件路径",
+                        "type": "string",
+                        "hint": "即“.pth”后缀的文件，请使用绝对路径，路径两端不要带双引号，不填则默认用GPT_SoVITS内置的SoVITS模型(建议直接在GPT_SoVITS中改默认模型)",
+                        "obvious_hint": True,
+                    },
+                    "gsv_default_parms": {
+                        "description": "GPT_SoVITS默认参数",
+                        "hint": "参考音频文件路径、参考音频文本必填，其他参数根据个人爱好自行填写",
+                        "type": "object",
+                        "items": {
+                            "gsv_ref_audio_path": {
+                                "description": "参考音频文件路径",
+                                "type": "string",
+                                "hint": "必填！请使用绝对路径！路径两端不要带双引号！",
+                                "obvious_hint": True,
+                            },
+                            "gsv_prompt_text": {
+                                "description": "参考音频文本",
+                                "type": "string",
+                                "hint": "必填！请填写参考音频讲述的文本",
+                                "obvious_hint": True,
+                            },
+                            "gsv_prompt_lang": {
+                                "description": "参考音频文本语言",
+                                "type": "string",
+                                "hint": "请填写参考音频讲述的文本的语言，默认为中文",
+                            },
+                            "gsv_aux_ref_audio_paths": {
+                                "description": "辅助参考音频文件路径",
+                                "type": "string",
+                                "hint": "辅助参考音频文件，可不填",
+                            },
+                            "gsv_text_lang": {
+                                "description": "文本语言",
+                                "type": "string",
+                                "hint": "默认为中文",
+                            },
+                            "gsv_top_k": {
+                                "description": "生成语音的多样性",
+                                "type": "int",
+                                "hint": "",
+                            },
+                            "gsv_top_p": {
+                                "description": "核采样的阈值",
+                                "type": "float",
+                                "hint": "",
+                            },
+                            "gsv_temperature": {
+                                "description": "生成语音的随机性",
+                                "type": "float",
+                                "hint": "",
+                            },
+                            "gsv_text_split_method": {
+                                "description": "切分文本的方法",
+                                "type": "string",
+                                "hint": "可选值：  `cut0`：不切分    `cut1`：四句一切   `cut2`：50字一切    `cut3`：按中文句号切    `cut4`：按英文句号切    `cut5`：按标点符号切",
+                                "options": [
+                                    "cut0",
+                                    "cut1",
+                                    "cut2",
+                                    "cut3",
+                                    "cut4",
+                                    "cut5",
+                                ],
+                            },
+                            "gsv_batch_size": {
+                                "description": "批处理大小",
+                                "type": "int",
+                                "hint": "",
+                            },
+                            "gsv_batch_threshold": {
+                                "description": "批处理阈值",
+                                "type": "float",
+                                "hint": "",
+                            },
+                            "gsv_split_bucket": {
+                                "description": "将文本分割成桶以便并行处理",
+                                "type": "bool",
+                                "hint": "",
+                            },
+                            "gsv_speed_factor": {
+                                "description": "语音播放速度",
+                                "type": "float",
+                                "hint": "1为原始语速",
+                            },
+                            "gsv_fragment_interval": {
+                                "description": "语音片段之间的间隔时间",
+                                "type": "float",
+                                "hint": "",
+                            },
+                            "gsv_streaming_mode": {
+                                "description": "启用流模式",
+                                "type": "bool",
+                                "hint": "",
+                            },
+                            "gsv_seed": {
+                                "description": "随机种子",
+                                "type": "int",
+                                "hint": "用于结果的可重复性",
+                            },
+                            "gsv_parallel_infer": {
+                                "description": "并行执行推理",
+                                "type": "bool",
+                                "hint": "",
+                            },
+                            "gsv_repetition_penalty": {
+                                "description": "重复惩罚因子",
+                                "type": "float",
+                                "hint": "",
+                            },
+                            "gsv_media_type": {
+                                "description": "输出媒体的类型",
+                                "type": "string",
+                                "hint": "建议用wav",
+                            },
+                        },
+                    },
                     "embedding_dimensions": {
                         "description": "嵌入维度",
                         "type": "int",

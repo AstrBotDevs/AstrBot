@@ -225,6 +225,10 @@ class ProviderManager:
                     from .sources.edge_tts_source import (
                         ProviderEdgeTTS as ProviderEdgeTTS,
                     )
+                case "gsv_tts_selfhost":
+                    from .sources.gsv_selfhosted_source import (
+                        ProviderGSVTTS as ProviderGSVTTS,
+                    )
                 case "gsvi_tts_api":
                     from .sources.gsvi_tts_source import (
                         ProviderGSVITTS as ProviderGSVITTS,

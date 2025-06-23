@@ -1,0 +1,82 @@
+{
+  "title": "Service Provider Management",
+  "subtitle": "Manage model service providers",
+  "providers": {
+    "title": "Service Providers",
+    "settings": "Settings",
+    "addProvider": "Add Provider",
+    "providerType": "Provider Type",
+    "tabs": {
+      "all": "All",
+      "chatCompletion": "Chat Completion",
+      "speechToText": "Speech to Text",
+      "textToSpeech": "Text to Speech",
+      "embedding": "Embedding"
+    },
+    "empty": {
+      "all": "No service providers available, click Add Provider to add one",
+      "typed": "No {type} type service providers available, click Add Provider to add one"
+    },
+    "description": {
+      "openai": "Supports all OpenAI API compatible providers.",
+      "default": ""
+    }
+  },
+  "availability": {
+    "title": "Provider Availability",
+    "subtitle": "Determined by testing model conversation availability, may incur API costs",
+    "refresh": "Refresh Status",
+    "noData": "Click \"Refresh Status\" button to get service provider availability",
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "errorMessage": "Error Message"
+  },
+  "logs": {
+    "title": "Service Logs",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "dialogs": {
+    "addProvider": {
+      "title": "Service Provider",
+      "tabs": {
+        "basic": "Basic",
+        "speechToText": "Speech to Text",
+        "textToSpeech": "Text to Speech",
+        "embedding": "Embedding"
+      },
+      "noTemplates": "No {type} type provider templates available"
+    },
+    "config": {
+      "addTitle": "Add",
+      "editTitle": "Edit",
+      "provider": "Service Provider",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "settings": {
+      "title": "Service Provider Settings",
+      "sessionSeparation": {
+        "title": "Enable Provider Session Isolation",
+        "description": "Different sessions can independently select text generation, TTS, STT and other service providers."
+      },
+      "close": "Close"
+    }
+  },
+  "messages": {
+    "success": {
+      "update": "Updated successfully!",
+      "add": "Added successfully!",
+      "delete": "Deleted successfully!",
+      "statusUpdate": "Status updated successfully!",
+      "sessionSeparation": "Session isolation settings updated"
+    },
+    "error": {
+      "sessionSeparation": "Failed to get session isolation configuration",
+      "fetchStatus": "Failed to get service provider status"
+    },
+    "confirm": {
+      "delete": "Are you sure you want to delete service provider {id}?"
+    }
+  }
+} 

@@ -1,0 +1,160 @@
+{
+  "title": "Extension Management",
+  "subtitle": "Manage and configure system extensions",
+  "tabs": {
+    "installed": "Installed",
+    "market": "Extension Market"
+  },
+  "search": {
+    "placeholder": "Search extensions...",
+    "marketPlaceholder": "Search market extensions..."
+  },
+  "views": {
+    "card": "Card View",
+    "list": "List View"
+  },
+  "buttons": {
+    "showSystemPlugins": "Show System Extensions",
+    "hideSystemPlugins": "Hide System Extensions",
+    "platformConfig": "Platform Command Config",
+    "install": "Install",
+    "uninstall": "Uninstall",
+    "update": "Update",
+    "reload": "Reload",
+    "enable": "Enable",
+    "disable": "Disable",
+    "configure": "Configure",
+    "viewInfo": "Handlers",
+    "viewDocs": "Documentation",
+    "close": "Close",
+    "save": "Save",
+    "saveAndClose": "Save and Close",
+    "cancel": "Cancel",
+    "actions": "Actions",
+    "back": "Back"
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "system": "System",
+    "loading": "Loading...",
+    "installed": "Installed",
+    "unknown": "Unknown"
+  },
+  "tooltips": {
+    "enable": "Click to Enable",
+    "disable": "Click to Disable",
+    "reload": "Reload",
+    "configure": "Configure",
+    "viewInfo": "Handlers",
+    "viewDocs": "Documentation",
+    "update": "Update",
+    "uninstall": "Uninstall"
+  },
+  "table": {
+    "headers": {
+      "name": "Name",
+      "description": "Description",
+      "version": "Version",
+      "author": "Author",
+      "status": "Status",
+      "actions": "Actions",
+      "stars": "Stars",
+      "lastUpdate": "Last Update",
+      "tags": "Tags",
+      "eventType": "Event Type",
+      "specificType": "Specific Type",
+      "trigger": "Trigger"
+    }
+  },
+  "empty": {
+    "noPlugins": "No Extensions",
+    "noPluginsDesc": "Try installing extensions or showing system extensions"
+  },
+  "market": {
+    "recommended": "🥳 Recommended",
+    "allPlugins": "📦 All Extensions",
+    "showFullName": "Full Name",
+    "devDocs": "Extension Development Docs",
+    "submitRepo": "Submit Extension Repository"
+  },
+  "dialogs": {
+    "error": {
+      "title": "Error Information",
+      "checkConsole": "Please check console for details"
+    },
+    "platformConfig": {
+      "title": "Platform Command Availability Configuration",
+      "description": "Set the availability of each extension on different platforms, check to enable",
+      "noAdapters": "No Platform Adapters Found",
+      "noAdaptersDesc": "Please add and configure platform adapters in Platform Management first, then set extension platform availability",
+      "goPlatforms": "Go to Platform Management",
+      "selectAll": "Select All",
+      "selectAllNormal": "Select All Normal Extensions",
+      "selectAllSystem": "Select All System Extensions",
+      "selectNone": "Select None",
+      "toggleAll": "Toggle All"
+    },
+    "config": {
+      "title": "Extension Configuration",
+      "noConfig": "This extension has no configuration"
+    },
+    "loading": {
+      "title": "Loading...",
+      "logs": "Logs"
+    },
+    "uninstall": {
+      "title": "Confirm Deletion",
+      "message": "Are you sure you want to delete this extension?"
+    }
+  },
+  "messages": {
+    "uninstalling": "Uninstalling",
+    "refreshing": "Refreshing extension list...",
+    "refreshSuccess": "Extension list refreshed!",
+    "refreshFailed": "Error occurred while refreshing extension list",
+    "reloadSuccess": "Reload successful",
+    "updateSuccess": "Update successful!",
+    "addSuccess": "Add successful!",
+    "saveSuccess": "Save successful!",
+    "deleteSuccess": "Delete successful!",
+    "installing": "Installing extension from file",
+    "installingFromUrl": "Installing extension from URL...",
+    "installFailed": "Extension installation failed:",
+    "getPlatformConfigFailed": "Failed to get platform extension config:",
+    "savePlatformConfigFailed": "Failed to save platform extension config:",
+    "getMarketDataFailed": "Failed to get extension market data:",
+    "hasUpdate": "New version available:",
+    "confirmDelete": "Are you sure you want to delete this extension?",
+    "fillUrlOrFile": "Please fill in extension URL or upload extension file",
+    "dontFillBoth": "Please don't fill in both extension URL and upload file"
+  },
+  "upload": {
+    "fromFile": "Install from File",
+    "fromUrl": "Install from URL",
+    "selectFile": "Select File",
+    "enterUrl": "Enter extension repository URL"
+  },
+  "card": {
+    "actions": {
+      "pluginConfig": "Extension Config",
+      "uninstallPlugin": "Uninstall Extension",
+      "reloadPlugin": "Reload Extension",
+      "togglePlugin": "Extension",
+      "viewHandlers": "View Handlers",
+      "updateTo": "Update to"
+    },
+    "status": {
+      "hasUpdate": "New version available",
+      "disabled": "This extension is disabled",
+      "handlersCount": " handlers"
+    },
+    "alt": {
+      "logo": "logo",
+      "extensionIcon": "extension icon"
+    },
+    "errors": {
+      "confirmNotRegistered": "$confirm not properly registered"
+    }
+  }
+} 

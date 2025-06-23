@@ -1,0 +1,41 @@
+{
+  "title": "平台适配器管理",
+  "subtitle": "管理机器人的平台适配器，连接到不同的聊天平台",
+  "adapters": "平台适配器",
+  "addAdapter": "新增适配器",
+  "emptyText": "暂无平台适配器，点击 新增适配器 添加",
+  "details": {
+    "adapterType": "适配器类型",
+    "token": "Token",
+    "description": "描述"
+  },
+  "logs": {
+    "title": "平台日志",
+    "expand": "展开",
+    "collapse": "收起"
+  },
+  "dialog": {
+    "add": "新增",
+    "edit": "编辑",
+    "adapter": "平台适配器",
+    "refresh": "刷新",
+    "cancel": "取消",
+    "save": "保存",
+    "addPlatform": "添加平台适配器"
+  },
+  "messages": {
+    "updateSuccess": "更新成功!",
+    "addSuccess": "添加成功!",
+    "deleteSuccess": "删除成功!",
+    "statusUpdateSuccess": "状态更新成功!",
+    "deleteConfirm": "确定要删除平台适配器"
+  },
+  "status": {
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "connecting": "连接中",
+    "connected": "已连接",
+    "disconnected": "已断开",
+    "error": "错误"
+  }
+} 

@@ -64,6 +64,8 @@ class AstrBotDashboard:
 
         self.shutdown_event = shutdown_event
 
+        self._init_jwt_secret()
+
     async def srv_plug_route(self, subpath, *args, **kwargs):
         """
         插件路由
@@ -90,7 +92,7 @@ class AstrBotDashboard:
         if token.startswith("Bearer "):
             token = token[7:]
         try:
-            payload = jwt.decode(token, WEBUI_SK, algorithms=["HS256"])
+            payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
             g.username = payload["username"]
         except jwt.ExpiredSignatureError:
             r = jsonify(Response().error("Token 过期").__dict__)
@@ -141,6 +143,15 @@ class AstrBotDashboard:
             return "未找到占用进程"
         except Exception as e:
             return f"获取进程信息失败: {str(e)}"
+
+    def _init_jwt_secret(self):
+        if not self.config.get("dashboard", {}).get("jwt_secret", None):
+            # 如果没有设置 JWT 密钥，则生成一个新的密钥
+            jwt_secret = os.urandom(32).hex()
+            self.config["dashboard"]["jwt_secret"] = jwt_secret
+            self.config.save_config()
+            logger.info("Initialized random JWT secret for dashboard.")
+        self._jwt_secret = self.config["dashboard"]["jwt_secret"]
 
     def run(self):
         ip_addr = []
