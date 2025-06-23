@@ -30,7 +30,16 @@ export default {
   },
   computed: {
     formattedTime() {
-      return this.stat?.running || this.t('status.loading');
+      if (!this.stat?.running) {
+        return this.t('status.loading');
+      }
+
+      const { hours, minutes, seconds } = this.stat.running;
+      return this.t('stats.runningTime.format', {
+        hours,
+        minutes,
+        seconds
+      });
     }
   }
 };
