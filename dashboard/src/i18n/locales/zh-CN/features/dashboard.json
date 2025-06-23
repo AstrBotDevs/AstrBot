@@ -21,7 +21,8 @@
     },
     "runningTime": {
       "title": "运行时间",
-      "subtitle": "系统已运行时长"
+      "subtitle": "系统已运行时长",
+      "format": "{hours}小时{minutes}分{seconds}秒"
     },
     "memoryUsage": {
       "title": "内存占用",

@@ -103,6 +103,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "username": "astrbot",
         "password": "77b90590a8945a7d36c963981a307dc9",
+        "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
     },
@@ -368,15 +369,15 @@ CONFIG_METADATA_2 = {
                         "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                         "obvious_hint": True,
                     },
-                    "discord_token":{
+                    "discord_token": {
                         "description": "Discord Bot Token",
                         "type": "string",
-                        "hint": "在此处填入你的Discord Bot Token"
+                        "hint": "在此处填入你的Discord Bot Token",
                     },
-                    "discord_proxy":{
+                    "discord_proxy": {
                         "description": "Discord 代理地址",
                         "type": "string",
-                        "hint": "可选的代理地址：http://ip:port"
+                        "hint": "可选的代理地址：http://ip:port",
                     },
                     "discord_command_register": {
                         "description": "是否自动将插件指令注册为 Discord 斜杠指令",
