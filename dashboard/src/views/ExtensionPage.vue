@@ -13,6 +13,7 @@ import { ref, computed, onMounted, reactive } from 'vue';
 const commonStore = useCommonStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/extension');
+const fileInput = ref(null);
 const activeTab = ref('installed');
 const extension_data = reactive({
   data: [],
@@ -61,6 +62,7 @@ const loading_ = ref(false);
 const extension_url = ref("");
 const dialog = ref(false);
 const upload_file = ref(null);
+const uploadTab = ref('file');
 const showPluginFullName = ref(false);
 const marketSearch = ref("");
 const filterKeys = ['name', 'desc', 'author'];
@@ -629,15 +631,19 @@ onMounted(async () => {
                   </v-btn>
                 </v-btn-group>
 
-                <v-btn @click="toggleShowReserved" prepend-icon="mdi-eye-settings-outline"
-                  :color="showReserved ? 'primary' : undefined" :variant="showReserved ? 'flat' : 'outlined'"
-                  class="flex-shrink-0">
+                <v-btn class="ml-2" variant="tonal" @click="toggleShowReserved">
+                  <v-icon>{{ showReserved ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
                   {{ showReserved ? tm('buttons.hideSystemPlugins') : tm('buttons.showSystemPlugins') }}
                 </v-btn>
 
-                <v-btn prepend-icon="mdi-tune-vertical" color="primary" variant="outlined"
-                  @click="getPlatformEnableConfig" class="flex-shrink-0">
+                <v-btn class="ml-2" variant="tonal" @click="getPlatformEnableConfig">
+                  <v-icon>mdi-cog</v-icon>
                   {{ tm('buttons.platformConfig') }}
+                </v-btn>
+
+                <v-btn class="ml-2" color="primary" variant="tonal" @click="dialog = true">
+                  <v-icon>mdi-plus</v-icon>
+                  {{ tm('buttons.install') }}
                 </v-btn>
               </v-col>
 
@@ -1067,6 +1073,75 @@ onMounted(async () => {
 
   <ReadmeDialog v-model:show="readmeDialog.show" :plugin-name="readmeDialog.pluginName"
     :repo-url="readmeDialog.repoUrl" />
+
+  <!-- 上传插件对话框 -->
+  <v-dialog v-model="dialog" width="500">
+    <v-card>
+      <v-card-title class="text-h5">{{ tm('dialogs.install.title') }}</v-card-title>
+      <v-card-text>
+        <v-tabs v-model="uploadTab">
+          <v-tab value="file">{{ tm('dialogs.install.fromFile') }}</v-tab>
+          <v-tab value="url">{{ tm('dialogs.install.fromUrl') }}</v-tab>
+        </v-tabs>
+
+        <v-window v-model="uploadTab" class="mt-4">
+          <v-window-item value="file">
+            <div class="d-flex flex-column align-center justify-center pa-4">
+              <v-file-input
+                ref="fileInput"
+                v-model="upload_file"
+                :label="tm('upload.selectFile')"
+                accept=".zip"
+                hide-details
+                hide-input
+                class="d-none"
+              ></v-file-input>
+              
+              <v-btn
+                color="primary"
+                size="large"
+                prepend-icon="mdi-upload"
+                @click="$refs.fileInput.click()"
+              >
+                {{ tm('buttons.selectFile') }}
+              </v-btn>
+              
+              <div class="text-body-2 text-medium-emphasis mt-2">
+                {{ tm('messages.supportedFormats') }}
+              </div>
+
+              <div v-if="upload_file" class="mt-4 text-center">
+                <v-chip color="primary" size="large" closable @click:close="upload_file = null">
+                  {{ upload_file.name }}
+                  <template v-slot:append>
+                    <span class="text-caption ml-2">({{ (upload_file.size / 1024).toFixed(1) }}KB)</span>
+                  </template>
+                </v-chip>
+              </div>
+            </div>
+          </v-window-item>
+
+          <v-window-item value="url">
+            <div class="pa-4">
+              <v-text-field
+                v-model="extension_url"
+                :label="tm('upload.enterUrl')"
+                variant="outlined"
+                prepend-inner-icon="mdi-link"
+                hide-details
+                placeholder="https://github.com/username/repo"
+              ></v-text-field>
+            </div>
+          </v-window-item>
+        </v-window>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="grey" variant="text" @click="dialog = false">{{ tm('buttons.cancel') }}</v-btn>
+        <v-btn color="primary" variant="text" @click="newExtension">{{ tm('buttons.install') }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>
