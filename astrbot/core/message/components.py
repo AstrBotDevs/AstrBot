@@ -610,6 +610,13 @@ class Node(BaseMessageComponent):
                         "data": {"file": f"base64://{bs64}"},
                     }
                 )
+            elif isinstance(comp, str):
+                data_content.append(
+                    {
+                    "type": "text",
+                    "data": {"text": comp.strip()}
+                    }
+                )
             elif isinstance(comp, File):
                 # For File segments, we need to handle the file differently
                 d = await comp.to_dict()
