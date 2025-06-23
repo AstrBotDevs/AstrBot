@@ -275,25 +275,25 @@ export default {
 
     getPlatformIcon(name) {
       if (name.includes('QQ')) {
-        return '/src/assets/images/platform_logos/qq.png'
+        return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
       } else if (name.includes('企业微信')) {
-        return '/src/assets/images/platform_logos/wecom.png'
+        return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
       } else if (name.includes('微信')) {
-        return '/src/assets/images/platform_logos/wechat.png';
+        return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
       } else if (name.includes('Lark')) {
-        return '/src/assets/images/platform_logos/lark.png';
+        return new URL('@/assets/images/platform_logos/lark.png', import.meta.url).href
       } else if (name.includes('DingTalk')) {
-        return '/src/assets/images/platform_logos/dingtalk.svg';
+        return new URL('@/assets/images/platform_logos/dingtalk.svg', import.meta.url).href
       } else if (name.includes('Telegram')) {
-        return '/src/assets/images/platform_logos/telegram.svg';
+        return new URL('@/assets/images/platform_logos/telegram.svg', import.meta.url).href
       } else if (name.includes('Discord')) {
-        return '/src/assets/images/platform_logos/discord.svg';
+        return new URL('@/assets/images/platform_logos/discord.svg', import.meta.url).href
       } else if (name.includes('Slack')) {
-        return '/src/assets/images/platform_logos/slack.svg';
+        return new URL('@/assets/images/platform_logos/slack.svg', import.meta.url).href
       } else if (name.includes('kook')) {
-        return '/src/assets/images/platform_logos/kook.png';
+        return new URL('@/assets/images/platform_logos/kook.png', import.meta.url).href
       } else if (name.includes('vocechat')) {
-        return '/src/assets/images/platform_logos/vocechat.png';
+        return new URL('@/assets/images/platform_logos/vocechat.png', import.meta.url).href
       }
     },
 
