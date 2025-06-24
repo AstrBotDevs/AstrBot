@@ -183,6 +183,7 @@ class AiocqhttpAdapter(Platform):
         @param get_reply: 是否获取回复消息。这个参数是为了防止多个回复嵌套。
         """
         abm = AstrBotMessage()
+        logger.info(f"event: {event}")
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
             str(event.sender["user_id"]), event.sender["nickname"]
@@ -273,6 +274,8 @@ class AiocqhttpAdapter(Platform):
                                 action="get_msg",
                                 message_id=int(m["data"]["id"]),
                             )
+                            # 添加必要的 post_type 字段，防止 Event.from_payload 报错
+                            reply_event_data["post_type"] = "message"
                             abm_reply = await self._convert_handle_message_event(
                                 Event.from_payload(reply_event_data), get_reply=False
                             )
