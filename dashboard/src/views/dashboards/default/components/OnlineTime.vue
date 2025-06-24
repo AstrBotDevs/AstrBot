@@ -6,14 +6,14 @@
           <div class="icon-wrapper">
             <v-icon icon="mdi-clock-outline" size="24"></v-icon>
           </div>
-          
+
           <div class="stat-content">
-            <div class="stat-title">{{ tm('features.dashboard.status.uptime') }}</div>
-            <h3 class="uptime-value">{{ stat.running || tm('features.dashboard.status.loading') }}</h3>
+            <div class="stat-title">{{ tm('stats.runningTime.title') }}</div>
+            <h3 class="uptime-value">{{ formattedRunningTime }}</h3>
           </div>
-          
+
           <v-spacer></v-spacer>
-          
+
           <div class="uptime-status">
             <v-icon icon="mdi-circle" size="10" color="success" class="blink-animation"></v-icon>
             <span class="status-text">{{ tm('features.dashboard.status.online') }}</span>
@@ -28,7 +28,7 @@
           <div class="icon-wrapper">
             <v-icon icon="mdi-memory" size="24"></v-icon>
           </div>
-          
+
           <div class="stat-content">
             <div class="stat-title">{{ tm('features.dashboard.status.memoryUsage') }}</div>
             <div class="memory-values">
@@ -36,14 +36,10 @@
               <span class="memory-separator">/</span>
               <h4 class="memory-total">{{ stat.memory?.system || 0 }} <span class="memory-unit">MiB</span></h4>
             </div>
-            
-            <v-progress-linear
-              :model-value="memoryPercentage"
-              color="warning"
-              height="4"
-              class="mt-2"
-            ></v-progress-linear>
-            
+
+            <v-progress-linear :model-value="memoryPercentage" color="warning" height="4"
+              class="mt-2"></v-progress-linear>
+
             <div class="memory-percentage">{{ memoryPercentage }}%</div>
           </div>
         </div>
@@ -72,6 +68,26 @@ export default {
     memoryPercentage() {
       if (!this.stat.memory || !this.stat.memory.process || !this.stat.memory.system) return 0;
       return Math.round((this.stat.memory.process / this.stat.memory.system) * 100);
+    }, formattedRunningTime() {
+      if (!this.stat?.running) {
+        return this.tm('status.loading');
+      }
+
+      let running = this.stat.running;
+      if (typeof running === 'string') {
+        try {
+          running = JSON.parse(running);
+        } catch (e) {
+          return this.tm('status.loading');
+        }
+      }
+
+      const { hours, minutes, seconds } = running;
+      return this.tm('stats.runningTime.format', {
+        hours: hours || 0,
+        minutes: minutes || 0,
+        seconds: seconds || 0
+      });
     }
   }
 };
@@ -185,9 +201,17 @@ export default {
 }
 
 @keyframes blink {
-  0% { opacity: 0.5; }
-  50% { opacity: 1; }
-  100% { opacity: 0.5; }
+  0% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.5;
+  }
 }
 
 .blink-animation {
