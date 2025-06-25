@@ -93,7 +93,7 @@
               <v-card variant="outlined" hover class="platform-card" @click="selectPlatformTemplate(name)">
                 <div class="platform-card-content">
                   <div class="platform-card-text">
-                    <v-card-title class="platform-card-title">接入 {{ name }}</v-card-title>
+                    <v-card-title class="platform-card-title">{{ tm('dialog.connectTitle', { name }) }}</v-card-title>
                     <v-card-text class="text-caption text-medium-emphasis platform-card-description">
                       {{ getPlatformDescription(template, name) }}
                     </v-card-text>
@@ -139,7 +139,7 @@
             <v-col cols="12" class="text-center">
               <v-btn color="info" variant="outlined" @click="openTutorial">
                 <v-icon start>mdi-book-open-variant</v-icon>
-                查看接入教程
+                {{ tm('dialog.viewTutorial') }}
               </v-btn>
             </v-col>
           </v-row>
@@ -172,14 +172,14 @@
       <v-card>
         <v-card-title class="text-h6 bg-warning d-flex align-center">
           <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
-          ID 冲突警告
+          {{ tm('dialog.idConflict.title') }}
         </v-card-title>
         <v-card-text class="py-4 text-body-1 text-medium-emphasis">
-          检测到 ID "{{ conflictId }}" 重复。请使用一个新的 ID。
+          {{ tm('dialog.idConflict.message', { id: conflictId }) }}
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">好的</v-btn>
+          <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">{{ tm('dialog.idConflict.confirm') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
