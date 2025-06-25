@@ -44,10 +44,7 @@ class ProviderGeminiTTSAPI(TTSProvider):
     async def get_audio(self, text: str) -> str:
         temp_dir = os.path.join(get_astrbot_data_path(), "temp")
         path = os.path.join(temp_dir, f"gemini_tts_{uuid.uuid4()}.wav")
-        if self.prefix:
-            prompt = f"{self.prefix}: {text}"
-        else:
-            prompt = text
+        prompt = f"{self.prefix}: {text}" if self.prefix else text
         response = await self.client.models.generate_content(
             model=self.model,
             contents=prompt,
@@ -78,8 +75,5 @@ class ProviderGeminiTTSAPI(TTSProvider):
             wf.setsampwidth(2)
             wf.setframerate(24000)
             wf.writeframes(response.candidates[0].content.parts[0].inline_data.data)
-
-        if not os.path.exists(path):
-            raise Exception(f"Failed to save audio to {path}.")
 
         return path
