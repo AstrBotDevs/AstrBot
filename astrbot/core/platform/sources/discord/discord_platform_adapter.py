@@ -166,38 +166,37 @@ class DiscordPlatformAdapter(Platform):
 
         content = message.content
 
-        # 如果机器人被@，移除@部分
-        if (
-            is_mentioned
-            and self.client
-            and self.client.user
-            and self.client.user in message.mentions
-        ):
-            # 构建机器人的@字符串，格式为 <@USER_ID> 或 <@!USER_ID>
-            mention_str = f"<@{self.client.user.id}>"
-            mention_str_nickname = (
-                f"<@!{self.client.user.id}>"  # 有些客户端会使用带!的格式
-            )
 
+        # 如果机器人被@，移除@部分
+        # 剥离 User Mention (<@id>, <@!id>)
+        if self.client and self.client.user:
+            mention_str = f"<@{self.client.user.id}>"
+            mention_str_nickname = f"<@!{self.client.user.id}>"
             if content.startswith(mention_str):
-                content = content[len(mention_str) :].lstrip()
+                content = content[len(mention_str):].lstrip()
             elif content.startswith(mention_str_nickname):
-                content = content[len(mention_str_nickname) :].lstrip()
+                content = content[len(mention_str_nickname):].lstrip()
+
+        # 剥离 Role Mention（bot 拥有的任一角色被提及，<@&role_id>）
+        if hasattr(message, "role_mentions") and hasattr(message, "guild") and message.guild:
+            bot_member = message.guild.get_member(self.client.user.id) if self.client and self.client.user else None
+            if bot_member and hasattr(bot_member, "roles"):
+                for role in bot_member.roles:
+                    role_mention_str = f"<@&{role.id}>"
+                    if content.startswith(role_mention_str):
+                        content = content[len(role_mention_str):].lstrip()
+                        break  # 只剥离第一个匹配的角色 mention
 
         abm = AstrBotMessage()
-
         abm.type = self._get_message_type(message.channel)
         abm.group_id = self._get_channel_id(message.channel)
-
         abm.message_str = content
         abm.sender = MessageMember(
             user_id=str(message.author.id), nickname=message.author.display_name
         )
-
         message_chain = []
         if abm.message_str:
             message_chain.append(Plain(text=abm.message_str))
-
         if message.attachments:
             for attachment in message.attachments:
                 if attachment.content_type and attachment.content_type.startswith(
@@ -210,7 +209,6 @@ class DiscordPlatformAdapter(Platform):
                     message_chain.append(
                         File(name=attachment.filename, url=attachment.url)
                     )
-
         abm.message = message_chain
         abm.raw_message = message
         abm.self_id = self.client_self_id
@@ -237,13 +235,25 @@ class DiscordPlatformAdapter(Platform):
         # 检查是否为斜杠指令
         is_slash_command = message_event.interaction_followup_webhook is not None
 
-        # 检查是否被@
-        is_mention = (
-            self.client
-            and self.client.user
-            and hasattr(message.raw_message, "mentions")
-            and self.client.user in message.raw_message.mentions
-        )
+        # 检查是否被@（User Mention 或 Bot 拥有的 Role Mention）
+        is_mention = False
+        # User Mention
+        if self.client and self.client.user and hasattr(message.raw_message, "mentions"):
+            if self.client.user in message.raw_message.mentions:
+                is_mention = True
+        # Role Mention（Bot 拥有的角色被提及）
+        if not is_mention and hasattr(message.raw_message, "role_mentions"):
+            bot_member = None
+            if hasattr(message.raw_message, "guild") and message.raw_message.guild:
+                try:
+                    bot_member = message.raw_message.guild.get_member(self.client.user.id)
+                except Exception:
+                    bot_member = None
+            if bot_member and hasattr(bot_member, "roles"):
+                bot_roles = set(bot_member.roles)
+                mentioned_roles = set(message.raw_message.role_mentions)
+                if bot_roles and mentioned_roles and bot_roles.intersection(mentioned_roles):
+                    is_mention = True
 
         # 如果是斜杠指令或被@的消息，设置为唤醒状态
         if is_slash_command or is_mention:
@@ -252,6 +262,7 @@ class DiscordPlatformAdapter(Platform):
 
         self.commit_event(message_event)
 
+        
     @override
     async def terminate(self):
         """终止适配器"""
