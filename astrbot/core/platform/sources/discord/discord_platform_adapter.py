@@ -46,6 +46,8 @@ class DiscordPlatformAdapter(Platform):
         self.enable_command_register = self.config.get("discord_command_register", True)
         self.guild_id = self.config.get("discord_guild_id_for_debug", None)
         self.activity_name = self.config.get("discord_activity_name", None)
+        self.shutdown_event = asyncio.Event()
+        self._polling_task = None
 
     @override
     async def send_by_session(
@@ -106,7 +108,6 @@ class DiscordPlatformAdapter(Platform):
     @override
     async def run(self):
         """主要运行逻辑"""
-
         # 初始化回调函数
         async def on_received(message_data):
             logger.debug(f"[Discord] 收到消息: {message_data}")
@@ -137,13 +138,15 @@ class DiscordPlatformAdapter(Platform):
         self.client.on_ready_once_callback = callback
 
         try:
-            await self.client.start_polling()
+            self._polling_task = asyncio.create_task(self.client.start_polling())
+            await self.shutdown_event.wait()
         except discord.errors.LoginFailure:
             logger.error("[Discord] 登录失败。请检查你的 Bot Token 是否正确。")
         except discord.errors.ConnectionClosed:
             logger.warning("[Discord] 与 Discord 的连接已关闭。")
         except Exception as e:
             logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
+        # finally: 不再自动调用 self.terminate()，只允许外部统一调度
 
     def _get_message_type(
         self, channel: Messageable, guild_id: int | None = None
@@ -165,7 +168,6 @@ class DiscordPlatformAdapter(Platform):
         is_mentioned = data.get("is_mentioned", False)
 
         content = message.content
-
 
         # 如果机器人被@，移除@部分
         # 剥离 User Mention (<@id>, <@!id>)
@@ -262,27 +264,39 @@ class DiscordPlatformAdapter(Platform):
 
         self.commit_event(message_event)
 
-        
     @override
     async def terminate(self):
         """终止适配器"""
-        logger.info("[Discord] 正在终止适配器...")
-
+        logger.info("[Discord] 正在终止适配器... (step 1: cancel polling task)")
+        self.shutdown_event.set()
+        # 优先 cancel polling_task
+        if self._polling_task:
+            self._polling_task.cancel()
+            try:
+                await asyncio.wait_for(self._polling_task, timeout=10)
+            except asyncio.CancelledError:
+                logger.info("[Discord] polling_task 已取消。")
+            except Exception as e:
+                logger.warning(f"[Discord] polling_task 取消异常: {e}")
+        logger.info("[Discord] 正在清理已注册的斜杠指令... (step 2)")
         # 清理指令
         if self.enable_command_register and self.client:
-            logger.info("[Discord] 正在清理已注册的斜杠指令...")
             try:
-                # 传入空的列表来清除所有全局指令
-                # 如果指定了 guild_id，则只清除该服务器的指令
-                await self.client.sync_commands(
-                    commands=[], guild_ids=[self.guild_id] if self.guild_id else None
+                await asyncio.wait_for(
+                    self.client.sync_commands(
+                        commands=[], guild_ids=[self.guild_id] if self.guild_id else None
+                    ),
+                    timeout=10
                 )
                 logger.info("[Discord] 指令清理完成。")
             except Exception as e:
                 logger.error(f"[Discord] 清理指令时发生错误: {e}", exc_info=True)
-
+        logger.info("[Discord] 正在关闭 Discord 客户端... (step 3)")
         if self.client and hasattr(self.client, "close"):
-            await self.client.close()
+            try:
+                await asyncio.wait_for(self.client.close(), timeout=10)
+            except Exception as e:
+                logger.warning(f"[Discord] 客户端关闭异常: {e}")
         logger.info("[Discord] 适配器已终止。")
 
     def register_handler(self, handler_info):
