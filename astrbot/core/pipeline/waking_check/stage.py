@@ -110,7 +110,7 @@ class WakingCheckStage(Stage):
         # 正则唤醒
         if not is_wake:
             for regex in self.wake_regex:
-                if re.match(regex, event.message_str):
+                if re.search(regex, event.message_str):
                     is_wake = True
                     event.is_wake = True
                     event.is_at_or_wake_command = True
