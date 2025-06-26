@@ -1,3 +1,4 @@
+import re
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot import logger
@@ -42,6 +43,7 @@ class WakingCheckStage(Stage):
         self.ignore_at_all = self.ctx.astrbot_config["platform_settings"].get(
             "ignore_at_all", False
         )
+        self.wake_regex = self.ctx.astrbot_config.get("wake_regex", [])
 
     async def process(
         self, event: AstrMessageEvent
@@ -104,6 +106,15 @@ class WakingCheckStage(Stage):
                 event.is_wake = True
                 event.is_at_or_wake_command = True
                 wake_prefix = ""
+
+        # 正则唤醒
+        if not is_wake:
+            for regex in self.wake_regex:
+                if re.match(regex, event.message_str):
+                    is_wake = True
+                    event.is_wake = True
+                    event.is_at_or_wake_command = True
+                    break
 
         # 检查插件的 handler filter
         activated_handlers = []

@@ -12,7 +12,6 @@ DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
-        "plugin_enable":[],
         "unique_session": False,
         "rate_limit": {
             "time": 60,
@@ -109,6 +108,7 @@ DEFAULT_CONFIG = {
     },
     "platform": [],
     "wake_prefix": ["/"],
+    "wake_regex": [".*astrbot.*"],
     "log_level": "INFO",
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
@@ -1864,6 +1864,12 @@ CONFIG_METADATA_2 = {
                 "items": {"type": "string"},
                 "obvious_hint": True,
                 "hint": "在不 @ 机器人的情况下，可以通过外加消息前缀来唤醒机器人。更改此配置将影响整个 Bot 的功能唤醒，包括所有指令。如果您不保留 `/`，则内置指令（help等）将需要通过您的唤醒前缀来触发。",
+            },
+            "wake_regex": {
+                "description": "正则唤醒表达式",
+                "type": "list",
+                "items": {"type": "string"},
+                "hint": "支持正则表达式的唤醒模式列表。当消息匹配任一正则表达式时，将唤醒机器人。例如含“astrbot”就唤醒的正则表达式：.*astrbot.*",
             },
             "t2i": {
                 "description": "文本转图像",
