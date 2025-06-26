@@ -506,12 +506,12 @@ class ProviderGoogleGenAI(Provider):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: list[str] = None,
-        func_tool: FuncCall = None,
-        contexts: list = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        session_id = None,
+        image_urls = None,
+        func_tool = None,
+        contexts = None,
+        system_prompt = None,
+        tool_calls_result = None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -527,7 +527,11 @@ class ProviderGoogleGenAI(Provider):
 
         # tool calls result
         if tool_calls_result:
-            context_query.extend(tool_calls_result.to_openai_messages())
+            if not isinstance(tool_calls_result, list):
+                context_query.extend(tool_calls_result.to_openai_messages())
+            else:
+                for tcr in tool_calls_result:
+                    context_query.extend(tcr.to_openai_messages())
 
         model_config = self.provider_config.get("model_config", {})
         model_config["model"] = self.get_model()

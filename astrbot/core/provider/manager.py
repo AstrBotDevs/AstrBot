@@ -190,11 +190,6 @@ class ProviderManager:
                     from .sources.anthropic_source import (
                         ProviderAnthropic as ProviderAnthropic,
                     )
-                case "llm_tuner":
-                    logger.info("加载 LLM Tuner 工具 ...")
-                    from .sources.llmtuner_source import (
-                        LLMTunerModelLoader as LLMTunerModelLoader,
-                    )
                 case "dify":
                     from .sources.dify_source import ProviderDify as ProviderDify
                 case "dashscope":

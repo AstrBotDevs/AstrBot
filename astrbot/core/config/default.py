@@ -774,17 +774,6 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek/deepseek-r1",
                         },
                     },
-                    "LLMTuner": {
-                        "id": "llmtuner_default",
-                        "type": "llm_tuner",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "base_model_path": "",
-                        "adapter_model_path": "",
-                        "llmtuner_template": "",
-                        "finetuning_type": "lora",
-                        "quantization_bit": 4,
-                    },
                     "Dify": {
                         "id": "dify_app_default",
                         "type": "dify",

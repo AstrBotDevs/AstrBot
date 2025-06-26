@@ -86,11 +86,11 @@ class Provider(AbstractProvider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = None,
+        image_urls: list[str] = None,
         func_tool: FuncCall = None,
-        contexts: List = None,
+        contexts: list = None,
         system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -114,11 +114,11 @@ class Provider(AbstractProvider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = None,
+        image_urls: list[str] = None,
         func_tool: FuncCall = None,
-        contexts: List = None,
+        contexts: list = None,
         system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。
