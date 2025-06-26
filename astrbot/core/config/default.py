@@ -12,6 +12,7 @@ DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
+        "plugin_enable": [],
         "unique_session": False,
         "rate_limit": {
             "time": 60,
