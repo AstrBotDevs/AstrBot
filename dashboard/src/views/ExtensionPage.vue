@@ -814,12 +814,16 @@ onMounted(async () => {
 
             <!-- <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small> -->
 
+            <v-btn icon="mdi-plus" size="x-large" style="position: fixed; right: 52px; bottom: 52px;" @click="dialog = true"
+                color="darkprimary">
+            </v-btn>
+
             <div v-if="pinnedPlugins.length > 0" class="mt-4">
               <h2>{{ tm('market.recommended') }}</h2>
               <v-row style="margin-top: 8px;">
                 <v-col cols="12" md="6" lg="6" v-for="plugin in pinnedPlugins" :key="plugin.name">
                   <ExtensionCard :extension="plugin" class="h-120 rounded-lg" market-mode="true" :highlight="true"
-                    @install="extension_url = plugin.repo; newExtension()" @view-readme="open(plugin.repo)">
+                    @install="extension_url = plugin.repo; dialog = true; uploadTab = 'url'" @view-readme="open(plugin.repo)">
                   </ExtensionCard>
                 </v-col>
               </v-row>
@@ -872,7 +876,7 @@ onMounted(async () => {
                   </template>
                   <template v-slot:item.actions="{ item }">
                     <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" variant="flat"
-                      @click="extension_url = item.repo; newExtension()">
+                      @click="extension_url = item.repo; dialog = true; uploadTab = 'url'">
                       <v-icon>mdi-download</v-icon></v-btn>
                     <v-btn v-else class="text-none mr-2" size="x-small" variant="flat" border
                       disabled><v-icon>mdi-check</v-icon></v-btn>
