@@ -1,5 +1,11 @@
 import discord
 from astrbot import logger
+import sys
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 
 # Discord Bot客户端
@@ -20,11 +26,22 @@ class DiscordBotClient(discord.Bot):
 
         # 回调函数
         self.on_message_received = None
+        self.on_ready_once_callback = None
+        self._ready_once_fired = False
 
+    @override
     async def on_ready(self):
         """当机器人成功连接并准备就绪时触发"""
         logger.info(f"[Discord] 已作为 {self.user} (ID: {self.user.id}) 登录")
         logger.info("[Discord] 客户端已准备就绪。")
+
+        if self.on_ready_once_callback and not self._ready_once_fired:
+            self._ready_once_fired = True
+            try:
+                await self.on_ready_once_callback()
+            except Exception as e:
+                logger.error(
+                    f"[Discord] on_ready_once_callback 执行失败: {e}", exc_info=True)
 
     def _create_message_data(self, message: discord.Message) -> dict:
         """从 discord.Message 创建数据字典"""
@@ -59,6 +76,7 @@ class DiscordBotClient(discord.Bot):
             "type": "interaction",
         }
 
+    @override
     async def on_message(self, message: discord.Message):
         """当接收到消息时触发"""
         if message.author.bot:
@@ -72,15 +90,6 @@ class DiscordBotClient(discord.Bot):
             message_data = self._create_message_data(message)
             await self.on_message_received(message_data)
 
-    async def on_interaction(self, interaction: discord.Interaction):
-        """当接收到交互（按钮点击等）时触发"""
-        logger.debug(
-            f"[Discord] 收到交互 from {interaction.user.name}: {interaction.data}"
-        )
-
-        if self.on_message_received:
-            interaction_data = self._create_interaction_data(interaction)
-            await self.on_message_received(interaction_data)
 
     def _extract_interaction_content(self, interaction: discord.Interaction) -> str:
         """从交互中提取内容"""
@@ -110,6 +119,7 @@ class DiscordBotClient(discord.Bot):
         """开始轮询消息，这是个阻塞方法"""
         await self.start(self.token)
 
+    @override
     async def close(self):
         """关闭客户端"""
         if not self.is_closed():

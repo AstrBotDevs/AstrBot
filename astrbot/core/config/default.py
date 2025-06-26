@@ -3,15 +3,17 @@
 """
 
 import os
+
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.15"
+VERSION = "3.5.17"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
 DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
+        "plugin_enable": [],
         "unique_session": False,
         "rate_limit": {
             "time": 60,
@@ -102,6 +104,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "username": "astrbot",
         "password": "77b90590a8945a7d36c963981a307dc9",
+        "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
     },
@@ -126,7 +129,7 @@ CONFIG_METADATA_2 = {
                 "description": "消息平台适配器",
                 "type": "list",
                 "config_template": {
-                    "qq_official(QQ)": {
+                    "QQ 官方机器人(WebSocket)": {
                         "id": "default",
                         "type": "qq_official",
                         "enable": False,
@@ -135,7 +138,7 @@ CONFIG_METADATA_2 = {
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
                     },
-                    "qq_official_webhook(QQ)": {
+                    "QQ 官方机器人(Webhook)": {
                         "id": "default",
                         "type": "qq_official_webhook",
                         "enable": False,
@@ -144,7 +147,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
-                    "aiocqhttp(OneBotv11)": {
+                    "QQ 个人号(aiocqhttp)": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
@@ -152,7 +155,7 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "gewechat(微信)": {
+                    "微信个人号(Gewechat)": {
                         "id": "gwchat",
                         "type": "gewechat",
                         "enable": False,
@@ -161,7 +164,7 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
-                    "wechatpadpro(微信)": {
+                    "微信个人号(WeChatPadPro)": {
                         "id": "wechatpadpro",
                         "type": "wechatpadpro",
                         "enable": False,
@@ -171,7 +174,7 @@ CONFIG_METADATA_2 = {
                         "wpp_active_message_poll": False,
                         "wpp_active_message_poll_interval": 3,
                     },
-                    "weixin_official_account(微信公众平台)": {
+                    "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
                         "enable": False,
@@ -184,7 +187,7 @@ CONFIG_METADATA_2 = {
                         "port": 6194,
                         "active_send_mode": False,
                     },
-                    "wecom(企业微信)": {
+                    "企业微信(含微信客服)": {
                         "id": "wecom",
                         "type": "wecom",
                         "enable": False,
@@ -197,7 +200,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
-                    "lark(飞书)": {
+                    "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
                         "enable": False,
@@ -206,14 +209,14 @@ CONFIG_METADATA_2 = {
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
                     },
-                    "dingtalk(钉钉)": {
+                    "钉钉(DingTalk)": {
                         "id": "dingtalk",
                         "type": "dingtalk",
                         "enable": False,
                         "client_id": "",
                         "client_secret": "",
                     },
-                    "telegram": {
+                    "Telegram": {
                         "id": "telegram",
                         "type": "telegram",
                         "enable": False,
@@ -225,14 +228,17 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                     },
-                    "discord":{
+                    "Discord": {
                         "id": "discord",
                         "type": "discord",
                         "enable": False,
                         "discord_token": "",
                         "discord_proxy": "",
+                        "discord_command_register": True,
+                        "discord_guild_id_for_debug": "",
+                        "discord_activity_name": "",
                     },
-                    "slack": {
+                    "Slack": {
                         "id": "slack",
                         "type": "slack",
                         "enable": False,
@@ -364,15 +370,28 @@ CONFIG_METADATA_2 = {
                         "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                         "obvious_hint": True,
                     },
-                    "discord_token":{
+                    "discord_token": {
                         "description": "Discord Bot Token",
                         "type": "string",
-                        "hint": "在此处填入你的Discord Bot Token"
+                        "hint": "在此处填入你的Discord Bot Token",
                     },
-                    "discord_proxy":{
+                    "discord_proxy": {
                         "description": "Discord 代理地址",
                         "type": "string",
-                        "hint": "可选的代理地址：http://ip:port"
+                        "hint": "可选的代理地址：http://ip:port",
+                    },
+                    "discord_command_register": {
+                        "description": "是否自动将插件指令注册为 Discord 斜杠指令",
+                        "type": "bool",
+                    },
+                    "discord_activity_name": {
+                        "description": "Discord 活动名称",
+                        "type": "string",
+                        "hint": "可选的 Discord 活动名称。留空则不设置活动。",
+                    },
+                    "discord_guild_id_for_debug": {
+                        "description": "【开发用】指定一个服务器(Guild)ID。在此服务器注册的指令会立刻生效，便于调试。留空则注册为全局指令。",
+                        "type": "string",
                     },
                 },
             },
@@ -957,6 +976,18 @@ CONFIG_METADATA_2 = {
                         "volcengine_speed_ratio": 1.0,
                         "api_base": "https://openspeech.bytedance.com/api/v1/tts",
                         "timeout": 20,
+                    },
+                    "Gemini TTS": {
+                        "id": "gemini_tts",
+                        "type": "gemini_tts",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "gemini_tts_api_key": "",
+                        "gemini_tts_api_base": "",
+                        "gemini_tts_timeout": 20,
+                        "gemini_tts_model": "gemini-2.5-flash-preview-tts",
+                        "gemini_tts_prefix": "",
+                        "gemini_tts_voice_name": "Leda",
                     },
                     "OpenAI Embedding": {
                         "id": "openai_embedding",

@@ -17,7 +17,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
-from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk_base64
+from astrbot.core.utils.tencent_record_helper import audio_to_tencent_silk_base64
 
 if TYPE_CHECKING:
     from .wechatpadpro_adapter import WeChatPadProAdapter
@@ -113,7 +113,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
     async def _send_voice(self, session: aiohttp.ClientSession, comp: Record):
         record_path = await comp.convert_to_file_path()
         # 默认已经存在 data/temp 中
-        b64, duration = await wav_to_tencent_silk_base64(record_path)
+        b64, duration = await audio_to_tencent_silk_base64(record_path)
         payload = {
             "ToUserName": self.session_id,
             "VoiceData": b64,

@@ -4,6 +4,7 @@ import App from './App.vue';
 import { router } from './router';
 import vuetify from './plugins/vuetify';
 import confirmPlugin from './plugins/confirmPlugin';
+import { setupI18n } from './i18n/composables';
 import '@/scss/style.scss';
 import VueApexCharts from 'vue3-apexcharts';
 
@@ -11,14 +12,31 @@ import print from 'vue3-print-nb';
 import { loader } from '@guolao/vue-monaco-editor'
 import axios from 'axios';
 
-const app = createApp(App);
-app.use(router);
-app.use(createPinia());
-app.use(print);
-app.use(VueApexCharts);
-app.use(vuetify);
-app.use(confirmPlugin);
-app.mount('#app');
+// 初始化新的i18n系统，等待完成后再挂载应用
+setupI18n().then(() => {
+  console.log('🌍 新i18n系统初始化完成');
+  
+  const app = createApp(App);
+  app.use(router);
+  app.use(createPinia());
+  app.use(print);
+  app.use(VueApexCharts);
+  app.use(vuetify);
+  app.use(confirmPlugin);
+  app.mount('#app');
+}).catch(error => {
+  console.error('❌ 新i18n系统初始化失败:', error);
+  
+  // 即使i18n初始化失败，也要挂载应用（使用回退机制）
+  const app = createApp(App);
+  app.use(router);
+  app.use(createPinia());
+  app.use(print);
+  app.use(VueApexCharts);
+  app.use(vuetify);
+  app.use(confirmPlugin);
+  app.mount('#app');
+});
 
 
 axios.interceptors.request.use((config) => {

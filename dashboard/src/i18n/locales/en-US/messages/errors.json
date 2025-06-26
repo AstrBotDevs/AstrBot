@@ -1,0 +1,39 @@
+{
+  "network": {
+    "timeout": "Network request timeout, please try again later",
+    "connection": "Network connection failed, please check your network",
+    "server": "Server error, please contact technical support",
+    "unavailable": "Service temporarily unavailable",
+    "forbidden": "Access denied"
+  },
+  "validation": {
+    "required": "This field is required",
+    "invalid": "Invalid input format",
+    "tooLong": "Input is too long",
+    "tooShort": "Input is too short",
+    "email": "Please enter a valid email address",
+    "url": "Please enter a valid URL",
+    "number": "Please enter a valid number"
+  },
+  "auth": {
+    "unauthorized": "Unauthorized access, please login again",
+    "forbidden": "Insufficient permissions to perform this operation",
+    "tokenExpired": "Login expired, please login again",
+    "invalidCredentials": "Invalid username or password"
+  },
+  "file": {
+    "uploadFailed": "File upload failed",
+    "invalidFormat": "Unsupported file format",
+    "tooLarge": "File size exceeds limit",
+    "notFound": "File not found"
+  },
+  "operation": {
+    "failed": "Operation failed",
+    "cancelled": "Operation cancelled",
+    "notSupported": "Operation not supported",
+    "conflict": "Operation conflict, please try again later"
+  },
+  "browser": {
+    "audioNotSupported": "Your browser does not support audio playback."
+  }
+} 

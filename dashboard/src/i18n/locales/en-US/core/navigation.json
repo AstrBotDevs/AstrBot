@@ -1,0 +1,18 @@
+{
+  "dashboard": "Dashboard", 
+  "platforms": "Platforms",
+  "providers": "Providers",
+  "toolUse": "MCP Tools",
+  "config": "Config",
+  "extension": "Extensions",
+  "extensionMarketplace": "Extension Market",
+  "chat": "Chat",
+  "conversation": "Conversations",
+  "console": "Console",
+  "alkaid": "Alkaid Lab",
+  "about": "About",
+  "settings": "Settings",
+  "documentation": "Documentation",
+  "github": "GitHub",
+  "drag": "Drag"
+} 

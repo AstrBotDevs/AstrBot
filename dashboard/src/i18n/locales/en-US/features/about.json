@@ -1,0 +1,17 @@
+{
+  "hero": {
+    "title": "AstrBot",
+    "subtitle": "A project out of interests and loves ❤️",
+    "starButton": "Star this project! 🌟",
+    "issueButton": "Submit Issue"
+  },
+  "contributors": {
+    "title": "Contributors",
+    "description": "This project is maintained by many open source community members. Thanks to every contributor for their dedication!",
+    "viewLink": "View AstrBot Contributors"
+  },
+  "stats": {
+    "title": "Global Deployment",
+    "license": "AstrBot is open source under AGPL v3 license"
+  }
+} 

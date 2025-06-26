@@ -1,0 +1,62 @@
+{
+  "title": "Configuration",
+  "subtitle": "Manage system configuration and settings",
+  "editor": {
+    "visual": "Visual Editor",
+    "code": "Code Editor",
+    "revertCode": "Revert to Previous Code",
+    "applyConfig": "Apply This Configuration",
+    "applyTip": "`Apply This Configuration` will stage and apply the configuration to the visual editor. To save, you need to click the save button in the bottom right corner."
+  },
+  "actions": {
+    "save": "Save Configuration",
+    "delete": "Delete This Item",
+    "add": "Add",
+    "reset": "Reset to Default",
+    "export": "Export Configuration",
+    "import": "Import Configuration",
+    "validate": "Validate Configuration"
+  },
+  "help": {
+    "documentation": "Official Documentation",
+    "support": "Join Group for Help",
+    "helpText": "Don't understand the configuration? Please see {documentation} or {support}.",
+    "helpPrefix": "Don't understand the configuration? Please see",
+    "helpMiddle": "or",
+    "helpSuffix": "."
+  },
+  "messages": {
+    "configApplied": "Configuration successfully applied. To save, you need to click the save button in the bottom right corner.",
+    "configApplyError": "Configuration not applied, JSON format error.",
+    "saveSuccess": "Configuration saved successfully",
+    "saveError": "Failed to save configuration",
+    "loadError": "Failed to load configuration"
+  },
+  "sections": {
+    "general": "General Settings",
+    "advanced": "Advanced Settings",
+    "security": "Security Settings",
+    "appearance": "Appearance Settings",
+    "notification": "Notification Settings"
+  },
+  "general": {
+    "botName": "Bot Name",
+    "language": "Interface Language",
+    "timezone": "Timezone",
+    "autoSave": "Auto Save",
+    "debugMode": "Debug Mode"
+  },
+  "advanced": {
+    "logLevel": "Log Level",
+    "maxConnections": "Max Connections",
+    "timeout": "Timeout",
+    "retryAttempts": "Retry Attempts",
+    "cacheSize": "Cache Size"
+  },
+  "security": {
+    "apiKey": "API Key",
+    "allowedHosts": "Allowed Hosts",
+    "rateLimit": "Rate Limit",
+    "encryption": "Encryption Settings"
+  }
+} 

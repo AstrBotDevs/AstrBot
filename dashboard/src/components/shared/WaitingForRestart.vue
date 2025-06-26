@@ -1,7 +1,7 @@
 <template>
     <v-dialog v-model="visible" persistent max-width="400">
         <v-card>
-            <v-card-title>正在等待 AstrBot 重启...</v-card-title>
+            <v-card-title>{{ t('core.common.restart.waiting') }}</v-card-title>
             <v-card-text>
                 <v-progress-linear indeterminate color="primary"></v-progress-linear>
             </v-card-text>
@@ -11,12 +11,16 @@
 
 <script>
 import axios from 'axios'
-
 import { useCommonStore } from '@/stores/common';
+import { useI18n } from '@/i18n/composables';
 
 
 export default {
     name: 'WaitingForRestart',
+    setup() {
+        const { t } = useI18n();
+        return { t };
+    },
     data() {
         return {
             visible: false,
@@ -47,7 +51,7 @@ export default {
                 }, 1000)
             } else {
                 if (this.cnt == 10) {
-                    this.status = '拉取状态达到最大次数，请手动检查。'
+                    this.status = this.t('core.common.restart.maxRetriesReached')
                 }
                 this.cnt = 0
                 setTimeout(() => {

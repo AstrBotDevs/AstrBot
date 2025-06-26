@@ -1,0 +1,114 @@
+{
+  "title": "函数工具管理",
+  "subtitle": "管理 MCP 服务器和查看可用的函数工具",
+  "tooltip": {
+    "info": "函数调用和 MCP 是什么？",
+    "marketplace": "浏览和安装来自社区的 MCP 服务器",
+    "serverConfig": "MCP 服务器(stdio)配置支持以下字段:\ncommand: 命令名称 (例如 python 或 uv)\nargs: 命令参数数组 (例如 [\"run\", \"server.py\"])\nenv: 环境变量对象 (例如 {\"api_key\": \"abc\"})\ncwd: 工作目录路径 (例如 /path/to/server)\nencoding: 输出编码 (默认 utf-8)\nencoding_error_handler: The text encoding error handler. Defaults to strict.\n其他字段请参考 MCP 文档\n⚠️ 如果您使用 Docker 部署 AstrBot, 请务必将 MCP 服务器装在 AstrBot 挂载好的 data 目录下"
+  },
+  "tabs": {
+    "local": "本地服务器",
+    "marketplace": "MCP 市场"
+  },
+  "mcpServers": {
+    "title": "MCP 服务器",
+    "buttons": {
+      "refresh": "刷新",
+      "add": "新增服务器",
+      "useTemplate": "使用模板"
+    },
+    "empty": "暂无 MCP 服务器，点击 新增服务器 添加",
+    "status": {
+      "noTools": "无可用工具",
+      "availableTools": "可用工具",
+      "configSummary": "配置: {keys}",
+      "noConfig": "未设置配置"
+    }
+  },
+  "functionTools": {
+    "title": "函数工具",
+    "buttons": {
+      "expand": "展开",
+      "collapse": "收起"
+    },
+    "search": "搜索函数工具",
+    "empty": "没有可用的函数工具",
+    "description": "功能描述",
+    "parameters": "参数列表",
+    "noParameters": "此工具没有参数",
+    "table": {
+      "paramName": "参数名",
+      "type": "类型",
+      "description": "描述",
+      "required": "必填"
+    }
+  },
+  "marketplace": {
+    "title": "MCP 服务器市场",
+    "search": "搜索服务器",
+    "buttons": {
+      "refresh": "刷新",
+      "detail": "详情",
+      "import": "导入"
+    },
+    "loading": "正在加载 MCP 服务器市场...",
+    "empty": "暂无可用的 MCP 服务器",
+    "status": {
+      "availableTools": "可用工具 ({count})",
+      "noToolsInfo": "无可用工具信息"
+    }
+  },
+  "dialogs": {
+    "addServer": {
+      "title": "新增 MCP 服务器",
+      "editTitle": "编辑 MCP 服务器",
+      "fields": {
+        "name": "服务器名称",
+        "nameRequired": "名称是必填项",
+        "enable": "启用服务器",
+        "config": "服务器配置"
+      },
+      "configNotes": {
+        "note1": "1. 某些 MCP 服务器可能需要按照其要求在 env 中填充 `API_KEY` 或 `TOKEN` 等信息，请注意检查是否填写。",
+        "note2": "2. 当配置中指定 url 参数时：如果还同时指定 `transport` 参数的值为 `streamable_http`，则使用 Steamable HTTP，否则使用 SSE 连接。"
+      },
+      "errors": {
+        "configEmpty": "配置不能为空",
+        "jsonFormat": "JSON 格式错误: {error}",
+        "jsonParse": "JSON 解析错误: {error}"
+      },
+      "buttons": {
+        "cancel": "取消",
+        "save": "保存"
+      }
+    },
+    "serverDetail": {
+      "title": "服务器详情",
+      "installConfig": "安装配置",
+      "availableTools": "可用工具",
+      "buttons": {
+        "close": "关闭",
+        "importConfig": "导入配置"
+      }
+    },
+    "confirmDelete": "确定要删除服务器 {name} 吗?"
+  },
+  "messages": {
+    "getServersError": "获取 MCP 服务器列表失败: {error}",
+    "getToolsError": "获取函数工具列表失败: {error}",
+    "saveSuccess": "保存成功!",
+    "saveError": "保存失败: {error}",
+    "deleteSuccess": "删除成功!",
+    "deleteError": "删除失败: {error}",
+    "updateSuccess": "更新成功!",
+    "updateError": "更新失败: {error}",
+    "getMarketError": "获取 MCP 市场服务器列表失败: {error}",
+    "importError": {
+      "noConfig": "此服务器没有可用配置",
+      "invalidFormat": "服务器配置格式不正确",
+      "failed": "导入配置失败: {error}"
+    },
+    "configParseError": "配置解析错误: {error}",
+    "noAvailableConfig": "无可用配置"
+  }
+} 
