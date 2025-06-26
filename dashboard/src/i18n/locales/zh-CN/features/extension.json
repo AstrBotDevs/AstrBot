@@ -31,7 +31,8 @@
     "saveAndClose": "保存并关闭",
     "cancel": "取消",
     "actions": "操作",
-    "back": "返回"
+    "back": "返回",
+    "selectFile": "选择文件"
   },
   "status": {
     "enabled": "启用",
@@ -106,6 +107,11 @@
     "uninstall": {
       "title": "删除确认",
       "message": "你确定要删除当前插件吗？"
+    },
+    "install": {
+      "title": "安装插件",
+      "fromFile": "从文件安装",
+      "fromUrl": "从链接安装"
     }
   },
   "messages": {
@@ -127,7 +133,8 @@
     "hasUpdate": "有新版本:",
     "confirmDelete": "确定要删除插件吗？",
     "fillUrlOrFile": "请填写插件链接或上传插件文件",
-    "dontFillBoth": "请不要同时填写插件链接和上传插件文件"
+    "dontFillBoth": "请不要同时填写插件链接和上传文件",
+    "supportedFormats": "支持 .zip 格式的插件文件"
   },
   "upload": {
     "fromFile": "从文件安装",
