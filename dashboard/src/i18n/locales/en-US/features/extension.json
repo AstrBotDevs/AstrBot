@@ -31,7 +31,8 @@
     "saveAndClose": "Save and Close",
     "cancel": "Cancel",
     "actions": "Actions",
-    "back": "Back"
+    "back": "Back",
+    "selectFile": "Select File"
   },
   "status": {
     "enabled": "Enabled",
@@ -106,6 +107,11 @@
     "uninstall": {
       "title": "Confirm Deletion",
       "message": "Are you sure you want to delete this extension?"
+    },
+    "install": {
+      "title": "Install Extension",
+      "fromFile": "Install from File",
+      "fromUrl": "Install from URL"
     }
   },
   "messages": {
@@ -127,7 +133,8 @@
     "hasUpdate": "New version available:",
     "confirmDelete": "Are you sure you want to delete this extension?",
     "fillUrlOrFile": "Please fill in extension URL or upload extension file",
-    "dontFillBoth": "Please don't fill in both extension URL and upload file"
+    "dontFillBoth": "Please don't fill in both extension URL and upload file",
+    "supportedFormats": "Supports .zip extension files"
   },
   "upload": {
     "fromFile": "Install from File",

@@ -21,7 +21,14 @@
     "refresh": "Refresh",
     "cancel": "Cancel",
     "save": "Save",
-    "addPlatform": "Add Platform Adapter"
+    "addPlatform": "Add Platform Adapter",
+    "connectTitle": "Connect {name}",
+    "viewTutorial": "View Tutorial",
+    "idConflict": {
+      "title": "ID Conflict Warning",
+      "message": "Detected duplicate ID \"{id}\". Please use a new ID.",
+      "confirm": "OK"
+    }
   },
   "messages": {
     "updateSuccess": "Update successful!",

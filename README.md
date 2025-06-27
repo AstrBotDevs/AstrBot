@@ -223,7 +223,7 @@ _✨ WebUI ✨_
 
 此外，本项目的诞生离不开以下开源项目：
 
-- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ)
+- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 伟大的猫猫框架
 - [wechatpy/wechatpy](https://github.com/wechatpy/wechatpy)
 
 ## ⭐ Star History
@@ -236,6 +236,9 @@ _✨ WebUI ✨_
 [![Star History Chart](https://api.star-history.com/svg?repos=soulter/astrbot&type=Date)](https://star-history.com/#soulter/astrbot&Date)
 
 </div>
+
+![10k-star-banner-credit-by-kevin](https://github.com/user-attachments/assets/c97fc5fb-20b9-4bc8-9998-c20b930ab097)
+
 
 ## Disclaimer
 

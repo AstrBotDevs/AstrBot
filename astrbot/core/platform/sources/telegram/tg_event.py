@@ -40,20 +40,21 @@ class TelegramPlatformEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
 
-    def _split_message(self, text: str) -> list[str]:
-        if len(text) <= self.MAX_MESSAGE_LENGTH:
+    @classmethod
+    def _split_message(cls, text: str) -> list[str]:
+        if len(text) <= cls.MAX_MESSAGE_LENGTH:
             return [text]
 
         chunks = []
         while text:
-            if len(text) <= self.MAX_MESSAGE_LENGTH:
+            if len(text) <= cls.MAX_MESSAGE_LENGTH:
                 chunks.append(text)
                 break
 
-            split_point = self.MAX_MESSAGE_LENGTH
-            segment = text[: self.MAX_MESSAGE_LENGTH]
+            split_point = cls.MAX_MESSAGE_LENGTH
+            segment = text[: cls.MAX_MESSAGE_LENGTH]
 
-            for _, pattern in self.SPLIT_PATTERNS.items():
+            for _, pattern in cls.SPLIT_PATTERNS.items():
                 if matches := list(pattern.finditer(segment)):
                     last_match = matches[-1]
                     split_point = last_match.end()
@@ -64,9 +65,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
         return chunks
 
-    async def send_with_client(
-        self, client: ExtBot, message: MessageChain, user_name: str
-    ):
+    @classmethod
+    async def send_with_client(cls, client: ExtBot, message: MessageChain, user_name: str):
         image_path = None
 
         has_reply = False
@@ -97,7 +97,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if at_user_id and not at_flag:
                     i.text = f"@{at_user_id} {i.text}"
                     at_flag = True
-                chunks = self._split_message(i.text)
+                chunks = cls._split_message(i.text)
                 for chunk in chunks:
                     try:
                         md_text = telegramify_markdown.markdownify(
