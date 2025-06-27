@@ -12,7 +12,7 @@ DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
-        "plugin_enable":[],
+        "plugin_enable": [],
         "unique_session": False,
         "rate_limit": {
             "time": 60,
@@ -387,10 +387,6 @@ CONFIG_METADATA_2 = {
                         "description": "Discord 活动名称",
                         "type": "string",
                         "hint": "可选的 Discord 活动名称。留空则不设置活动。",
-                    },
-                    "discord_guild_id_for_debug": {
-                        "description": "【开发用】指定一个服务器(Guild)ID。在此服务器注册的指令会立刻生效，便于调试。留空则注册为全局指令。",
-                        "type": "string",
                     },
                 },
             },

@@ -147,7 +147,6 @@ class DiscordPlatformAdapter(Platform):
             logger.warning("[Discord] 与 Discord 的连接已关闭。")
         except Exception as e:
             logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
-        # finally: 不再自动调用 self.terminate()，只允许外部统一调度
 
     def _get_message_type(
         self, channel: Messageable, guild_id: int | None = None
