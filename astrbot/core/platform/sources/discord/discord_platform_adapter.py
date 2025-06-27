@@ -46,6 +46,8 @@ class DiscordPlatformAdapter(Platform):
         self.enable_command_register = self.config.get("discord_command_register", True)
         self.guild_id = self.config.get("discord_guild_id_for_debug", None)
         self.activity_name = self.config.get("discord_activity_name", None)
+        self.shutdown_event = asyncio.Event()
+        self._polling_task = None
 
     @override
     async def send_by_session(
@@ -137,7 +139,8 @@ class DiscordPlatformAdapter(Platform):
         self.client.on_ready_once_callback = callback
 
         try:
-            await self.client.start_polling()
+            self._polling_task = asyncio.create_task(self.client.start_polling())
+            await self.shutdown_event.wait()
         except discord.errors.LoginFailure:
             logger.error("[Discord] 登录失败。请检查你的 Bot Token 是否正确。")
         except discord.errors.ConnectionClosed:
@@ -162,42 +165,47 @@ class DiscordPlatformAdapter(Platform):
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
         message: discord.Message = data["message"]
-        is_mentioned = data.get("is_mentioned", False)
 
         content = message.content
 
         # 如果机器人被@，移除@部分
-        if (
-            is_mentioned
-            and self.client
-            and self.client.user
-            and self.client.user in message.mentions
-        ):
-            # 构建机器人的@字符串，格式为 <@USER_ID> 或 <@!USER_ID>
+        # 剥离 User Mention (<@id>, <@!id>)
+        if self.client and self.client.user:
             mention_str = f"<@{self.client.user.id}>"
-            mention_str_nickname = (
-                f"<@!{self.client.user.id}>"  # 有些客户端会使用带!的格式
-            )
-
+            mention_str_nickname = f"<@!{self.client.user.id}>"
             if content.startswith(mention_str):
                 content = content[len(mention_str) :].lstrip()
             elif content.startswith(mention_str_nickname):
                 content = content[len(mention_str_nickname) :].lstrip()
 
-        abm = AstrBotMessage()
+        # 剥离 Role Mention（bot 拥有的任一角色被提及，<@&role_id>）
+        if (
+            hasattr(message, "role_mentions")
+            and hasattr(message, "guild")
+            and message.guild
+        ):
+            bot_member = (
+                message.guild.get_member(self.client.user.id)
+                if self.client and self.client.user
+                else None
+            )
+            if bot_member and hasattr(bot_member, "roles"):
+                for role in bot_member.roles:
+                    role_mention_str = f"<@&{role.id}>"
+                    if content.startswith(role_mention_str):
+                        content = content[len(role_mention_str) :].lstrip()
+                        break  # 只剥离第一个匹配的角色 mention
 
+        abm = AstrBotMessage()
         abm.type = self._get_message_type(message.channel)
         abm.group_id = self._get_channel_id(message.channel)
-
         abm.message_str = content
         abm.sender = MessageMember(
             user_id=str(message.author.id), nickname=message.author.display_name
         )
-
         message_chain = []
         if abm.message_str:
             message_chain.append(Plain(text=abm.message_str))
-
         if message.attachments:
             for attachment in message.attachments:
                 if attachment.content_type and attachment.content_type.startswith(
@@ -210,7 +218,6 @@ class DiscordPlatformAdapter(Platform):
                     message_chain.append(
                         File(name=attachment.filename, url=attachment.url)
                     )
-
         abm.message = message_chain
         abm.raw_message = message
         abm.self_id = self.client_self_id
@@ -237,13 +244,35 @@ class DiscordPlatformAdapter(Platform):
         # 检查是否为斜杠指令
         is_slash_command = message_event.interaction_followup_webhook is not None
 
-        # 检查是否被@
-        is_mention = (
+        # 检查是否被@（User Mention 或 Bot 拥有的 Role Mention）
+        is_mention = False
+        # User Mention
+        if (
             self.client
             and self.client.user
             and hasattr(message.raw_message, "mentions")
-            and self.client.user in message.raw_message.mentions
-        )
+        ):
+            if self.client.user in message.raw_message.mentions:
+                is_mention = True
+        # Role Mention（Bot 拥有的角色被提及）
+        if not is_mention and hasattr(message.raw_message, "role_mentions"):
+            bot_member = None
+            if hasattr(message.raw_message, "guild") and message.raw_message.guild:
+                try:
+                    bot_member = message.raw_message.guild.get_member(
+                        self.client.user.id
+                    )
+                except Exception:
+                    bot_member = None
+            if bot_member and hasattr(bot_member, "roles"):
+                bot_roles = set(bot_member.roles)
+                mentioned_roles = set(message.raw_message.role_mentions)
+                if (
+                    bot_roles
+                    and mentioned_roles
+                    and bot_roles.intersection(mentioned_roles)
+                ):
+                    is_mention = True
 
         # 如果是斜杠指令或被@的消息，设置为唤醒状态
         if is_slash_command or is_mention:
@@ -255,23 +284,37 @@ class DiscordPlatformAdapter(Platform):
     @override
     async def terminate(self):
         """终止适配器"""
-        logger.info("[Discord] 正在终止适配器...")
-
+        logger.info("[Discord] 正在终止适配器... (step 1: cancel polling task)")
+        self.shutdown_event.set()
+        # 优先 cancel polling_task
+        if self._polling_task:
+            self._polling_task.cancel()
+            try:
+                await asyncio.wait_for(self._polling_task, timeout=10)
+            except asyncio.CancelledError:
+                logger.info("[Discord] polling_task 已取消。")
+            except Exception as e:
+                logger.warning(f"[Discord] polling_task 取消异常: {e}")
+        logger.info("[Discord] 正在清理已注册的斜杠指令... (step 2)")
         # 清理指令
         if self.enable_command_register and self.client:
-            logger.info("[Discord] 正在清理已注册的斜杠指令...")
             try:
-                # 传入空的列表来清除所有全局指令
-                # 如果指定了 guild_id，则只清除该服务器的指令
-                await self.client.sync_commands(
-                    commands=[], guild_ids=[self.guild_id] if self.guild_id else None
+                await asyncio.wait_for(
+                    self.client.sync_commands(
+                        commands=[],
+                        guild_ids=[self.guild_id] if self.guild_id else None,
+                    ),
+                    timeout=10,
                 )
                 logger.info("[Discord] 指令清理完成。")
             except Exception as e:
                 logger.error(f"[Discord] 清理指令时发生错误: {e}", exc_info=True)
-
+        logger.info("[Discord] 正在关闭 Discord 客户端... (step 3)")
         if self.client and hasattr(self.client, "close"):
-            await self.client.close()
+            try:
+                await asyncio.wait_for(self.client.close(), timeout=10)
+            except Exception as e:
+                logger.warning(f"[Discord] 客户端关闭异常: {e}")
         logger.info("[Discord] 适配器已终止。")
 
     def register_handler(self, handler_info):
