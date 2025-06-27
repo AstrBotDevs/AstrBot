@@ -1,0 +1,167 @@
+{
+  "title": "插件管理",
+  "subtitle": "管理和配置系统插件",
+  "tabs": {
+    "installed": "已安装",
+    "market": "插件市场"
+  },
+  "search": {
+    "placeholder": "搜索插件...",
+    "marketPlaceholder": "搜索市场插件..."
+  },
+  "views": {
+    "card": "卡片视图",
+    "list": "列表视图"
+  },
+  "buttons": {
+    "showSystemPlugins": "显示系统插件",
+    "hideSystemPlugins": "隐藏系统插件",
+    "platformConfig": "平台命令配置",
+    "install": "安装",
+    "uninstall": "卸载",
+    "update": "更新",
+    "reload": "重载",
+    "enable": "启用",
+    "disable": "禁用",
+    "configure": "配置",
+    "viewInfo": "行为",
+    "viewDocs": "文档",
+    "close": "关闭",
+    "save": "保存",
+    "saveAndClose": "保存并关闭",
+    "cancel": "取消",
+    "actions": "操作",
+    "back": "返回",
+    "selectFile": "选择文件"
+  },
+  "status": {
+    "enabled": "启用",
+    "disabled": "禁用",
+    "system": "系统",
+    "loading": "加载中...",
+    "installed": "已安装",
+    "unknown": "未知"
+  },
+  "tooltips": {
+    "enable": "点击启用",
+    "disable": "点击禁用",
+    "reload": "重载",
+    "configure": "配置",
+    "viewInfo": "行为",
+    "viewDocs": "文档",
+    "update": "更新",
+    "uninstall": "卸载"
+  },
+  "table": {
+    "headers": {
+      "name": "名称",
+      "description": "描述",
+      "version": "版本",
+      "author": "作者",
+      "status": "状态",
+      "actions": "操作",
+      "stars": "Star数",
+      "lastUpdate": "最近更新",
+      "tags": "标签",
+      "eventType": "行为类型",
+      "specificType": "具体类型",
+      "trigger": "触发方式"
+    }
+  },
+  "empty": {
+    "noPlugins": "暂无插件",
+    "noPluginsDesc": "尝试安装插件或者显示系统插件"
+  },
+  "market": {
+    "recommended": "🥳 推荐",
+    "allPlugins": "📦 全部插件",
+    "showFullName": "完整名称",
+    "devDocs": "插件开发文档",
+    "submitRepo": "提交插件仓库"
+  },
+  "dialogs": {
+    "error": {
+      "title": "错误信息",
+      "checkConsole": "详情请检查控制台"
+    },
+    "platformConfig": {
+      "title": "平台命令可用性配置",
+      "description": "设置每个插件在不同平台上的可用性，勾选表示启用",
+      "noAdapters": "未找到平台适配器",
+      "noAdaptersDesc": "请先在 平台管理 中添加并配置平台适配器，然后再设置插件的平台可用性",
+      "goPlatforms": "前往平台管理",
+      "selectAll": "全选",
+      "selectAllNormal": "全选普通插件",
+      "selectAllSystem": "全选系统插件",
+      "selectNone": "全不选",
+      "toggleAll": "反选"
+    },
+    "config": {
+      "title": "插件配置",
+      "noConfig": "这个插件没有配置"
+    },
+    "loading": {
+      "title": "加载中...",
+      "logs": "日志"
+    },
+    "uninstall": {
+      "title": "删除确认",
+      "message": "你确定要删除当前插件吗？"
+    },
+    "install": {
+      "title": "安装插件",
+      "fromFile": "从文件安装",
+      "fromUrl": "从链接安装"
+    }
+  },
+  "messages": {
+    "uninstalling": "正在卸载",
+    "refreshing": "正在刷新插件列表...",
+    "refreshSuccess": "插件列表已刷新！",
+    "refreshFailed": "刷新插件列表时发生错误",
+    "reloadSuccess": "重载成功",
+    "updateSuccess": "更新成功!",
+    "addSuccess": "添加成功!",
+    "saveSuccess": "保存成功!",
+    "deleteSuccess": "删除成功!",
+    "installing": "正在从文件安装插件",
+    "installingFromUrl": "正在从链接安装插件...",
+    "installFailed": "安装插件失败:",
+    "getPlatformConfigFailed": "获取平台插件配置失败:",
+    "savePlatformConfigFailed": "保存平台插件配置失败:",
+    "getMarketDataFailed": "获取插件市场数据失败:",
+    "hasUpdate": "有新版本:",
+    "confirmDelete": "确定要删除插件吗？",
+    "fillUrlOrFile": "请填写插件链接或上传插件文件",
+    "dontFillBoth": "请不要同时填写插件链接和上传文件",
+    "supportedFormats": "支持 .zip 格式的插件文件"
+  },
+  "upload": {
+    "fromFile": "从文件安装",
+    "fromUrl": "从链接安装",
+    "selectFile": "选择文件",
+    "enterUrl": "输入插件仓库链接"
+  },
+  "card": {
+    "actions": {
+      "pluginConfig": "插件配置",
+      "uninstallPlugin": "卸载插件",
+      "reloadPlugin": "重载插件",
+      "togglePlugin": "插件",
+      "viewHandlers": "查看行为",
+      "updateTo": "更新到"
+    },
+    "status": {
+      "hasUpdate": "有新版本可用",
+      "disabled": "该插件已经被禁用",
+      "handlersCount": "个行为"
+    },
+    "alt": {
+      "logo": "logo",
+      "extensionIcon": "扩展图标"
+    },
+    "errors": {
+      "confirmNotRegistered": "$confirm 未正确注册"
+    }
+  }
+} 

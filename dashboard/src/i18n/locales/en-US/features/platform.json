@@ -1,0 +1,48 @@
+{
+  "title": "Platform Adapter Management",
+  "subtitle": "Manage bot platform adapters to connect to different chat platforms",
+  "adapters": "Platform Adapters",
+  "addAdapter": "Add Adapter",
+  "emptyText": "No platform adapters yet, click Add Adapter to create one",
+  "details": {
+    "adapterType": "Adapter Type",
+    "token": "Token",
+    "description": "Description"
+  },
+  "logs": {
+    "title": "Platform Logs",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "dialog": {
+    "add": "Add",
+    "edit": "Edit",
+    "adapter": "Platform Adapter",
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "save": "Save",
+    "addPlatform": "Add Platform Adapter",
+    "connectTitle": "Connect {name}",
+    "viewTutorial": "View Tutorial",
+    "idConflict": {
+      "title": "ID Conflict Warning",
+      "message": "Detected duplicate ID \"{id}\". Please use a new ID.",
+      "confirm": "OK"
+    }
+  },
+  "messages": {
+    "updateSuccess": "Update successful!",
+    "addSuccess": "Add successful!",
+    "deleteSuccess": "Delete successful!",
+    "statusUpdateSuccess": "Status update successful!",
+    "deleteConfirm": "Are you sure you want to delete platform adapter"
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "connecting": "Connecting",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "error": "Error"
+  }
+} 

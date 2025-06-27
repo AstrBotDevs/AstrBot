@@ -14,59 +14,62 @@ export interface menu {
   subCaption?: string;
 }
 
+// 注意：这个文件现在包含i18n键值而不是直接的文本
+// 在组件中使用时需要通过t()函数进行翻译
+// 所有键名都使用 core.navigation.* 格式
 const sidebarItem: menu[] = [
   {
-    title: '统计',
+    title: 'core.navigation.dashboard',
     icon: 'mdi-view-dashboard',
     to: '/dashboard/default'
   },
   {
-    title: '消息平台',
+    title: 'core.navigation.platforms',
     icon: 'mdi-message-processing',
     to: '/platforms',
   },
   {
-    title: '服务提供商',
+    title: 'core.navigation.providers',
     icon: 'mdi-creation',
     to: '/providers',
   },
   {
-    title: 'MCP',
+    title: 'core.navigation.toolUse',
     icon: 'mdi-function-variant',
     to: '/tool-use'
   },
   {
-    title: '配置文件',
+    title: 'core.navigation.config',
     icon: 'mdi-cog',
     to: '/config',
   },
   {
-    title: '插件',
+    title: 'core.navigation.extension',
     icon: 'mdi-puzzle',
     to: '/extension'
   },
   {
-    title: '聊天',
+    title: 'core.navigation.chat',
     icon: 'mdi-chat',
     to: '/chat'
   },
   {
-    title: '对话数据',
+    title: 'core.navigation.conversation',
     icon: 'mdi-database',
     to: '/conversation'
   },
   {
-    title: '控制台',
+    title: 'core.navigation.console',
     icon: 'mdi-console',
     to: '/console'
   },
   {
-    title: 'Alkaid',
+    title: 'core.navigation.alkaid',
     icon: 'mdi-test-tube',
     to: '/alkaid'
   },
   {
-    title: '关于',
+    title: 'core.navigation.about',
     icon: 'mdi-information',
     to: '/about'
   },

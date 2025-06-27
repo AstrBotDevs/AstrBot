@@ -1,34 +1,36 @@
 <script setup>
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
+import { useModuleI18n } from '@/i18n/composables';
 import axios from 'axios';
 
+const { tm } = useModuleI18n('features/console');
 </script>
 
 <template>
   <div style="height: 100%;">
     <div
       style="background-color: var(--v-theme-surface); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; justify-content: space-between;">
-      <h4>控制台</h4>
+      <h4>{{ tm('title') }}</h4>
       <div class="d-flex align-center">
         <v-switch
           v-model="autoScrollDisabled"
-          :label="autoScrollDisabled ? '自动滚动已关闭' : '自动滚动已开启'"
+          :label="autoScrollDisabled ? tm('autoScroll.disabled') : tm('autoScroll.enabled')"
           hide-details
           density="compact"
           style="margin-right: 16px;"
         ></v-switch>
         <v-dialog v-model="pipDialog" width="400">
           <template v-slot:activator="{ props }">
-            <v-btn variant="plain" v-bind="props">安装 pip 库</v-btn>
+            <v-btn variant="plain" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
           </template>
           <v-card>
             <v-card-title>
-              <span class="text-h5">安装 Pip 库</span>
+              <span class="text-h5">{{ tm('pipInstall.dialogTitle') }}</span>
             </v-card-title>
             <v-card-text>
-              <v-text-field v-model="pipInstallPayload.package" label="*库名，如 llmtuner" variant="outlined"></v-text-field>
-              <v-text-field v-model="pipInstallPayload.mirror" label="强制 PyPI 软件仓库链接（可选）" variant="outlined"></v-text-field>
-              <small>强制 PyPI 软件仓库链接 > 配置项 `PyPI 软件仓库地址`</small>
+              <v-text-field v-model="pipInstallPayload.package" :label="tm('pipInstall.packageLabel')" variant="outlined"></v-text-field>
+              <v-text-field v-model="pipInstallPayload.mirror" :label="tm('pipInstall.mirrorLabel')" variant="outlined"></v-text-field>
+              <small>{{ tm('pipInstall.mirrorHint') }}</small>
               <div>
                 <small>{{ status }}</small>
               </div>
@@ -37,7 +39,7 @@ import axios from 'axios';
             <v-card-actions>
               <v-spacer></v-spacer>
               <v-btn color="blue-darken-1" variant="text" @click="pipInstall" :loading="loading">
-                安装
+                {{ tm('pipInstall.installButton') }}
               </v-btn>
             </v-card-actions>
           </v-card>

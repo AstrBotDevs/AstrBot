@@ -1,12 +1,14 @@
-import traceback
 import asyncio
-from astrbot.core.config.astrbot_config import AstrBotConfig
-from .provider import Provider, STTProvider, TTSProvider, Personality
-from .entities import ProviderType
+import traceback
 from typing import List
-from astrbot.core.db import BaseDatabase
-from .register import provider_cls_map, llm_tools
+
 from astrbot.core import logger, sp
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.db import BaseDatabase
+
+from .entities import ProviderType
+from .provider import Personality, Provider, STTProvider, TTSProvider
+from .register import llm_tools, provider_cls_map
 
 
 class ProviderManager:
@@ -38,13 +40,11 @@ class ProviderManager:
                     begin_dialogs = []
                 user_turn = True
                 for dialog in begin_dialogs:
-                    bd_processed.append(
-                        {
-                            "role": "user" if user_turn else "assistant",
-                            "content": dialog,
-                            "_no_save": None,  # 不持久化到 db
-                        }
-                    )
+                    bd_processed.append({
+                        "role": "user" if user_turn else "assistant",
+                        "content": dialog,
+                        "_no_save": None,  # 不持久化到 db
+                    })
                     user_turn = not user_turn
             if mood_imitation_dialogs:
                 if len(mood_imitation_dialogs) % 2 != 0:
@@ -225,6 +225,10 @@ class ProviderManager:
                     from .sources.edge_tts_source import (
                         ProviderEdgeTTS as ProviderEdgeTTS,
                     )
+                case "gsv_tts_selfhost":
+                    from .sources.gsv_selfhosted_source import (
+                        ProviderGSVTTS as ProviderGSVTTS,
+                    )
                 case "gsvi_tts_api":
                     from .sources.gsvi_tts_source import (
                         ProviderGSVITTS as ProviderGSVITTS,
@@ -248,6 +252,10 @@ class ProviderManager:
                 case "volcengine_tts":
                     from .sources.volcengine_tts import (
                         ProviderVolcengineTTS as ProviderVolcengineTTS,
+                    )
+                case "gemini_tts":
+                    from .sources.gemini_tts_source import (
+                        ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
                     )
                 case "openai_embedding":
                     from .sources.openai_embedding_source import (

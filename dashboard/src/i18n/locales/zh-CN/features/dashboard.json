@@ -1,0 +1,65 @@
+{
+  "title": "控制台",
+  "subtitle": "实时监控和统计数据",
+  "lastUpdate": "最后更新",
+  "status": {
+    "loading": "加载中...",
+    "dataError": "获取数据失败",
+    "noticeError": "获取公告失败",
+    "online": "在线",
+    "uptime": "运行时间",
+    "memoryUsage": "内存占用"
+  },
+  "stats": {
+    "totalMessage": {
+      "title": "消息总数",
+      "subtitle": "所有平台发送的消息总计"
+    },
+    "onlinePlatform": {
+      "title": "消息平台",
+      "subtitle": "已连接的消息平台数量"
+    },
+    "runningTime": {
+      "title": "运行时间",
+      "subtitle": "系统已运行时长",
+      "format": "{hours}小时{minutes}分{seconds}秒"
+    },
+    "memoryUsage": {
+      "title": "内存占用",
+      "subtitle": "系统内存使用情况",
+      "cpuLoad": "CPU 负载",
+      "status": {
+        "good": "良好",
+        "normal": "正常", 
+        "high": "偏高"
+      }
+    }
+  },
+  "charts": {
+    "messageTrend": {
+      "title": "消息趋势分析",
+      "subtitle": "跟踪消息数量随时间的变化",
+      "totalMessages": "总消息数",
+      "dailyAverage": "平均每天",
+      "growthRate": "增长率",
+      "timeLabel": "时间",
+      "messageCount": "消息条数",
+      "timeRanges": {
+        "1day": "过去 1 天",
+        "3days": "过去 3 天", 
+        "1week": "过去 7 天",
+        "1month": "过去 30 天"
+      }
+    },
+    "platformStat": {
+      "title": "平台消息统计",
+      "subtitle": "各平台消息数量分布",
+      "total": "总计",
+      "noData": "暂无平台数据",
+      "messageUnit": "条",
+      "platformCount": "平台数",
+      "mostActive": "最活跃",
+      "totalPercentage": "总消息占比"
+    }
+  }
+} 

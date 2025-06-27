@@ -128,9 +128,7 @@ class RespondStage(Stage):
                 "streaming_segmented", False
             )
             logger.info(f"应用流式输出({event.get_platform_name()})")
-            await event._pre_send()
             await event.send_streaming(result.async_stream, use_fallback)
-            await event._post_send()
             return
         elif len(result.chain) > 0:
             # 检查路径映射
@@ -140,8 +138,6 @@ class RespondStage(Stage):
                         # 支持 File 消息段的路径映射。
                         component.file = path_Mapping(mappings, component.file)
                         event.get_result().chain[idx] = component
-
-            await event._pre_send()
 
             # 检查消息链是否为空
             try:
@@ -158,9 +154,14 @@ class RespondStage(Stage):
                 c for c in result.chain if not isinstance(c, Comp.Record)
             ]
 
-            if self.enable_seg and (
-                (self.only_llm_result and result.is_llm_result())
-                or not self.only_llm_result
+            if (
+                self.enable_seg
+                and (
+                    (self.only_llm_result and result.is_llm_result())
+                    or not self.only_llm_result
+                )
+                and event.get_platform_name()
+                not in ["qq_official", "weixin_official_account", "dingtalk"]
             ):
                 decorated_comps = []
                 if self.reply_with_mention:
@@ -208,7 +209,6 @@ class RespondStage(Stage):
                     logger.error(traceback.format_exc())
                     logger.error(f"发送消息失败: {e} chain: {result.chain}")
 
-            await event._post_send()
             logger.info(
                 f"AstrBot -> {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}"
             )

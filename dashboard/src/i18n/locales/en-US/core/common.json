@@ -1,0 +1,76 @@
+{
+  "save": "Save",
+  "cancel": "Cancel",
+  "close": "Close",
+  "delete": "Delete",
+  "edit": "Edit",
+  "add": "Add",
+  "confirm": "Confirm",
+  "loading": "Loading...",
+  "success": "Success",
+  "error": "Error",
+  "warning": "Warning",
+  "info": "Info",
+  "name": "Name",
+  "description": "Description",
+  "author": "Author",
+  "status": "Status",
+  "actions": "Actions",
+  "enable": "Enable",
+  "disable": "Disable",
+  "enabled": "Enabled",
+  "disabled": "Disabled",
+  "reload": "Reload",
+  "configure": "Configure",
+  "install": "Install",
+  "uninstall": "Uninstall",
+  "update": "Update",
+  "language": "Language",
+  "locale": "en-US",
+  "type": "Type",
+  "press": "Press",
+  "longPress": "Long press",
+  "yes": "Yes",
+  "no": "No",
+  "dialog": {
+    "confirmTitle": "Confirm Action",
+    "confirmMessage": "Are you sure you want to perform this action?",
+    "confirmButton": "Confirm",
+    "cancelButton": "Cancel"
+  },
+  "restart": {
+    "waiting": "Waiting for AstrBot to restart...",
+    "maxRetriesReached": "Maximum retry attempts reached, please check manually."
+  },
+  "readme": {
+    "title": "Extension Documentation",
+    "buttons": {
+      "viewOnGithub": "View Repository on GitHub",
+      "refresh": "Refresh Documentation"
+    },
+    "loading": "Loading README documentation...",
+    "errors": {
+      "fetchFailed": "Failed to fetch README",
+      "fetchError": "Error occurred while fetching README"
+    },
+    "empty": {
+      "title": "This extension does not provide documentation link or GitHub repository address.",
+      "subtitle": "Please check the extension marketplace or contact the extension author for more information."
+    }
+  },
+  "editor": {
+    "fullscreen": "Fullscreen Edit",
+    "editingTitle": "Editing Content"
+  },
+  "list": {
+    "addItemPlaceholder": "Add new item, press Enter to confirm",
+    "addButton": "Add"
+  },
+  "itemCard": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "delete": "Delete",
+    "edit": "Edit",
+    "noData": "No data available"
+  }
+} 

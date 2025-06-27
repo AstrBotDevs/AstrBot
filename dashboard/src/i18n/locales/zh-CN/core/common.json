@@ -1,0 +1,76 @@
+{
+  "save": "保存",
+  "cancel": "取消",
+  "close": "关闭",
+  "delete": "删除",
+  "edit": "编辑",
+  "add": "添加",
+  "confirm": "确认",
+  "loading": "加载中...",
+  "success": "成功",
+  "error": "错误",
+  "warning": "警告",
+  "info": "信息",
+  "name": "名称",
+  "description": "描述",
+  "author": "作者",
+  "status": "状态",
+  "actions": "操作",
+  "enable": "启用",
+  "disable": "禁用",
+  "enabled": "已启用",
+  "disabled": "已禁用",
+  "reload": "重载",
+  "configure": "配置",
+  "install": "安装",
+  "uninstall": "卸载",
+  "update": "更新",
+  "language": "语言",
+  "locale": "zh-CN",
+  "type": "输入",
+  "press": "按",
+  "longPress": "长按",
+  "yes": "是",
+  "no": "否",
+  "dialog": {
+    "confirmTitle": "确认操作",
+    "confirmMessage": "你确定要执行此操作吗？",
+    "confirmButton": "确定",
+    "cancelButton": "取消"
+  },
+  "restart": {
+    "waiting": "正在等待 AstrBot 重启...",
+    "maxRetriesReached": "拉取状态达到最大次数，请手动检查。"
+  },
+  "readme": {
+    "title": "插件说明文档",
+    "buttons": {
+      "viewOnGithub": "在GitHub中查看仓库",
+      "refresh": "刷新文档"
+    },
+    "loading": "正在加载README文档...",
+    "errors": {
+      "fetchFailed": "获取README失败",
+      "fetchError": "获取README时发生错误"
+    },
+    "empty": {
+      "title": "该插件未提供文档链接或GitHub仓库地址。",
+      "subtitle": "请查看插件市场或联系插件作者获取更多信息。"
+    }
+  },
+  "editor": {
+    "fullscreen": "全屏编辑",
+    "editingTitle": "编辑内容"
+  },
+  "list": {
+    "addItemPlaceholder": "添加新项，按回车确认添加",
+    "addButton": "添加"
+  },
+  "itemCard": {
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "delete": "删除",
+    "edit": "编辑",
+    "noData": "暂无数据"
+  }
+} 
