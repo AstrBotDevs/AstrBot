@@ -1,24 +1,24 @@
 <template>
   <v-container fluid>
     <div class="d-flex justify-space-between align-center mb-4">
-      <h2 class="text-h4 font-weight-bold">会话管理</h2>
+      <h2 class="text-h4 font-weight-bold">{{ tm('title') }}</h2>
       <v-btn 
         color="primary" 
         prepend-icon="mdi-refresh" 
         @click="refreshSessions"
         :loading="loading"
       >
-        刷新
+        {{ tm('buttons.refresh') }}
       </v-btn>
     </div>
 
     <v-card rounded="12" class="session-card">
       <v-card-title class="bg-primary text-white py-3 px-4 session-card-title">
         <v-icon color="white" class="me-2">mdi-account-group</v-icon>
-        <span>活跃会话</span>
+        <span>{{ tm('sessions.activeSessions') }}</span>
         <v-spacer></v-spacer>
         <v-chip color="white" text-color="primary" small>
-          {{ sessions.length }} 个会话
+          {{ sessions.length }} {{ tm('sessions.sessionCount') }}
         </v-chip>
       </v-card-title>
 
@@ -28,7 +28,7 @@
           <v-text-field
             v-model="searchQuery"
             prepend-inner-icon="mdi-magnify"
-            label="搜索会话..."
+            :label="tm('search.placeholder')"
             hide-details
             clearable
             variant="outlined"
@@ -38,7 +38,7 @@
           <v-select
             v-model="filterPlatform"
             :items="platformOptions"
-            label="平台筛选"
+            :label="tm('search.platformFilter')"
             hide-details
             clearable
             variant="outlined"
@@ -175,7 +175,7 @@
             >
               <template v-slot:label>
                 <span class="text-caption">
-                  {{ item.llm_enabled ? '已启用' : '已禁用' }}
+                  {{ item.llm_enabled ? tm('status.enabled') : tm('status.disabled') }}
                 </span>
               </template>
             </v-switch>
@@ -194,7 +194,7 @@
             >
               <template v-slot:label>
                 <span class="text-caption">
-                  {{ item.tts_enabled ? '已启用' : '已禁用' }}
+                  {{ item.tts_enabled ? tm('status.enabled') : tm('status.disabled') }}
                 </span>
               </template>
             </v-switch>
@@ -213,7 +213,7 @@
             >
               <template v-slot:label>
                 <span class="text-caption">
-                  {{ item.mcp_enabled ? '已启用' : '已禁用' }}
+                  {{ item.mcp_enabled ? tm('status.enabled') : tm('status.disabled') }}
                 </span>
               </template>
             </v-switch>
@@ -228,7 +228,7 @@
               @click="openPluginManager(item)"
               :loading="item.loadingPlugins"
             >
-              编辑
+              {{ tm('buttons.edit') }}
             </v-btn>
           </template>
 
@@ -236,8 +236,8 @@
           <template v-slot:no-data>
             <div class="text-center py-8">
               <v-icon size="64" color="grey-400">mdi-account-group-outline</v-icon>
-              <div class="text-h6 mt-4 text-grey-600">暂无活跃会话</div>
-              <div class="text-body-2 text-grey-500">当有用户与机器人交互时，会话将会显示在这里</div>
+              <div class="text-h6 mt-4 text-grey-600">{{ tm('sessions.noActiveSessions') }}</div>
+              <div class="text-body-2 text-grey-500">{{ tm('sessions.noActiveSessionsDesc') }}</div>
             </div>
           </template>
         </v-data-table>
@@ -248,7 +248,7 @@
     <v-card class="mt-4" v-if="availablePersonas.length > 0 || availableChatProviders.length > 0">
       <v-card-title class="bg-secondary text-white py-3 px-4">
         <v-icon color="white" class="me-2">mdi-cog-outline</v-icon>
-        <span>批量操作</span>
+        <span>{{ tm('batchOperations.title') }}</span>
       </v-card-title>
       
       <v-card-text class="pa-4">
@@ -259,7 +259,7 @@
               :items="personaOptions"
               item-title="label"
               item-value="value"
-              label="批量设置人格"
+              :label="tm('batchOperations.setPersona')"
               hide-details
               clearable
               variant="outlined"
@@ -272,7 +272,7 @@
               :items="chatProviderOptions"
               item-title="label"
               item-value="value"
-              label="批量设置 Chat Provider"
+              :label="tm('batchOperations.setChatProvider')"
               hide-details
               clearable
               variant="outlined"
@@ -287,7 +287,7 @@
               :disabled="!batchPersona && !batchChatProvider"
               :loading="batchUpdating"
             >
-              应用批量设置
+              {{ tm('buttons.apply') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -299,7 +299,7 @@
       <v-card v-if="selectedSessionForPlugin">
         <v-card-title class="bg-primary text-white py-3 px-4">
           <v-icon color="white" class="me-2">mdi-pencil</v-icon>
-          <span>插件管理 - {{ selectedSessionForPlugin.session_name }}</span>
+          <span>{{ tm('pluginManagement.title') }} - {{ selectedSessionForPlugin.session_name }}</span>
           <v-spacer></v-spacer>
           <v-btn icon variant="text" color="white" @click="pluginDialog = false">
             <v-icon>mdi-close</v-icon>
@@ -309,8 +309,8 @@
         <v-card-text class="pa-4" v-if="!loadingPlugins">
           <div v-if="sessionPlugins.length === 0" class="text-center py-8">
             <v-icon size="64" color="grey-400">mdi-puzzle-outline</v-icon>
-            <div class="text-h6 mt-4 text-grey-600">暂无可用插件</div>
-            <div class="text-body-2 text-grey-500">目前没有激活的插件</div>
+            <div class="text-h6 mt-4 text-grey-600">{{ tm('pluginManagement.noPlugins') }}</div>
+            <div class="text-body-2 text-grey-500">{{ tm('pluginManagement.noPluginsDesc') }}</div>
           </div>
           
           <v-list v-else>
@@ -330,7 +330,7 @@
               </v-list-item-title>
               
               <v-list-item-subtitle>
-                作者: {{ plugin.author }}
+                {{ tm('pluginManagement.author') }}: {{ plugin.author }}
               </v-list-item-subtitle>
               
               <template v-slot:append>
@@ -348,7 +348,7 @@
         
         <v-card-text v-else class="text-center py-8">
           <v-progress-circular indeterminate color="primary" size="48"></v-progress-circular>
-          <div class="text-body-1 mt-4">加载插件列表中...</div>
+          <div class="text-body-1 mt-4">{{ tm('pluginManagement.loading') }}</div>
         </v-card-text>
       </v-card>
     </v-dialog>
@@ -362,9 +362,19 @@
 
 <script>
 import axios from 'axios'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 export default {
   name: 'SessionManagementPage',
+  setup() {
+    const { t } = useI18n()
+    const { tm } = useModuleI18n('features/session-management')
+    
+    return {
+      t,
+      tm
+    }
+  },
   data() {
     return {
       loading: false,
@@ -393,22 +403,23 @@ export default {
       snackbar: false,
       snackbarText: '',
       snackbarColor: 'success',
-        // 表格头部
-      headers: [
-        { title: '会话信息', key: 'session_info', sortable: false, width: '200px' },
-        { title: '人格', key: 'persona', sortable: false, width: '180px' },
-        { title: 'Chat Provider', key: 'chat_provider', sortable: false, width: '180px' },
-        { title: 'STT Provider', key: 'stt_provider', sortable: false, width: '150px' },
-        { title: 'TTS Provider', key: 'tts_provider', sortable: false, width: '150px' },
-        { title: 'LLM启停', key: 'llm_enabled', sortable: false, width: '120px' },
-        { title: 'TTS启停', key: 'tts_enabled', sortable: false, width: '120px' },
-        { title: 'MCP启停', key: 'mcp_enabled', sortable: false, width: '120px' },
-        { title: '插件管理', key: 'plugins', sortable: false, width: '120px' },
-      ],
     }
   },
   
   computed: {
+    headers() {
+      return [
+        { title: this.tm('table.headers.sessionInfo'), key: 'session_info', sortable: false, width: '200px' },
+        { title: this.tm('table.headers.persona'), key: 'persona', sortable: false, width: '180px' },
+        { title: this.tm('table.headers.chatProvider'), key: 'chat_provider', sortable: false, width: '180px' },
+        { title: this.tm('table.headers.sttProvider'), key: 'stt_provider', sortable: false, width: '150px' },
+        { title: this.tm('table.headers.ttsProvider'), key: 'tts_provider', sortable: false, width: '150px' },
+        { title: this.tm('table.headers.llmStatus'), key: 'llm_enabled', sortable: false, width: '120px' },
+        { title: this.tm('table.headers.ttsStatus'), key: 'tts_enabled', sortable: false, width: '120px' },
+        { title: this.tm('table.headers.mcpStatus'), key: 'mcp_enabled', sortable: false, width: '120px' },
+        { title: this.tm('table.headers.pluginManagement'), key: 'plugins', sortable: false, width: '120px' },
+      ]
+    },
     filteredSessions() {
       let filtered = this.sessions;
       
@@ -438,7 +449,7 @@ export default {
     
     personaOptions() {
       const options = [
-        { label: '无人格', value: '[%None]' },
+        { label: this.tm('persona.none'), value: '[%None]' },
         ...this.availablePersonas.map(p => ({
           label: p.name,
           value: p.name
@@ -490,17 +501,17 @@ export default {
           this.availableSttProviders = data.available_stt_providers;
           this.availableTtsProviders = data.available_tts_providers;
         } else {
-          this.showError(response.data.message || '加载会话列表失败');
+          this.showError(response.data.message || this.tm('messages.loadSessionsError'));
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || '加载会话列表失败');
+        this.showError(error.response?.data?.message || this.tm('messages.loadSessionsError'));
       }
       this.loading = false;
     },
     
     async refreshSessions() {
       await this.loadSessions();
-      this.showSuccess('会话列表已刷新');
+      this.showSuccess(this.tm('messages.refreshSuccess'));
     },
     
     async updatePersona(session, personaName) {
@@ -513,14 +524,14 @@ export default {
         
         if (response.data.status === 'ok') {
           session.persona_id = personaName;
-          session.persona_name = personaName === '[%None]' ? '无人格' : 
+          session.persona_name = personaName === '[%None]' ? this.tm('persona.none') : 
             this.availablePersonas.find(p => p.name === personaName)?.name || personaName;
-          this.showSuccess('人格更新成功');
+          this.showSuccess(this.tm('messages.personaUpdateSuccess'));
         } else {
-          this.showError(response.data.message || '人格更新失败');
+          this.showError(response.data.message || this.tm('messages.personaUpdateError'));
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || '人格更新失败');
+        this.showError(error.response?.data?.message || this.tm('messages.personaUpdateError'));
       }
       session.updating = false;
     },
@@ -549,12 +560,12 @@ export default {
             const provider = this.availableTtsProviders.find(p => p.id === providerId);
             session.tts_provider_name = provider?.name || providerId;
           }
-          this.showSuccess('Provider 更新成功');
+          this.showSuccess(this.tm('messages.providerUpdateSuccess'));
         } else {
-          this.showError(response.data.message || 'Provider 更新失败');
+          this.showError(response.data.message || this.tm('messages.providerUpdateError'));
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || 'Provider 更新失败');
+        this.showError(error.response?.data?.message || this.tm('messages.providerUpdateError'));
       }      session.updating = false;
     },
     
@@ -568,12 +579,12 @@ export default {
         
         if (response.data.status === 'ok') {
           session.llm_enabled = enabled;
-          this.showSuccess(`LLM ${enabled ? '已启用' : '已禁用'}`);
+          this.showSuccess(this.tm('messages.llmStatusSuccess', { status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') }));
         } else {
-          this.showError(response.data.message || 'LLM状态更新失败');
+          this.showError(response.data.message || this.tm('messages.statusUpdateError'));
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || 'LLM状态更新失败');
+        this.showError(error.response?.data?.message || this.tm('messages.statusUpdateError'));
       }
       session.updating = false;
     },
@@ -588,12 +599,12 @@ export default {
         
         if (response.data.status === 'ok') {
           session.tts_enabled = enabled;
-          this.showSuccess(`TTS ${enabled ? '已启用' : '已禁用'}`);
+          this.showSuccess(this.tm('messages.ttsStatusSuccess', { status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') }));
         } else {
-          this.showError(response.data.message || 'TTS状态更新失败');
+          this.showError(response.data.message || this.tm('messages.statusUpdateError'));
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || 'TTS状态更新失败');
+        this.showError(error.response?.data?.message || this.tm('messages.statusUpdateError'));
       }
       session.updating = false;
     },
@@ -608,12 +619,12 @@ export default {
         
         if (response.data.status === 'ok') {
           session.mcp_enabled = enabled;
-          this.showSuccess(`MCP ${enabled ? '已启用' : '已禁用'}`);
+          this.showSuccess(this.tm('messages.mcpStatusSuccess', { status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') }));
         } else {
-          this.showError(response.data.message || 'MCP状态更新失败');
+          this.showError(response.data.message || this.tm('messages.statusUpdateError'));
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || 'MCP状态更新失败');
+        this.showError(error.response?.data?.message || this.tm('messages.statusUpdateError'));
       }
       session.updating = false;
     },
@@ -648,9 +659,9 @@ export default {
       this.batchUpdating = false;
       
       if (errorCount === 0) {
-        this.showSuccess(`成功批量更新 ${successCount} 项设置`);
+        this.showSuccess(this.tm('messages.batchUpdateSuccess', { count: successCount }));
       } else {
-        this.showError(`批量更新完成，${successCount} 项成功，${errorCount} 项失败`);
+        this.showError(this.tm('messages.batchUpdatePartial', { success: successCount, error: errorCount }));
       }
       
       // 清空批量设置
@@ -675,10 +686,10 @@ export default {
             updating: false
           }));
         } else {
-          this.showError(response.data.message || '加载插件列表失败');
+          this.showError(response.data.message || this.tm('messages.loadPluginsError'));
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || '加载插件列表失败');
+        this.showError(error.response?.data?.message || this.tm('messages.loadPluginsError'));
       }
       
       this.loadingPlugins = false;
@@ -696,12 +707,15 @@ export default {
         
         if (response.data.status === 'ok') {
           plugin.enabled = enabled;
-          this.showSuccess(`插件 ${plugin.name} ${enabled ? '已启用' : '已禁用'}`);
+          this.showSuccess(this.tm('messages.pluginStatusSuccess', { 
+            name: plugin.name, 
+            status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') 
+          }));
         } else {
-          this.showError(response.data.message || '插件状态更新失败');
+          this.showError(response.data.message || this.tm('messages.pluginStatusError'));
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || '插件状态更新失败');
+        this.showError(error.response?.data?.message || this.tm('messages.pluginStatusError'));
       }
       
       plugin.updating = false;

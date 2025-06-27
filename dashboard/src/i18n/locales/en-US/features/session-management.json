@@ -1,0 +1,68 @@
+{
+  "title": "Session Management",
+  "subtitle": "Manage active sessions and configurations",
+  "buttons": {
+    "refresh": "Refresh",
+    "edit": "Edit",
+    "apply": "Apply Batch Settings"
+  },
+  "sessions": {
+    "activeSessions": "Active Sessions",
+    "sessionCount": "sessions",
+    "noActiveSessions": "No active sessions",
+    "noActiveSessionsDesc": "Sessions will appear here when users interact with the bot"
+  },
+  "search": {
+    "placeholder": "Search sessions...",
+    "platformFilter": "Platform Filter"
+  },
+  "table": {
+    "headers": {
+      "sessionInfo": "Session Info",
+      "persona": "Persona",
+      "chatProvider": "Chat Provider",
+      "sttProvider": "STT Provider",
+      "ttsProvider": "TTS Provider",
+      "llmStatus": "LLM Status",
+      "ttsStatus": "TTS Status",
+      "mcpStatus": "MCP Status",
+      "pluginManagement": "Plugin Management"
+    }
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "persona": {
+    "none": "No Persona"
+  },
+  "batchOperations": {
+    "title": "Batch Operations",
+    "setPersona": "Batch Set Persona",
+    "setChatProvider": "Batch Set Chat Provider"
+  },
+  "pluginManagement": {
+    "title": "Plugin Management",
+    "noPlugins": "No available plugins",
+    "noPluginsDesc": "Currently no active plugins",
+    "loading": "Loading plugin list...",
+    "author": "Author"
+  },
+  "messages": {
+    "refreshSuccess": "Session list refreshed",
+    "personaUpdateSuccess": "Persona updated successfully",
+    "personaUpdateError": "Failed to update persona",
+    "providerUpdateSuccess": "Provider updated successfully",
+    "providerUpdateError": "Failed to update provider",
+    "llmStatusSuccess": "LLM {status}",
+    "ttsStatusSuccess": "TTS {status}",
+    "mcpStatusSuccess": "MCP {status}",
+    "statusUpdateError": "Failed to update status",
+    "loadSessionsError": "Failed to load session list",
+    "batchUpdateSuccess": "Successfully batch updated {count} settings",
+    "batchUpdatePartial": "Batch update completed, {success} successful, {error} failed",
+    "loadPluginsError": "Failed to load plugin list",
+    "pluginStatusSuccess": "Plugin {name} {status}",
+    "pluginStatusError": "Failed to update plugin status"
+  }
+}
