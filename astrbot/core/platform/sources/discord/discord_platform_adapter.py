@@ -108,6 +108,7 @@ class DiscordPlatformAdapter(Platform):
     @override
     async def run(self):
         """主要运行逻辑"""
+
         # 初始化回调函数
         async def on_received(message_data):
             logger.debug(f"[Discord] 收到消息: {message_data}")
@@ -165,7 +166,6 @@ class DiscordPlatformAdapter(Platform):
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
         message: discord.Message = data["message"]
-        is_mentioned = data.get("is_mentioned", False)
 
         content = message.content
 
@@ -175,18 +175,26 @@ class DiscordPlatformAdapter(Platform):
             mention_str = f"<@{self.client.user.id}>"
             mention_str_nickname = f"<@!{self.client.user.id}>"
             if content.startswith(mention_str):
-                content = content[len(mention_str):].lstrip()
+                content = content[len(mention_str) :].lstrip()
             elif content.startswith(mention_str_nickname):
-                content = content[len(mention_str_nickname):].lstrip()
+                content = content[len(mention_str_nickname) :].lstrip()
 
         # 剥离 Role Mention（bot 拥有的任一角色被提及，<@&role_id>）
-        if hasattr(message, "role_mentions") and hasattr(message, "guild") and message.guild:
-            bot_member = message.guild.get_member(self.client.user.id) if self.client and self.client.user else None
+        if (
+            hasattr(message, "role_mentions")
+            and hasattr(message, "guild")
+            and message.guild
+        ):
+            bot_member = (
+                message.guild.get_member(self.client.user.id)
+                if self.client and self.client.user
+                else None
+            )
             if bot_member and hasattr(bot_member, "roles"):
                 for role in bot_member.roles:
                     role_mention_str = f"<@&{role.id}>"
                     if content.startswith(role_mention_str):
-                        content = content[len(role_mention_str):].lstrip()
+                        content = content[len(role_mention_str) :].lstrip()
                         break  # 只剥离第一个匹配的角色 mention
 
         abm = AstrBotMessage()
@@ -240,7 +248,11 @@ class DiscordPlatformAdapter(Platform):
         # 检查是否被@（User Mention 或 Bot 拥有的 Role Mention）
         is_mention = False
         # User Mention
-        if self.client and self.client.user and hasattr(message.raw_message, "mentions"):
+        if (
+            self.client
+            and self.client.user
+            and hasattr(message.raw_message, "mentions")
+        ):
             if self.client.user in message.raw_message.mentions:
                 is_mention = True
         # Role Mention（Bot 拥有的角色被提及）
@@ -248,13 +260,19 @@ class DiscordPlatformAdapter(Platform):
             bot_member = None
             if hasattr(message.raw_message, "guild") and message.raw_message.guild:
                 try:
-                    bot_member = message.raw_message.guild.get_member(self.client.user.id)
+                    bot_member = message.raw_message.guild.get_member(
+                        self.client.user.id
+                    )
                 except Exception:
                     bot_member = None
             if bot_member and hasattr(bot_member, "roles"):
                 bot_roles = set(bot_member.roles)
                 mentioned_roles = set(message.raw_message.role_mentions)
-                if bot_roles and mentioned_roles and bot_roles.intersection(mentioned_roles):
+                if (
+                    bot_roles
+                    and mentioned_roles
+                    and bot_roles.intersection(mentioned_roles)
+                ):
                     is_mention = True
 
         # 如果是斜杠指令或被@的消息，设置为唤醒状态
@@ -284,9 +302,10 @@ class DiscordPlatformAdapter(Platform):
             try:
                 await asyncio.wait_for(
                     self.client.sync_commands(
-                        commands=[], guild_ids=[self.guild_id] if self.guild_id else None
+                        commands=[],
+                        guild_ids=[self.guild_id] if self.guild_id else None,
                     ),
-                    timeout=10
+                    timeout=10,
                 )
                 logger.info("[Discord] 指令清理完成。")
             except Exception as e:
