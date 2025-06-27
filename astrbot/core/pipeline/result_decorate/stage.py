@@ -172,10 +172,15 @@ class ResultDecorateStage(Stage):
             tts_provider = self.ctx.plugin_manager.context.get_using_tts_provider(
                 event.unified_msg_origin
             )
+            
+            # 导入SessionServiceManager以检查会话级TTS开关
+            from astrbot.core.star.session_llm_manager import SessionServiceManager
+            
             if (
                 self.ctx.astrbot_config["provider_tts_settings"]["enable"]
                 and result.is_llm_result()
                 and tts_provider
+                and SessionServiceManager.should_process_tts_request(event)
             ):
                 new_chain = []
                 for comp in result.chain:

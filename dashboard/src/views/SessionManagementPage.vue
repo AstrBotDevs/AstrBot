@@ -12,8 +12,8 @@
       </v-btn>
     </div>
 
-    <v-card>
-      <v-card-title class="bg-primary text-white py-3 px-4">
+    <v-card rounded="12" class="session-card">
+      <v-card-title class="bg-primary text-white py-3 px-4 session-card-title">
         <v-icon color="white" class="me-2">mdi-account-group</v-icon>
         <span>活跃会话</span>
         <v-spacer></v-spacer>
@@ -31,6 +31,7 @@
             label="搜索会话..."
             hide-details
             clearable
+            variant="outlined"
             class="me-4"
           ></v-text-field>
           
@@ -40,6 +41,7 @@
             label="平台筛选"
             hide-details
             clearable
+            variant="outlined"
             class="me-4"
             style="max-width: 150px;"
           ></v-select>
@@ -81,6 +83,7 @@
               item-value="value"
               hide-details
               density="compact"
+              variant="outlined"
               @update:model-value="(value) => updatePersona(item, value)"
               :loading="item.updating"
             >
@@ -104,6 +107,7 @@
               item-value="value"
               hide-details
               density="compact"
+              variant="outlined"
               @update:model-value="(value) => updateProvider(item, value, 'chat_completion')"
               :loading="item.updating"
             >
@@ -124,6 +128,7 @@
               item-value="value"
               hide-details
               density="compact"
+              variant="outlined"
               @update:model-value="(value) => updateProvider(item, value, 'speech_to_text')"
               :loading="item.updating"
               :disabled="sttProviderOptions.length === 0"
@@ -145,6 +150,7 @@
               item-value="value"
               hide-details
               density="compact"
+              variant="outlined"
               @update:model-value="(value) => updateProvider(item, value, 'text_to_speech')"
               :loading="item.updating"
               :disabled="ttsProviderOptions.length === 0"
@@ -175,27 +181,55 @@
             </v-switch>
           </template>
 
+          <!-- TTS启停 -->
+          <template v-slot:item.tts_enabled="{ item }">
+            <v-switch
+              :model-value="item.tts_enabled"
+              @update:model-value="(value) => updateTTS(item, value)"
+              :loading="item.updating"
+              hide-details
+              density="compact"
+              color="secondary"
+              inset
+            >
+              <template v-slot:label>
+                <span class="text-caption">
+                  {{ item.tts_enabled ? '已启用' : '已禁用' }}
+                </span>
+              </template>
+            </v-switch>
+          </template>
+
+          <!-- MCP启停 -->
+          <template v-slot:item.mcp_enabled="{ item }">
+            <v-switch
+              :model-value="item.mcp_enabled"
+              @update:model-value="(value) => updateMCP(item, value)"
+              :loading="item.updating"
+              hide-details
+              density="compact"
+              color="info"
+              inset
+            >
+              <template v-slot:label>
+                <span class="text-caption">
+                  {{ item.mcp_enabled ? '已启用' : '已禁用' }}
+                </span>
+              </template>
+            </v-switch>
+          </template>
+
           <!-- 插件管理 -->
           <template v-slot:item.plugins="{ item }">
             <v-btn
               size="small"
-              variant="text"
+              variant="outlined"
               color="primary"
               @click="openPluginManager(item)"
               :loading="item.loadingPlugins"
             >
               编辑
             </v-btn>
-          </template>
-
-          <!-- 操作 -->
-          <template v-slot:item.actions="{ item }">
-            <v-btn
-              icon="mdi-information"
-              size="small"
-              variant="text"
-              @click="showSessionDetail(item)"
-            ></v-btn>
           </template>
 
           <!-- 空状态 -->
@@ -228,6 +262,7 @@
               label="批量设置人格"
               hide-details
               clearable
+              variant="outlined"
             ></v-select>
           </v-col>
           
@@ -240,6 +275,7 @@
               label="批量设置 Chat Provider"
               hide-details
               clearable
+              variant="outlined"
             ></v-select>
           </v-col>
           
@@ -257,98 +293,6 @@
         </v-row>
       </v-card-text>
     </v-card>
-
-    <!-- 会话详情对话框 -->
-    <v-dialog v-model="detailDialog" max-width="600">
-      <v-card v-if="selectedSession">
-        <v-card-title class="bg-primary text-white py-3 px-4">
-          <v-icon color="white" class="me-2">mdi-information</v-icon>
-          <span>会话详情</span>
-          <v-spacer></v-spacer>
-          <v-btn icon variant="text" color="white" @click="detailDialog = false">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-card-title>
-
-        <v-card-text class="pa-4">
-          <v-list>
-            <v-list-item>
-              <v-list-item-title>会话 ID</v-list-item-title>
-              <v-list-item-subtitle>{{ selectedSession.session_id }}</v-list-item-subtitle>
-            </v-list-item>
-            
-            <v-list-item>
-              <v-list-item-title>对话 ID</v-list-item-title>
-              <v-list-item-subtitle>{{ selectedSession.conversation_id }}</v-list-item-subtitle>
-            </v-list-item>
-            
-            <v-list-item>
-              <v-list-item-title>平台</v-list-item-title>
-              <v-list-item-subtitle>
-                <v-chip :color="getPlatformColor(selectedSession.platform)" size="small">
-                  {{ selectedSession.platform }}
-                </v-chip>
-              </v-list-item-subtitle>
-            </v-list-item>
-            
-            <v-list-item>
-              <v-list-item-title>消息类型</v-list-item-title>
-              <v-list-item-subtitle>{{ selectedSession.message_type }}</v-list-item-subtitle>
-            </v-list-item>
-            
-            <v-list-item>
-              <v-list-item-title>当前人格</v-list-item-title>
-              <v-list-item-subtitle>
-                <v-chip 
-                  size="small" 
-                  :color="selectedSession.persona_id === '[%None]' ? 'grey' : 'primary'"
-                >
-                  {{ selectedSession.persona_name || '默认' }}
-                </v-chip>
-              </v-list-item-subtitle>
-            </v-list-item>
-            
-            <v-list-item>
-              <v-list-item-title>Chat Provider</v-list-item-title>
-              <v-list-item-subtitle>
-                <v-chip size="small" color="success">
-                  {{ selectedSession.chat_provider_name || '未设置' }}
-                </v-chip>
-              </v-list-item-subtitle>
-            </v-list-item>
-            
-            <v-list-item v-if="selectedSession.stt_provider_name">
-              <v-list-item-title>STT Provider</v-list-item-title>
-              <v-list-item-subtitle>
-                <v-chip size="small" color="info">
-                  {{ selectedSession.stt_provider_name }}
-                </v-chip>
-              </v-list-item-subtitle>
-            </v-list-item>
-              <v-list-item v-if="selectedSession.tts_provider_name">
-              <v-list-item-title>TTS Provider</v-list-item-title>
-              <v-list-item-subtitle>
-                <v-chip size="small" color="warning">
-                  {{ selectedSession.tts_provider_name }}
-                </v-chip>
-              </v-list-item-subtitle>
-            </v-list-item>
-            
-            <v-list-item>
-              <v-list-item-title>LLM状态</v-list-item-title>
-              <v-list-item-subtitle>
-                <v-chip 
-                  size="small" 
-                  :color="selectedSession.llm_enabled ? 'success' : 'error'"
-                >
-                  {{ selectedSession.llm_enabled ? '已启用' : '已禁用' }}
-                </v-chip>
-              </v-list-item-subtitle>
-            </v-list-item>
-          </v-list>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
 
     <!-- 插件管理对话框 -->
     <v-dialog v-model="pluginDialog" max-width="800">
@@ -439,10 +383,6 @@ export default {
       batchChatProvider: null,
       batchUpdating: false,
       
-      // 对话框
-      detailDialog: false,
-      selectedSession: null,
-      
       // 插件管理
       pluginDialog: false,
       selectedSessionForPlugin: null,
@@ -461,8 +401,9 @@ export default {
         { title: 'STT Provider', key: 'stt_provider', sortable: false, width: '150px' },
         { title: 'TTS Provider', key: 'tts_provider', sortable: false, width: '150px' },
         { title: 'LLM启停', key: 'llm_enabled', sortable: false, width: '120px' },
+        { title: 'TTS启停', key: 'tts_enabled', sortable: false, width: '120px' },
+        { title: 'MCP启停', key: 'mcp_enabled', sortable: false, width: '120px' },
         { title: '插件管理', key: 'plugins', sortable: false, width: '120px' },
-        { title: '操作', key: 'actions', sortable: false, width: '80px' },
       ],
     }
   },
@@ -637,6 +578,46 @@ export default {
       session.updating = false;
     },
     
+    async updateTTS(session, enabled) {
+      session.updating = true;
+      try {
+        const response = await axios.post('/api/session/update_tts', {
+          session_id: session.session_id,
+          enabled: enabled
+        });
+        
+        if (response.data.status === 'ok') {
+          session.tts_enabled = enabled;
+          this.showSuccess(`TTS ${enabled ? '已启用' : '已禁用'}`);
+        } else {
+          this.showError(response.data.message || 'TTS状态更新失败');
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || 'TTS状态更新失败');
+      }
+      session.updating = false;
+    },
+    
+    async updateMCP(session, enabled) {
+      session.updating = true;
+      try {
+        const response = await axios.post('/api/session/update_mcp', {
+          session_id: session.session_id,
+          enabled: enabled
+        });
+        
+        if (response.data.status === 'ok') {
+          session.mcp_enabled = enabled;
+          this.showSuccess(`MCP ${enabled ? '已启用' : '已禁用'}`);
+        } else {
+          this.showError(response.data.message || 'MCP状态更新失败');
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || 'MCP状态更新失败');
+      }
+      session.updating = false;
+    },
+    
     async applyBatchChanges() {
       if (!this.batchPersona && !this.batchChatProvider) {
         return;
@@ -725,11 +706,6 @@ export default {
       
       plugin.updating = false;
     },
-
-    showSessionDetail(session) {
-      this.selectedSession = session;
-      this.detailDialog = true;
-    },
     
     getPlatformColor(platform) {
       const colors = {
@@ -762,10 +738,25 @@ export default {
 <style scoped>
 .v-data-table >>> .v-data-table__td {
   padding: 8px 16px !important;
+  vertical-align: middle !important;
+}
+
+.v-data-table >>> .v-data-table__th {
+  vertical-align: middle !important;
 }
 
 .v-select >>> .v-field__input {
   padding-top: 4px !important;
   padding-bottom: 4px !important;
+}
+
+.session-card {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.session-card-title {
+  border-top-left-radius: 12px !important;
+  border-top-right-radius: 12px !important;
 }
 </style>

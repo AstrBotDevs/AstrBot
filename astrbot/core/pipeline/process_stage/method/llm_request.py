@@ -26,7 +26,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
-from astrbot.core.star.session_llm_manager import SessionLLMManager
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from mcp.types import (
     TextContent,
     ImageContent,
@@ -74,7 +74,7 @@ class LLMRequestSubStage(Stage):
             return
         
         # 检查会话级别的LLM启停状态
-        if not SessionLLMManager.should_process_llm_request(event):
+        if not SessionServiceManager.should_process_llm_request(event):
             logger.debug(f"会话 {event.unified_msg_origin} 禁用了 LLM，跳过处理。")
             return
             
@@ -460,6 +460,18 @@ class LLMRequestSubStage(Stage):
             try:
                 func_tool = req.func_tool.get_func(func_tool_name)
                 if func_tool.origin == "mcp":
+                    # 检查会话级MCP开关
+                    if not SessionServiceManager.should_process_mcp_request(event):
+                        logger.debug(f"会话 {event.unified_msg_origin} 禁用了 MCP，跳过工具调用: {func_tool_name}")
+                        tool_call_result.append(
+                            ToolCallMessageSegment(
+                                role="tool",
+                                tool_call_id=func_tool_id,
+                                content="MCP工具调用已在此会话中被禁用",
+                            )
+                        )
+                        continue
+                        
                     logger.info(
                         f"从 MCP 服务 {func_tool.mcp_server_name} 调用工具函数：{func_tool.name}，参数：{func_tool_args}"
                     )

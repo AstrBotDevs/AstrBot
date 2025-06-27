@@ -6,7 +6,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
-from astrbot.core.star.session_llm_manager import SessionLLMManager
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 
 
 class SessionManagementRoute(Route):
@@ -25,6 +25,8 @@ class SessionManagementRoute(Route):
             "/session/plugins": ("GET", self.get_session_plugins),
             "/session/update_plugin": ("POST", self.update_session_plugin),
             "/session/update_llm": ("POST", self.update_session_llm),
+            "/session/update_tts": ("POST", self.update_session_tts),
+            "/session/update_mcp": ("POST", self.update_session_mcp),
         }
         self.db_helper = db_helper
         self.core_lifecycle = core_lifecycle
@@ -49,6 +51,7 @@ class SessionManagementRoute(Route):
             provider_manager = self.core_lifecycle.star_context.provider_manager
             
             sessions = []
+            
               # 构建会话信息
             for session_id, conversation_id in session_conversations.items():
                 session_info = {
@@ -62,7 +65,9 @@ class SessionManagementRoute(Route):
                     "stt_provider_name": None,
                     "tts_provider_id": None,
                     "tts_provider_name": None,
-                    "llm_enabled": SessionLLMManager.is_llm_enabled_for_session(session_id),
+                    "llm_enabled": SessionServiceManager.is_llm_enabled_for_session(session_id),
+                    "tts_enabled": SessionServiceManager.is_tts_enabled_for_session(session_id),
+                    "mcp_enabled": SessionServiceManager.is_mcp_enabled_for_session(session_id),
                     "platform": session_id.split(":")[0] if ":" in session_id else "unknown",
                     "message_type": session_id.split(":")[1] if session_id.count(":") >= 1 else "unknown",
                     "session_name": session_id.split(":")[2] if session_id.count(":") >= 2 else session_id,
@@ -280,11 +285,16 @@ class SessionManagementRoute(Route):
                 "stt_provider_name": None,
                 "tts_provider_id": None,
                 "tts_provider_name": None,
-                "llm_enabled": SessionLLMManager.is_llm_enabled_for_session(session_id),
+                "llm_enabled": SessionServiceManager.is_llm_enabled_for_session(session_id),
+                "tts_enabled": None,  # 将在下面设置
+                "mcp_enabled": SessionServiceManager.is_mcp_enabled_for_session(session_id),
                 "platform": session_id.split(":")[0] if ":" in session_id else "unknown",
                 "message_type": session_id.split(":")[1] if session_id.count(":") >= 1 else "unknown",
                 "session_name": session_id.split(":")[2] if session_id.count(":") >= 2 else session_id,
             }
+            
+            # 获取TTS状态
+            session_info["tts_enabled"] = SessionServiceManager.is_tts_enabled_for_session(session_id)
             
             # 获取对话信息
             conversation = self.db_helper.get_conversation_by_user_id(session_id, conversation_id)
@@ -457,8 +467,8 @@ class SessionManagementRoute(Route):
             if enabled is None:
                 return Response().error("缺少必要参数: enabled").__dict__
             
-            # 使用 SessionLLMManager 更新LLM状态
-            SessionLLMManager.set_llm_status_for_session(session_id, enabled)
+            # 使用 SessionServiceManager 更新LLM状态
+            SessionServiceManager.set_llm_status_for_session(session_id, enabled)
             
             return Response().ok({
                 "message": f"LLM已{'启用' if enabled else '禁用'}",
@@ -470,3 +480,57 @@ class SessionManagementRoute(Route):
             error_msg = f"更新会话LLM状态失败: {str(e)}\n{traceback.format_exc()}"
             logger.error(error_msg)
             return Response().error(f"更新会话LLM状态失败: {str(e)}").__dict__
+    
+    async def update_session_tts(self):
+        """更新指定会话的TTS启停状态"""
+        try:
+            data = await request.get_json()
+            session_id = data.get("session_id")
+            enabled = data.get("enabled")
+            
+            if not session_id:
+                return Response().error("缺少必要参数: session_id").__dict__
+            
+            if enabled is None:
+                return Response().error("缺少必要参数: enabled").__dict__
+            
+            # 使用 SessionServiceManager 更新TTS状态
+            SessionServiceManager.set_tts_status_for_session(session_id, enabled)
+            
+            return Response().ok({
+                "message": f"TTS已{'启用' if enabled else '禁用'}",
+                "session_id": session_id,
+                "tts_enabled": enabled,
+            }).__dict__
+            
+        except Exception as e:
+            error_msg = f"更新会话TTS状态失败: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            return Response().error(f"更新会话TTS状态失败: {str(e)}").__dict__
+    
+    async def update_session_mcp(self):
+        """更新指定会话的MCP启停状态"""
+        try:
+            data = await request.get_json()
+            session_id = data.get("session_id")
+            enabled = data.get("enabled")
+            
+            if not session_id:
+                return Response().error("缺少必要参数: session_id").__dict__
+            
+            if enabled is None:
+                return Response().error("缺少必要参数: enabled").__dict__
+            
+            # 使用 SessionServiceManager 更新MCP状态
+            SessionServiceManager.set_mcp_status_for_session(session_id, enabled)
+            
+            return Response().ok({
+                "message": f"MCP工具调用已{'启用' if enabled else '禁用'}",
+                "session_id": session_id,
+                "mcp_enabled": enabled,
+            }).__dict__
+            
+        except Exception as e:
+            error_msg = f"更新会话MCP状态失败: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            return Response().error(f"更新会话MCP状态失败: {str(e)}").__dict__
