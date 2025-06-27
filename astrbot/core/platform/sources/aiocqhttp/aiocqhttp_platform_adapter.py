@@ -168,9 +168,7 @@ class AiocqhttpAdapter(Platform):
 
         if "sub_type" in event:
             if event["sub_type"] == "poke" and "target_id" in event:
-                abm.message.append(
-                    Poke(qq=str(event["target_id"]), type="poke")
-                )  # noqa: F405
+                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))  # noqa: F405
 
         return abm
 
@@ -183,7 +181,6 @@ class AiocqhttpAdapter(Platform):
         @param get_reply: 是否获取回复消息。这个参数是为了防止多个回复嵌套。
         """
         abm = AstrBotMessage()
-        logger.info(f"event: {event}")
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
             str(event.sender["user_id"]), event.sender["nickname"]
