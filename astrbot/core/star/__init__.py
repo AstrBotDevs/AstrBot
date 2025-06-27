@@ -18,10 +18,12 @@ class Star(CommandParserMixin):
         """将文本转换为图片"""
         return await html_renderer.render_t2i(text, return_url=return_url)
 
-    async def html_render(self, tmpl: str, data: dict, return_url=True) -> str:
+    async def html_render(
+        self, tmpl: str, data: dict, return_url=True, options: dict = None
+    ) -> str:
         """渲染 HTML"""
         return await html_renderer.render_custom_template(
-            tmpl, data, return_url=return_url
+            tmpl, data, return_url=return_url, options=options
         )
 
     async def terminate(self):

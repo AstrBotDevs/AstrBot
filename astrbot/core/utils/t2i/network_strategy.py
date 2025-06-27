@@ -34,18 +34,22 @@ class NetworkRenderStrategy(RenderStrategy):
             self.BASE_RENDER_URL += "/text2img"
 
     async def render_custom_template(
-        self, tmpl_str: str, tmpl_data: dict, return_url: bool = True
+        self,
+        tmpl_str: str,
+        tmpl_data: dict,
+        return_url: bool = True,
+        options: dict = None,
     ) -> str:
         """使用自定义文转图模板"""
+        default_options = {"full_page": True, "type": "jpeg", "quality": 40}
+        if options:
+            default_options.update(options)
+
         post_data = {
             "tmpl": tmpl_str,
             "json": return_url,
             "tmpldata": tmpl_data,
-            "options": {
-                "full_page": True,
-                "type": "jpeg",
-                "quality": 40,
-            },
+            "options": default_options,
         }
         if return_url:
             ssl_context = ssl.create_default_context(cafile=certifi.where())
