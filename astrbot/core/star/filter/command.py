@@ -115,7 +115,7 @@ class CommandFilter(HandlerFilter):
                         result[param_name] = params[i]
                     elif isinstance(param_type_or_default_val, bool):
                         # 处理布尔类型
-                        lower_param = params[i].lower()
+                        lower_param = str(params[i]).lower()
                         if lower_param in ["true", "yes", "1"]:
                             result[param_name] = True
                         elif lower_param in ["false", "no", "0"]:
