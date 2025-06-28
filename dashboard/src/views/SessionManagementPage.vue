@@ -173,11 +173,6 @@
               color="primary"
               inset
             >
-              <template v-slot:label>
-                <span class="text-caption">
-                  {{ item.llm_enabled ? tm('status.enabled') : tm('status.disabled') }}
-                </span>
-              </template>
             </v-switch>
           </template>
 
@@ -192,11 +187,6 @@
               color="secondary"
               inset
             >
-              <template v-slot:label>
-                <span class="text-caption">
-                  {{ item.tts_enabled ? tm('status.enabled') : tm('status.disabled') }}
-                </span>
-              </template>
             </v-switch>
           </template>
 
@@ -211,11 +201,6 @@
               color="info"
               inset
             >
-              <template v-slot:label>
-                <span class="text-caption">
-                  {{ item.mcp_enabled ? tm('status.enabled') : tm('status.disabled') }}
-                </span>
-              </template>
             </v-switch>
           </template>
 
