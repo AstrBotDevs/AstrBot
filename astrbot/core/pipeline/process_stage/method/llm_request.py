@@ -101,7 +101,8 @@ class LLMRequestSubStage(Stage):
                 if not event.message_str.startswith(self.provider_wake_prefix):
                     return
             req.prompt = event.message_str[len(self.provider_wake_prefix) :]
-            req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
+            if SessionServiceManager.should_process_mcp_request(event):
+                req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     image_path = await comp.convert_to_file_path()
@@ -471,7 +472,7 @@ class LLMRequestSubStage(Stage):
                             )
                         )
                         continue
-                        
+
                     logger.info(
                         f"从 MCP 服务 {func_tool.mcp_server_name} 调用工具函数：{func_tool.name}，参数：{func_tool_args}"
                     )
