@@ -43,7 +43,7 @@ class NetworkRenderStrategy(RenderStrategy):
         """使用自定义文转图模板"""
         default_options = {"full_page": True, "type": "jpeg", "quality": 40}
         if options:
-            default_options.update(options)
+            default_options |= options
 
         post_data = {
             "tmpl": tmpl_str,
