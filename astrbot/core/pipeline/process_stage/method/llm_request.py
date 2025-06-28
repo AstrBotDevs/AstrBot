@@ -72,12 +72,12 @@ class LLMRequestSubStage(Stage):
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug("未启用 LLM 能力，跳过处理。")
             return
-        
+
         # 检查会话级别的LLM启停状态
         if not SessionServiceManager.should_process_llm_request(event):
             logger.debug(f"会话 {event.unified_msg_origin} 禁用了 LLM，跳过处理。")
             return
-            
+
         umo = event.unified_msg_origin
         provider = self.ctx.plugin_manager.context.get_using_provider(umo=umo)
         if provider is None:
@@ -461,18 +461,6 @@ class LLMRequestSubStage(Stage):
             try:
                 func_tool = req.func_tool.get_func(func_tool_name)
                 if func_tool.origin == "mcp":
-                    # 检查会话级MCP开关
-                    if not SessionServiceManager.should_process_mcp_request(event):
-                        logger.debug(f"会话 {event.unified_msg_origin} 禁用了 MCP，跳过工具调用: {func_tool_name}")
-                        tool_call_result.append(
-                            ToolCallMessageSegment(
-                                role="tool",
-                                tool_call_id=func_tool_id,
-                                content="MCP工具调用已在此会话中被禁用",
-                            )
-                        )
-                        continue
-
                     logger.info(
                         f"从 MCP 服务 {func_tool.mcp_server_name} 调用工具函数：{func_tool.name}，参数：{func_tool_args}"
                     )
