@@ -41,10 +41,15 @@ class StatRoute(Route):
         await self.core_lifecycle.restart()
         return Response().ok().__dict__
 
-    def format_sec(self, sec: int):
-        m, s = divmod(sec, 60)
-        h, m = divmod(m, 60)
-        return f"{h}小时{m}分{s}秒"
+    def _get_running_time_components(self, total_seconds: int):
+        """将总秒数转换为时分秒组件"""
+        minutes, seconds = divmod(total_seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        return {
+            "hours": hours,
+            "minutes": minutes,
+            "seconds": seconds
+        }
 
     def is_default_cred(self):
         username = self.config["dashboard"]["username"]
@@ -107,6 +112,11 @@ class StatRoute(Route):
                 }
                 plugin_info.append(info)
 
+            # 计算运行时长组件
+            running_time = self._get_running_time_components(
+                int(time.time()) - self.core_lifecycle.start_time
+            )
+
             stat_dict.update(
                 {
                     "platform": self.db_helper.get_grouped_base_stats(
@@ -119,9 +129,7 @@ class StatRoute(Route):
                     "plugin_count": len(plugins),
                     "plugins": plugin_info,
                     "message_time_series": message_time_based_stats,
-                    "running": self.format_sec(
-                        int(time.time()) - self.core_lifecycle.start_time
-                    ),
+                    "running": running_time,  # 现在返回时间组件而不是格式化的字符串
                     "memory": {
                         "process": psutil.Process().memory_info().rss >> 20,
                         "system": psutil.virtual_memory().total >> 20,

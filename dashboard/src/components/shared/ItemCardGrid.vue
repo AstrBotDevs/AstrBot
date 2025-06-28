@@ -3,7 +3,7 @@
     <v-row v-if="items.length === 0">
       <v-col cols="12" class="text-center pa-8">
         <v-icon size="64" color="grey-lighten-1">{{ emptyIcon }}</v-icon>
-        <p class="text-grey mt-4">{{ emptyText }}</p>
+        <p class="text-grey mt-4">{{ displayEmptyText }}</p>
       </v-col>
     </v-row>
 
@@ -24,7 +24,7 @@
                   @update:model-value="toggleEnabled(item)"
                 ></v-switch>
               </template>
-              <span>{{ getItemEnabled(item) ? '已启用' : '已禁用' }}</span>
+              <span>{{ getItemEnabled(item) ? t('core.common.itemCard.enabled') : t('core.common.itemCard.disabled') }}</span>
             </v-tooltip>
           </v-card-title>
           
@@ -43,7 +43,7 @@
               prepend-icon="mdi-delete" 
               @click="$emit('delete', item)"
             >
-              删除
+              {{ t('core.common.itemCard.delete') }}
             </v-btn>
             <v-btn 
               variant="text" 
@@ -52,7 +52,7 @@
               prepend-icon="mdi-pencil" 
               @click="$emit('edit', item)"
             >
-              编辑
+              {{ t('core.common.itemCard.edit') }}
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -62,8 +62,14 @@
 </template>
 
 <script>
+import { useI18n } from '@/i18n/composables';
+
 export default {
   name: 'ItemCardGrid',
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   props: {
     items: {
       type: Array,
@@ -83,10 +89,15 @@ export default {
     },
     emptyText: {
       type: String,
-      default: '暂无数据'
+      default: null
     }
   },
   emits: ['toggle-enabled', 'delete', 'edit'],
+  computed: {
+    displayEmptyText() {
+      return this.emptyText || this.t('core.common.itemCard.noData');
+    }
+  },
   methods: {
     getItemTitle(item) {
       return item[this.titleField];

@@ -1,9 +1,10 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, computed } from 'vue';
 import axios from 'axios';
 import { marked } from 'marked';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
+import { useI18n } from '@/i18n/composables';
 
 const props = defineProps({
   show: {
@@ -21,6 +22,9 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:show']);
+
+// 国际化
+const { t } = useI18n();
 
 const content = ref(null);
 const error = ref(null);
@@ -54,10 +58,10 @@ async function fetchReadme() {
     if (res.data.status === 'ok') {
       content.value = res.data.data.content;
     } else {
-      error.value = res.data.message || '获取README失败';
+      error.value = res.data.message || t('core.common.readme.errors.fetchFailed');
     }
   } catch (err) {
-    error.value = err.message || '获取README时发生错误';
+    error.value = err.message || t('core.common.readme.errors.fetchError');
   } finally {
     loading.value = false;
   }
@@ -99,13 +103,23 @@ function renderMarkdown(content) {
 function refreshReadme() {
   fetchReadme();
 }
+
+// 计算属性处理双向绑定
+const _show = computed({
+  get() {
+    return props.show;
+  },
+  set(value) {
+    emit('update:show', value);
+  }
+});
 </script>
 
 <template>
   <v-dialog v-model="_show" width="800" persistent>
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
-        <span class="text-h5">插件说明文档</span>
+        <span class="text-h5">{{ t('core.common.readme.title') }}</span>
         <v-btn icon @click="$emit('update:show', false)">
           <v-icon>mdi-close</v-icon>
         </v-btn>
@@ -119,21 +133,21 @@ function refreshReadme() {
             prepend-icon="mdi-github"
             @click="openRepoInNewTab()" 
           >
-            在GitHub中查看仓库
+            {{ t('core.common.readme.buttons.viewOnGithub') }}
           </v-btn>
           <v-btn
             color="secondary"
             prepend-icon="mdi-refresh"
             @click="refreshReadme()"
           >
-            刷新文档
+            {{ t('core.common.readme.buttons.refresh') }}
           </v-btn>
         </div>
         
         <!-- 加载中 -->
         <div v-if="loading" class="d-flex flex-column align-center justify-center" style="height: 100%;">
           <v-progress-circular indeterminate color="primary" size="64" class="mb-4"></v-progress-circular>
-          <p class="text-body-1 text-center">正在加载README文档...</p>
+          <p class="text-body-1 text-center">{{ t('core.common.readme.loading') }}</p>
         </div>
         
         <!-- 内容显示 -->
@@ -148,14 +162,14 @@ function refreshReadme() {
         <!-- 无内容提示 -->
         <div v-else class="d-flex flex-column align-center justify-center" style="height: 100%;">
           <v-icon size="64" color="warning" class="mb-4">mdi-file-question-outline</v-icon>
-          <p class="text-body-1 text-center mb-4">该插件未提供文档链接或GitHub仓库地址。<br>请查看插件市场或联系插件作者获取更多信息。</p>
+          <p class="text-body-1 text-center mb-4">{{ t('core.common.readme.empty.title') }}<br>{{ t('core.common.readme.empty.subtitle') }}</p>
         </div>
       </v-card-text>
       <v-divider></v-divider>
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="primary" variant="tonal" @click="$emit('update:show', false)">
-          关闭
+          {{ t('core.common.close') }}
         </v-btn>
       </v-card-actions>
     </v-card>

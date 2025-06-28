@@ -5,8 +5,8 @@
       <v-card-text>{{ message }}</v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="gray" @click="handleCancel">取消</v-btn>
-        <v-btn color="red" @click="handleConfirm">确定</v-btn>
+        <v-btn color="gray" @click="handleCancel">{{ t('core.common.dialog.cancelButton') }}</v-btn>
+        <v-btn color="red" @click="handleConfirm">{{ t('core.common.dialog.confirmButton') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -14,6 +14,9 @@
 
 <script setup>
 import { ref } from "vue";
+import { useI18n } from '@/i18n/composables';
+
+const { t } = useI18n();
 
 const isOpen = ref(false);
 const title = ref("");
@@ -21,8 +24,8 @@ const message = ref("");
 let resolvePromise = null; // ✅ 确保 Promise 句柄可用
 
 const open = (options) => {
-  title.value = options.title || "确认操作";
-  message.value = options.message || "你确定要执行此操作吗？";
+  title.value = options.title || t('core.common.dialog.confirmTitle');
+  message.value = options.message || t('core.common.dialog.confirmMessage');
   isOpen.value = true;
 
   return new Promise((resolve) => {

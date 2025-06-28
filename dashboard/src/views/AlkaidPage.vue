@@ -3,8 +3,8 @@
     <v-card-text class="pa-4" style="height: 100%;">
       <v-container fluid class="d-flex flex-column" style="height: 100%;">
         <div style="margin-bottom: 32px;">
-          <h1 class="gradient-text">The Alkaid Project.</h1>
-          <small style="color: #a3a3a3;">AstrBot Alpha 项目</small>
+          <h1 class="gradient-text">{{ tm('page.title') }}</h1>
+          <small style="color: #a3a3a3;">{{ tm('page.subtitle') }}</small>
         </div>
 
         <div style="display: flex; gap: 8px; margin-bottom: 16px;">
@@ -12,19 +12,19 @@
             :color="isActive('knowledge-base') ? '#9b72cb' : ''" rounded="lg" 
             @click="navigateTo('knowledge-base')">
             <v-icon start>mdi-text-box-search</v-icon>
-            知识库
+            {{ tm('page.navigation.knowledgeBase') }}
           </v-btn>
           <v-btn size="large" :variant="isActive('long-term-memory') ? 'flat' : 'tonal'"
             :color="isActive('long-term-memory') ? '#9b72cb' : ''" rounded="lg"
             @click="navigateTo('long-term-memory')">
             <v-icon start>mdi-dots-hexagon</v-icon>
-            长期记忆层
+            {{ tm('page.navigation.longTermMemory') }}
           </v-btn>
           <v-btn size="large" :variant="isActive('other') ? 'flat' : 'tonal'"
             :color="isActive('other') ? '#9b72cb' : ''" rounded="lg" 
             @click="navigateTo('other')">
             <v-icon start>mdi-tools</v-icon>
-            ...
+            {{ tm('page.navigation.other') }}
           </v-btn>
         </div>
 
@@ -37,18 +37,35 @@
 </template>
 
 <script>
+import { useModuleI18n } from '@/i18n/composables';
+
 export default {
   name: 'AlkaidPage',
   components: {},
+  setup() {
+    const { tm } = useModuleI18n('features/alkaid/index');
+    return { tm };
+  },
   data() {
     return {}
   },
   methods: {
     navigateTo(tab) {
-      this.$router.push(`/alkaid/${tab}`);
+      try {
+        if (this.$router && typeof this.$router.push === 'function') {
+          this.$router.push(`/alkaid/${tab}`);
+        }
+      } catch (error) {
+        console.warn('Navigation error:', error);
+      }
     },
     isActive(tab) {
-      return this.$route.path.includes(`/alkaid/${tab}`);
+      try {
+        return this.$route && this.$route.path.includes(`/alkaid/${tab}`);
+      } catch (error) {
+        console.warn('Route check error:', error);
+        return false;
+      }
     }
   },
   mounted() {

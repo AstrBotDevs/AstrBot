@@ -37,11 +37,11 @@
       </v-list-item>
     </v-list>
     <div style="display: flex; align-items: center;">
-      <v-text-field v-model="newItem" label="添加新项，按回车确认添加" @keyup.enter="addItem" clearable dense hide-details
+      <v-text-field v-model="newItem" :label="t('core.common.list.addItemPlaceholder')" @keyup.enter="addItem" clearable dense hide-details
         variant="outlined" density="compact"></v-text-field>
       <v-btn @click="addItem" text variant="tonal">
         <v-icon>mdi-plus</v-icon>
-        添加
+        {{ t('core.common.list.addButton') }}
       </v-btn>
     </div>
 
@@ -49,8 +49,14 @@
 </template>
 
 <script>
+import { useI18n } from '@/i18n/composables';
+
 export default {
   name: 'ListConfigItem',
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   props: {
     value: {
       type: Array,

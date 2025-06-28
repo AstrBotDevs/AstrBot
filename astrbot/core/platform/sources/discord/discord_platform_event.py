@@ -4,13 +4,25 @@ import base64
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
+import sys
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.api.message_components import Plain, Image, File, BaseMessageComponent
+from astrbot.api.platform import AstrBotMessage, PlatformMetadata, At
+from astrbot.api.message_components import (
+    Plain,
+    Image,
+    File,
+    BaseMessageComponent,
+    Reply,
+)
 from astrbot import logger
 from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 
 # 自定义Discord视图组件（兼容旧版本）
@@ -29,36 +41,52 @@ class DiscordPlatformEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         client: DiscordBotClient,
+        interaction_followup_webhook: Optional[discord.Webhook] = None,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
+        self.interaction_followup_webhook = interaction_followup_webhook
 
+    @override
     async def send(self, message: MessageChain):
         """发送消息到Discord平台"""
+
+        # 解析消息链为 Discord 所需的对象
         try:
-            channel = await self._get_channel()
-            if not channel:
-                logger.error(f"[Discord] 无法获取频道 {self.session_id}")
-                return
+            content, files, view, embeds, reference_message_id = await self._parse_to_discord(message)
+        except Exception as e:
+            logger.error(f"[Discord] 解析消息链时失败: {e}", exc_info=True)
+            return
 
-            # 解析消息链
-            content, files, view, embeds = await self._parse_to_discord(message)
+        kwargs = {}
+        if content:
+            kwargs["content"] = content
+        if files:
+            kwargs["files"] = files
+        if view:
+            kwargs["view"] = view
+        if embeds:
+            kwargs["embeds"] = embeds
+        if reference_message_id and not self.interaction_followup_webhook:
+            kwargs["reference"] = self.client.get_message(int(reference_message_id))
+        if not kwargs:
+            logger.debug("[Discord] 尝试发送空消息，已忽略。")
+            return
 
-            # Discord 不允许发送完全空的消息
-            if not content and not files and not view and not embeds:
-                logger.debug("[Discord] 尝试发送空消息，已忽略。")
-                return
+        # 根据上下文执行发送/回复操作
+        try:
+            # -- 斜杠指令/交互上下文 --
+            if self.interaction_followup_webhook:
+                await self.interaction_followup_webhook.send(**kwargs)
 
-            # 发送消息
-            await channel.send(
-                content=content or None,
-                files=files or None,
-                view=view or None,
-                embeds=embeds or None,
-            )
+            # -- 常规消息上下文 --
+            else:
+                channel = await self._get_channel()
+                if not channel:
+                    return
+                else:
+                    await channel.send(**kwargs)
 
-        except discord.errors.HTTPException as e:
-            logger.error(f"[Discord] 发送消息失败: {e.status} {e.code} - {e.text}")
         except Exception as e:
             logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
 
@@ -80,14 +108,18 @@ class DiscordPlatformEvent(AstrMessageEvent):
         message: MessageChain,
     ) -> tuple[str, list[discord.File], Optional[discord.ui.View], list[discord.Embed]]:
         """将 MessageChain 解析为 Discord 发送所需的内容"""
-        plain_text_parts = []
+        content = ""
         files = []
         view = None
         embeds = []
-
+        reference_message_id = None
         for i in message.chain:  # 遍历消息链
             if isinstance(i, Plain):  # 如果是文字类型的
-                plain_text_parts.append(i.text)
+                content += i.text
+            elif isinstance(i, Reply):
+                reference_message_id = i.id
+            elif isinstance(i, At):
+                content += f"<@{i.qq}>"
             elif isinstance(i, Image):
                 logger.debug(f"[Discord] 开始处理 Image 组件: {i}")
                 try:
@@ -174,7 +206,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         if await asyncio.to_thread(path.exists):
                             file_bytes = await asyncio.to_thread(path.read_bytes)
                             files.append(
-                                discord.File(BytesIO(file_bytes), filename=i.name)
+                                discord.File(BytesIO(file_bytes),
+                                             filename=i.name)
                             )
                         else:
                             logger.warning(
@@ -197,37 +230,10 @@ class DiscordPlatformEvent(AstrMessageEvent):
             else:
                 logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
 
-        # 合并文本内容
-        content = "\n".join(plain_text_parts)
         if len(content) > 2000:
             logger.warning("[Discord] 消息内容超过2000字符，将被截断。")
             content = content[:2000]
-
-        return content, files, view, embeds
-
-    async def reply(self, message: MessageChain):
-        """回复消息（如果原消息存在）"""
-        try:
-            if hasattr(self.message_obj, "raw_message") and hasattr(
-                self.message_obj.raw_message, "reply"
-            ):
-                # 解析消息链
-                content, files, view, embeds = await self._parse_to_discord(message)
-
-                # 使用Discord的回复功能
-                await self.message_obj.raw_message.reply(
-                    content=content or None,
-                    files=files or None,
-                    view=view or None,
-                    embeds=embeds or None,
-                )
-            else:
-                # 如果无法回复，使用普通发送
-                await self.send(message)
-        except Exception as e:
-            logger.error(f"[Discord] 回复消息失败: {e}")
-            # 回退到普通发送
-            await self.send(message)
+        return content, files, view, embeds, reference_message_id
 
     async def react(self, emoji: str):
         """对原消息添加反应"""

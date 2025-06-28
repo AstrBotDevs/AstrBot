@@ -1,0 +1,22 @@
+{
+  "loading": "加载中",
+  "success": "成功",
+  "error": "错误",
+  "warning": "警告",
+  "info": "信息",
+  "pending": "等待中",
+  "processing": "处理中",
+  "completed": "已完成",
+  "failed": "失败",
+  "cancelled": "已取消",
+  "timeout": "超时",
+  "connecting": "连接中",
+  "connected": "已连接",
+  "disconnected": "已断开",
+  "online": "在线",
+  "offline": "离线",
+  "active": "活跃",
+  "inactive": "非活跃",
+  "ready": "就绪",
+  "busy": "忙碌"
+} 
