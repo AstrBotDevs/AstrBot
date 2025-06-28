@@ -11,7 +11,7 @@ ASTRBOT_T2I_DEFAULT_ENDPOINT = "https://t2i.soulter.top/text2img"
 
 
 class NetworkRenderStrategy(RenderStrategy):
-    def __init__(self, base_url: str = ASTRBOT_T2I_DEFAULT_ENDPOINT) -> None:
+    def __init__(self, base_url: str | None = None) -> None:
         super().__init__()
         if not base_url:
             base_url = ASTRBOT_T2I_DEFAULT_ENDPOINT
@@ -38,7 +38,7 @@ class NetworkRenderStrategy(RenderStrategy):
         tmpl_str: str,
         tmpl_data: dict,
         return_url: bool = True,
-        options: dict = None,
+        options: dict | None = None,
     ) -> str:
         """使用自定义文转图模板"""
         default_options = {"full_page": True, "type": "jpeg", "quality": 40}
