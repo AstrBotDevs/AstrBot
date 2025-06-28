@@ -23,6 +23,7 @@ class StarMetadata:
     desc: str  # 插件简介
     version: str  # 插件版本
     repo: str = None  # 插件仓库地址
+    dependencies: List[str] = field(default_factory=list)
 
     star_cls_type: type = None
     """插件的类对象的类型"""

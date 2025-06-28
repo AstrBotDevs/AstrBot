@@ -85,6 +85,8 @@ class EventType(enum.Enum):
     OnCallingFuncToolEvent = enum.auto()  # 调用函数工具
     OnAfterMessageSentEvent = enum.auto()  # 发送消息后
 
+    OnStarActivatedEvent = enum.auto()  # 插件启用
+    OnStarDeactivatedEvent = enum.auto()  # 插件禁用
 
 @dataclass
 class StarHandlerMetadata:

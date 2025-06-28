@@ -388,3 +388,31 @@ def register_after_message_sent(**kwargs):
         return awaitable
 
     return decorator
+
+
+def register_on_star_activated(star_name: str = None, **kwargs):
+    """当指定插件被激活时"""
+
+    def decorator(awaitable):
+        handler_md = get_handler_or_create(
+            awaitable, EventType.OnStarActivatedEvent, **kwargs
+        )
+        if star_name:
+            handler_md.extras_configs["target_star_name"] = star_name
+        return awaitable
+
+    return decorator
+
+
+def register_on_star_deactivated(star_name: str = None, **kwargs):
+    """当指定插件被停用时"""
+
+    def decorator(awaitable):
+        handler_md = get_handler_or_create(
+            awaitable, EventType.OnStarDeactivatedEvent, **kwargs
+        )
+        if star_name:
+            handler_md.extras_configs["target_star_name"] = star_name
+        return awaitable
+
+    return decorator
