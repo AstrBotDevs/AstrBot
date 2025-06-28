@@ -82,6 +82,8 @@ class WeChatPadProAdapter(Platform):
 
     async def _retry_request(self, session, url, params, payload, max_retries=3, retry_delay=1.0):
         """统一的重试请求逻辑"""
+        import random  # 导入随机模块用于抖动计算
+        
         for attempt in range(max_retries + 1):
             try:
                 async with session.post(url, params=params, json=payload) as response:
@@ -89,18 +91,29 @@ class WeChatPadProAdapter(Platform):
                         if attempt >= max_retries:
                             logger.error(f"最终HTTP失败: {response.status}")
                             return None
-                        delay = retry_delay * (2 ** attempt)
-                        logger.warning(f"HTTP错误重试 {attempt + 1}/{max_retries}")
+                        
+                        # 计算带随机抖动的延迟 (0.5-1.5倍基础延迟)
+                        jitter = random.uniform(0.5, 1.5)
+                        delay = retry_delay * (2 ** attempt) * jitter
+                        
+                        logger.warning(f"HTTP错误重试 {attempt + 1}/{max_retries}, 等待 {delay:.2f}秒")
                         await asyncio.sleep(delay)
                         continue
+                        
                     return await response.json()
+                    
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 if attempt >= max_retries:
                     logger.error(f"最终网络错误: {type(e).__name__}")
                     return None
-                delay = retry_delay * (2 ** attempt)
-                logger.warning(f"网络错误重试 {attempt + 1}/{max_retries}")
+                    
+                # 计算带随机抖动的延迟 (0.5-1.5倍基础延迟)
+                jitter = random.uniform(0.5, 1.5)
+                delay = retry_delay * (2 ** attempt) * jitter
+                
+                logger.warning(f"网络错误重试 {attempt + 1}/{max_retries}, 等待 {delay:.2f}秒")
                 await asyncio.sleep(delay)
+                
         return None
 
     async def run(self) -> None:
@@ -590,10 +603,8 @@ class WeChatPadProAdapter(Platform):
                 logger.error(f"获取群成员详情时发生错误: {e}")
                 return None
 
-    async def _download_raw_image(
-            self, from_user_name: str, to_user_name: str, msg_id: int
-    ) -> str | None:
-        """下载原始图片（修复优化版）"""
+    async def _download_raw_image(self, session, from_user_name: str, to_user_name: str, msg_id: int) -> str | None:
+        """下载原始图片（优化版）"""
         url = f"{self.base_url}/message/GetMsgBigImg"
         params = {"key": self.auth_key}
         start_pos = 0
@@ -601,7 +612,7 @@ class WeChatPadProAdapter(Platform):
         image_data = bytearray()  # 使用字节数组存储原始数据
         log_interval = 1024 * 1024  # 1MB日志间隔
 
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+        try:
             while total_len is None or start_pos < total_len:
                 payload = {
                     "CompressType": 0,
@@ -618,9 +629,9 @@ class WeChatPadProAdapter(Platform):
 
                 # 优化数据缓冲区获取逻辑
                 data_buffer = (
-                        data_json.get("Data", {}).get("Buffer") or
-                        data_json.get("Buffer") or
-                        data_json.get("Data", {}).get("Data", {}).get("Buffer")
+                    data_json.get("Data", {}).get("Buffer") or
+                    data_json.get("Buffer") or
+                    data_json.get("Data", {}).get("Data", {}).get("Buffer")
                 )
 
                 if not data_buffer:
@@ -632,8 +643,9 @@ class WeChatPadProAdapter(Platform):
                     chunk_data = base64.b64decode(data_buffer)
                     if not chunk_data:
                         logger.error("接收到空数据块")
+                        # 修正的缩进位置：空数据块时直接返回None
                         return None
-
+                        
                     image_data.extend(chunk_data)
                     chunk_size = len(chunk_data)
                     start_pos += chunk_size
@@ -654,8 +666,12 @@ class WeChatPadProAdapter(Platform):
                     logger.error(f"Base64解码失败: {e}")
                     return None
 
-        logger.info(f"图片下载完成，大小: {len(image_data)} 字节")
-        return base64.b64encode(image_data).decode()
+            logger.info(f"图片下载完成，大小: {len(image_data)} 字节")
+            return base64.b64encode(image_data).decode()
+            
+        except Exception as e:
+            logger.error(f"下载原始图片时发生未预期错误: {e}")
+            return None
 
     async def download_voice(
         self, to_user_name: str, new_msg_id: str, bufid: str, length: int
