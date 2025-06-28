@@ -7,9 +7,12 @@ from astrbot.core.config import AstrBotConfig
 from .custom_filter import CustomFilter
 from ..star_handler import StarHandlerMetadata
 
+
 class GreedyStr(str):
     """标记指令完成其他参数接收后的所有剩余文本。"""
+
     pass
+
 
 # 标准指令受到 wake_prefix 的制约。
 class CommandFilter(HandlerFilter):
@@ -18,8 +21,8 @@ class CommandFilter(HandlerFilter):
     def __init__(
         self,
         command_name: str,
-        alias: set = None,
-        handler_md: StarHandlerMetadata = None,
+        alias: set | None = None,
+        handler_md: StarHandlerMetadata | None = None,
         parent_command_names: List[str] = [""],
     ):
         self.command_name = command_name
@@ -113,9 +116,9 @@ class CommandFilter(HandlerFilter):
                     elif isinstance(param_type_or_default_val, bool):
                         # 处理布尔类型
                         lower_param = params[i].lower()
-                        if lower_param in ['true', 'yes', '1']:
+                        if lower_param in ["true", "yes", "1"]:
                             result[param_name] = True
-                        elif lower_param in ['false', 'no', '0']:
+                        elif lower_param in ["false", "no", "0"]:
                             result[param_name] = False
                         else:
                             raise ValueError(
