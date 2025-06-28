@@ -18,8 +18,8 @@ class CommandFilter(HandlerFilter):
     def __init__(
         self,
         command_name: str,
-        alias: set = None,
-        handler_md: StarHandlerMetadata = None,
+        alias: set | None = None,
+        handler_md: StarHandlerMetadata | None = None,
         parent_command_names: List[str] = [""],
     ):
         self.command_name = command_name

@@ -1,6 +1,25 @@
 <script setup>
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref } from 'vue'
+import ListConfigItem from './ListConfigItem.vue'
+import { useI18n } from '@/i18n/composables'
+
+defineProps({
+  metadata: {
+    type: Object,
+    required: true
+  },
+  iterable: {
+    type: Object,
+    required: true
+  },
+  metadataKey: {
+    type: String,
+    required: true
+  }
+})
+
+const { t } = useI18n()
 
 const dialog = ref(false)
 const currentEditingKey = ref('')
@@ -307,35 +326,7 @@ function saveEditedContent() {
   </v-dialog>
 </template>
 
-<script>
-import ListConfigItem from './ListConfigItem.vue';
-import { useI18n } from '@/i18n/composables';
 
-export default {
-  name: 'AstrBotConfig',
-  components: {
-    ListConfigItem
-  },
-  setup() {
-    const { t } = useI18n();
-    return { t };
-  },
-  props: {
-    metadata: {
-      type: Object,
-      required: true
-    },
-    iterable: {
-      type: Object,
-      required: true
-    },
-    metadataKey: {
-      type: String,
-      required: true
-    }
-  }
-}
-</script>
 
 <style scoped>
 .config-section {
