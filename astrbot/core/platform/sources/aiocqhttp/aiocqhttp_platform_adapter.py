@@ -307,7 +307,7 @@ class AiocqhttpAdapter(Platform):
                             user_id=int(m["data"]["qq"]),
                         )
                         if at_info:
-                            nickname = at_info.get("nickname", "")
+                            nickname = at_info.get("nick", "") or at_info.get("nickname", "")
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
 
                             abm.message.append(
