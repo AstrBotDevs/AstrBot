@@ -268,13 +268,11 @@ class LLMRequestSubStage(Stage):
                         cid=cid,
                         title=title,
                     )
-                    web_chat_back_queue.put_nowait(
-                        {
-                            "type": "update_title",
-                            "cid": cid,
-                            "data": title,
-                        }
-                    )
+                    web_chat_back_queue.put_nowait({
+                        "type": "update_title",
+                        "cid": cid,
+                        "data": title,
+                    })
 
     async def _save_to_history(
         self,
@@ -323,4 +321,3 @@ class LLMRequestSubStage(Stage):
             else:
                 fixed_messages.append(message)
         return fixed_messages
-
