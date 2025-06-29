@@ -89,11 +89,6 @@ class LLMRequestSubStage(Stage):
                 "provider_request 必须是 ProviderRequest 类型。"
             )
 
-            # 检查会话级别的LLM启停状态（防止事件钩子绕过会话级别限制）
-            if not SessionServiceManager.should_process_llm_request(event):
-                logger.debug(f"会话 {event.unified_msg_origin} 禁用了 LLM，拒绝事件钩子/插件的 LLM 请求。")
-                return
-
             if req.conversation:
                 all_contexts = json.loads(req.conversation.history)
                 req.contexts = self._process_tool_message_pairs(
