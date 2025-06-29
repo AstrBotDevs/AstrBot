@@ -29,7 +29,7 @@ let dashboardCurrentVersion = ref('');
 let version = ref('');
 let releases = ref([]);
 let devCommits = ref([]);
-
+let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
 
 let tab = ref(0);
@@ -217,6 +217,7 @@ function switchVersion(version: string) {
 }
 
 function updateDashboard() {
+  updatingDashboardLoading.value = true;
   updateStatus.value = t('core.header.updateDialog.status.updating');
   axios.post('/api/update/dashboard')
       .then((res) => {
@@ -230,7 +231,9 @@ function updateDashboard() {
       .catch((err) => {
         console.log(err);
         updateStatus.value = err
-      });
+      }).finally(() => {
+    updatingDashboardLoading.value = false;
+  });
 }
 
 function toggleDarkMode() {
@@ -416,7 +419,7 @@ commonStore.getStartTime();
               </div>
 
               <v-btn color="primary" style="border-radius: 10px;" @click="updateDashboard()"
-                     :disabled="!dashboardHasNewVersion">
+                     :disabled="!dashboardHasNewVersion" :loading="updatingDashboardLoading">
                 {{ t('core.header.updateDialog.dashboardUpdate.downloadAndUpdate') }}
               </v-btn>
             </div>
