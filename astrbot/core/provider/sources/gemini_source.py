@@ -53,7 +53,7 @@ class ProviderGoogleGenAI(Provider):
         self,
         provider_config,
         provider_settings,
-        default_persona = None,
+        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
@@ -259,12 +259,10 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
-        native_tool_enabled = any(
-            [
-                self.provider_config.get("gm_native_coderunner", False),
-                self.provider_config.get("gm_native_search", False),
-            ]
-        )
+        native_tool_enabled = any([
+            self.provider_config.get("gm_native_coderunner", False),
+            self.provider_config.get("gm_native_search", False),
+        ])
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -501,12 +499,12 @@ class ProviderGoogleGenAI(Provider):
     async def text_chat(
         self,
         prompt: str,
-        session_id = None,
-        image_urls = None,
-        func_tool = None,
-        contexts = None,
-        system_prompt = None,
-        tool_calls_result = None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
+        tool_calls_result=None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -630,9 +628,10 @@ class ProviderGoogleGenAI(Provider):
                 if not image_data:
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
-                user_content["content"].append(
-                    {"type": "image_url", "image_url": {"url": image_data}}
-                )
+                user_content["content"].append({
+                    "type": "image_url",
+                    "image_url": {"url": image_data},
+                })
             return user_content
         else:
             return {"role": "user", "content": text}
