@@ -57,7 +57,7 @@ class ToolLoopAgent(BaseAgentRunner):
     def _transition_state(self, new_state: AgentState) -> None:
         """转换 Agent 状态"""
         if self._state != new_state:
-            logger.info(f"Agent state transition: {self._state} -> {new_state}")
+            logger.debug(f"Agent state transition: {self._state} -> {new_state}")
             self._state = new_state
 
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
@@ -106,7 +106,7 @@ class ToolLoopAgent(BaseAgentRunner):
 
         # 处理 LLM 响应
         llm_resp = llm_resp_result
-        logger.info(f"LLMResp: {llm_resp}")
+        logger.debug(f"LLMResp: {llm_resp}")
 
         if llm_resp.role == "err":
             # 如果 LLM 响应错误，转换到错误状态
