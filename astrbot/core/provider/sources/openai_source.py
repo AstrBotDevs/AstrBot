@@ -9,14 +9,12 @@ import astrbot.core.message.components as Comp
 from openai import AsyncOpenAI, AsyncAzureOpenAI
 from openai.types.chat.chat_completion import ChatCompletion
 
-# from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai._exceptions import NotFoundError, UnprocessableEntityError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.message.message_event_result import MessageChain
 
-from astrbot.core.db import BaseDatabase
-from astrbot.api.provider import Provider, Personality
+from astrbot.api.provider import Provider
 from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
 from typing import List, AsyncGenerator
@@ -30,17 +28,13 @@ from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 class ProviderOpenAIOfficial(Provider):
     def __init__(
         self,
-        provider_config: dict,
-        provider_settings: dict,
-        db_helper: BaseDatabase,
-        persistant_history=True,
-        default_persona: Personality = None,
+        provider_config,
+        provider_settings,
+        default_persona = None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            persistant_history,
-            db_helper,
             default_persona,
         )
         self.chosen_api_key = None
@@ -224,12 +218,10 @@ class ProviderOpenAIOfficial(Provider):
     async def _prepare_chat_payload(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: list[str] = None,
-        func_tool: FuncCall = None,
-        contexts: list = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        image_urls: list[str] | None = None,
+        contexts: list | None = None,
+        system_prompt: str | None = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
@@ -246,14 +238,18 @@ class ProviderOpenAIOfficial(Provider):
 
         # tool calls result
         if tool_calls_result:
-            context_query.extend(tool_calls_result.to_openai_messages())
+            if isinstance(tool_calls_result, ToolCallsResult):
+                context_query.extend(tool_calls_result.to_openai_messages())
+            else:
+                for tcr in tool_calls_result:
+                    context_query.extend(tcr.to_openai_messages())
 
         model_config = self.provider_config.get("model_config", {})
         model_config["model"] = self.get_model()
 
         payloads = {"messages": context_query, **model_config}
 
-        return payloads, context_query, func_tool
+        return payloads, context_query
 
     async def _handle_api_error(
         self,
@@ -352,11 +348,9 @@ class ProviderOpenAIOfficial(Provider):
         tool_calls_result=None,
         **kwargs,
     ) -> LLMResponse:
-        payloads, context_query, func_tool = await self._prepare_chat_payload(
+        payloads, context_query = await self._prepare_chat_payload(
             prompt,
-            session_id,
             image_urls,
-            func_tool,
             contexts,
             system_prompt,
             tool_calls_result,
@@ -422,11 +416,9 @@ class ProviderOpenAIOfficial(Provider):
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""
-        payloads, context_query, func_tool = await self._prepare_chat_payload(
+        payloads, context_query = await self._prepare_chat_payload(
             prompt,
-            session_id,
             image_urls,
-            func_tool,
             contexts,
             system_prompt,
             tool_calls_result,

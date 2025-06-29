@@ -1,4 +1,3 @@
-from astrbot.core.db import BaseDatabase
 from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
 from typing import List
@@ -13,15 +12,11 @@ class ProviderZhipu(ProviderOpenAIOfficial):
         self,
         provider_config: dict,
         provider_settings: dict,
-        db_helper: BaseDatabase,
-        persistant_history=True,
         default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            db_helper,
-            persistant_history,
             default_persona,
         )
 

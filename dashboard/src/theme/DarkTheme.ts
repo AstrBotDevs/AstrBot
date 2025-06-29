@@ -39,7 +39,8 @@ const PurpleThemeDark: ThemeTypes = {
     background: '#111111',
     overlay: '#111111aa',
     codeBg: '#282833',
-    code: '#ffffffdd'
+    code: '#ffffffdd',
+    chatMessageBubble: '#2d2e30',
   }
 };
 

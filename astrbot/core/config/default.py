@@ -61,6 +61,7 @@ DEFAULT_CONFIG = {
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
+        "show_tool_use_status": False,
         "streaming_segmented": False,
         "separate_provider": False,
     },
@@ -441,7 +442,7 @@ CONFIG_METADATA_2 = {
                     "ignore_bot_self_message": {
                         "description": "是否忽略机器人自身的消息",
                         "type": "bool",
-                        "hint": "某些平台如 gewechat 会将自身账号在其他 APP 端发送的消息也当做消息事件下发导致给自己发消息时唤醒机器人",
+                        "hint": "某些平台会将自身账号在其他 APP 端发送的消息也当做消息事件下发导致给自己发消息时唤醒机器人",
                     },
                     "ignore_at_all": {
                         "description": "是否忽略 @ 全体成员",
@@ -769,17 +770,6 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "deepseek/deepseek-r1",
                         },
-                    },
-                    "LLMTuner": {
-                        "id": "llmtuner_default",
-                        "type": "llm_tuner",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "base_model_path": "",
-                        "adapter_model_path": "",
-                        "llmtuner_template": "",
-                        "finetuning_type": "lora",
-                        "quantization_bit": 4,
                     },
                     "Dify": {
                         "id": "dify_app_default",
@@ -1699,10 +1689,15 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "启用后，将会流式输出 LLM 的响应。目前仅支持 OpenAI API提供商 以及 Telegram、QQ Official 私聊 两个平台",
                     },
+                    "show_tool_use_status": {
+                        "description": "函数调用状态输出",
+                        "type": "bool",
+                        "hint": "在触发函数调用时输出其函数名和内容。",
+                    },
                     "streaming_segmented": {
                         "description": "不支持流式回复的平台分段输出",
                         "type": "bool",
-                        "hint": "启用后，若平台不支持流式回复，会分段输出。目前仅支持 aiocqhttp 和 gewechat 两个平台，不支持或无需使用流式分段输出的平台会静默忽略此选项",
+                        "hint": "启用后，若平台不支持流式回复，会分段输出。目前仅支持 aiocqhttp 两个平台，不支持或无需使用流式分段输出的平台会静默忽略此选项",
                     },
                 },
             },

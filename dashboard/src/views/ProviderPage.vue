@@ -414,7 +414,6 @@ export default {
         "anthropic_chat_completion": "chat_completion",
         "googlegenai_chat_completion": "chat_completion",
         "zhipu_chat_completion": "chat_completion",
-        "llm_tuner": "chat_completion",
         "dify": "chat_completion",
         "dashscope": "chat_completion",
         "openai_whisper_api": "speech_to_text",
