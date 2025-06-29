@@ -175,7 +175,7 @@
                         <div v-else class="message-list">
                             <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
                                 <!-- 用户消息 -->
-                                <div v-if="msg.type == 'user'" class="user-message">
+                                <div v-if="msg.type == 'user'" class="user-message" style="background-color: var(--v-theme-chatMessageBubble);">
                                     <div class="message-bubble user-bubble">
                                         <span>{{ msg.message }}</span>
 
@@ -195,15 +195,12 @@
                                             </audio>
                                         </div>
                                     </div>
-                                    <v-avatar class="user-avatar" color="deep-purple-lighten-3" size="36">
-                                        <v-icon icon="mdi-account" />
-                                    </v-avatar>
                                 </div>
 
                                 <!-- 机器人消息 -->
                                 <div v-else class="bot-message">
-                                    <v-avatar class="bot-avatar" color="deep-purple" size="36">
-                                        <span class="text-h6">✨</span>
+                                    <v-avatar class="bot-avatar" size="36">
+                                        <span class="text-h2">✨</span>
                                     </v-avatar>
                                     <div class="message-bubble bot-bubble">
                                         <div v-html="marked(msg.message)" class="markdown-content"></div>
@@ -1574,28 +1571,25 @@ export default {
 }
 
 .message-bubble {
-    padding: 12px 16px;
-    border-radius: 18px;
+    padding: 8px 16px;
+    border-radius: 12px;
     max-width: 80%;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .user-bubble {
-    background-color: var(--v-theme-background);
+    background-color: var(--v-theme-chatMessageBubble);
     color: var(--v-theme-primaryText);
-    border-top-right-radius: 4px;
 }
 
 .bot-bubble {
-    background-color: var(--v-theme-surface);
     border: 1px solid var(--v-theme-border);
     color: var(--v-theme-primaryText);
-    border-top-left-radius: 4px;
 }
 
 .user-avatar,
 .bot-avatar {
-    align-self: flex-end;
+    align-self: flex-start;
+    margin-top: 12px;
 }
 
 /* 附件样式 */
