@@ -163,7 +163,11 @@ class LLMRequestSubStage(Stage):
                         if resp.type == "tool_call_result":
                             continue  # 跳过工具调用结果
                         if resp.type == "tool_call":
+                            if self.streaming_response:
+                                # 用来标记流式响应需要分节
+                                yield MessageChain(chain=[], type="break")
                             if self.show_tool_use or event.get_platform_name() == "webchat":
+                                resp.data["chain"].type = "tool_call"
                                 await event.send(resp.data["chain"])
                             continue
 
@@ -186,9 +190,6 @@ class LLMRequestSubStage(Stage):
                                 yield resp.data["chain"]  # MessageChain
                     if tool_loop_agent.done():
                         break
-                    if self.streaming_response:
-                        # 用来标记流式响应结束
-                        yield MessageChain(chain=[], type="break")
 
                 except Exception as e:
                     logger.error(traceback.format_exc())
