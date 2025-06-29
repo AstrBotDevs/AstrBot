@@ -89,19 +89,15 @@ class ToolLoopAgent(BaseAgentRunner):
                     )
                 continue
             llm_resp_result = llm_response
-            break # got final response
+            break  # got final response
 
         if not llm_resp_result:
             return
 
-        # 执行事件钩子
-        await self.pipeline_ctx.call_event_hook(
-            self.event, EventType.OnLLMResponseEvent, self.final_llm_resp
-        )
-
         # 处理 LLM 响应
         llm_resp = llm_resp_result
         logger.info(f"LLMResp: {llm_resp}")
+
         if llm_resp.role == "err":
             # 如果 LLM 响应错误，直接返回错误信息
             self.final_llm_resp = llm_resp
@@ -119,6 +115,11 @@ class ToolLoopAgent(BaseAgentRunner):
             # 如果没有工具调用，结束 Agent Loop
             self.final_llm_resp = llm_resp
             self.is_done = True
+
+            # 执行事件钩子
+            await self.pipeline_ctx.call_event_hook(
+                self.event, EventType.OnLLMResponseEvent, llm_resp
+            )
 
         # 返回 LLM 结果
         if llm_resp.result_chain:
