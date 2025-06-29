@@ -325,8 +325,6 @@ class ProviderManager:
                 inst = provider_metadata.cls_type(
                     provider_config,
                     self.provider_settings,
-                    self.db_helper,
-                    self.provider_settings.get("persistant_history", True),
                     self.selected_default_persona,
                 )
 

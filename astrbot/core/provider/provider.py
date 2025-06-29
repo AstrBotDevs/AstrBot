@@ -1,6 +1,5 @@
 import abc
 from typing import List
-from astrbot.core.db import BaseDatabase
 from typing import TypedDict, AsyncGenerator
 from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
@@ -53,15 +52,13 @@ class Provider(AbstractProvider):
         self,
         provider_config: dict,
         provider_settings: dict,
-        persistant_history: bool = True,
-        db_helper: BaseDatabase = None,
-        default_persona: Personality = None,
+        default_persona: Personality | None = None,
     ) -> None:
         super().__init__(provider_config)
 
         self.provider_settings = provider_settings
 
-        self.curr_personality: Personality = default_persona
+        self.curr_personality = default_persona
         """维护了当前的使用的 persona，即人格。可能为 None"""
 
     @abc.abstractmethod

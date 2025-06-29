@@ -8,8 +8,7 @@ from anthropic import AsyncAnthropic
 from anthropic.types import Message
 
 from astrbot.core.utils.io import download_image_by_url
-from astrbot.core.db import BaseDatabase
-from astrbot.api.provider import Provider, Personality
+from astrbot.api.provider import Provider
 from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
 from ..register import register_provider_adapter
@@ -23,17 +22,13 @@ from typing import AsyncGenerator
 class ProviderAnthropic(Provider):
     def __init__(
         self,
-        provider_config: dict,
-        provider_settings: dict,
-        db_helper: BaseDatabase,
-        persistant_history=True,
-        default_persona: Personality = None,
+        provider_config,
+        provider_settings,
+        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            persistant_history,
-            db_helper,
             default_persona,
         )
 
@@ -234,12 +229,12 @@ class ProviderAnthropic(Provider):
     async def text_chat(
         self,
         prompt,
-        session_id = None,
-        image_urls = [],
-        func_tool = None,
+        session_id=None,
+        image_urls=[],
+        func_tool=None,
         contexts=None,
         system_prompt=None,
-        tool_calls_result = None,
+        tool_calls_result=None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:

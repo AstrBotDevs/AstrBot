@@ -12,8 +12,7 @@ from google.genai.errors import APIError
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
-from astrbot.api.provider import Personality, Provider
-from astrbot.core.db import BaseDatabase
+from astrbot.api.provider import Provider
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 from astrbot.core.provider.func_tool_manager import FuncCall
@@ -52,17 +51,13 @@ class ProviderGoogleGenAI(Provider):
 
     def __init__(
         self,
-        provider_config: dict,
-        provider_settings: dict,
-        db_helper: BaseDatabase,
-        persistant_history=True,
-        default_persona: Personality = None,
+        provider_config,
+        provider_settings,
+        default_persona = None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            persistant_history,
-            db_helper,
             default_persona,
         )
         self.api_keys: list = provider_config.get("key", [])
