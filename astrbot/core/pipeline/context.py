@@ -76,7 +76,7 @@ class PipelineContext:
             # 以前的 handler 会额外传入一个参数, 但是 context 对象实际上在插件实例中有一份
             ready_to_call = handler(event, self.plugin_manager.context, *args, **kwargs)
 
-        if isinstance(ready_to_call, T.AsyncGenerator):
+        if inspect.isasyncgen(ready_to_call):
             _has_yielded = False
             try:
                 async for ret in ready_to_call:
