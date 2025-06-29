@@ -141,6 +141,9 @@ class LLMRequestSubStage(Stage):
         if not req.session_id:
             req.session_id = event.unified_msg_origin
 
+        # fix messages
+        req.contexts = self.fix_messages(req.contexts)
+
         # Call Agent
         tool_loop_agent = ToolLoopAgent(
             provider=provider,
@@ -304,3 +307,20 @@ class LLMRequestSubStage(Stage):
             event.unified_msg_origin, req.conversation.cid, history=messages
         )
         logger.debug(f"messages persisted: {messages}")
+
+    def fix_messages(self, messages: list[dict]) -> list[dict]:
+        """验证并且修复上下文"""
+        fixed_messages = []
+        for message in messages:
+            if message.get("role") == "tool":
+                # tool block 前面必须要有 user 和 assistant block
+                if len(fixed_messages) < 2:
+                    # 这种情况可能是上下文被截断导致的
+                    # 我们直接将之前的上下文都清空
+                    fixed_messages = []
+                else:
+                    fixed_messages.append(message)
+            else:
+                fixed_messages.append(message)
+        return fixed_messages
+
