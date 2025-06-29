@@ -4,6 +4,7 @@ from typing import TypedDict, AsyncGenerator
 from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 from dataclasses import dataclass
+from deprecated import deprecated
 
 
 class Personality(TypedDict):

@@ -32,9 +32,9 @@ class ProviderAnthropic(Provider):
             default_persona,
         )
 
-        self.chosen_api_key = None
+        self.chosen_api_key: str = ""
         self.api_keys: List = provider_config.get("key", [])
-        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
+        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
@@ -97,6 +97,9 @@ class ProviderAnthropic(Provider):
                 )
             else:
                 new_messages.append(message)
+        
+        logger.debug(f"message: {messages}")
+        logger.debug(f"new message: {new_messages}")
 
         return system_prompt, new_messages
 
@@ -368,3 +371,17 @@ class ProviderAnthropic(Provider):
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
         return ""
+
+    def get_current_key(self) -> str:
+        return self.chosen_api_key
+
+    async def get_models(self) -> List[str]:
+        models_str = []
+        models = await self.client.models.list()
+        models = sorted(models.data, key=lambda x: x.id)
+        for model in models:
+            models_str.append(model.id)
+        return models_str
+
+    def set_key(self, key: str):
+        self.chosen_api_key = key

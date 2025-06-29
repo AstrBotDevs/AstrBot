@@ -1,7 +1,7 @@
 import sys
 import traceback
 import typing as T
-from .base import BaseAgentRunner, AgentResponse
+from .base import BaseAgentRunner, AgentResponse, AgentResponseData
 from ...context import PipelineContext
 from astrbot.core.provider.provider import Provider
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -70,18 +70,16 @@ class ToolLoopAgent(BaseAgentRunner):
                     if llm_response.result_chain:
                         yield AgentResponse(
                             type="streaming_delta",
-                            data={
-                                "chain": llm_response.result_chain.chain,
-                            },
+                            data=AgentResponseData(chain=llm_response.result_chain),
                         )
                     else:
                         yield AgentResponse(
                             type="streaming_delta",
-                            data={
-                                "chain": MessageChain().message(
+                            data=AgentResponseData(
+                                chain=MessageChain().message(
                                     llm_response.completion_text
-                                ),
-                            },
+                                )
+                            ),
                         )
                 else:
                     llm_resp_result = llm_response
@@ -105,11 +103,11 @@ class ToolLoopAgent(BaseAgentRunner):
             self.is_done = True
             yield AgentResponse(
                 type="err",
-                data={
-                    "chain": MessageChain().message(
+                data=AgentResponseData(
+                    chain=MessageChain().message(
                         f"LLM 响应错误: {llm_resp.completion_text or '未知错误'}"
-                    ),
-                },
+                    )
+                ),
             )
 
         if not llm_resp.tools_call_name:
@@ -121,16 +119,14 @@ class ToolLoopAgent(BaseAgentRunner):
         if llm_resp.result_chain:
             yield AgentResponse(
                 type="llm_result",
-                data={
-                    "chain": llm_resp.result_chain.chain,
-                },
+                data=AgentResponseData(chain=llm_resp.result_chain),
             )
         elif llm_resp.completion_text:
             yield AgentResponse(
                 type="llm_result",
-                data={
-                    "chain": MessageChain().message(llm_resp.completion_text),
-                },
+                data=AgentResponseData(
+                    chain=MessageChain().message(llm_resp.completion_text)
+                ),
             )
 
         # 如果有工具调用，还需处理工具调用
@@ -142,14 +138,14 @@ class ToolLoopAgent(BaseAgentRunner):
                 elif isinstance(result, MessageChain):
                     yield AgentResponse(
                         type="tool_call_result",
-                        data={
-                            "chain": result.chain,
-                        },
+                        data=AgentResponseData(chain=result),
                     )
             # 将结果添加到上下文中
             tool_calls_result = ToolCallsResult(
                 tool_calls_info=AssistantMessageSegment(
-                    role="assistant", tool_calls=llm_resp.to_openai_tool_calls()
+                    role="assistant",
+                    tool_calls=llm_resp.to_openai_tool_calls(),
+                    content=llm_resp.completion_text,
                 ),
                 tool_calls_result=tool_call_result_blocks,
             )

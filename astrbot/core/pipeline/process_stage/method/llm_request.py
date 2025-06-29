@@ -163,14 +163,14 @@ class LLMRequestSubStage(Stage):
                             )
                             event.set_result(
                                 MessageEventResult(
-                                    chain=resp.data["chain"],
+                                    chain=resp.data["chain"].chain,
                                     result_content_type=content_typ,
                                 )
                             )
                             yield
                             event.clear_result()
                         else:
-                            yield resp.data["chain"]
+                            yield resp.data["chain"].chain
                     if tool_loop_agent.done():
                         break
                 except Exception as e:

@@ -2,12 +2,16 @@ import abc
 import typing as T
 from dataclasses import dataclass
 from astrbot.core.provider.entities import LLMResponse
+from ....message.message_event_result import MessageChain
 
+
+class AgentResponseData(T.TypedDict):
+    chain: MessageChain
 
 @dataclass
 class AgentResponse:
     type: str
-    data: dict
+    data: AgentResponseData
 
 
 class BaseAgentRunner:

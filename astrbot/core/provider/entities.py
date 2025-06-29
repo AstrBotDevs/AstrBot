@@ -58,7 +58,7 @@ class AssistantMessageSegment:
     """OpenAI 格式的上下文中 role 为 assistant 的消息段。参考: https://platform.openai.com/docs/guides/function-calling"""
 
     content: str = None
-    tool_calls: List[ChatCompletionMessageToolCall | Dict] = None
+    tool_calls: List[ChatCompletionMessageToolCall | Dict] = field(default_factory=list)
     role: str = "assistant"
 
     def to_dict(self):
@@ -67,7 +67,7 @@ class AssistantMessageSegment:
         }
         if self.content:
             ret["content"] = self.content
-        elif self.tool_calls:
+        if self.tool_calls:
             ret["tool_calls"] = self.tool_calls
         return ret
 
