@@ -168,9 +168,7 @@ class AiocqhttpAdapter(Platform):
 
         if "sub_type" in event:
             if event["sub_type"] == "poke" and "target_id" in event:
-                abm.message.append(
-                    Poke(qq=str(event["target_id"]), type="poke")
-                )  # noqa: F405
+                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))  # noqa: F405
 
         return abm
 
@@ -273,6 +271,8 @@ class AiocqhttpAdapter(Platform):
                                 action="get_msg",
                                 message_id=int(m["data"]["id"]),
                             )
+                            # 添加必要的 post_type 字段，防止 Event.from_payload 报错
+                            reply_event_data["post_type"] = "message"
                             abm_reply = await self._convert_handle_message_event(
                                 Event.from_payload(reply_event_data), get_reply=False
                             )
@@ -307,7 +307,7 @@ class AiocqhttpAdapter(Platform):
                             user_id=int(m["data"]["qq"]),
                         )
                         if at_info:
-                            nickname = at_info.get("nick", "")
+                            nickname = at_info.get("nick", "") or at_info.get("nickname", "")
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
 
                             abm.message.append(
@@ -322,7 +322,7 @@ class AiocqhttpAdapter(Platform):
                                 first_at_self_processed = True
                             else:
                                 # 非第一个@机器人或@其他用户，添加到message_str
-                                message_str += f" @{nickname} "
+                                message_str += f" @{nickname}({m['data']['qq']}) "
                         else:
                             abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
                     except ActionFailed as e:
