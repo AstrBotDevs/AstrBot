@@ -51,6 +51,15 @@ class ToolLoopAgent(BaseAgentRunner):
         self.final_llm_resp = None
         self.is_done = False
 
+    async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
+        """Yields chunks *and* a final LLMResponse."""
+        if self.streaming:
+            stream = self.provider.text_chat_stream(**self.req.__dict__)
+            async for resp in stream:  # type: ignore
+                yield resp
+        else:
+            yield await self.provider.text_chat(**self.req.__dict__)
+
     @override
     async def step(self):
         """
@@ -62,29 +71,25 @@ class ToolLoopAgent(BaseAgentRunner):
 
         # 执行 LLM 请求
         llm_resp_result = None
-        if self.streaming:
-            stream = self.provider.text_chat_stream(**self.req.__dict__)
-            async for llm_response in stream:  # type: ignore
-                assert isinstance(llm_response, LLMResponse)
-                if llm_response.is_chunk:
-                    if llm_response.result_chain:
-                        yield AgentResponse(
-                            type="streaming_delta",
-                            data=AgentResponseData(chain=llm_response.result_chain),
-                        )
-                    else:
-                        yield AgentResponse(
-                            type="streaming_delta",
-                            data=AgentResponseData(
-                                chain=MessageChain().message(
-                                    llm_response.completion_text
-                                )
-                            ),
-                        )
+
+        async for llm_response in self._iter_llm_responses():
+            assert isinstance(llm_response, LLMResponse)
+            if llm_response.is_chunk:
+                if llm_response.result_chain:
+                    yield AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(chain=llm_response.result_chain),
+                    )
                 else:
-                    llm_resp_result = llm_response
-        else:
-            llm_resp_result = await self.provider.text_chat(**self.req.__dict__)
+                    yield AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(
+                            chain=MessageChain().message(llm_response.completion_text)
+                        ),
+                    )
+                continue
+            llm_resp_result = llm_response
+            break # got final response
 
         if not llm_resp_result:
             return

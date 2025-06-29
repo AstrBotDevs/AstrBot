@@ -97,9 +97,6 @@ class ProviderAnthropic(Provider):
                 )
             else:
                 new_messages.append(message)
-        
-        logger.debug(f"message: {messages}")
-        logger.debug(f"new message: {new_messages}")
 
         return system_prompt, new_messages
 
@@ -233,7 +230,7 @@ class ProviderAnthropic(Provider):
         self,
         prompt,
         session_id=None,
-        image_urls=[],
+        image_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,

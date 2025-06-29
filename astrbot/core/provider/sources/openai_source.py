@@ -249,8 +249,6 @@ class ProviderOpenAIOfficial(Provider):
 
         payloads = {"messages": context_query, **model_config}
 
-        logger.debug(f"payloads: {payloads}")
-
         return payloads, context_query
 
     async def _handle_api_error(
