@@ -96,6 +96,14 @@ class WebChatMessageEvent(AstrMessageEvent):
         return data
 
     async def send(self, message: MessageChain):
+        await web_chat_back_queue.put(
+            {
+                "type": "end",
+                "data": "",
+                "streaming": False,
+                "cid": self.session_id.split("!")[-1],
+            }
+        )
         await WebChatMessageEvent._send(message, session_id=self.session_id)
         await web_chat_back_queue.put(
             {
@@ -110,6 +118,18 @@ class WebChatMessageEvent(AstrMessageEvent):
     async def send_streaming(self, generator, use_fallback: bool = False):
         final_data = ""
         async for chain in generator:
+            if chain.type == "break":
+                # 分割符
+                await web_chat_back_queue.put(
+                    {
+                        "type": "end",
+                        "data": final_data,
+                        "streaming": True,
+                        "cid": self.session_id.split("!")[-1],
+                    }
+                )
+                final_data = ""
+                continue
             final_data += await WebChatMessageEvent._send(
                 chain, session_id=self.session_id, streaming=True
             )

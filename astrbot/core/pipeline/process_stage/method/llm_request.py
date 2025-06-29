@@ -31,15 +31,17 @@ class LLMRequestSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         conf = ctx.astrbot_config
+        settings = conf["provider_settings"]
         self.bot_wake_prefixs: list[str] = conf["wake_prefix"]  # list
-        self.provider_wake_prefix: str = conf["provider_settings"]["wake_prefix"]  # str
-        self.max_context_length = conf["provider_settings"]["max_context_length"]  # int
+        self.provider_wake_prefix: str = settings["wake_prefix"]  # str
+        self.max_context_length = settings["max_context_length"]  # int
         self.dequeue_context_length: int = min(
-            max(1, conf["provider_settings"]["dequeue_context_length"]),
+            max(1, settings["dequeue_context_length"]),
             self.max_context_length - 1,
         )
-        self.streaming_response: bool = conf["provider_settings"]["streaming_response"]
-        self.max_step: int = conf["provider_settings"].get("max_agent_step", 10)
+        self.streaming_response: bool = settings["streaming_response"]
+        self.max_step: int = settings.get("max_agent_step", 10)
+        self.show_tool_use: bool = settings.get("show_tool_use_status", True)
 
         for bwp in self.bot_wake_prefixs:
             if self.provider_wake_prefix.startswith(bwp):
@@ -158,10 +160,17 @@ class LLMRequestSubStage(Stage):
                 step_idx += 1
                 try:
                     async for resp in tool_loop_agent.step():
+                        if resp.type == "tool_call_result":
+                            continue  # 跳过工具调用结果
+                        if resp.type == "tool_call":
+                            if self.show_tool_use or event.get_platform_name() == "webchat":
+                                await event.send(resp.data["chain"])
+                            continue
+
                         if not self.streaming_response:
                             content_typ = (
                                 ResultContentType.LLM_RESULT
-                                if resp.type == "llm_resp"
+                                if resp.type == "llm_result"
                                 else ResultContentType.GENERAL_RESULT
                             )
                             event.set_result(
@@ -173,9 +182,14 @@ class LLMRequestSubStage(Stage):
                             yield
                             event.clear_result()
                         else:
-                            yield resp.data["chain"].chain
+                            if resp.type == "streaming_delta":
+                                yield resp.data["chain"]  # MessageChain
                     if tool_loop_agent.done():
                         break
+                    if self.streaming_response:
+                        # 用来标记流式响应结束
+                        yield MessageChain(chain=[], type="break")
+
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     event.set_result(
@@ -268,11 +282,13 @@ class LLMRequestSubStage(Stage):
                         cid=cid,
                         title=title,
                     )
-                    web_chat_back_queue.put_nowait({
-                        "type": "update_title",
-                        "cid": cid,
-                        "data": title,
-                    })
+                    web_chat_back_queue.put_nowait(
+                        {
+                            "type": "update_title",
+                            "cid": cid,
+                            "data": title,
+                        }
+                    )
 
     async def _save_to_history(
         self,

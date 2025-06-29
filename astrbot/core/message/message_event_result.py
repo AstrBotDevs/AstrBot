@@ -24,6 +24,8 @@ class MessageChain:
 
     chain: List[BaseMessageComponent] = field(default_factory=list)
     use_t2i_: Optional[bool] = None  # None 为跟随用户设置
+    type: Optional[str] = None
+    """消息链承载的消息的类型。可选，用于让消息平台区分不同业务场景的消息链。"""
 
     def message(self, message: str):
         """添加一条文本消息到消息链 `chain` 中。

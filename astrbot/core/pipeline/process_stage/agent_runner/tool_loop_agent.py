@@ -148,6 +148,13 @@ class ToolLoopAgent(BaseAgentRunner):
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
             tool_call_result_blocks = []
+            for tool_call_name in llm_resp.tools_call_name:
+                yield AgentResponse(
+                    type="tool_call",
+                    data=AgentResponseData(
+                        chain=MessageChain().message(f"🔨 调用工具: {tool_call_name}")
+                    ),
+                )
             async for result in self._handle_function_tools(self.req, llm_resp):
                 if isinstance(result, list):
                     tool_call_result_blocks = result
@@ -183,6 +190,8 @@ class ToolLoopAgent(BaseAgentRunner):
             llm_response.tools_call_ids,
         ):
             try:
+                if not req.func_tool:
+                    return
                 func_tool = req.func_tool.get_func(func_tool_name)
                 if func_tool.origin == "mcp":
                     logger.info(
@@ -200,6 +209,7 @@ class ToolLoopAgent(BaseAgentRunner):
                                 content=res.content[0].text,
                             )
                         )
+                        yield MessageChain().message(res.content[0].text)
                     elif isinstance(res.content[0], ImageContent):
                         tool_call_result_blocks.append(
                             ToolCallMessageSegment(
@@ -219,6 +229,7 @@ class ToolLoopAgent(BaseAgentRunner):
                                     content=resource.text,
                                 )
                             )
+                            yield MessageChain().message(resource.text)
                         elif (
                             isinstance(resource, BlobResourceContents)
                             and resource.mimeType
@@ -240,6 +251,7 @@ class ToolLoopAgent(BaseAgentRunner):
                                     content="返回的数据类型不受支持",
                                 )
                             )
+                            yield MessageChain().message("返回的数据类型不受支持。")
                 else:
                     logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
                     # 尝试调用工具函数
@@ -256,6 +268,7 @@ class ToolLoopAgent(BaseAgentRunner):
                                     content=resp,
                                 )
                             )
+                            yield MessageChain().message(resp)
                         else:
                             # Tool 直接请求发送消息给用户
                             # 这里我们将直接结束 Agent Loop。

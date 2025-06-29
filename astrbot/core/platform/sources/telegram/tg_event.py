@@ -158,6 +158,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
+                if chain.type == "break":
+                    # 分割符
+                    message_id = None  # 重置消息 ID
+                    delta = ""  # 重置 delta
+                    continue
+
                 # 处理消息链中的每个组件
                 for i in chain.chain:
                     if isinstance(i, Plain):
