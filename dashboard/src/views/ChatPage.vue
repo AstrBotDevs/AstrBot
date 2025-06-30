@@ -3,13 +3,16 @@
         <v-card-text class="chat-page-container">
             <div class="chat-layout">
                 <div class="sidebar-panel" :class="{ 'sidebar-collapsed': sidebarCollapsed }"
+                    :style="{ 'background-color': isDark ? sidebarCollapsed ? '#1e1e1e' : '#2d2d2d' : sidebarCollapsed ? '#ffffff' : '#f5f5f5' }"
                     @mouseenter="handleSidebarMouseEnter" @mouseleave="handleSidebarMouseLeave">
 
-                    <div style="display: flex; align-items: center; justify-content: center; padding: 16px; padding-bottom: 0px;" v-if="chatboxMode">
+                    <div style="display: flex; align-items: center; justify-content: center; padding: 16px; padding-bottom: 0px;"
+                        v-if="chatboxMode">
                         <img width="50" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
-                        <span v-if="!sidebarCollapsed" style="font-weight: 1000; font-size: 26px; margin-left: 8px;" class="text-secondary">AstrBot</span>
+                        <span v-if="!sidebarCollapsed" style="font-weight: 1000; font-size: 26px; margin-left: 8px;"
+                            class="text-secondary">AstrBot</span>
                     </div>
-                    
+
 
                     <div class="sidebar-collapse-btn-container">
                         <v-btn icon class="sidebar-collapse-btn" @click="toggleSidebar" variant="text"
@@ -21,7 +24,9 @@
 
                     <div style="padding: 16px; padding-top: 8px;">
                         <v-btn block variant="text" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus" style="box-shadow: 0 1px 2px rgba(0,0,0,0.1); background-color: transparent !important; border-radius: 4px;">{{ tm('actions.newChat') }}</v-btn>
+                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus"
+                            style="background-color: transparent !important; border-radius: 4px;">{{
+                                tm('actions.newChat') }}</v-btn>
                         <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currCid" v-if="sidebarCollapsed"
                             elevation="0"></v-btn>
                     </div>
@@ -29,11 +34,12 @@
                         <v-divider class="mx-2"></v-divider>
                     </div>
 
-                    <div style="overflow-y: auto; flex-grow: 1;" class="sidebar-panel" :class="{ 'fade-in': sidebarHoverExpanded }"
+
+                    <div style="overflow-y: auto; flex-grow: 1;" :class="{ 'fade-in': sidebarHoverExpanded }"
                         v-if="!sidebarCollapsed">
-                        <v-card class="conversation-list-card" v-if="conversations.length > 0" flat>
+                        <v-card v-if="conversations.length > 0" flat style="background-color: transparent;">
                             <v-list density="compact" nav class="conversation-list"
-                                @update:selected="getConversationMessages">
+                                style="background-color: transparent;" @update:selected="getConversationMessages">
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                     rounded="lg" class="conversation-item" active-color="secondary">
                                     <v-list-item-title v-if="!sidebarCollapsed" class="conversation-title">{{ item.title
@@ -62,42 +68,13 @@
                     <div v-if="!sidebarCollapsed">
                         <v-divider class="mx-2"></v-divider>
                     </div>
-                    <div style="padding: 16px;" :class="{ 'fade-in': sidebarHoverExpanded }"
-                        v-if="!sidebarCollapsed">
-                        <div class="sidebar-section-title">
-                            {{ tm('conversation.systemStatus') }}
-                        </div>
-                        <div class="status-chips">
-                            <v-chip class="status-chip" :color="status?.llm_enabled ? 'primary' : 'grey-lighten-2'"
-                                variant="outlined" size="small" rounded="sm">
-                                <template v-slot:prepend>
-                                    <v-icon :icon="status?.llm_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
-                                        size="x-small"></v-icon>
-                                </template>
-                                <span>{{ tm('conversation.llmService') }}</span>
-                            </v-chip>
-
-                            <v-chip class="status-chip" :color="status?.stt_enabled ? 'success' : 'grey-lighten-2'"
-                                variant="outlined" size="small" rounded="sm">
-                                <template v-slot:prepend>
-                                    <v-icon :icon="status?.stt_enabled ? 'mdi-check-circle' : 'mdi-alert-circle'"
-                                        size="x-small"></v-icon>
-                                </template>
-                                <span>{{ tm('conversation.speechToText') }}</span>
-                            </v-chip>
-                        </div>
-
-                        <transition
-                            name="expand"
-                            @before-enter="beforeEnter"
-                            @enter="enter"
-                            @after-enter="afterEnter"
-                            @before-leave="beforeLeave"
-                            @leave="leave"
-                        >
+                    <div style="padding: 16px;" :class="{ 'fade-in': sidebarHoverExpanded }" v-if="!sidebarCollapsed">
+                        <transition name="expand" @before-enter="beforeEnter" @enter="enter" @after-enter="afterEnter"
+                            @before-leave="beforeLeave" @leave="leave">
                             <div v-if="currCid" class="delete-btn-container">
                                 <v-btn variant="outlined" rounded="sm" class="delete-chat-btn"
-                                    @click="deleteConversation(currCid)" color="error" density="comfortable" size="small">
+                                    @click="deleteConversation(currCid)" color="error" density="comfortable"
+                                    size="small">
                                     <v-icon start size="small">mdi-delete</v-icon>
                                     {{ tm('actions.deleteChat') }}
                                 </v-btn>
@@ -111,14 +88,18 @@
 
                     <div class="conversation-header fade-in">
                         <div class="conversation-header-content" v-if="currCid && getCurrentConversation">
-                            <h2 class="conversation-header-title">{{ getCurrentConversation.title || tm('conversation.newConversation') }}</h2>
-                            <div class="conversation-header-time">{{ formatDate(getCurrentConversation.updated_at) }}</div>
+                            <h2 class="conversation-header-title">{{ getCurrentConversation.title ||
+                                tm('conversation.newConversation')
+                            }}</h2>
+                            <div class="conversation-header-time">{{ formatDate(getCurrentConversation.updated_at) }}
+                            </div>
                         </div>
                         <div class="conversation-header-actions">
                             <!-- router 推送到 /chatbox -->
                             <v-tooltip :text="tm('actions.fullscreen')" v-if="!chatboxMode">
                                 <template v-slot:activator="{ props }">
-                                    <v-icon v-bind="props" @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')"
+                                    <v-icon v-bind="props"
+                                        @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')"
                                         class="fullscreen-icon">mdi-fullscreen</v-icon>
                                 </template>
                             </v-tooltip>
@@ -131,7 +112,8 @@
                             <!-- 主题切换按钮 -->
                             <v-tooltip :text="isDark ? tm('modes.lightMode') : tm('modes.darkMode')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
-                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon" variant="text">
+                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon"
+                                        variant="text">
                                         <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
                                     </v-btn>
                                 </template>
@@ -175,8 +157,9 @@
                         <div v-else class="message-list">
                             <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
                                 <!-- 用户消息 -->
-                                <div v-if="msg.type == 'user'" class="user-message" style="background-color: var(--v-theme-chatMessageBubble);">
-                                    <div class="message-bubble user-bubble">
+                                <div v-if="msg.type == 'user'" class="user-message">
+                                    <div class="message-bubble user-bubble"
+                                        :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
                                         <span>{{ msg.message }}</span>
 
                                         <!-- 图片附件 -->
@@ -212,34 +195,21 @@
 
                     <!-- 输入区域 -->
                     <div class="input-area fade-in">
-                        <v-text-field autocomplete="off" id="input-field" variant="outlined" v-model="prompt"
-                            :label="inputFieldLabel" :placeholder="tm('input.placeholder')" :loading="loadingChat"
-                            clear-icon="mdi-close-circle" clearable @click:clear="clearMessage" class="message-input"
-                            @keydown="handleInputKeyDown" hide-details>
-                            <template v-slot:loader>
-                                <v-progress-linear :active="loadingChat" height="3" color="deep-purple"
-                                    indeterminate></v-progress-linear>
-                            </template>
-
-                            <template v-slot:append>
-                                <v-tooltip :text="tm('input.send')">
-                                    <template v-slot:activator="{ props }">
-                                        <v-btn v-bind="props" @click="sendMessage" class="send-btn" icon="mdi-send"
-                                            variant="text" color="deep-purple"
-                                            :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl" />
-                                    </template>
-                                </v-tooltip>
-
-                                <v-tooltip :text="tm('input.voice')">
-                                    <template v-slot:activator="{ props }">
-                                        <v-btn v-bind="props" @click="isRecording ? stopRecording() : startRecording()"
-                                            class="record-btn"
-                                            :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
-                                            :color="isRecording ? 'error' : 'deep-purple'" />
-                                    </template>
-                                </v-tooltip>
-                            </template>
-                        </v-text-field>
+                        <div
+                            style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px; padding: 4px;">
+                            <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown"
+                                @click:clear="clearMessage" placeholder="Ask AstrBot..."
+                                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"
+                                :disabled="loadingChat"></textarea>
+                            <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                                <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
+                                    :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
+                                    class="send-btn" size="small" />
+                                <v-btn @click="isRecording ? stopRecording() : startRecording()"
+                                    :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
+                                    :color="isRecording ? 'error' : 'deep-purple'" class="record-btn" size="small" />
+                            </div>
+                        </div>
 
                         <!-- 附件预览区 -->
                         <div class="attachments-preview" v-if="stagedImagesUrl.length > 0 || stagedAudioUrl">
@@ -260,16 +230,17 @@
                         </div>
                     </div>
                 </div>
+
             </div>
         </v-card-text>
-    </v-card>    
+    </v-card>
     <!-- 编辑对话标题对话框 -->
     <v-dialog v-model="editTitleDialog" max-width="400">
         <v-card>
             <v-card-title class="dialog-title">{{ tm('actions.editTitle') }}</v-card-title>
             <v-card-text>
-                                    <v-text-field v-model="editingTitle" :label="tm('conversation.newConversation')" variant="outlined" hide-details class="mt-2"
-                    @keyup.enter="saveTitle" autofocus />
+                <v-text-field v-model="editingTitle" :label="tm('conversation.newConversation')" variant="outlined"
+                    hide-details class="mt-2" @keyup.enter="saveTitle" autofocus />
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
@@ -277,9 +248,9 @@
                 <v-btn text @click="saveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
             </v-card-actions>
         </v-card>
-    </v-dialog>    <!-- 连接冲突提示对话框 -->
+    </v-dialog> <!-- 连接冲突提示对话框 -->
     <v-dialog v-model="connectionConflictDialog" max-width="600" persistent>
-        <v-card class="rounded-lg">            
+        <v-card class="rounded-lg">
             <v-toolbar color="primary" density="comfortable" flat>
                 <v-icon color="white" class="ml-4 mr-2">mdi-information-outline</v-icon>
                 <v-toolbar-title class="text-white">{{ tm('connection.title') }}</v-toolbar-title>
@@ -293,13 +264,8 @@
                 <div class="text-body-1 mb-4">
                     {{ tm('connection.message') }}
                 </div>
-                
-                <v-alert 
-                    type="info" 
-                    variant="tonal" 
-                    class="mb-4"
-                    icon="mdi-lightbulb-outline"
-                >
+
+                <v-alert type="info" variant="tonal" class="mb-4" icon="mdi-lightbulb-outline">
                     <div class="text-body-2 mb-2">
                         <strong>{{ tm('connection.reasons') }}</strong>
                     </div>
@@ -310,12 +276,7 @@
                     </ul>
                 </v-alert>
 
-                <v-alert 
-                    type="warning" 
-                    variant="tonal" 
-                    icon="mdi-alert-circle-outline"
-                    class="mb-0"
-                >
+                <v-alert type="warning" variant="tonal" icon="mdi-alert-circle-outline" class="mb-0">
                     <div class="text-body-2">
                         {{ tm('connection.notice') }}
                     </div>
@@ -324,12 +285,7 @@
 
             <v-card-actions class="px-6 pb-4">
                 <v-spacer></v-spacer>
-                <v-btn 
-                    color="primary" 
-                    variant="elevated"
-                    @click="connectionConflictDialog = false"
-                    class="px-6"
-                >
+                <v-btn color="primary" variant="elevated" @click="connectionConflictDialog = false" class="px-6">
                     {{ tm('connection.understand') }}
                 </v-btn>
             </v-card-actions>
@@ -337,15 +293,10 @@
     </v-dialog>
 
     <!-- 连接状态消息提示 -->
-    <v-snackbar 
-        v-model="connectionStatusSnackbar" 
-        :color="connectionStatusColor" 
-        :timeout="4000"
-        location="top"
-    >
+    <v-snackbar v-model="connectionStatusSnackbar" :color="connectionStatusColor" :timeout="4000" location="top">
         <v-icon class="mr-2">
-            {{ connectionStatusColor === 'success' ? 'mdi-check-circle' : 
-               connectionStatusColor === 'warning' ? 'mdi-alert-circle' : 'mdi-information' }}
+            {{ connectionStatusColor === 'success' ? 'mdi-check-circle' :
+                connectionStatusColor === 'warning' ? 'mdi-alert-circle' : 'mdi-information' }}
         </v-icon>
         {{ connectionStatusMessage }}
     </v-snackbar>
@@ -374,10 +325,10 @@ export default {
             type: Boolean,
             default: false
         }
-    },    setup() {
+    }, setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/chat');
-        
+
         return {
             t,
             tm,
@@ -410,7 +361,7 @@ export default {
             eventSourceReader: null,
             sseReconnecting: false, // 添加重连状态标志
 
-            
+
             // // Ctrl键长按相关变量
             ctrlKeyDown: false,
             ctrlKeyTimer: null,
@@ -437,7 +388,7 @@ export default {
             connectionStatusColor: 'info',
         }
     },
-    
+
     computed: {
         isDark() {
             return useCustomizerStore().uiTheme === 'PurpleThemeDark';
@@ -455,13 +406,13 @@ export default {
             immediate: true,
             handler(to, from) {
                 console.log('Route changed:', to.path, 'from:', from?.path);                // 如果是从不同的路由模式切换（chat <-> chatbox），重新建立SSE连接
-                if (from && 
+                if (from &&
                     ((from.path.startsWith('/chat') && to.path.startsWith('/chatbox')) ||
-                     (from.path.startsWith('/chatbox') && to.path.startsWith('/chat')))) {
+                        (from.path.startsWith('/chatbox') && to.path.startsWith('/chat')))) {
                     console.log('Route mode changed, reconnecting SSE...');
                     this.reconnectSSE();
                 }
-                
+
                 // Check if the route matches /chat/<cid> or /chatbox/<cid> pattern
                 if (to.path.startsWith('/chat/') || to.path.startsWith('/chatbox/')) {
                     const pathCid = to.path.split('/')[2];
@@ -481,7 +432,7 @@ export default {
                 }
             }
         },
-        
+
         // Watch for conversations loaded to handle pending cid
         conversations: {
             handler(newConversations) {
@@ -527,7 +478,7 @@ export default {
 
     beforeUnmount() {
         this.disconnectSSE();
-        
+
         // 移除keyup事件监听
         document.removeEventListener('keyup', this.handleInputKeyUp);
 
@@ -538,7 +489,7 @@ export default {
 
         // Cleanup blob URLs
         this.cleanupMediaCache();
-    },    
+    },
     methods: {
         // 显示连接冲突对话框
         showConnectionConflictDialog() {
@@ -658,7 +609,7 @@ export default {
                 }
                 this.eventSourceReader = null;
             }
-            
+
             if (this.eventSource) {
                 try {
                     this.eventSource.cancel();
@@ -676,33 +627,33 @@ export default {
                 console.log('SSE reconnection already in progress');
                 return;
             }
-            
+
             this.sseReconnecting = true;
             console.log('Reconnecting SSE...');
             this.disconnectSSE();
-            
+
             // 等待更长时间确保后端连接完全清理
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             this.startListeningEvent();
         },
 
         async startListeningEvent() {
             // 确保之前的连接已断开
             this.disconnectSSE();
-            
+
             // 如果正在重连过程中，等待一下
             if (this.sseReconnecting) {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
-            
+
             let retryCount = 0;
             const maxRetries = 3;
-            
+
             while (retryCount < maxRetries) {
                 try {
                     console.log(`尝试建立SSE连接 (${retryCount + 1}/${maxRetries})`);
-                    
+
                     const response = await fetch('/api/chat/listen', {
                         method: 'GET',
                         headers: {
@@ -716,13 +667,13 @@ export default {
                     }
 
                     const reader = response.body.getReader();
-                    const decoder = new TextDecoder();                    
+                    const decoder = new TextDecoder();
                     this.eventSource = reader;
                     this.eventSourceReader = reader;
                     this.sseReconnecting = false;
 
                     let in_streaming = false;
-                    let message_obj = null;                    
+                    let message_obj = null;
                     console.log('SSE连接已建立');
                     // 显示连接成功状态
                     if (retryCount > 0) {
@@ -856,28 +807,28 @@ export default {
                             break;
                         }
                     }
-                    
+
                     // 如果成功连接并正常结束，跳出重试循环
                     break;
-                    
+
                 } catch (error) {
                     console.error(`SSE连接错误 (尝试 ${retryCount + 1}):`, error);
-                    
-                    retryCount++;                    
+
+                    retryCount++;
                     if (error.message === 'CONNECTION_CONFLICT' && retryCount < maxRetries) {
                         console.log(`连接冲突，等待 ${2000 * retryCount}ms 后重试...`);
                         this.showConnectionStatus(`${this.tm('connection.status.reconnecting')} (${retryCount}/${maxRetries})`, 'warning');
                         await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
                         continue;
                     }
-                    
+
                     if (retryCount >= maxRetries) {
                         console.error('SSE连接重试次数已达上限');
                         this.showConnectionStatus(this.tm('connection.status.failed'), 'error');
                         this.sseReconnecting = false;
                         break;
                     }
-                    
+
                     // 等待一段时间后重试
                     await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
                 } finally {
@@ -885,7 +836,7 @@ export default {
                     this.eventSourceReader = null;
                 }
             }
-            
+
             this.sseReconnecting = false;
         },
 
@@ -981,7 +932,7 @@ export default {
         getConversations() {
             axios.get('/api/chat/conversations').then(response => {
                 this.conversations = response.data.data;
-                
+
                 // If there's a pending conversation ID from the route
                 if (this.pendingCid) {
                     const conversation = this.conversations.find(c => c.cid === this.pendingCid);
@@ -1000,7 +951,7 @@ export default {
         getConversationMessages(cid) {
             if (!cid[0])
                 return;
-                
+
             // Update the URL to reflect the selected conversation
             if (this.$route.path !== `/chat/${cid[0]}` && this.$route.path !== `/chatbox/${cid[0]}`) {
                 if (this.$route.path.startsWith('/chatbox')) {
@@ -1010,7 +961,7 @@ export default {
                 }
             }
 
-                
+
             axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
                 this.currCid = cid[0];
                 let message = JSON.parse(response.data.data.history);
@@ -1098,9 +1049,9 @@ export default {
 
         // 检查是否可以发送消息
         canSendMessage() {
-            return (this.prompt && this.prompt.trim()) || 
-                   this.stagedImagesName.length > 0 || 
-                   this.stagedAudioUrl;
+            return (this.prompt && this.prompt.trim()) ||
+                this.stagedImagesName.length > 0 ||
+                this.stagedAudioUrl;
         },
 
         async sendMessage() {
@@ -1180,11 +1131,11 @@ export default {
                 const container = this.$refs.messageContainer;
                 container.scrollTop = container.scrollHeight;
             });
-        },        
+        },
         handleInputKeyDown(e) {
             if (e.ctrlKey && e.keyCode === 66) { // Ctrl+B组合键
                 e.preventDefault(); // 防止默认行为
-                
+
                 // 防止重复触发
                 if (this.ctrlKeyDown) return;
 
@@ -1197,7 +1148,7 @@ export default {
                     }
                 }, this.ctrlKeyLongPressThreshold);
             }
-        },        
+        },
         handleInputKeyUp(e) {
             if (e.keyCode === 66) { // B键释放
                 this.ctrlKeyDown = false;
@@ -1305,26 +1256,27 @@ export default {
     opacity: 0;
 }
 
-
-/* 聊天页面布局 */
 .chat-page-card {
-    margin-bottom: 16px;
     width: 100%;
-    height: 100%;
-    border-radius: 16px;
+    height: calc(100vh - 84px);
+    max-height: 100%;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+    overflow: hidden;
 }
 
 .chat-page-container {
     width: 100%;
     height: 100%;
-    max-height: calc(100vh - 120px);
+    max-height: 100%;
     padding: 0;
+    overflow: hidden;
 }
 
 .chat-layout {
     height: 100%;
+    max-height: 100%;
     display: flex;
+    overflow: hidden;
 }
 
 .sidebar-panel {
@@ -1334,29 +1286,11 @@ export default {
     flex-direction: column;
     padding: 0;
     border-right: 1px solid rgba(0, 0, 0, 0.05);
-    background-color: var(--v-theme-containerBg);
     height: 100%;
+    max-height: 100%;
     position: relative;
     transition: all 0.3s ease;
     overflow: hidden;
-    /* 防止内容溢出 */
-}
-
-.sidebar-panel ::-webkit-scrollbar {
-    width: 6px;
-}
-
-.sidebar-panel ::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.sidebar-panel ::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 3px;
-}
-
-.sidebar-panel ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(0, 0, 0, 0.3);
 }
 
 /* 侧边栏折叠状态 */
@@ -1439,7 +1373,7 @@ export default {
 .status-chips .v-chip {
     flex: 1 1 0;
     justify-content: center;
-    opacity: 0.7; /* Make border and text slightly transparent */
+    opacity: 0.7;
 }
 
 .status-chip {
@@ -1467,7 +1401,8 @@ export default {
 }
 
 .delete-btn-container {
-    /* margin-top: -8px; */ /* Removed for better layout practices */
+    /* margin-top: -8px; */
+    /* Removed for better layout practices */
 }
 
 .expand-enter-active,
@@ -1492,20 +1427,24 @@ export default {
     transition: opacity 0.25s ease;
 }
 
-/* 聊天内容区域 */
 .chat-content-panel {
     height: 100%;
+    max-height: 100%;
     width: 100%;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .messages-container {
-    height: calc(100% - 80px);
+    height: 100%;
+    max-height: 100%;
     overflow-y: auto;
     padding: 16px;
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 /* 欢迎页样式 */
@@ -1577,8 +1516,9 @@ export default {
 }
 
 .user-bubble {
-    background-color: var(--v-theme-chatMessageBubble);
     color: var(--v-theme-primaryText);
+    padding: 12px 16px;
+    font-size: 16px;
 }
 
 .bot-bubble {
@@ -1633,17 +1573,8 @@ export default {
     background-color: var(--v-theme-surface);
     position: relative;
     border-top: 1px solid var(--v-theme-border);
-}
-
-.message-input {
-    border-radius: 24px;
-    max-width: 900px;
-    margin: 0 auto;
-}
-
-.send-btn,
-.record-btn {
-    margin-left: 4px;
+    flex-shrink: 0;
+    /* 防止输入区域被压缩 */
 }
 
 /* 附件预览区 */
@@ -1797,38 +1728,7 @@ export default {
     border-bottom: 1px solid var(--v-theme-border);
     width: 100%;
     padding-right: 32px;
-}
-
-.conversation-header-content {
-    display: flex;
-    flex-direction: column;
-}
-
-.conversation-header-title {
-    font-size: 18px;
-    font-weight: 600;
-    margin: 0;
-    color: var(--v-theme-primaryText);
-}
-
-.conversation-header-time {
-    font-size: 12px;
-    color: var(--v-theme-secondaryText);
-    margin-top: 4px;
-}
-
-.conversation-header-actions {
-    display: flex;
-    align-items: center;
-}
-
-.fullscreen-icon {
-    opacity: 0.7;
-    transition: opacity 0.2s;
-    cursor: pointer;
-}
-
-.fullscreen-icon:hover {
-    opacity: 1;
+    flex-shrink: 0;
+    /* 防止header被压缩 */
 }
 </style>
