@@ -29,11 +29,10 @@ class RespondStage(Stage):
         Comp.Image: lambda comp: bool(comp.file),  # 图片
         Comp.Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
         Comp.Poke: lambda comp: comp.id != 0 and comp.qq != 0,  # 戳一戳
-        Comp.Node: lambda comp: bool(comp.name)
-        and comp.uin != 0
-        and bool(comp.content),  # 一个转发节点
+        Comp.Node: lambda comp: bool(comp.content),  # 转发节点
         Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
         Comp.File: lambda comp: bool(comp.file_ or comp.url),
+        Comp.WechatEmoji: lambda comp: comp.md5 is not None,  # 微信表情
     }
 
     async def initialize(self, ctx: PipelineContext):
@@ -129,9 +128,7 @@ class RespondStage(Stage):
                 "streaming_segmented", False
             )
             logger.info(f"应用流式输出({event.get_platform_name()})")
-            await event._pre_send()
             await event.send_streaming(result.async_stream, use_fallback)
-            await event._post_send()
             return
         elif len(result.chain) > 0:
             # 检查路径映射
@@ -141,8 +138,6 @@ class RespondStage(Stage):
                         # 支持 File 消息段的路径映射。
                         component.file = path_Mapping(mappings, component.file)
                         event.get_result().chain[idx] = component
-
-            await event._pre_send()
 
             # 检查消息链是否为空
             try:
@@ -154,9 +149,19 @@ class RespondStage(Stage):
             except Exception as e:
                 logger.warning(f"空内容检查异常: {e}")
 
-            if self.enable_seg and (
-                (self.only_llm_result and result.is_llm_result())
-                or not self.only_llm_result
+            record_comps = [c for c in result.chain if isinstance(c, Comp.Record)]
+            non_record_comps = [
+                c for c in result.chain if not isinstance(c, Comp.Record)
+            ]
+
+            if (
+                self.enable_seg
+                and (
+                    (self.only_llm_result and result.is_llm_result())
+                    or not self.only_llm_result
+                )
+                and event.get_platform_name()
+                not in ["qq_official", "weixin_official_account", "dingtalk"]
             ):
                 decorated_comps = []
                 if self.reply_with_mention:
@@ -171,22 +176,39 @@ class RespondStage(Stage):
                             decorated_comps.append(comp)
                             result.chain.remove(comp)
                             break
+
+                for rcomp in record_comps:
+                    i = await self._calc_comp_interval(rcomp)
+                    await asyncio.sleep(i)
+                    try:
+                        await event.send(MessageChain([rcomp]))
+                    except Exception as e:
+                        logger.error(f"发送消息失败: {e} chain: {result.chain}")
+                        break
+
                 # 分段回复
-                for comp in result.chain:
+                for comp in non_record_comps:
                     i = await self._calc_comp_interval(comp)
                     await asyncio.sleep(i)
                     try:
                         await event.send(MessageChain([*decorated_comps, comp]))
+                        decorated_comps = []  # 清空已发送的装饰组件
                     except Exception as e:
                         logger.error(f"发送消息失败: {e} chain: {result.chain}")
                         break
             else:
+                for rcomp in record_comps:
+                    try:
+                        await event.send(MessageChain([rcomp]))
+                    except Exception as e:
+                        logger.error(f"发送消息失败: {e} chain: {result.chain}")
+
                 try:
-                    await event.send(result)
+                    await event.send(MessageChain(non_record_comps))
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"发送消息失败: {e} chain: {result.chain}")
-            await event._post_send()
+
             logger.info(
                 f"AstrBot -> {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}"
             )

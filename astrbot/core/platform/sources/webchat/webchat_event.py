@@ -35,6 +35,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "cid": cid,
                         "data": data,
                         "streaming": streaming,
+                        "chain_type": message.type,
                     }
                 )
             elif isinstance(comp, Image):
@@ -110,6 +111,18 @@ class WebChatMessageEvent(AstrMessageEvent):
     async def send_streaming(self, generator, use_fallback: bool = False):
         final_data = ""
         async for chain in generator:
+            if chain.type == "break" and final_data:
+                # 分割符
+                await web_chat_back_queue.put(
+                    {
+                        "type": "end",
+                        "data": final_data,
+                        "streaming": True,
+                        "cid": self.session_id.split("!")[-1],
+                    }
+                )
+                final_data = ""
+                continue
             final_data += await WebChatMessageEvent._send(
                 chain, session_id=self.session_id, streaming=True
             )

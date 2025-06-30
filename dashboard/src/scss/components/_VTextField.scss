@@ -10,6 +10,69 @@
 .v-field__outline {
   color: rgb(var(--v-theme-inputBorder));
 }
+
+// 亮色主题样式
+.v-theme--PurpleTheme .v-text-field .v-field__outline {
+  --v-field-border-width: 2px !important;
+  --v-field-border-opacity: 1 !important;
+  color: rgba(149, 117, 205, 0.6) !important;
+  border-color: rgba(149, 117, 205, 0.6) !important;
+}
+
+.v-theme--PurpleTheme .v-text-field:hover .v-field__outline {
+  --v-field-border-width: 2px !important;
+  --v-field-border-opacity: 1 !important;
+  color: rgba(149, 117, 205, 0.6) !important;
+  border-color: rgba(149, 117, 205, 0.6) !important;
+}
+
+.v-theme--PurpleTheme .v-text-field .v-field--focused .v-field__outline {
+  --v-field-border-width: 2.5px !important;
+  --v-field-border-opacity: 1 !important;
+  color: rgba(149, 117, 205, 0.8) !important;
+  border-color: rgba(149, 117, 205, 0.8) !important;
+}
+
+// 深色主题样式
+.v-theme--PurpleThemeDark .v-text-field .v-field {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.v-theme--PurpleThemeDark .v-text-field .v-field__outline {
+  --v-field-border-width: 2px !important;
+  --v-field-border-opacity: 1 !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.v-theme--PurpleThemeDark .v-text-field:hover .v-field__outline {
+  --v-field-border-width: 2px !important;
+  --v-field-border-opacity: 1 !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.v-theme--PurpleThemeDark .v-text-field .v-field--focused .v-field__outline {
+  --v-field-border-width: 2.5px !important;
+  --v-field-border-opacity: 1 !important;
+  color: rgb(129, 102, 176) !important;
+  border-color: rgb(126, 99, 171) !important;
+}
+
+.v-theme--PurpleThemeDark .v-text-field input {
+  color: #ffffff !important;
+  font-weight: 500;
+}
+
+.v-theme--PurpleThemeDark .v-text-field .v-field__label {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.v-theme--PurpleThemeDark .v-text-field .v-field__prepend-inner .v-icon,
+.v-theme--PurpleThemeDark .v-text-field .v-field__append-inner .v-icon {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
 .inputWithbg {
   .v-field--variant-outlined {
     background-color: rgba(0, 0, 0, 0.025);

@@ -120,6 +120,30 @@ class WecomPlatformEvent(AstrMessageEvent):
                             self.get_self_id(),
                             response["media_id"],
                         )
+                elif isinstance(comp, Record):
+                    record_path = await comp.convert_to_file_path()
+                    # 转成amr
+                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                    record_path_amr = os.path.join(temp_dir, f"{uuid.uuid4()}.amr")
+                    pydub.AudioSegment.from_wav(record_path).export(
+                        record_path_amr, format="amr"
+                    )
+
+                    with open(record_path_amr, "rb") as f:
+                        try:
+                            response = self.client.media.upload("voice", f)
+                        except Exception as e:
+                            logger.error(f"微信客服上传语音失败: {e}")
+                            await self.send(
+                                MessageChain().message(f"微信客服上传语音失败: {e}")
+                            )
+                            return
+                        logger.info(f"微信客服上传语音返回: {response}")
+                        kf_message_api.send_voice(
+                            user_id,
+                            self.get_self_id(),
+                            response["media_id"],
+                        )
                 else:
                     logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
         else:

@@ -5,7 +5,7 @@ import { useCommonStore } from '@/stores/common';
 <template>
   <div>
     <!-- 添加筛选级别控件 -->
-    <div class="filter-controls mb-2">
+    <div class="filter-controls mb-2" v-if="showLevelBtns">
       <v-chip-group v-model="selectedLevels" column multiple>
         <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter
           :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'">
@@ -51,7 +51,11 @@ export default {
   props: {
     historyNum: {
       type: String,
-      default: -1
+      default: "-1"
+    },
+    showLevelBtns: {
+      type: Boolean,
+      default: true
     }
   },
   watch: {

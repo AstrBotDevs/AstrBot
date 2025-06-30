@@ -26,6 +26,7 @@ class ChatRoute(Route):
             "/chat/conversations": ("GET", self.get_conversations),
             "/chat/get_conversation": ("GET", self.get_conversation),
             "/chat/delete_conversation": ("GET", self.delete_conversation),
+            "/chat/rename_conversation": ("POST", self.rename_conversation),
             "/chat/get_file": ("GET", self.get_file),
             "/chat/post_image": ("POST", self.post_image),
             "/chat/post_file": ("POST", self.post_file),
@@ -61,16 +62,25 @@ class ChatRoute(Route):
             return Response().error("Missing key: filename").__dict__
 
         try:
-            with open(os.path.join(self.imgs_dir, filename), "rb") as f:
-                if filename.endswith(".wav"):
+            file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
+            real_file_path = os.path.realpath(file_path)
+            real_imgs_dir = os.path.realpath(self.imgs_dir)
+
+            if not real_file_path.startswith(real_imgs_dir):
+                return Response().error("Invalid file path").__dict__
+
+            with open(real_file_path, "rb") as f:
+                filename_ext = os.path.splitext(filename)[1].lower()
+
+                if filename_ext == ".wav":
                     return QuartResponse(f.read(), mimetype="audio/wav")
-                elif filename.split(".")[-1] in self.supported_imgs:
+                elif filename_ext[1:] in self.supported_imgs:
                     return QuartResponse(f.read(), mimetype="image/jpeg")
                 else:
                     return QuartResponse(f.read())
 
-        except FileNotFoundError:
-            return Response().error("File not found").__dict__
+        except (FileNotFoundError, OSError):
+            return Response().error("File access error").__dict__
 
     async def post_image(self):
         post_data = await request.files
@@ -91,7 +101,6 @@ class ChatRoute(Route):
 
         file = post_data["file"]
         filename = f"{str(uuid.uuid4())}"
-        print(file)
         # 通过文件格式判断文件类型
         if file.content_type.startswith("audio"):
             filename += ".wav"
@@ -143,7 +152,7 @@ class ChatRoute(Route):
         try:
             history = json.loads(conversation.history)
         except BaseException as e:
-            print(e)
+            logger.error(f"Failed to parse conversation history: {e}")
             history = []
         new_his = {"type": "user", "message": message}
         if image_url:
@@ -197,6 +206,9 @@ class ChatRoute(Route):
                     if streaming and type != "end":
                         continue
 
+                    if type == "update_title":
+                        continue
+
                     if result_text:
                         conversation = self.db.get_conversation_by_user_id(
                             username, cid
@@ -204,7 +216,7 @@ class ChatRoute(Route):
                         try:
                             history = json.loads(conversation.history)
                         except BaseException as e:
-                            print(e)
+                            logger.error(f"Failed to parse conversation history: {e}")
                             history = []
                         history.append({"type": "bot", "message": result_text})
                         self.db.update_conversation(
@@ -241,6 +253,18 @@ class ChatRoute(Route):
         conversation_id = str(uuid.uuid4())
         self.db.new_conversation(username, conversation_id)
         return Response().ok(data={"conversation_id": conversation_id}).__dict__
+
+    async def rename_conversation(self):
+        username = g.get("username", "guest")
+        post_data = await request.json
+        if "conversation_id" not in post_data or "title" not in post_data:
+            return Response().error("Missing key: conversation_id or title").__dict__
+
+        conversation_id = post_data["conversation_id"]
+        title = post_data["title"]
+
+        self.db.update_conversation_title(username, conversation_id, title=title)
+        return Response().ok(message="重命名成功！").__dict__
 
     async def get_conversations(self):
         username = g.get("username", "guest")

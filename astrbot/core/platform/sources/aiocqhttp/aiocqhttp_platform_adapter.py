@@ -103,6 +103,9 @@ class AiocqhttpAdapter(Platform):
 
         if event["post_type"] == "message":
             abm = await self._convert_handle_message_event(event)
+            if abm.sender.user_id == "2854196310":
+                # 屏蔽 QQ 管家的消息
+                return
         elif event["post_type"] == "notice":
             abm = await self._convert_handle_notice_event(event)
         elif event["post_type"] == "request":
@@ -165,9 +168,7 @@ class AiocqhttpAdapter(Platform):
 
         if "sub_type" in event:
             if event["sub_type"] == "poke" and "target_id" in event:
-                abm.message.append(
-                    Poke(qq=str(event["target_id"]), type="poke")
-                )  # noqa: F405
+                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))  # noqa: F405
 
         return abm
 
@@ -218,6 +219,9 @@ class AiocqhttpAdapter(Platform):
             a = None
             if t == "text":
                 current_text = "".join(m["data"]["text"] for m in m_group).strip()
+                if not current_text:
+                    # 如果文本段为空，则跳过
+                    continue
                 message_str += current_text
                 a = ComponentTypes[t](text=current_text)  # noqa: F405
                 abm.message.append(a)
@@ -267,6 +271,8 @@ class AiocqhttpAdapter(Platform):
                                 action="get_msg",
                                 message_id=int(m["data"]["id"]),
                             )
+                            # 添加必要的 post_type 字段，防止 Event.from_payload 报错
+                            reply_event_data["post_type"] = "message"
                             abm_reply = await self._convert_handle_message_event(
                                 Event.from_payload(reply_event_data), get_reply=False
                             )
@@ -301,7 +307,7 @@ class AiocqhttpAdapter(Platform):
                             user_id=int(m["data"]["qq"]),
                         )
                         if at_info:
-                            nickname = at_info.get("nick", "")
+                            nickname = at_info.get("nick", "") or at_info.get("nickname", "")
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
 
                             abm.message.append(
@@ -316,7 +322,7 @@ class AiocqhttpAdapter(Platform):
                                 first_at_self_processed = True
                             else:
                                 # 非第一个@机器人或@其他用户，添加到message_str
-                                message_str += f" @{nickname} "
+                                message_str += f" @{nickname}({m['data']['qq']}) "
                         else:
                             abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
                     except ActionFailed as e:

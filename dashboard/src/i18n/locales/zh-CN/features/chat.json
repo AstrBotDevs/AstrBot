@@ -1,0 +1,75 @@
+{
+  "title": "聊天吧!",
+  "subtitle": "与AI助手进行对话",
+  "input": {
+    "placeholder": "开始输入...",
+    "send": "发送",
+    "clear": "清空",
+    "upload": "上传文件",
+    "voice": "语音输入",
+    "recordingPrompt": "录音中，请说话...",
+    "chatPrompt": "聊天吧!"
+  },
+  "message": {
+    "user": "用户",
+    "assistant": "助手",
+    "system": "系统",
+    "error": "错误消息",
+    "loading": "思考中..."
+  },
+  "voice": {
+    "start": "开始录音",
+    "stop": "停止录音",
+    "recording": "新录音",
+    "processing": "处理中...",
+    "error": "录音失败"
+  },
+  "welcome": {
+    "title": "欢迎使用 AstrBot",
+    "subtitle": "您的智能对话助手",
+    "quickActions": "快速操作",
+    "examples": "示例问题"
+  },
+  "actions": {
+    "copy": "复制",
+    "regenerate": "重新生成",
+    "like": "点赞",
+    "dislike": "踩",
+    "share": "分享",
+    "newChat": "创建对话",
+    "deleteChat": "删除此对话",
+    "editTitle": "编辑标题",
+    "fullscreen": "全屏模式",
+    "exitFullscreen": "退出全屏"
+  },
+  "conversation": {
+    "newConversation": "新对话",
+    "noHistory": "暂无对话历史",
+    "systemStatus": "系统状态",
+    "llmService": "LLM 服务",
+    "speechToText": "语音转文本"
+  },
+  "modes": {
+    "darkMode": "切换到夜间模式",
+    "lightMode": "切换到日间模式"
+  },  "shortcuts": {
+    "help": "获取帮助",
+    "voiceRecord": "录制语音",
+    "pasteImage": "粘贴图片"
+  },
+  "connection": {
+    "title": "连接状态提醒",
+    "message": "系统检测到聊天连接需要重新建立。",
+    "reasons": "这可能是因为：",
+    "reasonWindowResize": "切换了聊天窗口大小（正常现象）",
+    "reasonMultipleTabs": "在其他标签页中打开了聊天页面",
+    "reasonNetworkIssue": "网络连接临时中断",
+    "notice": "注意：为了确保消息正确接收，系统只允许同时保持一个聊天连接。如果您在多个标签页中使用聊天功能，建议只保留一个页面。",
+    "understand": "我知道了",
+    "status": {
+      "reconnecting": "正在重新连接...",
+      "reconnected": "聊天连接已重新建立",
+      "failed": "连接失败，请刷新页面重试"
+    }
+  }
+} 

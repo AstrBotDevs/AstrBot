@@ -8,6 +8,12 @@ from .custom_filter import CustomFilter
 from ..star_handler import StarHandlerMetadata
 
 
+class GreedyStr(str):
+    """标记指令完成其他参数接收后的所有剩余文本。"""
+
+    pass
+
+
 # 标准指令受到 wake_prefix 的制约。
 class CommandFilter(HandlerFilter):
     """标准指令过滤器"""
@@ -15,8 +21,8 @@ class CommandFilter(HandlerFilter):
     def __init__(
         self,
         command_name: str,
-        alias: set = None,
-        handler_md: StarHandlerMetadata = None,
+        alias: set | None = None,
+        handler_md: StarHandlerMetadata | None = None,
         parent_command_names: List[str] = [""],
     ):
         self.command_name = command_name
@@ -68,7 +74,22 @@ class CommandFilter(HandlerFilter):
     ) -> Dict[str, Any]:
         """将参数列表 params 根据 param_type 转换为参数字典。"""
         result = {}
-        for i, (param_name, param_type_or_default_val) in enumerate(param_type.items()):
+        param_items = list(param_type.items())
+        for i, (param_name, param_type_or_default_val) in enumerate(param_items):
+            is_greedy = param_type_or_default_val is GreedyStr
+
+            if is_greedy:
+                # GreedyStr 必须是最后一个参数
+                if i != len(param_items) - 1:
+                    raise ValueError(
+                        f"参数 '{param_name}' (GreedyStr) 必须是最后一个参数。"
+                    )
+
+                # 将剩余的所有部分合并成一个字符串
+                remaining_params = params[i:]
+                result[param_name] = " ".join(remaining_params)
+                break
+            # 没有 GreedyStr 的情况
             if i >= len(params):
                 if (
                     isinstance(param_type_or_default_val, Type)
@@ -92,6 +113,17 @@ class CommandFilter(HandlerFilter):
                     elif isinstance(param_type_or_default_val, str):
                         # 如果 param_type_or_default_val 是字符串，直接赋值
                         result[param_name] = params[i]
+                    elif isinstance(param_type_or_default_val, bool):
+                        # 处理布尔类型
+                        lower_param = str(params[i]).lower()
+                        if lower_param in ["true", "yes", "1"]:
+                            result[param_name] = True
+                        elif lower_param in ["false", "no", "0"]:
+                            result[param_name] = False
+                        else:
+                            raise ValueError(
+                                f"参数 {param_name} 必须是布尔值（true/false, yes/no, 1/0）。"
+                            )
                     elif isinstance(param_type_or_default_val, int):
                         result[param_name] = int(params[i])
                     elif isinstance(param_type_or_default_val, float):

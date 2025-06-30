@@ -20,7 +20,7 @@ from requests import Response
 from wechatpy.utils import check_signature
 from wechatpy.crypto import WeChatCrypto
 from wechatpy import WeChatClient
-from wechatpy.messages import TextMessage, ImageMessage, VoiceMessage
+from wechatpy.messages import TextMessage, ImageMessage, VoiceMessage, BaseMessage
 from wechatpy.exceptions import InvalidSignatureException
 from wechatpy import parse_message
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
@@ -87,7 +87,11 @@ class WecomServer:
             logger.info(f"解析成功: {msg}")
 
             if self.callback:
-                await self.callback(msg)
+                result_xml = await self.callback(msg)
+                if not result_xml:
+                    return "success"
+                if isinstance(result_xml, str):
+                    return result_xml
 
         return "success"
 
@@ -117,6 +121,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         self.api_base_url = platform_config.get(
             "api_base_url", "https://api.weixin.qq.com/cgi-bin/"
         )
+        self.active_send_mode = self.config.get("active_send_mode", False)
 
         if not self.api_base_url:
             self.api_base_url = "https://api.weixin.qq.com/cgi-bin/"
@@ -138,9 +143,29 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
 
         self.client.API_BASE_URL = self.api_base_url
 
-        async def callback(msg):
+        # 微信公众号必须 5 秒内进行回复，否则会重试 3 次，我们需要对其进行消息排重
+        # msgid -> Future
+        self.wexin_event_workers: dict[str, asyncio.Future] = {}
+
+        async def callback(msg: BaseMessage):
             try:
-                await self.convert_message(msg)
+                if self.active_send_mode:
+                    await self.convert_message(msg, None)
+                else:
+                    if msg.id in self.wexin_event_workers:
+                        future = self.wexin_event_workers[msg.id]
+                        logger.debug(f"duplicate message id checked: {msg.id}")
+                    else:
+                        future = asyncio.get_event_loop().create_future()
+                        self.wexin_event_workers[msg.id] = future
+                        await self.convert_message(msg, future)
+                    # I love shield so much!
+                    result = await asyncio.wait_for(asyncio.shield(future), 60)  # wait for 60s
+                    logger.debug(f"Got future result: {result}")
+                    self.wexin_event_workers.pop(msg.id, None)
+                    return result  # xml. see weixin_offacc_event.py
+            except asyncio.TimeoutError:
+                pass
             except Exception as e:
                 logger.error(f"转换消息时出现异常: {e}")
 
@@ -163,7 +188,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
     async def run(self):
         await self.server.start_polling()
 
-    async def convert_message(self, msg) -> AstrBotMessage | None:
+    async def convert_message(
+        self, msg, future: asyncio.Future = None
+    ) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
             abm.message_str = msg.content
@@ -177,7 +204,6 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             abm.message_id = msg.id
             abm.timestamp = msg.time
             abm.session_id = abm.sender.user_id
-            abm.raw_message = msg
         elif msg.type == "image":
             assert isinstance(msg, ImageMessage)
             abm.message_str = "[图片]"
@@ -191,7 +217,6 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             abm.message_id = msg.id
             abm.timestamp = msg.time
             abm.session_id = abm.sender.user_id
-            abm.raw_message = msg
         elif msg.type == "voice":
             assert isinstance(msg, VoiceMessage)
 
@@ -209,7 +234,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 audio = AudioSegment.from_file(path)
                 audio.export(path_wav, format="wav")
             except Exception as e:
-                logger.error(f"转换音频失败: {e}。如果没有安装 pydub 和 ffmpeg 请先安装。")
+                logger.error(
+                    f"转换音频失败: {e}。如果没有安装 pydub 和 ffmpeg 请先安装。"
+                )
                 path_wav = path
                 return
 
@@ -224,11 +251,16 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             abm.message_id = msg.id
             abm.timestamp = msg.time
             abm.session_id = abm.sender.user_id
-            abm.raw_message = msg
         else:
             logger.warning(f"暂未实现的事件: {msg.type}")
+            future.set_result(None)
             return
-
+        # 很不优雅 :(
+        abm.raw_message = {
+            "message": msg,
+            "future": future,
+            "active_send_mode": self.active_send_mode,
+        }
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
 

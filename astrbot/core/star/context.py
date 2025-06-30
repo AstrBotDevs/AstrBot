@@ -3,6 +3,7 @@ from typing import List, Union
 
 from astrbot.core import sp
 from astrbot.core.provider.provider import Provider, TTSProvider, STTProvider
+from astrbot.core.provider.entities import ProviderType
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.provider.func_tool_manager import FuncCall
@@ -16,7 +17,6 @@ from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
 from typing import Awaitable
-from astrbot.core.rag.knowledge_db_mgr import KnowledgeDBManager
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
@@ -42,6 +42,8 @@ class Context:
 
     platform_manager: PlatformManager = None
 
+    registered_web_apis: list = []
+
     # back compatibility
     _register_tasks: List[Awaitable] = []
     _star_manager = None
@@ -54,14 +56,12 @@ class Context:
         provider_manager: ProviderManager = None,
         platform_manager: PlatformManager = None,
         conversation_manager: ConversationManager = None,
-        knowledge_db_manager: KnowledgeDBManager = None,
     ):
         self._event_queue = event_queue
         self._config = config
         self._db = db
         self.provider_manager = provider_manager
         self.platform_manager = platform_manager
-        self.knowledge_db_manager = knowledge_db_manager
         self.conversation_manager = conversation_manager
 
     def get_registered_star(self, star_name: str) -> StarMetadata:
@@ -126,11 +126,8 @@ class Context:
         self.provider_manager.provider_insts.append(provider)
 
     def get_provider_by_id(self, provider_id: str) -> Provider:
-        """通过 ID 获取用于文本生成任务的 LLM Provider(Chat_Completion 类型)。"""
-        for provider in self.provider_manager.provider_insts:
-            if provider.meta().id == provider_id:
-                return provider
-        return None
+        """通过 ID 获取对应的 LLM Provider(Chat_Completion 类型)。"""
+        return self.provider_manager.inst_map.get(provider_id)
 
     def get_all_providers(self) -> List[Provider]:
         """获取所有用于文本生成任务的 LLM Provider(Chat_Completion 类型)。"""
@@ -144,24 +141,46 @@ class Context:
         """获取所有用于 STT 任务的 Provider。"""
         return self.provider_manager.stt_provider_insts
 
-    def get_using_provider(self) -> Provider:
+    def get_using_provider(self, umo: str = None) -> Provider:
         """
-        获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。
+        获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。通过 /provider 指令切换。
 
-        通过 /provider 指令切换。
+        Args:
+            umo(str): unified_message_origin 值，如果传入并且用户启用了提供商会话隔离，则使用该会话偏好的提供商。
         """
+        if umo and self._config["provider_settings"]["separate_provider"]:
+            perf = sp.get("session_provider_perf", {})
+            prov_id = perf.get(umo, {}).get(ProviderType.CHAT_COMPLETION.value, None)
+            if inst := self.provider_manager.inst_map.get(prov_id, None):
+                return inst
         return self.provider_manager.curr_provider_inst
 
-    def get_using_tts_provider(self) -> TTSProvider:
+    def get_using_tts_provider(self, umo: str = None) -> TTSProvider:
         """
         获取当前使用的用于 TTS 任务的 Provider。
+
+        Args:
+            umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
+        if umo and self._config["provider_settings"]["separate_provider"]:
+            perf = sp.get("session_provider_perf", {})
+            prov_id = perf.get(umo, {}).get(ProviderType.TEXT_TO_SPEECH.value, None)
+            if inst := self.provider_manager.inst_map.get(prov_id, None):
+                return inst
         return self.provider_manager.curr_tts_provider_inst
 
-    def get_using_stt_provider(self) -> STTProvider:
+    def get_using_stt_provider(self, umo: str = None) -> STTProvider:
         """
         获取当前使用的用于 STT 任务的 Provider。
+
+        Args:
+            umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
+        if umo and self._config["provider_settings"]["separate_provider"]:
+            perf = sp.get("session_provider_perf", {})
+            prov_id = perf.get(umo, {}).get(ProviderType.SPEECH_TO_TEXT.value, None)
+            if inst := self.provider_manager.inst_map.get(prov_id, None):
+                return inst
         return self.provider_manager.curr_stt_provider_inst
 
     def get_config(self) -> AstrBotConfig:
@@ -301,3 +320,12 @@ class Context:
         注册一个异步任务。
         """
         self._register_tasks.append(task)
+
+    def register_web_api(
+        self, route: str, view_handler: Awaitable, methods: list, desc: str
+    ):
+        for idx, api in enumerate(self.registered_web_apis):
+            if api[0] == route and methods == api[2]:
+                self.registered_web_apis[idx] = (route, view_handler, methods, desc)
+                return
+        self.registered_web_apis.append((route, view_handler, methods, desc))

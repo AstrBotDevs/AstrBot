@@ -1,6 +1,6 @@
 <p align="center">
-
-![yjtp](https://github.com/user-attachments/assets/dcc74009-c57e-4b66-9ae3-0a81fc001255)
+ 
+![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
 
 </p>
 
@@ -31,13 +31,21 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 <!-- [![codecov](https://img.shields.io/codecov/c/github/soulter/astrbot?style=for-the-badge)](https://codecov.io/gh/Soulter/AstrBot)
  -->
 
-> [!NOTE]
+> [!WARNING]
 > 
-> 个人微信接入所依赖的开源项目 Gewechat 近期已停止维护，我们正在评估其他方案（如 xxxbot 等）并将在数日内接入（很快！）。目前推荐微信用户暂时使用**微信官方**推出的企业微信接入方式和微信客服接入方式(版本 >= v3.5.7)。详情请前往 [#1443](https://github.com/AstrBotDevs/AstrBot/issues/1443) 讨论。
+> 请务必修改默认密码以及保证 AstrBot 版本 >= 3.5.13。
 
 ## ✨ 近期更新
 
-1. AstrBot 现已支持接入 [MCP](https://modelcontextprotocol.io/) 服务器！
+<details><summary>1. AstrBot 现已自带知识库能力</summary>
+
+ 📚 详见[文档](https://astrbot.app/use/knowledge-base.html)
+
+ ![image](https://github.com/user-attachments/assets/28b639b0-bb5c-4958-8e94-92ae8cfd1ab4)
+
+</details>
+
+2. AstrBot 现已支持接入 [MCP](https://modelcontextprotocol.io/) 服务器！
 
 ## ✨ 主要功能
 
@@ -45,7 +53,7 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 > 🪧 我们正基于前沿科研成果，设计并实现适用于角色扮演和情感陪伴的长短期记忆模型及情绪控制模型，旨在提升对话的真实性与情感表达能力。敬请期待 `v3.6.0` 版本！
 
 1. **大语言模型对话**。支持各种大语言模型，包括 OpenAI API、Google Gemini、Llama、Deepseek、ChatGLM 等，支持接入本地部署的大模型，通过 Ollama、LLMTuner。具有多轮对话、人格情境、多模态能力，支持图片理解、语音转文字（Whisper）。
-2. **多消息平台接入**。支持接入 QQ（OneBot）、QQ 频道、微信（Gewechat）、飞书、Telegram。后续将支持钉钉、Discord、WhatsApp、小爱音响。支持速率限制、白名单、关键词过滤、百度内容审核。
+2. **多消息平台接入**。支持接入 QQ（OneBot、QQ 官方机器人平台）、QQ 频道、微信、企业微信、微信公众号、飞书、Telegram、钉钉、Discord、KOOK、VoceChat。支持速率限制、白名单、关键词过滤、百度内容审核。
 3. **Agent**。原生支持部分 Agent 能力，如代码执行器、自然语言待办、网页搜索。对接 [Dify 平台](https://dify.ai/)，便捷接入 Dify 智能助手、知识库和 Dify 工作流。
 4. **插件扩展**。深度优化的插件机制，支持[开发插件](https://astrbot.app/dev/plugin.html)扩展功能，极简开发。已支持安装多个插件。
 5. **可视化管理面板**。支持可视化修改配置、插件管理、日志查看等功能，降低配置难度。集成 WebChat，可在面板上与大模型对话。
@@ -109,20 +117,24 @@ uvx astrbot init
 
 ## ⚡ 消息平台支持情况
 
-| 平台    | 支持性 | 详情 | 消息类型 |
-| -------- | ------- | ------- | ------ |
-| QQ(官方机器人接口) | ✔    | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片 |
-| QQ(OneBot)      | ✔    | 私聊、群聊 | 文字、图片、语音 |
-| 微信个人号    | ✔    | 微信个人号私聊、群聊 | 文字、图片、语音 |
-| Telegram   | ✔    | 私聊、群聊 | 文字、图片 |
-| 企业微信    | ✔    | 私聊 | 文字、图片、语音 |
-| 微信客服    | ✔    | 私聊 | 文字、图片 |
-| 飞书   | ✔    | 私聊、群聊 | 文字、图片 |
-| 钉钉   | ✔    | 私聊、群聊 | 文字、图片 |
-| 微信对话开放平台 | 🚧    | 计划内 | - |
-| Discord   | 🚧    | 计划内 | - |
-| WhatsApp   | 🚧    | 计划内 | - |
-| 小爱音响   | 🚧    | 计划内 | - |
+| 平台    | 支持性 |
+| -------- | ------- |
+| QQ(官方机器人接口) | ✔    |
+| QQ(OneBot)      | ✔    |
+| 微信个人号    | ✔    |
+| Telegram   | ✔    |
+| 企业微信    | ✔    |
+| 微信客服    | ✔    |
+| 微信公众号    | ✔    |
+| 飞书   | ✔    |
+| 钉钉   | ✔    |
+| Slack   | ✔    |
+| Discord   | ✔    |
+| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
+| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
+| 微信对话开放平台 | 🚧    |
+| WhatsApp   | 🚧    |
+| 小爱音响   | 🚧    |
 
 ## ⚡ 提供商支持情况
 
@@ -143,6 +155,7 @@ uvx astrbot init
 | SenseVoice | ✔    | 语音转文本 | 本地部署 |
 | OpenAI TTS API | ✔    | 文本转语音 |  |
 | GSVI | ✔    | 文本转语音 | GPT-Sovits-Inference |
+| GPT-SoVITs | ✔    | 文本转语音 | GPT-Sovits-Inference |
 | FishAudio | ✔    | 文本转语音 | GPT-Sovits 作者参与的项目 |
 | Edge TTS | ✔    | 文本转语音 | Edge 浏览器的免费 TTS |
 | 阿里云百炼 TTS | ✔    | 文本转语音 |  |
@@ -171,7 +184,6 @@ pre-commit install
 
 - Star 这个项目！
 - 在[爱发电](https://afdian.com/a/soulter)支持我！
-- 在[微信](https://drive.soulter.top/f/pYfA/d903f4fa49a496fda3f16d2be9e023b5.png)支持我~
 
 ## ✨ Demo
 
@@ -211,7 +223,7 @@ _✨ WebUI ✨_
 
 此外，本项目的诞生离不开以下开源项目：
 
-- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ)
+- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 伟大的猫猫框架
 - [wechatpy/wechatpy](https://github.com/wechatpy/wechatpy)
 
 ## ⭐ Star History
@@ -224,6 +236,9 @@ _✨ WebUI ✨_
 [![Star History Chart](https://api.star-history.com/svg?repos=soulter/astrbot&type=Date)](https://star-history.com/#soulter/astrbot&Date)
 
 </div>
+
+![10k-star-banner-credit-by-kevin](https://github.com/user-attachments/assets/c97fc5fb-20b9-4bc8-9998-c20b930ab097)
+
 
 ## Disclaimer
 

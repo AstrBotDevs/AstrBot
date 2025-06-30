@@ -303,6 +303,7 @@ class WecomPlatformAdapter(Platform):
         abm.session_id = external_userid
         abm.type = MessageType.FRIEND_MESSAGE
         abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])
+        abm.message_str = ""
         if msgtype == "text":
             text = msg.get("text", {}).get("content", "").strip()
             abm.message = [Plain(text=text)]
@@ -316,7 +317,29 @@ class WecomPlatformAdapter(Platform):
             with open(path, "wb") as f:
                 f.write(resp.content)
             abm.message = [Image(file=path, url=path)]
-            abm.message_str = "[图片]"
+        elif msgtype == "voice":
+            media_id = msg.get("voice", {}).get("media_id", "")
+            resp: Response = await asyncio.get_event_loop().run_in_executor(
+                None, self.client.media.download, media_id
+            )
+
+            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            path = os.path.join(temp_dir, f"weixinkefu_{media_id}.amr")
+            with open(path, "wb") as f:
+                f.write(resp.content)
+
+            try:
+                from pydub import AudioSegment
+
+                path_wav = os.path.join(temp_dir, f"weixinkefu_{media_id}.wav")
+                audio = AudioSegment.from_file(path)
+                audio.export(path_wav, format="wav")
+            except Exception as e:
+                logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
+                path_wav = path
+                return
+
+            abm.message = [Record(file=path_wav, url=path_wav)]
         else:
             logger.warning(f"未实现的微信客服消息事件: {msg}")
             return

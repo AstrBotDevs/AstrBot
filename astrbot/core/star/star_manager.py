@@ -37,6 +37,12 @@ except ImportError:
     if os.getenv("ASTRBOT_RELOAD", "0") == "1":
         logger.warning("未安装 watchfiles，无法实现插件的热重载。")
 
+try:
+    import nh3
+except ImportError:
+    logger.warning("未安装 nh3 库，无法清理插件 README.md 中的 HTML 标签。")
+    nh3 = None
+
 
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -140,11 +146,13 @@ class PluginManager:
                 if os.path.exists(os.path.join(path, d, "main.py")) or os.path.exists(
                     os.path.join(path, d, d + ".py")
                 ):
-                    modules.append({
-                        "pname": d,
-                        "module": module_str,
-                        "module_path": os.path.join(path, d, module_str),
-                    })
+                    modules.append(
+                        {
+                            "pname": d,
+                            "module": module_str,
+                            "module_path": os.path.join(path, d, module_str),
+                        }
+                    )
         return modules
 
     def _get_plugin_modules(self) -> List[dict]:
@@ -158,7 +166,7 @@ class PluginManager:
             plugins.extend(_p)
         return plugins
 
-    def _check_plugin_dept_update(self, target_plugin: str = None):
+    async def _check_plugin_dept_update(self, target_plugin: str = None):
         """检查插件的依赖
         如果 target_plugin 为 None，则检查所有插件的依赖
         """
@@ -177,7 +185,7 @@ class PluginManager:
                 pth = os.path.join(plugin_path, "requirements.txt")
                 logger.info(f"正在安装插件 {p} 所需的依赖库: {pth}")
                 try:
-                    pip_installer.install(requirements_path=pth)
+                    await pip_installer.install(requirements_path=pth)
                 except Exception as e:
                     logger.error(f"更新插件 {p} 的依赖失败。Code: {str(e)}")
 
@@ -399,7 +407,7 @@ class PluginManager:
                     module = __import__(path, fromlist=[module_str])
                 except (ModuleNotFoundError, ImportError):
                     # 尝试安装依赖
-                    self._check_plugin_dept_update(target_plugin=root_dir_name)
+                    await self._check_plugin_dept_update(target_plugin=root_dir_name)
                     module = __import__(path, fromlist=[module_str])
                 except Exception as e:
                     logger.error(traceback.format_exc())
@@ -443,11 +451,11 @@ class PluginManager:
                             metadata.repo = metadata_yaml.repo
                     except Exception:
                         pass
-
+                    metadata.config = plugin_config
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
                         if plugin_config:
-                            metadata.config = plugin_config
+                            # metadata.config = plugin_config
                             try:
                                 metadata.star_cls = metadata.star_cls_type(
                                     context=self.context, config=plugin_config
@@ -634,16 +642,21 @@ class PluginManager:
         if not os.path.exists(readme_path):
             readme_path = os.path.join(plugin_path, "readme.md")
 
-        if os.path.exists(readme_path):
+        if os.path.exists(readme_path) and nh3:
             try:
                 with open(readme_path, "r", encoding="utf-8") as f:
                     readme_content = f.read()
+                cleaned_content = nh3.clean(readme_content)
             except Exception as e:
                 logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")
 
         plugin_info = None
         if plugin:
-            plugin_info = {"repo": plugin.repo, "readme": readme_content}
+            plugin_info = {
+                "repo": plugin.repo,
+                "readme": cleaned_content,
+                "name": plugin.name,
+            }
 
         return plugin_info
 
@@ -838,6 +851,10 @@ class PluginManager:
 
         plugin_info = None
         if plugin:
-            plugin_info = {"repo": plugin.repo, "readme": readme_content}
+            plugin_info = {
+                "repo": plugin.repo,
+                "readme": readme_content,
+                "name": plugin.name,
+            }
 
         return plugin_info

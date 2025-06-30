@@ -28,10 +28,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self.send_buffer = None
 
     async def send(self, message: MessageChain):
-        if not self.send_buffer:
-            self.send_buffer = message
-        else:
-            self.send_buffer.chain.extend(message.chain)
+        self.send_buffer = message
+        await self._post_send()
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊"""

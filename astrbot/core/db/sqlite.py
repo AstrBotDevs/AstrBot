@@ -11,7 +11,9 @@ class SQLiteDatabase(BaseDatabase):
         super().__init__()
         self.db_path = db_path
 
-        with open(os.path.dirname(__file__) + "/sqlite_init.sql", "r") as f:
+        with open(
+            os.path.dirname(__file__) + "/sqlite_init.sql", "r", encoding="utf-8"
+        ) as f:
             sql = f.read()
 
         # 初始化数据库

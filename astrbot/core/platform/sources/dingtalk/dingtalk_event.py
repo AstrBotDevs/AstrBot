@@ -32,31 +32,31 @@ class DingtalkMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(segment, Comp.Image):
                 markdown_str = ""
-                if segment.file and segment.file.startswith("file:///"):
-                    logger.warning(
-                        "dingtalk only support url image, not: " + segment.file
-                    )
-                    continue
-                elif segment.file and segment.file.startswith("http"):
-                    markdown_str += f"![image]({segment.file})\n\n"
-                elif segment.file and segment.file.startswith("base64://"):
-                    logger.warning("dingtalk only support url image, not base64")
-                    continue
-                else:
-                    logger.warning(
-                        "dingtalk only support url image, not: " + segment.file
-                    )
-                    continue
 
-                ret = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    client.reply_markdown,
-                    "😄",
-                    markdown_str,
-                    self.message_obj.raw_message,
-                )
-                logger.debug(f"send image: {ret}")
+                try:
+                    if not segment.file:
+                        logger.warning("钉钉图片 segment 缺少 file 字段，跳过")
+                        continue
+                    if segment.file.startswith(("http://", "https://")):
+                        image_url = segment.file
+                    else:
+                        image_url = await segment.register_to_file_service()
 
+                    markdown_str = f"![image]({image_url})\n\n"
+
+                    ret = await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        client.reply_markdown,
+                        "😄",
+                        markdown_str,
+                        self.message_obj.raw_message,
+                    )
+                    logger.debug(f"send image: {ret}")
+
+                except Exception as e:
+                    logger.error(f"钉钉图片处理失败: {e}")
+                    logger.warning(f"跳过图片发送: {image_path}")
+                    continue
     async def send(self, message: MessageChain):
         await self.send_with_client(self.client, message)
         await super().send(message)

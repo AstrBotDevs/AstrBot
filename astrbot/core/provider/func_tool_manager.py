@@ -4,6 +4,7 @@ import textwrap
 import os
 import asyncio
 import logging
+from datetime import timedelta
 
 from typing import Dict, List, Awaitable, Literal, Any
 from dataclasses import dataclass
@@ -19,6 +20,13 @@ try:
     from mcp.client.sse import sse_client
 except (ModuleNotFoundError, ImportError):
     logger.warning("警告: 缺少依赖库 'mcp'，将无法使用 MCP 服务。")
+
+try:
+    from mcp.client.streamable_http import streamablehttp_client
+except (ModuleNotFoundError, ImportError):
+    logger.warning(
+        "警告: 缺少依赖库 'mcp' 或者 mcp 库版本过低，无法使用 Streamable HTTP 连接方式。"
+    )
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
@@ -96,7 +104,10 @@ class MCPClient:
     async def connect_to_server(self, mcp_server_config: dict, name: str):
         """连接到 MCP 服务器
 
-        如果 `url` 参数存在，则使用 SSE 的方式连接到 MCP 服务。
+        如果 `url` 参数存在：
+            1. 当 transport 指定为 `streamable_http` 时，使用 Streamable HTTP 连接方式。
+            1. 当 transport 指定为 `sse` 时，使用 SSE 连接方式。
+            2. 如果没有指定，默认使用 SSE 的方式连接到 MCP 服务。
 
         Args:
             mcp_server_config (dict): Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
@@ -108,15 +119,41 @@ class MCPClient:
         cfg.pop("active", None)  # Remove active flag from config
 
         if "url" in cfg:
-            # SSE transport method
-            self._streams_context = sse_client(url=cfg["url"])
-            streams = await self._streams_context.__aenter__()
+            is_sse = True
+            if cfg.get("transport") == "streamable_http":
+                is_sse = False
+            if is_sse:
+                # SSE transport method
+                self._streams_context = sse_client(
+                    url=cfg["url"],
+                    headers=cfg.get("headers", {}),
+                    timeout=cfg.get("timeout", 5),
+                    sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
+                )
+                streams = await self._streams_context.__aenter__()
 
-            # Create a new client session
-            # self.session = await self._session_context.__aenter__()
-            self.session = await self.exit_stack.enter_async_context(
-                mcp.ClientSession(*streams)
-            )
+                # Create a new client session
+                self.session = await self.exit_stack.enter_async_context(
+                    mcp.ClientSession(*streams)
+                )
+            else:
+                timeout = timedelta(seconds=cfg.get("timeout", 30))
+                sse_read_timeout = timedelta(
+                    seconds=cfg.get("sse_read_timeout", 60 * 5)
+                )
+                self._streams_context = streamablehttp_client(
+                    url=cfg["url"],
+                    headers=cfg.get("headers", {}),
+                    timeout=timeout,
+                    sse_read_timeout=sse_read_timeout,
+                    terminate_on_close=cfg.get("terminate_on_close", True),
+                )
+                read_s, write_s, _ = await self._streams_context.__aenter__()
+
+                # Create a new client session
+                self.session = await self.exit_stack.enter_async_context(
+                    mcp.ClientSession(read_stream=read_s, write_stream=write_s)
+                )
 
         else:
             server_params = mcp.StdioServerParameters(

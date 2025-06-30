@@ -8,6 +8,7 @@ from quart import request
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config import VERSION
+from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core import DEMO_MODE
 
 
@@ -40,13 +41,37 @@ class StatRoute(Route):
         await self.core_lifecycle.restart()
         return Response().ok().__dict__
 
-    def format_sec(self, sec: int):
-        m, s = divmod(sec, 60)
-        h, m = divmod(m, 60)
-        return f"{h}小时{m}分{s}秒"
+    def _get_running_time_components(self, total_seconds: int):
+        """将总秒数转换为时分秒组件"""
+        minutes, seconds = divmod(total_seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        return {
+            "hours": hours,
+            "minutes": minutes,
+            "seconds": seconds
+        }
+
+    def is_default_cred(self):
+        username = self.config["dashboard"]["username"]
+        password = self.config["dashboard"]["password"]
+        return (
+            username == "astrbot"
+            and password == "77b90590a8945a7d36c963981a307dc9"
+            and not DEMO_MODE
+        )
 
     async def get_version(self):
-        return Response().ok({"version": VERSION}).__dict__
+        return (
+            Response()
+            .ok(
+                {
+                    "version": VERSION,
+                    "dashboard_version": await get_dashboard_version(),
+                    "change_pwd_hint": self.is_default_cred(),
+                }
+            )
+            .__dict__
+        )
 
     async def get_start_time(self):
         return Response().ok({"start_time": self.core_lifecycle.start_time}).__dict__
@@ -87,6 +112,11 @@ class StatRoute(Route):
                 }
                 plugin_info.append(info)
 
+            # 计算运行时长组件
+            running_time = self._get_running_time_components(
+                int(time.time()) - self.core_lifecycle.start_time
+            )
+
             stat_dict.update(
                 {
                     "platform": self.db_helper.get_grouped_base_stats(
@@ -99,9 +129,7 @@ class StatRoute(Route):
                     "plugin_count": len(plugins),
                     "plugins": plugin_info,
                     "message_time_series": message_time_based_stats,
-                    "running": self.format_sec(
-                        int(time.time()) - self.core_lifecycle.start_time
-                    ),
+                    "running": running_time,  # 现在返回时间组件而不是格式化的字符串
                     "memory": {
                         "process": psutil.Process().memory_info().rss >> 20,
                         "system": psutil.virtual_memory().total >> 20,

@@ -2,16 +2,16 @@
 import { ref, shallowRef, onMounted } from 'vue';
 import axios from 'axios';
 import { useCustomizerStore } from '../../../stores/customizer';
+import { useI18n } from '@/i18n/composables';
 import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
+
+const { t } = useI18n();
 
 const customizer = useCustomizerStore();
 const sidebarMenu = shallowRef(sidebarItems);
 
 const showIframe = ref(false);
-const version = ref("");
-const buildVer = ref("");
-const hasWebUIUpdate = ref(false);
 
 // 默认桌面端 iframe 样式
 const iframeStyle = ref({
@@ -68,9 +68,10 @@ function toggleIframe() {
   showIframe.value = !showIframe.value;
 }
 
-function openIframeLink() {
+function openIframeLink(url) {
   if (typeof window !== 'undefined') {
-    window.open("https://astrbot.app", "_blank");
+    let url_ = url || "https://astrbot.app";
+    window.open(url_, "_blank");
   }
 }
 
@@ -149,25 +150,6 @@ function endDrag() {
   document.removeEventListener('touchend', onTouchEnd);
 }
 
-// 获取版本和更新信息
-onMounted(() => {
-  axios.get('/api/stat/version')
-    .then((res) => {
-      version.value = "v" + res.data.data.version;
-    })
-    .catch((err) => {
-      console.log(err);
-    });
-
-  axios.get('/api/update/check?type=dashboard')
-    .then((res) => {
-      hasWebUIUpdate.value = res.data.data.has_new_version;
-      buildVer.value = res.data.data.current_version;
-    })
-    .catch((err) => {
-      console.log(err);
-    });
-});
 </script>
 
 <template>
@@ -181,32 +163,26 @@ onMounted(() => {
     width="220"
     :rail="customizer.mini_sidebar"
   >
-    <v-list class="pa-4 listitem" style="height: auto;">
-      <template v-for="(item, i) in sidebarMenu" :key="i">
-        <NavItem :item="item" class="leftPadding" />
-      </template>
-    </v-list>
-    <div class="text-center">
-      <v-chip color="inputBorder" size="small"> {{ version }} </v-chip>
-    </div>
-    <div style="position: absolute; bottom: 32px; width: 100%; font-size: 13px;" class="text-center">
-      <v-list-item v-if="!customizer.mini_sidebar" @click="toggleIframe">
-        <v-btn variant="plain" size="small">
-          🤔 点击此处 查看/关闭 悬浮文档！
-        </v-btn>
-      </v-list-item>
-      <small style="display: block;" v-if="buildVer">WebUI 版本: {{ buildVer }}</small>
-      <small style="display: block;" v-else>构建: embedded</small>
-      <v-tooltip text="使用 /dashboard_update 指令更新管理面板">
-        <template v-slot:activator="{ props }">
-          <small v-bind="props" v-if="hasWebUIUpdate" style="display: block; margin-top: 4px;">面板有更新</small>
+    <div class="sidebar-container">
+      <v-list class="pa-4 listitem flex-grow-1">
+        <template v-for="(item, i) in sidebarMenu" :key="i">
+          <NavItem :item="item" class="leftPadding" />
         </template>
-      </v-tooltip>
-      <small style="display: block; margin-top: 8px;">AGPL-3.0</small>
+      </v-list>
+      <div class="sidebar-footer" v-if="!customizer.mini_sidebar">
+        <v-btn style="margin-bottom: 8px;" size="small" variant="tonal" color="primary" to="/settings">
+          🔧 {{ t('core.navigation.settings') }}
+        </v-btn>
+        <v-btn style="margin-bottom: 8px;" size="small" variant="plain" @click="toggleIframe">
+          {{ t('core.navigation.documentation') }}
+        </v-btn>
+        <v-btn style="margin-bottom: 8px;" size="small" variant="plain" @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
+          {{ t('core.navigation.github') }}
+        </v-btn>
+      </div>
     </div>
   </v-navigation-drawer>
   
-  <!-- 优化后的悬浮 iframe -->
   <div
     v-if="showIframe"
     id="draggable-iframe"
@@ -216,13 +192,13 @@ onMounted(() => {
     <div :style="dragHeaderStyle" @mousedown="onMouseDown" @touchstart="onTouchStart">
       <div style="display: flex; align-items: center;">
         <v-icon icon="mdi-cursor-move" />
-        <span style="margin-left: 8px;">拖拽</span>
+        <span style="margin-left: 8px;">{{ t('core.navigation.drag') }}</span>
       </div>
       <div style="display: flex; gap: 8px;">
         <!-- 跳转按钮 -->
         <v-btn
           icon
-          @click.stop="openIframeLink"
+          @click.stop="openIframeLink('https://astrbot.app')"
           @mousedown.stop
           style="border-radius: 8px; border: 1px solid #ccc;"
         >

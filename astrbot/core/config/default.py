@@ -3,15 +3,17 @@
 """
 
 import os
+
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.9"
+VERSION = "3.5.18"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
 DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
+        "plugin_enable": {},
         "unique_session": False,
         "rate_limit": {
             "time": 60,
@@ -40,12 +42,15 @@ DEFAULT_CONFIG = {
         },
         "no_permission_reply": True,
         "empty_mention_waiting": True,
+        "empty_mention_waiting_need_reply": True,
         "friend_message_needs_wake_prefix": False,
         "ignore_bot_self_message": False,
+        "ignore_at_all": False,
     },
     "provider": [],
     "provider_settings": {
         "enable": True,
+        "default_provider_id": "",
         "wake_prefix": "",
         "web_search": False,
         "web_search_link": False,
@@ -56,7 +61,9 @@ DEFAULT_CONFIG = {
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
+        "show_tool_use_status": False,
         "streaming_segmented": False,
+        "separate_provider": False,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -66,6 +73,7 @@ DEFAULT_CONFIG = {
         "enable": False,
         "provider_id": "",
         "dual_output": False,
+        "use_file_service": False,
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
@@ -91,11 +99,13 @@ DEFAULT_CONFIG = {
     "t2i_word_threshold": 150,
     "t2i_strategy": "remote",
     "t2i_endpoint": "",
+    "t2i_use_file_service": False,
     "http_proxy": "",
     "dashboard": {
         "enable": True,
         "username": "astrbot",
         "password": "77b90590a8945a7d36c963981a307dc9",
+        "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
     },
@@ -120,7 +130,7 @@ CONFIG_METADATA_2 = {
                 "description": "消息平台适配器",
                 "type": "list",
                 "config_template": {
-                    "qq_official(QQ)": {
+                    "QQ 官方机器人(WebSocket)": {
                         "id": "default",
                         "type": "qq_official",
                         "enable": False,
@@ -129,7 +139,7 @@ CONFIG_METADATA_2 = {
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
                     },
-                    "qq_official_webhook(QQ)": {
+                    "QQ 官方机器人(Webhook)": {
                         "id": "default",
                         "type": "qq_official_webhook",
                         "enable": False,
@@ -138,7 +148,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
-                    "aiocqhttp(OneBotv11)": {
+                    "QQ 个人号(aiocqhttp)": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
@@ -146,7 +156,7 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "gewechat(微信)": {
+                    "微信个人号(Gewechat)": {
                         "id": "gwchat",
                         "type": "gewechat",
                         "enable": False,
@@ -155,7 +165,17 @@ CONFIG_METADATA_2 = {
                         "host": "这里填写你的局域网IP或者公网服务器IP",
                         "port": 11451,
                     },
-                    "weixin_official_account(微信公众平台)": {
+                    "微信个人号(WeChatPadPro)": {
+                        "id": "wechatpadpro",
+                        "type": "wechatpadpro",
+                        "enable": False,
+                        "admin_key": "stay33",
+                        "host": "这里填写你的局域网IP或者公网服务器IP",
+                        "port": 8059,
+                        "wpp_active_message_poll": False,
+                        "wpp_active_message_poll_interval": 3,
+                    },
+                    "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
                         "enable": False,
@@ -166,8 +186,9 @@ CONFIG_METADATA_2 = {
                         "api_base_url": "https://api.weixin.qq.com/cgi-bin/",
                         "callback_server_host": "0.0.0.0",
                         "port": 6194,
+                        "active_send_mode": False,
                     },
-                    "wecom(企业微信)": {
+                    "企业微信(含微信客服)": {
                         "id": "wecom",
                         "type": "wecom",
                         "enable": False,
@@ -180,7 +201,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
-                    "lark(飞书)": {
+                    "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
                         "enable": False,
@@ -189,14 +210,14 @@ CONFIG_METADATA_2 = {
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
                     },
-                    "dingtalk(钉钉)": {
+                    "钉钉(DingTalk)": {
                         "id": "dingtalk",
                         "type": "dingtalk",
                         "enable": False,
                         "client_id": "",
                         "client_secret": "",
                     },
-                    "telegram": {
+                    "Telegram": {
                         "id": "telegram",
                         "type": "telegram",
                         "enable": False,
@@ -208,12 +229,70 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                     },
+                    "Discord": {
+                        "id": "discord",
+                        "type": "discord",
+                        "enable": False,
+                        "discord_token": "",
+                        "discord_proxy": "",
+                        "discord_command_register": True,
+                        "discord_guild_id_for_debug": "",
+                        "discord_activity_name": "",
+                    },
+                    "Slack": {
+                        "id": "slack",
+                        "type": "slack",
+                        "enable": False,
+                        "bot_token": "",
+                        "app_token": "",
+                        "signing_secret": "",
+                        "slack_connection_mode": "socket",  # webhook, socket
+                        "slack_webhook_host": "0.0.0.0",
+                        "slack_webhook_port": 6197,
+                        "slack_webhook_path": "/astrbot-slack-webhook/callback",
+                    },
                 },
                 "items": {
+                    "slack_connection_mode": {
+                        "description": "Slack Connection Mode",
+                        "type": "string",
+                        "options": ["webhook", "socket"],
+                        "hint": "The connection mode for Slack. `webhook` uses a webhook server, `socket` uses Slack's Socket Mode.",
+                    },
+                    "slack_webhook_host": {
+                        "description": "Slack Webhook Host",
+                        "type": "string",
+                        "hint": "Only valid when Slack connection mode is `webhook`.",
+                    },
+                    "slack_webhook_port": {
+                        "description": "Slack Webhook Port",
+                        "type": "int",
+                        "hint": "Only valid when Slack connection mode is `webhook`.",
+                    },
+                    "slack_webhook_path": {
+                        "description": "Slack Webhook Path",
+                        "type": "string",
+                        "hint": "Only valid when Slack connection mode is `webhook`.",
+                    },
+                    "active_send_mode": {
+                        "description": "是否换用主动发送接口",
+                        "type": "bool",
+                        "desc": "只有企业认证的公众号才能主动发送。主动发送接口的限制会少一些。",
+                    },
+                    "wpp_active_message_poll": {
+                        "description": "是否启用主动消息轮询",
+                        "type": "bool",
+                        "hint": "只有当你发现微信消息没有按时同步到 AstrBot 时，才需要启用这个功能，默认不启用。",
+                    },
+                    "wpp_active_message_poll_interval": {
+                        "description": "主动消息轮询间隔",
+                        "type": "int",
+                        "hint": "主动消息轮询间隔，单位为秒，默认 3 秒，最大不要超过 60 秒，否则可能被认为是旧消息。",
+                    },
                     "kf_name": {
-                      "description": "微信客服账号名",
-                      "type": "string",
-                      "hint": "可选。微信客服账号名(不是 ID)。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取"
+                        "description": "微信客服账号名",
+                        "type": "string",
+                        "hint": "可选。微信客服账号名(不是 ID)。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取",
                     },
                     "telegram_token": {
                         "description": "Bot Token",
@@ -236,10 +315,10 @@ CONFIG_METADATA_2 = {
                         "hint": "Telegram 命令自动刷新间隔，单位为秒。",
                     },
                     "id": {
-                        "description": "ID",
+                        "description": "机器人名称",
                         "type": "string",
                         "obvious_hint": True,
-                        "hint": "ID 不能和其它的平台适配器重复，否则将发生严重冲突。",
+                        "hint": "机器人名称(ID)不能和其它的平台适配器重复。",
                     },
                     "type": {
                         "description": "适配器类型",
@@ -292,6 +371,25 @@ CONFIG_METADATA_2 = {
                         "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                         "obvious_hint": True,
                     },
+                    "discord_token": {
+                        "description": "Discord Bot Token",
+                        "type": "string",
+                        "hint": "在此处填入你的Discord Bot Token",
+                    },
+                    "discord_proxy": {
+                        "description": "Discord 代理地址",
+                        "type": "string",
+                        "hint": "可选的代理地址：http://ip:port",
+                    },
+                    "discord_command_register": {
+                        "description": "是否自动将插件指令注册为 Discord 斜杠指令",
+                        "type": "bool",
+                    },
+                    "discord_activity_name": {
+                        "description": "Discord 活动名称",
+                        "type": "string",
+                        "hint": "可选的 Discord 活动名称。留空则不设置活动。",
+                    },
                 },
             },
             "platform_settings": {
@@ -327,9 +425,14 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，当用户没有权限执行某个操作时，机器人会回复一条消息。",
                     },
                     "empty_mention_waiting": {
-                        "description": "只 @ 机器人是否触发等待回复",
+                        "description": "只 @ 机器人是否触发等待",
                         "type": "bool",
-                        "hint": "启用后，当消息内容只有 @ 机器人时，会触发等待回复，在 60 秒内的该用户的任意一条消息均会唤醒机器人。这在某些平台不支持 @ 和语音/图片等消息同时发送时特别有用。",
+                        "hint": "启用后，当消息内容只有 @ 机器人时，会触发等待，在 60 秒内的该用户的任意一条消息均会唤醒机器人。这在某些平台不支持 @ 和语音/图片等消息同时发送时特别有用。",
+                    },
+                    "empty_mention_waiting_need_reply": {
+                        "description": "只 @ 机器人触发等待时是否需要回复提醒",
+                        "type": "bool",
+                        "hint": "在上面一个配置项中，如果启用了触发等待，启用此项后，机器人会使用 LLM 生成一条回复。否则，将不回复而只是等待。",
                     },
                     "friend_message_needs_wake_prefix": {
                         "description": "私聊消息是否需要唤醒前缀",
@@ -339,7 +442,12 @@ CONFIG_METADATA_2 = {
                     "ignore_bot_self_message": {
                         "description": "是否忽略机器人自身的消息",
                         "type": "bool",
-                        "hint": "某些平台如 gewechat 会将自身账号在其他 APP 端发送的消息也当做消息事件下发导致给自己发消息时唤醒机器人",
+                        "hint": "某些平台会将自身账号在其他 APP 端发送的消息也当做消息事件下发导致给自己发消息时唤醒机器人",
+                    },
+                    "ignore_at_all": {
+                        "description": "是否忽略 @ 全体成员",
+                        "type": "bool",
+                        "hint": "启用后，机器人会忽略 @ 全体成员 的消息事件。",
                     },
                     "segmented_reply": {
                         "description": "分段回复",
@@ -592,6 +700,7 @@ CONFIG_METADATA_2 = {
                         "gm_resp_image_modal": False,
                         "gm_native_search": False,
                         "gm_native_coderunner": False,
+                        "gm_url_context": False,
                         "gm_safety_settings": {
                             "harassment": "BLOCK_MEDIUM_AND_ABOVE",
                             "hate_speech": "BLOCK_MEDIUM_AND_ABOVE",
@@ -661,17 +770,6 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "deepseek/deepseek-r1",
                         },
-                    },
-                    "LLMTuner": {
-                        "id": "llmtuner_default",
-                        "type": "llm_tuner",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "base_model_path": "",
-                        "adapter_model_path": "",
-                        "llmtuner_template": "",
-                        "finetuning_type": "lora",
-                        "quantization_bit": 4,
                     },
                     "Dify": {
                         "id": "dify_app_default",
@@ -757,6 +855,37 @@ CONFIG_METADATA_2 = {
                         "edge-tts-voice": "zh-CN-XiaoxiaoNeural",
                         "timeout": 20,
                     },
+                    "GSV TTS(本地加载)": {
+                        "id": "gsv_tts",
+                        "enable": False,
+                        "type": "gsv_tts_selfhost",
+                        "provider_type": "text_to_speech",
+                        "api_base": "http://127.0.0.1:9880",
+                        "gpt_weights_path": "",
+                        "sovits_weights_path": "",
+                        "timeout": 60,
+                        "gsv_default_parms": {
+                            "gsv_ref_audio_path": "",
+                            "gsv_prompt_text": "",
+                            "gsv_prompt_lang": "zh",
+                            "gsv_aux_ref_audio_paths": "",
+                            "gsv_text_lang": "zh",
+                            "gsv_top_k": 5,
+                            "gsv_top_p": 1.0,
+                            "gsv_temperature": 1.0,
+                            "gsv_text_split_method": "cut3",
+                            "gsv_batch_size": 1,
+                            "gsv_batch_threshold": 0.75,
+                            "gsv_split_bucket": True,
+                            "gsv_speed_factor": 1,
+                            "gsv_fragment_interval": 0.3,
+                            "gsv_streaming_mode": False,
+                            "gsv_seed": -1,
+                            "gsv_parallel_infer": True,
+                            "gsv_repetition_penalty": 1.35,
+                            "gsv_media_type": "wav",
+                        },
+                    },
                     "GSVI TTS(API)": {
                         "id": "gsvi_tts",
                         "type": "gsvi_tts_api",
@@ -798,46 +927,317 @@ CONFIG_METADATA_2 = {
                         "azure_tts_rate": "1",
                         "azure_tts_volume": "100",
                         "azure_tts_subscription_key": "",
-                        "azure_tts_region": "eastus"
+                        "azure_tts_region": "eastus",
+                    },
+                    "MiniMax TTS(API)": {
+                        "id": "minimax_tts",
+                        "type": "minimax_tts_api",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.minimax.chat/v1/t2a_v2",
+                        "minimax-group-id": "",
+                        "model": "speech-02-turbo",
+                        "minimax-langboost": "auto",
+                        "minimax-voice-speed": 1.0,
+                        "minimax-voice-vol": 1.0,
+                        "minimax-voice-pitch": 0,
+                        "minimax-is-timber-weight": False,
+                        "minimax-voice-id": "female-shaonv",
+                        "minimax-timber-weight": '[\n    {\n        "voice_id": "Chinese (Mandarin)_Warm_Girl",\n        "weight": 25\n    },\n    {\n        "voice_id": "Chinese (Mandarin)_BashfulGirl",\n        "weight": 50\n    }\n]',
+                        "minimax-voice-emotion": "neutral",
+                        "minimax-voice-latex": False,
+                        "minimax-voice-english-normalization": False,
+                        "timeout": 20,
+                    },
+                    "火山引擎_TTS(API)": {
+                        "id": "volcengine_tts",
+                        "type": "volcengine_tts",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "appid": "",
+                        "volcengine_cluster": "volcano_tts",
+                        "volcengine_voice_type": "",
+                        "volcengine_speed_ratio": 1.0,
+                        "api_base": "https://openspeech.bytedance.com/api/v1/tts",
+                        "timeout": 20,
+                    },
+                    "Gemini TTS": {
+                        "id": "gemini_tts",
+                        "type": "gemini_tts",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "gemini_tts_api_key": "",
+                        "gemini_tts_api_base": "",
+                        "gemini_tts_timeout": 20,
+                        "gemini_tts_model": "gemini-2.5-flash-preview-tts",
+                        "gemini_tts_prefix": "",
+                        "gemini_tts_voice_name": "Leda",
+                    },
+                    "OpenAI Embedding": {
+                        "id": "openai_embedding",
+                        "type": "openai_embedding",
+                        "provider_type": "embedding",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        "embedding_api_base": "",
+                        "embedding_model": "",
+                        "embedding_dimensions": 1536,
+                        "timeout": 20,
+                    },
+                    "Gemini Embedding": {
+                        "id": "gemini_embedding",
+                        "type": "gemini_embedding",
+                        "provider_type": "embedding",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        "embedding_api_base": "",
+                        "embedding_model": "gemini-embedding-exp-03-07",
+                        "embedding_dimensions": 768,
+                        "timeout": 20,
                     },
                 },
                 "items": {
+                    "gpt_weights_path": {
+                        "description": "GPT模型文件路径",
+                        "type": "string",
+                        "hint": "即“.ckpt”后缀的文件，请使用绝对路径，路径两端不要带双引号，不填则默认用GPT_SoVITS内置的SoVITS模型(建议直接在GPT_SoVITS中改默认模型)",
+                        "obvious_hint": True,
+                    },
+                    "sovits_weights_path": {
+                        "description": "SoVITS模型文件路径",
+                        "type": "string",
+                        "hint": "即“.pth”后缀的文件，请使用绝对路径，路径两端不要带双引号，不填则默认用GPT_SoVITS内置的SoVITS模型(建议直接在GPT_SoVITS中改默认模型)",
+                        "obvious_hint": True,
+                    },
+                    "gsv_default_parms": {
+                        "description": "GPT_SoVITS默认参数",
+                        "hint": "参考音频文件路径、参考音频文本必填，其他参数根据个人爱好自行填写",
+                        "type": "object",
+                        "items": {
+                            "gsv_ref_audio_path": {
+                                "description": "参考音频文件路径",
+                                "type": "string",
+                                "hint": "必填！请使用绝对路径！路径两端不要带双引号！",
+                                "obvious_hint": True,
+                            },
+                            "gsv_prompt_text": {
+                                "description": "参考音频文本",
+                                "type": "string",
+                                "hint": "必填！请填写参考音频讲述的文本",
+                                "obvious_hint": True,
+                            },
+                            "gsv_prompt_lang": {
+                                "description": "参考音频文本语言",
+                                "type": "string",
+                                "hint": "请填写参考音频讲述的文本的语言，默认为中文",
+                            },
+                            "gsv_aux_ref_audio_paths": {
+                                "description": "辅助参考音频文件路径",
+                                "type": "string",
+                                "hint": "辅助参考音频文件，可不填",
+                            },
+                            "gsv_text_lang": {
+                                "description": "文本语言",
+                                "type": "string",
+                                "hint": "默认为中文",
+                            },
+                            "gsv_top_k": {
+                                "description": "生成语音的多样性",
+                                "type": "int",
+                                "hint": "",
+                            },
+                            "gsv_top_p": {
+                                "description": "核采样的阈值",
+                                "type": "float",
+                                "hint": "",
+                            },
+                            "gsv_temperature": {
+                                "description": "生成语音的随机性",
+                                "type": "float",
+                                "hint": "",
+                            },
+                            "gsv_text_split_method": {
+                                "description": "切分文本的方法",
+                                "type": "string",
+                                "hint": "可选值：  `cut0`：不切分    `cut1`：四句一切   `cut2`：50字一切    `cut3`：按中文句号切    `cut4`：按英文句号切    `cut5`：按标点符号切",
+                                "options": [
+                                    "cut0",
+                                    "cut1",
+                                    "cut2",
+                                    "cut3",
+                                    "cut4",
+                                    "cut5",
+                                ],
+                            },
+                            "gsv_batch_size": {
+                                "description": "批处理大小",
+                                "type": "int",
+                                "hint": "",
+                            },
+                            "gsv_batch_threshold": {
+                                "description": "批处理阈值",
+                                "type": "float",
+                                "hint": "",
+                            },
+                            "gsv_split_bucket": {
+                                "description": "将文本分割成桶以便并行处理",
+                                "type": "bool",
+                                "hint": "",
+                            },
+                            "gsv_speed_factor": {
+                                "description": "语音播放速度",
+                                "type": "float",
+                                "hint": "1为原始语速",
+                            },
+                            "gsv_fragment_interval": {
+                                "description": "语音片段之间的间隔时间",
+                                "type": "float",
+                                "hint": "",
+                            },
+                            "gsv_streaming_mode": {
+                                "description": "启用流模式",
+                                "type": "bool",
+                                "hint": "",
+                            },
+                            "gsv_seed": {
+                                "description": "随机种子",
+                                "type": "int",
+                                "hint": "用于结果的可重复性",
+                            },
+                            "gsv_parallel_infer": {
+                                "description": "并行执行推理",
+                                "type": "bool",
+                                "hint": "",
+                            },
+                            "gsv_repetition_penalty": {
+                                "description": "重复惩罚因子",
+                                "type": "float",
+                                "hint": "",
+                            },
+                            "gsv_media_type": {
+                                "description": "输出媒体的类型",
+                                "type": "string",
+                                "hint": "建议用wav",
+                            },
+                        },
+                    },
+                    "embedding_dimensions": {
+                        "description": "嵌入维度",
+                        "type": "int",
+                        "hint": "嵌入向量的维度。根据模型不同，可能需要调整，请参考具体模型的文档。此配置项请务必填写正确，否则将导致向量数据库无法正常工作。",
+                    },
+                    "embedding_model": {
+                        "description": "嵌入模型",
+                        "type": "string",
+                        "hint": "嵌入模型名称。",
+                    },
+                    "embedding_api_key": {
+                        "description": "API Key",
+                        "type": "string",
+                    },
+                    "embedding_api_base": {
+                        "description": "API Base URL",
+                        "type": "string",
+                    },
+                    "volcengine_cluster": {
+                        "type": "string",
+                        "description": "火山引擎集群",
+                        "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts",
+                    },
+                    "volcengine_voice_type": {
+                        "type": "string",
+                        "description": "火山引擎音色",
+                        "hint": "输入声音id(Voice_type)",
+                    },
+                    "volcengine_speed_ratio": {
+                        "type": "float",
+                        "description": "语速设置",
+                        "hint": "语速设置，范围为 0.2 到 3.0,默认值为 1.0",
+                    },
+                    "volcengine_volume_ratio": {
+                        "type": "float",
+                        "description": "音量设置",
+                        "hint": "音量设置，范围为 0.0 到 2.0,默认值为 1.0",
+                    },
                     "azure_tts_voice": {
                         "type": "string",
                         "description": "音色设置",
-                        "hint": "API 音色"
+                        "hint": "API 音色",
                     },
                     "azure_tts_style": {
                         "type": "string",
                         "description": "风格设置",
-                        "hint": "声音特定的讲话风格。 可以表达快乐、同情和平静等情绪。"
+                        "hint": "声音特定的讲话风格。 可以表达快乐、同情和平静等情绪。",
                     },
                     "azure_tts_role": {
                         "type": "string",
                         "description": "模仿设置（可选）",
                         "hint": "讲话角色扮演。 声音可以模仿不同的年龄和性别，但声音名称不会更改。 例如，男性语音可以提高音调和改变语调来模拟女性语音，但语音名称不会更改。 如果角色缺失或不受声音的支持，则会忽略此属性。",
-                        "options": ["Boy","Girl","YoungAdultFemale","YoungAdultMale","OlderAdultFemale","OlderAdultMale","SeniorFemale","SeniorMale","禁用"]
+                        "options": [
+                            "Boy",
+                            "Girl",
+                            "YoungAdultFemale",
+                            "YoungAdultMale",
+                            "OlderAdultFemale",
+                            "OlderAdultMale",
+                            "SeniorFemale",
+                            "SeniorMale",
+                            "禁用",
+                        ],
                     },
                     "azure_tts_rate": {
                         "type": "string",
                         "description": "语速设置",
-                        "hint": "指示文本的讲出速率。可在字词或句子层面应用语速。 速率变化应为原始音频的 0.5 到 2 倍。"
+                        "hint": "指示文本的讲出速率。可在字词或句子层面应用语速。 速率变化应为原始音频的 0.5 到 2 倍。",
                     },
                     "azure_tts_volume": {
                         "type": "string",
                         "description": "语音音量设置",
-                        "hint": "指示语音的音量级别。 可在句子层面应用音量的变化。以从 0.0 到 100.0（从最安静到最大声，例如 75）的数字表示。 默认值为 100.0。"
+                        "hint": "指示语音的音量级别。 可在句子层面应用音量的变化。以从 0.0 到 100.0（从最安静到最大声，例如 75）的数字表示。 默认值为 100.0。",
                     },
                     "azure_tts_region": {
                         "type": "string",
                         "description": "API 地区",
                         "hint": "Azure_TTS 处理数据所在区域，具体参考 https://learn.microsoft.com/zh-cn/azure/ai-services/speech-service/regions",
-                        "options": ["southafricanorth", "eastasia", "southeastasia", "australiaeast", "centralindia", "japaneast", "japanwest", "koreacentral", "canadacentral", "northeurope", "westeurope", "francecentral", "germanywestcentral", "norwayeast", "swedencentral", "switzerlandnorth", "switzerlandwest", "uksouth", "uaenorth", "brazilsouth", "qatarcentral", "centralus", "eastus", "eastus2", "northcentralus", "southcentralus", "westcentralus", "westus", "westus2", "westus3"]
+                        "options": [
+                            "southafricanorth",
+                            "eastasia",
+                            "southeastasia",
+                            "australiaeast",
+                            "centralindia",
+                            "japaneast",
+                            "japanwest",
+                            "koreacentral",
+                            "canadacentral",
+                            "northeurope",
+                            "westeurope",
+                            "francecentral",
+                            "germanywestcentral",
+                            "norwayeast",
+                            "swedencentral",
+                            "switzerlandnorth",
+                            "switzerlandwest",
+                            "uksouth",
+                            "uaenorth",
+                            "brazilsouth",
+                            "qatarcentral",
+                            "centralus",
+                            "eastus",
+                            "eastus2",
+                            "northcentralus",
+                            "southcentralus",
+                            "westcentralus",
+                            "westus",
+                            "westus2",
+                            "westus3",
+                        ],
                     },
                     "azure_tts_subscription_key": {
                         "type": "string",
                         "description": "服务订阅密钥",
-                        "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）"
+                        "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）",
                     },
                     "dashscope_tts_voice": {
                         "description": "语音合成模型",
@@ -857,6 +1257,12 @@ CONFIG_METADATA_2 = {
                     },
                     "gm_native_coderunner": {
                         "description": "启用原生代码执行器",
+                        "type": "bool",
+                        "hint": "启用后所有函数工具将全部失效",
+                        "obvious_hint": True,
+                    },
+                    "gm_url_context": {
+                        "description": "启用URL上下文功能",
                         "type": "bool",
                         "hint": "启用后所有函数工具将全部失效",
                         "obvious_hint": True,
@@ -922,6 +1328,98 @@ CONFIG_METADATA_2 = {
                                 "hint": "模型应该生成的思考Token的数量，设为0关闭思考。除gemini-2.5-flash外的模型会静默忽略此参数。",
                             },
                         },
+                    },
+                    "minimax-group-id": {
+                        "type": "string",
+                        "description": "用户组",
+                        "hint": "于账户管理->基本信息中可见",
+                    },
+                    "minimax-langboost": {
+                        "type": "string",
+                        "description": "指定语言/方言",
+                        "hint": "增强对指定的小语种和方言的识别能力，设置后可以提升在指定小语种/方言场景下的语音表现",
+                        "options": [
+                            "Chinese",
+                            "Chinese,Yue",
+                            "English",
+                            "Arabic",
+                            "Russian",
+                            "Spanish",
+                            "French",
+                            "Portuguese",
+                            "German",
+                            "Turkish",
+                            "Dutch",
+                            "Ukrainian",
+                            "Vietnamese",
+                            "Indonesian",
+                            "Japanese",
+                            "Italian",
+                            "Korean",
+                            "Thai",
+                            "Polish",
+                            "Romanian",
+                            "Greek",
+                            "Czech",
+                            "Finnish",
+                            "Hindi",
+                            "auto",
+                        ],
+                    },
+                    "minimax-voice-speed": {
+                        "type": "float",
+                        "description": "语速",
+                        "hint": "生成声音的语速, 取值[0.5, 2], 默认为1.0, 取值越大，语速越快",
+                    },
+                    "minimax-voice-vol": {
+                        "type": "float",
+                        "description": "音量",
+                        "hint": "生成声音的音量, 取值(0, 10], 默认为1.0, 取值越大，音量越高",
+                    },
+                    "minimax-voice-pitch": {
+                        "type": "int",
+                        "description": "语调",
+                        "hint": "生成声音的语调, 取值[-12, 12], 默认为0",
+                    },
+                    "minimax-is-timber-weight": {
+                        "type": "bool",
+                        "description": "启用混合音色",
+                        "hint": "启用混合音色, 支持以自定义权重混合最多四种音色, 启用后自动忽略单一音色设置",
+                    },
+                    "minimax-timber-weight": {
+                        "type": "string",
+                        "description": "混合音色",
+                        "editor_mode": True,
+                        "hint": "混合音色及其权重, 最多支持四种音色, 权重为整数, 取值[1, 100]. 可在官网API语音调试台预览代码获得预设以及编写模板, 需要严格按照json字符串格式编写, 可以查看控制台判断是否解析成功. 具体结构可参照默认值以及官网代码预览.",
+                    },
+                    "minimax-voice-id": {
+                        "type": "string",
+                        "description": "单一音色",
+                        "hint": "单一音色编号, 详见官网文档",
+                    },
+                    "minimax-voice-emotion": {
+                        "type": "string",
+                        "description": "情绪",
+                        "hint": "控制合成语音的情绪",
+                        "options": [
+                            "happy",
+                            "sad",
+                            "angry",
+                            "fearful",
+                            "disgusted",
+                            "surprised",
+                            "neutral",
+                        ],
+                    },
+                    "minimax-voice-latex": {
+                        "type": "bool",
+                        "description": "支持朗读latex公式",
+                        "hint": "朗读latex公式, 但是需要确保输入文本按官网要求格式化",
+                    },
+                    "minimax-voice-english-normalization": {
+                        "type": "bool",
+                        "description": "支持英语文本规范化",
+                        "hint": "可提升数字阅读场景的性能，但会略微增加延迟",
                     },
                     "rag_options": {
                         "description": "RAG 选项",
@@ -1124,8 +1622,18 @@ CONFIG_METADATA_2 = {
                     "enable": {
                         "description": "启用大语言模型聊天",
                         "type": "bool",
-                        "hint": "如需切换大语言模型提供商，请使用 `/provider` 命令。",
+                        "hint": "如需切换大语言模型提供商，请使用 /provider 命令。",
                         "obvious_hint": True,
+                    },
+                    "separate_provider": {
+                        "description": "提供商会话隔离",
+                        "type": "bool",
+                        "hint": "启用后，每个会话支持独立选择文本生成、STT、TTS 等提供商。如果会话在使用 /provider 指令时提示无权限，可以将会话加入管理员名单或者使用 /alter_cmd provider member 将指令设为非管理员指令。",
+                    },
+                    "default_provider_id": {
+                        "description": "默认模型提供商 ID",
+                        "type": "string",
+                        "hint": "可选。每个聊天会话的默认提供商 ID。",
                     },
                     "wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀",
@@ -1181,10 +1689,15 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "启用后，将会流式输出 LLM 的响应。目前仅支持 OpenAI API提供商 以及 Telegram、QQ Official 私聊 两个平台",
                     },
+                    "show_tool_use_status": {
+                        "description": "函数调用状态输出",
+                        "type": "bool",
+                        "hint": "在触发函数调用时输出其函数名和内容。",
+                    },
                     "streaming_segmented": {
                         "description": "不支持流式回复的平台分段输出",
                         "type": "bool",
-                        "hint": "启用后，若平台不支持流式回复，会分段输出。目前仅支持 aiocqhttp 和 gewechat 两个平台，不支持或无需使用流式分段输出的平台会静默忽略此选项",
+                        "hint": "启用后，若平台不支持流式回复，会分段输出。目前仅支持 aiocqhttp 两个平台，不支持或无需使用流式分段输出的平台会静默忽略此选项",
                     },
                 },
             },
@@ -1239,7 +1752,7 @@ CONFIG_METADATA_2 = {
                         "obvious_hint": True,
                     },
                     "provider_id": {
-                        "description": "提供商 ID，不填则默认第一个STT提供商",
+                        "description": "提供商 ID",
                         "type": "string",
                         "hint": "语音转文本提供商 ID。如果不填写将使用载入的第一个提供商。",
                     },
@@ -1256,7 +1769,7 @@ CONFIG_METADATA_2 = {
                         "obvious_hint": True,
                     },
                     "provider_id": {
-                        "description": "提供商 ID，不填则默认第一个TTS提供商",
+                        "description": "提供商 ID",
                         "type": "string",
                         "hint": "文本转语音提供商 ID。如果不填写将使用载入的第一个提供商。",
                     },
@@ -1265,6 +1778,11 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "启用后，Bot 将同时输出语音和文字消息。",
                         "obvious_hint": True,
+                    },
+                    "use_file_service": {
+                        "description": "使用文件服务提供 TTS 语音文件",
+                        "type": "bool",
+                        "hint": "启用后，如已配置 callback_api_base ，将会使用文件服务提供TTS语音文件",
                     },
                 },
             },
@@ -1382,7 +1900,7 @@ CONFIG_METADATA_2 = {
                 "description": "对外可达的回调接口地址",
                 "type": "string",
                 "obvious_hint": True,
-                "hint": "外部服务可能会通过 AstrBot 生成的回调链接（如文件下载链接）访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址（host），因此需要通过此配置项显式指定 “外部服务如何访问 AstrBot” 的地址。如 http://localhost:6185，https://example.com 等。"
+                "hint": "外部服务可能会通过 AstrBot 生成的回调链接（如文件下载链接）访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址（host），因此需要通过此配置项显式指定 “外部服务如何访问 AstrBot” 的地址。如 http://localhost:6185，https://example.com 等。",
             },
             "log_level": {
                 "description": "控制台日志级别",
@@ -1400,6 +1918,11 @@ CONFIG_METADATA_2 = {
                 "description": "文本转图像服务接口",
                 "type": "string",
                 "hint": "当 t2i_strategy 为 remote 时生效。为空时使用 AstrBot API 服务",
+            },
+            "t2i_use_file_service": {
+                "description": "本地文本转图像使用文件服务提供文件",
+                "type": "bool",
+                "hint": "当 t2i_strategy 为 local 并且配置 callback_api_base 时生效。是否使用文件服务提供文件。",
             },
             "pip_install_arg": {
                 "description": "pip 安装参数",
