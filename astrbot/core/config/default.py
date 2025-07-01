@@ -54,6 +54,7 @@ DEFAULT_CONFIG = {
         "wake_prefix": "",
         "web_search": False,
         "web_search_link": False,
+        "display_reasoning_text": False,
         "identifier": False,
         "datetime_system_prompt": True,
         "default_personality": "default",
@@ -1651,6 +1652,11 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "obvious_hint": True,
                         "hint": "开启后，将会传入网页搜索结果的链接给模型，并引导模型输出引用链接。",
+                    },
+                    "display_reasoning_text": {
+                        "description": "显示思考内容",
+                        "type": "bool",
+                        "hint": "开启后，将在回复中显示模型的思考过程。",
                     },
                     "identifier": {
                         "description": "启动识别群员",
