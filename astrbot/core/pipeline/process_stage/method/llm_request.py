@@ -3,9 +3,9 @@
 """
 
 import traceback
-import copy
 import asyncio
 import json
+import copy
 from typing import Union, AsyncGenerator
 from ...context import PipelineContext
 from ..stage import Stage
@@ -22,6 +22,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
     LLMResponse,
 )
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
 from astrbot.core import web_chat_back_queue
 from ..agent_runner.tool_loop_agent import ToolLoopAgent
@@ -165,6 +166,11 @@ class LLMRequestSubStage(Stage):
         async def requesting():
             step_idx = 0
             while step_idx < self.max_step:
+                # 在每次实际请求 LLM 前检查会话级别的启停状态，这可以防止插件或函数工具调用时绕过会话级别的限制
+                if not SessionServiceManager.should_process_llm_request(event):
+                    logger.debug(f"会话 {event.unified_msg_origin} 禁用了 LLM，终止 LLM 请求。")
+                    return
+                
                 step_idx += 1
                 try:
                     async for resp in tool_loop_agent.step():
