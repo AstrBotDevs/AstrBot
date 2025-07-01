@@ -2,7 +2,7 @@ import time
 import asyncio
 import uuid
 import os
-from typing import Awaitable, Any
+from typing import Awaitable, Any, Callable
 from astrbot.core.platform import (
     Platform,
     AstrBotMessage,
@@ -13,7 +13,7 @@ from astrbot.core.platform import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.message.components import Plain, Image, Record  # noqa: F403
 from astrbot import logger
-from astrbot.core import web_chat_queue
+from .webchat_queue_mgr import webchat_queue_mgr, WebChatQueueMgr
 from .webchat_event import WebChatMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
@@ -21,14 +21,46 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class QueueListener:
-    def __init__(self, queue: asyncio.Queue, callback: callable) -> None:
-        self.queue = queue
+    def __init__(self, webchat_queue_mgr: WebChatQueueMgr, callback: Callable) -> None:
+        self.webchat_queue_mgr = webchat_queue_mgr
         self.callback = callback
+        self.running_tasks = set()
+
+    async def listen_to_queue(self, conversation_id: str):
+        """Listen to a specific conversation queue"""
+        queue = self.webchat_queue_mgr.get_or_create_queue(conversation_id)
+        while True:
+            try:
+                data = await queue.get()
+                await self.callback(data)
+            except Exception as e:
+                logger.error(
+                    f"Error processing message from conversation {conversation_id}: {e}"
+                )
+                break
 
     async def run(self):
+        """Monitor for new conversation queues and start listeners"""
+        monitored_conversations = set()
+
         while True:
-            data = await self.queue.get()
-            await self.callback(data)
+            # Check for new conversations
+            current_conversations = set(self.webchat_queue_mgr.queues.keys())
+            new_conversations = current_conversations - monitored_conversations
+
+            # Start listeners for new conversations
+            for conversation_id in new_conversations:
+                task = asyncio.create_task(self.listen_to_queue(conversation_id))
+                self.running_tasks.add(task)
+                task.add_done_callback(self.running_tasks.discard)
+                monitored_conversations.add(conversation_id)
+                logger.debug(f"Started listener for conversation: {conversation_id}")
+
+            # Clean up monitored conversations that no longer exist
+            removed_conversations = monitored_conversations - current_conversations
+            monitored_conversations -= removed_conversations
+
+            await asyncio.sleep(1)  # Check for new conversations every second
 
 
 @register_platform_adapter("webchat", "webchat")
@@ -45,7 +77,7 @@ class WebChatAdapter(Platform):
         os.makedirs(self.imgs_dir, exist_ok=True)
 
         self.metadata = PlatformMetadata(
-            name="webchat", description="webchat", id=self.config.get("id")
+            name="webchat", description="webchat", id=self.config.get("id", "")
         )
 
     async def send_by_session(
@@ -105,7 +137,7 @@ class WebChatAdapter(Platform):
             abm = await self.convert_message(data)
             await self.handle_msg(abm)
 
-        bot = QueueListener(web_chat_queue, callback)
+        bot = QueueListener(webchat_queue_mgr, callback)
         return bot.run()
 
     def meta(self) -> PlatformMetadata:

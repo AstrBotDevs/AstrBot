@@ -187,8 +187,7 @@
                             style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px; padding: 4px;">
                             <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown"
                                 @click:clear="clearMessage" placeholder="Ask AstrBot..."
-                                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"
-                                :disabled="loadingChat"></textarea>
+                                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
                             <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
                                 <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
                                     :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
@@ -308,7 +307,6 @@ export default {
 
             eventSource: null,
             eventSourceReader: null,
-            sseReconnecting: false, // 添加重连状态标志
 
             // // Ctrl键长按相关变量
             ctrlKeyDown: false,
@@ -352,8 +350,6 @@ export default {
                 if (from &&
                     ((from.path.startsWith('/chat') && to.path.startsWith('/chatbox')) ||
                         (from.path.startsWith('/chatbox') && to.path.startsWith('/chat')))) {
-                    console.log('Route mode changed, reconnecting SSE...');
-                    this.reconnectSSE();
                 }
 
                 // Check if the route matches /chat/<cid> or /chatbox/<cid> pattern
@@ -394,7 +390,6 @@ export default {
         // Theme is now handled globally by the customizer store.
         // 设置输入框标签
         this.inputFieldLabel = this.tm('input.chatPrompt');
-        this.startListeningEvent();
         this.checkStatus();
         this.getConversations();
         let inputField = document.getElementById('input-field');
@@ -420,8 +415,6 @@ export default {
     },
 
     beforeUnmount() {
-        this.disconnectSSE();
-
         // 移除keyup事件监听
         document.removeEventListener('keyup', this.handleInputKeyUp);
 
@@ -529,246 +522,10 @@ export default {
             }
         },
 
-        // 断开SSE连接
-        disconnectSSE() {
-            if (this.eventSourceReader) {
-                try {
-                    this.eventSourceReader.cancel();
-                    console.log('SSE Reader cancelled');
-                } catch (error) {
-                    console.warn('Error cancelling SSE reader:', error);
-                }
-                this.eventSourceReader = null;
-            }
 
-            if (this.eventSource) {
-                try {
-                    this.eventSource.cancel();
-                    console.log('SSE连接已断开');
-                } catch (error) {
-                    console.warn('Error cancelling SSE:', error);
-                }
-                this.eventSource = null;
-            }
-        },
-
-        // 重新连接SSE
-        async reconnectSSE() {
-            if (this.sseReconnecting) {
-                console.log('SSE reconnection already in progress');
-                return;
-            }
-
-            this.sseReconnecting = true;
-            console.log('Reconnecting SSE...');
-            this.disconnectSSE();
-
-            // 等待更长时间确保后端连接完全清理
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            this.startListeningEvent();
-        },
-
-        async startListeningEvent() {
-            // 确保之前的连接已断开
-            this.disconnectSSE();
-
-            // 如果正在重连过程中，等待一下
-            if (this.sseReconnecting) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-
-            let retryCount = 0;
-            const maxRetries = 3;
-
-            while (retryCount < maxRetries) {
-                try {
-                    console.log(`尝试建立SSE连接 (${retryCount + 1}/${maxRetries})`);
-
-                    const response = await fetch('/api/chat/listen', {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': 'Bearer ' + localStorage.getItem('token')
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`SSE连接失败: ${response.statusText}`);
-                    }
-
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    this.eventSource = reader;
-                    this.eventSourceReader = reader;
-                    this.sseReconnecting = false;
-
-                    let in_streaming = false;
-                    let message_obj = null;
-                    console.log('SSE连接已建立');
-                    // 显示连接成功状态
-                    if (retryCount > 0) {
-                        this.showConnectionStatus(this.tm('connection.status.reconnected'), 'success');
-                    }
-
-                    while (true) {
-                        try {
-                            const { done, value } = await reader.read();
-                            if (done) {
-                                console.log('SSE连接正常关闭');
-                                break;
-                            }
-
-                            const chunk = decoder.decode(value, { stream: true });
-
-                            // 可能有多行
-                            let lines = chunk.split('\n\n');
-
-                            console.log('SSE数据:', lines);
-
-                            for (let i = 0; i < lines.length; i++) {
-                                let line = lines[i].trim();
-
-                                if (!line) {
-                                    continue;
-                                }
-
-                                console.log(line);                                // 处理后端错误响应格式
-                                if (line.startsWith('{"status":"error"')) {
-                                    try {
-                                        const errorObj = JSON.parse(line);
-                                        if (errorObj.message === 'Already connected') {
-                                            throw new Error('CONNECTION_CONFLICT');
-                                        }
-                                        console.error('后端错误:', errorObj.message);
-                                        continue;
-                                    } catch (parseError) {
-                                        if (parseError.message === 'CONNECTION_CONFLICT') {
-                                            throw parseError;
-                                        }
-                                        console.warn('解析错误响应失败:', line);
-                                        continue;
-                                    }
-                                }
-
-                                // data: {"type": "plain", "data": "helloworld"}
-                                let chunk_json;
-                                try {
-                                    chunk_json = JSON.parse(line.replace('data: ', ''));
-                                } catch (parseError) {
-                                    console.warn('JSON解析失败:', line, parseError);
-                                    continue;
-                                }
-
-                                // 检查解析后的数据是否有效
-                                if (!chunk_json || typeof chunk_json !== 'object') {
-                                    console.warn('无效的数据对象:', chunk_json);
-                                    continue;
-                                }
-
-                                // 检查是否有type字段
-                                if (!chunk_json.hasOwnProperty('type')) {
-                                    console.warn('数据缺少type字段:', chunk_json);
-                                    continue;
-                                }
-
-                                if (chunk_json.type === 'heartbeat') {
-                                    continue; // 心跳包
-                                }
-                                if (chunk_json.type === 'error') {
-                                    console.error('Error received:', chunk_json.data);
-                                    continue;
-                                }
-
-                                if (chunk_json.type === 'image') {
-                                    let img = chunk_json.data.replace('[IMAGE]', '');
-                                    const imageUrl = await this.getMediaFile(img);
-                                    let bot_resp = {
-                                        type: 'bot',
-                                        message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
-                                    }
-                                    this.messages.push(bot_resp);
-                                } else if (chunk_json.type === 'record') {
-                                    let audio = chunk_json.data.replace('[RECORD]', '');
-                                    const audioUrl = await this.getMediaFile(audio);
-                                    let bot_resp = {
-                                        type: 'bot',
-                                        message: `<audio controls class="audio-player">
-                                <source src="${audioUrl}" type="audio/wav">
-                                ${this.t('messages.errors.browser.audioNotSupported')}
-                              </audio>`
-                                    }
-                                    this.messages.push(bot_resp);
-                                } else if (chunk_json.type === 'plain') {
-                                    if (!in_streaming) {
-                                        message_obj = {
-                                            type: 'bot',
-                                            message: this.ref(chunk_json.data),
-                                        }
-                                        this.messages.push(message_obj);
-                                        in_streaming = true;
-                                    } else {
-                                        message_obj.message.value += chunk_json.data;
-                                    }
-                                } else if (chunk_json.type === 'end') {
-                                    in_streaming = false;
-                                    // 在消息流结束后初始化代码复制按钮
-                                    this.initCodeCopyButtons();
-                                    continue;
-                                } else if (chunk_json.type === 'update_title') {
-                                    // 更新对话标题
-                                    const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
-                                    if (conversation) {
-                                        conversation.title = chunk_json.data;
-                                    }
-                                } else {
-                                    console.warn('未知数据类型:', chunk_json.type);
-                                }
-                                this.scrollToBottom();
-                            }
-                        } catch (readError) {
-                            if (readError.name === 'AbortError') {
-                                console.log('SSE连接被取消');
-                                break;
-                            }
-                            if (readError.message === 'CONNECTION_CONFLICT') {
-                                throw readError;
-                            }
-                            console.error('SSE读取错误:', readError);
-                            break;
-                        }
-                    }
-
-                    // 如果成功连接并正常结束，跳出重试循环
-                    break;
-
-                } catch (error) {
-                    console.error(`SSE连接错误 (尝试 ${retryCount + 1}):`, error);
-
-                    retryCount++;
-                    if (error.message === 'CONNECTION_CONFLICT' && retryCount < maxRetries) {
-                        console.log(`连接冲突，等待 ${2000 * retryCount}ms 后重试...`);
-                        this.showConnectionStatus(`${this.tm('connection.status.reconnecting')} (${retryCount}/${maxRetries})`, 'warning');
-                        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
-                        continue;
-                    }
-
-                    if (retryCount >= maxRetries) {
-                        console.error('SSE连接重试次数已达上限');
-                        this.showConnectionStatus(this.tm('connection.status.failed'), 'error');
-                        this.sseReconnecting = false;
-                        break;
-                    }
-
-                    // 等待一段时间后重试
-                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-                } finally {
-                    this.eventSource = null;
-                    this.eventSourceReader = null;
-                }
-            }
-
-            this.sseReconnecting = false;
+        showConnectionStatus(message, type) {
+            // You can implement a toast notification here or update UI status
+            console.log(`Connection status: ${message} (${type})`);
         },
 
         removeAudio() {
@@ -920,7 +677,6 @@ export default {
                     }
                 }
                 this.messages = message;
-                // 初始化代码复制按钮
                 this.initCodeCopyButtons();
             }).catch(err => {
                 console.error(err);
@@ -1032,33 +788,144 @@ export default {
             this.messages.push(userMessage);
             this.scrollToBottom();
 
-            this.loadingChat = true;
+            this.loadingChat = true
 
-            fetch('/api/chat/send', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + localStorage.getItem('token')
-                },
-                body: JSON.stringify({
-                    message: this.prompt.trim(), // 确保发送的消息已去除前后空格
-                    conversation_id: this.currCid,
-                    image_url: this.stagedImagesName,
-                    audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : []
-                })
-            })
-                .then(response => {
-                    this.prompt = '';
-                    this.stagedImagesName = [];
-                    this.stagedImagesUrl = [];
-                    this.stagedAudioUrl = "";
-                    this.loadingChat = false;
-                })
-                .catch(err => {
-                    console.error(err);
-                    this.loadingChat = false;
+            try {
+                const response = await fetch('/api/chat/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('token')
+                    },
+                    body: JSON.stringify({
+                        message: this.prompt.trim(), // 确保发送的消息已去除前后空格
+                        conversation_id: this.currCid,
+                        image_url: this.stagedImagesName,
+                        audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : []
+                    })
                 });
+
+                this.prompt = ''; // 清空输入框;
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let in_streaming = false;
+                let message_obj = null;
+
+                while (true) {
+                    try {
+                        const { done, value } = await reader.read();
+                        if (done) {
+                            console.log('SSE stream completed');
+                            break;
+                        }
+
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n\n');
+
+                        for (let i = 0; i < lines.length; i++) {
+                            let line = lines[i].trim();
+
+                            if (!line) {
+                                continue;
+                            }
+
+                            // Parse SSE data
+                            let chunk_json;
+                            try {
+                                chunk_json = JSON.parse(line.replace('data: ', ''));
+                            } catch (parseError) {
+                                console.warn('JSON解析失败:', line, parseError);
+                                continue;
+                            }
+
+                            // 检查解析后的数据是否有效
+                            if (!chunk_json || typeof chunk_json !== 'object' || !chunk_json.hasOwnProperty('type')) {
+                                console.warn('无效的数据对象:', chunk_json);
+                                continue;
+                            }
+
+                            if (chunk_json.type === 'heartbeat') {
+                                continue; // 心跳包
+                            }
+                            if (chunk_json.type === 'error') {
+                                console.error('Error received:', chunk_json.data);
+                                continue;
+                            }
+
+                            if (chunk_json.type === 'image') {
+                                let img = chunk_json.data.replace('[IMAGE]', '');
+                                const imageUrl = await this.getMediaFile(img);
+                                let bot_resp = {
+                                    type: 'bot',
+                                    message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                                }
+                                this.messages.push(bot_resp);
+                            } else if (chunk_json.type === 'record') {
+                                let audio = chunk_json.data.replace('[RECORD]', '');
+                                const audioUrl = await this.getMediaFile(audio);
+                                let bot_resp = {
+                                    type: 'bot',
+                                    message: `<audio controls class="audio-player">
+                                        <source src="${audioUrl}" type="audio/wav">
+                                        ${this.t('messages.errors.browser.audioNotSupported')}
+                                      </audio>`
+                                }
+                                this.messages.push(bot_resp);
+                            } else if (chunk_json.type === 'plain') {
+                                if (!in_streaming) {
+                                    message_obj = {
+                                        type: 'bot',
+                                        message: this.ref(chunk_json.data),
+                                    }
+                                    this.messages.push(message_obj);
+                                    in_streaming = true;
+                                } else {
+                                    message_obj.message.value += chunk_json.data;
+                                }
+                            } else if (chunk_json.type === 'end') {
+                                in_streaming = false;
+                                // 在消息流结束后初始化代码复制按钮
+                                this.initCodeCopyButtons();
+                                continue;
+                            } else if (chunk_json.type === 'update_title') {
+                                // 更新对话标题
+                                const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
+                                if (conversation) {
+                                    conversation.title = chunk_json.data;
+                                }
+                            } else {
+                                console.warn('未知数据类型:', chunk_json.type);
+                            }
+                            this.scrollToBottom();
+                        }
+                    } catch (readError) {
+                        console.error('SSE读取错误:', readError);
+                        break;
+                    }
+                }
+
+                // Clear input after successful send
+                this.prompt = '';
+                this.stagedImagesName = [];
+                this.stagedImagesUrl = [];
+                this.stagedAudioUrl = "";
+                this.loadingChat = false;
+
+                // get the latest conversations
+                this.getConversations();
+
+            } catch (err) {
+                console.error('发送消息失败:', err);
+                this.loadingChat = false;
+                this.showConnectionStatus(this.tm('connection.status.failed'), 'error');
+            }
         },
+
         scrollToBottom() {
             this.$nextTick(() => {
                 const container = this.$refs.messageContainer;
