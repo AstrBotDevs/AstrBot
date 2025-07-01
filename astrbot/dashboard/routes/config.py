@@ -256,39 +256,38 @@ class ConfigRoute(Route):
             )
         return status_info
 
+    def _error_response(self, message: str, status_code: int = 500, log_fn=logger.error):
+        log_fn(message)
+        # 记录更详细的traceback信息，但只在是严重错误时
+        if status_code == 500:
+            log_fn(traceback.format_exc())
+        return Response().error(message, status_code=status_code).__dict__
+
     async def check_one_provider_status(self):
-        """
-        API 接口: 检查单个 LLM Provider 的状态
-        """
+        """API: check a single LLM Provider's status by id"""
         provider_id = request.args.get("id")
         if not provider_id:
-            return Response().error("Missing provider_id parameter", status_code=400).__dict__
+            return self._error_response("Missing provider_id parameter", 400, logger.warning)
 
-        logger.info(f"API call received: /config/provider/check_one for id: {provider_id}")
-
+        logger.info(f"API call: /config/provider/check_one id={provider_id}")
         try:
-            all_providers: typing.List = (
-                self.core_lifecycle.star_context.get_all_providers()
+            all_providers = self.core_lifecycle.star_context.get_all_providers()
+            # replace manual loop with next(filter(...))
+            target = next(
+                (p for p in all_providers if p.provider_config.get("id") == provider_id),
+                None
             )
-            
-            target_provider = None
-            for p in all_providers:
-                # provider.provider_config 是 AstrBotConfig 对象，可以直接当字典用
-                if p.provider_config.get("id") == provider_id:
-                    target_provider = p
-                    break
-            
-            if not target_provider:
-                logger.warning(f"Provider with id '{provider_id}' not found for status check.")
-                return Response().error(f"Provider with id '{provider_id}' not found", status_code=404).__dict__
+            if not target:
+                return self._error_response(f"Provider with id '{provider_id}' not found", 404, logger.warning)
 
-            result = await self._test_single_provider(target_provider)
+            result = await self._test_single_provider(target)
             return Response().ok(result).__dict__
 
         except Exception as e:
-            logger.error(f"Critical error in check_one_provider_status for id {provider_id}: {str(e)}")
-            logger.error(traceback.format_exc())
-            return Response().error(f"检查 Provider 状态时发生严重错误: {str(e)}", status_code=500).__dict__
+            return self._error_response(
+                f"Critical error checking provider {provider_id}: {e}",
+                500
+            )
 
     async def get_configs(self):
         # plugin_name 为空时返回 AstrBot 配置
