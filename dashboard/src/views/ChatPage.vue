@@ -31,7 +31,7 @@
                             elevation="0"></v-btn>
                     </div>
                     <div v-if="!sidebarCollapsed">
-                        <v-divider class="mx-2"></v-divider>
+                        <v-divider class="mx-4"></v-divider>
                     </div>
 
 
@@ -49,8 +49,12 @@
                                         }}</v-list-item-subtitle> -->
 
                                     <template v-if="!sidebarCollapsed" v-slot:append>
-                                        <v-btn icon="mdi-pencil" size="x-small" variant="text" class="edit-title-btn"
-                                            @click.stop="showEditTitleDialog(item.cid, item.title)" />
+                                        <div class="conversation-actions">
+                                            <v-btn icon="mdi-pencil" size="x-small" variant="text" class="edit-title-btn"
+                                                @click.stop="showEditTitleDialog(item.cid, item.title)" />
+                                            <v-btn icon="mdi-delete" size="x-small" variant="text" class="delete-conversation-btn"
+                                                color="error" @click.stop="deleteConversation(item.cid)" />
+                                        </div>
                                     </template>
                                 </v-list-item>
                             </v-list>
@@ -65,22 +69,6 @@
                         </v-fade-transition>
                     </div>
 
-                    <div v-if="!sidebarCollapsed">
-                        <v-divider class="mx-2"></v-divider>
-                    </div>
-                    <div style="padding: 16px;" :class="{ 'fade-in': sidebarHoverExpanded }" v-if="!sidebarCollapsed">
-                        <transition name="expand" @before-enter="beforeEnter" @enter="enter" @after-enter="afterEnter"
-                            @before-leave="beforeLeave" @leave="leave">
-                            <div v-if="currCid" class="delete-btn-container">
-                                <v-btn variant="outlined" rounded="sm" class="delete-chat-btn"
-                                    @click="deleteConversation(currCid)" color="error" density="comfortable"
-                                    size="small">
-                                    <v-icon start size="small">mdi-delete</v-icon>
-                                    {{ tm('actions.deleteChat') }}
-                                </v-btn>
-                            </div>
-                        </transition>
-                    </div>
                 </div>
 
                 <!-- 右侧聊天内容区域 -->
@@ -112,7 +100,7 @@
                             <!-- 主题切换按钮 -->
                             <v-tooltip :text="isDark ? tm('modes.lightMode') : tm('modes.darkMode')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
-                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon"
+                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon" size="small" rounded="sm" style="margin-right: 8px;"
                                         variant="text">
                                         <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
                                     </v-btn>
@@ -1174,23 +1162,6 @@ export default {
             });
             this.mediaCache = {};
         },
-
-        // For smooth height transition on delete button
-        beforeEnter(el) {
-            el.style.height = '0';
-        },
-        enter(el) {
-            el.style.height = el.scrollHeight + 'px';
-        },
-        afterEnter(el) {
-            el.style.height = 'auto';
-        },
-        beforeLeave(el) {
-            el.style.height = el.scrollHeight + 'px';
-        },
-        leave(el) {
-            el.style.height = '0';
-        },
     },
 }
 </script>
@@ -1335,6 +1306,30 @@ export default {
     background-color: rgba(103, 58, 183, 0.05);
 }
 
+.conversation-item:hover .conversation-actions {
+    opacity: 1;
+    visibility: visible;
+}
+
+.conversation-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+}
+
+.edit-title-btn,
+.delete-conversation-btn {
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.edit-title-btn:hover,
+.delete-conversation-btn:hover {
+    opacity: 1;
+}
+
 .conversation-title {
     font-weight: 500;
     font-size: 14px;
@@ -1379,36 +1374,6 @@ export default {
 .status-chip {
     font-size: 12px;
     height: 24px !important;
-}
-
-.delete-chat-btn {
-    height: 32px !important;
-    width: 100%;
-    color: rgb(var(--v-theme-error)) !important;
-    font-weight: 500;
-    box-shadow: none !important;
-    margin-top: 8px;
-    text-transform: none;
-    letter-spacing: 0.25px;
-    font-size: 12px;
-    line-height: 1.2em;
-    transition: opacity 0.25s ease;
-    opacity: 0.7;
-}
-
-.delete-chat-btn:hover {
-    background-color: rgba(var(--v-theme-error-rgb), 0.1) !important;
-}
-
-.delete-btn-container {
-    /* margin-top: -8px; */
-    /* Removed for better layout practices */
-}
-
-.expand-enter-active,
-.expand-leave-active {
-    transition: height 0.15s ease-in-out;
-    overflow: hidden;
 }
 
 .no-conversations {
