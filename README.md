@@ -111,9 +111,13 @@ uvx astrbot init
 
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
-#### Replit 部署
+#### 在 Replit 上部署
 
 [![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
+
+#### 在 雨云 上部署
+
+[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
 ## ⚡ 消息平台支持情况
 
