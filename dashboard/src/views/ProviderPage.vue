@@ -115,14 +115,23 @@
           <v-container v-else class="pa-0">
             <v-row>
               <v-col v-for="status in providerStatuses" :key="status.id" cols="12" sm="6" md="4">
-                <v-card variant="outlined" class="status-card">
+                <v-card variant="outlined" class="status-card" :class="`status-${status.status}`">
                   <v-card-item>
-                    <v-icon :color="status.status === 'available' ? 'success' : 'error'" class="me-2">
-                      {{ status.status === 'available' ? 'mdi-check-circle' : 'mdi-alert-circle' }}
-                    </v-icon>
+                    <v-icon v-if="status.status === 'available'" color="success" class="me-2">mdi-check-circle</v-icon>
+                    <v-icon v-else-if="status.status === 'unavailable'" color="error" class="me-2">mdi-alert-circle</v-icon>
+                    <v-progress-circular
+                      v-else-if="status.status === 'pending'"
+                      indeterminate
+                      color="primary"
+                      size="20"
+                      width="2"
+                      class="me-2"
+                    ></v-progress-circular>
+
                     <span class="font-weight-bold">{{ status.id }}</span>
-                    <v-chip :color="status.status === 'available' ? 'success' : 'error'" size="small" class="ml-2">
-                      {{ status.status === 'available' ? tm('availability.available') : tm('availability.unavailable') }}
+                    
+                    <v-chip :color="getStatusColor(status.status)" size="small" class="ml-2">
+                      {{ getStatusText(status.status) }}
                     </v-chip>
                   </v-card-item>
                   <v-card-text v-if="status.status === 'unavailable'" class="text-caption text-medium-emphasis">
@@ -470,10 +479,16 @@ export default {
           sessionSeparation: this.tm('messages.success.sessionSeparation')
         },
         error: {
-          sessionSeparation: this.tm('messages.error.sessionSeparation')
+          sessionSeparation: this.tm('messages.error.sessionSeparation'),
+          fetchStatus: this.tm('messages.error.fetchStatus')
         },
         confirm: {
           delete: this.tm('messages.confirm.delete')
+        },
+        status: {
+          available: this.tm('availability.available'),
+          unavailable: this.tm('availability.unavailable'),
+          pending: this.tm('availability.pending')
         }
       };
     },
@@ -763,19 +778,58 @@ export default {
     },
     
     // 获取供应商状态
-    fetchProviderStatus() {
+    async fetchProviderStatus() {
+      if (this.loadingStatus) return;
+
       this.loadingStatus = true;
-      axios.get('/api/config/provider/check_status').then((res) => {
-        if (res.data && res.data.status === 'ok') {
-          this.providerStatuses = res.data.data || [];
-        } else {
-          this.showError(res.data?.message || this.tm('messages.error.fetchStatus'));
-        }
-        this.loadingStatus = false;
-      }).catch((err) => {
-        this.loadingStatus = false;
-        this.showError(err.response?.data?.message || err.message);
+      
+      // 1. 立即初始化UI为pending状态
+      this.providerStatuses = this.config_data.provider.map(p => ({
+        id: p.id,
+        name: p.id,
+        status: 'pending',
+        error: null
+      }));
+
+      // 2. 为每个provider创建一个并发的测试请求
+      const promises = this.config_data.provider.map(p => {
+        return axios.get(`/api/config/provider/check_one?id=${p.id}`)
+          .then(res => {
+            if (res.data && res.data.status === 'ok') {
+              // 成功，更新对应的provider状态
+              const index = this.providerStatuses.findIndex(s => s.id === p.id);
+              if (index !== -1) {
+                this.providerStatuses.splice(index, 1, res.data.data);
+              }
+            } else {
+              // 接口返回了业务错误
+              throw new Error(res.data?.message || `Failed to check status for ${p.id}`);
+            }
+          })
+          .catch(err => {
+            // 网络错误或业务错误
+            const errorMessage = err.response?.data?.message || err.message || 'Unknown error';
+            const index = this.providerStatuses.findIndex(s => s.id === p.id);
+            if (index !== -1) {
+              const failedStatus = {
+                ...this.providerStatuses[index],
+                status: 'unavailable',
+                error: errorMessage
+              };
+              this.providerStatuses.splice(index, 1, failedStatus);
+            }
+            // 可以在这里选择性地向上抛出错误，以便Promise.allSettled知道
+            return Promise.reject(errorMessage);
+          });
       });
+
+      // 3. 等待所有请求完成（无论成功或失败）
+      try {
+        await Promise.allSettled(promises);
+      } finally {
+        // 4. 关闭全局加载状态
+        this.loadingStatus = false;
+      }
     },
 
     confirmEmptyKey() {
@@ -805,6 +859,22 @@ export default {
         this.idConflictResolve(confirmed);
       }
       this.showIdConflictDialog = false;
+    },
+    getStatusColor(status) {
+      switch (status) {
+        case 'available':
+          return 'success';
+        case 'unavailable':
+          return 'error';
+        case 'pending':
+          return 'grey';
+        default:
+          return 'default';
+      }
+    },
+
+    getStatusText(status) {
+      return this.messages.status[status] || status;
     },
   }
 }

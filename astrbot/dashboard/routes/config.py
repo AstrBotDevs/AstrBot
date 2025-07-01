@@ -166,7 +166,7 @@ class ConfigRoute(Route):
             "/config/provider/update": ("POST", self.post_update_provider),
             "/config/provider/delete": ("POST", self.post_delete_provider),
             "/config/llmtools": ("GET", self.get_llm_tools),
-            "/config/provider/check_status": ("GET", self.check_all_providers_status),
+            "/config/provider/check_one": ("GET", self.check_one_provider_status),
             "/config/provider/list": ("GET", self.get_provider_config_list),
             "/config/provider/get_session_seperate": (
                 "GET",
@@ -256,34 +256,39 @@ class ConfigRoute(Route):
             )
         return status_info
 
-    async def check_all_providers_status(self):
+    async def check_one_provider_status(self):
         """
-        API 接口: 检查所有 LLM Providers 的状态
+        API 接口: 检查单个 LLM Provider 的状态
         """
-        logger.info("API call received: /config/provider/check_status")
+        provider_id = request.args.get("id")
+        if not provider_id:
+            return Response().error("Missing provider_id parameter", status_code=400).__dict__
+
+        logger.info(f"API call received: /config/provider/check_one for id: {provider_id}")
+
         try:
             all_providers: typing.List = (
                 self.core_lifecycle.star_context.get_all_providers()
             )
-            logger.debug(f"Found {len(all_providers)} providers to check.")
+            
+            target_provider = None
+            for p in all_providers:
+                # provider.provider_config 是 AstrBotConfig 对象，可以直接当字典用
+                if p.provider_config.get("id") == provider_id:
+                    target_provider = p
+                    break
+            
+            if not target_provider:
+                logger.warning(f"Provider with id '{provider_id}' not found for status check.")
+                return Response().error(f"Provider with id '{provider_id}' not found", status_code=404).__dict__
 
-            if not all_providers:
-                logger.info("No providers found to check.")
-                return Response().ok([]).__dict__
+            result = await self._test_single_provider(target_provider)
+            return Response().ok(result).__dict__
 
-            tasks = [self._test_single_provider(p) for p in all_providers]
-            logger.debug(f"Created {len(tasks)} tasks for concurrent provider checks.")
-
-            results = await asyncio.gather(*tasks)
-            logger.info(f"Provider status check completed. Results: {results}")
-
-            return Response().ok(results).__dict__
         except Exception as e:
-            logger.error(f"Critical error in check_all_providers_status: {str(e)}")
+            logger.error(f"Critical error in check_one_provider_status for id {provider_id}: {str(e)}")
             logger.error(traceback.format_exc())
-            return (
-                Response().error(f"检查 Provider 状态时发生严重错误: {str(e)}").__dict__
-            )
+            return Response().error(f"检查 Provider 状态时发生严重错误: {str(e)}", status_code=500).__dict__
 
     async def get_configs(self):
         # plugin_name 为空时返回 AstrBot 配置
