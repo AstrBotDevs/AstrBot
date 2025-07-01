@@ -4,7 +4,10 @@
   "buttons": {
     "refresh": "刷新",
     "edit": "编辑",
-    "apply": "应用批量设置"
+    "apply": "应用批量设置",
+    "editName": "编辑会话名称",
+    "save": "保存",
+    "cancel": "取消"
   },
   "sessions": {
     "activeSessions": "活跃会话",
@@ -48,6 +51,14 @@
     "loading": "加载插件列表中...",
     "author": "作者"
   },
+  "nameEditor": {
+    "title": "编辑会话名称",
+    "customName": "自定义名称",
+    "placeholder": "输入自定义会话名称（留空则使用原始名称）",
+    "originalName": "原始名称",
+    "fullSessionId": "完整会话ID",
+    "hint": "自定义名称帮助您轻松识别会话。当设置了自定义名称时，会显示一个小感叹号标识（！），鼠标悬停时会显示实际的UMO。"
+  },
   "messages": {
     "refreshSuccess": "会话列表已刷新",
     "personaUpdateSuccess": "人格更新成功",
@@ -63,6 +74,8 @@
     "batchUpdatePartial": "批量更新完成，{success} 项成功，{error} 项失败",
     "loadPluginsError": "加载插件列表失败",
     "pluginStatusSuccess": "插件 {name} {status}",
-    "pluginStatusError": "插件状态更新失败"
+    "pluginStatusError": "插件状态更新失败",
+    "nameUpdateSuccess": "会话名称更新成功",
+    "nameUpdateError": "会话名称更新失败"
   }
 }

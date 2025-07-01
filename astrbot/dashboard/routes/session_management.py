@@ -27,6 +27,7 @@ class SessionManagementRoute(Route):
             "/session/update_llm": ("POST", self.update_session_llm),
             "/session/update_tts": ("POST", self.update_session_tts),
             "/session/update_mcp": ("POST", self.update_session_mcp),
+            "/session/update_name": ("POST", self.update_session_name),
         }
         self.db_helper = db_helper
         self.core_lifecycle = core_lifecycle
@@ -70,7 +71,8 @@ class SessionManagementRoute(Route):
                     "mcp_enabled": SessionServiceManager.is_mcp_enabled_for_session(session_id),
                     "platform": session_id.split(":")[0] if ":" in session_id else "unknown",
                     "message_type": session_id.split(":")[1] if session_id.count(":") >= 1 else "unknown",
-                    "session_name": session_id.split(":")[2] if session_id.count(":") >= 2 else session_id,
+                    "session_name": SessionServiceManager.get_session_display_name(session_id),
+                    "session_raw_name": session_id.split(":")[2] if session_id.count(":") >= 2 else session_id,
                 }
                 
                 # 获取对话信息
@@ -534,3 +536,28 @@ class SessionManagementRoute(Route):
             error_msg = f"更新会话MCP状态失败: {str(e)}\n{traceback.format_exc()}"
             logger.error(error_msg)
             return Response().error(f"更新会话MCP状态失败: {str(e)}").__dict__
+    
+    async def update_session_name(self):
+        """更新指定会话的自定义名称"""
+        try:
+            data = await request.get_json()
+            session_id = data.get("session_id")
+            custom_name = data.get("custom_name", "")
+            
+            if not session_id:
+                return Response().error("缺少必要参数: session_id").__dict__
+            
+            # 使用 SessionServiceManager 更新会话名称
+            SessionServiceManager.set_session_custom_name(session_id, custom_name)
+            
+            return Response().ok({
+                "message": f"会话名称已更新为: {custom_name if custom_name.strip() else '已清除自定义名称'}",
+                "session_id": session_id,
+                "custom_name": custom_name,
+                "display_name": SessionServiceManager.get_session_display_name(session_id),
+            }).__dict__
+            
+        except Exception as e:
+            error_msg = f"更新会话名称失败: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            return Response().error(f"更新会话名称失败: {str(e)}").__dict__

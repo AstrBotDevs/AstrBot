@@ -4,7 +4,10 @@
   "buttons": {
     "refresh": "Refresh",
     "edit": "Edit",
-    "apply": "Apply Batch Settings"
+    "apply": "Apply Batch Settings",
+    "editName": "Edit Session Name",
+    "save": "Save",
+    "cancel": "Cancel"
   },
   "sessions": {
     "activeSessions": "Active Sessions",
@@ -48,6 +51,14 @@
     "loading": "Loading plugin list...",
     "author": "Author"
   },
+  "nameEditor": {
+    "title": "Edit Session Name",
+    "customName": "Custom Name",
+    "placeholder": "Enter custom session name (leave empty to use original name)",
+    "originalName": "Original Name",
+    "fullSessionId": "Full Session ID",
+    "hint": "Custom names help you easily identify sessions. The small information icon (!) will show the actual UMO when hovering."
+  },
   "messages": {
     "refreshSuccess": "Session list refreshed",
     "personaUpdateSuccess": "Persona updated successfully",
@@ -63,6 +74,8 @@
     "batchUpdatePartial": "Batch update completed, {success} successful, {error} failed",
     "loadPluginsError": "Failed to load plugin list",
     "pluginStatusSuccess": "Plugin {name} {status}",
-    "pluginStatusError": "Failed to update plugin status"
+    "pluginStatusError": "Failed to update plugin status",
+    "nameUpdateSuccess": "Session name updated successfully",
+    "nameUpdateError": "Failed to update session name"
   }
 }

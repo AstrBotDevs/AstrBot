@@ -197,6 +197,68 @@ class SessionServiceManager:
         return SessionServiceManager.is_mcp_enabled_for_session(session_id)
 
     # =============================================================================
+    # 会话命名相关方法
+    # =============================================================================
+
+    @staticmethod
+    def get_session_custom_name(session_id: str) -> str:
+        """获取会话的自定义名称
+
+        Args:
+            session_id: 会话ID (unified_msg_origin)
+
+        Returns:
+            str: 自定义名称，如果没有设置则返回None
+        """
+        session_config = sp.get("session_service_config", {}) or {}
+        session_services = session_config.get(session_id, {})
+        return session_services.get("custom_name")
+
+    @staticmethod
+    def set_session_custom_name(session_id: str, custom_name: str) -> None:
+        """设置会话的自定义名称
+
+        Args:
+            session_id: 会话ID (unified_msg_origin)
+            custom_name: 自定义名称，可以为空字符串来清除名称
+        """
+        # 获取当前配置
+        session_config = sp.get("session_service_config", {}) or {}
+        if session_id not in session_config:
+            session_config[session_id] = {}
+
+        # 设置自定义名称
+        if custom_name and custom_name.strip():
+            session_config[session_id]["custom_name"] = custom_name.strip()
+        else:
+            # 如果传入空名称，则删除自定义名称
+            session_config[session_id].pop("custom_name", None)
+
+        # 保存配置
+        sp.put("session_service_config", session_config)
+
+        logger.info(
+            f"会话 {session_id} 的自定义名称已更新为: {custom_name.strip() if custom_name and custom_name.strip() else '已清除'}"
+        )
+
+    @staticmethod
+    def get_session_display_name(session_id: str) -> str:
+        """获取会话的显示名称（优先显示自定义名称，否则显示原始session_id的最后一段）
+
+        Args:
+            session_id: 会话ID (unified_msg_origin)
+
+        Returns:
+            str: 显示名称
+        """
+        custom_name = SessionServiceManager.get_session_custom_name(session_id)
+        if custom_name:
+            return custom_name
+        
+        # 如果没有自定义名称，返回session_id的最后一段
+        return session_id.split(":")[2] if session_id.count(":") >= 2 else session_id
+
+    # =============================================================================
     # 通用配置方法
     # =============================================================================
 

@@ -60,16 +60,50 @@
           <!-- 会话信息 -->
           <template v-slot:item.session_info="{ item }">
             <div class="py-2">
-              <div class="font-weight-medium">{{ item.session_name }}</div>
-              <div class="text-caption text-grey-600">
-                <v-chip 
-                  :color="getPlatformColor(item.platform)" 
-                  size="x-small" 
-                  class="me-1"
+              <div class="d-flex align-center">
+                <div class="flex-grow-1">
+                  <div class="font-weight-medium d-flex align-center">
+                    {{ item.session_name }}
+                    <v-tooltip 
+                      v-if="item.session_name !== item.session_raw_name" 
+                      activator="parent" 
+                      location="top"
+                    >
+                      <span class="text-caption">实际UMO: {{ item.session_raw_name }}</span>
+                    </v-tooltip>
+                    <v-icon 
+                      v-if="item.session_name !== item.session_raw_name" 
+                      size="12" 
+                      color="warning" 
+                      class="ml-1"
+                    >
+                      mdi-information-outline
+                    </v-icon>
+                  </div>
+                  <div class="text-caption text-grey-600">
+                    <v-chip 
+                      :color="getPlatformColor(item.platform)" 
+                      size="x-small" 
+                      class="me-1"
+                    >
+                      {{ item.platform }}
+                    </v-chip>
+                    {{ item.message_type }}
+                  </div>
+                </div>
+                <v-btn
+                  icon
+                  size="small"
+                  variant="text"
+                  color="primary"
+                  @click="openNameEditor(item)"
+                  :loading="item.updating"
                 >
-                  {{ item.platform }}
-                </v-chip>
-                {{ item.message_type }}
+                  <v-icon size="16">mdi-pencil</v-icon>
+                  <v-tooltip activator="parent" location="top">
+                    {{ tm('buttons.editName') }}
+                  </v-tooltip>
+                </v-btn>
               </div>
             </div>
           </template>
@@ -338,6 +372,69 @@
       </v-card>
     </v-dialog>
 
+    <!-- 会话命名编辑对话框 -->
+    <v-dialog v-model="nameEditDialog" max-width="500">
+      <v-card v-if="selectedSessionForName">
+        <v-card-title class="bg-primary text-white py-3 px-4 d-flex align-center">
+          <v-icon color="white" class="me-2">mdi-rename-box</v-icon>
+          <span>{{ tm('nameEditor.title') }}</span>
+          <v-spacer></v-spacer>
+          <v-btn icon variant="text" color="white" @click="nameEditDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+
+        <v-card-text class="pa-4">
+          <v-text-field
+            v-model="newSessionName"
+            :label="tm('nameEditor.customName')"
+            :placeholder="tm('nameEditor.placeholder')"
+            variant="outlined"
+            hide-details="auto"
+            clearable
+            class="mb-4"
+            @keyup.enter="saveSessionName"
+          ></v-text-field>
+          
+          <div class="text-caption text-grey-600 mb-2">
+            {{ tm('nameEditor.originalName') }}: {{ selectedSessionForName.session_raw_name }}
+          </div>
+          
+          <div class="text-caption text-grey-600 mb-2">
+            {{ tm('nameEditor.fullSessionId') }}: {{ selectedSessionForName.session_id }}
+          </div>
+          
+          <v-alert 
+            variant="tonal" 
+            type="info" 
+            density="compact" 
+            class="mb-4"
+          >
+            {{ tm('nameEditor.hint') }}
+          </v-alert>
+        </v-card-text>
+
+        <v-card-actions class="px-4 pb-4">
+          <v-spacer></v-spacer>
+          <v-btn 
+            color="grey" 
+            variant="text" 
+            @click="nameEditDialog = false"
+            :disabled="nameEditLoading"
+          >
+            {{ tm('buttons.cancel') }}
+          </v-btn>
+          <v-btn 
+            color="primary" 
+            @click="saveSessionName"
+            :loading="nameEditLoading"
+          >
+            {{ tm('buttons.save') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 提示信息 -->
     <v-snackbar v-model="snackbar" :timeout="3000" :color="snackbarColor">
       {{ snackbarText }}
@@ -383,6 +480,12 @@ export default {
       selectedSessionForPlugin: null,
       sessionPlugins: [],
       loadingPlugins: false,
+      
+      // 会话命名编辑器
+      nameEditDialog: false,
+      selectedSessionForName: null,
+      newSessionName: '',
+      nameEditLoading: false,
       
       // 提示信息
       snackbar: false,
@@ -704,6 +807,37 @@ export default {
       }
       
       plugin.updating = false;
+    },
+    
+    openNameEditor(session) {
+      this.selectedSessionForName = session;
+      this.newSessionName = session.session_name === session.session_raw_name ? '' : session.session_name;
+      this.nameEditDialog = true;
+    },
+    
+    async saveSessionName() {
+      if (!this.selectedSessionForName) return;
+      
+      this.nameEditLoading = true;
+      try {
+        const response = await axios.post('/api/session/update_name', {
+          session_id: this.selectedSessionForName.session_id,
+          custom_name: this.newSessionName || ''
+        });
+        
+        if (response.data.status === 'ok') {
+          // 更新本地数据
+          this.selectedSessionForName.session_name = response.data.data.display_name;
+          this.showSuccess(response.data.data.message || this.tm('messages.nameUpdateSuccess'));
+          this.nameEditDialog = false;
+        } else {
+          this.showError(response.data.message || this.tm('messages.nameUpdateError'));
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || this.tm('messages.nameUpdateError'));
+      }
+      
+      this.nameEditLoading = false;
     },
     
     getPlatformColor(platform) {
