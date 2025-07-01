@@ -20,7 +20,7 @@ const PurpleTheme: ThemeTypes = {
     lightsuccess: '#b9f6ca',
     lighterror: '#f9d8d8',
     lightwarning: '#fff8e1',
-    primaryText: '#000000dd',
+    primaryText: '#1b1c1d',
     secondaryText: '#000000aa',
     darkprimary: '#1565c0',
     darksecondary: '#4527a0',
@@ -39,7 +39,8 @@ const PurpleTheme: ThemeTypes = {
     background: '#f9fafcf4',
     overlay: '#ffffffaa',
     codeBg: '#f5f0ff',
-    code: '#673ab7'
+    code: '#673ab7',
+    chatMessageBubble: '#e7ebf4',
   }
 };
 

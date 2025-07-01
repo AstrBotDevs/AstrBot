@@ -190,11 +190,6 @@ class ProviderManager:
                     from .sources.anthropic_source import (
                         ProviderAnthropic as ProviderAnthropic,
                     )
-                case "llm_tuner":
-                    logger.info("加载 LLM Tuner 工具 ...")
-                    from .sources.llmtuner_source import (
-                        LLMTunerModelLoader as LLMTunerModelLoader,
-                    )
                 case "dify":
                     from .sources.dify_source import ProviderDify as ProviderDify
                 case "dashscope":
@@ -330,8 +325,6 @@ class ProviderManager:
                 inst = provider_metadata.cls_type(
                     provider_config,
                     self.provider_settings,
-                    self.db_helper,
-                    self.provider_settings.get("persistant_history", True),
                     self.selected_default_persona,
                 )
 

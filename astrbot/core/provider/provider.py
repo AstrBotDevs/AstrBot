@@ -1,6 +1,5 @@
 import abc
 from typing import List
-from astrbot.core.db import BaseDatabase
 from typing import TypedDict, AsyncGenerator
 from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
@@ -53,15 +52,13 @@ class Provider(AbstractProvider):
         self,
         provider_config: dict,
         provider_settings: dict,
-        persistant_history: bool = True,
-        db_helper: BaseDatabase = None,
-        default_persona: Personality = None,
+        default_persona: Personality | None = None,
     ) -> None:
         super().__init__(provider_config)
 
         self.provider_settings = provider_settings
 
-        self.curr_personality: Personality = default_persona
+        self.curr_personality = default_persona
         """维护了当前的使用的 persona，即人格。可能为 None"""
 
     @abc.abstractmethod
@@ -86,11 +83,11 @@ class Provider(AbstractProvider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = None,
+        image_urls: list[str] = None,
         func_tool: FuncCall = None,
-        contexts: List = None,
+        contexts: list = None,
         system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -114,11 +111,11 @@ class Provider(AbstractProvider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = None,
+        image_urls: list[str] = None,
         func_tool: FuncCall = None,
-        contexts: List = None,
+        contexts: list = None,
         system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。

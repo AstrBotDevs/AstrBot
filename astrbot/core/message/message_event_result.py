@@ -24,6 +24,8 @@ class MessageChain:
 
     chain: List[BaseMessageComponent] = field(default_factory=list)
     use_t2i_: Optional[bool] = None  # None 为跟随用户设置
+    type: Optional[str] = None
+    """消息链承载的消息的类型。可选，用于让消息平台区分不同业务场景的消息链。"""
 
     def message(self, message: str):
         """添加一条文本消息到消息链 `chain` 中。
@@ -98,6 +100,15 @@ class MessageChain:
         self.chain.append(Image.fromFileSystem(path))
         return self
 
+    def base64_image(self, base64_str: str):
+        """添加一条图片消息（base64 编码字符串）到消息链 `chain` 中。
+        Example:
+
+            CommandResult().base64_image("iVBORw0KGgoAAAANSUhEUgAAAAUA...")
+        """
+        self.chain.append(Image.fromBase64(base64_str))
+        return self
+
     def use_t2i(self, use_t2i: bool):
         """设置是否使用文本转图片服务。
 
@@ -157,7 +168,7 @@ class ResultContentType(enum.Enum):
     """普通的消息结果"""
     STREAMING_RESULT = enum.auto()
     """调用 LLM 产生的流式结果"""
-    STREAMING_FINISH= enum.auto()
+    STREAMING_FINISH = enum.auto()
     """流式输出完成"""
 
 

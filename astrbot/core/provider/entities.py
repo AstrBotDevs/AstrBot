@@ -58,7 +58,7 @@ class AssistantMessageSegment:
     """OpenAI 格式的上下文中 role 为 assistant 的消息段。参考: https://platform.openai.com/docs/guides/function-calling"""
 
     content: str = None
-    tool_calls: List[ChatCompletionMessageToolCall | Dict] = None
+    tool_calls: List[ChatCompletionMessageToolCall | Dict] = field(default_factory=list)
     role: str = "assistant"
 
     def to_dict(self):
@@ -67,7 +67,7 @@ class AssistantMessageSegment:
         }
         if self.content:
             ret["content"] = self.content
-        elif self.tool_calls:
+        if self.tool_calls:
             ret["tool_calls"] = self.tool_calls
         return ret
 
@@ -95,19 +95,19 @@ class ProviderRequest:
     """提示词"""
     session_id: str = ""
     """会话 ID"""
-    image_urls: List[str] = None
+    image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""
-    func_tool: FuncCall = None
+    func_tool: FuncCall | None = None
     """可用的函数工具"""
-    contexts: List = None
+    contexts: list[dict] = field(default_factory=list)
     """上下文。格式与 openai 的上下文格式一致：
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages
     """
     system_prompt: str = ""
     """系统提示词"""
-    conversation: Conversation = None
+    conversation: Conversation | None = None
 
-    tool_calls_result: ToolCallsResult = None
+    tool_calls_result: list[ToolCallsResult] | ToolCallsResult | None = None
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
 
     def __repr__(self):
@@ -115,6 +115,14 @@ class ProviderRequest:
 
     def __str__(self):
         return self.__repr__()
+
+    def append_tool_calls_result(self, tool_calls_result: ToolCallsResult):
+        """添加工具调用结果到请求中"""
+        if not self.tool_calls_result:
+            self.tool_calls_result = []
+        if isinstance(self.tool_calls_result, ToolCallsResult):
+            self.tool_calls_result = [self.tool_calls_result]
+        self.tool_calls_result.append(tool_calls_result)
 
     def _print_friendly_context(self):
         """打印友好的消息上下文。将 image_url 的值替换为 <Image>"""
