@@ -236,58 +236,7 @@
                 <v-btn text @click="saveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
             </v-card-actions>
         </v-card>
-    </v-dialog> <!-- 连接冲突提示对话框 -->
-    <v-dialog v-model="connectionConflictDialog" max-width="600" persistent>
-        <v-card class="rounded-lg">
-            <v-toolbar color="primary" density="comfortable" flat>
-                <v-icon color="white" class="ml-4 mr-2">mdi-information-outline</v-icon>
-                <v-toolbar-title class="text-white">{{ tm('connection.title') }}</v-toolbar-title>
-                <v-spacer></v-spacer>
-                <v-btn icon @click="connectionConflictDialog = false" variant="text" color="white">
-                    <v-icon>mdi-close</v-icon>
-                </v-btn>
-            </v-toolbar>
-
-            <v-card-text class="pa-6">
-                <div class="text-body-1 mb-4">
-                    {{ tm('connection.message') }}
-                </div>
-
-                <v-alert type="info" variant="tonal" class="mb-4" icon="mdi-lightbulb-outline">
-                    <div class="text-body-2 mb-2">
-                        <strong>{{ tm('connection.reasons') }}</strong>
-                    </div>
-                    <ul class="ml-4">
-                        <li class="mb-1">{{ tm('connection.reasonWindowResize') }}</li>
-                        <li class="mb-1">{{ tm('connection.reasonMultipleTabs') }}</li>
-                        <li class="mb-1">{{ tm('connection.reasonNetworkIssue') }}</li>
-                    </ul>
-                </v-alert>
-
-                <v-alert type="warning" variant="tonal" icon="mdi-alert-circle-outline" class="mb-0">
-                    <div class="text-body-2">
-                        {{ tm('connection.notice') }}
-                    </div>
-                </v-alert>
-            </v-card-text>
-
-            <v-card-actions class="px-6 pb-4">
-                <v-spacer></v-spacer>
-                <v-btn color="primary" variant="elevated" @click="connectionConflictDialog = false" class="px-6">
-                    {{ tm('connection.understand') }}
-                </v-btn>
-            </v-card-actions>
-        </v-card>
     </v-dialog>
-
-    <!-- 连接状态消息提示 -->
-    <v-snackbar v-model="connectionStatusSnackbar" :color="connectionStatusColor" :timeout="4000" location="top">
-        <v-icon class="mr-2">
-            {{ connectionStatusColor === 'success' ? 'mdi-check-circle' :
-                connectionStatusColor === 'warning' ? 'mdi-alert-circle' : 'mdi-information' }}
-        </v-icon>
-        {{ connectionStatusMessage }}
-    </v-snackbar>
 </template>
 
 <script>
@@ -298,9 +247,21 @@ import { ref } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
+import hljs from 'highlight.js';
+import 'highlight.js/styles/github.css';
 
 marked.setOptions({
-    breaks: true
+    breaks: true,
+    highlight: function(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+            try {
+                return hljs.highlight(code, { language: lang }).value;
+            } catch (err) {
+                console.error('Highlight error:', err);
+            }
+        }
+        return hljs.highlightAuto(code).value;
+    }
 });
 
 export default {
@@ -349,7 +310,6 @@ export default {
             eventSourceReader: null,
             sseReconnecting: false, // 添加重连状态标志
 
-
             // // Ctrl键长按相关变量
             ctrlKeyDown: false,
             ctrlKeyTimer: null,
@@ -368,12 +328,7 @@ export default {
             sidebarHoverTimer: null,
             sidebarHoverExpanded: false,
             sidebarHoverDelay: 100, // 悬停延迟，单位毫秒            
-            pendingCid: null, // Store pending conversation ID for route handling            
-            // 连接状态提示相关
-            connectionConflictDialog: false,
-            connectionStatusSnackbar: false,
-            connectionStatusMessage: '',
-            connectionStatusColor: 'info',
+            pendingCid: null, // Store pending conversation ID for route handling
         }
     },
 
@@ -479,18 +434,6 @@ export default {
         this.cleanupMediaCache();
     },
     methods: {
-        // 显示连接冲突对话框
-        showConnectionConflictDialog() {
-            this.connectionConflictDialog = true;
-        },
-
-        // 显示连接状态消息
-        showConnectionStatus(message, color = 'info') {
-            this.connectionStatusMessage = message;
-            this.connectionStatusColor = color;
-            this.connectionStatusSnackbar = true;
-        },
-
         toggleTheme() {
             const customizer = useCustomizerStore();
             const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
@@ -695,8 +638,6 @@ export default {
                                     try {
                                         const errorObj = JSON.parse(line);
                                         if (errorObj.message === 'Already connected') {
-                                            console.log('检测到连接冲突，显示提示对话框...');
-                                            this.showConnectionConflictDialog();
                                             throw new Error('CONNECTION_CONFLICT');
                                         }
                                         console.error('后端错误:', errorObj.message);
@@ -771,6 +712,8 @@ export default {
                                     }
                                 } else if (chunk_json.type === 'end') {
                                     in_streaming = false;
+                                    // 在消息流结束后初始化代码复制按钮
+                                    this.initCodeCopyButtons();
                                     continue;
                                 } else if (chunk_json.type === 'update_title') {
                                     // 更新对话标题
@@ -977,6 +920,8 @@ export default {
                     }
                 }
                 this.messages = message;
+                // 初始化代码复制按钮
+                this.initCodeCopyButtons();
             }).catch(err => {
                 console.error(err);
             });
@@ -1118,6 +1063,8 @@ export default {
             this.$nextTick(() => {
                 const container = this.$refs.messageContainer;
                 container.scrollTop = container.scrollHeight;
+                // 在滚动后初始化代码复制按钮
+                this.initCodeCopyButtons();
             });
         },
         handleInputKeyDown(e) {
@@ -1161,6 +1108,66 @@ export default {
                 }
             });
             this.mediaCache = {};
+        },
+
+        // 复制代码到剪贴板
+        copyCodeToClipboard(code) {
+            navigator.clipboard.writeText(code).then(() => {
+                // 可以添加一个简单的提示
+                console.log('代码已复制到剪贴板');
+            }).catch(err => {
+                console.error('复制失败:', err);
+                // 如果现代API失败，使用传统方法
+                const textArea = document.createElement('textarea');
+                textArea.value = code;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    console.log('代码已复制到剪贴板 (fallback)');
+                } catch (fallbackErr) {
+                    console.error('复制失败 (fallback):', fallbackErr);
+                }
+                document.body.removeChild(textArea);
+            });
+        },
+
+        // 获取复制图标SVG
+        getCopyIconSvg() {
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+        },
+
+        // 获取成功图标SVG
+        getSuccessIconSvg() {
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"></polyline></svg>';
+        },
+
+        // 初始化代码块复制按钮
+        initCodeCopyButtons() {
+            this.$nextTick(() => {
+                const codeBlocks = this.$refs.messageContainer?.querySelectorAll('pre code') || [];
+                codeBlocks.forEach((codeBlock, index) => {
+                    const pre = codeBlock.parentElement;
+                    if (pre && !pre.querySelector('.copy-code-btn')) {
+                        const button = document.createElement('button');
+                        button.className = 'copy-code-btn';
+                        button.innerHTML = this.getCopyIconSvg();
+                        button.title = '复制代码';
+                        button.addEventListener('click', () => {
+                            this.copyCodeToClipboard(codeBlock.textContent);
+                            // 显示复制成功提示
+                            button.innerHTML = this.getSuccessIconSvg();
+                            button.style.color = '#4caf50';
+                            setTimeout(() => {
+                                button.innerHTML = this.getCopyIconSvg();
+                                button.style.color = '';
+                            }, 2000);
+                        });
+                        pre.style.position = 'relative';
+                        pre.appendChild(button);
+                    }
+                });
+            });
         },
     },
 }
@@ -1631,6 +1638,7 @@ export default {
     border-radius: 6px;
     overflow-x: auto;
     margin: 12px 0;
+    position: relative;
 }
 
 .markdown-content code {
@@ -1640,6 +1648,144 @@ export default {
     font-family: 'Fira Code', monospace;
     font-size: 0.9em;
     color: var(--v-theme-code);
+}
+
+/* 代码块中的code标签样式 */
+.markdown-content pre code {
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-family: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.85em;
+    color: inherit;
+    display: block;
+    overflow-x: auto;
+    line-height: 1.5;
+}
+
+/* 自定义代码高亮样式 */
+.markdown-content pre {
+    border: 1px solid var(--v-theme-border);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 确保highlight.js的样式正确应用 */
+.markdown-content pre code.hljs {
+    background: transparent !important;
+    color: inherit;
+}
+
+/* 亮色主题下的代码高亮 */
+.v-theme--light .markdown-content pre {
+    background-color: #f6f8fa;
+}
+
+/* 暗色主题下的代码块样式 */
+.v-theme--dark .markdown-content pre {
+    background-color: #0d1117 !important;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.v-theme--dark .markdown-content pre code {
+    color: #e6edf3 !important;
+}
+
+/* 暗色主题下的highlight.js样式覆盖 */
+.v-theme--dark .hljs {
+    background: #0d1117 !important;
+    color: #e6edf3 !important;
+}
+
+.v-theme--dark .hljs-keyword,
+.v-theme--dark .hljs-selector-tag,
+.v-theme--dark .hljs-built_in,
+.v-theme--dark .hljs-name,
+.v-theme--dark .hljs-tag {
+    color: #ff7b72 !important;
+}
+
+.v-theme--dark .hljs-string,
+.v-theme--dark .hljs-title,
+.v-theme--dark .hljs-section,
+.v-theme--dark .hljs-attribute,
+.v-theme--dark .hljs-literal,
+.v-theme--dark .hljs-template-tag,
+.v-theme--dark .hljs-template-variable,
+.v-theme--dark .hljs-type,
+.v-theme--dark .hljs-addition {
+    color: #a5d6ff !important;
+}
+
+.v-theme--dark .hljs-comment,
+.v-theme--dark .hljs-quote,
+.v-theme--dark .hljs-deletion,
+.v-theme--dark .hljs-meta {
+    color: #8b949e !important;
+}
+
+.v-theme--dark .hljs-number,
+.v-theme--dark .hljs-regexp,
+.v-theme--dark .hljs-symbol,
+.v-theme--dark .hljs-variable,
+.v-theme--dark .hljs-template-variable,
+.v-theme--dark .hljs-link,
+.v-theme--dark .hljs-selector-attr,
+.v-theme--dark .hljs-selector-pseudo {
+    color: #79c0ff !important;
+}
+
+.v-theme--dark .hljs-function,
+.v-theme--dark .hljs-class,
+.v-theme--dark .hljs-title.class_ {
+    color: #d2a8ff !important;
+}
+
+/* 复制按钮样式 */
+.copy-code-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    padding: 6px;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    font-size: 12px;
+    z-index: 10;
+    backdrop-filter: blur(4px);
+}
+
+.copy-code-btn:hover {
+    background: rgba(255, 255, 255, 1);
+    color: #333;
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.copy-code-btn:active {
+    transform: scale(0.95);
+}
+
+.markdown-content pre:hover .copy-code-btn {
+    opacity: 1;
+}
+
+.v-theme--dark .copy-code-btn {
+    background: rgba(45, 45, 45, 0.9);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #ccc;
+}
+
+.v-theme--dark .copy-code-btn:hover {
+    background: rgba(45, 45, 45, 1);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .markdown-content img {
