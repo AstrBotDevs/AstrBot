@@ -13,7 +13,8 @@ class PlatformAdapterType(enum.Flag):
     TELEGRAM = enum.auto()
     WECOM = enum.auto()
     LARK = enum.auto()
-    ALL = AIOCQHTTP | QQOFFICIAL | VCHAT | GEWECHAT | TELEGRAM | WECOM | LARK
+    WECHATPADPRO = enum.auto()
+    ALL = AIOCQHTTP | QQOFFICIAL | VCHAT | GEWECHAT | TELEGRAM | WECOM | LARK | WECHATPADPRO
 
 
 ADAPTER_NAME_2_TYPE = {
@@ -24,6 +25,7 @@ ADAPTER_NAME_2_TYPE = {
     "telegram": PlatformAdapterType.TELEGRAM,
     "wecom": PlatformAdapterType.WECOM,
     "lark": PlatformAdapterType.LARK,
+    "wechatpadpro": PlatformAdapterType.WECHATPADPRO,
 }
 
 

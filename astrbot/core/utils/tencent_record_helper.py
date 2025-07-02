@@ -117,7 +117,7 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     try:
         import pilk
     except ImportError as e:
-        raise Exception("未安装 pysilk，请执行: pip install pysilk") from e
+        raise Exception("未安装 pilk: pip install pilk") from e
 
     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
     os.makedirs(temp_dir, exist_ok=True)
