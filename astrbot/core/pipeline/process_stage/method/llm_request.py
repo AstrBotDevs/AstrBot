@@ -112,7 +112,8 @@ class LLMRequestSubStage(Stage):
             return
 
         # 执行请求 LLM 前事件钩子。
-        await self.ctx.call_event_hook(event, EventType.OnLLMRequestEvent, req)
+        if await self.ctx.call_event_hook(event, EventType.OnLLMRequestEvent, req):
+            return
 
         if isinstance(req.contexts, str):
             req.contexts = json.loads(req.contexts)
@@ -159,6 +160,8 @@ class LLMRequestSubStage(Stage):
                 step_idx += 1
                 try:
                     async for resp in tool_loop_agent.step():
+                        if event.is_stopped():
+                            return
                         if resp.type == "tool_call_result":
                             continue  # 跳过工具调用结果
                         if resp.type == "tool_call":

@@ -127,9 +127,10 @@ class ToolLoopAgent(BaseAgentRunner):
             self._transition_state(AgentState.DONE)
 
             # 执行事件钩子
-            await self.pipeline_ctx.call_event_hook(
+            if await self.pipeline_ctx.call_event_hook(
                 self.event, EventType.OnLLMResponseEvent, llm_resp
-            )
+            ):
+                return
 
         # 返回 LLM 结果
         if llm_resp.result_chain:
