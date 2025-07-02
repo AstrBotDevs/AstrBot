@@ -259,7 +259,7 @@ class LLMRequestSubStage(Stage):
                     f"{cleaned_text}\n"
                     "Only output the summary within 10 words, DO NOT INCLUDE any other text."
                     "You must use the same language as the user."
-                    "If you think the dialog is too short to summarize, only output a special mark: `None`"
+                    "If you think the dialog is too short to summarize, only output a special mark: `<None>`"
                 ),
             )
             if llm_resp and llm_resp.completion_text:
@@ -267,7 +267,7 @@ class LLMRequestSubStage(Stage):
                     f"WebChat 对话标题生成响应: {llm_resp.completion_text.strip()}"
                 )
                 title = llm_resp.completion_text.strip()
-                if not title or "None" == title:
+                if not title or "<None>" in title:
                     return
                 await self.conv_manager.update_conversation_title(
                     event.unified_msg_origin, title=title
