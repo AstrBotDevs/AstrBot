@@ -14,7 +14,7 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
+from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.utils.io import download_image_by_url
 
@@ -259,10 +259,12 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
-        native_tool_enabled = any([
-            self.provider_config.get("gm_native_coderunner", False),
-            self.provider_config.get("gm_native_search", False),
-        ])
+        native_tool_enabled = any(
+            [
+                self.provider_config.get("gm_native_coderunner", False),
+                self.provider_config.get("gm_native_search", False),
+            ]
+        )
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -544,13 +546,13 @@ class ProviderGoogleGenAI(Provider):
 
     async def text_chat_stream(
         self,
-        prompt: str,
-        session_id: str = None,
-        image_urls: list[str] = None,
-        func_tool: FuncCall = None,
-        contexts: str = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        prompt,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
+        tool_calls_result=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
@@ -566,7 +568,11 @@ class ProviderGoogleGenAI(Provider):
 
         # tool calls result
         if tool_calls_result:
-            context_query.extend(tool_calls_result.to_openai_messages())
+            if not isinstance(tool_calls_result, list):
+                context_query.extend(tool_calls_result.to_openai_messages())
+            else:
+                for tcr in tool_calls_result:
+                    context_query.extend(tcr.to_openai_messages())
 
         model_config = self.provider_config.get("model_config", {})
         model_config["model"] = self.get_model()
@@ -628,10 +634,12 @@ class ProviderGoogleGenAI(Provider):
                 if not image_data:
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
-                user_content["content"].append({
-                    "type": "image_url",
-                    "image_url": {"url": image_data},
-                })
+                user_content["content"].append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_data},
+                    }
+                )
             return user_content
         else:
             return {"role": "user", "content": text}

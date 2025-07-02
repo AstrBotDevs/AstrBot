@@ -300,7 +300,11 @@ class ProviderAnthropic(Provider):
 
         # tool calls result
         if tool_calls_result:
-            context_query.extend(tool_calls_result.to_openai_messages())
+            if not isinstance(tool_calls_result, list):
+                context_query.extend(tool_calls_result.to_openai_messages())
+            else:
+                for tcr in tool_calls_result:
+                    context_query.extend(tcr.to_openai_messages())
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
