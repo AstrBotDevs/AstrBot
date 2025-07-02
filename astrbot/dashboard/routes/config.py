@@ -9,6 +9,7 @@ from astrbot.core.platform.register import platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core import logger
+from astrbot.core.provider import Provider
 import asyncio
 
 
@@ -168,6 +169,7 @@ class ConfigRoute(Route):
             "/config/llmtools": ("GET", self.get_llm_tools),
             "/config/provider/check_status": ("GET", self.check_all_providers_status),
             "/config/provider/list": ("GET", self.get_provider_config_list),
+            "/config/provider/model_list": ("GET", self.get_provider_model_list),
             "/config/provider/get_session_seperate": (
                 "GET",
                 lambda: Response()
@@ -318,6 +320,28 @@ class ConfigRoute(Route):
             if provider.get("provider_type", None) == provider_type:
                 provider_list.append(provider)
         return Response().ok(provider_list).__dict__
+
+    async def get_provider_model_list(self):
+        """获取指定提供商的模型列表"""
+        provider_id = request.args.get("provider_id", None)
+        if not provider_id:
+            return Response().error("缺少参数 provider_id").__dict__
+
+        prov_mgr = self.core_lifecycle.provider_manager
+        provider: Provider | None = prov_mgr.inst_map.get(provider_id, None)
+        if not provider:
+            return Response().error(f"未找到 ID 为 {provider_id} 的提供商").__dict__
+
+        try:
+            models = await provider.get_models()
+            ret = {
+                "models": models,
+                "provider_id": provider_id,
+            }
+            return Response().ok(ret).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
 
     async def post_astrbot_configs(self):
         post_configs = await request.json

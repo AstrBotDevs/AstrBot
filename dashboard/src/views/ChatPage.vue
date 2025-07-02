@@ -50,10 +50,12 @@
 
                                     <template v-if="!sidebarCollapsed" v-slot:append>
                                         <div class="conversation-actions">
-                                            <v-btn icon="mdi-pencil" size="x-small" variant="text" class="edit-title-btn"
+                                            <v-btn icon="mdi-pencil" size="x-small" variant="text"
+                                                class="edit-title-btn"
                                                 @click.stop="showEditTitleDialog(item.cid, item.title)" />
-                                            <v-btn icon="mdi-delete" size="x-small" variant="text" class="delete-conversation-btn"
-                                                color="error" @click.stop="deleteConversation(item.cid)" />
+                                            <v-btn icon="mdi-delete" size="x-small" variant="text"
+                                                class="delete-conversation-btn" color="error"
+                                                @click.stop="deleteConversation(item.cid)" />
                                         </div>
                                     </template>
                                 </v-list-item>
@@ -78,7 +80,7 @@
                         <div class="conversation-header-content" v-if="currCid && getCurrentConversation">
                             <h2 class="conversation-header-title">{{ getCurrentConversation.title ||
                                 tm('conversation.newConversation')
-                            }}</h2>
+                                }}</h2>
                             <div class="conversation-header-time">{{ formatDate(getCurrentConversation.updated_at) }}
                             </div>
                         </div>
@@ -100,8 +102,8 @@
                             <!-- 主题切换按钮 -->
                             <v-tooltip :text="isDark ? tm('modes.lightMode') : tm('modes.darkMode')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
-                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon" size="small" rounded="sm" style="margin-right: 8px;"
-                                        variant="text">
+                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon"
+                                        size="small" rounded="sm" style="margin-right: 8px;" variant="text">
                                         <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
                                     </v-btn>
                                 </template>
@@ -188,14 +190,29 @@
                             <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown"
                                 @click:clear="clearMessage" placeholder="Ask AstrBot..."
                                 style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
-                            <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
-                                <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
-                                    :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
-                                    class="send-btn" size="small" />
-                                <v-btn @click="isRecording ? stopRecording() : startRecording()"
-                                    :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
-                                    :color="isRecording ? 'error' : 'deep-purple'" class="record-btn" size="small" />
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0px 8px;">
+                                <div style="display: flex; justify-content: flex-start; margin-top: 8px;">
+
+                                    <!-- 选择提供商和模型 -->
+                                    <v-btn class="text-none" variant="tonal" rounded="xl" size="small" v-if="selectedProviderId && selectedModelName" @click="showProviderModelDialog = true">
+                                        {{ selectedProviderId }} / {{ selectedModelName }}
+                                    </v-btn>
+                                    <v-btn variant="tonal" rounded="xl" size="small" v-else @click="showProviderModelDialog = true">
+                                        选择模型
+                                    </v-btn>
+
+                                </div>
+                                <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                                    <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
+                                        :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
+                                        class="send-btn" size="small" />
+                                    <v-btn @click="isRecording ? stopRecording() : startRecording()"
+                                        :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
+                                        :color="isRecording ? 'error' : 'deep-purple'" class="record-btn"
+                                        size="small" />
+                                </div>
                             </div>
+
                         </div>
 
                         <!-- 附件预览区 -->
@@ -236,6 +253,89 @@
             </v-card-actions>
         </v-card>
     </v-dialog>
+
+    <!-- 选择提供商和模型对话框 -->
+    <v-dialog v-model="showProviderModelDialog" max-width="800" persistent>
+        <v-card style="padding: 8px;">
+            <v-card-title class="dialog-title">
+                <span>选择提供商和模型</span>
+            </v-card-title>
+            <v-card-text class="pa-0">
+                <div class="provider-model-container">
+                    <!-- 左侧提供商列表 -->
+                    <div class="provider-list-panel">
+                        <div class="panel-header">
+                            <h4>提供商</h4>
+                        </div>
+                        <v-list density="compact" nav class="provider-list">
+                            <v-list-item 
+                                v-for="provider in chatCompletionProviderConfigs" 
+                                :key="provider.id"
+                                :value="provider.id"
+                                @click="selectProvider(provider)"
+                                :active="selectedProviderId === provider.id"
+                                rounded="lg"
+                                class="provider-item">
+                                <v-list-item-title>{{ provider.id }}</v-list-item-title>
+                                <v-list-item-subtitle v-if="provider.api_base">{{ provider.api_base }}</v-list-item-subtitle>
+                            </v-list-item>
+                        </v-list>
+                        <div v-if="chatCompletionProviderConfigs.length === 0" class="empty-state">
+                            <v-icon icon="mdi-cloud-off-outline" size="large" color="grey-lighten-1"></v-icon>
+                            <div class="empty-text">暂无可用提供商</div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧模型列表 -->
+                    <div class="model-list-panel">
+                        <div class="panel-header">
+                            <h4>模型</h4>
+                            <v-btn 
+                                v-if="selectedProviderId" 
+                                icon="mdi-refresh" 
+                                size="small" 
+                                variant="text" 
+                                @click="refreshModels"
+                                :loading="loadingModels">
+                            </v-btn>
+                        </div>
+                        <v-list density="compact" nav class="model-list" v-if="selectedProviderId">
+                            <v-list-item 
+                                v-for="model in modelList" 
+                                :key="model"
+                                :value="model"
+                                @click="selectModel(model)"
+                                :active="selectedModelName === model"
+                                rounded="lg"
+                                class="model-item">
+                                <v-list-item-title>{{ model }}</v-list-item-title>
+                                <v-list-item-subtitle v-if="model.description">{{ model.description }}</v-list-item-subtitle>
+                            </v-list-item>
+                        </v-list>
+                        <div v-else class="empty-state">
+                            <v-icon icon="mdi-robot-outline" size="large" color="grey-lighten-1"></v-icon>
+                            <div class="empty-text">请先选择提供商</div>
+                        </div>
+                        <div v-if="selectedProviderId && modelList.length === 0 && !loadingModels" class="empty-state">
+                            <v-icon icon="mdi-robot-off-outline" size="large" color="grey-lighten-1"></v-icon>
+                            <div class="empty-text">该提供商暂无可用模型</div>
+                        </div>
+                    </div>
+                </div>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn text @click="closeProviderModelDialog" color="grey-darken-1">取消</v-btn>
+                <v-btn 
+                    text 
+                    @click="confirmSelection" 
+                    color="primary"
+                    :disabled="!selectedProviderId || !selectedModelName">
+                    确认选择
+                </v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
 </template>
 
 <script>
@@ -251,7 +351,7 @@ import 'highlight.js/styles/github.css';
 
 marked.setOptions({
     breaks: true,
-    highlight: function(code, lang) {
+    highlight: function (code, lang) {
         if (lang && hljs.getLanguage(lang)) {
             try {
                 return hljs.highlight(code, { language: lang }).value;
@@ -327,6 +427,22 @@ export default {
             sidebarHoverExpanded: false,
             sidebarHoverDelay: 100, // 悬停延迟，单位毫秒            
             pendingCid: null, // Store pending conversation ID for route handling
+
+            chatCompletionProviderConfigs: [],
+            modelList: [],
+            selectedProvider: {
+                id: '',
+                name: ''
+            },
+            selectedModel: {
+                name: ''
+            },
+
+            // 选择提供商和模型对话框相关变量
+            showProviderModelDialog: false,
+            selectedProviderId: '',
+            selectedModelName: '',
+            loadingModels: false
         }
     },
 
@@ -392,6 +508,7 @@ export default {
         this.inputFieldLabel = this.tm('input.chatPrompt');
         this.checkStatus();
         this.getConversations();
+        this.getChatCompletionProviderList(); // 获取提供商列表
         let inputField = document.getElementById('input-field');
         inputField.addEventListener('paste', this.handlePaste);
         inputField.addEventListener('keydown', function (e) {
@@ -1035,6 +1152,97 @@ export default {
                     }
                 });
             });
+        },
+
+        getChatCompletionProviderList() {
+            axios.get('/api/config/provider/list', {
+                params: {
+                    provider_type: 'chat_completion'
+                }
+            })
+                .then(response => {
+                    if (response.data.status === 'ok') {
+                        this.chatCompletionProviderConfigs = response.data.data || [];
+                    } else {
+                        console.error('获取聊天完成提供商列表失败:', response.data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('获取聊天完成提供商列表失败:', error);
+                });
+        },
+
+        getProviderModels(providerId) {
+            this.loadingModels = true;
+            axios.get('/api/config/provider/model_list', {
+                params: {
+                    provider_id: providerId
+                }
+            })
+                .then(response => {
+                    if (response.data.status === 'ok') {
+                        this.modelList = response.data.data.models || [];
+                    } else {
+                        console.error('获取模型列表失败:', response.data.message);
+                        this.modelList = [];
+                    }
+                })
+                .catch(error => {
+                    console.error('获取模型列表失败:', error);
+                    this.modelList = [];
+                })
+                .finally(() => {
+                    this.loadingModels = false;
+                });
+        },
+
+        // 选择提供商
+        selectProvider(provider) {
+            this.selectedProviderId = provider.id;
+            this.selectedModelName = ''; // 重置选中的模型
+            this.modelList = []; // 清空模型列表
+            this.getProviderModels(provider.id); // 获取该提供商的模型列表
+        },
+
+        // 选择模型
+        selectModel(model) {
+            this.selectedModelName = model;
+        },
+
+        // 刷新模型列表
+        refreshModels() {
+            if (this.selectedProviderId) {
+                this.getProviderModels(this.selectedProviderId);
+            }
+        },
+
+        // 确认选择
+        confirmSelection() {
+            if (this.selectedProviderId && this.selectedModelName) {
+                // 找到选中的提供商对象
+                const provider = this.chatCompletionProviderConfigs.find(p => p.id === this.selectedProviderId);
+                const model = this.modelList.find(m => m.name === this.selectedModelName);
+                
+                if (provider && model) {
+                    this.selectedProvider = {
+                        id: provider.id,
+                        name: provider.name
+                    };
+                    this.selectedModel = {
+                        name: model.name
+                    };
+                }
+                
+                this.closeProviderModelDialog();
+            }
+        },
+
+        // 关闭对话框
+        closeProviderModelDialog() {
+            this.showProviderModelDialog = false;
+            // 可以选择是否重置临时选择状态
+            // this.selectedProviderId = '';
+            // this.selectedModelName = '';
         },
     },
 }
@@ -1708,5 +1916,83 @@ export default {
     padding-right: 32px;
     flex-shrink: 0;
     /* 防止header被压缩 */
+}
+
+/* 提供商和模型选择对话框样式 */
+.provider-model-container {
+    display: flex;
+    height: 500px;
+    border: 1px solid var(--v-theme-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.provider-list-panel,
+.model-list-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--v-theme-surface);
+}
+
+.provider-list-panel {
+    border-right: 1px solid var(--v-theme-border);
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    border-bottom: 1px solid var(--v-theme-border);
+    background-color: var(--v-theme-containerBg);
+}
+
+.panel-header h4 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--v-theme-primaryText);
+}
+
+.provider-list,
+.model-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.provider-item,
+.model-item {
+    margin-bottom: 4px;
+    border-radius: 8px !important;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.provider-item:hover,
+.model-item:hover {
+    background-color: rgba(103, 58, 183, 0.05);
+}
+
+.provider-item.v-list-item--active,
+.model-item.v-list-item--active {
+    background-color: rgba(103, 58, 183, 0.1);
+    color: var(--v-theme-secondary);
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    opacity: 0.6;
+    gap: 12px;
+}
+
+.empty-text {
+    font-size: 14px;
+    color: var(--v-theme-secondaryText);
 }
 </style>
