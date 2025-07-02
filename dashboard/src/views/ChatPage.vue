@@ -31,7 +31,7 @@
                             elevation="0"></v-btn>
                     </div>
                     <div v-if="!sidebarCollapsed">
-                        <v-divider class="mx-2"></v-divider>
+                        <v-divider class="mx-4"></v-divider>
                     </div>
 
 
@@ -49,8 +49,12 @@
                                         }}</v-list-item-subtitle> -->
 
                                     <template v-if="!sidebarCollapsed" v-slot:append>
-                                        <v-btn icon="mdi-pencil" size="x-small" variant="text" class="edit-title-btn"
-                                            @click.stop="showEditTitleDialog(item.cid, item.title)" />
+                                        <div class="conversation-actions">
+                                            <v-btn icon="mdi-pencil" size="x-small" variant="text" class="edit-title-btn"
+                                                @click.stop="showEditTitleDialog(item.cid, item.title)" />
+                                            <v-btn icon="mdi-delete" size="x-small" variant="text" class="delete-conversation-btn"
+                                                color="error" @click.stop="deleteConversation(item.cid)" />
+                                        </div>
                                     </template>
                                 </v-list-item>
                             </v-list>
@@ -65,22 +69,6 @@
                         </v-fade-transition>
                     </div>
 
-                    <div v-if="!sidebarCollapsed">
-                        <v-divider class="mx-2"></v-divider>
-                    </div>
-                    <div style="padding: 16px;" :class="{ 'fade-in': sidebarHoverExpanded }" v-if="!sidebarCollapsed">
-                        <transition name="expand" @before-enter="beforeEnter" @enter="enter" @after-enter="afterEnter"
-                            @before-leave="beforeLeave" @leave="leave">
-                            <div v-if="currCid" class="delete-btn-container">
-                                <v-btn variant="outlined" rounded="sm" class="delete-chat-btn"
-                                    @click="deleteConversation(currCid)" color="error" density="comfortable"
-                                    size="small">
-                                    <v-icon start size="small">mdi-delete</v-icon>
-                                    {{ tm('actions.deleteChat') }}
-                                </v-btn>
-                            </div>
-                        </transition>
-                    </div>
                 </div>
 
                 <!-- 右侧聊天内容区域 -->
@@ -112,7 +100,7 @@
                             <!-- 主题切换按钮 -->
                             <v-tooltip :text="isDark ? tm('modes.lightMode') : tm('modes.darkMode')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
-                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon"
+                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon" size="small" rounded="sm" style="margin-right: 8px;"
                                         variant="text">
                                         <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
                                     </v-btn>
@@ -199,8 +187,7 @@
                             style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px; padding: 4px;">
                             <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown"
                                 @click:clear="clearMessage" placeholder="Ask AstrBot..."
-                                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"
-                                :disabled="loadingChat"></textarea>
+                                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
                             <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
                                 <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
                                     :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
@@ -248,58 +235,7 @@
                 <v-btn text @click="saveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
             </v-card-actions>
         </v-card>
-    </v-dialog> <!-- 连接冲突提示对话框 -->
-    <v-dialog v-model="connectionConflictDialog" max-width="600" persistent>
-        <v-card class="rounded-lg">
-            <v-toolbar color="primary" density="comfortable" flat>
-                <v-icon color="white" class="ml-4 mr-2">mdi-information-outline</v-icon>
-                <v-toolbar-title class="text-white">{{ tm('connection.title') }}</v-toolbar-title>
-                <v-spacer></v-spacer>
-                <v-btn icon @click="connectionConflictDialog = false" variant="text" color="white">
-                    <v-icon>mdi-close</v-icon>
-                </v-btn>
-            </v-toolbar>
-
-            <v-card-text class="pa-6">
-                <div class="text-body-1 mb-4">
-                    {{ tm('connection.message') }}
-                </div>
-
-                <v-alert type="info" variant="tonal" class="mb-4" icon="mdi-lightbulb-outline">
-                    <div class="text-body-2 mb-2">
-                        <strong>{{ tm('connection.reasons') }}</strong>
-                    </div>
-                    <ul class="ml-4">
-                        <li class="mb-1">{{ tm('connection.reasonWindowResize') }}</li>
-                        <li class="mb-1">{{ tm('connection.reasonMultipleTabs') }}</li>
-                        <li class="mb-1">{{ tm('connection.reasonNetworkIssue') }}</li>
-                    </ul>
-                </v-alert>
-
-                <v-alert type="warning" variant="tonal" icon="mdi-alert-circle-outline" class="mb-0">
-                    <div class="text-body-2">
-                        {{ tm('connection.notice') }}
-                    </div>
-                </v-alert>
-            </v-card-text>
-
-            <v-card-actions class="px-6 pb-4">
-                <v-spacer></v-spacer>
-                <v-btn color="primary" variant="elevated" @click="connectionConflictDialog = false" class="px-6">
-                    {{ tm('connection.understand') }}
-                </v-btn>
-            </v-card-actions>
-        </v-card>
     </v-dialog>
-
-    <!-- 连接状态消息提示 -->
-    <v-snackbar v-model="connectionStatusSnackbar" :color="connectionStatusColor" :timeout="4000" location="top">
-        <v-icon class="mr-2">
-            {{ connectionStatusColor === 'success' ? 'mdi-check-circle' :
-                connectionStatusColor === 'warning' ? 'mdi-alert-circle' : 'mdi-information' }}
-        </v-icon>
-        {{ connectionStatusMessage }}
-    </v-snackbar>
 </template>
 
 <script>
@@ -310,9 +246,21 @@ import { ref } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
+import hljs from 'highlight.js';
+import 'highlight.js/styles/github.css';
 
 marked.setOptions({
-    breaks: true
+    breaks: true,
+    highlight: function(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+            try {
+                return hljs.highlight(code, { language: lang }).value;
+            } catch (err) {
+                console.error('Highlight error:', err);
+            }
+        }
+        return hljs.highlightAuto(code).value;
+    }
 });
 
 export default {
@@ -359,8 +307,6 @@ export default {
 
             eventSource: null,
             eventSourceReader: null,
-            sseReconnecting: false, // 添加重连状态标志
-
 
             // // Ctrl键长按相关变量
             ctrlKeyDown: false,
@@ -380,12 +326,7 @@ export default {
             sidebarHoverTimer: null,
             sidebarHoverExpanded: false,
             sidebarHoverDelay: 100, // 悬停延迟，单位毫秒            
-            pendingCid: null, // Store pending conversation ID for route handling            
-            // 连接状态提示相关
-            connectionConflictDialog: false,
-            connectionStatusSnackbar: false,
-            connectionStatusMessage: '',
-            connectionStatusColor: 'info',
+            pendingCid: null, // Store pending conversation ID for route handling
         }
     },
 
@@ -409,8 +350,6 @@ export default {
                 if (from &&
                     ((from.path.startsWith('/chat') && to.path.startsWith('/chatbox')) ||
                         (from.path.startsWith('/chatbox') && to.path.startsWith('/chat')))) {
-                    console.log('Route mode changed, reconnecting SSE...');
-                    this.reconnectSSE();
                 }
 
                 // Check if the route matches /chat/<cid> or /chatbox/<cid> pattern
@@ -451,7 +390,6 @@ export default {
         // Theme is now handled globally by the customizer store.
         // 设置输入框标签
         this.inputFieldLabel = this.tm('input.chatPrompt');
-        this.startListeningEvent();
         this.checkStatus();
         this.getConversations();
         let inputField = document.getElementById('input-field');
@@ -477,8 +415,6 @@ export default {
     },
 
     beforeUnmount() {
-        this.disconnectSSE();
-
         // 移除keyup事件监听
         document.removeEventListener('keyup', this.handleInputKeyUp);
 
@@ -491,18 +427,6 @@ export default {
         this.cleanupMediaCache();
     },
     methods: {
-        // 显示连接冲突对话框
-        showConnectionConflictDialog() {
-            this.connectionConflictDialog = true;
-        },
-
-        // 显示连接状态消息
-        showConnectionStatus(message, color = 'info') {
-            this.connectionStatusMessage = message;
-            this.connectionStatusColor = color;
-            this.connectionStatusSnackbar = true;
-        },
-
         toggleTheme() {
             const customizer = useCustomizerStore();
             const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
@@ -598,246 +522,10 @@ export default {
             }
         },
 
-        // 断开SSE连接
-        disconnectSSE() {
-            if (this.eventSourceReader) {
-                try {
-                    this.eventSourceReader.cancel();
-                    console.log('SSE Reader cancelled');
-                } catch (error) {
-                    console.warn('Error cancelling SSE reader:', error);
-                }
-                this.eventSourceReader = null;
-            }
 
-            if (this.eventSource) {
-                try {
-                    this.eventSource.cancel();
-                    console.log('SSE连接已断开');
-                } catch (error) {
-                    console.warn('Error cancelling SSE:', error);
-                }
-                this.eventSource = null;
-            }
-        },
-
-        // 重新连接SSE
-        async reconnectSSE() {
-            if (this.sseReconnecting) {
-                console.log('SSE reconnection already in progress');
-                return;
-            }
-
-            this.sseReconnecting = true;
-            console.log('Reconnecting SSE...');
-            this.disconnectSSE();
-
-            // 等待更长时间确保后端连接完全清理
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            this.startListeningEvent();
-        },
-
-        async startListeningEvent() {
-            // 确保之前的连接已断开
-            this.disconnectSSE();
-
-            // 如果正在重连过程中，等待一下
-            if (this.sseReconnecting) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-
-            let retryCount = 0;
-            const maxRetries = 3;
-
-            while (retryCount < maxRetries) {
-                try {
-                    console.log(`尝试建立SSE连接 (${retryCount + 1}/${maxRetries})`);
-
-                    const response = await fetch('/api/chat/listen', {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': 'Bearer ' + localStorage.getItem('token')
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`SSE连接失败: ${response.statusText}`);
-                    }
-
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    this.eventSource = reader;
-                    this.eventSourceReader = reader;
-                    this.sseReconnecting = false;
-
-                    let in_streaming = false;
-                    let message_obj = null;
-                    console.log('SSE连接已建立');
-                    // 显示连接成功状态
-                    if (retryCount > 0) {
-                        this.showConnectionStatus(this.tm('connection.status.reconnected'), 'success');
-                    }
-
-                    while (true) {
-                        try {
-                            const { done, value } = await reader.read();
-                            if (done) {
-                                console.log('SSE连接正常关闭');
-                                break;
-                            }
-
-                            const chunk = decoder.decode(value, { stream: true });
-
-                            // 可能有多行
-                            let lines = chunk.split('\n\n');
-
-                            console.log('SSE数据:', lines);
-
-                            for (let i = 0; i < lines.length; i++) {
-                                let line = lines[i].trim();
-
-                                if (!line) {
-                                    continue;
-                                }
-
-                                console.log(line);                                // 处理后端错误响应格式
-                                if (line.startsWith('{"status":"error"')) {
-                                    try {
-                                        const errorObj = JSON.parse(line);
-                                        if (errorObj.message === 'Already connected') {
-                                            console.log('检测到连接冲突，显示提示对话框...');
-                                            this.showConnectionConflictDialog();
-                                            throw new Error('CONNECTION_CONFLICT');
-                                        }
-                                        console.error('后端错误:', errorObj.message);
-                                        continue;
-                                    } catch (parseError) {
-                                        if (parseError.message === 'CONNECTION_CONFLICT') {
-                                            throw parseError;
-                                        }
-                                        console.warn('解析错误响应失败:', line);
-                                        continue;
-                                    }
-                                }
-
-                                // data: {"type": "plain", "data": "helloworld"}
-                                let chunk_json;
-                                try {
-                                    chunk_json = JSON.parse(line.replace('data: ', ''));
-                                } catch (parseError) {
-                                    console.warn('JSON解析失败:', line, parseError);
-                                    continue;
-                                }
-
-                                // 检查解析后的数据是否有效
-                                if (!chunk_json || typeof chunk_json !== 'object') {
-                                    console.warn('无效的数据对象:', chunk_json);
-                                    continue;
-                                }
-
-                                // 检查是否有type字段
-                                if (!chunk_json.hasOwnProperty('type')) {
-                                    console.warn('数据缺少type字段:', chunk_json);
-                                    continue;
-                                }
-
-                                if (chunk_json.type === 'heartbeat') {
-                                    continue; // 心跳包
-                                }
-                                if (chunk_json.type === 'error') {
-                                    console.error('Error received:', chunk_json.data);
-                                    continue;
-                                }
-
-                                if (chunk_json.type === 'image') {
-                                    let img = chunk_json.data.replace('[IMAGE]', '');
-                                    const imageUrl = await this.getMediaFile(img);
-                                    let bot_resp = {
-                                        type: 'bot',
-                                        message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
-                                    }
-                                    this.messages.push(bot_resp);
-                                } else if (chunk_json.type === 'record') {
-                                    let audio = chunk_json.data.replace('[RECORD]', '');
-                                    const audioUrl = await this.getMediaFile(audio);
-                                    let bot_resp = {
-                                        type: 'bot',
-                                        message: `<audio controls class="audio-player">
-                                <source src="${audioUrl}" type="audio/wav">
-                                ${this.t('messages.errors.browser.audioNotSupported')}
-                              </audio>`
-                                    }
-                                    this.messages.push(bot_resp);
-                                } else if (chunk_json.type === 'plain') {
-                                    if (!in_streaming) {
-                                        message_obj = {
-                                            type: 'bot',
-                                            message: this.ref(chunk_json.data),
-                                        }
-                                        this.messages.push(message_obj);
-                                        in_streaming = true;
-                                    } else {
-                                        message_obj.message.value += chunk_json.data;
-                                    }
-                                } else if (chunk_json.type === 'end') {
-                                    in_streaming = false;
-                                    continue;
-                                } else if (chunk_json.type === 'update_title') {
-                                    // 更新对话标题
-                                    const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
-                                    if (conversation) {
-                                        conversation.title = chunk_json.data;
-                                    }
-                                } else {
-                                    console.warn('未知数据类型:', chunk_json.type);
-                                }
-                                this.scrollToBottom();
-                            }
-                        } catch (readError) {
-                            if (readError.name === 'AbortError') {
-                                console.log('SSE连接被取消');
-                                break;
-                            }
-                            if (readError.message === 'CONNECTION_CONFLICT') {
-                                throw readError;
-                            }
-                            console.error('SSE读取错误:', readError);
-                            break;
-                        }
-                    }
-
-                    // 如果成功连接并正常结束，跳出重试循环
-                    break;
-
-                } catch (error) {
-                    console.error(`SSE连接错误 (尝试 ${retryCount + 1}):`, error);
-
-                    retryCount++;
-                    if (error.message === 'CONNECTION_CONFLICT' && retryCount < maxRetries) {
-                        console.log(`连接冲突，等待 ${2000 * retryCount}ms 后重试...`);
-                        this.showConnectionStatus(`${this.tm('connection.status.reconnecting')} (${retryCount}/${maxRetries})`, 'warning');
-                        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
-                        continue;
-                    }
-
-                    if (retryCount >= maxRetries) {
-                        console.error('SSE连接重试次数已达上限');
-                        this.showConnectionStatus(this.tm('connection.status.failed'), 'error');
-                        this.sseReconnecting = false;
-                        break;
-                    }
-
-                    // 等待一段时间后重试
-                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-                } finally {
-                    this.eventSource = null;
-                    this.eventSourceReader = null;
-                }
-            }
-
-            this.sseReconnecting = false;
+        showConnectionStatus(message, type) {
+            // You can implement a toast notification here or update UI status
+            console.log(`Connection status: ${message} (${type})`);
         },
 
         removeAudio() {
@@ -989,6 +677,7 @@ export default {
                     }
                 }
                 this.messages = message;
+                this.initCodeCopyButtons();
             }).catch(err => {
                 console.error(err);
             });
@@ -1099,37 +788,150 @@ export default {
             this.messages.push(userMessage);
             this.scrollToBottom();
 
-            this.loadingChat = true;
+            this.loadingChat = true
 
-            fetch('/api/chat/send', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + localStorage.getItem('token')
-                },
-                body: JSON.stringify({
-                    message: this.prompt.trim(), // 确保发送的消息已去除前后空格
-                    conversation_id: this.currCid,
-                    image_url: this.stagedImagesName,
-                    audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : []
-                })
-            })
-                .then(response => {
-                    this.prompt = '';
-                    this.stagedImagesName = [];
-                    this.stagedImagesUrl = [];
-                    this.stagedAudioUrl = "";
-                    this.loadingChat = false;
-                })
-                .catch(err => {
-                    console.error(err);
-                    this.loadingChat = false;
+            try {
+                const response = await fetch('/api/chat/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('token')
+                    },
+                    body: JSON.stringify({
+                        message: this.prompt.trim(), // 确保发送的消息已去除前后空格
+                        conversation_id: this.currCid,
+                        image_url: this.stagedImagesName,
+                        audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : []
+                    })
                 });
+
+                this.prompt = ''; // 清空输入框;
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let in_streaming = false;
+                let message_obj = null;
+
+                while (true) {
+                    try {
+                        const { done, value } = await reader.read();
+                        if (done) {
+                            console.log('SSE stream completed');
+                            break;
+                        }
+
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n\n');
+
+                        for (let i = 0; i < lines.length; i++) {
+                            let line = lines[i].trim();
+
+                            if (!line) {
+                                continue;
+                            }
+
+                            // Parse SSE data
+                            let chunk_json;
+                            try {
+                                chunk_json = JSON.parse(line.replace('data: ', ''));
+                            } catch (parseError) {
+                                console.warn('JSON解析失败:', line, parseError);
+                                continue;
+                            }
+
+                            // 检查解析后的数据是否有效
+                            if (!chunk_json || typeof chunk_json !== 'object' || !chunk_json.hasOwnProperty('type')) {
+                                console.warn('无效的数据对象:', chunk_json);
+                                continue;
+                            }
+
+                            if (chunk_json.type === 'heartbeat') {
+                                continue; // 心跳包
+                            }
+                            if (chunk_json.type === 'error') {
+                                console.error('Error received:', chunk_json.data);
+                                continue;
+                            }
+
+                            if (chunk_json.type === 'image') {
+                                let img = chunk_json.data.replace('[IMAGE]', '');
+                                const imageUrl = await this.getMediaFile(img);
+                                let bot_resp = {
+                                    type: 'bot',
+                                    message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                                }
+                                this.messages.push(bot_resp);
+                            } else if (chunk_json.type === 'record') {
+                                let audio = chunk_json.data.replace('[RECORD]', '');
+                                const audioUrl = await this.getMediaFile(audio);
+                                let bot_resp = {
+                                    type: 'bot',
+                                    message: `<audio controls class="audio-player">
+                                        <source src="${audioUrl}" type="audio/wav">
+                                        ${this.t('messages.errors.browser.audioNotSupported')}
+                                      </audio>`
+                                }
+                                this.messages.push(bot_resp);
+                            } else if (chunk_json.type === 'plain') {
+                                if (!in_streaming) {
+                                    message_obj = {
+                                        type: 'bot',
+                                        message: this.ref(chunk_json.data),
+                                    }
+                                    this.messages.push(message_obj);
+                                    in_streaming = true;
+                                } else {
+                                    message_obj.message.value += chunk_json.data;
+                                }
+                            } else if (chunk_json.type === 'end') {
+                                in_streaming = false;
+                                // 在消息流结束后初始化代码复制按钮
+                                this.initCodeCopyButtons();
+                                continue;
+                            } else if (chunk_json.type === 'update_title') {
+                                // 更新对话标题
+                                const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
+                                if (conversation) {
+                                    conversation.title = chunk_json.data;
+                                }
+                            } else {
+                                console.warn('未知数据类型:', chunk_json.type);
+                            }
+                            this.scrollToBottom();
+                        }
+                    } catch (readError) {
+                        console.error('SSE读取错误:', readError);
+                        break;
+                    }
+                }
+
+                // Clear input after successful send
+                this.prompt = '';
+                this.stagedImagesName = [];
+                this.stagedImagesUrl = [];
+                this.stagedAudioUrl = "";
+                this.loadingChat = false;
+
+                // get the latest conversations
+                this.getConversations();
+
+            } catch (err) {
+                console.error('发送消息失败:', err);
+                this.loadingChat = false;
+                this.showConnectionStatus(this.tm('connection.status.failed'), 'error');
+            }
         },
+
         scrollToBottom() {
             this.$nextTick(() => {
                 const container = this.$refs.messageContainer;
                 container.scrollTop = container.scrollHeight;
+                // 在滚动后初始化代码复制按钮
+                this.initCodeCopyButtons();
             });
         },
         handleInputKeyDown(e) {
@@ -1175,21 +977,64 @@ export default {
             this.mediaCache = {};
         },
 
-        // For smooth height transition on delete button
-        beforeEnter(el) {
-            el.style.height = '0';
+        // 复制代码到剪贴板
+        copyCodeToClipboard(code) {
+            navigator.clipboard.writeText(code).then(() => {
+                // 可以添加一个简单的提示
+                console.log('代码已复制到剪贴板');
+            }).catch(err => {
+                console.error('复制失败:', err);
+                // 如果现代API失败，使用传统方法
+                const textArea = document.createElement('textarea');
+                textArea.value = code;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    console.log('代码已复制到剪贴板 (fallback)');
+                } catch (fallbackErr) {
+                    console.error('复制失败 (fallback):', fallbackErr);
+                }
+                document.body.removeChild(textArea);
+            });
         },
-        enter(el) {
-            el.style.height = el.scrollHeight + 'px';
+
+        // 获取复制图标SVG
+        getCopyIconSvg() {
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
         },
-        afterEnter(el) {
-            el.style.height = 'auto';
+
+        // 获取成功图标SVG
+        getSuccessIconSvg() {
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"></polyline></svg>';
         },
-        beforeLeave(el) {
-            el.style.height = el.scrollHeight + 'px';
-        },
-        leave(el) {
-            el.style.height = '0';
+
+        // 初始化代码块复制按钮
+        initCodeCopyButtons() {
+            this.$nextTick(() => {
+                const codeBlocks = this.$refs.messageContainer?.querySelectorAll('pre code') || [];
+                codeBlocks.forEach((codeBlock, index) => {
+                    const pre = codeBlock.parentElement;
+                    if (pre && !pre.querySelector('.copy-code-btn')) {
+                        const button = document.createElement('button');
+                        button.className = 'copy-code-btn';
+                        button.innerHTML = this.getCopyIconSvg();
+                        button.title = '复制代码';
+                        button.addEventListener('click', () => {
+                            this.copyCodeToClipboard(codeBlock.textContent);
+                            // 显示复制成功提示
+                            button.innerHTML = this.getSuccessIconSvg();
+                            button.style.color = '#4caf50';
+                            setTimeout(() => {
+                                button.innerHTML = this.getCopyIconSvg();
+                                button.style.color = '';
+                            }, 2000);
+                        });
+                        pre.style.position = 'relative';
+                        pre.appendChild(button);
+                    }
+                });
+            });
         },
     },
 }
@@ -1335,6 +1180,30 @@ export default {
     background-color: rgba(103, 58, 183, 0.05);
 }
 
+.conversation-item:hover .conversation-actions {
+    opacity: 1;
+    visibility: visible;
+}
+
+.conversation-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+}
+
+.edit-title-btn,
+.delete-conversation-btn {
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.edit-title-btn:hover,
+.delete-conversation-btn:hover {
+    opacity: 1;
+}
+
 .conversation-title {
     font-weight: 500;
     font-size: 14px;
@@ -1379,36 +1248,6 @@ export default {
 .status-chip {
     font-size: 12px;
     height: 24px !important;
-}
-
-.delete-chat-btn {
-    height: 32px !important;
-    width: 100%;
-    color: rgb(var(--v-theme-error)) !important;
-    font-weight: 500;
-    box-shadow: none !important;
-    margin-top: 8px;
-    text-transform: none;
-    letter-spacing: 0.25px;
-    font-size: 12px;
-    line-height: 1.2em;
-    transition: opacity 0.25s ease;
-    opacity: 0.7;
-}
-
-.delete-chat-btn:hover {
-    background-color: rgba(var(--v-theme-error-rgb), 0.1) !important;
-}
-
-.delete-btn-container {
-    /* margin-top: -8px; */
-    /* Removed for better layout practices */
-}
-
-.expand-enter-active,
-.expand-leave-active {
-    transition: height 0.15s ease-in-out;
-    overflow: hidden;
 }
 
 .no-conversations {
@@ -1666,6 +1505,7 @@ export default {
     border-radius: 6px;
     overflow-x: auto;
     margin: 12px 0;
+    position: relative;
 }
 
 .markdown-content code {
@@ -1675,6 +1515,144 @@ export default {
     font-family: 'Fira Code', monospace;
     font-size: 0.9em;
     color: var(--v-theme-code);
+}
+
+/* 代码块中的code标签样式 */
+.markdown-content pre code {
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-family: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.85em;
+    color: inherit;
+    display: block;
+    overflow-x: auto;
+    line-height: 1.5;
+}
+
+/* 自定义代码高亮样式 */
+.markdown-content pre {
+    border: 1px solid var(--v-theme-border);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 确保highlight.js的样式正确应用 */
+.markdown-content pre code.hljs {
+    background: transparent !important;
+    color: inherit;
+}
+
+/* 亮色主题下的代码高亮 */
+.v-theme--light .markdown-content pre {
+    background-color: #f6f8fa;
+}
+
+/* 暗色主题下的代码块样式 */
+.v-theme--dark .markdown-content pre {
+    background-color: #0d1117 !important;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.v-theme--dark .markdown-content pre code {
+    color: #e6edf3 !important;
+}
+
+/* 暗色主题下的highlight.js样式覆盖 */
+.v-theme--dark .hljs {
+    background: #0d1117 !important;
+    color: #e6edf3 !important;
+}
+
+.v-theme--dark .hljs-keyword,
+.v-theme--dark .hljs-selector-tag,
+.v-theme--dark .hljs-built_in,
+.v-theme--dark .hljs-name,
+.v-theme--dark .hljs-tag {
+    color: #ff7b72 !important;
+}
+
+.v-theme--dark .hljs-string,
+.v-theme--dark .hljs-title,
+.v-theme--dark .hljs-section,
+.v-theme--dark .hljs-attribute,
+.v-theme--dark .hljs-literal,
+.v-theme--dark .hljs-template-tag,
+.v-theme--dark .hljs-template-variable,
+.v-theme--dark .hljs-type,
+.v-theme--dark .hljs-addition {
+    color: #a5d6ff !important;
+}
+
+.v-theme--dark .hljs-comment,
+.v-theme--dark .hljs-quote,
+.v-theme--dark .hljs-deletion,
+.v-theme--dark .hljs-meta {
+    color: #8b949e !important;
+}
+
+.v-theme--dark .hljs-number,
+.v-theme--dark .hljs-regexp,
+.v-theme--dark .hljs-symbol,
+.v-theme--dark .hljs-variable,
+.v-theme--dark .hljs-template-variable,
+.v-theme--dark .hljs-link,
+.v-theme--dark .hljs-selector-attr,
+.v-theme--dark .hljs-selector-pseudo {
+    color: #79c0ff !important;
+}
+
+.v-theme--dark .hljs-function,
+.v-theme--dark .hljs-class,
+.v-theme--dark .hljs-title.class_ {
+    color: #d2a8ff !important;
+}
+
+/* 复制按钮样式 */
+.copy-code-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    padding: 6px;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    font-size: 12px;
+    z-index: 10;
+    backdrop-filter: blur(4px);
+}
+
+.copy-code-btn:hover {
+    background: rgba(255, 255, 255, 1);
+    color: #333;
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.copy-code-btn:active {
+    transform: scale(0.95);
+}
+
+.markdown-content pre:hover .copy-code-btn {
+    opacity: 1;
+}
+
+.v-theme--dark .copy-code-btn {
+    background: rgba(45, 45, 45, 0.9);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #ccc;
+}
+
+.v-theme--dark .copy-code-btn:hover {
+    background: rgba(45, 45, 45, 1);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .markdown-content img {

@@ -23,7 +23,6 @@ from astrbot.core.provider.entities import (
     LLMResponse,
 )
 from astrbot.core.star.star_handler import EventType
-from astrbot.core import web_chat_back_queue
 from ..agent_runner.tool_loop_agent import ToolLoopAgent
 
 
@@ -282,13 +281,6 @@ class LLMRequestSubStage(Stage):
                         user_id=username,
                         cid=cid,
                         title=title,
-                    )
-                    web_chat_back_queue.put_nowait(
-                        {
-                            "type": "update_title",
-                            "cid": cid,
-                            "data": title,
-                        }
                     )
 
     async def _save_to_history(
