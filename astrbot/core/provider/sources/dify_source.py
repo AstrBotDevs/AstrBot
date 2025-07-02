@@ -18,7 +18,7 @@ class ProviderDify(Provider):
         self,
         provider_config,
         provider_settings,
-        default_persona = None,
+        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
@@ -65,7 +65,7 @@ class ProviderDify(Provider):
         if image_urls is None:
             image_urls = []
         result = ""
-        session_id = session_id or kwargs.get("user") # 1734
+        session_id = session_id or kwargs.get("user")  # 1734
         conversation_id = self.conversation_ids.get(session_id, "")
 
         files_payload = []
@@ -84,13 +84,11 @@ class ProviderDify(Provider):
                     f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。"
                 )
                 continue
-            files_payload.append(
-                {
-                    "type": "image",
-                    "transfer_method": "local_file",
-                    "upload_file_id": file_response["id"],
-                }
-            )
+            files_payload.append({
+                "type": "image",
+                "transfer_method": "local_file",
+                "upload_file_id": file_response["id"],
+            })
 
         # 获得会话变量
         payload_vars = self.variables.copy()
