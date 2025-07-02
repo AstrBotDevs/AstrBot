@@ -30,7 +30,7 @@ class ProviderOpenAIOfficial(Provider):
         self,
         provider_config,
         provider_settings,
-        default_persona = None,
+        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
@@ -525,9 +525,10 @@ class ProviderOpenAIOfficial(Provider):
                 if not image_data:
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
-                user_content["content"].append(
-                    {"type": "image_url", "image_url": {"url": image_data}}
-                )
+                user_content["content"].append({
+                    "type": "image_url",
+                    "image_url": {"url": image_data},
+                })
             return user_content
         else:
             return {"role": "user", "content": text}
