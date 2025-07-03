@@ -58,6 +58,8 @@ class LLMRequestSubStage(Stage):
         _ctx = self.ctx.plugin_manager.context
         if sel_provider and isinstance(sel_provider, str):
             provider = _ctx.get_provider_by_id(sel_provider)
+            if not provider:
+                logger.error(f"未找到指定的提供商: {sel_provider}。")
             return provider
 
         return _ctx.get_using_provider(umo=event.unified_msg_origin)
