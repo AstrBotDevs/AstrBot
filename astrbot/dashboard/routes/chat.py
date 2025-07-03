@@ -120,6 +120,8 @@ class ChatRoute(Route):
         conversation_id = post_data["conversation_id"]
         image_url = post_data.get("image_url")
         audio_url = post_data.get("audio_url")
+        selected_provider = post_data.get("selected_provider")
+        selected_model = post_data.get("selected_model")
         if not message and not image_url and not audio_url:
             return (
                 Response()
@@ -202,6 +204,8 @@ class ChatRoute(Route):
                     "message": message,
                     "image_url": image_url,  # list
                     "audio_url": audio_url,
+                    "selected_provider": selected_provider,
+                    "selected_model": selected_model,
                 },
             )
         )

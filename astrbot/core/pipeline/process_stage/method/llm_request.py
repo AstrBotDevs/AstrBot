@@ -24,6 +24,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.star_handler import EventType
 from ..agent_runner.tool_loop_agent import ToolLoopAgent
+from astrbot.core.provider import Provider
 
 
 class LLMRequestSubStage(Stage):
@@ -51,16 +52,25 @@ class LLMRequestSubStage(Stage):
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
+    def _select_provider(self, event: AstrMessageEvent) -> Provider | None:
+        """选择使用的 LLM 提供商"""
+        sel_provider = event.get_extra("selected_provider")
+        _ctx = self.ctx.plugin_manager.context
+        if sel_provider and isinstance(sel_provider, str):
+            provider = _ctx.get_provider_by_id(sel_provider)
+            return provider
+
+        return _ctx.get_using_provider(umo=event.unified_msg_origin)
+
     async def process(
         self, event: AstrMessageEvent, _nested: bool = False
     ) -> Union[None, AsyncGenerator[None, None]]:
-        req: ProviderRequest = None
+        req: ProviderRequest | None = None
 
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug("未启用 LLM 能力，跳过处理。")
             return
-        umo = event.unified_msg_origin
-        provider = self.ctx.plugin_manager.context.get_using_provider(umo=umo)
+        provider = self._select_provider(event)
         if provider is None:
             return
 
@@ -75,6 +85,8 @@ class LLMRequestSubStage(Stage):
 
         else:
             req = ProviderRequest(prompt="", image_urls=[])
+            if sel_model := event.get_extra("selected_model"):
+                req.model = sel_model
             if self.provider_wake_prefix:
                 if not event.message_str.startswith(self.provider_wake_prefix):
                     return
@@ -165,7 +177,10 @@ class LLMRequestSubStage(Stage):
                             if self.streaming_response:
                                 # 用来标记流式响应需要分节
                                 yield MessageChain(chain=[], type="break")
-                            if self.show_tool_use or event.get_platform_name() == "webchat":
+                            if (
+                                self.show_tool_use
+                                or event.get_platform_name() == "webchat"
+                            ):
                                 resp.data["chain"].type = "tool_call"
                                 await event.send(resp.data["chain"])
                             continue

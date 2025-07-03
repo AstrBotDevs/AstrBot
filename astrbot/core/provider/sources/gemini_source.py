@@ -259,10 +259,12 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
-        native_tool_enabled = any([
-            self.provider_config.get("gm_native_coderunner", False),
-            self.provider_config.get("gm_native_search", False),
-        ])
+        native_tool_enabled = any(
+            [
+                self.provider_config.get("gm_native_coderunner", False),
+                self.provider_config.get("gm_native_search", False),
+            ]
+        )
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -505,6 +507,7 @@ class ProviderGoogleGenAI(Provider):
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -527,7 +530,7 @@ class ProviderGoogleGenAI(Provider):
                     context_query.extend(tcr.to_openai_messages())
 
         model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = self.get_model()
+        model_config["model"] = model or self.get_model()
 
         payloads = {"messages": context_query, **model_config}
 
@@ -551,6 +554,7 @@ class ProviderGoogleGenAI(Provider):
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
@@ -573,7 +577,7 @@ class ProviderGoogleGenAI(Provider):
                     context_query.extend(tcr.to_openai_messages())
 
         model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = self.get_model()
+        model_config["model"] = model or self.get_model()
 
         payloads = {"messages": context_query, **model_config}
 
@@ -632,10 +636,12 @@ class ProviderGoogleGenAI(Provider):
                 if not image_data:
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
-                user_content["content"].append({
-                    "type": "image_url",
-                    "image_url": {"url": image_data},
-                })
+                user_content["content"].append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_data},
+                    }
+                )
             return user_content
         else:
             return {"role": "user", "content": text}
