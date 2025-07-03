@@ -112,6 +112,12 @@
       "title": "Install Extension",
       "fromFile": "Install from File",
       "fromUrl": "Install from URL"
+    },
+    "danger_warning": {
+      "title": "Dangerous Plugin Warning",
+      "message": "This plugin has been flagged as containing security risks, including unsafe code or functionalities that may cause system malfunctions or data loss. You are solely responsible for any consequences resulting from installing or using this plugin. Do you wish to proceed with the installation?",
+      "confirm": "I understand the risks and wish to continue",
+      "cancel": "Cancel"
     }
   },
   "messages": {
@@ -163,5 +169,8 @@
     "errors": {
       "confirmNotRegistered": "$confirm not properly registered"
     }
+  },
+  "tags": {
+    "danger": "Dangerous Plugin"
   }
-} 
+}

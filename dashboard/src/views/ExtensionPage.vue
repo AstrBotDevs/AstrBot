@@ -58,6 +58,10 @@ const isListView = ref(false);
 const pluginSearch = ref("");
 const loading_ = ref(false);
 
+// 危险插件确认对话框
+const dangerConfirmDialog = ref(false);
+const selectedDangerPlugin = ref(null);
+
 // 插件市场相关
 const extension_url = ref("");
 const dialog = ref(false);
@@ -419,6 +423,35 @@ const open = (link) => {
   if (link) {
     window.open(link, '_blank');
   }
+};
+
+// 为表格视图创建一个处理安装插件的函数
+const handleInstallPlugin = async (plugin) => {
+  if (plugin.tags && plugin.tags.includes('danger')) {
+    selectedDangerPlugin.value = plugin;
+    dangerConfirmDialog.value = true;
+  } else {
+    extension_url.value = plugin.repo;
+    dialog.value = true;
+    uploadTab.value = 'url';
+  }
+};
+
+// 确认安装危险插件
+const confirmDangerInstall = () => {
+  if (selectedDangerPlugin.value) {
+    extension_url.value = selectedDangerPlugin.value.repo;
+    dialog.value = true;
+    uploadTab.value = 'url';
+  }
+  dangerConfirmDialog.value = false;
+  selectedDangerPlugin.value = null;
+};
+
+// 取消安装危险插件
+const cancelDangerInstall = () => {
+  dangerConfirmDialog.value = false;
+  selectedDangerPlugin.value = null;
 };
 
 // 插件市场显示完整插件名称
@@ -823,7 +856,7 @@ onMounted(async () => {
               <v-row style="margin-top: 8px;">
                 <v-col cols="12" md="6" lg="6" v-for="plugin in pinnedPlugins" :key="plugin.name">
                   <ExtensionCard :extension="plugin" class="h-120 rounded-lg" market-mode="true" :highlight="true"
-                    @install="extension_url = plugin.repo; dialog = true; uploadTab = 'url'" @view-readme="open(plugin.repo)">
+                    @install="handleInstallPlugin(plugin)" @view-readme="open(plugin.repo)">
                   </ExtensionCard>
                 </v-col>
               </v-row>
@@ -871,12 +904,12 @@ onMounted(async () => {
                   </template>
                   <template v-slot:item.tags="{ item }">
                     <span v-if="item.tags.length === 0">-</span>
-                    <v-chip v-for="tag in item.tags" :key="tag" color="primary" size="x-small">
-                      {{ tag }}</v-chip>
+                    <v-chip v-for="tag in item.tags" :key="tag" :color="tag === 'danger' ? 'error' : 'primary'" size="x-small">
+                      {{ tag === 'danger' ? tm('tags.danger') : tag }}</v-chip>
                   </template>
                   <template v-slot:item.actions="{ item }">
                     <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" variant="flat"
-                      @click="extension_url = item.repo; dialog = true; uploadTab = 'url'">
+                      @click="handleInstallPlugin(item)">
                       <v-icon>mdi-download</v-icon></v-btn>
                     <v-btn v-else class="text-none mr-2" size="x-small" variant="flat" border
                       disabled><v-icon>mdi-check</v-icon></v-btn>
@@ -960,7 +993,7 @@ onMounted(async () => {
                         </v-list-item>
                       </v-list>
                     </v-menu>
-                  </div>
+                    </div>
                 </th>
               </tr>
             </thead>
@@ -1077,6 +1110,28 @@ onMounted(async () => {
 
   <ReadmeDialog v-model:show="readmeDialog.show" :plugin-name="readmeDialog.pluginName"
     :repo-url="readmeDialog.repoUrl" />
+
+  <!-- 危险插件确认对话框 -->
+  <v-dialog v-model="dangerConfirmDialog" width="500" persistent>
+    <v-card>
+      <v-card-title class="text-h5 d-flex align-center">
+        <v-icon color="error" class="mr-2">mdi-alert-circle</v-icon>
+        {{ tm('dialogs.danger_warning.title') }}
+      </v-card-title>
+      <v-card-text>
+        <div class="font-weight-medium">{{ tm('dialogs.danger_warning.message') }}</div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="grey" variant="text" @click="cancelDangerInstall">
+          {{ tm('dialogs.danger_warning.cancel') }}
+        </v-btn>
+        <v-btn color="error" variant="elevated" @click="confirmDangerInstall">
+          {{ tm('dialogs.danger_warning.confirm') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 
   <!-- 上传插件对话框 -->
   <v-dialog v-model="dialog" width="500">
