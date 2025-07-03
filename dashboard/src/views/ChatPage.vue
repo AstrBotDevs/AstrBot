@@ -50,10 +50,12 @@
 
                                     <template v-if="!sidebarCollapsed" v-slot:append>
                                         <div class="conversation-actions">
-                                            <v-btn icon="mdi-pencil" size="x-small" variant="text" class="edit-title-btn"
+                                            <v-btn icon="mdi-pencil" size="x-small" variant="text"
+                                                class="edit-title-btn"
                                                 @click.stop="showEditTitleDialog(item.cid, item.title)" />
-                                            <v-btn icon="mdi-delete" size="x-small" variant="text" class="delete-conversation-btn"
-                                                color="error" @click.stop="deleteConversation(item.cid)" />
+                                            <v-btn icon="mdi-delete" size="x-small" variant="text"
+                                                class="delete-conversation-btn" color="error"
+                                                @click.stop="deleteConversation(item.cid)" />
                                         </div>
                                     </template>
                                 </v-list-item>
@@ -100,8 +102,8 @@
                             <!-- 主题切换按钮 -->
                             <v-tooltip :text="isDark ? tm('modes.lightMode') : tm('modes.darkMode')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
-                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon" size="small" rounded="sm" style="margin-right: 8px;"
-                                        variant="text">
+                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon"
+                                        size="small" rounded="sm" style="margin-right: 8px;" variant="text">
                                         <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
                                     </v-btn>
                                 </template>
@@ -188,14 +190,23 @@
                             <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown"
                                 @click:clear="clearMessage" placeholder="Ask AstrBot..."
                                 style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
-                            <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
-                                <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
-                                    :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
-                                    class="send-btn" size="small" />
-                                <v-btn @click="isRecording ? stopRecording() : startRecording()"
-                                    :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
-                                    :color="isRecording ? 'error' : 'deep-purple'" class="record-btn" size="small" />
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; padding: 0px 8px;">
+                                <div style="display: flex; justify-content: flex-start; margin-top: 8px;">
+                                    <!-- 选择提供商和模型 -->
+                                    <ProviderModelSelector ref="providerModelSelector" />
+                                </div>
+                                <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                                    <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
+                                        :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
+                                        class="send-btn" size="small" />
+                                    <v-btn @click="isRecording ? stopRecording() : startRecording()"
+                                        :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
+                                        :color="isRecording ? 'error' : 'deep-purple'" class="record-btn"
+                                        size="small" />
+                                </div>
                             </div>
+
                         </div>
 
                         <!-- 附件预览区 -->
@@ -246,12 +257,13 @@ import { ref } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
+import ProviderModelSelector from '@/components/chat/ProviderModelSelector.vue';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 
 marked.setOptions({
     breaks: true,
-    highlight: function(code, lang) {
+    highlight: function (code, lang) {
         if (lang && hljs.getLanguage(lang)) {
             try {
                 return hljs.highlight(code, { language: lang }).value;
@@ -266,7 +278,8 @@ marked.setOptions({
 export default {
     name: 'ChatPage',
     components: {
-        LanguageSwitcher
+        LanguageSwitcher,
+        ProviderModelSelector
     },
     props: {
         chatboxMode: {
@@ -790,6 +803,11 @@ export default {
 
             this.loadingChat = true
 
+            // 从ProviderModelSelector组件获取当前选择
+            const selection = this.$refs.providerModelSelector?.getCurrentSelection();
+            const selectedProviderId = selection?.providerId || '';
+            const selectedModelName = selection?.modelName || '';
+
             try {
                 const response = await fetch('/api/chat/send', {
                     method: 'POST',
@@ -801,7 +819,9 @@ export default {
                         message: this.prompt.trim(), // 确保发送的消息已去除前后空格
                         conversation_id: this.currCid,
                         image_url: this.stagedImagesName,
-                        audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : []
+                        audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : [],
+                        selected_provider: selectedProviderId,
+                        selected_model: selectedModelName
                     })
                 });
 

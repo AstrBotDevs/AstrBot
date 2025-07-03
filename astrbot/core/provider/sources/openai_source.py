@@ -222,6 +222,7 @@ class ProviderOpenAIOfficial(Provider):
         contexts: list | None = None,
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
+        model: str | None = None,
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
@@ -245,7 +246,7 @@ class ProviderOpenAIOfficial(Provider):
                     context_query.extend(tcr.to_openai_messages())
 
         model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = self.get_model()
+        model_config["model"] = model or self.get_model()
 
         payloads = {"messages": context_query, **model_config}
 
@@ -346,6 +347,7 @@ class ProviderOpenAIOfficial(Provider):
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> LLMResponse:
         payloads, context_query = await self._prepare_chat_payload(
@@ -354,6 +356,7 @@ class ProviderOpenAIOfficial(Provider):
             contexts,
             system_prompt,
             tool_calls_result,
+            model=model,
             **kwargs,
         )
 
@@ -413,6 +416,7 @@ class ProviderOpenAIOfficial(Provider):
         contexts=[],
         system_prompt=None,
         tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""
@@ -422,6 +426,7 @@ class ProviderOpenAIOfficial(Provider):
             contexts,
             system_prompt,
             tool_calls_result,
+            model=model,
             **kwargs,
         )
 
@@ -525,10 +530,12 @@ class ProviderOpenAIOfficial(Provider):
                 if not image_data:
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
-                user_content["content"].append({
-                    "type": "image_url",
-                    "image_url": {"url": image_data},
-                })
+                user_content["content"].append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_data},
+                    }
+                )
             return user_content
         else:
             return {"role": "user", "content": text}

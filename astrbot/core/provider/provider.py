@@ -88,6 +88,7 @@ class Provider(AbstractProvider):
         contexts: list = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
+        model: str | None = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -116,6 +117,7 @@ class Provider(AbstractProvider):
         contexts: list = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
+        model: str | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。

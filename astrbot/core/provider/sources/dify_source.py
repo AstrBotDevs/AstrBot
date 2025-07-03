@@ -60,6 +60,8 @@ class ProviderDify(Provider):
         func_tool: FuncCall = None,
         contexts: List = None,
         system_prompt: str = None,
+        tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> LLMResponse:
         if image_urls is None:
@@ -84,11 +86,13 @@ class ProviderDify(Provider):
                     f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。"
                 )
                 continue
-            files_payload.append({
-                "type": "image",
-                "transfer_method": "local_file",
-                "upload_file_id": file_response["id"],
-            })
+            files_payload.append(
+                {
+                    "type": "image",
+                    "transfer_method": "local_file",
+                    "upload_file_id": file_response["id"],
+                }
+            )
 
         # 获得会话变量
         payload_vars = self.variables.copy()
@@ -195,6 +199,7 @@ class ProviderDify(Provider):
         contexts=...,
         system_prompt=None,
         tool_calls_result=None,
+        model=None,
         **kwargs,
     ):
         # raise NotImplementedError("This method is not implemented yet.")
