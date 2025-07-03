@@ -99,8 +99,6 @@ class ProviderOpenAIOfficial(Provider):
         for key in to_del:
             del payloads[key]
 
-        logger.info(f"payloads: {payloads}")
-
         completion = await self.client.chat.completions.create(
             **payloads, stream=False, extra_body=extra_body
         )
