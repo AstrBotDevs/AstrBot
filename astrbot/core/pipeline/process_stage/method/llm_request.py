@@ -3,9 +3,9 @@
 """
 
 import traceback
-import copy
 import asyncio
 import json
+import copy
 from typing import Union, AsyncGenerator
 from ...context import PipelineContext
 from ..stage import Stage
@@ -22,6 +22,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
     LLMResponse,
 )
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
 from ..agent_runner.tool_loop_agent import ToolLoopAgent
 
@@ -59,6 +60,12 @@ class LLMRequestSubStage(Stage):
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug("未启用 LLM 能力，跳过处理。")
             return
+
+        # 检查会话级别的LLM启停状态
+        if not SessionServiceManager.should_process_llm_request(event):
+            logger.debug(f"会话 {event.unified_msg_origin} 禁用了 LLM，跳过处理。")
+            return
+
         umo = event.unified_msg_origin
         provider = self.ctx.plugin_manager.context.get_using_provider(umo=umo)
         if provider is None:
@@ -79,7 +86,8 @@ class LLMRequestSubStage(Stage):
                 if not event.message_str.startswith(self.provider_wake_prefix):
                     return
             req.prompt = event.message_str[len(self.provider_wake_prefix) :]
-            req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
+            if SessionServiceManager.should_process_mcp_request(event):
+                req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     image_path = await comp.convert_to_file_path()
@@ -143,6 +151,7 @@ class LLMRequestSubStage(Stage):
         if not req.session_id:
             req.session_id = event.unified_msg_origin
 
+
         # fix messages
         req.contexts = self.fix_messages(req.contexts)
 
@@ -157,6 +166,11 @@ class LLMRequestSubStage(Stage):
         async def requesting():
             step_idx = 0
             while step_idx < self.max_step:
+                # 在每次实际请求 LLM 前检查会话级别的启停状态，这可以防止插件或函数工具调用时绕过会话级别的限制
+                if not SessionServiceManager.should_process_llm_request(event):
+                    logger.debug(f"会话 {event.unified_msg_origin} 禁用了 LLM，终止 LLM 请求。")
+                    return
+                
                 step_idx += 1
                 try:
                     async for resp in tool_loop_agent.step():
@@ -243,6 +257,11 @@ class LLMRequestSubStage(Stage):
 
     async def _handle_webchat(self, event: AstrMessageEvent, req: ProviderRequest):
         """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
+        # 检查会话级别的LLM启停状态，防止标题生成功能绕过会话级别限制
+        if not SessionServiceManager.should_process_llm_request(event):
+            logger.debug(f"会话 {event.unified_msg_origin} 禁用了 LLM，跳过 WebChat 标题生成。")
+            return
+            
         conversation = await self.conv_manager.get_conversation(
             event.unified_msg_origin, req.conversation.cid
         )
