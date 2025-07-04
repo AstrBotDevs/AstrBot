@@ -67,7 +67,7 @@ class ProviderDify(Provider):
         if image_urls is None:
             image_urls = []
         result = ""
-        session_id = session_id or kwargs.get("user")  # 1734
+        session_id = session_id or kwargs.get("user") or "unknown"  # 1734
         conversation_id = self.conversation_ids.get(session_id, "")
 
         files_payload = []
