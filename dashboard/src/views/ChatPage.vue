@@ -80,7 +80,7 @@
                         <div class="conversation-header-content" v-if="currCid && getCurrentConversation">
                             <h2 class="conversation-header-title">{{ getCurrentConversation.title ||
                                 tm('conversation.newConversation')
-                            }}</h2>
+                                }}</h2>
                             <div class="conversation-header-time">{{ formatDate(getCurrentConversation.updated_at) }}
                             </div>
                         </div>
@@ -175,8 +175,17 @@
                                     <v-avatar class="bot-avatar" size="36">
                                         <span class="text-h2">✨</span>
                                     </v-avatar>
-                                    <div class="message-bubble bot-bubble">
-                                        <div v-html="marked(msg.message)" class="markdown-content"></div>
+                                    <div class="bot-message-content">
+                                        <div class="message-bubble bot-bubble">
+                                            <div v-html="marked(msg.message)" class="markdown-content"></div>
+                                        </div>
+                                        <div class="message-actions">
+                                            <v-btn :icon="getCopyIcon(index)" size="small" variant="text"
+                                                class="copy-message-btn"
+                                                :class="{ 'copy-success': isCopySuccess(index) }"
+                                                @click="copyBotMessage(msg.message, index)"
+                                                :title="t('core.common.copy')" />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -340,6 +349,11 @@ export default {
             sidebarHoverExpanded: false,
             sidebarHoverDelay: 100, // 悬停延迟，单位毫秒            
             pendingCid: null, // Store pending conversation ID for route handling
+
+            // 复制成功提示
+            copySuccessMessage: null,
+            copySuccessTimeout: null,
+            copiedMessages: new Set(), // 存储已复制的消息索引
         }
     },
 
@@ -1000,7 +1014,6 @@ export default {
         // 复制代码到剪贴板
         copyCodeToClipboard(code) {
             navigator.clipboard.writeText(code).then(() => {
-                // 可以添加一个简单的提示
                 console.log('代码已复制到剪贴板');
             }).catch(err => {
                 console.error('复制失败:', err);
@@ -1017,6 +1030,54 @@ export default {
                 }
                 document.body.removeChild(textArea);
             });
+        },
+
+        // 复制bot消息到剪贴板
+        copyBotMessage(message, messageIndex) {
+            // 移除HTML标签，获取纯文本
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = message;
+            const plainText = tempDiv.textContent || tempDiv.innerText || message;
+
+            navigator.clipboard.writeText(plainText).then(() => {
+                console.log('消息已复制到剪贴板');
+                this.showCopySuccess(messageIndex);
+            }).catch(err => {
+                console.error('复制失败:', err);
+                // 如果现代API失败，使用传统方法
+                const textArea = document.createElement('textarea');
+                textArea.value = plainText;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    console.log('消息已复制到剪贴板 (fallback)');
+                    this.showCopySuccess(messageIndex);
+                } catch (fallbackErr) {
+                    console.error('复制失败 (fallback):', fallbackErr);
+                }
+                document.body.removeChild(textArea);
+            });
+        },
+
+        // 显示复制成功提示
+        showCopySuccess(messageIndex) {
+            this.copiedMessages.add(messageIndex);
+
+            // 2秒后移除成功状态
+            setTimeout(() => {
+                this.copiedMessages.delete(messageIndex);
+            }, 2000);
+        },
+
+        // 获取复制按钮图标
+        getCopyIcon(messageIndex) {
+            return this.copiedMessages.has(messageIndex) ? 'mdi-check' : 'mdi-content-copy';
+        },
+
+        // 检查是否为复制成功状态
+        isCopySuccess(messageIndex) {
+            return this.copiedMessages.has(messageIndex);
         },
 
         // 获取复制图标SVG
@@ -1366,6 +1427,47 @@ export default {
     justify-content: flex-start;
     align-items: flex-start;
     gap: 12px;
+}
+
+.bot-message-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    max-width: 80%;
+    position: relative;
+}
+
+.message-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    margin-left: 8px;
+}
+
+.bot-message:hover .message-actions {
+    opacity: 1;
+}
+
+.copy-message-btn {
+    opacity: 0.6;
+    transition: all 0.2s ease;
+    color: var(--v-theme-secondary);
+}
+
+.copy-message-btn:hover {
+    opacity: 1;
+    background-color: rgba(103, 58, 183, 0.1);
+}
+
+.copy-message-btn.copy-success {
+    color: #4caf50;
+    opacity: 1;
+}
+
+.copy-message-btn.copy-success:hover {
+    color: #4caf50;
+    background-color: rgba(76, 175, 80, 0.1);
 }
 
 .message-bubble {
@@ -1727,6 +1829,5 @@ export default {
     width: 100%;
     padding-right: 32px;
     flex-shrink: 0;
-    /* 防止header被压缩 */
 }
 </style>
