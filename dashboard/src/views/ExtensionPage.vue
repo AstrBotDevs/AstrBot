@@ -814,7 +814,7 @@ onMounted(async () => {
 
             <!-- <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small> -->
 
-            <v-btn icon="mdi-plus" size="x-large" style="position: fixed; right: 52px; bottom: 52px;" @click="dialog = true"
+            <v-btn icon="mdi-plus" size="x-large" style="position: fixed; right: 52px; bottom: 52px; z-index: 10000" @click="dialog = true"
                 color="darkprimary">
             </v-btn>
 
