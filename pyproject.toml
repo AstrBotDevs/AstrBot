@@ -47,6 +47,7 @@ dependencies = [
     "watchfiles>=1.0.5",
     "websockets>=15.0.1",
     "wechatpy>=1.8.18",
+    "networkx>=3.4.2",
 ]
 
 [project.scripts]
