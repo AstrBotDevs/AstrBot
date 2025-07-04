@@ -1,6 +1,6 @@
 <p align="center">
-    
-![6e1279651f16d7fdf4727558b72bbaf1](https://github.com/user-attachments/assets/ead4c551-fc3c-48f7-a6f7-afbfdb820512)
+
+![yjtp](https://github.com/user-attachments/assets/dcc74009-c57e-4b66-9ae3-0a81fc001255)
 
 </p>
 
@@ -10,28 +10,54 @@ _✨ Easy-to-use Multi-platform LLM Chatbot & Development Framework ✨_
 
 <a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot)](https://github.com/Soulter/AstrBot/releases/latest)
-<img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python">
-<a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg"/></a>
-<a  href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="Static Badge" src="https://img.shields.io/badge/QQ群-630166526-purple"></a>
-[![wakatime](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e.svg)](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e)
-![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fstats&query=v&label=7%E6%97%A5%E6%B6%88%E6%81%AF%E4%B8%8A%E8%A1%8C%E9%87%8F&cacheSeconds=3600)
-[![codecov](https://codecov.io/gh/Soulter/AstrBot/graph/badge.svg?token=FF3P5967B8)](https://codecov.io/gh/Soulter/AstrBot)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot?style=for-the-badge&color=76bad9)](https://github.com/Soulter/AstrBot/releases/latest)
+<img src="https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&color=76bad9" alt="python">
+<a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?style=for-the-badge&color=76bad9"/></a>
+<a  href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="QQ_community" src="https://img.shields.io/badge/QQ群-775869627-purple?style=for-the-badge&color=76bad9"></a>
+<a  href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
+[![wakatime](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e.svg?style=for-the-badge&color=76bad9)](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e)
+![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fstats&query=v&label=7%E6%97%A5%E6%B4%BB%E8%B7%83%E9%87%8F&cacheSeconds=3600&style=for-the-badge&color=3b618e)
+![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%E4%B8%AA&style=for-the-badge&label=%E6%8F%92%E4%BB%B6%E5%B8%82%E5%9C%BA&cacheSeconds=3600)
 
+<a href="https://github.com/Soulter/AstrBot/blob/master/README.md">中文</a> ｜
+<a href="https://github.com/Soulter/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://astrbot.app/">Documentation</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">Issue Tracking</a>
+
 </div>
 
 AstrBot is a loosely coupled, asynchronous chatbot and development framework that supports multi-platform deployment, featuring an easy-to-use plugin system and comprehensive Large Language Model (LLM) integration capabilities.
 
+<!-- [![codecov](https://img.shields.io/codecov/c/github/soulter/astrbot?style=for-the-badge)](https://codecov.io/gh/Soulter/AstrBot)
+ -->
+
+> [!NOTE]
+>
+> The open-source project Gewechat, which personal WeChat integration depends on, has recently stopped maintenance. `v3.5.10` now supports connecting to WeChatPadPro as a replacement for the gewechat method. For details, see the documentation [WeChatPadPro](https://astrbot.app/deploy/platform/wechat/wechatpadpro.html)
+
+## ✨ Recent Updates
+
+<details><summary>1. AstrBot now has built-in knowledge base capabilities</summary>
+
+📚 See [documentation](https://astrbot.app/use/knowledge-base.html) for details
+
+![image](https://github.com/user-attachments/assets/28b639b0-bb5c-4958-8e94-92ae8cfd1ab4)
+
+</details>
+
+2. AstrBot now supports connecting to [MCP](https://modelcontextprotocol.io/) servers!
+
 ## ✨ Key Features
 
-1. **LLM Conversations** - Supports various LLMs including OpenAI API, Google Gemini, Llama, Deepseek, ChatGLM, etc. Enables local model deployment via Ollama/LLMTuner. Features multi-turn dialogues, personality contexts, multimodal capabilities (image understanding), and speech-to-text (Whisper).
-2. **Multi-platform Integration** - Supports QQ (OneBot), QQ Channels, WeChat (Gewechat), Feishu, and Telegram. Planned support for DingTalk, Discord, WhatsApp, and Xiaomi Smart Speakers. Includes rate limiting, whitelisting, keyword filtering, and Baidu content moderation.
-3. **Agent Capabilities** - Native support for code execution, natural language TODO lists, web search. Integrates with [Dify Platform](https://dify.ai/) for easy access to Dify assistants/knowledge bases/workflows.
-4. **Plugin System** - Optimized plugin mechanism with minimal development effort. Supports multiple installed plugins.
-5. **Web Dashboard** - Visual configuration management, plugin controls, logging, and WebChat interface for direct LLM interaction.
-6. **High Stability & Modularity** - Event bus and pipeline architecture ensures high modularization and loose coupling.
+> [!NOTE]
+> 🪧 We are designing and implementing long-short term memory models and emotion control models suitable for role-playing and emotional companionship based on cutting-edge scientific research results, aiming to improve the authenticity of dialogue and emotional expression capabilities. Stay tuned for version `v3.6.0`!
+
+1. **Large Language Model Conversations**. Supports various large language models including OpenAI API, Google Gemini, Llama, Deepseek, ChatGLM, etc. Supports locally deployed large models through Ollama and LLMTuner. Features multi-turn conversations, personality contexts, multimodal capabilities, image understanding, and speech-to-text (Whisper).
+2. **Multi-platform Integration**. Supports QQ (OneBot), QQ Channels, WeChat (Gewechat), Feishu, and Telegram. Future support planned for DingTalk, Discord, WhatsApp, and Xiaomi Smart Speakers. Includes rate limiting, whitelisting, keyword filtering, and Baidu content moderation.
+3. **Agent**. Native support for some Agent capabilities such as code executor, natural language TODO, and web search. Integrates with [Dify Platform](https://dify.ai/) for easy access to Dify smart assistants, knowledge bases, and Dify workflows.
+4. **Plugin Extensions**. Deeply optimized plugin mechanism that supports [plugin development](https://astrbot.app/dev/plugin.html) to extend functionality with minimal development effort. Supports multiple plugin installations.
+5. **Visual Management Panel**. Supports visual configuration modifications, plugin management, log viewing, and other functions to reduce configuration difficulty. Integrates WebChat for direct large model conversations in the panel.
+6. **High Stability and Modularity**. Architecture design based on event bus and pipeline ensures high modularity and loose coupling.
 
 > [!TIP]
 > Dashboard Demo: [https://demo.astrbot.app/](https://demo.astrbot.app/)  
@@ -39,15 +65,108 @@ AstrBot is a loosely coupled, asynchronous chatbot and development framework tha
 
 ## ✨ Deployment
 
-#### Docker Deployment
+### Docker Deployment
 
-See docs: [Deploy with Docker](https://astrbot.app/deploy/astrbot/docker.html#docker-deployment)
+See docs: [Deploy AstrBot with Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)
 
-#### Windows Installer
+### Windows One-Click Installer Deployment
 
-Requires Python (>3.10). See docs: [Windows Installer Guide](https://astrbot.app/deploy/astrbot/windows.html)
+See docs: [Deploy AstrBot with Windows One-Click Installer](https://astrbot.app/deploy/astrbot/windows.html)
 
-#### Replit Deployment
+### BT Panel Deployment
+
+See docs: [BT Panel Deployment](https://astrbot.app/deploy/astrbot/btpanel.html)
+
+### CasaOS Deployment
+
+Community contributed deployment method.
+
+See docs: [CasaOS Deployment](https://astrbot.app/deploy/astrbot/casaos.html)
+
+### Manual Deployment
+
+> Recommend using `uv`.
+
+First, install uv:
+
+```bash
+pip install uv
+```
+
+[Official](https://docs.astral.sh/uv/) recommended installation method:
+
+linux / macos:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+wget -qO- https://astral.sh/uv/install.sh | sh
+```
+
+windows:
+
+```pwsh
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+[Ensure in PATH]
+```bash
+uv tool update-shell
+```
+
+Install AstrBot via Git Clone:
+
+```bash
+git clone https://github.com/AstrBotDevs/AstrBot && mkdir -p astrbot && cd AstrBot # or uv tool install https://github.com/AstrBotDevs/AstrBot.git && mkdir astrbot && cd astrbot && astrbot run
+uv run main.py
+```
+
+Install Astrbot via uv:
+
+```bash
+uv tool install astrbot
+```
+
+Initialize:
+
+```bash
+mkdir astrbot && cd astrbot  # mkdir astrbot ; cd astrbot
+```
+
+Run:
+
+```bash
+astrbot run
+```
+
+Or, run AstrBot temporarily via uvx:
+
+```bash
+mkdir astrbot && cd astrbot
+uvx astrbot init
+# uvx astrbot run
+```
+
+Or see official docs: [Deploy AstrBot from Source](https://astrbot.app/deploy/astrbot/cli.html)
+
+One-click install and run:
+
+linux && macos && windows:
+
+```bash
+uv tool install astrbot && mkdir -p astrbot && cd astrbot && astrbot init && astrbot run
+```
+
+Subsequent updates:
+
+```bash
+uv tool update astrbot
+```
+
+> [!TIP]
+> If you are using python3.13, you may not be able to install it. Please use -p 3.12 or lower versions
+> For example: uv tool install astrbot -p 3.12
+
+### Replit Deployment
 
 [![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
 

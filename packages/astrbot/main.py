@@ -5,6 +5,7 @@ import builtins
 import traceback
 import re
 import zoneinfo
+import anyio
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -169,7 +170,10 @@ class Main(star.Star):
             active = " (启用)" if tool.active else "(停用)"
             msg += f"- {tool.name}: {tool.description} {active}\n"
 
-        msg += "\n使用 /tool on/off <工具名> 激活或者停用函数工具。/tool off_all 停用所有函数工具。"
+        msg += (
+            "\n使用 /tool on/off <工具名> 激活或者停用函数工具。"
+            "/tool off_all 停用所有函数工具。"
+        )
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
 
     @tool.command("on")
@@ -224,7 +228,10 @@ class Main(star.Star):
         if plugin_list_info.strip() == "":
             plugin_list_info = "没有加载任何插件。"
 
-        plugin_list_info += "\n使用 /plugin help <插件名> 查看插件帮助和加载的指令。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
+        plugin_list_info += (
+            "\n使用 /plugin help <插件名> 查看插件帮助和加载的指令。\n"
+            "使用 /plugin on/off <插件名> 启用或者禁用插件。"
+        )
         event.set_result(
             MessageEventResult().message(f"{plugin_list_info}").use_t2i(False)
         )
@@ -357,7 +364,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
             self.context.get_config()["platform_settings"]["unique_session"]
             and event.get_group_id()
         ):
-            ret += f"\n\n当前处于独立会话模式, 此群 ID: {event.get_group_id()}, 也可将此 ID 加入白名单来放行整个群聊。"
+            ret += (
+                f"\n\n当前处于独立会话模式, 此群 ID: {event.get_group_id()}, "
+                "也可将此 ID 加入白名单来放行整个群聊。"
+            )
 
         event.set_result(MessageEventResult().message(ret).use_t2i(False))
 
@@ -368,7 +378,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
         if admin_id is None:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。可通过 /sid 获取 ID。"
+                    "使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。"
+                    "可通过 /sid 获取 ID。"
                 )
             )
             return
@@ -396,7 +407,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
         if sid is None:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。"
+                    "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。"
+                    "可通过 /sid 获取 ID。"
                 )
             )
         self.context.get_config()["platform_settings"]["id_whitelist"].append(str(sid))
@@ -616,7 +628,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
             curr_model = prov.get_model() or "无"
             ret += f"\n当前模型: [{curr_model}]"
 
-            ret += "\nTips: 使用 /model <模型名/编号>，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
+            ret += (
+                "\nTips: 使用 /model <模型名/编号>，即可实时更换模型。"
+                "如目标模型不存在于上表，请输入模型名。"
+            )
             message.set_result(MessageEventResult().message(ret).use_t2i(False))
         else:
             if isinstance(idx_or_name, int):
@@ -702,7 +717,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
             if idx == 1:
                 ret += "没有找到任何对话。"
             dify_cid = provider.conversation_ids.get(message.unified_msg_origin, None)
-            ret += f"\n\n用户: {message.unified_msg_origin}\n当前对话: {dify_cid}\n使用 /switch <序号> 切换对话。"
+            ret += (
+                f"\n\n用户: {message.unified_msg_origin}\n当前对话: {dify_cid}\n"
+                "使用 /switch <序号> 切换对话。"
+            )
             message.set_result(MessageEventResult().message(ret))
             return
 
@@ -743,7 +761,11 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     "name"
                 ]
             title = _titles.get(conv.cid, "新对话")
-            ret += f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+            ret += (
+                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  "
+                f"上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).\
+                         strftime('%m-%d %H:%M')}\n"
+            )
             global_index += 1
 
         ret += "---\n"
@@ -922,7 +944,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
             # 群聊，没开独立会话，发送人不是管理员
             message.set_result(
                 MessageEventResult().message(
-                    f"会话处于群聊，并且未开启独立会话，并且您 (ID {message.get_sender_id()}) 不是管理员，因此没有权限删除当前对话。"
+                    f"会话处于群聊，并且未开启独立会话，并且您 \
+                        (ID {message.get_sender_id()}) 不是管理员，\
+                        因此没有权限删除当前对话。"
                 )
             )
             return
@@ -937,7 +961,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 )
             message.set_result(
                 MessageEventResult().message(
-                    "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
+                    "删除当前对话成功。不再处于对话状态，使用 /switch 序号\
+                        切换到其他对话或 /new 创建。"
                 )
             )
             return
@@ -961,7 +986,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
         )
         message.set_result(
             MessageEventResult().message(
-                "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
+                "删除当前对话成功。不再处于对话状态，\
+                    使用 /switch 序号 切换到其他对话或 /new 创建。"
             )
         )
 
@@ -1004,7 +1030,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("persona")
     async def persona(self, message: AstrMessageEvent):
-        l = message.message_str.split(" ")  # noqa: E741
+        L = message.message_str.split(" ")  
 
         curr_persona_name = "无"
         cid = await self.context.conversation_manager.get_curr_conversation_id(
@@ -1027,7 +1053,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             curr_cid_title = conversation.title if conversation.title else "新对话"
             curr_cid_title += f"({cid[:4]})"
 
-        if len(l) == 1:
+        if len(L) == 1:
             message.set_result(
                 MessageEventResult()
                 .message(
@@ -1046,17 +1072,17 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 )
                 .use_t2i(False)
             )
-        elif l[1] == "list":
+        elif L[1] == "list":
             msg = "人格列表：\n"
             for persona in self.context.provider_manager.personas:
                 msg += f"- {persona['name']}\n"
             msg += "\n\n*输入 `/persona view 人格名` 查看人格详细信息"
             message.set_result(MessageEventResult().message(msg))
-        elif l[1] == "view":
-            if len(l) == 2:
+        elif L[1] == "view":
+            if len(L) == 2:
                 message.set_result(MessageEventResult().message("请输入人格情景名"))
                 return
-            ps = l[2].strip()
+            ps = L[2].strip()
             if persona := next(
                 builtins.filter(
                     lambda persona: persona["name"] == ps,
@@ -1069,7 +1095,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             else:
                 msg = f"人格{ps}不存在"
             message.set_result(MessageEventResult().message(msg))
-        elif l[1] == "unset":
+        elif L[1] == "unset":
             if not cid:
                 message.set_result(
                     MessageEventResult().message("当前没有对话，无法取消人格。")
@@ -1080,7 +1106,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             )
             message.set_result(MessageEventResult().message("取消人格成功。"))
         else:
-            ps = "".join(l[1:]).strip()
+            ps = "".join(L[1:]).strip()
             if not cid:
                 message.set_result(
                     MessageEventResult().message(
@@ -1100,7 +1126,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 )
                 message.set_result(
                     MessageEventResult().message(
-                        "设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。"
+                        "设置成功。如果您正在切换到不同的人格，\
+                            请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。"
                     )
                 )
             else:
@@ -1160,8 +1187,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def gewe_code(self, event: AstrMessageEvent, code: str):
         """保存 gewechat 验证码"""
         code_path = os.path.join(get_astrbot_data_path(), "temp", "gewe_code")
-        with open(code_path, "w", encoding="utf-8") as f:
-            f.write(code)
+        async with await anyio.open_file(code_path, "w", encoding="utf-8") as f:
+            await f.write(code)
         yield event.plain_result("验证码已保存。")
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
@@ -1196,13 +1223,16 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 try:
                     conv = None
                     if provider.meta().type != "dify":
-                        session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
+                        session_curr_cid = await self.context.conversation_manager.\
+                            get_curr_conversation_id(
                             event.unified_msg_origin
                         )
 
                         if not session_curr_cid:
                             logger.error(
-                                "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。"
+                                "当前未处于对话状态，无法主动回复，\
+                                请确保 平台设置->会话隔离(unique_session) 未开启，\
+                                并使用 /switch 序号 切换或者 /new 创建一个会话。"
                             )
                             return
 
@@ -1217,7 +1247,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
                         )
                         if cid is None:
                             logger.error(
-                                "[Dify] 当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。"
+                                "[Dify] 当前未处于对话状态，无法主动回复。\
+                                    请确保 平台设置->会话隔离(unique_session) 未开启，\
+                                    并使用 /switch 序号 切换或者 /new 创建一个会话。"
                             )
                             return
 
@@ -1287,7 +1319,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 if prompt := persona["prompt"]:
                     req.system_prompt += prompt
                 if mood_dialogs := persona["_mood_imitation_dialogs_processed"]:
-                    req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
+                    req.system_prompt += "\nHere are few shots of dialogs,\
+                          you need to imitate the tone of 'B'\
+                          in the following dialogs to respond:\n"
                     req.system_prompt += mood_dialogs
                 if (
                     begin_dialogs := persona["_begin_dialogs_processed"]
@@ -1299,7 +1333,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 sender_info = f"(Sent by {quote.sender_nickname})"
             else:
                 sender_info = ""
-            req.system_prompt += f"\nUser is quoting the message{sender_info}: {quote.message_str}, please consider the context."
+            req.system_prompt += f"\nUser is quoting the message\
+                {sender_info}: {quote.message_str}, please consider the context."
 
         if self.ltm:
             try:
@@ -1323,7 +1358,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
         token = self.parse_commands(event.message_str)
         if token.len < 2:
             yield event.plain_result(
-                "可设置所有其他指令是否需要管理员权限。\n格式: /alter_cmd <cmd_name> <admin/member>\n 例如: /alter_cmd provider admin 将 provider 设置为管理员指令\n /alter_cmd reset config 打开reset权限配置"
+                "可设置所有其他指令是否需要管理员权限。\
+                    \n格式: /alter_cmd <cmd_name> <admin/member>\n"
+                "例如: /alter_cmd provider admin 将 provider 设置为管理员指令\n"
+                "/alter_cmd reset config 打开reset权限配置"
             )
             return
 

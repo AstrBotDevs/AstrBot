@@ -7,6 +7,7 @@ import asyncio
 import re
 import aiodocker
 import time
+import anyio
 import astrbot.api.star as star
 from collections import defaultdict
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -42,9 +43,11 @@ You need to generate python codes to solve user's problem: {prompt}
     You can only use these libraries and the libraries that they depend on.
 2. Do not generate malicious code.
 3. Use given `shared.api` package to output the result.
-   It has 3 functions: `send_text(text: str)`, `send_image(image_path: str)`, `send_file(file_path: str)`.
+   It has 3 functions: `send_text(text: str)`, `send_image(image_path: str)`,\
+      `send_file(file_path: str)`.
    For Image and file, you must save it to `output` folder.
-4. You must only output the code, do not output the result of the code and any other information.
+4. You must only output the code, do not output the result of the code\
+      and any other information.
 5. The output language is same as user's input language.
 6. Please first provide relevant knowledge about user's problem appropriately.
 
@@ -61,8 +64,11 @@ def fabonacci(n):
         return fabonacci(n-1) + fabonacci(n-2)
 
 result = fabonacci(10)
-send_text("The fabonacci sequence is a series of numbers in which each number is the sum of the two preceding ones, starting from 0 and 1.")
-send_text("Let's calculate the fabonacci sequence of 10: " + result) # send_text is a function to send pure text to user
+send_text("The fabonacci sequence is a series of numbers \
+    in which each number is the sum of the two preceding ones,\
+      starting from 0 and 1.")
+send_text("Let's calculate the fabonacci sequence of 10: " + result) \
+    # send_text is a function to send pure text to user
 ```
 
 2. User's problem: `please draw a sin(x) function.`
@@ -76,7 +82,9 @@ x = np.linspace(0, 2*np.pi, 100)
 y = np.sin(x)
 plt.plot(x, y)
 plt.savefig("output/sin_x.png")
-send_text("The sin(x) is a periodic function with a period of 2π, and the value range is [-1, 1]. The following is the image of sin(x).")
+send_text("The sin(x) is a periodic function with a period of 2π,\
+    and the value range is [-1, 1]. \
+    The following is the image of sin(x).")
 send_image("output/sin_x.png") # send_image is a function to send image to user
 send_text("If you need more information, please let me know :)")
 ```
@@ -133,7 +141,8 @@ class Main(star.Star):
         ok = await self.is_docker_available()
         if not ok:
             logger.info(
-                "Docker 不可用，代码解释器将无法使用，astrbot-python-interpreter 将自动禁用。"
+                "Docker 不可用，代码解释器将无法使用，"
+                "astrbot-python-interpreter 将自动禁用。"
             )
             await self.context._star_manager.turn_off_plugin(
                 "astrbot-python-interpreter"
@@ -145,8 +154,8 @@ class Main(star.Star):
         """
         ext = os.path.splitext(file_path)[1]
         S3_URL = "https://s3.neko.soulter.top/astrbot-s3"
-        with open(file_path, "rb") as f:
-            file = f.read()
+        async with await anyio.open_file(file_path, "rb") as f:
+            file = await f.read()
 
         s3_file_url = f"{S3_URL}/{uuid.uuid4().hex}{ext}"
 
@@ -172,7 +181,9 @@ class Main(star.Star):
     async def get_image_name(self) -> str:
         """Get the image name"""
         if self.config["sandbox"]["docker_mirror"]:
-            return f"{self.config['sandbox']['docker_mirror']}/{self.config['sandbox']['image']}"
+            docker_mirror = self.config["sandbox"]["docker_mirror"]
+            docker_image = self.config["sandbox"]["image"]
+            return f"{docker_mirror}/{docker_image}"
         return self.config["sandbox"]["image"]
 
     def _save_config(self):
@@ -191,8 +202,8 @@ class Main(star.Star):
                 if resp.status != 200:
                     return ""
                 image_path = os.path.join(workplace_path, f"{filename}.jpg")
-                with open(image_path, "wb") as f:
-                    f.write(await resp.read())
+                async with await anyio.open_file(image_path, "wb") as f:
+                    await f.write(await resp.read())
                 return f"{filename}.jpg"
 
     async def tidy_code(self, code: str) -> str:
@@ -252,7 +263,11 @@ class Main(star.Star):
         """设置 Docker 宿主机绝对路径"""
         if not path:
             yield event.plain_result(
-                f"当前 Docker 宿主机绝对路径: {self.config.get('docker_host_astrbot_abs_path', '')}"
+                f"当前 Docker 宿主机绝对路径: {
+                    self.config.get(
+                    'docker_host_astrbot_abs_path',
+                    ''
+                )}"
             )
         else:
             self.config["docker_host_astrbot_abs_path"] = path
@@ -263,9 +278,12 @@ class Main(star.Star):
     async def pi_mirror(self, event: AstrMessageEvent, url: str = ""):
         """Docker 镜像地址"""
         if not url:
-            yield event.plain_result(f"""当前 Docker 镜像地址: {self.config["sandbox"]["docker_mirror"]}。
+            yield event.plain_result(f"""当前 Docker 镜像地址: \
+                        {self.config["sandbox"]["docker_mirror"]}。
 使用 `pi mirror <url>` 来设置 Docker 镜像地址。
-您所设置的 Docker 镜像地址将会自动加在 Docker 镜像名前。如: `soulter/astrbot-code-interpreter-sandbox` -> `cjie.eu.org/soulter/astrbot-code-interpreter-sandbox`。
+您所设置的 Docker 镜像地址将会自动加在 Docker 镜像名前。
+如: `soulter/astrbot-code-interpreter-sandbox` -> \
+`cjie.eu.org/soulter/astrbot-code-interpreter-sandbox`。
 """)
         else:
             self.config["sandbox"]["docker_mirror"] = url
@@ -295,7 +313,8 @@ class Main(star.Star):
         await asyncio.sleep(60)
         if uid in self.user_waiting:
             yield event.plain_result(
-                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 未在规定时间内上传{tip}。"
+                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} "
+                f"未在规定时间内上传{tip}。"
             )
             self.user_waiting.pop(uid)
 
@@ -306,11 +325,13 @@ class Main(star.Star):
         if uid in self.user_waiting:
             self.user_waiting.pop(uid)
             yield event.plain_result(
-                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 已清理。"
+                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} "
+                "已清理。"
             )
         else:
             yield event.plain_result(
-                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 没有等待上传文件。"
+                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} "
+                "没有等待上传文件。"
             )
 
     @pi.command("list")
@@ -320,17 +341,22 @@ class Main(star.Star):
         if uid in self.user_file_msg_buffer:
             files = self.user_file_msg_buffer[uid]
             yield event.plain_result(
-                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 上传的文件: {files}"
+                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} "
+                f"上传的文件: {files}"
             )
         else:
             yield event.plain_result(
-                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 没有上传文件。"
+                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()}"
+                " 没有上传文件。"
             )
 
     @llm_tool("python_interpreter")
     async def python_interpreter(self, event: AstrMessageEvent):
-        """Use this tool only if user really want to solve a complex problem and the problem can be solved very well by Python code.
-        For example, user can use this tool to solve math problems, edit image, docx, pptx, pdf, etc.
+        """Use this tool only if user really want to solve
+        a complex problem and the problem can be solved very well |
+        by Python code.
+            For example, user can use this tool to solve |
+        math problems, edit image, docx, pptx, pdf, etc.
         """
         if not await self.is_docker_available():
             yield event.plain_result("Docker 在当前机器不可用，无法沙箱化执行代码。")
@@ -387,8 +413,14 @@ class Main(star.Star):
 
             # 整理代码并保存
             code_clean = await self.tidy_code(llm_response.completion_text)
-            with open(os.path.join(workplace_path, "exec.py"), "w") as f:
-                f.write(code_clean)
+            async with await anyio.open_file(
+                os.path.join(
+                    workplace_path,
+                    "exec.py"
+                ),
+                "w"
+            ) as f:
+                await f.write(code_clean)
 
             # 启动容器
             docker = aiodocker.Docker()
@@ -426,7 +458,9 @@ class Main(star.Star):
                 host_workplace = os.path.abspath(workplace_path)
 
             logger.debug(
-                f"host_shared: {host_shared}, host_output: {host_output}, host_workplace: {host_workplace}"
+                f"host_shared: {host_shared}, \
+                host_output: {host_output}, \
+                host_workplace: {host_workplace}"
             )
 
             container = await docker.containers.run(
@@ -481,7 +515,12 @@ class Main(star.Star):
 
             if not ok:
                 if traceback:
-                    obs = f"## Observation \n When execute the code: ```python\n{code_clean}\n```\n\n Error occurred:\n\n{traceback}\n Need to improve/fix the code."
+                    obs = (
+                        f"## Observation \n When execute the code: "
+                        f"```python\n{code_clean}\n```\n\n "
+                        f"Error occurred:\n\n{traceback}\n "
+                        f"Need to improve/fix the code."
+                    )
                 else:
                     logger.warning(
                         f"未从沙箱输出中捕获到合法的输出。沙箱输出日志: {logs}"
@@ -509,16 +548,20 @@ class Main(star.Star):
         yield event.plain_result(f"用户 {event.get_session_id()} 上传的文件已清理。")
 
     async def run_container(
-        self, container: aiodocker.docker.DockerContainer, timeout: int = 20
+        self, container: aiodocker.docker.DockerContainer, timeout_seconds: int = 20
     ) -> list[str]:
         """Run the container and get the output"""
         try:
-            await container.wait(timeout=timeout)
-            logs = await container.log(stdout=True, stderr=True)
-            return logs
-        except asyncio.TimeoutError:
+            async with anyio.fail_after(timeout_seconds):
+                await container.wait()
+                logs = await container.log(stdout=True, stderr=True)
+                return logs
+        except TimeoutError:
             logger.warning(f"Container {container.id} timeout.")
             await container.kill()
-            return [f"[Error]: Container has been killed due to timeout ({timeout}s)."]
+            return [
+                f"[Error]: Container has been killed due to timeout "
+                f"({timeout_seconds}s)."
+            ]
         finally:
             await container.delete()

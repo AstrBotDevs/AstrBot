@@ -3,6 +3,7 @@ import json
 import datetime
 import uuid
 import zoneinfo
+import anyio
 import astrbot.api.star as star
 from astrbot.api.event import filter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -12,10 +13,16 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 @star.register(
-    name="astrbot-reminder", desc="使用 LLM 待办提醒", author="Soulter", version="0.0.1"
+    name="astrbot-reminder",
+    desc="使用 LLM 待办提醒",
+    author="Soulter",
+    version="0.0.1"
 )
 class Main(star.Star):
-    """使用 LLM 待办提醒。只需对 LLM 说想要提醒的事情和时间即可。比如：`之后每天这个时候都提醒我做多邻国`"""
+    """
+    使用 LLM 待办提醒。只需对 LLM 说想要提醒的事情和时间即可。
+    比如：`之后每天这个时候都提醒我做多邻国`
+    """
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
@@ -85,8 +92,8 @@ class Main(star.Star):
     async def _save_data(self):
         """Save the reminder data."""
         reminder_file = os.path.join(get_astrbot_data_path(), "astrbot-reminder.json")
-        with open(reminder_file, "w", encoding="utf-8") as f:
-            json.dump(self.reminder_data, f, ensure_ascii=False)
+        async with await anyio.open_file(reminder_file, "w", encoding="utf-8") as f:
+            await f.write(json.dumps(self.reminder_data, ensure_ascii=False))
 
     def _parse_cron_expr(self, cron_expr: str):
         fields = cron_expr.split(" ")
@@ -111,9 +118,15 @@ class Main(star.Star):
 
         Args:
             text(string): Must Required. The content of the reminder.
-            datetime_str(string): Required when user's reminder is a single reminder. The datetime string of the reminder, Must format with %Y-%m-%d %H:%M
-            cron_expression(string): Required when user's reminder is a repeated reminder. The cron expression of the reminder.
-            human_readable_cron(string): Optional. The human readable cron expression of the reminder.
+            datetime_str(string): |
+               Required when user's reminder is a single reminder.
+               The datetime string of the reminder,
+               Must format with %Y-%m-%d %H:%M
+            cron_expression(string):
+                Required when user's reminder is a repeated
+                reminder. The cron expression of the reminder.
+            human_readable_cron(string): Optional.
+                The human readable cron expression of the reminder.
         """
         if event.get_platform_name() == "qq_official":
             yield event.plain_result("reminder 暂不支持 QQ 官方机器人。")
@@ -170,7 +183,8 @@ class Main(star.Star):
             + text
             + "\n时间: "
             + reminder_time
-            + "\n\n使用 /reminder ls 查看所有待办事项。\n使用 /tool off reminder 关闭此功能。"
+            + "\n\n使用 /reminder ls 查看所有待办事项。\n"
+            + "使用 /tool off reminder 关闭此功能。"
         )
 
     @filter.command_group("reminder")
@@ -236,7 +250,8 @@ class Main(star.Star):
             except Exception as e:
                 logger.error(f"Remove job error: {e}")
                 yield event.plain_result(
-                    f"成功移除对应的待办事项。删除定时任务失败: {str(e)} 可能需要重启 AstrBot 以取消该提醒任务。"
+                    f"成功移除对应的待办事项。删除定时任务失败: {str(e)} "
+                    "可能需要重启 AstrBot 以取消该提醒任务。"
                 )
             await self._save_data()
             yield event.plain_result("成功删除待办事项：\n" + reminder["text"])

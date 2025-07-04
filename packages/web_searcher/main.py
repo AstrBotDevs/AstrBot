@@ -141,7 +141,8 @@ class Main(star.Star):
             idx += 1
 
         if self.websearch_link:
-            ret += "针对问题，请根据上面的结果分点总结，并且在结尾处附上对应内容的参考链接（如有）。"
+            ret += "针对问题，请根据上面的结果分点总"
+            "并且在结尾处附上对应内容的参考链接（如有）。"
 
         return ret
 

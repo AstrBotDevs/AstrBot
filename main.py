@@ -8,9 +8,6 @@ from astrbot.core import logger, LogManager, LogBroker
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
-# add parent path to sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
     /   \         /       |           ||   _  \     |   _  \   /  __  \  |           |
@@ -49,10 +46,10 @@ async def check_dashboard_files():
             logger.warning(
                 "检测到管理面板有更新。可以使用 /dashboard_update 命令更新。"
             )
-        return
-
-    logger.info(
-        "开始下载管理面板文件...高峰期（晚上）可能导致较慢的速度。如多次下载失败，请前往 https://github.com/Soulter/AstrBot/releases/latest 下载 dist.zip，并将其中的 dist 文件夹解压至 data 目录下。"
+        return    logger.info(
+        "开始下载管理面板文件...高峰期（晚上）可能导致较慢的速度。"
+        "如多次下载失败，请前往 https://github.com/Soulter/AstrBot/releases/latest "
+        "下载 dist.zip，并将其中的 dist 文件夹解压至 data 目录下。"
     )
 
     try:

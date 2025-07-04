@@ -23,25 +23,23 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://astrbot.app/">查看文档</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
+
 </div>
 
 AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用的插件系统和完善的大语言模型（LLM）接入功能的聊天机器人及开发框架。
 
-
 <!-- [![codecov](https://img.shields.io/codecov/c/github/soulter/astrbot?style=for-the-badge)](https://codecov.io/gh/Soulter/AstrBot)
  -->
 
-> [!WARNING]
-> 
-> 请务必修改默认密码以及保证 AstrBot 版本 >= 3.5.13。
+> 个人微信接入所依赖的开源项目 Gewechat 近期已停止维护，`v3.5.10` 已经支持接入 WeChatPadPro 替换 gewechat 方式。详见文档 [WeChatPadPro](https://astrbot.app/deploy/platform/wechat/wechatpadpro.html)
 
 ## ✨ 近期更新
 
 <details><summary>1. AstrBot 现已自带知识库能力</summary>
 
- 📚 详见[文档](https://astrbot.app/use/knowledge-base.html)
+📚 详见[文档](https://astrbot.app/use/knowledge-base.html)
 
- ![image](https://github.com/user-attachments/assets/28b639b0-bb5c-4958-8e94-92ae8cfd1ab4)
+![image](https://github.com/user-attachments/assets/28b639b0-bb5c-4958-8e94-92ae8cfd1ab4)
 
 </details>
 
@@ -61,7 +59,7 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 > [!TIP]
 > WebUI 在线体验 Demo: [https://demo.astrbot.app/](https://demo.astrbot.app/)
-> 
+>
 > 用户名: `astrbot`, 密码: `astrbot`。
 
 ## ✨ 使用方式
@@ -90,18 +88,54 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 首先，安装 uv：
 
+[官网](https://docs.astral.sh/uv/)推荐的安装方式：
+
+linux / macos：
+
+
 ```bash
-pip install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+wget -qO- https://astral.sh/uv/install.sh | sh
 ```
+
+windows:
+
+```pwsh
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+[确保在PATH中]
+```bash
+uv tool update-shell
+```
+
 
 通过 Git Clone 安装 AstrBot：
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
+git clone https://github.com/AstrBotDevs/AstrBot && mkdir -p astrbot && cd AstrBot # 或者 uv tool install https://github.com/AstrBotDevs/AstrBot.git && mkdir astrbot && cd astrbot && astrbot run
 uv run main.py
 ```
 
-或者，直接通过 uvx 安装 AstrBot：
+通过uv安装 Astrbot:
+
+```bash
+uv tool install astrbot # 不建议使用pip install astrbot 可能会导致意外情况
+```
+
+初始化：
+
+```bash
+mkdir astrbot && cd astrbot  # mkdir astrbot ; cd astrbot
+```
+
+运行：
+
+```bash
+astrbot run
+```
+
+或者，直接通过 uvx 临时运行 AstrBot：
 
 ```bash
 mkdir astrbot && cd astrbot
@@ -216,7 +250,6 @@ _✨ WebUI ✨_
 
 </details>
 
-
 ## ❤️ Special Thanks
 
 特别感谢所有 Contributors 和插件开发者对 AstrBot 的贡献 ❤️
@@ -232,11 +265,11 @@ _✨ WebUI ✨_
 
 ## ⭐ Star History
 
-> [!TIP] 
+> [!TIP]
 > 如果本项目对您的生活 / 工作产生了帮助，或者您关注本项目的未来发展，请给项目 Star，这是我维护这个开源项目的动力 <3
 
 <div align="center">
-    
+
 [![Star History Chart](https://api.star-history.com/svg?repos=soulter/astrbot&type=Date)](https://star-history.com/#soulter/astrbot&Date)
 
 </div>
@@ -251,4 +284,3 @@ _✨ WebUI ✨_
 3. Please ensure compliance with local laws and regulations when using this project.
 
 _私は、高性能ですから!_
-
