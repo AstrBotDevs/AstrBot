@@ -1,4 +1,4 @@
-from .star import StarMetadata
+from .star import StarMetadata, star_map
 from .star_manager import PluginManager
 from .context import Context
 from astrbot.core.provider import Provider
@@ -13,6 +13,14 @@ class Star(CommandParserMixin):
     def __init__(self, context: Context):
         StarTools.initialize(context)
         self.context = context
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        metadata = StarMetadata(
+            star_cls_type=cls,
+            module_path=cls.__module__,
+        )
+        star_map[cls.__module__] = metadata
 
     @staticmethod
     async def text_to_image(text: str, return_url=True) -> str:

@@ -11,7 +11,6 @@ import os
 import sys
 import traceback
 from types import ModuleType
-from typing import List
 
 import yaml
 
@@ -157,7 +156,7 @@ class PluginManager:
                     )
         return modules
 
-    def _get_plugin_modules(self) -> List[dict]:
+    def _get_plugin_modules(self) -> list[dict]:
         plugins = []
         if os.path.exists(self.plugin_store_path):
             plugins.extend(self._get_modules(self.plugin_store_path))
@@ -439,7 +438,7 @@ class PluginManager:
                         )
 
                 if path in star_map:
-                    # 通过装饰器的方式注册插件
+                    # 通过__init__subclass__注册插件
                     metadata = star_map[path]
 
                     try:
@@ -453,6 +452,7 @@ class PluginManager:
                             metadata.desc = metadata_yaml.desc
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
+                            star_registry.append(metadata)
                     except Exception:
                         pass
                     metadata.config = plugin_config

@@ -55,12 +55,6 @@ class RstScene(Enum):
         return cls.PRIVATE
 
 
-@star.register(
-    name="astrbot",
-    desc="AstrBot 基础指令结合 + 拓展功能",
-    author="Soulter",
-    version="4.0.0",
-)
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
