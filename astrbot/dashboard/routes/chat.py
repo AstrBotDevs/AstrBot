@@ -166,13 +166,12 @@ class ChatRoute(Route):
                     type = result.get("type")
                     cid = result.get("cid")
                     streaming = result.get("streaming", False)
+                    chain_type = result.get("chain_type")
                     yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
                     await asyncio.sleep(0.05)
 
                     if streaming and type != "end":
-                        continue
-
-                    if type == "update_title":
+                        # If the result is still streaming, we continue to wait for more data
                         continue
 
                     if result_text:
@@ -189,7 +188,11 @@ class ChatRoute(Route):
                         self.db.update_conversation(
                             username, cid, history=json.dumps(history)
                         )
-                        break
+                        if chain_type not in ["tool_call", "tool_call_result"]:
+                            # If the result is not a tool call or tool call result,
+                            # we can break the loop and end the stream
+                            break
+
             except BaseException as _:
                 logger.debug(f"用户 {username} 断开聊天长连接。")
                 return
