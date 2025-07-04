@@ -12,7 +12,7 @@ import { useI18n } from '@/i18n/composables';
 
 // 配置markdown-it，默认安全设置
 const md = new MarkdownIt({
-    html: false,        // 启用HTML标签
+    html: true,        // 启用HTML标签
     breaks: true,       // 换行转<br>
     linkify: true,      // 自动转链接
     typographer: false  // 禁用智能引号
