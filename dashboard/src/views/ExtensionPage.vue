@@ -904,8 +904,8 @@ onMounted(async () => {
                   </template>
                   <template v-slot:item.tags="{ item }">
                     <span v-if="item.tags.length === 0">-</span>
-                    <v-chip v-for="tag in item.tags" :key="tag" :color="tag === 'danger' ? 'error' : 'primary'" size="x-small">
-                      {{ tag === 'danger' ? tm('tags.danger') : tag }}</v-chip>
+                    <v-chip v-for="tag in item.tags" :key="tag" :color="tag === 'danger' ? 'error' : 'primary'" size="x-small" v-show="tag !== 'danger'">
+                      {{ tag }}</v-chip>
                   </template>
                   <template v-slot:item.actions="{ item }">
                     <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" variant="flat"
@@ -1115,18 +1115,18 @@ onMounted(async () => {
   <v-dialog v-model="dangerConfirmDialog" width="500" persistent>
     <v-card>
       <v-card-title class="text-h5 d-flex align-center">
-        <v-icon color="error" class="mr-2">mdi-alert-circle</v-icon>
+        <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
         {{ tm('dialogs.danger_warning.title') }}
       </v-card-title>
       <v-card-text>
-        <div class="font-weight-medium">{{ tm('dialogs.danger_warning.message') }}</div>
+        <div>{{ tm('dialogs.danger_warning.message') }}</div>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="cancelDangerInstall">
+        <v-btn color="grey" @click="cancelDangerInstall">
           {{ tm('dialogs.danger_warning.cancel') }}
         </v-btn>
-        <v-btn color="error" variant="elevated" @click="confirmDangerInstall">
+        <v-btn color="warning" @click="confirmDangerInstall">
           {{ tm('dialogs.danger_warning.confirm') }}
         </v-btn>
       </v-card-actions>
