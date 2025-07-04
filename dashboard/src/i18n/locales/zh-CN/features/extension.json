@@ -79,6 +79,9 @@
     "devDocs": "插件开发文档",
     "submitRepo": "提交插件仓库"
   },
+  "tags": {
+    "danger": "危险"
+  },
   "dialogs": {
     "error": {
       "title": "错误信息",

@@ -79,6 +79,9 @@
     "devDocs": "Extension Development Docs",
     "submitRepo": "Submit Extension Repository"
   },
+  "tags": {
+    "danger": "Danger"
+  },
   "dialogs": {
     "error": {
       "title": "Error Information",
