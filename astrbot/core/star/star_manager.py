@@ -452,7 +452,6 @@ class PluginManager:
                             metadata.desc = metadata_yaml.desc
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
-                            star_registry.append(metadata)
                     except Exception:
                         pass
                     metadata.config = plugin_config
@@ -507,6 +506,8 @@ class PluginManager:
                             )
                         if func_tool.name in inactivated_llm_tools:
                             func_tool.active = False
+
+                    star_registry.append(metadata)
 
                 else:
                     # v3.4.0 以前的方式注册插件
