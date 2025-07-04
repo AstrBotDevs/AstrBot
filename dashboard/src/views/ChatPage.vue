@@ -177,7 +177,7 @@
                                     </v-avatar>
                                     <div class="bot-message-content">
                                         <div class="message-bubble bot-bubble">
-                                            <div v-html="marked(msg.message)" class="markdown-content"></div>
+                                            <div v-html="md.render(msg.message)" class="markdown-content"></div>
                                         </div>
                                         <div class="message-actions">
                                             <v-btn :icon="getCopyIcon(index)" size="small" variant="text"
@@ -261,7 +261,7 @@
 <script>
 import { router } from '@/router';
 import axios from 'axios';
-import { marked } from 'marked';
+import MarkdownIt from 'markdown-it';
 import { ref } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
@@ -270,8 +270,11 @@ import ProviderModelSelector from '@/components/chat/ProviderModelSelector.vue';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 
-marked.setOptions({
-    breaks: true,
+// 配置markdown-it，启用代码高亮
+const md = new MarkdownIt({
+    html: false,        // 禁用HTML标签，防XSS
+    breaks: true,       // 换行转<br>
+    linkify: true,      // 自动转链接
     highlight: function (code, lang) {
         if (lang && hljs.getLanguage(lang)) {
             try {
@@ -303,7 +306,7 @@ export default {
             t,
             tm,
             router,
-            marked,
+            md,
             ref
         };
     },

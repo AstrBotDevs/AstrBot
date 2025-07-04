@@ -7,8 +7,16 @@ import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import {md5} from 'js-md5';
 import {useAuthStore} from '@/stores/auth';
 import {useCommonStore} from '@/stores/common';
-import {marked} from 'marked';
+import MarkdownIt from 'markdown-it';
 import { useI18n } from '@/i18n/composables';
+
+// 配置markdown-it，默认安全设置
+const md = new MarkdownIt({
+    html: false,        // 启用HTML标签
+    breaks: true,       // 换行转<br>
+    linkify: true,      // 自动转链接
+    typographer: false  // 禁用智能引号
+});
 
 const customizer = useCustomizerStore();
 const { t } = useI18n();
@@ -323,7 +331,7 @@ commonStore.getStartTime();
 
             <div v-if="releaseMessage"
                 style="background-color: #646cff24; padding: 16px; border-radius: 10px; font-size: 14px; max-height: 400px; overflow-y: auto;"
-                v-html="marked(releaseMessage)" class="markdown-content">
+                v-html="md.render(releaseMessage)" class="markdown-content">
             </div>
 
             <div class="mb-4 mt-4">
