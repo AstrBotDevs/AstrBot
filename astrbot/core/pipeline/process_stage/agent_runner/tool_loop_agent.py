@@ -106,7 +106,6 @@ class ToolLoopAgent(BaseAgentRunner):
 
         # 处理 LLM 响应
         llm_resp = llm_resp_result
-        logger.debug(f"LLMResp: {llm_resp}")
 
         if llm_resp.role == "err":
             # 如果 LLM 响应错误，转换到错误状态

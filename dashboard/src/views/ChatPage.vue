@@ -1473,7 +1473,6 @@ export default {
 .message-bubble {
     padding: 8px 16px;
     border-radius: 12px;
-    max-width: 80%;
 }
 
 .user-bubble {
