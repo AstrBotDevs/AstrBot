@@ -133,23 +133,28 @@ def build_plug_list(plugins_dir: Path) -> list:
 
     # 获取在线插件列表
     online_plugins = []
-    try:
-        with httpx.Client() as client:
-            resp = client.get("https://api.soulter.top/astrbot/plugins")
-            resp.raise_for_status()
-            data = resp.json()
-            for plugin_id, plugin_info in data.items():
-                online_plugins.append({
-                    "name": str(plugin_id),
-                    "desc": str(plugin_info.get("desc", "")),
-                    "version": str(plugin_info.get("version", "")),
-                    "author": str(plugin_info.get("author", "")),
-                    "repo": str(plugin_info.get("repo", "")),
-                    "status": PluginStatus.NOT_INSTALLED,
-                    "local_path": None,
-                })
-    except Exception as e:
-        click.echo(f"获取在线插件列表失败: {e}", err=True)
+    plugin_apis = ["https://api.soulter.top/astrbot/plugins", "https://api.wenturc.com/astrbot/plugins"]
+    
+    for api_url in plugin_apis:
+        try:
+            with httpx.Client() as client:
+                resp = client.get(api_url)
+                resp.raise_for_status()
+                data = resp.json()
+                for plugin_id, plugin_info in data.items():
+                    online_plugins.append({
+                        "name": str(plugin_id),
+                        "desc": str(plugin_info.get("desc", "")),
+                        "version": str(plugin_info.get("version", "")),
+                        "author": str(plugin_info.get("author", "")),
+                        "repo": str(plugin_info.get("repo", "")),
+                        "status": PluginStatus.NOT_INSTALLED,
+                        "local_path": None,
+                    })
+                break  # 成功获取数据后跳出循环
+        except Exception as e:
+            click.echo(f"尝试从 {api_url} 获取插件列表失败: {e}，尝试下一个API", err=True)
+            continue
 
     # 与在线插件比对，更新状态
     online_plugin_names = {plugin["name"] for plugin in online_plugins}

@@ -85,7 +85,7 @@ class PluginRoute(Route):
         if custom:
             urls = [custom]
         else:
-            urls = ["https://api.soulter.top/astrbot/plugins"]
+            urls = ["https://api.soulter.top/astrbot/plugins", "https://api.wenturc.com/astrbot/plugins"]
 
         # 新增：创建 SSL 上下文，使用 certifi 提供的根证书
         ssl_context = ssl.create_default_context(cafile=certifi.where())
