@@ -366,30 +366,20 @@ class WeChatPadProAdapter(Platform):
         )
         while True:
             try:
-                async with websockets.connect(ws_url) as websocket:
-                    logger.debug("WebSocket 连接成功。")
-                    # 设置空闲超时重连
-                    wait_time = (
-                        self.active_message_poll_interval
-                        if self.active_mesasge_poll
-                        else 120
-                    )
-                    while True:
-                        try:
-                            message = await asyncio.wait_for(
-                                websocket.recv(), timeout=wait_time
-                            )
-                            # logger.debug(message) # 不显示原始消息内容
-                            asyncio.create_task(self.handle_websocket_message(message))
-                        except asyncio.TimeoutError:
-                            logger.debug(f"WebSocket 连接空闲超过 {wait_time} s")
-                            break
-                        except websockets.exceptions.ConnectionClosedOK:
-                            logger.info("WebSocket 连接正常关闭。")
-                            break
-                        except Exception as e:
-                            logger.error(f"处理 WebSocket 消息时发生错误: {e}")
-                            break
+                async with aiohttp.ClientSession() as session:
+                    async with session.ws_connect(ws_url) as ws:
+                        logger.info("WebSocket 连接成功。")
+                        async for msg in ws:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                asyncio.create_task(self.handle_websocket_message(msg.data))
+                            elif msg.type == aiohttp.WSMsgType.ERROR:
+                                message = f"WebSocket 链接错误: {ws.exception()}"
+                                logger.info(message)
+                                raise Exception(message)
+                            elif msg.type == aiohttp.WSMsgType.CLOSED:
+                                message = f"WebSocket 链接正常关闭。"
+                                logger.info(message)
+                                raise Exception(message)
             except Exception as e:
                 logger.error(
                     f"WebSocket 连接失败: {e}, 请检查WeChatPadPro服务状态，或尝试重启WeChatPadPro适配器。"
