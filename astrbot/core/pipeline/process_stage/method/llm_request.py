@@ -177,7 +177,12 @@ class LLMRequestSubStage(Stage):
                         if event.is_stopped():
                             return
                         if resp.type == "tool_call_result":
-                            continue  # 跳过工具调用结果
+                            # 处理工具调用结果，直接发送给用户
+                            if self.streaming_response:
+                                yield resp.data["chain"]
+                            else:
+                                await event.send(resp.data["chain"])
+                            continue
                         if resp.type == "tool_call":
                             if self.streaming_response:
                                 # 用来标记流式响应需要分节
