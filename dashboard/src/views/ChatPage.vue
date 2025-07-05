@@ -149,6 +149,7 @@
                                 <!-- 用户消息 -->
                                 <div v-if="msg.type == 'user'" class="user-message">
                                     <div class="message-bubble user-bubble"
+                                        :class="{ 'has-audio': msg.audio_url }"
                                         :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
                                         <span>{{ msg.message }}</span>
 
@@ -1525,9 +1526,16 @@ export default {
 
 .audio-attachment {
     margin-top: 8px;
+    min-width: 250px;
+}
+
+/* 包含音频的消息气泡最小宽度 */
+.message-bubble.has-audio {
+    min-width: 280px;
 }
 
 .audio-player {
+    width: 100%;
     height: 36px;
     border-radius: 18px;
 }
