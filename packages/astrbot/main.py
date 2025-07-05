@@ -10,6 +10,7 @@ import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
 from astrbot.api.provider import ProviderRequest
+from astrbot.core import DEMO_MODE
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderType
@@ -59,7 +60,7 @@ class RstScene(Enum):
     name="astrbot",
     desc="AstrBot 基础指令结合 + 拓展功能",
     author="Soulter",
-    version="4.0.0",
+    version="4.0.1",
 )
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
@@ -233,6 +234,11 @@ class Main(star.Star):
     @plugin.command("off")
     async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = None):
         """禁用插件"""
+        if DEMO_MODE:
+            event.set_result(
+                MessageEventResult().message("演示模式下无法禁用插件。")
+            )
+            return
         if not plugin_name:
             event.set_result(
                 MessageEventResult().message("/plugin off <插件名> 禁用插件。")
@@ -245,6 +251,11 @@ class Main(star.Star):
     @plugin.command("on")
     async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = None):
         """启用插件"""
+        if DEMO_MODE:
+            event.set_result(
+                MessageEventResult().message("演示模式下无法启用插件。")
+            )
+            return
         if not plugin_name:
             event.set_result(
                 MessageEventResult().message("/plugin on <插件名> 启用插件。")
@@ -257,6 +268,11 @@ class Main(star.Star):
     @plugin.command("get")
     async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = None):
         """安装插件"""
+        if DEMO_MODE:
+            event.set_result(
+                MessageEventResult().message("演示模式下无法安装插件。")
+            )
+            return
         if not plugin_repo:
             event.set_result(
                 MessageEventResult().message("/plugin get <插件仓库地址> 安装插件")
