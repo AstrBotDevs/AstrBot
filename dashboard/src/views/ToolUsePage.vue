@@ -226,7 +226,7 @@
               </div>
 
               <v-row v-else>
-                <v-col v-for="(server, index) in filteredMarketplaceServers" :key="index" cols="12" md="6" lg="4">
+                <v-col v-for="(server, index) in paginatedMarketplaceServers" :key="index" cols="12" md="6" lg="4">
                   <v-card class="marketplace-card hover-elevation" height="100%">
                     <v-card-title class="d-flex align-center pb-1 pt-3">
                       <span class="text-h4 text-truncate" :title="server.name">
@@ -506,7 +506,7 @@ export default {
       openedPanel: [], // 存储打开的面板索引
 
       // MCP 市场相关
-      marketplaceServers: [],
+      allMarketplaceServers: [], // 存储所有市场服务器数据
       marketplaceLoading: false,
       marketplaceSearch: '',
       selectedMarketplaceServer: null,
@@ -515,8 +515,6 @@ export default {
       // 分页相关
       currentMarketPage: 1,
       marketPageSize: 9, // 每页显示9个服务器，适合3列布局
-      totalMarketPages: 1,
-      totalMarketItems: 0,
     }
   },
 
@@ -557,16 +555,33 @@ export default {
 
     // 过滤后的市场服务器
     filteredMarketplaceServers() {
-      if (!this.marketplaceSearch.trim()) {
-        return this.marketplaceServers;
+      if (!this.marketplaceSearch || !this.marketplaceSearch.trim()) {
+        return this.allMarketplaceServers;
       }
       
       const searchTerm = this.marketplaceSearch.toLowerCase();
-      return this.marketplaceServers.filter(server => 
+      return this.allMarketplaceServers.filter(server => 
         server.name.toLowerCase().includes(searchTerm) || 
         (server.name_h && server.name_h.toLowerCase().includes(searchTerm)) ||
         (server.description && server.description.toLowerCase().includes(searchTerm))
       );
+    },
+
+    // 当前页显示的服务器
+    paginatedMarketplaceServers() {
+      const startIndex = (this.currentMarketPage - 1) * this.marketPageSize;
+      const endIndex = startIndex + this.marketPageSize;
+      return this.filteredMarketplaceServers.slice(startIndex, endIndex);
+    },
+
+    // 总页数（基于过滤后的结果）
+    totalMarketPages() {
+      return Math.ceil(this.filteredMarketplaceServers.length / this.marketPageSize) || 1;
+    },
+
+    // 总项目数（基于过滤后的结果）
+    totalMarketItems() {
+      return this.filteredMarketplaceServers.length;
     },
   },
 
@@ -781,35 +796,19 @@ export default {
 
     // MCP 市场相关方法
 
-    // 获取市场服务器列表
-    fetchMarketplaceServers(page = 1) {
+    // 获取市场服务器列表（一次性获取所有数据）
+    fetchMarketplaceServers() {
       this.marketplaceLoading = true;
 
-      // 构建请求参数
-      const params = {
-        page: page,
-        page_size: this.marketPageSize
-      };
-
-      // 如果有搜索关键词，添加到请求参数
-      if (this.marketplaceSearch.trim()) {
-        params.search = this.marketplaceSearch.trim();
-      }
-
-      axios.get('/api/tools/mcp/market', { params })
+      // 获取所有数据，不进行分页
+      axios.get('/api/tools/mcp/market', { 
+        params: { 
+          page: 1, 
+          page_size: 10000 // 获取所有数据
+        } 
+      })
         .then(response => {
-          this.marketplaceServers = response.data.data.mcpservers || [];
-
-          // 更新分页信息
-          if (response.data.data.pagination) {
-            this.totalMarketItems = response.data.data.pagination.total || 0;
-            this.totalMarketPages = response.data.data.pagination.totalPages || 1;
-            this.currentMarketPage = response.data.data.pagination.currentPage || 1;
-          } else {
-            // 如果后端没有返回分页信息，根据返回的数据量估算
-            this.totalMarketPages = Math.ceil(this.marketplaceServers.length / this.marketPageSize) || 1;
-          }
-
+          this.allMarketplaceServers = response.data.data.mcpservers || [];
           this.marketplaceLoading = false;
         })
         .catch(error => {
@@ -818,16 +817,15 @@ export default {
         });
     },
 
-    // 搜索市场服务器
+    // 搜索市场服务器（前端处理）
     searchMarketplaceServers() {
-      // 重置到第一页，然后获取结果
+      // 重置到第一页
       this.currentMarketPage = 1;
-      this.fetchMarketplaceServers(1);
     },
 
-    // 切换分页
+    // 切换分页（前端处理）
     changePage(page) {
-      this.fetchMarketplaceServers(page);
+      this.currentMarketPage = page;
     },
 
     // 显示服务器详情
