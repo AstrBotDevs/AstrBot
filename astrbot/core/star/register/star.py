@@ -1,4 +1,4 @@
-from ..star import star_registry, StarMetadata, star_map
+import warnings
 
 
 def register_star(name: str, author: str, desc: str, version: str, repo: str = None):
@@ -21,18 +21,13 @@ def register_star(name: str, author: str, desc: str, version: str, repo: str = N
     帮助信息会被自动提取。使用 `/plugin <插件名> 可以查看帮助信息。`
     """
 
+    warnings.warn(
+        "The 'register_star' decorator is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     def decorator(cls):
-        star_metadata = StarMetadata(
-            name=name,
-            author=author,
-            desc=desc,
-            version=version,
-            repo=repo,
-            star_cls_type=cls,
-            module_path=cls.__module__,
-        )
-        star_registry.append(star_metadata)
-        star_map[cls.__module__] = star_metadata
         return cls
 
     return decorator

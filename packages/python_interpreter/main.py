@@ -94,12 +94,6 @@ DEFAULT_CONFIG = {
 PATH = os.path.join(get_astrbot_data_path(), "config", "python_interpreter.json")
 
 
-@star.register(
-    name="astrbot-python-interpreter",
-    desc="Python 代码执行器",
-    author="Soulter",
-    version="0.0.1",
-)
 class Main(star.Star):
     """基于 Docker 沙箱的 Python 代码执行器"""
 
