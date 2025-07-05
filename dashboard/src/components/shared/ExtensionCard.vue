@@ -49,6 +49,11 @@ const reloadExtension = () => {
 };
 
 const $confirm = inject("$confirm");
+
+const installExtension = async () => {
+  emit('install', props.extension);
+};
+
 const uninstallExtension = async () => {
   if (typeof $confirm !== "function") {
     console.error(tm("card.errors.confirmNotRegistered"));
@@ -117,6 +122,10 @@ const viewReadme = () => {
             <v-icon icon="mdi-cogs" start></v-icon>
             {{ extension.handlers?.length }}{{ tm("card.status.handlersCount") }}
           </v-chip>
+          <v-chip v-for="tag in extension.tags" :key="tag" :color="tag === 'danger' ? 'error' : 'primary'" label
+            size="small" class="ml-2">
+            {{ tag === 'danger' ? tm('tags.danger') : tag }}
+          </v-chip>
         </div>
 
         <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }" style="max-height: 65px; overflow-y: auto;">
@@ -139,7 +148,7 @@ const viewReadme = () => {
       <v-btn color="teal-accent-4" :text="tm('buttons.viewDocs')" variant="text" @click="viewReadme"></v-btn>
       <v-btn v-if="!marketMode" color="teal-accent-4" :text="tm('buttons.actions')" variant="text" @click="reveal = true"></v-btn>
       <v-btn v-if="marketMode && !extension?.installed" color="teal-accent-4" :text="tm('buttons.install')" variant="text"
-        @click="emit('install', extension)"></v-btn>
+        @click="installExtension"></v-btn>
       <v-btn v-if="marketMode && extension?.installed" color="teal-accent-4" :text="tm('status.installed')" variant="text" disabled></v-btn>
     </v-card-actions>
 
@@ -200,6 +209,7 @@ const viewReadme = () => {
       </v-card>
     </v-expand-transition>
   </v-card>
+
 </template>
 
 <style scoped>
