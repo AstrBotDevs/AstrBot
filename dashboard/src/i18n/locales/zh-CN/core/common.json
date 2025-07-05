@@ -2,6 +2,7 @@
   "save": "保存",
   "cancel": "取消",
   "close": "关闭",
+  "copy": "复制",
   "delete": "删除",
   "edit": "编辑",
   "add": "添加",
@@ -32,6 +33,7 @@
   "longPress": "长按",
   "yes": "是",
   "no": "否",
+  "imagePreview": "图片预览",
   "dialog": {
     "confirmTitle": "确认操作",
     "confirmMessage": "你确定要执行此操作吗？",
