@@ -17,6 +17,7 @@ assignees: ''
 {
   "name": "插件名",
   "desc": "插件介绍",
+  "author": "作者名",
   "repo": "插件仓库链接",
   "tags": [],
   "social_link": ""

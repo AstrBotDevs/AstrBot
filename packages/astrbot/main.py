@@ -655,25 +655,16 @@ UID: {user_id} 此 ID 可用于设置管理员。
             return
 
         size_per_page = 6
-        session_curr_cid = (
-            await self.context.conversation_manager.get_curr_conversation_id(
-                message.unified_msg_origin
-            )
-        )
+
+        conv_mgr = self.context.conversation_manager
+        umo = message.unified_msg_origin
+        session_curr_cid = await conv_mgr.get_curr_conversation_id(umo)
 
         if not session_curr_cid:
-            message.set_result(
-                MessageEventResult().message(
-                    "当前未处于对话状态，请 /switch 序号 切换或者 /new 创建。"
-                )
-            )
-            return
+            session_curr_cid = await conv_mgr.new_conversation(umo)
 
-        (
-            contexts,
-            total_pages,
-        ) = await self.context.conversation_manager.get_human_readable_context(
-            message.unified_msg_origin, session_curr_cid, page, size_per_page
+        contexts, total_pages = await conv_mgr.get_human_readable_context(
+            umo, session_curr_cid, page, size_per_page
         )
 
         history = ""
@@ -682,12 +673,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 context = context[:150] + "..."
             history += f"{context}\n"
 
-        ret = f"""当前对话历史记录：
-{history}
-第 {page} 页 | 共 {total_pages} 页
-
-*输入 /history 2 跳转到第 2 页
-"""
+        ret = (
+            f"当前对话历史记录："
+            f"{history if history else '无历史记录'}\n\n"
+            f"第 {page} 页 | 共 {total_pages} 页\n"
+            f"*输入 /history 2 跳转到第 2 页"
+        )
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
 
@@ -1022,14 +1013,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
         curr_cid_title = "无"
         if cid:
             conversation = await self.context.conversation_manager.get_conversation(
-                message.unified_msg_origin, cid
+                unified_msg_origin=message.unified_msg_origin,
+                conversation_id=cid,
+                create_if_not_exists=True,
             )
-            if not conversation:
-                message.set_result(
-                    MessageEventResult().message(
-                        "请先进入一个对话。可以使用 /new 创建。"
-                    )
-                )
             if not conversation.persona_id and not conversation.persona_id == "[%None]":
                 curr_persona_name = (
                     self.context.provider_manager.selected_default_persona["name"]

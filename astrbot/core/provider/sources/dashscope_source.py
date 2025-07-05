@@ -67,6 +67,7 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         func_tool: FuncCall = None,
         contexts: List = None,
         system_prompt: str = None,
+        model=None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -163,6 +164,7 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         contexts=...,
         system_prompt=None,
         tool_calls_result=None,
+        model=None,
         **kwargs,
     ):
         # raise NotImplementedError("This method is not implemented yet.")

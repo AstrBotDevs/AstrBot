@@ -29,6 +29,7 @@ class ConversationRoute(Route):
             ),
         }
         self.db_helper = db_helper
+        self.core_lifecycle = core_lifecycle
         self.register_routes()
 
     async def list_conversations(self):
@@ -165,11 +166,9 @@ class ConversationRoute(Route):
 
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
-            conversation = self.db_helper.get_conversation_by_user_id(user_id, cid)
-            if not conversation:
-                return Response().error("对话不存在").__dict__
-            self.db_helper.delete_conversation(user_id, cid)
-
+            self.core_lifecycle.conversation_manager.delete_conversation(
+                unified_msg_origin=user_id, conversation_id=cid
+            )
             return Response().ok({"message": "对话删除成功"}).__dict__
 
         except Exception as e:

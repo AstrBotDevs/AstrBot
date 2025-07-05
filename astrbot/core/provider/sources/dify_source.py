@@ -18,7 +18,7 @@ class ProviderDify(Provider):
         self,
         provider_config,
         provider_settings,
-        default_persona = None,
+        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
@@ -60,12 +60,14 @@ class ProviderDify(Provider):
         func_tool: FuncCall = None,
         contexts: List = None,
         system_prompt: str = None,
+        tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> LLMResponse:
         if image_urls is None:
             image_urls = []
         result = ""
-        session_id = session_id or kwargs.get("user") # 1734
+        session_id = session_id or kwargs.get("user") or "unknown"  # 1734
         conversation_id = self.conversation_ids.get(session_id, "")
 
         files_payload = []
@@ -197,6 +199,7 @@ class ProviderDify(Provider):
         contexts=...,
         system_prompt=None,
         tool_calls_result=None,
+        model=None,
         **kwargs,
     ):
         # raise NotImplementedError("This method is not implemented yet.")

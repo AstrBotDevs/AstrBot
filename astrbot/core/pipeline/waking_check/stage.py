@@ -164,7 +164,7 @@ class WakingCheckStage(Stage):
                         "parsed_params"
                     )
 
-            event.clear_extra()
+            event._extras.pop("parsed_params", None)
 
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)

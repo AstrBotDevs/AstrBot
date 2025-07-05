@@ -9,6 +9,7 @@ from astrbot.core.platform.register import platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core import logger
+from astrbot.core.provider import Provider
 import asyncio
 
 
@@ -166,8 +167,9 @@ class ConfigRoute(Route):
             "/config/provider/update": ("POST", self.post_update_provider),
             "/config/provider/delete": ("POST", self.post_delete_provider),
             "/config/llmtools": ("GET", self.get_llm_tools),
-            "/config/provider/check_status": ("GET", self.check_all_providers_status),
+            "/config/provider/check_one": ("GET", self.check_one_provider_status),
             "/config/provider/list": ("GET", self.get_provider_config_list),
+            "/config/provider/model_list": ("GET", self.get_provider_model_list),
             "/config/provider/get_session_seperate": (
                 "GET",
                 lambda: Response()
@@ -256,33 +258,37 @@ class ConfigRoute(Route):
             )
         return status_info
 
-    async def check_all_providers_status(self):
-        """
-        API 接口: 检查所有 LLM Providers 的状态
-        """
-        logger.info("API call received: /config/provider/check_status")
+    def _error_response(self, message: str, status_code: int = 500, log_fn=logger.error):
+        log_fn(message)
+        # 记录更详细的traceback信息，但只在是严重错误时
+        if status_code == 500:
+            log_fn(traceback.format_exc())
+        return Response().error(message, status_code=status_code).__dict__
+
+    async def check_one_provider_status(self):
+        """API: check a single LLM Provider's status by id"""
+        provider_id = request.args.get("id")
+        if not provider_id:
+            return self._error_response("Missing provider_id parameter", 400, logger.warning)
+
+        logger.info(f"API call: /config/provider/check_one id={provider_id}")
         try:
-            all_providers: typing.List = (
-                self.core_lifecycle.star_context.get_all_providers()
+            all_providers = self.core_lifecycle.star_context.get_all_providers()
+            # replace manual loop with next(filter(...))
+            target = next(
+                (p for p in all_providers if p.provider_config.get("id") == provider_id),
+                None
             )
-            logger.debug(f"Found {len(all_providers)} providers to check.")
+            if not target:
+                return self._error_response(f"Provider with id '{provider_id}' not found", 404, logger.warning)
 
-            if not all_providers:
-                logger.info("No providers found to check.")
-                return Response().ok([]).__dict__
+            result = await self._test_single_provider(target)
+            return Response().ok(result).__dict__
 
-            tasks = [self._test_single_provider(p) for p in all_providers]
-            logger.debug(f"Created {len(tasks)} tasks for concurrent provider checks.")
-
-            results = await asyncio.gather(*tasks)
-            logger.info(f"Provider status check completed. Results: {results}")
-
-            return Response().ok(results).__dict__
         except Exception as e:
-            logger.error(f"Critical error in check_all_providers_status: {str(e)}")
-            logger.error(traceback.format_exc())
-            return (
-                Response().error(f"检查 Provider 状态时发生严重错误: {str(e)}").__dict__
+            return self._error_response(
+                f"Critical error checking provider {provider_id}: {e}",
+                500
             )
 
     async def get_configs(self):
@@ -318,6 +324,28 @@ class ConfigRoute(Route):
             if provider.get("provider_type", None) == provider_type:
                 provider_list.append(provider)
         return Response().ok(provider_list).__dict__
+
+    async def get_provider_model_list(self):
+        """获取指定提供商的模型列表"""
+        provider_id = request.args.get("provider_id", None)
+        if not provider_id:
+            return Response().error("缺少参数 provider_id").__dict__
+
+        prov_mgr = self.core_lifecycle.provider_manager
+        provider: Provider | None = prov_mgr.inst_map.get(provider_id, None)
+        if not provider:
+            return Response().error(f"未找到 ID 为 {provider_id} 的提供商").__dict__
+
+        try:
+            models = await provider.get_models()
+            ret = {
+                "models": models,
+                "provider_id": provider_id,
+            }
+            return Response().ok(ret).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
 
     async def post_astrbot_configs(self):
         post_configs = await request.json

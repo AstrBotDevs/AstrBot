@@ -28,5 +28,3 @@ pip_installer = PipInstaller(
     astrbot_config.get("pip_install_arg", ""),
     astrbot_config.get("pypi_index_url", None),
 )
-web_chat_queue = asyncio.Queue(maxsize=32)
-web_chat_back_queue = asyncio.Queue(maxsize=32)
