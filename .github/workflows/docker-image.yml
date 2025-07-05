@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Pull The Codes
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Must be 0 so we can fetch tags
 
