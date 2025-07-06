@@ -225,21 +225,23 @@ class WeChatPadProAdapter(Platform):
                     # 修正成功判断条件和授权码提取路径
                     if response.status == 200 and response_data.get("Code") == 200:
                         # 授权码在 Data 字段的列表中
-                        if (
-                            response_data.get("Data")
-                            and isinstance(response_data["Data"], list)
-                            and len(response_data["Data"]) > 0
-                        ):
-                            self.auth_key = response_data["Data"][0]
-                            logger.info(f"成功获取授权码 {self.auth_key[:8]}...")
+                        data = response_data.get("Data")
+                        if data:
+                            # 新返回格式
+                            if isinstance(data.get("authKeys"), list) and data["authKeys"]:
+                                self.auth_key = data["authKeys"][0]
+                            # 兼容旧版接口
+                            elif isinstance(data, list) and data:
+                                self.auth_key = data[0]
+                            
+                            if self.auth_key:
+                                logger.info(f"成功获取授权码 {self.auth_key[:8]}...")
+                            else:
+                                logger.error(f"生成授权码成功但未找到授权码: {response_data}")
                         else:
-                            logger.error(
-                                f"生成授权码成功但未找到授权码: {response_data}"
-                            )
+                            logger.error(f"生成授权码成功但未找到授权码: {response_data}")
                     else:
-                        logger.error(
-                            f"生成授权码失败: {response.status}, {response_data}"
-                        )
+                        logger.error(f"生成授权码失败: {response.status}, {response_data}")
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
             except Exception as e:
