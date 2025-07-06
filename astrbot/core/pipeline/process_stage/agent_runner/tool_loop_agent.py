@@ -209,6 +209,15 @@ class ToolLoopAgent(BaseAgentRunner):
                                 content=res.content[0].text,
                             )
                         )
+
+                        # For sequentialthinking tool, send directly to user
+                        if func_tool.name == 'sequentialthinking' and func_tool_args.get('thought'):
+                            thought = func_tool_args.get("thought", "")
+                            thoughtNumber = func_tool_args.get("thoughtNumber", "?")
+                            totalThoughts = func_tool_args.get("totalThoughts", "?")
+                            thought_text = f"💭 思考步骤 {thoughtNumber}/{totalThoughts}：{thought}"
+                            yield MessageChain(type="sequential-thinking").message(thought_text)
+
                         yield MessageChain().message(res.content[0].text)
                     elif isinstance(res.content[0], ImageContent):
                         tool_call_result_blocks.append(

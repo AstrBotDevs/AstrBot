@@ -178,6 +178,12 @@ class LLMRequestSubStage(Stage):
                             return
                         if resp.type == "tool_call_result":
                             msg_chain = resp.data["chain"]
+
+                            if msg_chain.type == "sequential-thinking":
+                                # sequential-thinking 用于标记 llm tool 需要直接发送给用户的思考内容
+                                resp.data["chain"].type = "sequential-thinking"
+                                await event.send(resp.data["chain"])
+
                             if msg_chain.type == "tool_direct_result":
                                 # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
                                 resp.data["chain"].type = "tool_call_result"
