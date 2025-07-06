@@ -80,19 +80,26 @@ def save_temp_img(img: Union[Image.Image, str]) -> str:
 
 
 def clean_url(url: str) -> str:
+    # 特殊处理：修复协议后的多余斜杠
     if url.startswith("https:////") or url.startswith("http:////"):
         # 直接替换为正确的协议格式
         url = url.replace(":////", "://", 1)
     
-    url = re.sub(r'(?<!:)(/{2,})', '/', url)
-    url = re.sub(r'(https?):/([^/])', r'\1://\2', url)
+    # 更健壮的多余斜杠处理
+    # 处理协议部分（如https://// -> https://）
+    url = re.sub(r'(?<!:)(/{2,})', '/', url)  # 替换所有连续斜杠为单斜杠
+    url = re.sub(r'(https?):/([^/])', r'\1://\2', url)  # 修复协议分隔符
     
+    # 特殊处理以//开头的URL（无协议情况）
     if url.startswith('//'):
         url = 'https:' + url
     
+    # 处理可能存在的其他问题
+    # 确保URL有正确的协议前缀
     if not url.startswith(('http://', 'https://')):
         url = 'https://' + url.lstrip('/')
     
+    # 确保路径中不包含多余斜杠
     try:
         parsed = urlparse(url)
         clean_path = re.sub(r'/{2,}', '/', parsed.path)
@@ -105,6 +112,7 @@ def clean_url(url: str) -> str:
             parsed.fragment
         ))
     except Exception:
+        # 如果解析失败，使用备用方案
         url = re.sub(r'/{2,}', '/', url)
     
     return url
@@ -113,6 +121,10 @@ def clean_url(url: str) -> str:
 async def download_image_by_url(
     url: str, post: bool = False, post_data: dict = None, path=None
 ) -> str:
+    """
+    下载图片, 返回 path
+    """
+    # 清洗URL解决无效格式问题
     original_url = url
     url = clean_url(url)
     
