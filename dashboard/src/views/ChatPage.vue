@@ -1477,8 +1477,10 @@ export default {
 
 .user-bubble {
     color: var(--v-theme-primaryText);
-    padding: 12px 16px;
+    padding: 18px 20px;
     font-size: 16px;
+    max-width: 60%;
+    border-radius: 1.5rem;
 }
 
 .bot-bubble {
