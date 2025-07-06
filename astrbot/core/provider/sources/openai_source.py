@@ -487,7 +487,7 @@ class ProviderOpenAIOfficial(Provider):
             if flag:
                 flag = False  # 删除 image 后，下一条（LLM 响应）也要删除
                 continue
-            if isinstance(context["content"], list):
+            if "content" in context and isinstance(context["content"], list):
                 flag = True
                 # continue
                 new_content = []
