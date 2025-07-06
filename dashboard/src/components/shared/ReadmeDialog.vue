@@ -119,7 +119,7 @@ const _show = computed({
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h5">{{ t('core.common.readme.title') }}</span>
-        <v-btn icon @click="$emit('update:show', false)">
+        <v-btn icon @click="$emit('update:show', false)" variant="text">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
