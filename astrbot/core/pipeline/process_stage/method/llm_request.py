@@ -177,7 +177,13 @@ class LLMRequestSubStage(Stage):
                         if event.is_stopped():
                             return
                         if resp.type == "tool_call_result":
-                            continue  # 跳过工具调用结果
+                            msg_chain = resp.data["chain"]
+                            if msg_chain.type == "tool_direct_result":
+                                # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
+                                resp.data["chain"].type = "tool_call_result"
+                                await event.send(resp.data["chain"])
+                                continue
+                            # 对于其他情况，暂时先不处理
                         if resp.type == "tool_call":
                             if self.streaming_response:
                                 # 用来标记流式响应需要分节
@@ -258,7 +264,9 @@ class LLMRequestSubStage(Stage):
 
         await self._save_to_history(event, req, tool_loop_agent.get_final_llm_resp())
 
-    async def _handle_webchat(self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider):
+    async def _handle_webchat(
+        self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider
+    ):
         """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
         conversation = await self.conv_manager.get_conversation(
             event.unified_msg_origin, req.conversation.cid
@@ -332,7 +340,6 @@ class LLMRequestSubStage(Stage):
         await self.conv_manager.update_conversation(
             event.unified_msg_origin, req.conversation.cid, history=messages
         )
-        logger.debug(f"messages persisted: {messages}")
 
     def fix_messages(self, messages: list[dict]) -> list[dict]:
         """验证并且修复上下文"""

@@ -106,7 +106,6 @@ class ToolLoopAgent(BaseAgentRunner):
 
         # 处理 LLM 响应
         llm_resp = llm_resp_result
-        logger.debug(f"LLMResp: {llm_resp}")
 
         if llm_resp.role == "err":
             # 如果 LLM 响应错误，转换到错误状态
@@ -219,7 +218,9 @@ class ToolLoopAgent(BaseAgentRunner):
                                 content="返回了图片(已直接发送给用户)",
                             )
                         )
-                        yield MessageChain().base64_image(res.content[0].data)
+                        yield MessageChain(type="tool_direct_result").base64_image(
+                            res.content[0].data
+                        )
                     elif isinstance(res.content[0], EmbeddedResource):
                         resource = res.content[0].resource
                         if isinstance(resource, TextResourceContents):
@@ -243,7 +244,9 @@ class ToolLoopAgent(BaseAgentRunner):
                                     content="返回了图片(已直接发送给用户)",
                                 )
                             )
-                            yield MessageChain().base64_image(res.content[0].data)
+                            yield MessageChain(type="tool_direct_result").base64_image(
+                                res.content[0].data
+                            )
                         else:
                             tool_call_result_blocks.append(
                                 ToolCallMessageSegment(
@@ -276,7 +279,9 @@ class ToolLoopAgent(BaseAgentRunner):
                             self._transition_state(AgentState.DONE)
                             if res := self.event.get_result():
                                 if res.chain:
-                                    yield MessageChain(chain=res.chain)
+                                    yield MessageChain(
+                                        chain=res.chain, type="tool_direct_result"
+                                    )
 
                 self.event.clear_result()
             except Exception as e:
