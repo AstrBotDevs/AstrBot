@@ -587,7 +587,7 @@ onMounted(async () => {
 <template>
   <v-row>
     <v-col cols="12" md="12">
-      <v-card variant="flat" class="rounded-xl">
+      <v-card variant="flat">
         <v-card-item>
           <template v-slot:prepend>
             <div class="plugin-page-icon d-flex justify-center align-center rounded-lg mr-4">

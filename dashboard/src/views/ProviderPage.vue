@@ -2,153 +2,137 @@
   <div class="provider-page">
     <v-container fluid class="pa-0">
       <!-- 页面标题 -->
-      <v-row>
-        <v-col cols="12">
-          <h1 class="text-h4 font-weight-bold mb-2">
-            <v-icon size="x-large" color="primary" class="me-2">mdi-creation</v-icon>{{ tm('title') }}
+      <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-8">
+        <div>
+          <h1 class="text-h1 font-weight-bold mb-2">
+            <v-icon color="black" class="me-2">mdi-creation</v-icon>{{ tm('title') }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
             {{ tm('subtitle') }}
           </p>
-        </v-col>
-      </v-row>
-
-      <!-- 服务提供商部分 -->
-      <v-card class="mb-6" elevation="2">
-        <v-card-title class="d-flex align-center py-3 px-4">
-          <v-icon color="primary" class="me-2">mdi-api</v-icon>
-          <span class="text-h6">{{ tm('providers.title') }}</span>
-          <v-chip color="info" size="small" class="ml-2">{{ config_data.provider?.length || 0 }}</v-chip>
-          <v-spacer></v-spacer>
-          <v-btn color="success" prepend-icon="mdi-cog" variant="tonal" class="me-2" @click="showSettingsDialog = true">
+        </div>
+        <div>
+          <v-btn color="success" prepend-icon="mdi-cog" variant="tonal" class="me-2" @click="showSettingsDialog = true" rounded="xl" size="x-large">
             {{ tm('providers.settings') }}
           </v-btn>
-          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true">
+          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true" rounded="xl" size="x-large">
             {{ tm('providers.addProvider') }}
           </v-btn>
-        </v-card-title>
+        </div>
+      </v-row>
 
-        <v-divider></v-divider>
-
+      <div>
         <!-- 添加分类标签页 -->
-        <v-card-text class="px-4 pt-3 pb-0">
-          <v-tabs v-model="activeProviderTypeTab" bg-color="transparent">
-            <v-tab value="all" class="font-weight-medium px-3">
-              <v-icon start>mdi-filter-variant</v-icon>
-              {{ tm('providers.tabs.all') }}
-            </v-tab>
-            <v-tab value="chat_completion" class="font-weight-medium px-3">
-              <v-icon start>mdi-message-text</v-icon>
-              {{ tm('providers.tabs.chatCompletion') }}
-            </v-tab>
-            <v-tab value="speech_to_text" class="font-weight-medium px-3">
-              <v-icon start>mdi-microphone-message</v-icon>
-              {{ tm('providers.tabs.speechToText') }}
-            </v-tab>
-            <v-tab value="text_to_speech" class="font-weight-medium px-3">
-              <v-icon start>mdi-volume-high</v-icon>
-              {{ tm('providers.tabs.textToSpeech') }}
-            </v-tab>
-            <v-tab value="embedding" class="font-weight-medium px-3">
-              <v-icon start>mdi-code-json</v-icon>
-              {{ tm('providers.tabs.embedding') }}
-            </v-tab>
-          </v-tabs>
-        </v-card-text>
+        <v-tabs v-model="activeProviderTypeTab" bg-color="transparent" class="mb-4">
+          <v-tab value="all" class="font-weight-medium px-3">
+            <v-icon start>mdi-filter-variant</v-icon>
+            {{ tm('providers.tabs.all') }}
+          </v-tab>
+          <v-tab value="chat_completion" class="font-weight-medium px-3">
+            <v-icon start>mdi-message-text</v-icon>
+            {{ tm('providers.tabs.chatCompletion') }}
+          </v-tab>
+          <v-tab value="speech_to_text" class="font-weight-medium px-3">
+            <v-icon start>mdi-microphone-message</v-icon>
+            {{ tm('providers.tabs.speechToText') }}
+          </v-tab>
+          <v-tab value="text_to_speech" class="font-weight-medium px-3">
+            <v-icon start>mdi-volume-high</v-icon>
+            {{ tm('providers.tabs.textToSpeech') }}
+          </v-tab>
+          <v-tab value="embedding" class="font-weight-medium px-3">
+            <v-icon start>mdi-code-json</v-icon>
+            {{ tm('providers.tabs.embedding') }}
+          </v-tab>
+        </v-tabs>
 
-        <v-card-text class="px-4 py-3">
-          <item-card-grid
-            :items="filteredProviders"
-            title-field="id"
-            enabled-field="enable"
-            empty-icon="mdi-api-off"
-            :empty-text="getEmptyText()"
-            @toggle-enabled="providerStatusChange"
-            @delete="deleteProvider"
-            @edit="configExistingProvider"
-          >
-            <template v-slot:item-details="{ item }">
-              <div class="d-flex align-center mb-2">
-                <v-icon size="small" color="grey" class="me-2">mdi-tag</v-icon>
-                <span class="text-caption text-medium-emphasis">
-                  {{ tm('providers.providerType') }}:
-                  <v-chip size="x-small" color="primary" class="ml-1">{{ item.type }}</v-chip>
-                </span>
-              </div>
-              <div v-if="item.api_base" class="d-flex align-center mb-2">
-                <v-icon size="small" color="grey" class="me-2">mdi-web</v-icon>
-                <span class="text-caption text-medium-emphasis text-truncate" :title="item.api_base">
-                  API Base: {{ item.api_base }}
-                </span>
-              </div>
-              <div v-if="item.api_key" class="d-flex align-center">
-                <v-icon size="small" color="grey" class="me-2">mdi-key</v-icon>
-                <span class="text-caption text-medium-emphasis">API Key: ••••••••</span>
-              </div>
-            </template>
-          </item-card-grid>
-        </v-card-text>
-      </v-card>
+        <v-row v-if="filteredProviders.length === 0">
+          <v-col cols="12" class="text-center pa-8">
+            <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
+            <p class="text-grey mt-4">{{ getEmptyText() }}</p>
+          </v-col>
+        </v-row>
+
+        <v-row v-else>
+          <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
+            <item-card 
+              :item="provider" 
+              title-field="id" 
+              enabled-field="enable"
+              @toggle-enabled="providerStatusChange"
+              @delete="deleteProvider" 
+              @edit="configExistingProvider">
+              <template v-slot:details="{ item }">
+              </template>
+            </item-card>
+          </v-col>
+        </v-row>
+      </div>
 
       <!-- 供应商状态部分 -->
-      <v-card class="mb-6" elevation="2">
+      <v-card elevation="0" class="mt-4">
         <v-card-title class="d-flex align-center py-3 px-4">
-          <v-icon color="primary" class="me-2">mdi-heart-pulse</v-icon>
-          <span class="text-h6">{{ tm('availability.title') }}</span>
+          <v-icon class="me-2">mdi-heart-pulse</v-icon>
+          <span class="text-h4">{{ tm('availability.title') }}</span>
           <v-spacer></v-spacer>
           <v-btn color="primary" variant="tonal" :loading="loadingStatus" @click="fetchProviderStatus">
             <v-icon left>mdi-refresh</v-icon>
             {{ tm('availability.refresh') }}
           </v-btn>
+          <v-btn variant="text" color="primary" @click="showStatus = !showStatus" style="margin-left: 8px;">
+            {{ showStatus ? tm('logs.collapse') : tm('logs.expand') }}
+            <v-icon>{{ showStatus ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+          </v-btn>
         </v-card-title>
-        <v-card-subtitle class="px-4 py-1 text-caption text-medium-emphasis">
-          {{ tm('availability.subtitle') }}
-        </v-card-subtitle>
 
         <v-divider></v-divider>
 
-        <v-card-text class="px-4 py-3">
-          <v-alert v-if="providerStatuses.length === 0" type="info" variant="tonal">
-            {{ tm('availability.noData') }}
-          </v-alert>
-          
-          <v-container v-else class="pa-0">
-            <v-row>
-              <v-col v-for="status in providerStatuses" :key="status.id" cols="12" sm="6" md="4">
-                <v-card variant="outlined" class="status-card" :class="`status-${status.status}`">
-                  <v-card-item>
-                    <v-icon v-if="status.status === 'available'" color="success" class="me-2">mdi-check-circle</v-icon>
-                    <v-icon v-else-if="status.status === 'unavailable'" color="error" class="me-2">mdi-alert-circle</v-icon>
-                    <v-progress-circular
-                      v-else-if="status.status === 'pending'"
-                      indeterminate
-                      color="primary"
-                      size="20"
-                      width="2"
-                      class="me-2"
-                    ></v-progress-circular>
+        <v-expand-transition>
+          <v-card-text class="pa-0" v-if="showStatus">
+            <v-card-text class="px-4 py-3">
+              <v-alert v-if="providerStatuses.length === 0" type="info" variant="tonal">
+                {{ tm('availability.noData') }}
+              </v-alert>
+              
+              <v-container v-else class="pa-0">
+                <v-row>
+                  <v-col v-for="status in providerStatuses" :key="status.id" cols="12" sm="6" md="4">
+                    <v-card variant="outlined" class="status-card" :class="`status-${status.status}`">
+                      <v-card-item>
+                        <v-icon v-if="status.status === 'available'" color="success" class="me-2">mdi-check-circle</v-icon>
+                        <v-icon v-else-if="status.status === 'unavailable'" color="error" class="me-2">mdi-alert-circle</v-icon>
+                        <v-progress-circular
+                          v-else-if="status.status === 'pending'"
+                          indeterminate
+                          color="primary"
+                          size="20"
+                          width="2"
+                          class="me-2"
+                        ></v-progress-circular>
 
-                    <span class="font-weight-bold">{{ status.id }}</span>
-                    
-                    <v-chip :color="getStatusColor(status.status)" size="small" class="ml-2">
-                      {{ getStatusText(status.status) }}
-                    </v-chip>
-                  </v-card-item>
-                  <v-card-text v-if="status.status === 'unavailable'" class="text-caption text-medium-emphasis">
-                    <span class="font-weight-bold">{{ tm('availability.errorMessage') }}:</span> {{ status.error }}
-                  </v-card-text>
-                </v-card>
-              </v-col>
-            </v-row>
-          </v-container>
-        </v-card-text>
+                        <span class="font-weight-bold">{{ status.id }}</span>
+                        
+                        <v-chip :color="getStatusColor(status.status)" size="small" class="ml-2">
+                          {{ getStatusText(status.status) }}
+                        </v-chip>
+                      </v-card-item>
+                      <v-card-text v-if="status.status === 'unavailable'" class="text-caption text-medium-emphasis">
+                        <span class="font-weight-bold">{{ tm('availability.errorMessage') }}:</span> {{ status.error }}
+                      </v-card-text>
+                    </v-card>
+                  </v-col>
+                </v-row>
+              </v-container>
+            </v-card-text>
+          </v-card-text>
+        </v-expand-transition>
       </v-card>
 
       <!-- 日志部分 -->
-      <v-card elevation="2">
+      <v-card elevation="0" class="mt-4">
         <v-card-title class="d-flex align-center py-3 px-4">
-          <v-icon color="primary" class="me-2">mdi-console-line</v-icon>
-          <span class="text-h6">{{ tm('logs.title') }}</span>
+          <v-icon class="me-2">mdi-console-line</v-icon>
+          <span class="text-h4">{{ tm('logs.title') }}</span>
           <v-spacer></v-spacer>
           <v-btn variant="text" color="primary" @click="showConsole = !showConsole">
             {{ showConsole ? tm('logs.collapse') : tm('logs.expand') }}
@@ -358,7 +342,7 @@ import axios from 'axios';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
-import ItemCardGrid from '@/components/shared/ItemCardGrid.vue';
+import ItemCard from '@/components/shared/ItemCard.vue';
 import { useModuleI18n } from '@/i18n/composables';
 
 export default {
@@ -367,7 +351,7 @@ export default {
     AstrBotConfig,
     WaitingForRestart,
     ConsoleDisplayer,
-    ItemCardGrid
+    ItemCard
   },
   setup() {
     const { tm } = useModuleI18n('features/provider');
@@ -405,6 +389,9 @@ export default {
       save_message_success: "success",
 
       showConsole: false,
+      
+      // 显示状态部分
+      showStatus: false,
       
       // 供应商状态相关
       providerStatuses: [],
@@ -783,6 +770,7 @@ export default {
       if (this.loadingStatus) return;
 
       this.loadingStatus = true;
+      this.showStatus = true; // 自动展开状态部分
       
       // 1. 立即初始化UI为pending状态
       this.providerStatuses = this.config_data.provider.map(p => ({
@@ -885,11 +873,6 @@ export default {
 .provider-page {
   padding: 20px;
   padding-top: 8px;
-}
-
-.provider-selection-dialog .v-card-title {
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
 }
 
 .provider-card {

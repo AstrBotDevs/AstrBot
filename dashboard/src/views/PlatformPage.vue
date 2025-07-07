@@ -1,62 +1,48 @@
 <template>
   <div class="platform-page">
     <v-container fluid class="pa-0">
-      <!-- 页面标题 -->
-      <v-row>
-        <v-col cols="12">
-          <h1 class="text-h4 font-weight-bold mb-2">
-            <v-icon size="x-large" color="primary" class="me-2">mdi-connection</v-icon>{{ tm('title') }}
+      <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-8">
+        <div>
+          <h1 class="text-h1 font-weight-bold mb-2">
+            <v-icon color="black" class="me-2">mdi-connection</v-icon>{{ tm('title') }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
             {{ tm('subtitle') }}
           </p>
-        </v-col>
+        </div>
+        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddPlatformDialog = true" rounded="xl" size="x-large">
+          {{ tm('addAdapter') }}
+        </v-btn>
       </v-row>
 
-      <!-- 平台适配器部分 -->
-      <v-card class="mb-6" elevation="2">
-        <v-card-title class="d-flex align-center py-3 px-4">
-          <v-icon color="primary" class="me-2">mdi-apps</v-icon>
-          <span class="text-h6">{{ tm('adapters') }}</span>
-          <v-chip color="info" size="small" class="ml-2">{{ config_data.platform?.length || 0 }}</v-chip>
-          <v-spacer></v-spacer>
-          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddPlatformDialog = true">
-            {{ tm('addAdapter') }}
-          </v-btn>
-        </v-card-title>
+      <div>
+        <v-row v-if="(config_data.platform || []).length === 0">
+          <v-col cols="12" class="text-center pa-8">
+            <v-icon size="64" color="grey-lighten-1">mdi-connection</v-icon>
+            <p class="text-grey mt-4">{{ tm('emptyText') }}</p>
+          </v-col>
+        </v-row>
 
-        <v-divider></v-divider>
-
-        <v-card-text class="px-4 py-3">
-          <item-card-grid :items="config_data.platform || []" title-field="id" enabled-field="enable"
-            empty-icon="mdi-connection" :empty-text="tm('emptyText')" @toggle-enabled="platformStatusChange"
-            @delete="deletePlatform" @edit="editPlatform">
-            <template v-slot:item-details="{ item }">
-              <div class="d-flex align-center mb-2">
-                <v-icon size="small" color="grey" class="me-2">mdi-tag</v-icon>
-                <span class="text-caption text-medium-emphasis">
-                  {{ tm('details.adapterType') }}:
-                  <v-chip size="x-small" color="primary" class="ml-1">{{ item.type }}</v-chip>
-                </span>
-              </div>
-              <div v-if="item.token" class="d-flex align-center mb-2">
-                <v-icon size="small" color="grey" class="me-2">mdi-key</v-icon>
-                <span class="text-caption text-medium-emphasis">{{ tm('details.token') }}: ••••••••</span>
-              </div>
-              <div v-if="item.description" class="d-flex align-center">
-                <v-icon size="small" color="grey" class="me-2">mdi-information-outline</v-icon>
-                <span class="text-caption text-medium-emphasis text-truncate">{{ item.description }}</span>
-              </div>
-            </template>
-          </item-card-grid>
-        </v-card-text>
-      </v-card>
+        <v-row v-else>
+          <v-col v-for="(platform, index) in config_data.platform || []" :key="index" cols="12" md="6" lg="4" xl="3">
+            <item-card 
+              :item="platform" 
+              title-field="id" 
+              enabled-field="enable"
+              :bglogo="getPlatformIcon(platform.type || platform.id)"
+              @toggle-enabled="platformStatusChange"
+              @delete="deletePlatform" 
+              @edit="editPlatform">
+            </item-card>
+          </v-col>
+        </v-row>
+      </div>
 
       <!-- 日志部分 -->
-      <v-card elevation="2">
+      <v-card elevation="0" class="mt-4">
         <v-card-title class="d-flex align-center py-3 px-4">
-          <v-icon color="primary" class="me-2">mdi-console-line</v-icon>
-          <span class="text-h6">{{ tm('logs.title') }}</span>
+          <v-icon class="me-2">mdi-console-line</v-icon>
+          <span class="text-h4">{{ tm('logs.title') }}</span>
           <v-spacer></v-spacer>
           <v-btn variant="text" color="primary" @click="showConsole = !showConsole">
             {{ showConsole ? tm('logs.collapse') : tm('logs.expand') }}
@@ -99,7 +85,7 @@
                     </v-card-text>
                   </div>
                   <div class="platform-card-logo">
-                    <img :src="getPlatformIcon(name)" v-if="getPlatformIcon(name)" class="platform-logo-img">
+                    <img :src="getPlatformIcon(template.type)" v-if="getPlatformIcon(template.type)" class="platform-logo-img">
                     <div v-else class="platform-logo-fallback">
                       {{ name[0].toUpperCase() }}
                     </div>
@@ -179,7 +165,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">{{ tm('dialog.idConflict.confirm') }}</v-btn>
+          <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">{{ tm('dialog.idConflict.confirm')
+          }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -191,7 +178,7 @@ import axios from 'axios';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
-import ItemCardGrid from '@/components/shared/ItemCardGrid.vue';
+import ItemCard from '@/components/shared/ItemCard.vue';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 
@@ -201,7 +188,7 @@ export default {
     AstrBotConfig,
     WaitingForRestart,
     ConsoleDisplayer,
-    ItemCardGrid
+    ItemCard
   },
   setup() {
     const { t } = useI18n();
@@ -274,25 +261,25 @@ export default {
     },
 
     getPlatformIcon(name) {
-      if (name.includes('QQ')) {
+      if (name === 'aiocqhttp' || name === 'qq_official' || name === 'qq_official_webhook') {
         return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
-      } else if (name.includes('企业微信')) {
+      } else if (name === 'wecom') {
         return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
-      } else if (name.includes('微信')) {
+      } else if (name === 'gewechat' || name === 'wechatpadpro' || name === 'weixin_official_account' || name === 'wechat') {
         return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
-      } else if (name.includes('Lark')) {
+      } else if (name === 'lark') {
         return new URL('@/assets/images/platform_logos/lark.png', import.meta.url).href
-      } else if (name.includes('DingTalk')) {
+      } else if (name === 'dingtalk') {
         return new URL('@/assets/images/platform_logos/dingtalk.svg', import.meta.url).href
-      } else if (name.includes('Telegram')) {
+      } else if (name === 'telegram') {
         return new URL('@/assets/images/platform_logos/telegram.svg', import.meta.url).href
-      } else if (name.includes('Discord')) {
+      } else if (name === 'discord') {
         return new URL('@/assets/images/platform_logos/discord.svg', import.meta.url).href
-      } else if (name.includes('Slack')) {
+      } else if (name === 'slack') {
         return new URL('@/assets/images/platform_logos/slack.svg', import.meta.url).href
-      } else if (name.includes('kook')) {
+      } else if (name === 'kook') {
         return new URL('@/assets/images/platform_logos/kook.png', import.meta.url).href
-      } else if (name.includes('vocechat')) {
+      } else if (name === 'vocechat') {
         return new URL('@/assets/images/platform_logos/vocechat.png', import.meta.url).href
       }
     },
