@@ -64,7 +64,7 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "separate_provider": False,
+        "separate_provider": True,
     },
     "provider_stt_settings": {
         "enable": False,
