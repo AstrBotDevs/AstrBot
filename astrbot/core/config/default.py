@@ -724,16 +724,16 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek-chat",
                         },
                     },
-                    "智谱 AI": {
-                        "id": "zhipu_default",
-                        "type": "zhipu_chat_completion",
+                    "302.AI": {
+                        "id": "302ai",
+                        "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
+                        "api_base": "https://api.302.ai/v1",
                         "timeout": 120,
-                        "api_base": "https://open.bigmodel.cn/api/paas/v4/",
                         "model_config": {
-                            "model": "glm-4-flash",
+                            "model": "gpt-4.1-mini",
                         },
                     },
                     "硅基流动": {
@@ -748,6 +748,18 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek-ai/DeepSeek-V3",
                         },
                     },
+                    "PPIO派欧云": {
+                        "id": "ppio",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.ppinfra.com/v3/openai",
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "deepseek/deepseek-r1",
+                        },
+                    },
                     "Kimi": {
                         "id": "moonshot",
                         "type": "openai_chat_completion",
@@ -760,16 +772,16 @@ CONFIG_METADATA_2 = {
                             "model": "moonshot-v1-8k",
                         },
                     },
-                    "PPIO派欧云": {
-                        "id": "ppio",
-                        "type": "openai_chat_completion",
+                    "智谱 AI": {
+                        "id": "zhipu_default",
+                        "type": "zhipu_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
-                        "api_base": "https://api.ppinfra.com/v3/openai",
                         "timeout": 120,
+                        "api_base": "https://open.bigmodel.cn/api/paas/v4/",
                         "model_config": {
-                            "model": "deepseek/deepseek-r1",
+                            "model": "glm-4-flash",
                         },
                     },
                     "Dify": {
