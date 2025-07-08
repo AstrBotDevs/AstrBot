@@ -12,12 +12,6 @@ from bs4 import BeautifulSoup
 from .engines import HEADERS, USER_AGENTS
 
 
-@star.register(
-    name="astrbot-web-searcher",
-    desc="让 LLM 具有网页检索能力",
-    author="Soulter",
-    version="1.14.514",
-)
 class Main(star.Star):
     """使用 /websearch on 或者 off 开启或者关闭网页搜索功能"""
 

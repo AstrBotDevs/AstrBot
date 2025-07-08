@@ -79,6 +79,9 @@
     "devDocs": "插件开发文档",
     "submitRepo": "提交插件仓库"
   },
+  "tags": {
+    "danger": "危险"
+  },
   "dialogs": {
     "error": {
       "title": "错误信息",
@@ -112,6 +115,12 @@
       "title": "安装插件",
       "fromFile": "从文件安装",
       "fromUrl": "从链接安装"
+    },
+    "danger_warning": {
+      "title": "警告",
+      "message": "该插件可能包含不安全的代码或功能，可能导致系统异常或数据损失等。请确认是否继续安装？",
+      "confirm": "继续",
+      "cancel": "取消"
     }
   },
   "messages": {
@@ -164,4 +173,4 @@
       "confirmNotRegistered": "$confirm 未正确注册"
     }
   }
-} 
+}

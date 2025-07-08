@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch, onMounted, computed } from 'vue';
 import axios from 'axios';
-import { marked } from 'marked';
+import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 import { useI18n } from '@/i18n/composables';
@@ -74,29 +74,28 @@ function openRepoInNewTab() {
   }
 }
 
+// 配置markdown-it，启用代码高亮
+const md = new MarkdownIt({
+  html: true,        // 启用HTML标签
+  breaks: true,       // 换行转<br>
+  linkify: true,      // 自动转链接
+  typographer: false, // 禁用智能引号
+  highlight: function(code, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(code, { language: lang }).value;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return hljs.highlightAuto(code).value;
+  }
+});
+
 // 渲染Markdown内容
 function renderMarkdown(content) {
   if (!content) return '';
-  
-  // 配置marked使用highlight.js进行语法高亮
-  marked.setOptions({
-    highlight: function(code, lang) {
-      if (lang && hljs.getLanguage(lang)) {
-        try {
-          return hljs.highlight(code, { language: lang }).value;
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      return hljs.highlightAuto(code).value;
-    },
-    gfm: true, // GitHub Flavored Markdown
-    breaks: true, // Convert \n to <br>
-    headerIds: true, // Add id attributes to headers
-    mangle: false // Don't mangle email addresses
-  });
-  
-  return marked(content);
+  return md.render(content);
 }
 
 // 刷新README内容
@@ -120,7 +119,7 @@ const _show = computed({
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h5">{{ t('core.common.readme.title') }}</span>
-        <v-btn icon @click="$emit('update:show', false)">
+        <v-btn icon @click="$emit('update:show', false)" variant="text">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>

@@ -2,7 +2,7 @@ import astrbot.api.message_components as Comp
 import copy
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star
 from astrbot.core.utils.session_waiter import (
     SessionWaiter,
     USER_SESSIONS,
@@ -13,13 +13,6 @@ from astrbot.core.utils.session_waiter import (
 from sys import maxsize
 
 
-@register(
-    "session_controller",
-    "Cvandia & Soulter",
-    "为插件支持会话控制",
-    "v1.0.1",
-    "https://astrbot.app",
-)
 class Waiter(Star):
     """会话控制"""
 
