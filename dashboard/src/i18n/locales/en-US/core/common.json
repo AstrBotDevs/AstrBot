@@ -2,6 +2,7 @@
   "save": "Save",
   "cancel": "Cancel",
   "close": "Close",
+  "copy": "Copy",
   "delete": "Delete",
   "edit": "Edit",
   "add": "Add",
@@ -32,6 +33,7 @@
   "longPress": "Long press",
   "yes": "Yes",
   "no": "No",
+  "imagePreview": "Image Preview",
   "dialog": {
     "confirmTitle": "Confirm Action",
     "confirmMessage": "Are you sure you want to perform this action?",
