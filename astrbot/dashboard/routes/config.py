@@ -256,6 +256,20 @@ class ConfigRoute(Route):
                 logger.error(f"Error testing embedding provider {provider_name}: {e}", exc_info=True)
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"Embedding test failed: {str(e)}"
+
+        elif provider_capability_type == ProviderType.TEXT_TO_SPEECH:
+            try:
+                # For TTS, we can call the get_audio method with a short prompt.
+                audio_result = await provider.get_audio("你好")
+                if isinstance(audio_result, str) and audio_result:
+                    status_info["status"] = "available"
+                else:
+                    status_info["status"] = "unavailable"
+                    status_info["error"] = f"TTS test failed: unexpected result type {type(audio_result)}"
+            except Exception as e:
+                logger.error(f"Error testing TTS provider {provider_name}: {e}", exc_info=True)
+                status_info["status"] = "unavailable"
+                status_info["error"] = f"TTS test failed: {str(e)}"
         else:
             logger.debug(f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}")
             status_info["status"] = "available"
