@@ -13,6 +13,8 @@ from .star_handler import (
     register_llm_tool,
     register_on_decorating_result,
     register_after_message_sent,
+    register_on_star_activated,
+    register_on_star_deactivated,
 )
 
 __all__ = [
@@ -30,4 +32,6 @@ __all__ = [
     "register_llm_tool",
     "register_on_decorating_result",
     "register_after_message_sent",
+    "register_on_star_activated",
+    "register_on_star_deactivated",
 ]
