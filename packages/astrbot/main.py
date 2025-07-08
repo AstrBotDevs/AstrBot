@@ -229,9 +229,7 @@ class Main(star.Star):
     async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = None):
         """禁用插件"""
         if DEMO_MODE:
-            event.set_result(
-                MessageEventResult().message("演示模式下无法禁用插件。")
-            )
+            event.set_result(MessageEventResult().message("演示模式下无法禁用插件。"))
             return
         if not plugin_name:
             event.set_result(
@@ -246,9 +244,7 @@ class Main(star.Star):
     async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = None):
         """启用插件"""
         if DEMO_MODE:
-            event.set_result(
-                MessageEventResult().message("演示模式下无法启用插件。")
-            )
+            event.set_result(MessageEventResult().message("演示模式下无法启用插件。"))
             return
         if not plugin_name:
             event.set_result(
@@ -263,9 +259,7 @@ class Main(star.Star):
     async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = None):
         """安装插件"""
         if DEMO_MODE:
-            event.set_result(
-                MessageEventResult().message("演示模式下无法安装插件。")
-            )
+            event.set_result(MessageEventResult().message("演示模式下无法安装插件。"))
             return
         if not plugin_repo:
             event.set_result(
@@ -1304,12 +1298,36 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 ) and not req.contexts:
                     req.contexts[:0] = begin_dialogs
 
-        if quote and quote.message_str:
+        if quote:
+            sender_info = ""
             if quote.sender_nickname:
                 sender_info = f"(Sent by {quote.sender_nickname})"
-            else:
-                sender_info = ""
-            req.system_prompt += f"\nUser is quoting the message{sender_info}: {quote.message_str}, please consider the context."
+            message_str = quote.message_str or "[Empty Text]"
+            req.system_prompt += (
+                f"\nUser is quoting a message{sender_info}.\n"
+                f"Here are the information of the quoted message: Text Content: {message_str}.\n"
+            )
+            image_seg = None
+            if quote.chain:
+                for comp in quote.chain:
+                    if isinstance(comp, Image):
+                        image_seg = comp
+                        break
+            if image_seg:
+                try:
+                    if prov := self.context.get_using_provider(
+                        event.unified_msg_origin
+                    ):
+                        llm_resp = await prov.text_chat(
+                            prompt="Please describe the image content.",
+                            image_urls=[await image_seg.convert_to_file_path()],
+                        )
+                        if llm_resp.completion_text:
+                            req.system_prompt += (
+                                f"Image Caption: {llm_resp.completion_text}\n"
+                            )
+                except BaseException as e:
+                    logger.error(f"处理引用图片失败: {e}")
 
         if self.ltm:
             try:
