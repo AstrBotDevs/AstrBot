@@ -8,24 +8,48 @@ from typing import Union
 class PlatformAdapterType(enum.Flag):
     AIOCQHTTP = enum.auto()
     QQOFFICIAL = enum.auto()
-    VCHAT = enum.auto()
     GEWECHAT = enum.auto()
     TELEGRAM = enum.auto()
     WECOM = enum.auto()
     LARK = enum.auto()
     WECHATPADPRO = enum.auto()
-    ALL = AIOCQHTTP | QQOFFICIAL | VCHAT | GEWECHAT | TELEGRAM | WECOM | LARK | WECHATPADPRO
+    DINGTALK = enum.auto()
+    DISCORD = enum.auto()
+    SLACK = enum.auto()
+    KOOK = enum.auto()
+    VOCECHAT = enum.auto()
+    WEIXIN_OFFICIAL_ACCOUNT = enum.auto()
+    ALL = (
+        AIOCQHTTP
+        | QQOFFICIAL
+        | GEWECHAT
+        | TELEGRAM
+        | WECOM
+        | LARK
+        | WECHATPADPRO
+        | DINGTALK
+        | DISCORD
+        | SLACK
+        | KOOK
+        | VOCECHAT
+        | WEIXIN_OFFICIAL_ACCOUNT
+    )
 
 
 ADAPTER_NAME_2_TYPE = {
     "aiocqhttp": PlatformAdapterType.AIOCQHTTP,
     "qq_official": PlatformAdapterType.QQOFFICIAL,
-    "vchat": PlatformAdapterType.VCHAT,
     "gewechat": PlatformAdapterType.GEWECHAT,
     "telegram": PlatformAdapterType.TELEGRAM,
     "wecom": PlatformAdapterType.WECOM,
     "lark": PlatformAdapterType.LARK,
+    "dingtalk": PlatformAdapterType.DINGTALK,
+    "discord": PlatformAdapterType.DISCORD,
+    "slack": PlatformAdapterType.SLACK,
+    "kook": PlatformAdapterType.KOOK,
     "wechatpadpro": PlatformAdapterType.WECHATPADPRO,
+    "vocechat": PlatformAdapterType.VOCECHAT,
+    "weixin_official_account": PlatformAdapterType.WEIXIN_OFFICIAL_ACCOUNT,
 }
 
 
