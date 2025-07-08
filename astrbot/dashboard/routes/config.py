@@ -1,9 +1,11 @@
 import typing
 import traceback
+import os
 from .route import Route, Response, RouteContext
 from astrbot.core.provider.entities import ProviderType
 from quart import request
 from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
+from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_registry
@@ -270,6 +272,28 @@ class ConfigRoute(Route):
                 logger.error(f"Error testing TTS provider {provider_name}: {e}", exc_info=True)
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"TTS test failed: {str(e)}"
+        elif provider_capability_type == ProviderType.SPEECH_TO_TEXT:
+            try:
+                logger.debug(f"Sending health check audio to provider: {status_info['name']}")
+                sample_audio_path = os.path.join(get_astrbot_path(), "samples", "stt_health_check.wav")
+                if not os.path.exists(sample_audio_path):
+                    status_info["status"] = "unavailable"
+                    status_info["error"] = "STT test failed: sample audio file not found."
+                    logger.warning(f"STT test for {status_info['name']} failed: sample audio file not found at {sample_audio_path}")
+                else:
+                    text_result = await provider.get_text(sample_audio_path)
+                    if isinstance(text_result, str) and text_result:
+                        status_info["status"] = "available"
+                        snippet = text_result[:70] + "..." if len(text_result) > 70 else text_result
+                        logger.info(f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{snippet}'")
+                    else:
+                        status_info["status"] = "unavailable"
+                        status_info["error"] = f"STT test failed: unexpected result type {type(text_result)}"
+                        logger.warning(f"STT test for {status_info['name']} failed: unexpected result type {type(text_result)}")
+            except Exception as e:
+                logger.error(f"Error testing STT provider {provider_name}: {e}", exc_info=True)
+                status_info["status"] = "unavailable"
+                status_info["error"] = f"STT test failed: {str(e)}"
         else:
             logger.debug(f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}")
             status_info["status"] = "available"
