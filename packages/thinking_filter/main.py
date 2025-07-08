@@ -1,17 +1,10 @@
 import re
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star
 from astrbot.api.provider import LLMResponse
 from openai.types.chat.chat_completion import ChatCompletion
 
 
-@register(
-    "thinking_filter",
-    "Soulter",
-    "可选择是否过滤推理模型的思考内容",
-    "1.0.0",
-    "https://astrbot.app",
-)
 class R1Filter(Star):
     def __init__(self, context: Context):
         super().__init__(context)

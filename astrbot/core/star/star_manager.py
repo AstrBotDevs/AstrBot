@@ -11,7 +11,6 @@ import os
 import sys
 import traceback
 from types import ModuleType
-from typing import List
 
 import yaml
 
@@ -119,7 +118,8 @@ class PluginManager:
                     reloaded_plugins.add(plugin_name)
                     break
 
-    def _get_classes(self, arg: ModuleType):
+    @staticmethod
+    def _get_classes(arg: ModuleType):
         """获取指定模块（可以理解为一个 python 文件）下所有的类"""
         classes = []
         clsmembers = inspect.getmembers(arg, inspect.isclass)
@@ -129,7 +129,8 @@ class PluginManager:
                 break
         return classes
 
-    def _get_modules(self, path):
+    @staticmethod
+    def _get_modules(path):
         modules = []
 
         dirs = os.listdir(path)
@@ -155,7 +156,7 @@ class PluginManager:
                     )
         return modules
 
-    def _get_plugin_modules(self) -> List[dict]:
+    def _get_plugin_modules(self) -> list[dict]:
         plugins = []
         if os.path.exists(self.plugin_store_path):
             plugins.extend(self._get_modules(self.plugin_store_path))
@@ -189,7 +190,8 @@ class PluginManager:
                 except Exception as e:
                     logger.error(f"更新插件 {p} 的依赖失败。Code: {str(e)}")
 
-    def _load_plugin_metadata(self, plugin_path: str, plugin_obj=None) -> StarMetadata:
+    @staticmethod
+    def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata:
         """v3.4.0 以前的方式载入插件元数据
 
         先寻找 metadata.yaml 文件，如果不存在，则使用插件对象的 info() 函数获取元数据。
@@ -228,8 +230,9 @@ class PluginManager:
 
         return metadata
 
+    @staticmethod
     def _get_plugin_related_modules(
-        self, plugin_root_dir: str, is_reserved: bool = False
+        plugin_root_dir: str, is_reserved: bool = False
     ) -> list[str]:
         """获取与指定插件相关的所有已加载模块名
 
@@ -435,7 +438,7 @@ class PluginManager:
                         )
 
                 if path in star_map:
-                    # 通过装饰器的方式注册插件
+                    # 通过__init__subclass__注册插件
                     metadata = star_map[path]
 
                     try:
@@ -503,6 +506,8 @@ class PluginManager:
                             )
                         if func_tool.name in inactivated_llm_tools:
                             func_tool.active = False
+
+                    star_registry.append(metadata)
 
                 else:
                     # v3.4.0 以前的方式注册插件
@@ -775,7 +780,8 @@ class PluginManager:
 
         plugin.activated = False
 
-    async def _terminate_plugin(self, star_metadata: StarMetadata):
+    @staticmethod
+    async def _terminate_plugin(star_metadata: StarMetadata):
         """终止插件，调用插件的 terminate() 和 __del__() 方法"""
         logger.info(f"正在终止插件 {star_metadata.name} ...")
 
