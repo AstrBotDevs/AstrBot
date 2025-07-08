@@ -202,52 +202,65 @@ class ConfigRoute(Route):
             f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})"
         )
 
-        if provider_capability_type != ProviderType.CHAT_COMPLETION:
-            logger.debug(f"Provider {provider_name} is not a Chat Completion provider. Marking as available without test. Meta: {meta}")
+        if provider_capability_type == ProviderType.CHAT_COMPLETION:
+            try:
+                logger.debug(f"Sending 'Ping' to provider: {status_info['name']}")
+                response = await asyncio.wait_for(
+                    provider.text_chat(prompt="REPLY `PONG` ONLY"), timeout=45.0
+                )
+                logger.debug(f"Received response from {status_info['name']}: {response}")
+                if response is not None:
+                    status_info["status"] = "available"
+                    response_text_snippet = ""
+                    if hasattr(response, "completion_text") and response.completion_text:
+                        response_text_snippet = (
+                            response.completion_text[:70] + "..."
+                            if len(response.completion_text) > 70
+                            else response.completion_text
+                        )
+                    elif hasattr(response, "result_chain") and response.result_chain:
+                        try:
+                            response_text_snippet = (
+                                response.result_chain.get_plain_text()[:70] + "..."
+                                if len(response.result_chain.get_plain_text()) > 70
+                                else response.result_chain.get_plain_text()
+                            )
+                        except Exception as _:
+                            pass
+                    logger.info(
+                        f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{response_text_snippet}'"
+                    )
+                else:
+                    status_info["error"] = "Test call returned None, but expected an LLMResponse object."
+                    logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None.")
+
+            except asyncio.TimeoutError:
+                status_info["error"] = "Connection timed out after 45 seconds during test call."
+                logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) timed out.")
+            except Exception as e:
+                error_message = str(e)
+                status_info["error"] = error_message
+                logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}")
+                logger.debug(f"Traceback for {status_info['name']}:\n{traceback.format_exc()}")
+
+        elif provider_capability_type == ProviderType.EMBEDDING:
+            try:
+                # For embedding, we can call the get_embedding method with a short prompt.
+                embedding_result = await provider.get_embedding("health_check")
+                if isinstance(embedding_result, list) and (not embedding_result or isinstance(embedding_result[0], float)):
+                    status_info["status"] = "available"
+                else:
+                    status_info["status"] = "unavailable"
+                    status_info["error"] = f"Embedding test failed: unexpected result type {type(embedding_result)}"
+            except Exception as e:
+                logger.error(f"Error testing embedding provider {provider_name}: {e}", exc_info=True)
+                status_info["status"] = "unavailable"
+                status_info["error"] = f"Embedding test failed: {str(e)}"
+        else:
+            logger.debug(f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}")
             status_info["status"] = "available"
             status_info["error"] = "This provider type is not tested and is assumed to be available."
-            return status_info
-        
-        try:
-            logger.debug(f"Sending 'Ping' to provider: {status_info['name']}")
-            response = await asyncio.wait_for(
-                provider.text_chat(prompt="REPLY `PONG` ONLY"), timeout=45.0
-            )
-            logger.debug(f"Received response from {status_info['name']}: {response}")
-            if response is not None:
-                status_info["status"] = "available"
-                response_text_snippet = ""
-                if hasattr(response, "completion_text") and response.completion_text:
-                    response_text_snippet = (
-                        response.completion_text[:70] + "..."
-                        if len(response.completion_text) > 70
-                        else response.completion_text
-                    )
-                elif hasattr(response, "result_chain") and response.result_chain:
-                    try:
-                        response_text_snippet = (
-                            response.result_chain.get_plain_text()[:70] + "..."
-                            if len(response.result_chain.get_plain_text()) > 70
-                            else response.result_chain.get_plain_text()
-                        )
-                    except Exception as _:
-                        pass
-                logger.info(
-                    f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{response_text_snippet}'"
-                )
-            else:
-                status_info["error"] = "Test call returned None, but expected an LLMResponse object."
-                logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None.")
 
-        except asyncio.TimeoutError:
-            status_info["error"] = "Connection timed out after 45 seconds during test call."
-            logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) timed out.")
-        except Exception as e:
-            error_message = str(e)
-            status_info["error"] = error_message
-            logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}")
-            logger.debug(f"Traceback for {status_info['name']}:\n{traceback.format_exc()}")
-            
         return status_info
 
     def _error_response(self, message: str, status_code: int = 500, log_fn=logger.error):
