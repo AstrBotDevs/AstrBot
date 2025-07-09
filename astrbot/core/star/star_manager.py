@@ -211,6 +211,9 @@ class PluginManager:
             metadata = plugin_obj.info()
 
         if isinstance(metadata, dict):
+            if "desc" not in metadata and "description" in metadata:
+                metadata["desc"] = metadata["description"]
+
             if (
                 "name" not in metadata
                 or "desc" not in metadata
@@ -452,8 +455,10 @@ class PluginManager:
                             metadata.desc = metadata_yaml.desc
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.error(
+                            f"插件 {root_dir_name} 元数据载入失败: {str(e)}。使用默认元数据。"
+                        )
                     metadata.config = plugin_config
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
