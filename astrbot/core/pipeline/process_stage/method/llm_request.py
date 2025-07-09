@@ -184,7 +184,8 @@ class LLMRequestSubStage(Stage):
                                 await event.send(resp.data["chain"])
                                 continue
                             # 对于其他情况，暂时先不处理
-                        if resp.type == "tool_call":
+                            continue
+                        elif resp.type == "tool_call":
                             if self.streaming_response:
                                 # 用来标记流式响应需要分节
                                 yield MessageChain(chain=[], type="break")
