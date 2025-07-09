@@ -1,6 +1,6 @@
 name: Run tests and upload coverage
 
-on: 
+on:
   push:
     branches:
       - master
@@ -8,6 +8,7 @@ on:
       - 'README.md'
       - 'changelogs/**'
       - 'dashboard/**'
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -21,25 +22,24 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
       
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio
+          pip install pytest pytest-asyncio pytest-cov
+          pip install --editable .
 
       - name: Run tests
         run: |
-          mkdir data
-          mkdir data/plugins
-          mkdir data/config
-          mkdir data/temp
+          mkdir -p data/plugins
+          mkdir -p data/config
+          mkdir -p data/temp
           export TESTING=true
           export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          PYTHONPATH=./ pytest --cov=. tests/ -v -o log_cli=true -o log_level=DEBUG
+          pytest --cov=. -v -o log_cli=true -o log_level=DEBUG
 
       - name: Upload results to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

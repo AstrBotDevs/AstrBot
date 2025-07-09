@@ -23,7 +23,12 @@ class PipelineContext:
         event: AstrMessageEvent,
         hook_type: EventType,
         *args,
-    ):
+    ) -> bool:
+        """调用事件钩子函数
+
+        Returns:
+            bool: 如果事件被终止，返回 True
+        """
         platform_id = event.get_platform_id()
         handlers = star_handlers_registry.get_handlers_by_event_type(
             hook_type, platform_id=platform_id
@@ -41,7 +46,8 @@ class PipelineContext:
                 logger.info(
                     f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
                 )
-                return
+
+        return event.is_stopped()
 
     async def call_handler(
         self,

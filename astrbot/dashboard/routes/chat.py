@@ -2,7 +2,7 @@ import uuid
 import json
 import os
 from .route import Route, Response, RouteContext
-from astrbot.core import web_chat_queue, web_chat_back_queue
+from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from quart import request, Response as QuartResponse, g, make_response
 from astrbot.core.db import BaseDatabase
 import asyncio
@@ -21,7 +21,6 @@ class ChatRoute(Route):
         super().__init__(context)
         self.routes = {
             "/chat/send": ("POST", self.chat),
-            "/chat/listen": ("GET", self.listener),
             "/chat/new_conversation": ("GET", self.new_conversation),
             "/chat/conversations": ("GET", self.get_conversations),
             "/chat/get_conversation": ("GET", self.get_conversation),
@@ -39,9 +38,6 @@ class ChatRoute(Route):
         os.makedirs(self.imgs_dir, exist_ok=True)
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
-
-        self.curr_user_cid = {}
-        self.curr_chat_sse = {}
 
     async def status(self):
         has_llm_enabled = (
@@ -124,6 +120,8 @@ class ChatRoute(Route):
         conversation_id = post_data["conversation_id"]
         image_url = post_data.get("image_url")
         audio_url = post_data.get("audio_url")
+        selected_provider = post_data.get("selected_provider")
+        selected_model = post_data.get("selected_model")
         if not message and not image_url and not audio_url:
             return (
                 Response()
@@ -133,21 +131,10 @@ class ChatRoute(Route):
         if not conversation_id:
             return Response().error("conversation_id is empty").__dict__
 
-        self.curr_user_cid[username] = conversation_id
+        # Get conversation-specific queues
+        back_queue = webchat_queue_mgr.get_or_create_back_queue(conversation_id)
 
-        await web_chat_queue.put(
-            (
-                username,
-                conversation_id,
-                {
-                    "message": message,
-                    "image_url": image_url,  # list
-                    "audio_url": audio_url,
-                },
-            )
-        )
-
-        # 持久化
+        # append user message
         conversation = self.db.get_conversation_by_user_id(username, conversation_id)
         try:
             history = json.loads(conversation.history)
@@ -164,30 +151,12 @@ class ChatRoute(Route):
             username, conversation_id, history=json.dumps(history)
         )
 
-        return Response().ok().__dict__
-
-    async def listener(self):
-        """一直保持长连接"""
-
-        username = g.get("username", "guest")
-
-        if username in self.curr_chat_sse:
-            return Response().error("Already connected").__dict__
-
-        self.curr_chat_sse[username] = None
-
-        heartbeat = json.dumps({"type": "heartbeat", "data": "ping"})
-
         async def stream():
             try:
-                yield f"data: {heartbeat}\n\n"  # 心跳包
                 while True:
                     try:
-                        result = await asyncio.wait_for(
-                            web_chat_back_queue.get(), timeout=10
-                        )  # 设置超时时间为5秒
+                        result = await asyncio.wait_for(back_queue.get(), timeout=10)
                     except asyncio.TimeoutError:
-                        yield f"data: {heartbeat}\n\n"  # 心跳包
                         continue
 
                     if not result:
@@ -197,19 +166,16 @@ class ChatRoute(Route):
                     type = result.get("type")
                     cid = result.get("cid")
                     streaming = result.get("streaming", False)
-                    if cid != self.curr_user_cid.get(username):
-                        # 丢弃
-                        continue
+                    chain_type = result.get("chain_type")
                     yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
                     await asyncio.sleep(0.05)
 
                     if streaming and type != "end":
-                        continue
-
-                    if type == "update_title":
+                        # If the result is still streaming, we continue to wait for more data
                         continue
 
                     if result_text:
+                        # append bot message
                         conversation = self.db.get_conversation_by_user_id(
                             username, cid
                         )
@@ -222,10 +188,30 @@ class ChatRoute(Route):
                         self.db.update_conversation(
                             username, cid, history=json.dumps(history)
                         )
+                        if chain_type not in ["tool_call", "tool_call_result"]:
+                            # If the result is not a tool call or tool call result,
+                            # we can break the loop and end the stream
+                            break
+
             except BaseException as _:
                 logger.debug(f"用户 {username} 断开聊天长连接。")
-                self.curr_chat_sse.pop(username)
                 return
+
+        # Put message to conversation-specific queue
+        chat_queue = webchat_queue_mgr.get_or_create_queue(conversation_id)
+        await chat_queue.put(
+            (
+                username,
+                conversation_id,
+                {
+                    "message": message,
+                    "image_url": image_url,  # list
+                    "audio_url": audio_url,
+                    "selected_provider": selected_provider,
+                    "selected_model": selected_model,
+                },
+            )
+        )
 
         response = await make_response(
             stream(),
@@ -236,7 +222,6 @@ class ChatRoute(Route):
                 "Connection": "keep-alive",
             },
         )
-        response.timeout = None
         return response
 
     async def delete_conversation(self):
@@ -245,6 +230,8 @@ class ChatRoute(Route):
         if not conversation_id:
             return Response().error("Missing key: conversation_id").__dict__
 
+        # Clean up queues when deleting conversation
+        webchat_queue_mgr.remove_queues(conversation_id)
         self.db.delete_conversation(username, conversation_id)
         return Response().ok().__dict__
 
@@ -278,7 +265,5 @@ class ChatRoute(Route):
             return Response().error("Missing key: conversation_id").__dict__
 
         conversation = self.db.get_conversation_by_user_id(username, conversation_id)
-
-        self.curr_user_cid[username] = conversation_id
 
         return Response().ok(data=conversation).__dict__

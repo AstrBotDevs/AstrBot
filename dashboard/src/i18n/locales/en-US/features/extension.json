@@ -79,6 +79,9 @@
     "devDocs": "Extension Development Docs",
     "submitRepo": "Submit Extension Repository"
   },
+  "tags": {
+    "danger": "Danger"
+  },
   "dialogs": {
     "error": {
       "title": "Error Information",
@@ -112,6 +115,12 @@
       "title": "Install Extension",
       "fromFile": "Install from File",
       "fromUrl": "Install from URL"
+    },
+    "danger_warning": {
+      "title": "Dangerous Plugin Warning",
+      "message": "This plugin has been flagged as containing security risks, including unsafe code or functionalities that may cause system malfunctions or data loss. Do you wish to proceed with the installation?",
+      "confirm": "Continue",
+      "cancel": "Cancel"
     }
   },
   "messages": {
@@ -164,4 +173,4 @@
       "confirmNotRegistered": "$confirm not properly registered"
     }
   }
-} 
+}

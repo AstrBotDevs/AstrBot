@@ -10,6 +10,7 @@ import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
 from astrbot.api.provider import ProviderRequest
+from astrbot.core import DEMO_MODE
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderType
@@ -55,12 +56,6 @@ class RstScene(Enum):
         return cls.PRIVATE
 
 
-@star.register(
-    name="astrbot",
-    desc="AstrBot 基础指令结合 + 拓展功能",
-    author="Soulter",
-    version="4.0.0",
-)
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
@@ -234,6 +229,9 @@ class Main(star.Star):
     @plugin.command("off")
     async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = None):
         """禁用插件"""
+        if DEMO_MODE:
+            event.set_result(MessageEventResult().message("演示模式下无法禁用插件。"))
+            return
         if not plugin_name:
             event.set_result(
                 MessageEventResult().message("/plugin off <插件名> 禁用插件。")
@@ -246,6 +244,9 @@ class Main(star.Star):
     @plugin.command("on")
     async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = None):
         """启用插件"""
+        if DEMO_MODE:
+            event.set_result(MessageEventResult().message("演示模式下无法启用插件。"))
+            return
         if not plugin_name:
             event.set_result(
                 MessageEventResult().message("/plugin on <插件名> 启用插件。")
@@ -258,6 +259,9 @@ class Main(star.Star):
     @plugin.command("get")
     async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = None):
         """安装插件"""
+        if DEMO_MODE:
+            event.set_result(MessageEventResult().message("演示模式下无法安装插件。"))
+            return
         if not plugin_repo:
             event.set_result(
                 MessageEventResult().message("/plugin get <插件仓库地址> 安装插件")
@@ -673,25 +677,16 @@ UID: {user_id} 此 ID 可用于设置管理员。
             return
 
         size_per_page = 6
-        session_curr_cid = (
-            await self.context.conversation_manager.get_curr_conversation_id(
-                message.unified_msg_origin
-            )
-        )
+
+        conv_mgr = self.context.conversation_manager
+        umo = message.unified_msg_origin
+        session_curr_cid = await conv_mgr.get_curr_conversation_id(umo)
 
         if not session_curr_cid:
-            message.set_result(
-                MessageEventResult().message(
-                    "当前未处于对话状态，请 /switch 序号 切换或者 /new 创建。"
-                )
-            )
-            return
+            session_curr_cid = await conv_mgr.new_conversation(umo)
 
-        (
-            contexts,
-            total_pages,
-        ) = await self.context.conversation_manager.get_human_readable_context(
-            message.unified_msg_origin, session_curr_cid, page, size_per_page
+        contexts, total_pages = await conv_mgr.get_human_readable_context(
+            umo, session_curr_cid, page, size_per_page
         )
 
         history = ""
@@ -700,12 +695,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 context = context[:150] + "..."
             history += f"{context}\n"
 
-        ret = f"""当前对话历史记录：
-{history}
-第 {page} 页 | 共 {total_pages} 页
-
-*输入 /history 2 跳转到第 2 页
-"""
+        ret = (
+            f"当前对话历史记录："
+            f"{history if history else '无历史记录'}\n\n"
+            f"第 {page} 页 | 共 {total_pages} 页\n"
+            f"*输入 /history 2 跳转到第 2 页"
+        )
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
 
@@ -1040,14 +1035,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
         curr_cid_title = "无"
         if cid:
             conversation = await self.context.conversation_manager.get_conversation(
-                message.unified_msg_origin, cid
+                unified_msg_origin=message.unified_msg_origin,
+                conversation_id=cid,
+                create_if_not_exists=True,
             )
-            if not conversation:
-                message.set_result(
-                    MessageEventResult().message(
-                        "请先进入一个对话。可以使用 /new 创建。"
-                    )
-                )
             if not conversation.persona_id and not conversation.persona_id == "[%None]":
                 curr_persona_name = (
                     self.context.provider_manager.selected_default_persona["name"]
@@ -1325,12 +1316,36 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 ) and not req.contexts:
                     req.contexts[:0] = begin_dialogs
 
-        if quote and quote.message_str:
+        if quote:
+            sender_info = ""
             if quote.sender_nickname:
                 sender_info = f"(Sent by {quote.sender_nickname})"
-            else:
-                sender_info = ""
-            req.system_prompt += f"\nUser is quoting the message{sender_info}: {quote.message_str}, please consider the context."
+            message_str = quote.message_str or "[Empty Text]"
+            req.system_prompt += (
+                f"\nUser is quoting a message{sender_info}.\n"
+                f"Here are the information of the quoted message: Text Content: {message_str}.\n"
+            )
+            image_seg = None
+            if quote.chain:
+                for comp in quote.chain:
+                    if isinstance(comp, Image):
+                        image_seg = comp
+                        break
+            if image_seg:
+                try:
+                    if prov := self.context.get_using_provider(
+                        event.unified_msg_origin
+                    ):
+                        llm_resp = await prov.text_chat(
+                            prompt="Please describe the image content.",
+                            image_urls=[await image_seg.convert_to_file_path()],
+                        )
+                        if llm_resp.completion_text:
+                            req.system_prompt += (
+                                f"Image Caption: {llm_resp.completion_text}\n"
+                            )
+                except BaseException as e:
+                    logger.error(f"处理引用图片失败: {e}")
 
         if self.ltm:
             try:
