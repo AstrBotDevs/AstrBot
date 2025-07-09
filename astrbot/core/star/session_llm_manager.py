@@ -197,6 +197,68 @@ class SessionServiceManager:
         return SessionServiceManager.is_mcp_enabled_for_session(session_id)
 
     # =============================================================================
+    # 会话整体启停相关方法
+    # =============================================================================
+
+    @staticmethod
+    def is_session_enabled(session_id: str) -> bool:
+        """检查会话是否整体启用
+
+        Args:
+            session_id: 会话ID (unified_msg_origin)
+
+        Returns:
+            bool: True表示启用，False表示禁用
+        """
+        # 获取会话服务配置
+        session_config = sp.get("session_service_config", {}) or {}
+        session_services = session_config.get(session_id, {})
+
+        # 如果配置了该会话的整体状态，返回该状态
+        session_enabled = session_services.get("session_enabled")
+        if session_enabled is not None:
+            return session_enabled
+
+        # 如果没有配置，默认为启用（兼容性考虑）
+        return True
+
+    @staticmethod
+    def set_session_status(session_id: str, enabled: bool) -> None:
+        """设置会话的整体启停状态
+
+        Args:
+            session_id: 会话ID (unified_msg_origin)
+            enabled: True表示启用，False表示禁用
+        """
+        # 获取当前配置
+        session_config = sp.get("session_service_config", {}) or {}
+        if session_id not in session_config:
+            session_config[session_id] = {}
+
+        # 设置会话整体状态
+        session_config[session_id]["session_enabled"] = enabled
+
+        # 保存配置
+        sp.put("session_service_config", session_config)
+
+        logger.info(
+            f"会话 {session_id} 的整体状态已更新为: {'启用' if enabled else '禁用'}"
+        )
+
+    @staticmethod
+    def should_process_session_request(event: AstrMessageEvent) -> bool:
+        """检查是否应该处理会话请求（会话整体启停检查）
+
+        Args:
+            event: 消息事件
+
+        Returns:
+            bool: True表示应该处理，False表示跳过
+        """
+        session_id = event.unified_msg_origin
+        return SessionServiceManager.is_session_enabled(session_id)
+
+    # =============================================================================
     # 会话命名相关方法
     # =============================================================================
 
@@ -270,12 +332,13 @@ class SessionServiceManager:
             session_id: 会话ID (unified_msg_origin)
 
         Returns:
-            Dict[str, bool]: 包含llm_enabled、tts_enabled、mcp_enabled的字典
+            Dict[str, bool]: 包含session_enabled、llm_enabled、tts_enabled、mcp_enabled的字典
         """
         session_config = sp.get("session_service_config", {}) or {}
         return session_config.get(
             session_id,
             {
+                "session_enabled": True,  # 默认启用
                 "llm_enabled": True,  # 默认启用
                 "tts_enabled": True,  # 默认启用
                 "mcp_enabled": True,  # 默认启用

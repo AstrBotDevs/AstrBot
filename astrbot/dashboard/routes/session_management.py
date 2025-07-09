@@ -28,6 +28,7 @@ class SessionManagementRoute(Route):
             "/session/update_tts": ("POST", self.update_session_tts),
             "/session/update_mcp": ("POST", self.update_session_mcp),
             "/session/update_name": ("POST", self.update_session_name),
+            "/session/update_status": ("POST", self.update_session_status),
         }
         self.db_helper = db_helper
         self.core_lifecycle = core_lifecycle
@@ -66,6 +67,7 @@ class SessionManagementRoute(Route):
                     "stt_provider_name": None,
                     "tts_provider_id": None,
                     "tts_provider_name": None,
+                    "session_enabled": SessionServiceManager.is_session_enabled(session_id),
                     "llm_enabled": SessionServiceManager.is_llm_enabled_for_session(session_id),
                     "tts_enabled": SessionServiceManager.is_tts_enabled_for_session(session_id),
                     "mcp_enabled": SessionServiceManager.is_mcp_enabled_for_session(session_id),
@@ -561,3 +563,30 @@ class SessionManagementRoute(Route):
             error_msg = f"更新会话名称失败: {str(e)}\n{traceback.format_exc()}"
             logger.error(error_msg)
             return Response().error(f"更新会话名称失败: {str(e)}").__dict__
+
+    async def update_session_status(self):
+        """更新指定会话的整体启停状态"""
+        try:
+            data = await request.get_json()
+            session_id = data.get("session_id")
+            session_enabled = data.get("session_enabled")
+            
+            if not session_id:
+                return Response().error("缺少必要参数: session_id").__dict__
+            
+            if session_enabled is None:
+                return Response().error("缺少必要参数: session_enabled").__dict__
+            
+            # 使用 SessionServiceManager 更新会话整体状态
+            SessionServiceManager.set_session_status(session_id, session_enabled)
+            
+            return Response().ok({
+                "message": f"会话整体状态已更新为: {'启用' if session_enabled else '禁用'}",
+                "session_id": session_id,
+                "session_enabled": session_enabled,
+            }).__dict__
+            
+        except Exception as e:
+            error_msg = f"更新会话整体状态失败: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            return Response().error(f"更新会话整体状态失败: {str(e)}").__dict__

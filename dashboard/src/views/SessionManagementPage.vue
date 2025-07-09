@@ -120,6 +120,7 @@
               variant="outlined"
               @update:model-value="(value) => updatePersona(item, value)"
               :loading="item.updating"
+              :disabled="!item.session_enabled"
             >
               <template v-slot:selection="{ item: selection }">
                 <v-chip 
@@ -144,6 +145,7 @@
               variant="outlined"
               @update:model-value="(value) => updateProvider(item, value, 'chat_completion')"
               :loading="item.updating"
+              :disabled="!item.session_enabled"
             >
               <template v-slot:selection="{ item: selection }">
                 <v-chip size="small" color="success">
@@ -165,7 +167,7 @@
               variant="outlined"
               @update:model-value="(value) => updateProvider(item, value, 'speech_to_text')"
               :loading="item.updating"
-              :disabled="sttProviderOptions.length === 0"
+              :disabled="sttProviderOptions.length === 0 || !item.session_enabled"
             >
               <template v-slot:selection="{ item: selection }">
                 <v-chip size="small" color="info">
@@ -187,7 +189,7 @@
               variant="outlined"
               @update:model-value="(value) => updateProvider(item, value, 'text_to_speech')"
               :loading="item.updating"
-              :disabled="ttsProviderOptions.length === 0"
+              :disabled="ttsProviderOptions.length === 0 || !item.session_enabled"
             >
               <template v-slot:selection="{ item: selection }">
                 <v-chip size="small" color="warning">
@@ -196,12 +198,27 @@
               </template>
             </v-select>          </template>
 
+          <!-- 会话启停 -->
+          <template v-slot:item.session_enabled="{ item }">
+            <v-switch
+              :model-value="item.session_enabled"
+              @update:model-value="(value) => updateSessionStatus(item, value)"
+              :loading="item.updating"
+              hide-details
+              density="compact"
+              color="success"
+              inset
+            >
+            </v-switch>
+          </template>
+
           <!-- LLM启停 -->
           <template v-slot:item.llm_enabled="{ item }">
             <v-switch
               :model-value="item.llm_enabled"
               @update:model-value="(value) => updateLLM(item, value)"
               :loading="item.updating"
+              :disabled="!item.session_enabled"
               hide-details
               density="compact"
               color="primary"
@@ -216,6 +233,7 @@
               :model-value="item.tts_enabled"
               @update:model-value="(value) => updateTTS(item, value)"
               :loading="item.updating"
+              :disabled="!item.session_enabled"
               hide-details
               density="compact"
               color="secondary"
@@ -230,6 +248,7 @@
               :model-value="item.mcp_enabled"
               @update:model-value="(value) => updateMCP(item, value)"
               :loading="item.updating"
+              :disabled="!item.session_enabled"
               hide-details
               density="compact"
               color="info"
@@ -246,6 +265,7 @@
               color="primary"
               @click="openPluginManager(item)"
               :loading="item.loadingPlugins"
+              :disabled="!item.session_enabled"
             >
               {{ tm('buttons.edit') }}
             </v-btn>
@@ -497,6 +517,7 @@ export default {
   computed: {
     headers() {
       return [
+        { title: this.tm('table.headers.sessionStatus'), key: 'session_enabled', sortable: false, width: '120px' },
         { title: this.tm('table.headers.sessionInfo'), key: 'session_info', sortable: false, width: '200px' },
         { title: this.tm('table.headers.persona'), key: 'persona', sortable: false, width: '180px' },
         { title: this.tm('table.headers.chatProvider'), key: 'chat_provider', sortable: false, width: '180px' },
@@ -655,6 +676,26 @@ export default {
       } catch (error) {
         this.showError(error.response?.data?.message || this.tm('messages.providerUpdateError'));
       }      session.updating = false;
+    },
+    
+    async updateSessionStatus(session, enabled) {
+      session.updating = true;
+      try {
+        const response = await axios.post('/api/session/update_status', {
+          session_id: session.session_id,
+          session_enabled: enabled
+        });
+        
+        if (response.data.status === 'ok') {
+          session.session_enabled = enabled;
+          this.showSuccess(this.tm('messages.sessionStatusSuccess', { status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') }));
+        } else {
+          this.showError(response.data.message || this.tm('messages.statusUpdateError'));
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || this.tm('messages.statusUpdateError'));
+      }
+      session.updating = false;
     },
     
     async updateLLM(session, enabled) {

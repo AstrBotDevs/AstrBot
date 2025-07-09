@@ -21,6 +21,7 @@
   },
   "table": {
     "headers": {
+      "sessionStatus": "会话状态",
       "sessionInfo": "会话信息",
       "persona": "人格",
       "chatProvider": "Chat Provider",
@@ -65,6 +66,7 @@
     "personaUpdateError": "人格更新失败",
     "providerUpdateSuccess": "Provider 更新成功",
     "providerUpdateError": "Provider 更新失败",
+    "sessionStatusSuccess": "会话 {status}",
     "llmStatusSuccess": "LLM {status}",
     "ttsStatusSuccess": "TTS {status}",
     "mcpStatusSuccess": "MCP {status}",
