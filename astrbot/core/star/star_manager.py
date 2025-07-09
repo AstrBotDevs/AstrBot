@@ -36,12 +36,6 @@ except ImportError:
     if os.getenv("ASTRBOT_RELOAD", "0") == "1":
         logger.warning("未安装 watchfiles，无法实现插件的热重载。")
 
-try:
-    import nh3
-except ImportError:
-    logger.warning("未安装 nh3 库，无法清理插件 README.md 中的 HTML 标签。")
-    nh3 = None
-
 
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -652,11 +646,10 @@ class PluginManager:
         if not os.path.exists(readme_path):
             readme_path = os.path.join(plugin_path, "readme.md")
 
-        if os.path.exists(readme_path) and nh3:
+        if os.path.exists(readme_path):
             try:
                 with open(readme_path, "r", encoding="utf-8") as f:
                     readme_content = f.read()
-                cleaned_content = nh3.clean(readme_content)
             except Exception as e:
                 logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")
 
@@ -664,7 +657,7 @@ class PluginManager:
         if plugin:
             plugin_info = {
                 "repo": plugin.repo,
-                "readme": cleaned_content,
+                "readme": readme_content,
                 "name": plugin.name,
             }
 
