@@ -561,7 +561,7 @@ export default {
         'FishAudio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/fishaudio.svg',
         'Azure': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/azure.svg',
         'MiniMax': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/minimax.svg',
-        '302.AI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/1.53.0/files/icons/ai302.svg',
+        '302.AI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/1.53.0/files/icons/ai302-color.svg',
       };
       for (const key in icons) {
         if (type.startsWith(key)) {
