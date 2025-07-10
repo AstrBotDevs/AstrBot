@@ -188,9 +188,9 @@ class PluginManager:
 
     @staticmethod
     def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata:
-        """v3.4.0 以前的方式载入插件元数据
+        """先寻找 metadata.yaml 文件，如果不存在，则使用插件对象的 info() 函数获取元数据。
 
-        先寻找 metadata.yaml 文件，如果不存在，则使用插件对象的 info() 函数获取元数据。
+        Notes: 旧版本 AstrBot 插件可能使用的是 info() 函数来获取元数据。
         """
         metadata = None
 
@@ -202,7 +202,7 @@ class PluginManager:
                 os.path.join(plugin_path, "metadata.yaml"), "r", encoding="utf-8"
             ) as f:
                 metadata = yaml.safe_load(f)
-        elif plugin_obj:
+        elif plugin_obj and hasattr(plugin_obj, "info"):
             # 使用 info() 函数
             metadata = plugin_obj.info()
 
@@ -438,7 +438,7 @@ class PluginManager:
                         )
 
                 if path in star_map:
-                    # 通过__init__subclass__注册插件
+                    # 通过 __init__subclass__ 注册插件
                     metadata = star_map[path]
 
                     try:
@@ -453,9 +453,10 @@ class PluginManager:
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
                     except Exception as e:
-                        logger.error(
+                        logger.warning(
                             f"插件 {root_dir_name} 元数据载入失败: {str(e)}。使用默认元数据。"
                         )
+                    logger.info(metadata)
                     metadata.config = plugin_config
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
@@ -653,7 +654,9 @@ class PluginManager:
                     with open(readme_path, "r", encoding="utf-8") as f:
                         readme_content = f.read()
                 except Exception as e:
-                    logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")
+                    logger.warning(
+                        f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}"
+                    )
 
             plugin_info = None
             if plugin:
