@@ -981,20 +981,19 @@ export default {
                                 } else {
                                     message_obj.message.value += chunk_json.data;
                                 }
-                            } else if (chunk_json.type === 'end') {
-                                in_streaming = false;
-                                // 在消息流结束后初始化代码复制按钮和图片点击事件
-                                this.initCodeCopyButtons();
-                                this.initImageClickEvents();
-                                continue;
                             } else if (chunk_json.type === 'update_title') {
                                 // 更新对话标题
                                 const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
                                 if (conversation) {
                                     conversation.title = chunk_json.data;
                                 }
-                            } else {
-                                console.warn('未知数据类型:', chunk_json.type);
+                            }
+                            if ((chunk_json.type === 'break' && chunk_json.streaming) || !chunk_json.streaming) {
+                                // break means a segment end
+                                in_streaming = false;
+                                // 在消息流结束后初始化代码复制按钮和图片点击事件
+                                this.initCodeCopyButtons();
+                                this.initImageClickEvents();
                             }
                             this.scrollToBottom();
                         }
