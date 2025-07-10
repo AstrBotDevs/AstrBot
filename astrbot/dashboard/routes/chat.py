@@ -156,7 +156,6 @@ class ChatRoute(Route):
                 while True:
                     try:
                         result = await asyncio.wait_for(back_queue.get(), timeout=10)
-                        print(f"Received result: {result}")
                     except asyncio.TimeoutError:
                         continue
 
