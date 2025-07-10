@@ -166,7 +166,7 @@ class ConversationRoute(Route):
 
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
-            self.core_lifecycle.conversation_manager.delete_conversation(
+            await self.core_lifecycle.conversation_manager.delete_conversation(
                 unified_msg_origin=user_id, conversation_id=cid
             )
             return Response().ok({"message": "对话删除成功"}).__dict__
