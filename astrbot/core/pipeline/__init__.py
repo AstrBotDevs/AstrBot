@@ -1,18 +1,18 @@
 from astrbot.core.message.message_event_result import (
-    MessageEventResult,
     EventResultType,
+    MessageEventResult,
 )
 
-from .waking_check.stage import WakingCheckStage
-from .whitelist_check.stage import WhitelistCheckStage
-from .session_status_check.stage import SessionStatusCheckStage
-from .rate_limit_check.stage import RateLimitStage
 from .content_safety_check.stage import ContentSafetyCheckStage
 from .platform_compatibility.stage import PlatformCompatibilityStage
 from .preprocess_stage.stage import PreProcessStage
 from .process_stage.stage import ProcessStage
-from .result_decorate.stage import ResultDecorateStage
+from .rate_limit_check.stage import RateLimitStage
 from .respond.stage import RespondStage
+from .result_decorate.stage import ResultDecorateStage
+from .session_status_check.stage import SessionStatusCheckStage
+from .waking_check.stage import WakingCheckStage
+from .whitelist_check.stage import WhitelistCheckStage
 
 # 管道阶段顺序
 STAGES_ORDER = [

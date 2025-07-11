@@ -338,31 +338,35 @@ class Main(star.Star):
     async def tts(self, event: AstrMessageEvent):
         """开关文本转语音（会话级别）"""
         from astrbot.core.star.session_llm_manager import SessionServiceManager
-        
+
         session_id = event.unified_msg_origin
         current_status = SessionServiceManager.is_tts_enabled_for_session(session_id)
-        
+
         # 切换状态
         new_status = not current_status
         SessionServiceManager.set_tts_status_for_session(session_id, new_status)
-        
+
         status_text = "已开启" if new_status else "已关闭"
-        event.set_result(MessageEventResult().message(f"{status_text}当前会话的文本转语音。"))
+        event.set_result(
+            MessageEventResult().message(f"{status_text}当前会话的文本转语音。")
+        )
 
     @filter.command("mcp")
     async def mcp(self, event: AstrMessageEvent):
         """开关MCP工具调用（会话级别）"""
         from astrbot.core.star.session_llm_manager import SessionServiceManager
-        
+
         session_id = event.unified_msg_origin
         current_status = SessionServiceManager.is_mcp_enabled_for_session(session_id)
-        
+
         # 切换状态
         new_status = not current_status
         SessionServiceManager.set_mcp_status_for_session(session_id, new_status)
-        
+
         status_text = "已开启" if new_status else "已关闭"
-        event.set_result(MessageEventResult().message(f"{status_text}当前会话的MCP工具调用。"))
+        event.set_result(
+            MessageEventResult().message(f"{status_text}当前会话的MCP工具调用。")
+        )
 
     @filter.command("sid")
     async def sid(self, event: AstrMessageEvent):

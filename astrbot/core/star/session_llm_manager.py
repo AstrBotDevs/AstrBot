@@ -2,8 +2,9 @@
 会话服务管理器 - 负责管理每个会话的LLM、TTS等服务的启停状态
 """
 
-from astrbot.core import sp, logger
 from typing import Dict
+
+from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
@@ -316,7 +317,7 @@ class SessionServiceManager:
         custom_name = SessionServiceManager.get_session_custom_name(session_id)
         if custom_name:
             return custom_name
-        
+
         # 如果没有自定义名称，返回session_id的最后一段
         return session_id.split(":")[2] if session_id.count(":") >= 2 else session_id
 
