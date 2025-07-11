@@ -1,3 +1,4 @@
+import numbers
 import typing
 import traceback
 from .route import Route, Response, RouteContext
@@ -249,7 +250,7 @@ class ConfigRoute(Route):
                 )
                 logger.debug(f"Received response from {status_info['name']}: {response}")
                 # 若返回向量则认为该嵌入模型可用
-                if response and isinstance(response, list) and all(isinstance(x, float) for x in response):
+                if response and isinstance(response, typing.Iterable) and all(isinstance(x, numbers.Number) for x in response):
                     status_info["status"] = "available"
                     logger.info(
                         f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{str(response)[:10]}...'"
