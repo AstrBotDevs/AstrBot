@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "3.5.19"
+version = "3.5.22"
 description = "易上手的多平台 LLM 聊天机器人及开发框架"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,7 +27,6 @@ dependencies = [
     "lark-oapi>=1.4.15",
     "lxml-html-clean>=0.4.2",
     "mcp>=1.8.0",
-    "nh3>=0.2.21",
     "openai>=1.78.0",
     "ormsgpack>=1.9.1",
     "pillow>=11.2.1",

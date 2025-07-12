@@ -129,9 +129,9 @@ class Main(star.Star):
             logger.info(
                 "Docker 不可用，代码解释器将无法使用，astrbot-python-interpreter 将自动禁用。"
             )
-            await self.context._star_manager.turn_off_plugin(
-                "astrbot-python-interpreter"
-            )
+            # await self.context._star_manager.turn_off_plugin(
+            #     "astrbot-python-interpreter"
+            # )
 
     async def file_upload(self, file_path: str):
         """
