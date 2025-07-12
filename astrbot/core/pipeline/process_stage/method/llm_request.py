@@ -2,29 +2,30 @@
 本地 Agent 模式的 LLM 调用 Stage
 """
 
-import traceback
-import copy
 import asyncio
+import copy
 import json
-from typing import Union, AsyncGenerator
-from ...context import PipelineContext
-from ..stage import Stage
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+import traceback
+from typing import AsyncGenerator, Union
+from astrbot.core import logger
+from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
+    MessageChain,
     MessageEventResult,
     ResultContentType,
-    MessageChain,
 )
-from astrbot.core.message.components import Image
-from astrbot.core import logger
-from astrbot.core.utils.metrics import Metric
-from astrbot.core.provider.entities import (
-    ProviderRequest,
-    LLMResponse,
-)
-from astrbot.core.star.star_handler import EventType
-from ..agent_runner.tool_loop_agent import ToolLoopAgent
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
+from astrbot.core.provider.entities import (
+    LLMResponse,
+    ProviderRequest,
+)
+from astrbot.core.star.session_llm_manager import SessionServiceManager
+from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.metrics import Metric
+from ...context import PipelineContext
+from ..agent_runner.tool_loop_agent import ToolLoopAgent
+from ..stage import Stage
 
 
 class LLMRequestSubStage(Stage):
@@ -72,6 +73,12 @@ class LLMRequestSubStage(Stage):
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug("未启用 LLM 能力，跳过处理。")
             return
+
+        # 检查会话级别的LLM启停状态
+        if not SessionServiceManager.should_process_llm_request(event):
+            logger.debug(f"会话 {event.unified_msg_origin} 禁用了 LLM，跳过处理。")
+            return
+
         provider = self._select_provider(event)
         if provider is None:
             return
