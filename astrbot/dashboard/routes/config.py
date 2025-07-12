@@ -5,7 +5,7 @@ from quart import request
 from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.platform.register import platform_registry
+from astrbot.core.platform.register import platform_registry, platform_cls_map
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core import logger
@@ -474,6 +474,52 @@ class ConfigRoute(Route):
         tools = tool_mgr.get_func_desc_openai_style()
         return Response().ok(tools).__dict__
 
+    async def _register_platform_logo(self, platform, platform_default_tmpl):
+        """注册平台logo文件并生成访问令牌"""
+        if not platform.logo_path:
+            return
+            
+        try:
+            from astrbot.core import file_token_service
+            import os
+            import inspect
+            
+            # 获取平台适配器类
+            platform_cls = platform_cls_map.get(platform.name)
+            if not platform_cls:
+                logger.warning(f"Platform class not found for {platform.name}")
+                return
+                
+            # 获取插件目录路径
+            module_file = inspect.getfile(platform_cls)
+            plugin_dir = os.path.dirname(module_file)
+            
+            # 解析logo文件路径
+            logo_file_path = (
+                platform.logo_path 
+                if os.path.isabs(platform.logo_path) 
+                else os.path.join(plugin_dir, platform.logo_path)
+            )
+            
+            # 检查文件是否存在并注册令牌
+            if os.path.exists(logo_file_path):
+                logo_token = await file_token_service.register_file(
+                    logo_file_path, timeout=3600
+                )
+                platform_default_tmpl[platform.name]["logo_token"] = logo_token
+                logger.debug(f"Logo token registered for platform {platform.name}")
+            else:
+                logger.warning(
+                    f"Platform {platform.name} logo file not found: {logo_file_path}"
+                )
+                
+        except (ImportError, AttributeError) as e:
+            logger.warning(f"Failed to import required modules for platform {platform.name}: {e}")
+        except (OSError, IOError) as e:
+            logger.warning(f"File system error for platform {platform.name} logo: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error registering logo for platform {platform.name}: {e}")
+
     async def _get_astrbot_config(self):
         config = self.config
 
@@ -481,9 +527,12 @@ class ConfigRoute(Route):
         platform_default_tmpl = CONFIG_METADATA_2["platform_group"]["metadata"][
             "platform"
         ]["config_template"]
+        
         for platform in platform_registry:
             if platform.default_config_tmpl:
                 platform_default_tmpl[platform.name] = platform.default_config_tmpl
+                # 处理logo信息
+                await self._register_platform_logo(platform, platform_default_tmpl)
 
         # 服务提供商的默认配置模板注入
         provider_default_tmpl = CONFIG_METADATA_2["provider_group"]["metadata"][
