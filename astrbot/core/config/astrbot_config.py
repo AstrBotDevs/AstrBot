@@ -123,8 +123,13 @@ class AstrBotConfig(dict):
         for key in list(conf.keys()):
             if key not in refer_conf:
                 path_ = path + "." + key if path else key
-                logger.info(f"检查到配置项 {path_} 不存在，将从当前配置中删除")
-                has_new = True
+
+                # 特殊处理 platform_settings.plugin_enable 的子项，不删除
+                if path == "platform_settings.plugin_enable" or path.startswith("platform_settings.plugin_enable."):
+                    new_conf[key] = conf[key]
+                else:
+                    logger.info(f"检查到配置项 {path_} 不存在，将从当前配置中删除")
+                    has_new = True
 
         # 顺序不一致也算作变更
         if list(conf.keys()) != list(new_conf.keys()):
