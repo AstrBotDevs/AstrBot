@@ -30,6 +30,24 @@ class ToolsRoute(Route):
         self.register_routes()
         self.tool_mgr = self.core_lifecycle.provider_manager.llm_tools
 
+        # MCP市场数据缓存
+        self._mcp_cache = None
+        self._cache_timestamp = None
+        self._cache_ttl = 300  # 缓存5分钟
+
+    def _is_cache_valid(self):
+        """检查缓存是否有效"""
+        import time
+
+        if self._mcp_cache is None or self._cache_timestamp is None:
+            return False
+        return (time.time() - self._cache_timestamp) < self._cache_ttl
+
+    def _clear_cache(self):
+        """清除缓存"""
+        self._mcp_cache = None
+        self._cache_timestamp = None
+
     @property
     def mcp_config_path(self):
         data_dir = get_astrbot_data_path()
@@ -133,11 +151,13 @@ class ToolsRoute(Route):
 
             if self.save_mcp_config(config):
                 # 动态初始化新MCP客户端
-                await self.tool_mgr.mcp_service_queue.put({
-                    "type": "init",
-                    "name": name,
-                    "cfg": config["mcpServers"][name],
-                })
+                await self.tool_mgr.mcp_service_queue.put(
+                    {
+                        "type": "init",
+                        "name": name,
+                        "cfg": config["mcpServers"][name],
+                    }
+                )
                 return Response().ok(None, f"成功添加 MCP 服务器 {name}").__dict__
             else:
                 return Response().error("保存配置失败").__dict__
@@ -195,29 +215,37 @@ class ToolsRoute(Route):
                 if active:
                     # 如果要激活服务器或者配置已更改
                     if name in self.tool_mgr.mcp_client_dict or not only_update_active:
-                        await self.tool_mgr.mcp_service_queue.put({
-                            "type": "terminate",
-                            "name": name,
-                        })
-                        await self.tool_mgr.mcp_service_queue.put({
-                            "type": "init",
-                            "name": name,
-                            "cfg": config["mcpServers"][name],
-                        })
+                        await self.tool_mgr.mcp_service_queue.put(
+                            {
+                                "type": "terminate",
+                                "name": name,
+                            }
+                        )
+                        await self.tool_mgr.mcp_service_queue.put(
+                            {
+                                "type": "init",
+                                "name": name,
+                                "cfg": config["mcpServers"][name],
+                            }
+                        )
                     else:
                         # 客户端不存在，初始化
-                        await self.tool_mgr.mcp_service_queue.put({
-                            "type": "init",
-                            "name": name,
-                            "cfg": config["mcpServers"][name],
-                        })
+                        await self.tool_mgr.mcp_service_queue.put(
+                            {
+                                "type": "init",
+                                "name": name,
+                                "cfg": config["mcpServers"][name],
+                            }
+                        )
                 else:
                     # 如果要停用服务器
                     if name in self.tool_mgr.mcp_client_dict:
-                        self.tool_mgr.mcp_service_queue.put_nowait({
-                            "type": "terminate",
-                            "name": name,
-                        })
+                        self.tool_mgr.mcp_service_queue.put_nowait(
+                            {
+                                "type": "terminate",
+                                "name": name,
+                            }
+                        )
 
                 return Response().ok(None, f"成功更新 MCP 服务器 {name}").__dict__
             else:
@@ -245,10 +273,12 @@ class ToolsRoute(Route):
             if self.save_mcp_config(config):
                 # 关闭并删除MCP客户端
                 if name in self.tool_mgr.mcp_client_dict:
-                    self.tool_mgr.mcp_service_queue.put_nowait({
-                        "type": "terminate",
-                        "name": name,
-                    })
+                    self.tool_mgr.mcp_service_queue.put_nowait(
+                        {
+                            "type": "terminate",
+                            "name": name,
+                        }
+                    )
 
                 return Response().ok(None, f"成功删除 MCP 服务器 {name}").__dict__
             else:
@@ -257,27 +287,125 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除 MCP 服务器失败: {str(e)}").__dict__
 
+    async def _fetch_mcp_page(
+        self, session: aiohttp.ClientSession, page: int, page_size: int
+    ) -> dict:
+        """获取单页MCP服务器数据"""
+        url = f"https://api.soulter.top/astrbot/mcpservers?page={page}&page_size={page_size}"
+        async with session.get(url) as response:
+            response.raise_for_status()
+            return (await response.json())["data"]
+
+    async def _fetch_all_mcp_servers(
+        self,
+        session: aiohttp.ClientSession,
+        max_pages: int = 1000,
+        page_size: int = 2000,
+        force_refresh: bool = False,
+    ) -> list:
+        """并发获取所有MCP服务器数据，支持缓存"""
+        import asyncio
+        import time
+
+        # 如果缓存有效且不强制刷新，直接返回缓存数据
+        if not force_refresh and self._is_cache_valid():
+            logger.info("使用MCP市场缓存数据")
+            return self._mcp_cache
+
+        logger.info("从API获取MCP市场数据")
+
+        # 获取第一页来了解总页数
+        first_page = await self._fetch_mcp_page(session, 1, page_size)
+        servers = first_page.get("mcpservers", [])
+        total_pages = first_page.get("pagination", {}).get("totalPages", 1)
+        pages_to_fetch = min(total_pages, max_pages)
+
+        # 并发获取剩余页面
+        if pages_to_fetch > 1:
+            tasks = [
+                self._fetch_mcp_page(session, page, page_size)
+                for page in range(2, pages_to_fetch + 1)
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for result in results:
+                if isinstance(result, dict):
+                    servers.extend(result.get("mcpservers", []))
+                else:
+                    logger.warning(f"获取页面数据失败: {result}")
+
+        # 更新缓存
+        self._mcp_cache = servers
+        self._cache_timestamp = time.time()
+        logger.info(f"已缓存{len(servers)}个MCP服务器数据")
+
+        return servers
+
+    def _filter_servers(self, servers: list, search_term: str) -> list:
+        """根据搜索条件过滤服务器"""
+        term = search_term.lower()
+        return [
+            server
+            for server in servers
+            if (
+                term in server.get("name", "").lower()
+                or term in server.get("name_h", "").lower()
+                or term in server.get("description", "").lower()
+            )
+        ]
+
+    def _paginate_list(self, items: list, page: int, page_size: int) -> dict:
+        """对列表进行分页"""
+        total = len(items)
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+
+        return {
+            "mcpservers": items[start_idx:end_idx],
+            "pagination": {
+                "total": total,
+                "totalPages": total_pages,
+                "currentPage": page,
+                "pageSize": page_size,
+            },
+        }
+
     async def get_mcp_markets(self):
+        """获取MCP市场数据，支持搜索和分页"""
         page = request.args.get("page", 1, type=int)
         page_size = request.args.get("page_size", 10, type=int)
-        BASE_URL = (
-            "https://api.soulter.top/astrbot/mcpservers?page={}&page_size={}".format(
-                page,
-                page_size,
-            )
-        )
+        search = request.args.get("search", "", type=str).strip()
+        force_refresh = request.args.get("force_refresh", False, type=bool)
+
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{BASE_URL}") as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        return Response().ok(data["data"]).__dict__
-                    else:
-                        return (
-                            Response()
-                            .error(f"获取市场数据失败: HTTP {response.status}")
-                            .__dict__
-                        )
-        except Exception as _:
+                if search:
+                    # 全局搜索模式
+                    all_servers = await self._fetch_all_mcp_servers(
+                        session, force_refresh=force_refresh
+                    )
+                    filtered_servers = self._filter_servers(all_servers, search)
+                    result = self._paginate_list(filtered_servers, page, page_size)
+
+                    cache_status = (
+                        "缓存"
+                        if not force_refresh and self._is_cache_valid()
+                        else "API"
+                    )
+                    logger.info(
+                        f"MCP市场全局搜索 '{search}' ({cache_status}): 在{len(all_servers)}个服务器中找到{len(filtered_servers)}个匹配项"
+                    )
+                else:
+                    if force_refresh:
+                        # 如果强制刷新，清除缓存
+                        self._clear_cache()
+                    # 正常分页模式
+                    result = await self._fetch_mcp_page(session, page, page_size)
+
+                return Response().ok(result).__dict__
+
+        except Exception as e:
+            logger.error(f"请求MCP市场API异常: {e}")
             logger.error(traceback.format_exc())
-        return Response().error("获取市场数据失败").__dict__
+            return Response().error(f"获取市场数据失败: {e}").__dict__

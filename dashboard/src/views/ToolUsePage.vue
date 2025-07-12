@@ -49,11 +49,11 @@
               <v-icon color="primary" class="me-2">mdi-server</v-icon>
               <span class="text-h6">{{ tm('mcpServers.title') }}</span>
               <v-spacer></v-spacer>
-              <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="getServers" :loading="loading">
+              <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="getServers" :loading="loading" rounded="lg">
                 {{ tm('mcpServers.buttons.refresh') }}
               </v-btn>
               <v-btn color="primary" style="margin-left: 8px;" prepend-icon="mdi-plus" variant="tonal"
-                @click="showMcpServerDialog = true">
+                @click="showMcpServerDialog = true" rounded="lg">
                 {{ tm('mcpServers.buttons.add') }}
               </v-btn>
             </v-card-title>
@@ -69,7 +69,7 @@
               <v-row v-else>
                 <v-col v-for="(server, index) in mcpServers || []" :key="index" cols="12" md="6" lg="4" xl="3">
                   <item-card
-                    style="background-color: #f7f2f9;"
+                    class="server-card"
                     :item="server" 
                     title-field="name" 
                     enabled-field="active"
@@ -219,7 +219,7 @@
               <v-text-field v-model="marketplaceSearch" prepend-inner-icon="mdi-magnify" :label="tm('marketplace.search')"
                 variant="outlined" density="compact" hide-details class="mx-2" style="max-width: 300px" clearable
                 @update:model-value="searchMarketplaceServers"></v-text-field>
-              <v-btn color="primary" prepend-icon="mdi-refresh" variant="text" @click="fetchMarketplaceServers(1)"
+              <v-btn color="primary" prepend-icon="mdi-refresh" variant="text" @click="fetchMarketplaceServers(1, true)"
                 :loading="marketplaceLoading">
                 {{ tm('marketplace.buttons.refresh') }}
               </v-btn>
@@ -536,6 +536,11 @@ export default {
   },
 
   computed: {
+    // 安全的搜索字符串
+    safeMarketplaceSearch() {
+      return this.marketplaceSearch || '';
+    },
+
     filteredTools() {
       if (!this.toolSearch) return this.tools;
 
@@ -570,19 +575,19 @@ export default {
       }
     },
 
-    // 过滤后的市场服务器
+    // 过滤后的市场服务器（服务端已处理搜索）
     filteredMarketplaceServers() {
-      if (!this.marketplaceSearch.trim()) {
-        return this.marketplaceServers;
-      }
-      
-      const searchTerm = this.marketplaceSearch.toLowerCase();
-      return this.marketplaceServers.filter(server => 
-        server.name.toLowerCase().includes(searchTerm) || 
-        (server.name_h && server.name_h.toLowerCase().includes(searchTerm)) ||
-        (server.description && server.description.toLowerCase().includes(searchTerm))
-      );
+      return this.marketplaceServers;
     },
+  },
+
+  watch: {
+    // 确保marketplaceSearch始终是字符串
+    marketplaceSearch(newVal) {
+      if (newVal === null || newVal === undefined) {
+        this.marketplaceSearch = '';
+      }
+    }
   },
 
   mounted() {
@@ -797,7 +802,7 @@ export default {
     // MCP 市场相关方法
 
     // 获取市场服务器列表
-    fetchMarketplaceServers(page = 1) {
+    fetchMarketplaceServers(page = 1, forceRefresh = false) {
       this.marketplaceLoading = true;
 
       // 构建请求参数
@@ -807,8 +812,13 @@ export default {
       };
 
       // 如果有搜索关键词，添加到请求参数
-      if (this.marketplaceSearch.trim()) {
-        params.search = this.marketplaceSearch.trim();
+      if (this.safeMarketplaceSearch.trim()) {
+        params.search = this.safeMarketplaceSearch.trim();
+      }
+
+      // 如果强制刷新，添加参数
+      if (forceRefresh) {
+        params.force_refresh = true;
       }
 
       axios.get('/api/tools/mcp/market', { params })
@@ -842,6 +852,7 @@ export default {
 
     // 切换分页
     changePage(page) {
+      this.currentMarketPage = page;
       this.fetchMarketplaceServers(page);
     },
 
@@ -912,6 +923,10 @@ export default {
 .tools-page {
   padding: 20px;
   padding-top: 8px;
+}
+
+.server-card {
+  background-color: rgba(var(--v-theme-primary), 0.05) !important;
 }
 
 .tool-chips {
