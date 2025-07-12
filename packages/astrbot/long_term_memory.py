@@ -135,7 +135,7 @@ class LongTermMemory:
             return
 
         if event.get_result() and event.get_result().is_llm_result():
-            final_message = f"[AstrBot/{datetime.datetime.now().strftime('%H:%M:%S')}]: {event.get_result().get_plain_text()}"
+            final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {event.get_result().get_plain_text()}"
             logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
             self.session_chats[event.unified_msg_origin].append(final_message)
             if len(self.session_chats[event.unified_msg_origin]) > self.max_cnt:
