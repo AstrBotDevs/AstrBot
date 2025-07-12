@@ -52,9 +52,13 @@
         <!-- 会话列表 -->
         <v-data-table
           :headers="headers"
-          :items="filteredSessions"
+          :items="paginatedSessions"
           :loading="loading"
-          :items-per-page="20"
+          :items-per-page="itemsPerPage"
+          :server-items-length="totalFilteredItems"
+          :page="currentPage"
+          @update:page="updatePage"
+          @update:items-per-page="updateItemsPerPage"
           class="elevation-0"
         >
           <!-- 会话信息 -->
@@ -242,21 +246,6 @@
             </v-switch>
           </template>
 
-          <!-- MCP启停 -->
-          <template v-slot:item.mcp_enabled="{ item }">
-            <v-switch
-              :model-value="item.mcp_enabled"
-              @update:model-value="(value) => updateMCP(item, value)"
-              :loading="item.updating"
-              :disabled="!item.session_enabled"
-              hide-details
-              density="compact"
-              color="info"
-              inset
-            >
-            </v-switch>
-          </template>
-
           <!-- 插件管理 -->
           <template v-slot:item.plugins="{ item }">
             <v-btn
@@ -284,15 +273,15 @@
     </v-card>
 
     <!-- 批量操作面板 -->
-    <v-card class="mt-4" v-if="availablePersonas.length > 0 || availableChatProviders.length > 0">
+    <v-card class="mt-4">
       <v-card-title class="bg-secondary text-white py-3 px-4">
         <v-icon color="white" class="me-2">mdi-cog-outline</v-icon>
         <span>{{ tm('batchOperations.title') }}</span>
       </v-card-title>
       
       <v-card-text class="pa-4">
-        <v-row>
-          <v-col cols="12" md="4" v-if="availablePersonas.length > 0">
+        <v-row class="justify-start align-center">
+          <v-col cols="2" v-if="availablePersonas.length > 0">
             <v-select
               v-model="batchPersona"
               :items="personaOptions"
@@ -302,10 +291,11 @@
               hide-details
               clearable
               variant="outlined"
+              density="compact"
             ></v-select>
           </v-col>
           
-          <v-col cols="12" md="4" v-if="availableChatProviders.length > 0">
+          <v-col cols="2" v-if="availableChatProviders.length > 0">
             <v-select
               v-model="batchChatProvider"
               :items="chatProviderOptions"
@@ -315,15 +305,75 @@
               hide-details
               clearable
               variant="outlined"
+              density="compact"
+            ></v-select>
+          </v-col>
+
+          <v-col cols="2">
+            <v-select
+              v-model="batchSttProvider"
+              :items="sttProviderOptions"
+              item-title="label"
+              item-value="value"
+              :label="tm('batchOperations.setSttProvider')"
+              hide-details
+              clearable
+              variant="outlined"
+              density="compact"
+              :disabled="availableSttProviders.length === 0"
+              :placeholder="availableSttProviders.length === 0 ? tm('batchOperations.noSttProvider') : ''"
+            ></v-select>
+          </v-col>
+
+          <v-col cols="2">
+            <v-select
+              v-model="batchTtsProvider"
+              :items="ttsProviderOptions"
+              item-title="label"
+              item-value="value"
+              :label="tm('batchOperations.setTtsProvider')"
+              hide-details
+              clearable
+              variant="outlined"
+              density="compact"
+              :disabled="availableTtsProviders.length === 0"
+              :placeholder="availableTtsProviders.length === 0 ? tm('batchOperations.noTtsProvider') : ''"
+            ></v-select>
+          </v-col>
+
+          <v-col cols="1.5">
+            <v-select
+              v-model="batchLlmStatus"
+              :items="[{label: tm('status.enabled'), value: true}, {label: tm('status.disabled'), value: false}]"
+              item-title="label"
+              item-value="value"
+              :label="tm('batchOperations.setLlmStatus')"
+              hide-details
+              clearable
+              variant="outlined"
+              density="compact"
+            ></v-select>
+          </v-col>
+
+          <v-col cols="1.5">
+            <v-select
+              v-model="batchTtsStatus"
+              :items="[{label: tm('status.enabled'), value: true}, {label: tm('status.disabled'), value: false}]"
+              item-title="label"
+              item-value="value"
+              :label="tm('batchOperations.setTtsStatus')"
+              hide-details
+              clearable
+              variant="outlined"
+              density="compact"
             ></v-select>
           </v-col>
           
-          <v-col cols="12" md="4">
+          <v-col cols="1">
             <v-btn
               color="primary"
-              block
               @click="applyBatchChanges"
-              :disabled="!batchPersona && !batchChatProvider"
+              :disabled="!batchPersona && !batchChatProvider && !batchSttProvider && !batchTtsProvider && batchLlmStatus === null && batchTtsStatus === null"
               :loading="batchUpdating"
             >
               {{ tm('buttons.apply') }}
@@ -484,6 +534,10 @@ export default {
       searchQuery: '',
       filterPlatform: null,
       
+      // 分页相关
+      currentPage: 1,
+      itemsPerPage: 20,
+      
       // 可用选项
       availablePersonas: [],
       availableChatProviders: [],
@@ -493,6 +547,10 @@ export default {
       // 批量操作
       batchPersona: null,
       batchChatProvider: null,
+      batchSttProvider: null,
+      batchTtsProvider: null,
+      batchLlmStatus: null,
+      batchTtsStatus: null,
       batchUpdating: false,
       
       // 插件管理
@@ -525,9 +583,59 @@ export default {
         { title: this.tm('table.headers.ttsProvider'), key: 'tts_provider', sortable: false, width: '150px' },
         { title: this.tm('table.headers.llmStatus'), key: 'llm_enabled', sortable: false, width: '120px' },
         { title: this.tm('table.headers.ttsStatus'), key: 'tts_enabled', sortable: false, width: '120px' },
-        { title: this.tm('table.headers.mcpStatus'), key: 'mcp_enabled', sortable: false, width: '120px' },
         { title: this.tm('table.headers.pluginManagement'), key: 'plugins', sortable: false, width: '120px' },
       ]
+    },
+    
+    // 懒加载过滤会话 - 只处理当前页面数据
+    paginatedSessions() {
+      // 先进行过滤
+      let filtered = this.sessions;
+      
+      // 搜索筛选
+      if (this.searchQuery) {
+        const query = this.searchQuery.toLowerCase();
+        filtered = filtered.filter(session => 
+          session.session_name.toLowerCase().includes(query) ||
+          session.platform.toLowerCase().includes(query) ||
+          session.persona_name?.toLowerCase().includes(query) ||
+          session.chat_provider_name?.toLowerCase().includes(query)
+        );
+      }
+      
+      // 平台筛选
+      if (this.filterPlatform) {
+        filtered = filtered.filter(session => session.platform === this.filterPlatform);
+      }
+      
+      // 计算分页
+      const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+      const endIndex = startIndex + this.itemsPerPage;
+      
+      return filtered.slice(startIndex, endIndex);
+    },
+    
+    // 计算过滤后的总数用于分页
+    totalFilteredItems() {
+      let filtered = this.sessions;
+      
+      // 搜索筛选
+      if (this.searchQuery) {
+        const query = this.searchQuery.toLowerCase();
+        filtered = filtered.filter(session => 
+          session.session_name.toLowerCase().includes(query) ||
+          session.platform.toLowerCase().includes(query) ||
+          session.persona_name?.toLowerCase().includes(query) ||
+          session.chat_provider_name?.toLowerCase().includes(query)
+        );
+      }
+      
+      // 平台筛选
+      if (this.filterPlatform) {
+        filtered = filtered.filter(session => session.platform === this.filterPlatform);
+      }
+      
+      return filtered.length;
     },
     filteredSessions() {
       let filtered = this.sessions;
@@ -738,28 +846,8 @@ export default {
       session.updating = false;
     },
     
-    async updateMCP(session, enabled) {
-      session.updating = true;
-      try {
-        const response = await axios.post('/api/session/update_mcp', {
-          session_id: session.session_id,
-          enabled: enabled
-        });
-        
-        if (response.data.status === 'ok') {
-          session.mcp_enabled = enabled;
-          this.showSuccess(this.tm('messages.mcpStatusSuccess', { status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') }));
-        } else {
-          this.showError(response.data.message || this.tm('messages.statusUpdateError'));
-        }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.statusUpdateError'));
-      }
-      session.updating = false;
-    },
-    
     async applyBatchChanges() {
-      if (!this.batchPersona && !this.batchChatProvider) {
+      if (!this.batchPersona && !this.batchChatProvider && !this.batchSttProvider && !this.batchTtsProvider && this.batchLlmStatus === null && this.batchTtsStatus === null) {
         return;
       }
       
@@ -767,7 +855,8 @@ export default {
       let successCount = 0;
       let errorCount = 0;
       
-      for (const session of this.filteredSessions) {
+      // 使用当前页面的会话数据而不是全部过滤后的会话
+      for (const session of this.paginatedSessions) {
         try {
           // 批量更新人格
           if (this.batchPersona) {
@@ -778,6 +867,30 @@ export default {
           // 批量更新 Chat Provider
           if (this.batchChatProvider) {
             await this.updateProvider(session, this.batchChatProvider, 'chat_completion');
+            successCount++;
+          }
+
+          // 批量更新 STT Provider
+          if (this.batchSttProvider) {
+            await this.updateProvider(session, this.batchSttProvider, 'speech_to_text');
+            successCount++;
+          }
+
+          // 批量更新 TTS Provider
+          if (this.batchTtsProvider) {
+            await this.updateProvider(session, this.batchTtsProvider, 'text_to_speech');
+            successCount++;
+          }
+
+          // 批量更新 LLM 状态
+          if (this.batchLlmStatus !== null) {
+            await this.updateLLM(session, this.batchLlmStatus);
+            successCount++;
+          }
+
+          // 批量更新 TTS 状态
+          if (this.batchTtsStatus !== null) {
+            await this.updateTTS(session, this.batchTtsStatus);
             successCount++;
           }
         } catch (error) {
@@ -796,6 +909,10 @@ export default {
       // 清空批量设置
       this.batchPersona = null;
       this.batchChatProvider = null;
+      this.batchSttProvider = null;
+      this.batchTtsProvider = null;
+      this.batchLlmStatus = null;
+      this.batchTtsStatus = null;
     },
     
     async openPluginManager(session) {
@@ -904,6 +1021,27 @@ export default {
       this.snackbarText = message;
       this.snackbarColor = 'error';
       this.snackbar = true;
+    },
+    
+    // 分页相关方法
+    updatePage(page) {
+      this.currentPage = page;
+    },
+    
+    updateItemsPerPage(itemsPerPage) {
+      this.itemsPerPage = itemsPerPage;
+      this.currentPage = 1; // 重置到第一页
+    },
+  },
+  
+  watch: {
+    // 监听搜索和筛选变化，重置页码
+    searchQuery() {
+      this.currentPage = 1;
+    },
+    
+    filterPlatform() {
+      this.currentPage = 1;
     },
   }
 }

@@ -29,7 +29,6 @@ class SessionManagementRoute(Route):
             "/session/update_plugin": ("POST", self.update_session_plugin),
             "/session/update_llm": ("POST", self.update_session_llm),
             "/session/update_tts": ("POST", self.update_session_tts),
-            "/session/update_mcp": ("POST", self.update_session_mcp),
             "/session/update_name": ("POST", self.update_session_name),
             "/session/update_status": ("POST", self.update_session_status),
         }
@@ -74,9 +73,6 @@ class SessionManagementRoute(Route):
                         session_id
                     ),
                     "tts_enabled": SessionServiceManager.is_tts_enabled_for_session(
-                        session_id
-                    ),
-                    "mcp_enabled": SessionServiceManager.is_mcp_enabled_for_session(
                         session_id
                     ),
                     "platform": session_id.split(":")[0]
@@ -345,9 +341,6 @@ class SessionManagementRoute(Route):
                     session_id
                 ),
                 "tts_enabled": None,  # 将在下面设置
-                "mcp_enabled": SessionServiceManager.is_mcp_enabled_for_session(
-                    session_id
-                ),
                 "platform": session_id.split(":")[0]
                 if ":" in session_id
                 else "unknown",
@@ -612,39 +605,6 @@ class SessionManagementRoute(Route):
             error_msg = f"更新会话TTS状态失败: {str(e)}\n{traceback.format_exc()}"
             logger.error(error_msg)
             return Response().error(f"更新会话TTS状态失败: {str(e)}").__dict__
-
-    async def update_session_mcp(self):
-        """更新指定会话的MCP启停状态"""
-        try:
-            data = await request.get_json()
-            session_id = data.get("session_id")
-            enabled = data.get("enabled")
-
-            if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
-
-            if enabled is None:
-                return Response().error("缺少必要参数: enabled").__dict__
-
-            # 使用 SessionServiceManager 更新MCP状态
-            SessionServiceManager.set_mcp_status_for_session(session_id, enabled)
-
-            return (
-                Response()
-                .ok(
-                    {
-                        "message": f"MCP工具调用已{'启用' if enabled else '禁用'}",
-                        "session_id": session_id,
-                        "mcp_enabled": enabled,
-                    }
-                )
-                .__dict__
-            )
-
-        except Exception as e:
-            error_msg = f"更新会话MCP状态失败: {str(e)}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"更新会话MCP状态失败: {str(e)}").__dict__
 
     async def update_session_name(self):
         """更新指定会话的自定义名称"""

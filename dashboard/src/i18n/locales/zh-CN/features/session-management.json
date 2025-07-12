@@ -29,7 +29,6 @@
       "ttsProvider": "TTS Provider",
       "llmStatus": "LLM启停",
       "ttsStatus": "TTS启停",
-      "mcpStatus": "MCP启停",
       "pluginManagement": "插件管理"
     }
   },
@@ -43,7 +42,13 @@
   "batchOperations": {
     "title": "批量操作",
     "setPersona": "批量设置人格",
-    "setChatProvider": "批量设置 Chat Provider"
+    "setChatProvider": "批量设置 Chat Provider",
+    "setSttProvider": "批量设置 STT Provider",
+    "setTtsProvider": "批量设置 TTS Provider",
+    "setLlmStatus": "批量设置 LLM 状态",
+    "setTtsStatus": "批量设置 TTS 状态",
+    "noSttProvider": "暂无可用 STT Provider",
+    "noTtsProvider": "暂无可用 TTS Provider"
   },
   "pluginManagement": {
     "title": "插件管理",
@@ -69,7 +74,6 @@
     "sessionStatusSuccess": "会话 {status}",
     "llmStatusSuccess": "LLM {status}",
     "ttsStatusSuccess": "TTS {status}",
-    "mcpStatusSuccess": "MCP {status}",
     "statusUpdateError": "状态更新失败",
     "loadSessionsError": "加载会话列表失败",
     "batchUpdateSuccess": "成功批量更新 {count} 项设置",

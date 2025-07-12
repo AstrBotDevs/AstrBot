@@ -29,7 +29,6 @@
       "ttsProvider": "TTS Provider",
       "llmStatus": "LLM Status",
       "ttsStatus": "TTS Status",
-      "mcpStatus": "MCP Status",
       "pluginManagement": "Plugin Management"
     }
   },
@@ -43,7 +42,13 @@
   "batchOperations": {
     "title": "Batch Operations",
     "setPersona": "Batch Set Persona",
-    "setChatProvider": "Batch Set Chat Provider"
+    "setChatProvider": "Batch Set Chat Provider",
+    "setSttProvider": "Batch Set STT Provider",
+    "setTtsProvider": "Batch Set TTS Provider",
+    "setLlmStatus": "Batch Set LLM Status",
+    "setTtsStatus": "Batch Set TTS Status",
+    "noSttProvider": "No STT Provider Available",
+    "noTtsProvider": "No TTS Provider Available"
   },
   "pluginManagement": {
     "title": "Plugin Management",
@@ -69,7 +74,6 @@
     "sessionStatusSuccess": "Session {status}",
     "llmStatusSuccess": "LLM {status}",
     "ttsStatusSuccess": "TTS {status}",
-    "mcpStatusSuccess": "MCP {status}",
     "statusUpdateError": "Failed to update status",
     "loadSessionsError": "Failed to load session list",
     "batchUpdateSuccess": "Successfully batch updated {count} settings",
