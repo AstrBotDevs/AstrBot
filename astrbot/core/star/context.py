@@ -2,7 +2,7 @@ from asyncio import Queue
 from typing import List, Union
 
 from astrbot.core import sp
-from astrbot.core.provider.provider import Provider, TTSProvider, STTProvider
+from astrbot.core.provider.provider import Provider, TTSProvider, STTProvider, EmbeddingProvider
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -140,6 +140,10 @@ class Context:
     def get_all_stt_providers(self) -> List[STTProvider]:
         """获取所有用于 STT 任务的 Provider。"""
         return self.provider_manager.stt_provider_insts
+
+    def get_all_embedding_providers(self) -> List[EmbeddingProvider]:
+        """获取所有用于 Embedding 任务的 Provider。"""
+        return self.provider_manager.embedding_provider_insts
 
     def get_using_provider(self, umo: str = None) -> Provider:
         """
