@@ -8,6 +8,8 @@ import base64
 import zipfile
 import uuid
 import psutil
+import re
+from urllib.parse import urlparse, urlunparse
 
 import certifi
 
@@ -51,6 +53,9 @@ def port_checker(port: int, host: str = "localhost"):
 
 def save_temp_img(img: Union[Image.Image, str]) -> str:
     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+    # 确保临时目录存在
+    os.makedirs(temp_dir, exist_ok=True)
+    
     # 获得文件创建时间，清除超过 12 小时的
     try:
         for f in os.listdir(temp_dir):
@@ -74,12 +79,57 @@ def save_temp_img(img: Union[Image.Image, str]) -> str:
     return p
 
 
+def clean_url(url: str) -> str:
+    # 特殊处理：修复协议后的多余斜杠
+    if url.startswith("https:////") or url.startswith("http:////"):
+        # 直接替换为正确的协议格式
+        url = url.replace(":////", "://", 1)
+    
+    # 更健壮的多余斜杠处理
+    # 处理协议部分（如https://// -> https://）
+    url = re.sub(r'(?<!:)(/{2,})', '/', url)  # 替换所有连续斜杠为单斜杠
+    url = re.sub(r'(https?):/([^/])', r'\1://\2', url)  # 修复协议分隔符
+    
+    # 特殊处理以//开头的URL（无协议情况）
+    if url.startswith('//'):
+        url = 'https:' + url
+    
+    # 处理可能存在的其他问题
+    # 确保URL有正确的协议前缀
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url.lstrip('/')
+    
+    # 确保路径中不包含多余斜杠
+    try:
+        parsed = urlparse(url)
+        clean_path = re.sub(r'/{2,}', '/', parsed.path)
+        url = urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            clean_path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment
+        ))
+    except Exception:
+        # 如果解析失败，使用备用方案
+        url = re.sub(r'/{2,}', '/', url)
+    
+    return url
+
+
 async def download_image_by_url(
     url: str, post: bool = False, post_data: dict = None, path=None
 ) -> str:
     """
     下载图片, 返回 path
     """
+    # 清洗URL解决无效格式问题
+    original_url = url
+    url = clean_url(url)
+    
+    print(f"下载图片: 原始URL={original_url}, 清洗后URL={url}")  # 调试信息
+    
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where()
@@ -116,6 +166,7 @@ async def download_image_by_url(
                 async with session.get(url, ssl=ssl_context) as resp:
                     return save_temp_img(await resp.read())
     except Exception as e:
+        print(f"下载图片失败: URL={url}, 错误={e}")
         raise e
 
 
