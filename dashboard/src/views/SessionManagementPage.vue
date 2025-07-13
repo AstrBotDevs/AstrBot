@@ -52,13 +52,9 @@
         <!-- 会话列表 -->
         <v-data-table
           :headers="headers"
-          :items="paginatedSessions"
+          :items="filteredSessions"
           :loading="loading"
           :items-per-page="itemsPerPage"
-          :server-items-length="totalFilteredItems"
-          :page="currentPage"
-          @update:page="updatePage"
-          @update:items-per-page="updateItemsPerPage"
           class="elevation-0"
         >
           <!-- 会话信息 -->
@@ -535,7 +531,6 @@ export default {
       filterPlatform: null,
       
       // 分页相关
-      currentPage: 1,
       itemsPerPage: 20,
       
       // 可用选项
@@ -587,56 +582,7 @@ export default {
       ]
     },
     
-    // 懒加载过滤会话 - 只处理当前页面数据
-    paginatedSessions() {
-      // 先进行过滤
-      let filtered = this.sessions;
-      
-      // 搜索筛选
-      if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase();
-        filtered = filtered.filter(session => 
-          session.session_name.toLowerCase().includes(query) ||
-          session.platform.toLowerCase().includes(query) ||
-          session.persona_name?.toLowerCase().includes(query) ||
-          session.chat_provider_name?.toLowerCase().includes(query)
-        );
-      }
-      
-      // 平台筛选
-      if (this.filterPlatform) {
-        filtered = filtered.filter(session => session.platform === this.filterPlatform);
-      }
-      
-      // 计算分页
-      const startIndex = (this.currentPage - 1) * this.itemsPerPage;
-      const endIndex = startIndex + this.itemsPerPage;
-      
-      return filtered.slice(startIndex, endIndex);
-    },
-    
-    // 计算过滤后的总数用于分页
-    totalFilteredItems() {
-      let filtered = this.sessions;
-      
-      // 搜索筛选
-      if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase();
-        filtered = filtered.filter(session => 
-          session.session_name.toLowerCase().includes(query) ||
-          session.platform.toLowerCase().includes(query) ||
-          session.persona_name?.toLowerCase().includes(query) ||
-          session.chat_provider_name?.toLowerCase().includes(query)
-        );
-      }
-      
-      // 平台筛选
-      if (this.filterPlatform) {
-        filtered = filtered.filter(session => session.platform === this.filterPlatform);
-      }
-      
-      return filtered.length;
-    },
+    // 懒加载过滤会话 - 使用客户端分页
     filteredSessions() {
       let filtered = this.sessions;
       
@@ -855,8 +801,8 @@ export default {
       let successCount = 0;
       let errorCount = 0;
       
-      // 使用当前页面的会话数据而不是全部过滤后的会话
-      for (const session of this.paginatedSessions) {
+      // 使用过滤后的会话数据进行批量操作
+      for (const session of this.filteredSessions) {
         try {
           // 批量更新人格
           if (this.batchPersona) {
@@ -1022,28 +968,7 @@ export default {
       this.snackbarColor = 'error';
       this.snackbar = true;
     },
-    
-    // 分页相关方法
-    updatePage(page) {
-      this.currentPage = page;
-    },
-    
-    updateItemsPerPage(itemsPerPage) {
-      this.itemsPerPage = itemsPerPage;
-      this.currentPage = 1; // 重置到第一页
-    },
   },
-  
-  watch: {
-    // 监听搜索和筛选变化，重置页码
-    searchQuery() {
-      this.currentPage = 1;
-    },
-    
-    filterPlatform() {
-      this.currentPage = 1;
-    },
-  }
 }
 </script>
 
