@@ -171,14 +171,33 @@
                                     </div>
                                 </div>
 
-                                <!-- 机器人消息 -->
+                                <!-- Bot Messages -->
                                 <div v-else class="bot-message">
                                     <v-avatar class="bot-avatar" size="36">
                                         <span class="text-h2">✨</span>
                                     </v-avatar>
                                     <div class="bot-message-content">
                                         <div class="message-bubble bot-bubble">
-                                            <div v-html="md.render(msg.message)" class="markdown-content"></div>
+                                            <!-- Text -->
+                                            <div v-if="msg.message && msg.message.trim()" 
+                                                 v-html="md.render(msg.message)" 
+                                                 class="markdown-content"></div>
+                                            
+                                            <!-- Image -->
+                                            <div class="embedded-images" v-if="msg.embedded_images && msg.embedded_images.length > 0">
+                                                <div v-for="(img, imgIndex) in msg.embedded_images" :key="imgIndex"
+                                                     class="embedded-image">
+                                                    <img :src="img" class="bot-embedded-image" @click="openImagePreview(img)" />
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Audio -->
+                                            <div class="embedded-audio" v-if="msg.embedded_audio">
+                                                <audio controls class="audio-player">
+                                                    <source :src="msg.embedded_audio" type="audio/wav">
+                                                    {{ t('messages.errors.browser.audioNotSupported') }}
+                                                </audio>
+                                            </div>
                                         </div>
                                         <div class="message-actions">
                                             <v-btn :icon="getCopyIcon(index)" size="small" variant="text"
@@ -716,7 +735,6 @@ export default {
                 }
             }
 
-
             axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
                 this.currCid = cid[0];
                 let message = JSON.parse(response.data.data.history);
@@ -724,21 +742,26 @@ export default {
                     if (message[i].message.startsWith('[IMAGE]')) {
                         let img = message[i].message.replace('[IMAGE]', '');
                         const imageUrl = await this.getMediaFile(img);
-                        message[i].message = `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                        if (!message[i].embedded_images) {
+                            message[i].embedded_images = [];
+                        }
+                        message[i].embedded_images.push(imageUrl);
+                        message[i].message = ''; // 清空message，避免显示标记文本
                     }
+                    
                     if (message[i].message.startsWith('[RECORD]')) {
                         let audio = message[i].message.replace('[RECORD]', '');
                         const audioUrl = await this.getMediaFile(audio);
-                        message[i].message = `<audio controls class="audio-player">
-                                    <source src="${audioUrl}" type="audio/wav">
-                                    ${this.t('messages.errors.browser.audioNotSupported')}
-                                  </audio>`
+                        message[i].embedded_audio = audioUrl;
+                        message[i].message = ''; // 清空message，避免显示标记文本
                     }
+                    
                     if (message[i].image_url && message[i].image_url.length > 0) {
                         for (let j = 0; j < message[i].image_url.length; j++) {
                             message[i].image_url[j] = await this.getMediaFile(message[i].image_url[j]);
                         }
                     }
+                    
                     if (message[i].audio_url) {
                         message[i].audio_url = await this.getMediaFile(message[i].audio_url);
                     }
@@ -924,9 +947,6 @@ export default {
                                 continue;
                             }
 
-                            if (chunk_json.type === 'heartbeat') {
-                                continue; // 心跳包
-                            }
                             if (chunk_json.type === 'error') {
                                 console.error('Error received:', chunk_json.data);
                                 continue;
@@ -937,7 +957,8 @@ export default {
                                 const imageUrl = await this.getMediaFile(img);
                                 let bot_resp = {
                                     type: 'bot',
-                                    message: `<img src="${imageUrl}" style="max-width: 80%; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);"/>`
+                                    message: '',
+                                    embedded_images: [imageUrl]
                                 }
                                 this.messages.push(bot_resp);
                             } else if (chunk_json.type === 'record') {
@@ -945,10 +966,8 @@ export default {
                                 const audioUrl = await this.getMediaFile(audio);
                                 let bot_resp = {
                                     type: 'bot',
-                                    message: `<audio controls class="audio-player">
-                                        <source src="${audioUrl}" type="audio/wav">
-                                        ${this.t('messages.errors.browser.audioNotSupported')}
-                                      </audio>`
+                                    message: '',
+                                    embedded_audio: audioUrl
                                 }
                                 this.messages.push(bot_resp);
                             } else if (chunk_json.type === 'plain') {
@@ -962,20 +981,19 @@ export default {
                                 } else {
                                     message_obj.message.value += chunk_json.data;
                                 }
-                            } else if (chunk_json.type === 'end') {
-                                in_streaming = false;
-                                // 在消息流结束后初始化代码复制按钮和图片点击事件
-                                this.initCodeCopyButtons();
-                                this.initImageClickEvents();
-                                continue;
                             } else if (chunk_json.type === 'update_title') {
                                 // 更新对话标题
                                 const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
                                 if (conversation) {
                                     conversation.title = chunk_json.data;
                                 }
-                            } else {
-                                console.warn('未知数据类型:', chunk_json.type);
+                            }
+                            if ((chunk_json.type === 'break' && chunk_json.streaming) || !chunk_json.streaming) {
+                                // break means a segment end
+                                in_streaming = false;
+                                // 在消息流结束后初始化代码复制按钮和图片点击事件
+                                this.initCodeCopyButtons();
+                                this.initImageClickEvents();
                             }
                             this.scrollToBottom();
                         }
@@ -1077,19 +1095,43 @@ export default {
 
         // 复制bot消息到剪贴板
         copyBotMessage(message, messageIndex) {
-            // 移除HTML标签，获取纯文本
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = message;
-            const plainText = tempDiv.textContent || tempDiv.innerText || message;
+            // 获取对应的消息对象
+            const msgObj = this.messages[messageIndex];
+            let textToCopy = '';
+            
+            // 如果有文本消息，添加到复制内容中
+            if (message && message.trim()) {
+                // 移除HTML标签，获取纯文本
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = message;
+                textToCopy = tempDiv.textContent || tempDiv.innerText || message;
+            }
+            
+            // 如果有内嵌图片，添加说明
+            if (msgObj && msgObj.embedded_images && msgObj.embedded_images.length > 0) {
+                if (textToCopy) textToCopy += '\n\n';
+                textToCopy += `[包含 ${msgObj.embedded_images.length} 张图片]`;
+            }
+            
+            // 如果有内嵌音频，添加说明
+            if (msgObj && msgObj.embedded_audio) {
+                if (textToCopy) textToCopy += '\n\n';
+                textToCopy += '[包含音频内容]';
+            }
+            
+            // 如果没有任何内容，使用默认文本
+            if (!textToCopy.trim()) {
+                textToCopy = '[媒体内容]';
+            }
 
-            navigator.clipboard.writeText(plainText).then(() => {
+            navigator.clipboard.writeText(textToCopy).then(() => {
                 console.log('消息已复制到剪贴板');
                 this.showCopySuccess(messageIndex);
             }).catch(err => {
                 console.error('复制失败:', err);
                 // 如果现代API失败，使用传统方法
                 const textArea = document.createElement('textarea');
-                textArea.value = plainText;
+                textArea.value = textToCopy;
                 document.body.appendChild(textArea);
                 textArea.select();
                 try {
@@ -1919,5 +1961,40 @@ export default {
     width: 100%;
     padding-right: 32px;
     flex-shrink: 0;
+}
+
+.embedded-images {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.embedded-image {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.bot-embedded-image {
+    max-width: 80%;
+    width: auto;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.bot-embedded-image:hover {
+    transform: scale(1.02);
+}
+
+.embedded-audio {
+    margin-top: 8px;
+}
+
+.embedded-audio .audio-player {
+    width: 100%;
+    max-width: 300px;
 }
 </style>

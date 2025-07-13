@@ -7,7 +7,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db import BaseDatabase
 
 from .entities import ProviderType
-from .provider import Personality, Provider, STTProvider, TTSProvider
+from .provider import Personality, Provider, STTProvider, TTSProvider, EmbeddingProvider
 from .register import llm_tools, provider_cls_map
 
 
@@ -93,7 +93,7 @@ class ProviderManager:
         """加载的 Speech To Text Provider 的实例"""
         self.tts_provider_insts: List[TTSProvider] = []
         """加载的 Text To Speech Provider 的实例"""
-        self.embedding_provider_insts: List[Provider] = []
+        self.embedding_provider_insts: List[EmbeddingProvider] = []
         """加载的 Embedding Provider 的实例"""
         self.inst_map: dict[str, Provider] = {}
         """Provider 实例映射. key: provider_id, value: Provider 实例"""

@@ -6,7 +6,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.19"
+VERSION = "3.5.22"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
@@ -318,8 +318,7 @@ CONFIG_METADATA_2 = {
                     "id": {
                         "description": "机器人名称",
                         "type": "string",
-                        "obvious_hint": True,
-                        "hint": "机器人名称(ID)不能和其它的平台适配器重复。",
+                        "hint": "机器人名称",
                     },
                     "type": {
                         "description": "适配器类型",
@@ -370,7 +369,6 @@ CONFIG_METADATA_2 = {
                         "description": "飞书机器人的名字",
                         "type": "string",
                         "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
-                        "obvious_hint": True,
                     },
                     "discord_token": {
                         "description": "Discord Bot Token",
@@ -486,13 +484,11 @@ CONFIG_METADATA_2 = {
                             "regex": {
                                 "description": "正则表达式",
                                 "type": "string",
-                                "obvious_hint": True,
                                 "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。re.findall(r'<regex>', text)",
                             },
                             "content_cleanup_rule": {
                                 "description": "过滤分段后的内容",
                                 "type": "string",
-                                "obvious_hint": True,
                                 "hint": "移除分段后的内容中的指定的内容。支持正则表达式。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.sub(r'<regex>', '', text)",
                             },
                         },
@@ -515,7 +511,6 @@ CONFIG_METADATA_2 = {
                         "description": "ID 白名单",
                         "type": "list",
                         "items": {"type": "string"},
-                        "obvious_hint": True,
                         "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可使用 /wl 添加白名单",
                     },
                     "id_whitelist_log": {
@@ -545,7 +540,6 @@ CONFIG_METADATA_2 = {
                         "description": "路径映射",
                         "type": "list",
                         "items": {"type": "string"},
-                        "obvious_hint": True,
                         "hint": "此功能解决由于文件系统不一致导致路径不存在的问题。格式为 <原路径>:<映射路径>。如 `/app/.config/QQ:/var/lib/docker/volumes/xxxx/_data`。这样，当消息平台下发的事件中图片和语音路径以 `/app/.config/QQ` 开头时，开头被替换为 `/var/lib/docker/volumes/xxxx/_data`。这在 AstrBot 或者平台协议端使用 Docker 部署时特别有用。",
                     },
                 },
@@ -605,6 +599,7 @@ CONFIG_METADATA_2 = {
                 "config_template": {
                     "OpenAI": {
                         "id": "openai",
+                        "provider": "openai",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -617,6 +612,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Azure OpenAI": {
                         "id": "azure",
+                        "provider": "azure",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -630,6 +626,7 @@ CONFIG_METADATA_2 = {
                     },
                     "xAI": {
                         "id": "xai",
+                        "provider": "xai",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -642,6 +639,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Anthropic": {
                         "id": "claude",
+                        "provider": "anthropic",
                         "type": "anthropic_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -655,6 +653,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Ollama": {
                         "id": "ollama_default",
+                        "provider": "ollama",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -666,6 +665,7 @@ CONFIG_METADATA_2 = {
                     },
                     "LM Studio": {
                         "id": "lm_studio",
+                        "provider": "lm_studio",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -677,6 +677,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Gemini(OpenAI兼容)": {
                         "id": "gemini_default",
+                        "provider": "google",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -689,6 +690,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Gemini": {
                         "id": "gemini_default",
+                        "provider": "google",
                         "type": "googlegenai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -714,6 +716,7 @@ CONFIG_METADATA_2 = {
                     },
                     "DeepSeek": {
                         "id": "deepseek_default",
+                        "provider": "deepseek",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -726,6 +729,7 @@ CONFIG_METADATA_2 = {
                     },
                     "302.AI": {
                         "id": "302ai",
+                        "provider": "302ai",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -738,6 +742,7 @@ CONFIG_METADATA_2 = {
                     },
                     "硅基流动": {
                         "id": "siliconflow",
+                        "provider": "siliconflow",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -750,6 +755,7 @@ CONFIG_METADATA_2 = {
                     },
                     "PPIO派欧云": {
                         "id": "ppio",
+                        "provider": "ppio",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -762,6 +768,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Kimi": {
                         "id": "moonshot",
+                        "provider": "moonshot",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -774,6 +781,7 @@ CONFIG_METADATA_2 = {
                     },
                     "智谱 AI": {
                         "id": "zhipu_default",
+                        "provider": "zhipu",
                         "type": "zhipu_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -786,6 +794,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Dify": {
                         "id": "dify_app_default",
+                        "provider": "dify",
                         "type": "dify",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -799,6 +808,7 @@ CONFIG_METADATA_2 = {
                     },
                     "阿里云百炼应用": {
                         "id": "dashscope",
+                        "provider": "dashscope",
                         "type": "dashscope",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -815,6 +825,7 @@ CONFIG_METADATA_2 = {
                     },
                     "FastGPT": {
                         "id": "fastgpt",
+                        "provider": "fastgpt",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -824,6 +835,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Whisper(API)": {
                         "id": "whisper",
+                        "provider": "openai",
                         "type": "openai_whisper_api",
                         "provider_type": "speech_to_text",
                         "enable": False,
@@ -833,15 +845,17 @@ CONFIG_METADATA_2 = {
                     },
                     "Whisper(本地加载)": {
                         "whisper_hint": "(不用修改我)",
+                        "provider": "openai",
                         "type": "openai_whisper_selfhost",
                         "provider_type": "speech_to_text",
                         "enable": False,
-                        "id": "whisper",
+                        "id": "whisper_selfhost",
                         "model": "tiny",
                     },
                     "SenseVoice(本地加载)": {
                         "sensevoice_hint": "(不用修改我)",
                         "type": "sensevoice_stt_selfhost",
+                        "provider": "sensevoice",
                         "provider_type": "speech_to_text",
                         "enable": False,
                         "id": "sensevoice",
@@ -851,6 +865,7 @@ CONFIG_METADATA_2 = {
                     "OpenAI TTS(API)": {
                         "id": "openai_tts",
                         "type": "openai_tts_api",
+                        "provider": "openai",
                         "provider_type": "text_to_speech",
                         "enable": False,
                         "api_key": "",
@@ -862,6 +877,7 @@ CONFIG_METADATA_2 = {
                     "Edge TTS": {
                         "edgetts_hint": "提示：使用这个服务前需要安装有 ffmpeg，并且可以直接在终端调用 ffmpeg 指令。",
                         "id": "edge_tts",
+                        "provider": "microsoft",
                         "type": "edge_tts",
                         "provider_type": "text_to_speech",
                         "enable": False,
@@ -871,6 +887,7 @@ CONFIG_METADATA_2 = {
                     "GSV TTS(本地加载)": {
                         "id": "gsv_tts",
                         "enable": False,
+                        "provider": "gpt_sovits",
                         "type": "gsv_tts_selfhost",
                         "provider_type": "text_to_speech",
                         "api_base": "http://127.0.0.1:9880",
@@ -902,6 +919,7 @@ CONFIG_METADATA_2 = {
                     "GSVI TTS(API)": {
                         "id": "gsvi_tts",
                         "type": "gsvi_tts_api",
+                        "provider": "gpt_sovits_inference",
                         "provider_type": "text_to_speech",
                         "api_base": "http://127.0.0.1:5000",
                         "character": "",
@@ -911,6 +929,7 @@ CONFIG_METADATA_2 = {
                     },
                     "FishAudio TTS(API)": {
                         "id": "fishaudio_tts",
+                        "provider": "fishaudio",
                         "type": "fishaudio_tts_api",
                         "provider_type": "text_to_speech",
                         "enable": False,
@@ -921,6 +940,7 @@ CONFIG_METADATA_2 = {
                     },
                     "阿里云百炼 TTS(API)": {
                         "id": "dashscope_tts",
+                        "provider": "dashscope",
                         "type": "dashscope_tts",
                         "provider_type": "text_to_speech",
                         "enable": False,
@@ -932,6 +952,7 @@ CONFIG_METADATA_2 = {
                     "Azure TTS": {
                         "id": "azure_tts",
                         "type": "azure_tts",
+                        "provider": "azure",
                         "provider_type": "text_to_speech",
                         "enable": True,
                         "azure_tts_voice": "zh-CN-YunxiaNeural",
@@ -945,6 +966,7 @@ CONFIG_METADATA_2 = {
                     "MiniMax TTS(API)": {
                         "id": "minimax_tts",
                         "type": "minimax_tts_api",
+                        "provider": "minimax",
                         "provider_type": "text_to_speech",
                         "enable": False,
                         "api_key": "",
@@ -966,6 +988,7 @@ CONFIG_METADATA_2 = {
                     "火山引擎_TTS(API)": {
                         "id": "volcengine_tts",
                         "type": "volcengine_tts",
+                        "provider": "volcengine",
                         "provider_type": "text_to_speech",
                         "enable": False,
                         "api_key": "",
@@ -979,6 +1002,7 @@ CONFIG_METADATA_2 = {
                     "Gemini TTS": {
                         "id": "gemini_tts",
                         "type": "gemini_tts",
+                        "provider": "google",
                         "provider_type": "text_to_speech",
                         "enable": False,
                         "gemini_tts_api_key": "",
@@ -991,6 +1015,7 @@ CONFIG_METADATA_2 = {
                     "OpenAI Embedding": {
                         "id": "openai_embedding",
                         "type": "openai_embedding",
+                        "provider": "openai",
                         "provider_type": "embedding",
                         "enable": True,
                         "embedding_api_key": "",
@@ -1002,6 +1027,7 @@ CONFIG_METADATA_2 = {
                     "Gemini Embedding": {
                         "id": "gemini_embedding",
                         "type": "gemini_embedding",
+                        "provider": "google",
                         "provider_type": "embedding",
                         "enable": True,
                         "embedding_api_key": "",
@@ -1012,17 +1038,19 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "provider": {
+                        "type": "string",
+                        "invisible": True,
+                    },
                     "gpt_weights_path": {
                         "description": "GPT模型文件路径",
                         "type": "string",
                         "hint": "即“.ckpt”后缀的文件，请使用绝对路径，路径两端不要带双引号，不填则默认用GPT_SoVITS内置的SoVITS模型(建议直接在GPT_SoVITS中改默认模型)",
-                        "obvious_hint": True,
                     },
                     "sovits_weights_path": {
                         "description": "SoVITS模型文件路径",
                         "type": "string",
                         "hint": "即“.pth”后缀的文件，请使用绝对路径，路径两端不要带双引号，不填则默认用GPT_SoVITS内置的SoVITS模型(建议直接在GPT_SoVITS中改默认模型)",
-                        "obvious_hint": True,
                     },
                     "gsv_default_parms": {
                         "description": "GPT_SoVITS默认参数",
@@ -1033,13 +1061,11 @@ CONFIG_METADATA_2 = {
                                 "description": "参考音频文件路径",
                                 "type": "string",
                                 "hint": "必填！请使用绝对路径！路径两端不要带双引号！",
-                                "obvious_hint": True,
                             },
                             "gsv_prompt_text": {
                                 "description": "参考音频文本",
                                 "type": "string",
                                 "hint": "必填！请填写参考音频讲述的文本",
-                                "obvious_hint": True,
                             },
                             "gsv_prompt_lang": {
                                 "description": "参考音频文本语言",
@@ -1266,19 +1292,16 @@ CONFIG_METADATA_2 = {
                         "description": "启用原生搜索功能",
                         "type": "bool",
                         "hint": "启用后所有函数工具将全部失效，免费次数限制请查阅官方文档",
-                        "obvious_hint": True,
                     },
                     "gm_native_coderunner": {
                         "description": "启用原生代码执行器",
                         "type": "bool",
                         "hint": "启用后所有函数工具将全部失效",
-                        "obvious_hint": True,
                     },
                     "gm_url_context": {
                         "description": "启用URL上下文功能",
                         "type": "bool",
                         "hint": "启用后所有函数工具将全部失效",
-                        "obvious_hint": True,
                     },
                     "gm_safety_settings": {
                         "description": "安全过滤器",
@@ -1462,7 +1485,6 @@ CONFIG_METADATA_2 = {
                         "description": "部署SenseVoice",
                         "type": "string",
                         "hint": "启用前请 pip 安装 funasr、funasr_onnx、torchaudio、torch、modelscope、jieba 库（默认使用CPU，大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
-                        "obvious_hint": True,
                     },
                     "is_emotion": {
                         "description": "情绪识别",
@@ -1477,18 +1499,10 @@ CONFIG_METADATA_2 = {
                     "variables": {
                         "description": "工作流固定输入变量",
                         "type": "object",
-                        "obvious_hint": True,
                         "items": {},
                         "hint": "可选。工作流固定输入变量，将会作为工作流的输入。也可以在对话时使用 /set 指令动态设置变量。如果变量名冲突，优先使用动态设置的变量。",
                         "invisible": True,
                     },
-                    # "fastgpt_app_type": {
-                    #     "description": "应用类型",
-                    #     "type": "string",
-                    #     "hint": "FastGPT 应用的应用类型。",
-                    #     "options": ["agent", "workflow", "plugin"],
-                    #     "obvious_hint": True,
-                    # },
                     "dashscope_app_type": {
                         "description": "应用类型",
                         "type": "string",
@@ -1499,7 +1513,6 @@ CONFIG_METADATA_2 = {
                             "dialog-workflow",
                             "task-workflow",
                         ],
-                        "obvious_hint": True,
                     },
                     "timeout": {
                         "description": "超时时间",
@@ -1509,26 +1522,22 @@ CONFIG_METADATA_2 = {
                     "openai-tts-voice": {
                         "description": "voice",
                         "type": "string",
-                        "obvious_hint": True,
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
                     },
                     "fishaudio-tts-character": {
                         "description": "character",
                         "type": "string",
-                        "obvious_hint": True,
                         "hint": "fishaudio TTS 的角色。默认为可莉。更多角色请访问：https://fish.audio/zh-CN/discovery",
                     },
                     "whisper_hint": {
                         "description": "本地部署 Whisper 模型须知",
                         "type": "string",
                         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
-                        "obvious_hint": True,
                     },
                     "id": {
                         "description": "ID",
                         "type": "string",
-                        "obvious_hint": True,
-                        "hint": "ID 不能和其它的服务提供商重复，否则将发生严重冲突。",
+                        "hint": "模型提供商名字。",
                     },
                     "type": {
                         "description": "模型提供商种类",
@@ -1543,53 +1552,27 @@ CONFIG_METADATA_2 = {
                     "enable": {
                         "description": "启用",
                         "type": "bool",
-                        "hint": "是否启用该模型。未启用的模型将不会被使用。",
+                        "hint": "是否启用。",
                     },
                     "key": {
                         "description": "API Key",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "API Key 列表。填写好后输入回车即可添加 API Key。支持多个 API Key。",
+                        "hint": "提供商 API Key。",
                     },
                     "api_base": {
                         "description": "API Base URL",
                         "type": "string",
-                        "hint": "API Base URL 请在在模型提供商处获得。如出现 404 报错，尝试在地址末尾加上 /v1",
-                        "obvious_hint": True,
-                    },
-                    "base_model_path": {
-                        "description": "基座模型路径",
-                        "type": "string",
-                        "hint": "基座模型路径。",
-                    },
-                    "adapter_model_path": {
-                        "description": "Adapter 模型路径",
-                        "type": "string",
-                        "hint": "Adapter 模型路径。如 Lora",
-                    },
-                    "llmtuner_template": {
-                        "description": "template",
-                        "type": "string",
-                        "hint": "基座模型的类型。如 llama3, qwen, 请参考 LlamaFactory 文档。",
-                    },
-                    "finetuning_type": {
-                        "description": "微调类型",
-                        "type": "string",
-                        "hint": "微调类型。如 `lora`",
-                    },
-                    "quantization_bit": {
-                        "description": "量化位数",
-                        "type": "int",
-                        "hint": "量化位数。如 4",
+                        "hint": "API Base URL 请在模型提供商处获得。如出现 404 报错，尝试在地址末尾加上 /v1",
                     },
                     "model_config": {
-                        "description": "文本生成模型",
+                        "description": "模型配置",
                         "type": "object",
                         "items": {
                             "model": {
                                 "description": "模型名称",
                                 "type": "string",
-                                "hint": "大语言模型的名称，一般是小写的英文。如 gpt-4o-mini, deepseek-chat 等。",
+                                "hint": "模型名称，如 gpt-4o-mini, deepseek-chat。",
                             },
                             "max_tokens": {
                                 "description": "模型最大输出长度（tokens）",
@@ -1636,7 +1619,6 @@ CONFIG_METADATA_2 = {
                         "description": "启用大语言模型聊天",
                         "type": "bool",
                         "hint": "如需切换大语言模型提供商，请使用 /provider 命令。",
-                        "obvious_hint": True,
                     },
                     "separate_provider": {
                         "description": "提供商会话隔离",
@@ -1656,13 +1638,11 @@ CONFIG_METADATA_2 = {
                     "web_search": {
                         "description": "启用网页搜索",
                         "type": "bool",
-                        "obvious_hint": True,
                         "hint": "能访问 Google 时效果最佳（国内需要在 `其他配置` 开启 HTTP 代理）。如果 Google 访问失败，程序会依次访问 Bing, Sogo 搜索引擎。",
                     },
                     "web_search_link": {
                         "description": "网页搜索引用链接",
                         "type": "bool",
-                        "obvious_hint": True,
                         "hint": "开启后，将会传入网页搜索结果的链接给模型，并引导模型输出引用链接。",
                     },
                     "display_reasoning_text": {
@@ -1673,13 +1653,11 @@ CONFIG_METADATA_2 = {
                     "identifier": {
                         "description": "启动识别群员",
                         "type": "bool",
-                        "obvious_hint": True,
                         "hint": "在 Prompt 前加上群成员的名字以让模型更好地了解群聊状态。启用将略微增加 token 开销。",
                     },
                     "datetime_system_prompt": {
                         "description": "启用日期时间系统提示",
                         "type": "bool",
-                        "obvious_hint": True,
                         "hint": "启用后，会在系统提示词中加上当前机器的日期时间。",
                     },
                     "default_personality": {
@@ -1736,7 +1714,6 @@ CONFIG_METADATA_2 = {
                         "description": "人格名称",
                         "type": "string",
                         "hint": "人格名称，用于在多个人格中区分。使用 /persona 指令可切换人格。在 大语言模型设置 处可以设置默认人格。",
-                        "obvious_hint": True,
                     },
                     "prompt": {
                         "description": "设定(系统提示词)",
@@ -1748,14 +1725,12 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                         "hint": "可选。在每个对话前会插入这些预设对话。对话需要成对(用户和助手)，输入完一个角色的内容之后按【回车】。需要偶数个对话",
-                        "obvious_hint": True,
                     },
                     "mood_imitation_dialogs": {
                         "description": "对话风格模仿",
                         "type": "list",
                         "items": {"type": "string"},
                         "hint": "旨在让模型尽可能模仿学习到所填写的对话的语气风格。格式和 `预设对话` 一致。对话需要成对(用户和助手)，输入完一个角色的内容之后按【回车】。需要偶数个对话",
-                        "obvious_hint": True,
                     },
                 },
             },
@@ -1767,7 +1742,6 @@ CONFIG_METADATA_2 = {
                         "description": "启用语音转文本(STT)",
                         "type": "bool",
                         "hint": "启用前请在 服务提供商配置 处创建支持 语音转文本任务 的提供商。如 whisper。",
-                        "obvious_hint": True,
                     },
                     "provider_id": {
                         "description": "提供商 ID",
@@ -1784,7 +1758,6 @@ CONFIG_METADATA_2 = {
                         "description": "启用文本转语音(TTS)",
                         "type": "bool",
                         "hint": "启用前请在 服务提供商配置 处创建支持 语音转文本任务 的提供商。如 openai_tts。",
-                        "obvious_hint": True,
                     },
                     "provider_id": {
                         "description": "提供商 ID",
@@ -1795,7 +1768,6 @@ CONFIG_METADATA_2 = {
                         "description": "启用语音和文字双输出",
                         "type": "bool",
                         "hint": "启用后，Bot 将同时输出语音和文字消息。",
-                        "obvious_hint": True,
                     },
                     "use_file_service": {
                         "description": "使用文件服务提供 TTS 语音文件",
@@ -1811,25 +1783,21 @@ CONFIG_METADATA_2 = {
                     "group_icl_enable": {
                         "description": "群聊内记录各群员对话",
                         "type": "bool",
-                        "obvious_hint": True,
                         "hint": "启用后，会记录群聊内各群员的对话。使用 /reset 命令清除记录。推荐使用 gpt-4o-mini 模型。",
                     },
                     "group_message_max_cnt": {
                         "description": "群聊消息最大数量",
                         "type": "int",
-                        "obvious_hint": True,
                         "hint": "群聊消息最大数量。超过此数量后，会自动清除旧消息。",
                     },
                     "image_caption": {
                         "description": "群聊图像转述(需模型支持)",
                         "type": "bool",
-                        "obvious_hint": True,
                         "hint": "用模型将群聊中的图片消息转述为文字，推荐 gpt-4o-mini 模型。和机器人的唤醒聊天中的图片消息仍然会直接作为上下文输入。",
                     },
                     "image_caption_provider_id": {
                         "description": "图像转述提供商 ID",
                         "type": "string",
-                        "obvious_hint": True,
                         "hint": "可选。图像转述提供商 ID。如为空将选择聊天使用的提供商。",
                     },
                     "image_caption_prompt": {
@@ -1843,14 +1811,12 @@ CONFIG_METADATA_2 = {
                             "enable": {
                                 "description": "启用主动回复",
                                 "type": "bool",
-                                "obvious_hint": True,
                                 "hint": "启用后，会根据触发概率主动回复群聊内的对话。QQ官方API(qq_official)不可用",
                             },
                             "whitelist": {
                                 "description": "主动回复白名单",
                                 "type": "list",
                                 "items": {"type": "string"},
-                                "obvious_hint": True,
                                 "hint": "启用后，只有在白名单内的群聊会被主动回复。为空时不启用白名单过滤。需要通过 /sid 获取 SID 添加到这里。",
                             },
                             "method": {
@@ -1862,13 +1828,11 @@ CONFIG_METADATA_2 = {
                             "possibility_reply": {
                                 "description": "回复概率",
                                 "type": "float",
-                                "obvious_hint": True,
                                 "hint": "回复概率。当回复方法为 possibility_reply 时有效。当概率 >= 1 时，每条消息都会回复。",
                             },
                             "prompt": {
                                 "description": "提示词",
                                 "type": "string",
-                                "obvious_hint": True,
                                 "hint": "提示词。当提示词为空时，如果触发回复，则向 LLM 请求的是触发的消息的内容；否则是提示词。此项可以和定时回复（暂未实现）配合使用。",
                             },
                         },
@@ -1884,7 +1848,6 @@ CONFIG_METADATA_2 = {
                 "description": "机器人唤醒前缀",
                 "type": "list",
                 "items": {"type": "string"},
-                "obvious_hint": True,
                 "hint": "在不 @ 机器人的情况下，可以通过外加消息前缀来唤醒机器人。更改此配置将影响整个 Bot 的功能唤醒，包括所有指令。如果您不保留 `/`，则内置指令（help等）将需要通过您的唤醒前缀来触发。",
             },
             "t2i": {
@@ -1911,13 +1874,11 @@ CONFIG_METADATA_2 = {
             "timezone": {
                 "description": "时区",
                 "type": "string",
-                "obvious_hint": True,
                 "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab",
             },
             "callback_api_base": {
                 "description": "对外可达的回调接口地址",
                 "type": "string",
-                "obvious_hint": True,
                 "hint": "外部服务可能会通过 AstrBot 生成的回调链接（如文件下载链接）访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址（host），因此需要通过此配置项显式指定 “外部服务如何访问 AstrBot” 的地址。如 http://localhost:6185，https://example.com 等。",
             },
             "log_level": {
@@ -1965,90 +1926,3 @@ DEFAULT_VALUE_MAP = {
     "list": [],
     "object": {},
 }
-
-
-# "project_atri": {
-#     "description": "Project ATRI 配置",
-#     "type": "object",
-#     "items": {
-#         "enable": {"description": "启用", "type": "bool"},
-#         "long_term_memory": {
-#             "description": "长期记忆",
-#             "type": "object",
-#             "items": {
-#                 "enable": {"description": "启用", "type": "bool"},
-#                 "summary_threshold_cnt": {
-#                     "description": "摘要阈值",
-#                     "type": "int",
-#                     "hint": "当一个会话的对话记录数量超过该阈值时，会自动进行摘要。",
-#                 },
-#                 "embedding_provider_id": {
-#                     "description": "Embedding provider ID",
-#                     "type": "string",
-#                     "hint": "只有当启用了长期记忆时，才需要填写此项。将会使用指定的 provider 来获取 Embedding，请确保所填的 provider id 在 `配置页` 中存在并且设置了 Embedding 配置",
-#                     "obvious_hint": True,
-#                 },
-#                 "summarize_provider_id": {
-#                     "description": "Summary provider ID",
-#                     "type": "string",
-#                     "hint": "只有当启用了长期记忆时，才需要填写此项。将会使用指定的 provider 来获取 Summary，请确保所填的 provider id 在 `配置页` 中存在。",
-#                     "obvious_hint": True,
-#                 },
-#             },
-#         },
-#         "active_message": {
-#             "description": "主动消息",
-#             "type": "object",
-#             "items": {
-#                 "enable": {"description": "启用", "type": "bool"},
-#             },
-#         },
-#         "vision": {
-#             "description": "视觉理解",
-#             "type": "object",
-#             "items": {
-#                 "enable": {"description": "启用", "type": "bool"},
-#                 "provider_id_or_ofa_model_path": {
-#                     "description": "提供商 ID 或 OFA 模型路径",
-#                     "type": "string",
-#                     "hint": "将会使用指定的 provider 来进行视觉处理，请确保所填的 provider id 在 `配置页` 中存在。",
-#                 },
-#             },
-#         },
-#         "split_response": {
-#             "description": "是否分割回复",
-#             "type": "bool",
-#             "hint": "启用后，将会根据句子分割回复以更像人类回复。每次回复之间具有随机的时间间隔。默认启用。",
-#         },
-#         "persona": {
-#             "description": "人格",
-#             "type": "string",
-#             "hint": "默认人格。当启动 ATRI 之后，在 Provider 处设置的人格将会失效。",
-#             "obvious_hint": True,
-#         },
-#         "chat_provider_id": {
-#             "description": "Chat provider ID",
-#             "type": "string",
-#             "hint": "将会使用指定的 provider 来进行文本聊天，请确保所填的 provider id 在 `配置页` 中存在。",
-#             "obvious_hint": True,
-#         },
-#         "chat_base_model_path": {
-#             "description": "用于聊天的基座模型路径",
-#             "type": "string",
-#             "hint": "用于聊天的基座模型路径。当填写此项和 Lora 路径后，将会忽略上面设置的 Chat provider ID。",
-#             "obvious_hint": True,
-#         },
-#         "chat_adapter_model_path": {
-#             "description": "用于聊天的 Lora 模型路径",
-#             "type": "string",
-#             "hint": "Lora 模型路径。",
-#             "obvious_hint": True,
-#         },
-#         "quantization_bit": {
-#             "description": "量化位数",
-#             "type": "int",
-#             "hint": "模型量化位数。如果你不知道这是什么，请不要修改。默认为 4。",
-#             "obvious_hint": True,
-#         },
-#     },
-# },
