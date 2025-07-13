@@ -3,11 +3,12 @@ import time
 import traceback
 from typing import AsyncGenerator, Union
 
-from astrbot.core import html_renderer, logger, file_token_service
+from astrbot.core import file_token_service, html_renderer, logger
 from astrbot.core.message.components import At, File, Image, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
@@ -176,10 +177,12 @@ class ResultDecorateStage(Stage):
             tts_provider = self.ctx.plugin_manager.context.get_using_tts_provider(
                 event.unified_msg_origin
             )
+
             if (
                 self.ctx.astrbot_config["provider_tts_settings"]["enable"]
                 and result.is_llm_result()
                 and tts_provider
+                and SessionServiceManager.should_process_tts_request(event)
             ):
                 new_chain = []
                 for comp in result.chain:

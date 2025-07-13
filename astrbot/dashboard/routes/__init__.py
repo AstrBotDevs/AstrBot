@@ -9,6 +9,7 @@ from .chat import ChatRoute
 from .tools import ToolsRoute  # 导入新的ToolsRoute
 from .conversation import ConversationRoute
 from .file import FileRoute
+from .session_management import SessionManagementRoute
 
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "ToolsRoute",
     "ConversationRoute",
     "FileRoute",
+    "SessionManagementRoute",
 ]

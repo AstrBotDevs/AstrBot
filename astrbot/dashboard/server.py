@@ -1,19 +1,23 @@
-import logging
-import jwt
 import asyncio
+import logging
 import os
 import socket
+
+import jwt
 import psutil
-from astrbot.core.config.default import VERSION
-from quart import Quart, request, jsonify, g
+from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from .routes import *
-from .routes.route import RouteContext, Response
+
 from astrbot.core import logger
+from astrbot.core.config.default import VERSION
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.utils.io import get_local_ip_addresses
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import get_local_ip_addresses
+
+from .routes import *
+from .routes.route import Response, RouteContext
+from .routes.session_management import SessionManagementRoute
 
 APP: Quart = None
 
@@ -53,6 +57,9 @@ class AstrBotDashboard:
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
         self.file_route = FileRoute(self.context)
+        self.session_management_route = SessionManagementRoute(
+            self.context, db, core_lifecycle
+        )
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",

@@ -52,6 +52,11 @@ const MainRoutes = {
       component: () => import('@/views/ConversationPage.vue')
     },
     {
+      name: 'SessionManagement',
+      path: '/session-management',
+      component: () => import('@/views/SessionManagementPage.vue')
+    },
+    {
       name: 'Console',
       path: '/console',
       component: () => import('@/views/ConsolePage.vue')

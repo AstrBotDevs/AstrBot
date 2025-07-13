@@ -38,6 +38,7 @@ export class I18nLoader {
       { name: 'features/chat', path: 'features/chat.json' },
       { name: 'features/extension', path: 'features/extension.json' },
       { name: 'features/conversation', path: 'features/conversation.json' },
+      { name: 'features/session-management', path: 'features/session-management.json' },
       { name: 'features/tooluse', path: 'features/tool-use.json' },
       { name: 'features/provider', path: 'features/provider.json' },
       { name: 'features/platform', path: 'features/platform.json' },

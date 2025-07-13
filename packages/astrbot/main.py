@@ -27,6 +27,7 @@ from astrbot.core.config.default import VERSION
 from .long_term_memory import LongTermMemory
 from astrbot.core import logger
 from astrbot.api.message_components import Plain, Image, Reply
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from typing import Union
 from enum import Enum
 
@@ -335,16 +336,18 @@ class Main(star.Star):
 
     @filter.command("tts")
     async def tts(self, event: AstrMessageEvent):
-        """开关文本转语音"""
-        config = self.context.get_config()
-        if config["provider_tts_settings"]["enable"]:
-            config["provider_tts_settings"]["enable"] = False
-            config.save_config()
-            event.set_result(MessageEventResult().message("已关闭文本转语音。"))
-            return
-        config["provider_tts_settings"]["enable"] = True
-        config.save_config()
-        event.set_result(MessageEventResult().message("已开启文本转语音。"))
+        """开关文本转语音（会话级别）"""
+        session_id = event.unified_msg_origin
+        current_status = SessionServiceManager.is_tts_enabled_for_session(session_id)
+
+        # 切换状态
+        new_status = not current_status
+        SessionServiceManager.set_tts_status_for_session(session_id, new_status)
+
+        status_text = "已开启" if new_status else "已关闭"
+        event.set_result(
+            MessageEventResult().message(f"{status_text}当前会话的文本转语音。")
+        )
 
     @filter.command("sid")
     async def sid(self, event: AstrMessageEvent):
