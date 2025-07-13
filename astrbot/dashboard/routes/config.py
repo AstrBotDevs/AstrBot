@@ -1,5 +1,7 @@
 import typing
 import traceback
+import os
+import inspect
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
@@ -8,7 +10,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_registry, platform_cls_map
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
-from astrbot.core import logger
+from astrbot.core import logger, file_token_service
 from astrbot.core.provider import Provider
 import asyncio
 
@@ -156,6 +158,7 @@ class ConfigRoute(Route):
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
+        self._logo_token_cache = {}  # 缓存logo token，避免重复注册
         self.routes = {
             "/config/get": ("GET", self.get_configs),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
@@ -480,9 +483,18 @@ class ConfigRoute(Route):
             return
             
         try:
-            from astrbot.core import file_token_service
-            import os
-            import inspect
+            # 检查缓存
+            cache_key = f"{platform.name}:{platform.logo_path}"
+            if cache_key in self._logo_token_cache:
+                cached_token = self._logo_token_cache[cache_key]
+                # 确保platform_default_tmpl[platform.name]存在且为字典
+                if platform.name not in platform_default_tmpl:
+                    platform_default_tmpl[platform.name] = {}
+                elif not isinstance(platform_default_tmpl[platform.name], dict):
+                    platform_default_tmpl[platform.name] = {}
+                platform_default_tmpl[platform.name]["logo_token"] = cached_token
+                logger.debug(f"Using cached logo token for platform {platform.name}")
+                return
             
             # 获取平台适配器类
             platform_cls = platform_cls_map.get(platform.name)
@@ -506,7 +518,18 @@ class ConfigRoute(Route):
                 logo_token = await file_token_service.register_file(
                     logo_file_path, timeout=3600
                 )
+                
+                # 确保platform_default_tmpl[platform.name]存在且为字典
+                if platform.name not in platform_default_tmpl:
+                    platform_default_tmpl[platform.name] = {}
+                elif not isinstance(platform_default_tmpl[platform.name], dict):
+                    platform_default_tmpl[platform.name] = {}
+                    
                 platform_default_tmpl[platform.name]["logo_token"] = logo_token
+                
+                # 缓存token
+                self._logo_token_cache[cache_key] = logo_token
+                
                 logger.debug(f"Logo token registered for platform {platform.name}")
             else:
                 logger.warning(
@@ -528,11 +551,20 @@ class ConfigRoute(Route):
             "platform"
         ]["config_template"]
         
+        # 收集需要注册logo的平台
+        logo_registration_tasks = []
         for platform in platform_registry:
             if platform.default_config_tmpl:
                 platform_default_tmpl[platform.name] = platform.default_config_tmpl
-                # 处理logo信息
-                await self._register_platform_logo(platform, platform_default_tmpl)
+                # 收集logo注册任务
+                if platform.logo_path:
+                    logo_registration_tasks.append(
+                        self._register_platform_logo(platform, platform_default_tmpl)
+                    )
+        
+        # 并行执行logo注册
+        if logo_registration_tasks:
+            await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
         # 服务提供商的默认配置模板注入
         provider_default_tmpl = CONFIG_METADATA_2["provider_group"]["metadata"][
