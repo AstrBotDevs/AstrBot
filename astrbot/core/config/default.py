@@ -605,6 +605,7 @@ CONFIG_METADATA_2 = {
                 "config_template": {
                     "OpenAI": {
                         "id": "openai",
+                        "provider": "openai",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -617,6 +618,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Azure OpenAI": {
                         "id": "azure",
+                        "provider": "azure",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -630,6 +632,7 @@ CONFIG_METADATA_2 = {
                     },
                     "xAI": {
                         "id": "xai",
+                        "provider": "xai",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -642,6 +645,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Anthropic": {
                         "id": "claude",
+                        "provider": "anthropic",
                         "type": "anthropic_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -655,6 +659,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Ollama": {
                         "id": "ollama_default",
+                        "provider": "ollama",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -666,6 +671,7 @@ CONFIG_METADATA_2 = {
                     },
                     "LM Studio": {
                         "id": "lm_studio",
+                        "provider": "lm_studio",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -677,6 +683,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Gemini(OpenAI兼容)": {
                         "id": "gemini_default",
+                        "provider": "google",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -689,6 +696,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Gemini": {
                         "id": "gemini_default",
+                        "provider": "google",
                         "type": "googlegenai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -714,6 +722,7 @@ CONFIG_METADATA_2 = {
                     },
                     "DeepSeek": {
                         "id": "deepseek_default",
+                        "provider": "deepseek",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -726,6 +735,7 @@ CONFIG_METADATA_2 = {
                     },
                     "302.AI": {
                         "id": "302ai",
+                        "provider": "302ai",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -738,6 +748,7 @@ CONFIG_METADATA_2 = {
                     },
                     "硅基流动": {
                         "id": "siliconflow",
+                        "provider": "siliconflow",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -750,6 +761,7 @@ CONFIG_METADATA_2 = {
                     },
                     "PPIO派欧云": {
                         "id": "ppio",
+                        "provider": "ppio",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -762,6 +774,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Kimi": {
                         "id": "moonshot",
+                        "provider": "moonshot",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -774,6 +787,7 @@ CONFIG_METADATA_2 = {
                     },
                     "智谱 AI": {
                         "id": "zhipu_default",
+                        "provider": "zhipu",
                         "type": "zhipu_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -786,6 +800,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Dify": {
                         "id": "dify_app_default",
+                        "provider": "dify",
                         "type": "dify",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -799,6 +814,7 @@ CONFIG_METADATA_2 = {
                     },
                     "阿里云百炼应用": {
                         "id": "dashscope",
+                        "provider": "dashscope",
                         "type": "dashscope",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -815,6 +831,7 @@ CONFIG_METADATA_2 = {
                     },
                     "FastGPT": {
                         "id": "fastgpt",
+                        "provider": "fastgpt",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -824,6 +841,7 @@ CONFIG_METADATA_2 = {
                     },
                     "Whisper(API)": {
                         "id": "whisper",
+                        "provider": "openai",
                         "type": "openai_whisper_api",
                         "provider_type": "speech_to_text",
                         "enable": False,
@@ -833,15 +851,17 @@ CONFIG_METADATA_2 = {
                     },
                     "Whisper(本地加载)": {
                         "whisper_hint": "(不用修改我)",
+                        "provider": "openai",
                         "type": "openai_whisper_selfhost",
                         "provider_type": "speech_to_text",
                         "enable": False,
-                        "id": "whisper",
+                        "id": "whisper_selfhost",
                         "model": "tiny",
                     },
                     "SenseVoice(本地加载)": {
                         "sensevoice_hint": "(不用修改我)",
                         "type": "sensevoice_stt_selfhost",
+                        "provider": "sensevoice",
                         "provider_type": "speech_to_text",
                         "enable": False,
                         "id": "sensevoice",
@@ -851,6 +871,7 @@ CONFIG_METADATA_2 = {
                     "OpenAI TTS(API)": {
                         "id": "openai_tts",
                         "type": "openai_tts_api",
+                        "provider": "openai",
                         "provider_type": "text_to_speech",
                         "enable": False,
                         "api_key": "",
@@ -862,6 +883,7 @@ CONFIG_METADATA_2 = {
                     "Edge TTS": {
                         "edgetts_hint": "提示：使用这个服务前需要安装有 ffmpeg，并且可以直接在终端调用 ffmpeg 指令。",
                         "id": "edge_tts",
+                        "provider": "microsoft",
                         "type": "edge_tts",
                         "provider_type": "text_to_speech",
                         "enable": False,
@@ -871,6 +893,7 @@ CONFIG_METADATA_2 = {
                     "GSV TTS(本地加载)": {
                         "id": "gsv_tts",
                         "enable": False,
+                        "provider": "gpt_sovits",
                         "type": "gsv_tts_selfhost",
                         "provider_type": "text_to_speech",
                         "api_base": "http://127.0.0.1:9880",
@@ -902,6 +925,7 @@ CONFIG_METADATA_2 = {
                     "GSVI TTS(API)": {
                         "id": "gsvi_tts",
                         "type": "gsvi_tts_api",
+                        "provider": "gpt_sovits_inference",
                         "provider_type": "text_to_speech",
                         "api_base": "http://127.0.0.1:5000",
                         "character": "",
@@ -911,6 +935,7 @@ CONFIG_METADATA_2 = {
                     },
                     "FishAudio TTS(API)": {
                         "id": "fishaudio_tts",
+                        "provider": "fishaudio",
                         "type": "fishaudio_tts_api",
                         "provider_type": "text_to_speech",
                         "enable": False,
@@ -921,6 +946,7 @@ CONFIG_METADATA_2 = {
                     },
                     "阿里云百炼 TTS(API)": {
                         "id": "dashscope_tts",
+                        "provider": "dashscope",
                         "type": "dashscope_tts",
                         "provider_type": "text_to_speech",
                         "enable": False,
@@ -932,6 +958,7 @@ CONFIG_METADATA_2 = {
                     "Azure TTS": {
                         "id": "azure_tts",
                         "type": "azure_tts",
+                        "provider": "azure",
                         "provider_type": "text_to_speech",
                         "enable": True,
                         "azure_tts_voice": "zh-CN-YunxiaNeural",
@@ -945,6 +972,7 @@ CONFIG_METADATA_2 = {
                     "MiniMax TTS(API)": {
                         "id": "minimax_tts",
                         "type": "minimax_tts_api",
+                        "provider": "minimax",
                         "provider_type": "text_to_speech",
                         "enable": False,
                         "api_key": "",
@@ -966,6 +994,7 @@ CONFIG_METADATA_2 = {
                     "火山引擎_TTS(API)": {
                         "id": "volcengine_tts",
                         "type": "volcengine_tts",
+                        "provider": "volcengine",
                         "provider_type": "text_to_speech",
                         "enable": False,
                         "api_key": "",
@@ -979,6 +1008,7 @@ CONFIG_METADATA_2 = {
                     "Gemini TTS": {
                         "id": "gemini_tts",
                         "type": "gemini_tts",
+                        "provider": "google",
                         "provider_type": "text_to_speech",
                         "enable": False,
                         "gemini_tts_api_key": "",
@@ -991,6 +1021,7 @@ CONFIG_METADATA_2 = {
                     "OpenAI Embedding": {
                         "id": "openai_embedding",
                         "type": "openai_embedding",
+                        "provider": "openai",
                         "provider_type": "embedding",
                         "enable": True,
                         "embedding_api_key": "",
@@ -1002,6 +1033,7 @@ CONFIG_METADATA_2 = {
                     "Gemini Embedding": {
                         "id": "gemini_embedding",
                         "type": "gemini_embedding",
+                        "provider": "google",
                         "provider_type": "embedding",
                         "enable": True,
                         "embedding_api_key": "",
@@ -1012,6 +1044,10 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "provider": {
+                        "type": "string",
+                        "invisible": True,
+                    },
                     "gpt_weights_path": {
                         "description": "GPT模型文件路径",
                         "type": "string",
