@@ -166,6 +166,7 @@ class LLMRequestSubStage(Stage):
             event=event,
             pipeline_ctx=self.ctx,
         )
+        logger.debug(f"handle provider[id: {provider.provider_config['id']}] request: {req}")
         await tool_loop_agent.reset(req=req, streaming=self.streaming_response)
 
         async def requesting():
