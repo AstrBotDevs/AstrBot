@@ -1,22 +1,32 @@
 <template>
-  <v-container fluid>
-    <div class="d-flex justify-space-between align-center mb-4">
-      <h2 class="text-h4 font-weight-bold">{{ tm('title') }}</h2>
-      <v-btn 
-        color="primary" 
-        prepend-icon="mdi-refresh" 
-        @click="refreshSessions"
-        :loading="loading"
-      >
-        {{ tm('buttons.refresh') }}
-      </v-btn>
-    </div>
+  <div class="session-management-page">
+    <v-container fluid class="pa-0">
+      <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-8">
+        <div>
+          <h1 class="text-h1 font-weight-bold mb-2">
+            <v-icon color="black" class="me-2">mdi-account-group</v-icon>{{ tm('title') }}
+          </h1>
+          <p class="text-subtitle-1 text-medium-emphasis mb-4">
+            {{ subtitle }}
+          </p>
+        </div>
+        <v-btn 
+          color="primary" 
+          prepend-icon="mdi-refresh" 
+          variant="tonal"
+          @click="refreshSessions"
+          :loading="loading"
+          rounded="xl"
+          size="x-large"
+        >
+          {{ tm('buttons.refresh') }}
+        </v-btn>
+      </v-row>
 
-    <v-card rounded="12" class="session-card">
+    <v-card elevation="0" rounded="12" class="session-card">
       <v-card-title class="bg-primary text-white py-3 px-4 session-card-title">
         <v-icon color="white" class="me-2">mdi-account-group</v-icon>
-        <span>{{ tm('sessions.activeSessions') }}</span>
-        <v-spacer></v-spacer>
+        <span class="text-h4 mr-4">{{ tm('sessions.activeSessions') }}</span>
         <v-chip color="white" text-color="primary" small>
           {{ sessions.length }} {{ tm('sessions.sessionCount') }}
         </v-chip>
@@ -33,6 +43,7 @@
             clearable
             variant="outlined"
             class="me-4"
+            density="compact"
           ></v-text-field>
           
           <v-select
@@ -44,6 +55,7 @@
             variant="outlined"
             class="me-4"
             style="max-width: 150px;"
+            density="compact"
           ></v-select>
         </v-toolbar>
 
@@ -269,121 +281,138 @@
     </v-card>
 
     <!-- 批量操作面板 -->
-    <v-card class="mt-4">
+    <v-card elevation="0" class="mt-4 batch-operations-card" rounded="12">
       <v-card-title class="bg-secondary text-white py-3 px-4">
         <v-icon color="white" class="me-2">mdi-cog-outline</v-icon>
-        <span>{{ tm('batchOperations.title') }}</span>
+        <span class="text-h4">{{ tm('batchOperations.title') }}</span>
       </v-card-title>
       
-      <v-card-text class="pa-4">
-        <v-row class="justify-start align-center">
-          <v-col cols="2" v-if="availablePersonas.length > 0">
-            <v-select
-              v-model="batchPersona"
-              :items="personaOptions"
-              item-title="label"
-              item-value="value"
-              :label="tm('batchOperations.setPersona')"
-              hide-details
-              clearable
-              variant="outlined"
-              density="compact"
-            ></v-select>
-          </v-col>
-          
-          <v-col cols="2" v-if="availableChatProviders.length > 0">
-            <v-select
-              v-model="batchChatProvider"
-              :items="chatProviderOptions"
-              item-title="label"
-              item-value="value"
-              :label="tm('batchOperations.setChatProvider')"
-              hide-details
-              clearable
-              variant="outlined"
-              density="compact"
-            ></v-select>
-          </v-col>
+      <v-card-text>
+        <div style="padding: 8px;">
+          <v-row>
+            <v-col cols="12" md="6" lg="3" v-if="availablePersonas.length > 0">
+              <v-select
+                v-model="batchPersona"
+                :items="personaOptions"
+                item-title="label"
+                item-value="value"
+                :label="tm('batchOperations.setPersona')"
+                hide-details
+                clearable
+                variant="outlined"
+                density="comfortable"
+                class="batch-select"
+              ></v-select>
+            </v-col>
+            
+            <v-col cols="12" md="6" lg="3" v-if="availableChatProviders.length > 0">
+              <v-select
+                v-model="batchChatProvider"
+                :items="chatProviderOptions"
+                item-title="label"
+                item-value="value"
+                :label="tm('batchOperations.setChatProvider')"
+                hide-details
+                clearable
+                variant="outlined"
+                density="comfortable"
+                class="batch-select"
+              ></v-select>
+            </v-col>
 
-          <v-col cols="2">
-            <v-select
-              v-model="batchSttProvider"
-              :items="sttProviderOptions"
-              item-title="label"
-              item-value="value"
-              :label="tm('batchOperations.setSttProvider')"
-              hide-details
-              clearable
-              variant="outlined"
-              density="compact"
-              :disabled="availableSttProviders.length === 0"
-              :placeholder="availableSttProviders.length === 0 ? tm('batchOperations.noSttProvider') : ''"
-            ></v-select>
-          </v-col>
+            <v-col cols="12" md="6" lg="3">
+              <v-select
+                v-model="batchSttProvider"
+                :items="sttProviderOptions"
+                item-title="label"
+                item-value="value"
+                :label="tm('batchOperations.setSttProvider')"
+                hide-details
+                clearable
+                variant="outlined"
+                density="comfortable"
+                class="batch-select"
+                :disabled="availableSttProviders.length === 0"
+                :placeholder="availableSttProviders.length === 0 ? tm('batchOperations.noSttProvider') : ''"
+              ></v-select>
+            </v-col>
 
-          <v-col cols="2">
-            <v-select
-              v-model="batchTtsProvider"
-              :items="ttsProviderOptions"
-              item-title="label"
-              item-value="value"
-              :label="tm('batchOperations.setTtsProvider')"
-              hide-details
-              clearable
-              variant="outlined"
-              density="compact"
-              :disabled="availableTtsProviders.length === 0"
-              :placeholder="availableTtsProviders.length === 0 ? tm('batchOperations.noTtsProvider') : ''"
-            ></v-select>
-          </v-col>
+            <v-col cols="12" md="6" lg="3">
+              <v-select
+                v-model="batchTtsProvider"
+                :items="ttsProviderOptions"
+                item-title="label"
+                item-value="value"
+                :label="tm('batchOperations.setTtsProvider')"
+                hide-details
+                clearable
+                variant="outlined"
+                density="comfortable"
+                class="batch-select"
+                :disabled="availableTtsProviders.length === 0"
+                :placeholder="availableTtsProviders.length === 0 ? tm('batchOperations.noTtsProvider') : ''"
+              ></v-select>
+            </v-col>
+          </v-row>
 
-          <v-col cols="1.5">
-            <v-select
-              v-model="batchLlmStatus"
-              :items="[{label: tm('status.enabled'), value: true}, {label: tm('status.disabled'), value: false}]"
-              item-title="label"
-              item-value="value"
-              :label="tm('batchOperations.setLlmStatus')"
-              hide-details
-              clearable
-              variant="outlined"
-              density="compact"
-            ></v-select>
-          </v-col>
+          <v-row>
+            <v-col cols="12" md="6" lg="3">
+              <v-select
+                v-model="batchLlmStatus"
+                :items="[{label: tm('status.enabled'), value: true}, {label: tm('status.disabled'), value: false}]"
+                item-title="label"
+                item-value="value"
+                :label="tm('batchOperations.setLlmStatus')"
+                hide-details
+                clearable
+                variant="outlined"
+                density="comfortable"
+                class="batch-select"
+              ></v-select>
+            </v-col>
 
-          <v-col cols="1.5">
-            <v-select
-              v-model="batchTtsStatus"
-              :items="[{label: tm('status.enabled'), value: true}, {label: tm('status.disabled'), value: false}]"
-              item-title="label"
-              item-value="value"
-              :label="tm('batchOperations.setTtsStatus')"
-              hide-details
-              clearable
-              variant="outlined"
-              density="compact"
-            ></v-select>
-          </v-col>
-          
-          <v-col cols="1">
+            <v-col cols="12" md="6" lg="3">
+              <v-select
+                v-model="batchTtsStatus"
+                :items="[{label: tm('status.enabled'), value: true}, {label: tm('status.disabled'), value: false}]"
+                item-title="label"
+                item-value="value"
+                :label="tm('batchOperations.setTtsStatus')"
+                hide-details
+                clearable
+                variant="outlined"
+                density="comfortable"
+                class="batch-select"
+              ></v-select>
+            </v-col>
+          </v-row>
+
+          <div class="d-flex justify-end align-center mt-8">
             <v-btn
               color="primary"
+              variant="tonal"
+              size="large"
+              rounded="lg"
               @click="applyBatchChanges"
               :disabled="!batchPersona && !batchChatProvider && !batchSttProvider && !batchTtsProvider && batchLlmStatus === null && batchTtsStatus === null"
               :loading="batchUpdating"
+              class="me-3"
             >
+              <v-icon start>mdi-check-all</v-icon>
               {{ tm('buttons.apply') }}
             </v-btn>
-          </v-col>
-        </v-row>
+
+          </div>
+        </div>
+
       </v-card-text>
     </v-card>
 
     <!-- 插件管理对话框 -->
-    <v-dialog v-model="pluginDialog" max-width="800">
+    <v-dialog v-model="pluginDialog" max-width="800" min-height="80%">
       <v-card v-if="selectedSessionForPlugin">
-        <v-card-title class="bg-primary text-white py-3 px-4">
-          <v-icon color="white" class="me-2">mdi-pencil</v-icon>
+        <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
+          <v-icon color="white" class="me-2">mdi-puzzle</v-icon>
           <span>{{ tm('pluginManagement.title') }} - {{ selectedSessionForPlugin.session_name }}</span>
           <v-spacer></v-spacer>
           <v-btn icon variant="text" color="white" @click="pluginDialog = false">
@@ -391,44 +420,47 @@
           </v-btn>
         </v-card-title>
 
-        <v-card-text class="pa-4" v-if="!loadingPlugins">
-          <div v-if="sessionPlugins.length === 0" class="text-center py-8">
-            <v-icon size="64" color="grey-400">mdi-puzzle-outline</v-icon>
-            <div class="text-h6 mt-4 text-grey-600">{{ tm('pluginManagement.noPlugins') }}</div>
-            <div class="text-body-2 text-grey-500">{{ tm('pluginManagement.noPluginsDesc') }}</div>
+        <v-card-text v-if="!loadingPlugins">
+          <div style="padding-left: 16px; padding-right: 16px;">
+            <div v-if="sessionPlugins.length === 0" class="text-center py-8">
+              <v-icon size="64" color="grey-400">mdi-puzzle-outline</v-icon>
+              <div class="text-h6 mt-4 text-grey-600">{{ tm('pluginManagement.noPlugins') }}</div>
+              <div class="text-body-2 text-grey-500">{{ tm('pluginManagement.noPluginsDesc') }}</div>
+            </div>
+            
+            <v-list v-else>
+              <v-list-item
+                v-for="plugin in sessionPlugins"
+                :key="plugin.name"
+                class="px-0"
+              >
+                <template v-slot:prepend>
+                  <v-icon :color="plugin.enabled ? 'success' : 'grey'">
+                    {{ plugin.enabled ? 'mdi-check-circle' : 'mdi-circle-outline' }}
+                  </v-icon>
+                </template>
+                
+                <v-list-item-title class="font-weight-medium">
+                  {{ plugin.name }}
+                </v-list-item-title>
+                
+                <v-list-item-subtitle>
+                  {{ tm('pluginManagement.author') }}: {{ plugin.author }}
+                </v-list-item-subtitle>
+                
+                <template v-slot:append>
+                  <v-switch
+                    :model-value="plugin.enabled"
+                    hide-details
+                    color="primary"
+                    @update:model-value="(value) => togglePlugin(plugin, value)"
+                    :loading="plugin.updating"
+                  ></v-switch>
+                </template>
+              </v-list-item>
+            </v-list>
           </div>
-          
-          <v-list v-else>
-            <v-list-item
-              v-for="plugin in sessionPlugins"
-              :key="plugin.name"
-              class="px-0"
-            >
-              <template v-slot:prepend>
-                <v-icon :color="plugin.enabled ? 'success' : 'grey'">
-                  {{ plugin.enabled ? 'mdi-check-circle' : 'mdi-circle-outline' }}
-                </v-icon>
-              </template>
-              
-              <v-list-item-title class="font-weight-medium">
-                {{ plugin.name }}
-              </v-list-item-title>
-              
-              <v-list-item-subtitle>
-                {{ tm('pluginManagement.author') }}: {{ plugin.author }}
-              </v-list-item-subtitle>
-              
-              <template v-slot:append>
-                <v-switch
-                  :model-value="plugin.enabled"
-                  hide-details
-                  color="primary"
-                  @update:model-value="(value) => togglePlugin(plugin, value)"
-                  :loading="plugin.updating"
-                ></v-switch>
-              </template>
-            </v-list-item>
-          </v-list>
+
         </v-card-text>
         
         <v-card-text v-else class="text-center py-8">
@@ -439,9 +471,9 @@
     </v-dialog>
 
     <!-- 会话命名编辑对话框 -->
-    <v-dialog v-model="nameEditDialog" max-width="500">
-      <v-card v-if="selectedSessionForName">
-        <v-card-title class="bg-primary text-white py-3 px-4 d-flex align-center">
+    <v-dialog v-model="nameEditDialog" max-width="500" min-height="60%">
+      <v-card v-if="selectedSessionForName" rounded="12">
+        <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
           <v-icon color="white" class="me-2">mdi-rename-box</v-icon>
           <span>{{ tm('nameEditor.title') }}</span>
           <v-spacer></v-spacer>
@@ -492,6 +524,7 @@
           </v-btn>
           <v-btn 
             color="primary" 
+            variant="tonal"
             @click="saveSessionName"
             :loading="nameEditLoading"
           >
@@ -502,10 +535,11 @@
     </v-dialog>
 
     <!-- 提示信息 -->
-    <v-snackbar v-model="snackbar" :timeout="3000" :color="snackbarColor">
+    <v-snackbar v-model="snackbar" :timeout="3000" elevation="24" :color="snackbarColor" location="top">
       {{ snackbarText }}
     </v-snackbar>
-  </v-container>
+    </v-container>
+  </div>
 </template>
 
 <script>
@@ -531,7 +565,7 @@ export default {
       filterPlatform: null,
       
       // 分页相关
-      itemsPerPage: 20,
+      itemsPerPage: 10,
       
       // 可用选项
       availablePersonas: [],
@@ -568,6 +602,21 @@ export default {
   },
   
   computed: {
+    // 安全访问翻译的计算属性
+    messages() {
+      return {
+        updateSuccess: this.tm('messages.updateSuccess'),
+        addSuccess: this.tm('messages.addSuccess'),
+        deleteSuccess: this.tm('messages.deleteSuccess'),
+        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
+        deleteConfirm: this.tm('messages.deleteConfirm')
+      };
+    },
+    
+    subtitle() {
+      return this.tm('subtitle') || '管理所有活跃的会话，配置人格、LLM提供商和插件';
+    },
+    
     headers() {
       return [
         { title: this.tm('table.headers.sessionStatus'), key: 'session_enabled', sortable: false, width: '120px' },
@@ -973,6 +1022,11 @@ export default {
 </script>
 
 <style scoped>
+.session-management-page {
+  padding: 20px;
+  padding-top: 8px;
+}
+
 .v-data-table >>> .v-data-table__td {
   padding: 8px 16px !important;
   vertical-align: middle !important;
@@ -995,5 +1049,26 @@ export default {
 .session-card-title {
   border-top-left-radius: 12px !important;
   border-top-right-radius: 12px !important;
+}
+
+/* 对话框标题栏样式 */
+.v-card .v-card-title {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+
+/* 表格行悬停效果 */
+.v-data-table >>> .v-data-table__tr:hover {
+  background-color: rgba(var(--v-theme-primary), 0.02) !important;
+}
+
+/* 工具栏样式改进 */
+.v-toolbar {
+  background-color: rgba(var(--v-theme-surface), 0.8) !important;
+}
+
+/* 卡片内边距改进 */
+.v-card-text {
+  padding: 16px 0 !important;
 }
 </style>
