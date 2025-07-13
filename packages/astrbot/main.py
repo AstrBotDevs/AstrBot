@@ -111,7 +111,6 @@ class Main(star.Star):
 /plugin: 查看插件、插件帮助
 /t2i: 开关文本转图片
 /tts: 开关文本转语音
-/mcp: 开关MCP工具调用
 /sid: 获取会话 ID
 /op: 管理员
 /wl: 白名单
