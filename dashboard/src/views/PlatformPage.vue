@@ -261,6 +261,14 @@ export default {
     },
 
     getPlatformIcon(name) {
+      // 首先检查是否有来自插件的 logo_token
+      const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[name];
+      if (template && template.logo_token) {
+        // 通过文件服务访问插件提供的 logo
+        return `/api/file/${template.logo_token}`;
+      }
+      
+      // 原有的硬编码图标逻辑
       if (name === 'aiocqhttp' || name === 'qq_official' || name === 'qq_official_webhook') {
         return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
       } else if (name === 'wecom') {

@@ -1,15 +1,17 @@
 import numbers
 import typing
 import traceback
+import os
+import inspect
 from .route import Route, Response, RouteContext
 from quart import request
 from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.platform.register import platform_registry
+from astrbot.core.platform.register import platform_registry, platform_cls_map
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
-from astrbot.core import logger
+from astrbot.core import logger, file_token_service
 from astrbot.core.provider import Provider
 import asyncio
 
@@ -157,6 +159,7 @@ class ConfigRoute(Route):
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
+        self._logo_token_cache = {}  # 缓存logo token，避免重复注册
         self.routes = {
             "/config/get": ("GET", self.get_configs),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
@@ -495,6 +498,72 @@ class ConfigRoute(Route):
         tools = tool_mgr.get_func_desc_openai_style()
         return Response().ok(tools).__dict__
 
+    async def _register_platform_logo(self, platform, platform_default_tmpl):
+        """注册平台logo文件并生成访问令牌"""
+        if not platform.logo_path:
+            return
+            
+        try:
+            # 检查缓存
+            cache_key = f"{platform.name}:{platform.logo_path}"
+            if cache_key in self._logo_token_cache:
+                cached_token = self._logo_token_cache[cache_key]
+                # 确保platform_default_tmpl[platform.name]存在且为字典
+                if platform.name not in platform_default_tmpl:
+                    platform_default_tmpl[platform.name] = {}
+                elif not isinstance(platform_default_tmpl[platform.name], dict):
+                    platform_default_tmpl[platform.name] = {}
+                platform_default_tmpl[platform.name]["logo_token"] = cached_token
+                logger.debug(f"Using cached logo token for platform {platform.name}")
+                return
+            
+            # 获取平台适配器类
+            platform_cls = platform_cls_map.get(platform.name)
+            if not platform_cls:
+                logger.warning(f"Platform class not found for {platform.name}")
+                return
+                
+            # 获取插件目录路径
+            module_file = inspect.getfile(platform_cls)
+            plugin_dir = os.path.dirname(module_file)
+            
+            # 解析logo文件路径
+            logo_file_path = (
+                platform.logo_path 
+                if os.path.isabs(platform.logo_path) 
+                else os.path.join(plugin_dir, platform.logo_path)
+            )
+            
+            # 检查文件是否存在并注册令牌
+            if os.path.exists(logo_file_path):
+                logo_token = await file_token_service.register_file(
+                    logo_file_path, timeout=3600
+                )
+                
+                # 确保platform_default_tmpl[platform.name]存在且为字典
+                if platform.name not in platform_default_tmpl:
+                    platform_default_tmpl[platform.name] = {}
+                elif not isinstance(platform_default_tmpl[platform.name], dict):
+                    platform_default_tmpl[platform.name] = {}
+                    
+                platform_default_tmpl[platform.name]["logo_token"] = logo_token
+                
+                # 缓存token
+                self._logo_token_cache[cache_key] = logo_token
+                
+                logger.debug(f"Logo token registered for platform {platform.name}")
+            else:
+                logger.warning(
+                    f"Platform {platform.name} logo file not found: {logo_file_path}"
+                )
+                
+        except (ImportError, AttributeError) as e:
+            logger.warning(f"Failed to import required modules for platform {platform.name}: {e}")
+        except (OSError, IOError) as e:
+            logger.warning(f"File system error for platform {platform.name} logo: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error registering logo for platform {platform.name}: {e}")
+
     async def _get_astrbot_config(self):
         config = self.config
 
@@ -502,9 +571,21 @@ class ConfigRoute(Route):
         platform_default_tmpl = CONFIG_METADATA_2["platform_group"]["metadata"][
             "platform"
         ]["config_template"]
+        
+        # 收集需要注册logo的平台
+        logo_registration_tasks = []
         for platform in platform_registry:
             if platform.default_config_tmpl:
                 platform_default_tmpl[platform.name] = platform.default_config_tmpl
+                # 收集logo注册任务
+                if platform.logo_path:
+                    logo_registration_tasks.append(
+                        self._register_platform_logo(platform, platform_default_tmpl)
+                    )
+        
+        # 并行执行logo注册
+        if logo_registration_tasks:
+            await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
         # 服务提供商的默认配置模板注入
         provider_default_tmpl = CONFIG_METADATA_2["provider_group"]["metadata"][
