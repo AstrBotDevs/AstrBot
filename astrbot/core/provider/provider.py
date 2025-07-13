@@ -3,6 +3,7 @@ from typing import List
 from typing import TypedDict, AsyncGenerator
 from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult, ProviderType
+from astrbot.core.provider.register import provider_cls_map
 from dataclasses import dataclass
 
 
@@ -41,8 +42,6 @@ class AbstractProvider(abc.ABC):
 
     def meta(self) -> ProviderMeta:
         """获取 Provider 的元数据"""
-        from astrbot.core.provider.register import provider_cls_map
-
         provider_type_name = self.provider_config["type"]
         meta_data = provider_cls_map.get(provider_type_name)
         provider_type = meta_data.provider_type if meta_data else None
