@@ -3,7 +3,7 @@
     <v-container fluid class="pa-0">
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-8">
         <div>
-          <h1 class="text-h1 font-weight-bold mb-2">
+          <h1 class="text-h1 font-weight-bold mb-2" style="display: flex; align-items: center;">
             <v-icon color="black" class="me-2">mdi-account-group</v-icon>{{ tm('title') }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
@@ -75,7 +75,15 @@
               <div class="d-flex align-center">
                 <div class="flex-grow-1">
                   <div class="font-weight-medium d-flex align-center">
-                    {{ item.session_name }}
+                    <v-tooltip 
+                      location="top"
+                    >
+                      <template v-slot:activator="{ props: tooltipProps }">
+                        <span v-bind="tooltipProps">{{ item.session_name }}</span>
+                      </template>
+                      使用 /sid 指令可查看会话 ID。
+                    </v-tooltip>
+                    
                     <v-tooltip 
                       v-if="item.session_name !== item.session_raw_name" 
                       activator="parent" 
@@ -288,7 +296,7 @@
       </v-card-title>
       
       <v-card-text>
-        <div style="padding: 8px;">
+        <div style="padding: 16px;">
           <v-row>
             <v-col cols="12" md="6" lg="3" v-if="availablePersonas.length > 0">
               <v-select
