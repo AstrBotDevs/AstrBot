@@ -306,7 +306,7 @@ class ConfigRoute(Route):
         # 记录更详细的traceback信息，但只在是严重错误时
         if status_code == 500:
             log_fn(traceback.format_exc())
-        return Response().error(message, status_code=status_code).__dict__
+        return Response().error(message).__dict__
 
     async def check_one_provider_status(self):
         """API: check a single LLM Provider's status by id"""
