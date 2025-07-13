@@ -27,6 +27,7 @@ from astrbot.core.config.default import VERSION
 from .long_term_memory import LongTermMemory
 from astrbot.core import logger
 from astrbot.api.message_components import Plain, Image, Reply
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from typing import Union
 from enum import Enum
 
@@ -337,8 +338,6 @@ class Main(star.Star):
     @filter.command("tts")
     async def tts(self, event: AstrMessageEvent):
         """开关文本转语音（会话级别）"""
-        from astrbot.core.star.session_llm_manager import SessionServiceManager
-
         session_id = event.unified_msg_origin
         current_status = SessionServiceManager.is_tts_enabled_for_session(session_id)
 
