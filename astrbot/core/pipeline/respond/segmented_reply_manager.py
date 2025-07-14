@@ -221,15 +221,3 @@ class SegmentedReplyManager:
             await self._cleanup_session(session_id)
 
         logger.info("分段回复管理器已关闭")
-
-    def get_queue_status(self) -> Dict[str, Dict]:
-        """获取所有队列的状态信息（用于调试）"""
-        status = {}
-        for session_id, queue in self.session_queues.items():
-            status[session_id] = {
-                "queue_size": queue.queue.qsize(),
-                "is_processing": queue.is_processing,
-                "worker_running": queue.worker_task and not queue.worker_task.done(),
-                "last_activity": queue.last_activity
-            }
-        return status
