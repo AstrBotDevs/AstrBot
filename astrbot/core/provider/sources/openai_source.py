@@ -187,6 +187,9 @@ class ProviderOpenAIOfficial(Provider):
             func_name_ls = []
             tool_call_ids = []
             for tool_call in choice.message.tool_calls:
+                if isinstance(tool_call, str):
+                    # workaround for #1359
+                    tool_call = json.loads(tool_call)
                 for tool in tools.func_list:
                     if tool.name == tool_call.function.name:
                         # workaround for #1454
