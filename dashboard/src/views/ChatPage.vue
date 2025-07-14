@@ -1994,6 +1994,7 @@ export default {
 }
 
 .embedded-audio {
+    width: 300px;
     margin-top: 8px;
 }
 
