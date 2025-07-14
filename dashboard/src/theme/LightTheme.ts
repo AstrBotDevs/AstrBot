@@ -38,8 +38,9 @@ const PurpleTheme: ThemeTypes = {
     secondary200: '#b39ddb',
     background: '#f9fafcf4',
     overlay: '#ffffffaa',
-    codeBg: '#f5f0ff',
-    code: '#673ab7',
+    codeBg: '#ececec',
+    preBg: 'rgb(249, 249, 249)',
+    code: 'rgb(13, 13, 13)',
     chatMessageBubble: '#e7ebf4',
   }
 };
