@@ -34,6 +34,7 @@ export type ThemeTypes = {
     primary200?: string;
     secondary200?: string;
     codeBg?: string;
+    preBg?: string;
     code?: string;
     chatMessageBubble?: string;
   };

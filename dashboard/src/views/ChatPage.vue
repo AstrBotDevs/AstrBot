@@ -126,17 +126,17 @@
                                 <span>Hello, I'm</span>
                                 <span class="bot-name">AstrBot ⭐</span>
                             </div>
-                            <div class="welcome-hint">
+                            <div class="welcome-hint markdown-content">
                                 <span>{{ t('core.common.type') }}</span>
                                 <code>help</code>
                                 <span>{{ tm('shortcuts.help') }} 😊</span>
                             </div>
-                            <div class="welcome-hint">
+                            <div class="welcome-hint markdown-content">
                                 <span>{{ t('core.common.longPress') }}</span>
                                 <code>Ctrl + B</code>
                                 <span>{{ tm('shortcuts.voiceRecord') }} 🎤</span>
                             </div>
-                            <div class="welcome-hint">
+                            <div class="welcome-hint markdown-content">
                                 <span>{{ t('core.common.press') }}</span>
                                 <code>Ctrl + V</code>
                                 <span>{{ tm('shortcuts.pasteImage') }} 🏞️</span>
@@ -151,7 +151,7 @@
                                     <div class="message-bubble user-bubble"
                                         :class="{ 'has-audio': msg.audio_url }"
                                         :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
-                                        <span>{{ msg.message }}</span>
+                                        <pre style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ msg.message }}</pre>
 
                                         <!-- 图片附件 -->
                                         <div class="image-attachments" v-if="msg.image_url && msg.image_url.length > 0">
@@ -218,10 +218,10 @@
                             style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px; padding: 4px;">
                             <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown"
                                 @click:clear="clearMessage" placeholder="Ask AstrBot..."
-                                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
+                                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 8px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
                             <div
                                 style="display: flex; justify-content: space-between; align-items: center; padding: 0px 8px;">
-                                <div style="display: flex; justify-content: flex-start; margin-top: 8px;">
+                                <div style="display: flex; justify-content: flex-start; margin-top: 4px;">
                                     <!-- 选择提供商和模型 -->
                                     <ProviderModelSelector ref="providerModelSelector" />
                                 </div>
@@ -885,6 +885,8 @@ export default {
             const selection = this.$refs.providerModelSelector?.getCurrentSelection();
             const selectedProviderId = selection?.providerId || '';
             const selectedModelName = selection?.modelName || '';
+            let prompt = this.prompt.trim();
+            this.prompt = ''; // 清空输入框
 
             try {
                 const response = await fetch('/api/chat/send', {
@@ -894,7 +896,7 @@ export default {
                         'Authorization': 'Bearer ' + localStorage.getItem('token')
                     },
                     body: JSON.stringify({
-                        message: this.prompt.trim(), // 确保发送的消息已去除前后空格
+                        message: prompt,
                         conversation_id: this.currCid,
                         image_url: this.stagedImagesName,
                         audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : [],
@@ -902,8 +904,6 @@ export default {
                         selected_model: selectedModelName
                     })
                 });
-
-                this.prompt = ''; // 清空输入框;
 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -1479,11 +1479,11 @@ export default {
 }
 
 .welcome-hint code {
-    background-color: var(--v-theme-codeBg);
+    background-color: rgb(var(--v-theme-codeBg));
     padding: 2px 6px;
     margin: 0 4px;
     border-radius: 4px;
-    color: var(--v-theme-code);
+    color: rgb(var(--v-theme-code));
     font-family: 'Fira Code', monospace;
     font-size: 13px;
 }
@@ -1571,6 +1571,8 @@ export default {
 .bot-bubble {
     border: 1px solid var(--v-theme-border);
     color: var(--v-theme-primaryText);
+    font-size: 16px;
+    max-width: 100%;
 }
 
 .user-avatar,
@@ -1749,8 +1751,8 @@ export default {
 }
 
 .markdown-content p {
-    margin-top: 10px;
-    margin-bottom: 10px;
+    margin-top: .5rem;
+    margin-bottom: .5rem;
 }
 
 .markdown-content pre {
@@ -1763,7 +1765,7 @@ export default {
 }
 
 .markdown-content code {
-    background-color: var(--v-theme-codeBg);
+    background-color: rgb(var(--v-theme-codeBg));
     padding: 2px 4px;
     border-radius: 4px;
     font-family: 'Fira Code', monospace;
@@ -1787,7 +1789,9 @@ export default {
 /* 自定义代码高亮样式 */
 .markdown-content pre {
     border: 1px solid var(--v-theme-border);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    background-color: rgb(var(--v-theme-preBg));
+    border-radius: 16px;
+    padding: 16px;
 }
 
 /* 确保highlight.js的样式正确应用 */
