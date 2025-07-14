@@ -91,20 +91,60 @@ class SessionSegmentedReplyQueue:
                     logger.error(f"发送语音消息失败: {e}")
                     return
 
-            # 再分段发送其他组件
-            decorated_comps = task.decorated_comps.copy()
+            # 过滤空的组件
+            valid_components = []
             for comp in task.components:
+                if await self._is_valid_component(comp):
+                    valid_components.append(comp)
+
+            if not valid_components:
+                # 如果没有有效组件，但有装饰组件，仍然发送装饰组件
+                if task.decorated_comps:
+                    try:
+                        await task.event.send(MessageChain(task.decorated_comps))
+                    except Exception as e:
+                        logger.error(f"发送装饰消息失败: {e}")
+                return
+
+            # 分段发送有效组件
+            decorated_comps = task.decorated_comps.copy()
+            for i, comp in enumerate(valid_components):
                 interval = await manager._calc_comp_interval(comp)
                 await asyncio.sleep(interval)
                 try:
-                    await task.event.send(MessageChain([*decorated_comps, comp]))
-                    decorated_comps = []  # 清空已发送的装饰组件
+                    # 第一条消息包含装饰组件
+                    if i == 0 and decorated_comps:
+                        await task.event.send(MessageChain([*decorated_comps, comp]))
+                    else:
+                        await task.event.send(MessageChain([comp]))
                 except Exception as e:
                     logger.error(f"发送分段消息失败: {e}")
                     return
 
         except Exception as e:
             logger.error(f"处理分段回复任务时出错: {e}")
+
+    async def _is_valid_component(self, comp: BaseMessageComponent) -> bool:
+        """检查组件是否为有效（非空）组件"""
+        import astrbot.core.message.components as Comp
+
+        if isinstance(comp, Comp.Plain):
+            return bool(comp.text and comp.text.strip())
+        elif isinstance(comp, Comp.Image):
+            return bool(comp.file)
+        elif isinstance(comp, Comp.Record):
+            return bool(comp.file)
+        elif isinstance(comp, Comp.Video):
+            return bool(comp.file)
+        elif isinstance(comp, Comp.At):
+            return bool(comp.qq) or bool(comp.name)
+        elif isinstance(comp, Comp.Reply):
+            return bool(comp.id) and comp.sender_id is not None
+        elif isinstance(comp, Comp.File):
+            return bool(comp.file_ or comp.url)
+        else:
+            # 对于其他类型的组件，默认认为有效
+            return True
 
 
 class SegmentedReplyManager:

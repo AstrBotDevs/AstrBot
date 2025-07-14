@@ -135,9 +135,6 @@ class RespondStage(Stage):
                 logger.warning(f"空内容检查异常: {e}")
 
             record_comps = [c for c in result.chain if isinstance(c, Comp.Record)]
-            non_record_comps = [
-                c for c in result.chain if not isinstance(c, Comp.Record)
-            ]
 
             if (
                 self.enable_seg
@@ -148,25 +145,33 @@ class RespondStage(Stage):
                 and event.get_platform_name()
                 not in ["qq_official", "weixin_official_account", "dingtalk"]
             ):
+                # 先提取装饰组件
                 decorated_comps = []
-                if self.reply_with_mention:
-                    for comp in result.chain:
-                        if isinstance(comp, Comp.At):
+                remaining_comps = []
+
+                for comp in result.chain:
+                    if isinstance(comp, Comp.Record):
+                        continue  # 语音组件单独处理
+                    elif self.reply_with_mention and isinstance(comp, Comp.At):
+                        if not any(isinstance(dc, Comp.At) for dc in decorated_comps):
                             decorated_comps.append(comp)
-                            result.chain.remove(comp)
-                            break
-                if self.reply_with_quote:
-                    for comp in result.chain:
-                        if isinstance(comp, Comp.Reply):
+                        continue
+                    elif self.reply_with_quote and isinstance(comp, Comp.Reply):
+                        if not any(isinstance(dc, Comp.Reply) for dc in decorated_comps):
                             decorated_comps.append(comp)
-                            result.chain.remove(comp)
-                            break
+                        continue
+                    else:
+                        remaining_comps.append(comp)
 
                 # 使用分段回复管理器处理
                 await self.segmented_reply_manager.enqueue_segmented_reply(
-                    event, decorated_comps, non_record_comps, record_comps
+                    event, decorated_comps, remaining_comps, record_comps
                 )
             else:
+                non_record_comps = [
+                    c for c in result.chain if not isinstance(c, Comp.Record)
+                ]
+
                 for rcomp in record_comps:
                     try:
                         await event.send(MessageChain([rcomp]))
