@@ -59,7 +59,13 @@ const sidebarItem: menu[] = [
     to: '/conversation'
   },
   {
+    title: 'core.navigation.sessionManagement',
+    icon: 'mdi-account-group',
+    to: '/session-management'
+  },
+  {
     title: 'core.navigation.console',
+
     icon: 'mdi-console',
     to: '/console'
   },

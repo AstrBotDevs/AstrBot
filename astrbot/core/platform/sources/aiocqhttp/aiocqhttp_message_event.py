@@ -1,7 +1,7 @@
 import asyncio
 import re
 from typing import AsyncGenerator, Dict, List
-from aiocqhttp import CQHttp
+from aiocqhttp import CQHttp, Event
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     Image,
@@ -58,50 +58,85 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             ret.append(d)
         return ret
 
-    async def send(self, message: MessageChain):
+    @classmethod
+    async def _dispatch_send(
+        cls,
+        bot: CQHttp,
+        event: Event | None,
+        is_group: bool,
+        session_id: str,
+        messages: list[dict],
+    ):
+        if event:
+            await bot.send(event=event, message=messages)
+        elif is_group:
+            await bot.send_group_msg(group_id=session_id, message=messages)
+        else:
+            await bot.send_private_msg(user_id=session_id, message=messages)
+
+    @classmethod
+    async def send_message(
+        cls,
+        bot: CQHttp,
+        message_chain: MessageChain,
+        event: Event | None = None,
+        is_group: bool = False,
+        session_id: str = None,
+    ):
+        """发送消息"""
+
         # 转发消息、文件消息不能和普通消息混在一起发送
         send_one_by_one = any(
-            isinstance(seg, (Node, Nodes, File)) for seg in message.chain
+            isinstance(seg, (Node, Nodes, File)) for seg in message_chain.chain
         )
-        if send_one_by_one:
-            for seg in message.chain:
-                if isinstance(seg, (Node, Nodes)):
-                    # 合并转发消息
-
-                    if isinstance(seg, Node):
-                        nodes = Nodes([seg])
-                        seg = nodes
-
-                    payload = await seg.to_dict()
-
-                    if self.get_group_id():
-                        payload["group_id"] = self.get_group_id()
-                        await self.bot.call_action("send_group_forward_msg", **payload)
-                    else:
-                        payload["user_id"] = self.get_sender_id()
-                        await self.bot.call_action(
-                            "send_private_forward_msg", **payload
-                        )
-                elif isinstance(seg, File):
-                    d = await AiocqhttpMessageEvent._from_segment_to_dict(seg)
-                    await self.bot.send(
-                        self.message_obj.raw_message,
-                        [d],
-                    )
-                else:
-                    await self.bot.send(
-                        self.message_obj.raw_message,
-                        await AiocqhttpMessageEvent._parse_onebot_json(
-                            MessageChain([seg])
-                        ),
-                    )
-                    await asyncio.sleep(0.5)
-        else:
-            ret = await AiocqhttpMessageEvent._parse_onebot_json(message)
+        if not send_one_by_one:
+            ret = await cls._parse_onebot_json(message_chain)
             if not ret:
                 return
-            await self.bot.send(self.message_obj.raw_message, ret)
+            await cls._dispatch_send(bot, event, is_group, session_id, ret)
+            return
+        for seg in message_chain.chain:
+            if isinstance(seg, (Node, Nodes)):
+                # 合并转发消息
+                if isinstance(seg, Node):
+                    nodes = Nodes([seg])
+                    seg = nodes
 
+                payload = await seg.to_dict()
+
+                if is_group:
+                    payload["group_id"] = session_id
+                    await bot.call_action("send_group_forward_msg", **payload)
+                else:
+                    payload["user_id"] = session_id
+                    await bot.call_action("send_private_forward_msg", **payload)
+            elif isinstance(seg, File):
+                d = await cls._from_segment_to_dict(seg)
+                await cls._dispatch_send(bot, event, is_group, session_id, [d])
+            else:
+                messages = await cls._parse_onebot_json(MessageChain([seg]))
+                if not messages:
+                    continue
+                await cls._dispatch_send(bot, event, is_group, session_id, messages)
+                await asyncio.sleep(0.5)
+
+    async def send(self, message: MessageChain):
+        """发送消息"""
+        event = self.message_obj.raw_message
+        assert isinstance(event, Event), "Event must be an instance of aiocqhttp.Event"
+        is_group = False
+        if self.get_group_id():
+            is_group = True
+            session_id = self.get_group_id()
+        else:
+            session_id = self.get_sender_id()
+        await self.send_message(
+            bot=self.bot,
+            message_chain=message,
+            event=event,
+            is_group=is_group,
+            session_id=session_id,
+        )
         await super().send(message)
 
     async def send_streaming(

@@ -144,7 +144,7 @@ uvx astrbot init
 
 | 名称    | 支持性 | 类型 | 备注 |
 | -------- | ------- | ------- | ------- |
-| OpenAI API | ✔    | 文本生成 | 也支持 DeepSeek、Google Gemini、GLM、Kimi、xAI 等兼容 OpenAI API 的服务 |
+| OpenAI API | ✔    | 文本生成 | 也支持 DeepSeek、Gemini、Kimi、xAI 等兼容 OpenAI API 的服务 |
 | Claude API | ✔    | 文本生成 |  |
 | Google Gemini API | ✔    | 文本生成 |  |
 | Dify | ✔    | LLMOps |  |
@@ -152,6 +152,8 @@ uvx astrbot init
 | Ollama | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
 | LM Studio | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
 | LLMTuner | ✔    | 模型加载器 | 本地加载 lora 等微调模型 |
+| [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | ✔    | 模型 API 及算力服务平台 |  |
+| [302.AI](https://share.302.ai/rr1M3l) | ✔    | 模型 API 服务平台 |  |
 | 硅基流动 | ✔    | 模型 API 服务平台 |  |
 | PPIO 派欧云 | ✔    | 模型 API 服务平台 |  |
 | OneAPI | ✔    | LLM 分发系统 |  |

@@ -56,7 +56,10 @@ class StarMetadata:
     """插件支持的平台ID字典，key为平台ID，value为是否支持"""
 
     def __str__(self) -> str:
-        return f"StarMetadata({self.name}, {self.desc}, {self.version}, {self.repo})"
+        return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"
+
+    def __repr__(self) -> str:
+        return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"
 
     def update_platform_compatibility(self, plugin_enable_config: dict) -> None:
         """更新插件支持的平台列表

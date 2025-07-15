@@ -22,7 +22,11 @@ class WebChatMessageEvent(AstrMessageEvent):
         web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
         if not message:
             await web_chat_back_queue.put(
-                {"type": "end", "data": "", "streaming": False}
+                {
+                    "type": "end",
+                    "data": "",
+                    "streaming": False,
+                }  # end means this request is finished
             )
             return ""
 
@@ -99,16 +103,6 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain):
         await WebChatMessageEvent._send(message, session_id=self.session_id)
-        cid = self.session_id.split("!")[-1]
-        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
-        await web_chat_back_queue.put(
-            {
-                "type": "end",
-                "data": "",
-                "streaming": False,
-                "cid": cid,
-            }
-        )
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
@@ -120,7 +114,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 # 分割符
                 await web_chat_back_queue.put(
                     {
-                        "type": "end",
+                        "type": "break",  # break means a segment end
                         "data": final_data,
                         "streaming": True,
                         "cid": cid,
@@ -134,7 +128,7 @@ class WebChatMessageEvent(AstrMessageEvent):
 
         await web_chat_back_queue.put(
             {
-                "type": "end",
+                "type": "complete",  # complete means we return the final result
                 "data": final_data,
                 "streaming": True,
                 "cid": cid,

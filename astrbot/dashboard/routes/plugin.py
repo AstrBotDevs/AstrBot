@@ -18,12 +18,6 @@ from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star_handler import EventType
 from astrbot.core import DEMO_MODE
 
-try:
-    import nh3
-except ImportError:
-    logger.warning("未安装 nh3 库，无法清理插件 README.md 中的 HTML 标签。")
-    nh3 = None
-
 
 class PluginRoute(Route):
     def __init__(
@@ -332,9 +326,6 @@ class PluginRoute(Route):
             return Response().error(str(e)).__dict__
 
     async def get_plugin_readme(self):
-        if not nh3:
-            return Response().error("未安装 nh3 库").__dict__
-
         plugin_name = request.args.get("name")
         logger.debug(f"正在获取插件 {plugin_name} 的README文件内容")
 
@@ -370,11 +361,9 @@ class PluginRoute(Route):
             with open(readme_path, "r", encoding="utf-8") as f:
                 readme_content = f.read()
 
-            cleaned_content = nh3.clean(readme_content)
-
             return (
                 Response()
-                .ok({"content": cleaned_content}, "成功获取README内容")
+                .ok({"content": readme_content}, "成功获取README内容")
                 .__dict__
             )
         except Exception as e:
@@ -395,12 +384,14 @@ class PluginRoute(Route):
                 platform_type = platform.get("type", "")
                 platform_id = platform.get("id", "")
 
-                platforms.append({
-                    "name": platform_id,  # 使用type作为name，这是系统内部使用的平台名称
-                    "id": platform_id,  # 保留id字段以便前端可以显示
-                    "type": platform_type,
-                    "display_name": f"{platform_type}({platform_id})",
-                })
+                platforms.append(
+                    {
+                        "name": platform_id,  # 使用type作为name，这是系统内部使用的平台名称
+                        "id": platform_id,  # 保留id字段以便前端可以显示
+                        "type": platform_type,
+                        "display_name": f"{platform_type}({platform_id})",
+                    }
+                )
 
             adjusted_platform_enable = {}
             for platform_id, plugins in platform_enable.items():
@@ -409,11 +400,13 @@ class PluginRoute(Route):
             # 获取所有插件，包括系统内部插件
             plugins = []
             for plugin in self.plugin_manager.context.get_all_stars():
-                plugins.append({
-                    "name": plugin.name,
-                    "desc": plugin.desc,
-                    "reserved": plugin.reserved,  # 添加reserved标志
-                })
+                plugins.append(
+                    {
+                        "name": plugin.name,
+                        "desc": plugin.desc,
+                        "reserved": plugin.reserved,  # 添加reserved标志
+                    }
+                )
 
             logger.debug(
                 f"获取插件平台配置: 原始配置={platform_enable}, 调整后={adjusted_platform_enable}"
@@ -421,11 +414,13 @@ class PluginRoute(Route):
 
             return (
                 Response()
-                .ok({
-                    "platforms": platforms,
-                    "plugins": plugins,
-                    "platform_enable": adjusted_platform_enable,
-                })
+                .ok(
+                    {
+                        "platforms": platforms,
+                        "plugins": plugins,
+                        "platform_enable": adjusted_platform_enable,
+                    }
+                )
                 .__dict__
             )
         except Exception as e:

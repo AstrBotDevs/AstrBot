@@ -83,19 +83,18 @@ class AiocqhttpAdapter(Platform):
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
     ):
-        ret = await AiocqhttpMessageEvent._parse_onebot_json(message_chain)
-        match session.message_type.value:
-            case MessageType.GROUP_MESSAGE.value:
-                if "_" in session.session_id:
-                    # 独立会话
-                    _, group_id = session.session_id.split("_")
-                    await self.bot.send_group_msg(group_id=group_id, message=ret)
-                else:
-                    await self.bot.send_group_msg(
-                        group_id=session.session_id, message=ret
-                    )
-            case MessageType.FRIEND_MESSAGE.value:
-                await self.bot.send_private_msg(user_id=session.session_id, message=ret)
+        is_group = session.message_type == MessageType.GROUP_MESSAGE
+        if is_group:
+            session_id = session.session_id.split("_")[-1]
+        else:
+            session_id = session.session_id
+        await AiocqhttpMessageEvent.send_message(
+            bot=self.bot,
+            message_chain=message_chain,
+            event=None,  # 这里不需要 event，因为是通过 session 发送的
+            is_group=is_group,
+            session_id=session_id,
+        )
         await super().send_by_session(session, message_chain)
 
     async def convert_message(self, event: Event) -> AstrBotMessage:
@@ -307,7 +306,9 @@ class AiocqhttpAdapter(Platform):
                             user_id=int(m["data"]["qq"]),
                         )
                         if at_info:
-                            nickname = at_info.get("nick", "") or at_info.get("nickname", "")
+                            nickname = at_info.get("nick", "") or at_info.get(
+                                "nickname", ""
+                            )
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
 
                             abm.message.append(

@@ -100,6 +100,7 @@ class ProviderDify(Provider):
         session_vars = sp.get("session_variables", {})
         session_var = session_vars.get(session_id, {})
         payload_vars.update(session_var)
+        payload_vars["system_prompt"] = system_prompt
 
         try:
             match self.api_type:

@@ -47,7 +47,6 @@
         contain
         width="120"
         height="120"
-        class="rounded-circle"
       ></v-img>
     </div>
   </v-card>

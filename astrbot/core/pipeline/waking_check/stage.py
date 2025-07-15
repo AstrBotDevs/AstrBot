@@ -1,13 +1,16 @@
-from ..stage import Stage, register_stage
-from ..context import PipelineContext
+from typing import AsyncGenerator, Union
+
 from astrbot import logger
-from typing import Union, AsyncGenerator
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
 from astrbot.core.message.components import At, AtAll, Reply
-from astrbot.core.star.star_handler import star_handlers_registry, EventType
-from astrbot.core.star.star import star_map
+from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
+from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+from ..context import PipelineContext
+from ..stage import Stage, register_stage
 
 
 @register_stage
@@ -165,6 +168,11 @@ class WakingCheckStage(Stage):
                     )
 
             event._extras.pop("parsed_params", None)
+
+        # 根据会话配置过滤插件处理器
+        activated_handlers = SessionPluginManager.filter_handlers_by_session(
+            event, activated_handlers
+        )
 
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)

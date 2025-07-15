@@ -187,6 +187,9 @@ class ProviderOpenAIOfficial(Provider):
             func_name_ls = []
             tool_call_ids = []
             for tool_call in choice.message.tool_calls:
+                if isinstance(tool_call, str):
+                    # workaround for #1359
+                    tool_call = json.loads(tool_call)
                 for tool in tools.func_list:
                     if tool.name == tool_call.function.name:
                         # workaround for #1454
@@ -482,13 +485,8 @@ class ProviderOpenAIOfficial(Provider):
         """
         new_contexts = []
 
-        flag = False
         for context in contexts:
-            if flag:
-                flag = False  # 删除 image 后，下一条（LLM 响应）也要删除
-                continue
             if "content" in context and isinstance(context["content"], list):
-                flag = True
                 # continue
                 new_content = []
                 for item in context["content"]:

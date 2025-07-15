@@ -109,7 +109,7 @@ class Main(star.Star):
         Args:
             text(string): Must Required. The content of the reminder.
             datetime_str(string): Required when user's reminder is a single reminder. The datetime string of the reminder, Must format with %Y-%m-%d %H:%M
-            cron_expression(string): Required when user's reminder is a repeated reminder. The cron expression of the reminder.
+            cron_expression(string): Required when user's reminder is a repeated reminder. The cron expression of the reminder. Monday is 0 and Sunday is 6.
             human_readable_cron(string): Optional. The human readable cron expression of the reminder.
         """
         if event.get_platform_name() == "qq_official":
