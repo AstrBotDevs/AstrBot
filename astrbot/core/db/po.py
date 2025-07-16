@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy import (
     Column,
     Integer,
@@ -26,8 +27,8 @@ class PlatformStat(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)  # primary key
     timestamp = Column(DateTime, nullable=False)
-    bot_id = Column(Integer, nullable=False)
-    platform_id = Column(Integer, nullable=False)
+    bot_id = Column(String, nullable=False)
+    platform_id = Column(String, nullable=False)
     platform_type = Column(String, nullable=False)  # such as "aiocqhttp", "slack", etc.
     count = Column(Integer, nullable=False, default=0)
 
@@ -44,11 +45,13 @@ class PlatformStat(Base):
 
 class ConversationV2(Base):
     __tablename__ = "conversations"
-
-    conversation_id = Column(Integer, primary_key=True, autoincrement=True)
-    bot_id = Column(Integer, nullable=False)
-    platform_id = Column(Integer, nullable=False)
-    user_id = Column(Integer, nullable=False)
+    inner_conversation_id = Column(Integer, primary_key=True, autoincrement=True)
+    conversation_id = Column(
+        String(36), nullable=False, unique=True, default=lambda: str(uuid.uuid4())
+    )
+    bot_id = Column(String, nullable=False)
+    platform_id = Column(String, nullable=False)
+    user_id = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
@@ -69,13 +72,13 @@ class LLMMessage(Base):
 
     message_id = Column(Integer, primary_key=True, autoincrement=True)  # primary key
     conversation_id = Column(
-        Integer, ForeignKey("conversations.conversation_id"), nullable=False
+        String, ForeignKey("conversations.conversation_id"), nullable=False
     )
-    parent_id = Column(Integer, ForeignKey("llm_messages.message_id"), nullable=True)
+    parent_id = Column(String, ForeignKey("llm_messages.message_id"), nullable=True)
     role = Column(String, nullable=False)  # e.g., 'user', 'assistant', 'system'
     content = Column(JSON, nullable=False)  # stores content as a JSON-encoded list
     tool_calls = Column(JSON, nullable=True)  # stores tool calls as a JSON-encoded list
-    tool_call_id = Column(Integer, nullable=True)  # ID for the specific tool call
+    tool_call_id = Column(String, nullable=True)  # ID for the specific tool call
     created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
 
     # Relationships
@@ -94,7 +97,7 @@ class Persona(Base):
     __tablename__ = "personas"
 
     persona_id = Column(Integer, primary_key=True, autoincrement=True)
-    bot_id = Column(Integer, nullable=False)
+    bot_id = Column(String, nullable=False)
     name = Column(String(255), nullable=False)
     system_prompt = Column(Text, nullable=False)
     begin_dialogs = Column(Text, nullable=True)
