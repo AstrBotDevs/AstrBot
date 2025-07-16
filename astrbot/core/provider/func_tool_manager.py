@@ -130,7 +130,7 @@ class MCPClient:
                     timeout=cfg.get("timeout", 5),
                     sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                streams = await self._streams_context.__aenter__()
+                streams = await self.exit_stack.enter_async_context(self._streams_context)
 
                 # Create a new client session
                 self.session = await self.exit_stack.enter_async_context(
@@ -148,7 +148,7 @@ class MCPClient:
                     sse_read_timeout=sse_read_timeout,
                     terminate_on_close=cfg.get("terminate_on_close", True),
                 )
-                read_s, write_s, _ = await self._streams_context.__aenter__()
+                read_s, write_s, _ = await self.exit_stack.enter_async_context(self._streams_context)
 
                 # Create a new client session
                 self.session = await self.exit_stack.enter_async_context(
@@ -414,7 +414,7 @@ class FuncCall:
             try:
                 # 关闭MCP连接
                 await self.mcp_client_dict[name].cleanup()
-                del self.mcp_client_dict[name]
+                self.mcp_client_dict.pop(name)
             except Exception as e:
                 logger.info(f"清空 MCP 客户端资源 {name}: {e}。")
             # 移除关联的FuncTool
