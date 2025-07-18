@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/astrbotdevs-astrbot-badge.png)](https://mseep.ai/app/astrbotdevs-astrbot)
+
 <p align="center">
  
 ![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
