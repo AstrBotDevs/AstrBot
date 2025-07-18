@@ -17,8 +17,8 @@ def check_astrbot_root(path: str | Path) -> bool:
 
 def get_astrbot_root() -> Path:
     """获取Astrbot根目录路径"""
-    if ROOT:=os.getenv("ASTRBOT_ROOT"):
-        return ROOT
+    if ROOT := os.getenv("ASTRBOT_ROOT"):
+        return Path(ROOT)
     else:
         return Path.cwd()
 

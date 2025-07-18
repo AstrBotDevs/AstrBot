@@ -9,7 +9,7 @@ import json
               help="输出格式")
 @click.option("--show-type", "-t", is_flag=True, help="显示值的类型")
 @click.option("--all", "-a", is_flag=True, help="显示所有配置项（包括未在验证器中的）")
-def get(key: str = None, format: str = "simple", show_type: bool = False, all: bool = False):
+def get(key: str | None = None, format: str = "simple", show_type: bool = False, all: bool = False):
     """获取配置项的值
     
     不提供key则显示所有可配置项，使用 --all 显示完整配置

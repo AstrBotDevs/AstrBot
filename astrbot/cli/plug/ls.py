@@ -1,3 +1,4 @@
+from pathlib import Path
 import click
 
 @click.command("list")
@@ -10,7 +11,7 @@ def list_impl(show_all: bool):
         display_plugins,
         PluginStatus
     )
-    base_path = get_astrbot_root()
+    base_path: Path = get_astrbot_root()
     plugins = build_plug_list(base_path / "data" / "plugins")
 
     # 未发布的插件
