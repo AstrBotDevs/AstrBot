@@ -1,4 +1,4 @@
-name: "[PluginWish] 插件功能需求"
+name: "🦄 插件功能需求"
 description: 提交新插件功能需求
 title: "[PluginWish] 希望有实现 XXXXX 功能的插件"
 labels: ["plugin-wish", "enhancement"]
