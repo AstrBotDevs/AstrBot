@@ -451,7 +451,9 @@ class FuncCall:
         Args:
             name (str): The name of the MCP server to disable. If None, ALL MCP servers will be disabled.
         """
-        if name and name in self.mcp_client_event:
+        if name:
+            if name not in self.mcp_client_event:
+                return
             client = self.mcp_client_dict.get(name)
             self.mcp_client_event[name].set()
             if not client:
