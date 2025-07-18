@@ -825,6 +825,7 @@ CONFIG_METADATA_2 = {
                     },
                     "ModelScope": {
                         "id": "modelscope",
+                        "provider": "modelscope",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
