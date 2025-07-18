@@ -464,11 +464,11 @@ class FuncCall:
                 self.func_list = [
                     f
                     for f in self.func_list
-                    if not (f.origin == "mcp" and f.mcp_server_name == name)
+                    if f.origin != "mcp" or f.mcp_server_name != name
                 ]
         else:
             running_events = [
-                client.running_event for client in self.mcp_client_dict.values()
+                client.running_event.wait() for client in self.mcp_client_dict.values()
             ]
             for key, event in self.mcp_client_event.items():
                 event.set()
