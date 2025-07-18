@@ -83,6 +83,6 @@ body:
       description: "请确认您已阅读并同意以下条款"
       options:
         - label: "我已搜索过类似的需求，确认这是一个新的需求"
-          required: true
         - label: "我理解这个需求可能需要时间来实现"
-          required: true
+    validations:
+      required: true
