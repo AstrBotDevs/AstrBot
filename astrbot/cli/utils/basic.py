@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import click
@@ -16,7 +17,10 @@ def check_astrbot_root(path: str | Path) -> bool:
 
 def get_astrbot_root() -> Path:
     """获取Astrbot根目录路径"""
-    return Path.cwd()
+    if ROOT:=os.getenv("ASTRBOT_ROOT"):
+        return ROOT
+    else:
+        return Path.cwd()
 
 
 async def check_dashboard(astrbot_root: Path) -> None:

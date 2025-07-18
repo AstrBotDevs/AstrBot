@@ -1,9 +1,7 @@
 """
 拷贝自 astrbot.core.utils.version_comparator
 """
-
 import re
-
 
 class VersionComparator:
     @staticmethod

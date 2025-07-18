@@ -11,14 +11,12 @@ from zipfile import ZipFile
 import click
 from .version_comparator import VersionComparator
 
-
 class PluginStatus(str, Enum):
     INSTALLED = "已安装"
     NEED_UPDATE = "需更新"
     NOT_INSTALLED = "未安装"
     NOT_PUBLISHED = "未发布"
-
-
+    
 def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
     """从 Git 仓库下载代码并解压到指定路径"""
     temp_dir = Path(tempfile.mkdtemp())
