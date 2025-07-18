@@ -193,7 +193,7 @@ class MCPClient:
                         logger=logger,
                         identifier=f"MCPServer-{name}",
                         callback=callback,
-                    ),
+                    ), # type: ignore
                 ),
             )
 
@@ -412,8 +412,8 @@ class FuncCall:
         self,
         name: str,
         config: dict,
-        event: asyncio.Event = None,
-        ready_future: asyncio.Future = None,
+        event: asyncio.Event | None = None,
+        ready_future: asyncio.Future | None = None,
         timeout: int = 30,
     ) -> None:
         """Enable_mcp_server a new MCP server to the manager and initialize it.
@@ -443,9 +443,11 @@ class FuncCall:
             self.mcp_client_event[name] = event
 
         if ready_future.done() and ready_future.exception():
-            raise ready_future.exception()
+            exc = ready_future.exception()
+            if exc is not None:
+                raise exc
 
-    async def disable_mcp_server(self, name: str = None, timeout: float = 10) -> None:
+    async def disable_mcp_server(self, name: str | None = None, timeout: float = 10) -> None:
         """Disable an MCP server by its name.
 
         Args:
