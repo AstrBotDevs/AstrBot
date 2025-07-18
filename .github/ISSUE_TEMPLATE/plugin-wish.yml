@@ -14,12 +14,12 @@ body:
     attributes:
       label: "需求背景"
       description: "您为什么需要这个插件？请描述您在使用框架中遇到的问题或痛点"
-      placeholder: "例如：在使用XX时，经常需要手动处理YY功能，效率较低且容易出错..."
+      placeholder: "例如：目前，llm回复没有表情包，感觉没有拟人味"
     validations:
       required: true
 
   - type: textarea
-    id: core-features
+    id: coe-features
     attributes:
       label: "核心功能需求"
       description: "请分点描述这个插件应该具备的核心功能。越具体越好。"
