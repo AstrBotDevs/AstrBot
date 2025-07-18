@@ -1,48 +1,97 @@
-# [PluginWish] 希望有实现 XXXXX 功能的插件
+name: "[PluginWish] 插件功能需求"
+description: 提交新插件功能需求
+title: "[PluginWish] 希望有实现 XXXXX 功能的插件"
+labels: ["plugin-wish", "enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢您提交插件功能需求！请详细填写以下信息，以便我们更好地理解您的需求。
+        
+  - type: textarea
+    id: background
+    attributes:
+      label: "需求背景"
+      description: "您为什么需要这个插件？请描述您在使用框架中遇到的问题或痛点"
+      placeholder: "例如：在使用XX框架时，经常需要手动处理YY功能，效率较低且容易出错..."
+    validations:
+      required: true
 
-## 需求背景
-**您为什么需要这个插件？**
-<!-- 请描述您在使用框架中遇到的问题或痛点 -->
+  - type: textarea
+    id: core-features
+    attributes:
+      label: "核心功能需求"
+      description: "请分点描述这个插件应该具备的核心功能。越具体越好。"
+      placeholder: |
+        * 功能 1: 支持自动识别和处理XX格式的数据
+        * 功能 2: 提供YY配置选项，允许用户自定义ZZ行为
+        * 功能 3: 集成AA API，实现BB功能
+        * ...
+    validations:
+      required: true
 
-## 功能需求
-**您希望该插件实现什么功能？**
-**请分点描述这个插件应该具备的核心功能。越具体越好。**
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: "使用场景和示例"
+      description: "请提供一两个具体的使用场景，并展示您期望的输入和输出"
+      placeholder: |
+        **场景一：**
+        - 输入：用户上传一个CSV文件
+        - 期望输出：自动解析并生成对应的JSON配置
+        - 使用描述：用户在项目配置页面上传CSV文件，插件自动转换格式
+        
+        **场景二：**
+        - 输入：用户输入API地址和认证信息
+        - 期望输出：自动生成对应的调用代码
+        - 使用描述：开发者配置API信息后，插件自动生成调用代码片段
+    validations:
+      required: true
 
-* **功能 1:**
-* **功能 2:**
-* **功能 3:**
-* ...
+  - type: textarea
+    id: reference-tools
+    attributes:
+      label: "参考工具或应用"
+      description: "是否有类似功能的其他工具或应用可供参考？"
+      placeholder: "例如：VSCode的XX插件、IntelliJ的YY功能、在线工具ZZ等"
+    validations:
+      required: false
 
-## 使用场景和示例 (Use cases and examples)
-**请提供一两个具体的使用场景，并展示您期望的输入和输出。**
+  - type: textarea
+    id: external-dependencies
+    attributes:
+      label: "外部依赖"
+      description: "实现这个插件可能需要哪些外部数据或 API？"
+      placeholder: "例如：需要调用GitHub API、需要访问第三方数据库、需要特定的Node.js模块等"
+    validations:
+      required: false
 
-* **场景一：**
-  - 输入：
-  - 期望输出：
-  - 使用描述：
+  - type: checkboxes
+    id: testing-willingness
+    attributes:
+      label: "测试意愿"
+      description: "您是否愿意参与后续的测试？"
+      options:
+        - label: "是，我愿意参与测试并提供反馈"
+        - label: "否，我只是提出需求"
 
-* **场景二：**
-  - 输入：
-  - 期望输出：
-  - 使用描述：
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: "其他补充信息"
+      description: "关于这个想法，还有什么需要补充的吗？"
+      placeholder: "任何其他相关信息、技术限制、优先级说明等"
+    validations:
+      required: false
 
-## 其他信息
-**关于这个想法，还有什么需要补充的吗？**
-
-* **是否有类似功能的其他工具或应用可供参考？**
-  
-
-* **实现这个插件可能需要哪些外部数据或 API？**
-  
-
-* **您是否愿意参与后续的测试？**
-  - [ ] 是
-  - [ ] 否
-
----
-
-### 填写说明
-- 请在标题中将"XXXXX"替换为您希望的具体功能名称
-- 尽可能详细地描述功能需求，这有助于开发者理解您的需求
-- 提供具体的使用场景和期望的输入输出示例
-- 如果知道相关的工具或技术，请在"其他信息"中说明
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: "确认"
+      description: "请确认您已阅读并同意以下条款"
+      options:
+        - label: "我已搜索过类似的需求，确认这是一个新的需求"
+          required: true
+        - label: "我理解这个需求可能需要时间来实现"
+          required: true
