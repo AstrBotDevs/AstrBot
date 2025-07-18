@@ -19,7 +19,7 @@ body:
       required: true
 
   - type: textarea
-    id: coe-features
+    id: core-features
     attributes:
       label: "核心功能需求"
       description: "请分点描述这个插件应该具备的核心功能。越具体越好。"
