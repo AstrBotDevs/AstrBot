@@ -21,7 +21,6 @@ async def run_astrbot(astrbot_root: Path):
 
     await core_lifecycle.start()
 
-
 @click.option("--reload", "-r", is_flag=True, help="插件自动重载")
 @click.option("--port", "-p", help="Astrbot Dashboard端口", required=False, type=str)
 @click.command()

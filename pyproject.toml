@@ -40,6 +40,7 @@ dependencies = [
     "qq-botpy>=1.2.1",
     "quart>=0.20.0",
     "readability-lxml>=0.8.4.1",
+    "rich>=14.0.0",
     "silk-python>=0.2.6",
     "slack-sdk>=3.35.0",
     "telegramify-markdown>=0.5.1",
