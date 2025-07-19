@@ -80,12 +80,10 @@ class FuncTool:
             if not self.mcp_client or not self.mcp_client.session:
                 raise Exception(f"MCP client for {self.name} is not available")
             # 使用name属性而不是额外的mcp_tool_name
-            if ":" in self.name:
-                # 如果名字是格式为 mcp:server:tool_name，提取实际的工具名
-                actual_tool_name = self.name.split(":")[-1]
-                return await self.mcp_client.session.call_tool(actual_tool_name, args)
-            else:
-                return await self.mcp_client.session.call_tool(self.name, args)
+            actual_tool_name = (
+                self.name.split(":")[-1] if ":" in self.name else self.name
+            )
+            return await self.mcp_client.session.call_tool(actual_tool_name, args)
         else:
             raise Exception(f"Unknown function origin: {self.origin}")
 
@@ -125,10 +123,11 @@ class MCPClient:
             self.server_errlogs.append(msg)
 
         if "url" in cfg:
-            is_sse = True
-            if cfg.get("transport") == "streamable_http":
-                is_sse = False
-            if is_sse:
+            success, error_msg = await _quick_test_mcp_connection(cfg)
+            if not success:
+                raise Exception(f"远程服务器不可达或配置错误: {error_msg}")
+
+            if cfg.get("transport") != "streamable_http":
                 # SSE transport method
                 self._streams_context = sse_client(
                     url=cfg["url"],
@@ -146,7 +145,7 @@ class MCPClient:
                     mcp.ClientSession(
                         *streams,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,
+                        logging_callback=logging_callback,  # type: ignore
                     )
                 )
             else:
@@ -172,7 +171,7 @@ class MCPClient:
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,
+                        logging_callback=logging_callback,  # type: ignore
                     )
                 )
 
@@ -193,7 +192,7 @@ class MCPClient:
                         logger=logger,
                         identifier=f"MCPServer-{name}",
                         callback=callback,
-                    ), # type: ignore
+                    ),  # type: ignore
                 ),
             )
 
@@ -213,6 +212,68 @@ class MCPClient:
         """Clean up resources"""
         await self.exit_stack.aclose()
         self.running_event.set()  # Set the running event to indicate cleanup is done
+
+
+async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
+    """快速测试 MCP 服务器可达性"""
+    import aiohttp
+
+    cfg = config.copy()
+    if "mcpServers" in cfg and len(cfg["mcpServers"]) > 0:
+        key_0 = list(cfg["mcpServers"].keys())[0]
+        cfg = cfg["mcpServers"][key_0]
+
+    url = cfg["url"]
+    headers = cfg.get("headers", {})
+    timeout = cfg.get("timeout", 5)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            if cfg.get("transport") == "streamable_http":
+                test_payload = {
+                    "jsonrpc": "2.0",
+                    "method": "initialize",
+                    "id": 0,
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test-client", "version": "1.2.3"},
+                    },
+                }
+                async with session.post(
+                    url,
+                    headers={
+                        **headers,
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    json=test_payload,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response:
+                    if response.status == 200:
+                        return True, ""
+                    else:
+                        return False, f"HTTP {response.status}: {response.reason}"
+            else:
+                async with session.get(
+                    url,
+                    headers={
+                        **headers,
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response:
+                    if response.status == 200:
+                        return True, ""
+                    else:
+                        return False, f"HTTP {response.status}: {response.reason}"
+
+    except aiohttp.ClientError as e:
+        return False, f"客户端错误: {str(e)}"
+    except asyncio.TimeoutError:
+        return False, f"连接超时: {timeout}秒"
+    except Exception as e:
+        return False, f"未知错误: {str(e)}"
 
 
 class FuncCall:
@@ -396,7 +457,13 @@ class FuncCall:
             ]
             logger.info(f"已关闭 MCP 服务 {name}")
 
-    async def test_mcp_server_connection(self, config: dict) -> list[str]:
+    @staticmethod
+    async def test_mcp_server_connection(config: dict) -> list[str]:
+        if "url" in config:
+            success, error_msg = await _quick_test_mcp_connection(config)
+            if not success:
+                raise Exception(f"远程服务器不可达或配置错误: {error_msg}")
+
         mcp_client = MCPClient()
         try:
             logger.debug(f"testing MCP server connection with config: {config}")
@@ -447,11 +514,14 @@ class FuncCall:
             if exc is not None:
                 raise exc
 
-    async def disable_mcp_server(self, name: str | None = None, timeout: float = 10) -> None:
+    async def disable_mcp_server(
+        self, name: str | None = None, timeout: float = 10
+    ) -> None:
         """Disable an MCP server by its name.
 
         Args:
             name (str): The name of the MCP server to disable. If None, ALL MCP servers will be disabled.
+            timeout (int): Timeout.
         """
         if name:
             if name not in self.mcp_client_event:
