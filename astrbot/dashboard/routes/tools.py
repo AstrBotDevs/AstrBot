@@ -26,6 +26,7 @@ class ToolsRoute(Route):
             "/tools/mcp/update": ("POST", self.update_mcp_server),
             "/tools/mcp/delete": ("POST", self.delete_mcp_server),
             "/tools/mcp/market": ("GET", self.get_mcp_markets),
+            "/tools/mcp/test": ("POST", self.test_mcp_connection),
         }
         self.register_routes()
         self.tool_mgr = self.core_lifecycle.provider_manager.llm_tools
@@ -132,12 +133,19 @@ class ToolsRoute(Route):
             config["mcpServers"][name] = server_config
 
             if self.save_mcp_config(config):
-                # 动态初始化新MCP客户端
-                await self.tool_mgr.mcp_service_queue.put({
-                    "type": "init",
-                    "name": name,
-                    "cfg": config["mcpServers"][name],
-                })
+                try:
+                    await self.tool_mgr.enable_mcp_server(
+                        name, server_config, timeout=30
+                    )
+                except TimeoutError:
+                    return Response().error(f"启用 MCP 服务器 {name} 超时。").__dict__
+                except Exception as e:
+                    logger.error(traceback.format_exc())
+                    return (
+                        Response()
+                        .error(f"启用 MCP 服务器 {name} 失败: {str(e)}")
+                        .__dict__
+                    )
                 return Response().ok(None, f"成功添加 MCP 服务器 {name}").__dict__
             else:
                 return Response().error("保存配置失败").__dict__
@@ -193,31 +201,55 @@ class ToolsRoute(Route):
             if self.save_mcp_config(config):
                 # 处理MCP客户端状态变化
                 if active:
-                    # 如果要激活服务器或者配置已更改
                     if name in self.tool_mgr.mcp_client_dict or not only_update_active:
-                        await self.tool_mgr.mcp_service_queue.put({
-                            "type": "terminate",
-                            "name": name,
-                        })
-                        await self.tool_mgr.mcp_service_queue.put({
-                            "type": "init",
-                            "name": name,
-                            "cfg": config["mcpServers"][name],
-                        })
-                    else:
-                        # 客户端不存在，初始化
-                        await self.tool_mgr.mcp_service_queue.put({
-                            "type": "init",
-                            "name": name,
-                            "cfg": config["mcpServers"][name],
-                        })
+                        try:
+                            await self.tool_mgr.disable_mcp_server(name, timeout=10)
+                        except TimeoutError as e:
+                            return (
+                                Response()
+                                .error(f"启用前停用 MCP 服务器时 {name} 超时: {str(e)}")
+                                .__dict__
+                            )
+                        except Exception as e:
+                            logger.error(traceback.format_exc())
+                            return (
+                                Response()
+                                .error(f"启用前停用 MCP 服务器时 {name} 失败: {str(e)}")
+                                .__dict__
+                            )
+                    try:
+                        await self.tool_mgr.enable_mcp_server(
+                            name, config["mcpServers"][name], timeout=30
+                        )
+                    except TimeoutError:
+                        return (
+                            Response().error(f"启用 MCP 服务器 {name} 超时。").__dict__
+                        )
+                    except Exception as e:
+                        logger.error(traceback.format_exc())
+                        return (
+                            Response()
+                            .error(f"启用 MCP 服务器 {name} 失败: {str(e)}")
+                            .__dict__
+                        )
                 else:
                     # 如果要停用服务器
                     if name in self.tool_mgr.mcp_client_dict:
-                        self.tool_mgr.mcp_service_queue.put_nowait({
-                            "type": "terminate",
-                            "name": name,
-                        })
+                        try:
+                            await self.tool_mgr.disable_mcp_server(name, timeout=10)
+                        except TimeoutError:
+                            return (
+                                Response()
+                                .error(f"停用 MCP 服务器 {name} 超时。")
+                                .__dict__
+                            )
+                        except Exception as e:
+                            logger.error(traceback.format_exc())
+                            return (
+                                Response()
+                                .error(f"停用 MCP 服务器 {name} 失败: {str(e)}")
+                                .__dict__
+                            )
 
                 return Response().ok(None, f"成功更新 MCP 服务器 {name}").__dict__
             else:
@@ -239,17 +271,23 @@ class ToolsRoute(Route):
             if name not in config["mcpServers"]:
                 return Response().error(f"服务器 {name} 不存在").__dict__
 
-            # 删除服务器配置
             del config["mcpServers"][name]
 
             if self.save_mcp_config(config):
-                # 关闭并删除MCP客户端
                 if name in self.tool_mgr.mcp_client_dict:
-                    self.tool_mgr.mcp_service_queue.put_nowait({
-                        "type": "terminate",
-                        "name": name,
-                    })
-
+                    try:
+                        await self.tool_mgr.disable_mcp_server(name, timeout=10)
+                    except TimeoutError:
+                        return (
+                            Response().error(f"停用 MCP 服务器 {name} 超时。").__dict__
+                        )
+                    except Exception as e:
+                        logger.error(traceback.format_exc())
+                        return (
+                            Response()
+                            .error(f"停用 MCP 服务器 {name} 失败: {str(e)}")
+                            .__dict__
+                        )
                 return Response().ok(None, f"成功删除 MCP 服务器 {name}").__dict__
             else:
                 return Response().error("保存配置失败").__dict__
@@ -281,3 +319,20 @@ class ToolsRoute(Route):
         except Exception as _:
             logger.error(traceback.format_exc())
         return Response().error("获取市场数据失败").__dict__
+
+    async def test_mcp_connection(self):
+        """
+        测试 MCP 服务器连接
+        """
+        try:
+            server_data = await request.json
+            config = server_data.get("mcp_server_config", None)
+
+            tools_name = await self.tool_mgr.test_mcp_server_connection(config)
+            return (
+                Response().ok(data=tools_name, message="🎉 MCP 服务器可用！").__dict__
+            )
+
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"测试 MCP 连接失败: {str(e)}").__dict__
