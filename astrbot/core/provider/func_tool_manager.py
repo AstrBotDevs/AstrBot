@@ -39,6 +39,72 @@ SUPPORTED_TYPES = [
 ]  # json schema 支持的数据类型
 
 
+def _prepare_config(config: dict) -> dict:
+    """准备配置，处理嵌套格式"""
+    if "mcpServers" in config and config["mcpServers"]:
+        first_key = next(iter(config["mcpServers"]))
+        config = config["mcpServers"][first_key]
+    config.pop("active", None)
+    return config
+
+
+async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
+    """快速测试 MCP 服务器可达性"""
+    import aiohttp
+
+    cfg = _prepare_config(config.copy())
+
+    url = cfg["url"]
+    headers = cfg.get("headers", {})
+    timeout = cfg.get("timeout", 5)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            if cfg.get("transport") == "streamable_http":
+                test_payload = {
+                    "jsonrpc": "2.0",
+                    "method": "initialize",
+                    "id": 0,
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test-client", "version": "1.2.3"},
+                    },
+                }
+                async with session.post(
+                    url,
+                    headers={
+                        **headers,
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    json=test_payload,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response:
+                    if response.status == 200:
+                        return True, ""
+                    else:
+                        return False, f"HTTP {response.status}: {response.reason}"
+            else:
+                async with session.get(
+                    url,
+                    headers={
+                        **headers,
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response:
+                    if response.status == 200:
+                        return True, ""
+                    else:
+                        return False, f"HTTP {response.status}: {response.reason}"
+
+    except asyncio.TimeoutError:
+        return False, f"连接超时: {timeout}秒"
+    except Exception as e:
+        return False, f"{e!s}"
+
+
 @dataclass
 class FuncTool:
     """
@@ -111,11 +177,7 @@ class MCPClient:
         Args:
             mcp_server_config (dict): Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
         """
-        cfg = mcp_server_config.copy()
-        if "mcpServers" in cfg and len(cfg["mcpServers"]) > 0:
-            key_0 = list(cfg["mcpServers"].keys())[0]
-            cfg = cfg["mcpServers"][key_0]
-        cfg.pop("active", None)  # Remove active flag from config
+        cfg = _prepare_config(mcp_server_config.copy())
 
         def logging_callback(msg: str):
             # 处理 MCP 服务的错误日志
@@ -214,74 +276,12 @@ class MCPClient:
         self.running_event.set()  # Set the running event to indicate cleanup is done
 
 
-async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
-    """快速测试 MCP 服务器可达性"""
-    import aiohttp
-
-    cfg = config.copy()
-    if "mcpServers" in cfg and len(cfg["mcpServers"]) > 0:
-        key_0 = list(cfg["mcpServers"].keys())[0]
-        cfg = cfg["mcpServers"][key_0]
-
-    url = cfg["url"]
-    headers = cfg.get("headers", {})
-    timeout = cfg.get("timeout", 5)
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            if cfg.get("transport") == "streamable_http":
-                test_payload = {
-                    "jsonrpc": "2.0",
-                    "method": "initialize",
-                    "id": 0,
-                    "params": {
-                        "protocolVersion": "2024-11-05",
-                        "capabilities": {},
-                        "clientInfo": {"name": "test-client", "version": "1.2.3"},
-                    },
-                }
-                async with session.post(
-                    url,
-                    headers={
-                        **headers,
-                        "Content-Type": "application/json",
-                        "Accept": "application/json, text/event-stream",
-                    },
-                    json=test_payload,
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                ) as response:
-                    if response.status == 200:
-                        return True, ""
-                    else:
-                        return False, f"HTTP {response.status}: {response.reason}"
-            else:
-                async with session.get(
-                    url,
-                    headers={
-                        **headers,
-                        "Accept": "application/json, text/event-stream",
-                    },
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                ) as response:
-                    if response.status == 200:
-                        return True, ""
-                    else:
-                        return False, f"HTTP {response.status}: {response.reason}"
-
-    except asyncio.TimeoutError:
-        return False, f"连接超时: {timeout}秒"
-    except Exception as e:
-        return False, f"{e!s}"
-
-
 class FuncCall:
     def __init__(self) -> None:
         self.func_list: List[FuncTool] = []
         """内部加载的 func tools"""
         self.mcp_client_dict: Dict[str, MCPClient] = {}
         """MCP 服务列表"""
-        self.mcp_service_queue = asyncio.Queue()
-        """用于外部控制 MCP 服务的启停"""
         self.mcp_client_event: Dict[str, asyncio.Event] = {}
 
     def empty(self) -> bool:
@@ -446,7 +446,7 @@ class FuncCall:
                 await self.mcp_client_dict[name].cleanup()
                 self.mcp_client_dict.pop(name)
             except Exception as e:
-                logger.info(f"清空 MCP 客户端资源 {name}: {e}。")
+                logger.error(f"清空 MCP 客户端资源 {name}: {e}。")
             # 移除关联的FuncTool
             self.func_list = [
                 f
