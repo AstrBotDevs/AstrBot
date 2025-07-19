@@ -1,10 +1,10 @@
 <script setup>
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import { ref } from 'vue'
+import { ref, reactive, onMounted, provide, inject } from 'vue'
 import ListConfigItem from './ListConfigItem.vue'
 import { useI18n } from '@/i18n/composables'
 
-defineProps({
+const props = defineProps({
   metadata: {
     type: Object,
     required: true
@@ -26,6 +26,42 @@ const currentEditingKey = ref('')
 const currentEditingLanguage = ref('json')
 const currentEditingTheme = ref('vs-light')
 let currentEditingKeyIterable = null
+
+let expansionStates = inject('expansionStates', null)
+let toggleExpansion = inject('toggleExpansion', null)
+
+if (expansionStates === null) {
+  expansionStates = reactive({})
+  const storageKey = `expansion-states-${props.metadataKey}`
+
+  toggleExpansion = (key) => {
+    expansionStates[key] = !(expansionStates[key] ?? true)
+    localStorage.setItem(storageKey, JSON.stringify(expansionStates))
+  }
+
+  onMounted(() => {
+    const savedStates = localStorage.getItem(storageKey)
+    if (savedStates) {
+      Object.assign(expansionStates, JSON.parse(savedStates))
+    }
+
+    if (props.metadata[props.metadataKey]?.type === 'object') {
+      for (const key in props.iterable) {
+        if (
+          props.metadata[props.metadataKey].items[key]?.type === 'object' &&
+          expansionStates[key] === undefined
+        ) {
+          expansionStates[key] = true
+        }
+      }
+    }
+  })
+
+
+  provide('expansionStates', expansionStates)
+  provide('toggleExpansion', toggleExpansion)
+}
+
 
 function openEditorDialog(key, value, theme, language) {
   currentEditingKey.value = key
@@ -58,9 +94,31 @@ function saveEditedContent() {
         <!-- Nested Object -->
         <div v-if="metadata[metadataKey].items[key]?.type === 'object'" class="nested-object">
           <div v-if="metadata[metadataKey].items[key] && !metadata[metadataKey].items[key]?.invisible" class="nested-container">
+            <div class="d-flex align-center">
+              <v-switch
+                :model-value="expansionStates[key] ?? true"
+                color="primary"
+                inset
+                density="compact"
+                hide-details
+                @update:model-value="() => toggleExpansion(key)"
+                class="mr-2"
+              ></v-switch>
+              <div class="config-section flex-grow-1" @click="() => toggleExpansion(key)" style="cursor: pointer;">
+                <v-list-item-title class="config-title">
+                  {{ metadata[metadataKey].items[key]?.description }} <span class="metadata-key">({{ key }})</span>
+                </v-list-item-title>
+                <v-list-item-subtitle class="config-hint">
+                  <span v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint" class="important-hint">‼️</span>
+                  {{ metadata[metadataKey].items[key]?.hint }}
+                </v-list-item-subtitle>
+              </div>
+            </div>
             <v-expand-transition>
-              <AstrBotConfig :metadata="metadata[metadataKey].items" :iterable="iterable[key]" :metadataKey="key">
-              </AstrBotConfig>
+              <div v-if="expansionStates[key] ?? true">
+                <AstrBotConfig :metadata="metadata[metadataKey].items" :iterable="iterable[key]" :metadataKey="key">
+                </AstrBotConfig>
+              </div>
             </v-expand-transition>
           </div>
         </div>
