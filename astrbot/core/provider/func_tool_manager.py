@@ -125,7 +125,7 @@ class MCPClient:
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
             if not success:
-                raise Exception(f"远程服务器不可达或配置错误: {error_msg}")
+                raise Exception(error_msg)
 
             if cfg.get("transport") != "streamable_http":
                 # SSE transport method
@@ -268,12 +268,10 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                     else:
                         return False, f"HTTP {response.status}: {response.reason}"
 
-    except aiohttp.ClientError as e:
-        return False, f"客户端错误: {str(e)}"
     except asyncio.TimeoutError:
         return False, f"连接超时: {timeout}秒"
     except Exception as e:
-        return False, f"未知错误: {str(e)}"
+        return False, f"{e!s}"
 
 
 class FuncCall:
@@ -462,7 +460,7 @@ class FuncCall:
         if "url" in config:
             success, error_msg = await _quick_test_mcp_connection(config)
             if not success:
-                raise Exception(f"远程服务器不可达或配置错误: {error_msg}")
+                raise Exception(error_msg)
 
         mcp_client = MCPClient()
         try:
