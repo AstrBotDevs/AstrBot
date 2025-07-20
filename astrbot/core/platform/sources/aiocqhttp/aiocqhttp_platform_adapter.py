@@ -272,8 +272,14 @@ class AiocqhttpAdapter(Platform):
                             )
                             # 添加必要的 post_type 字段，防止 Event.from_payload 报错
                             reply_event_data["post_type"] = "message"
+                            new_event = Event.from_payload(reply_event_data)
+                            if not new_event:
+                                logger.error(
+                                    f"无法从回复消息数据构造 Event 对象: {reply_event_data}"
+                                )
+                                continue
                             abm_reply = await self._convert_handle_message_event(
-                                Event.from_payload(reply_event_data), get_reply=False
+                                new_event, get_reply=False
                             )
 
                             reply_seg = Reply(
