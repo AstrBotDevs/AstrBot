@@ -5,9 +5,11 @@
 避免多个会话的分段回复相互干扰。
 """
 
+import astrbot.core.message.components as Comp
 import asyncio
+import math
+import random
 import weakref
-from typing import Dict, List, Optional
 from dataclasses import dataclass
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -17,10 +19,11 @@ from astrbot.core.message.message_event_result import MessageChain, BaseMessageC
 @dataclass
 class SegmentedReplyTask:
     """分段回复任务"""
+
     event: AstrMessageEvent
-    decorated_comps: List[BaseMessageComponent]
-    components: List[BaseMessageComponent]
-    record_comps: List[BaseMessageComponent]
+    decorated_comps: list[BaseMessageComponent]
+    components: list[BaseMessageComponent]
+    record_comps: list[BaseMessageComponent]
 
 
 class SessionSegmentedReplyQueue:
@@ -30,7 +33,7 @@ class SessionSegmentedReplyQueue:
         self.session_id = session_id
         self.manager = weakref.ref(manager)  # 使用弱引用避免循环引用
         self.queue: asyncio.Queue = asyncio.Queue()
-        self.worker_task: Optional[asyncio.Task] = None
+        self.worker_task: asyncio.Task | None = None
         self.is_processing = False
         self.last_activity = asyncio.get_event_loop().time()
 
@@ -39,7 +42,6 @@ class SessionSegmentedReplyQueue:
         self.last_activity = asyncio.get_event_loop().time()
         await self.queue.put(task)
 
-        # 如果工作任务还没启动，启动它
         if self.worker_task is None or self.worker_task.done():
             self.worker_task = asyncio.create_task(self._worker())
 
@@ -48,7 +50,7 @@ class SessionSegmentedReplyQueue:
         try:
             while True:
                 try:
-                    # 等待任务，超时时间为30秒
+                    # 等待任务，超时时间为 30 秒
                     task = await asyncio.wait_for(self.queue.get(), timeout=30.0)
                     self.is_processing = True
                     self.last_activity = asyncio.get_event_loop().time()
@@ -57,8 +59,10 @@ class SessionSegmentedReplyQueue:
                     self.queue.task_done()
 
                 except asyncio.TimeoutError:
-                    # 30秒没有新任务，退出工作协程
-                    logger.debug(f"会话 {self.session_id} 的分段回复队列超时，停止工作协程")
+                    # 30 秒没有新任务，退出工作协程
+                    logger.debug(
+                        f"会话 {self.session_id} 的分段回复队列超时，停止工作协程"
+                    )
                     break
                 except Exception as e:
                     logger.error(f"处理会话 {self.session_id} 的分段回复时出错: {e}")
@@ -111,13 +115,13 @@ class SegmentedReplyManager:
     """分段回复管理器"""
 
     def __init__(self):
-        self.session_queues: Dict[str, SessionSegmentedReplyQueue] = {}
-        self.cleanup_task: Optional[asyncio.Task] = None
+        self.session_queues: dict[str, SessionSegmentedReplyQueue] = {}
+        self.cleanup_task: asyncio.Task | None = None
         self._interval_method = "random"
         self._interval = [1.5, 3.5]
         self._log_base = 2.0
 
-    def initialize(self, interval_method: str, interval: List[float], log_base: float):
+    def initialize(self, interval_method: str, interval: list[float], log_base: float):
         """初始化配置参数"""
         self._interval_method = interval_method
         self._interval = interval
@@ -130,24 +134,25 @@ class SegmentedReplyManager:
     async def enqueue_segmented_reply(
         self,
         event: AstrMessageEvent,
-        decorated_comps: List[BaseMessageComponent],
-        components: List[BaseMessageComponent],
-        record_comps: List[BaseMessageComponent]
+        decorated_comps: list[BaseMessageComponent],
+        components: list[BaseMessageComponent],
+        record_comps: list[BaseMessageComponent],
     ):
         """将分段回复任务加入对应会话的队列"""
         session_id = event.unified_msg_origin
 
         # 获取或创建会话队列
         if session_id not in self.session_queues:
-            self.session_queues[session_id] = SessionSegmentedReplyQueue(session_id, self)
-            logger.debug(f"为会话 {session_id} 创建分段回复队列")
+            self.session_queues[session_id] = SessionSegmentedReplyQueue(
+                session_id, self
+            )
 
         queue = self.session_queues[session_id]
         task = SegmentedReplyTask(
             event=event,
             decorated_comps=decorated_comps,
             components=components,
-            record_comps=record_comps
+            record_comps=record_comps,
         )
 
         await queue.enqueue(task)
@@ -155,10 +160,6 @@ class SegmentedReplyManager:
 
     async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
         """计算组件发送间隔时间"""
-        import random
-        import math
-        import astrbot.core.message.components as Comp
-
         if self._interval_method == "log":
             if isinstance(comp, Comp.Plain):
                 # 统计字数
@@ -194,10 +195,12 @@ class SegmentedReplyManager:
                 inactive_sessions = []
 
                 for session_id, queue in self.session_queues.items():
-                    # 如果队列超过5分钟没有活动且不在处理中，标记为可清理
-                    if (current_time - queue.last_activity > 300 and
-                        not queue.is_processing and
-                        queue.queue.empty()):
+                    # 如果队列超过 5 分钟没有活动且不在处理中，标记为可清理
+                    if (
+                        current_time - queue.last_activity > 300
+                        and not queue.is_processing
+                        and queue.queue.empty()
+                    ):
                         inactive_sessions.append(session_id)
 
                 # 清理不活跃的会话
@@ -205,7 +208,9 @@ class SegmentedReplyManager:
                     await self._cleanup_session(session_id)
 
                 if inactive_sessions:
-                    logger.debug(f"清理了 {len(inactive_sessions)} 个不活跃的分段回复队列")
+                    logger.debug(
+                        f"清理了 {len(inactive_sessions)} 个不活跃的分段回复队列"
+                    )
 
             except Exception as e:
                 logger.error(f"定期清理分段回复队列时出错: {e}")
@@ -219,5 +224,3 @@ class SegmentedReplyManager:
         # 清理所有会话队列
         for session_id in list(self.session_queues.keys()):
             await self._cleanup_session(session_id)
-
-        logger.info("分段回复管理器已关闭")
