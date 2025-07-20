@@ -20,10 +20,16 @@
             </v-tooltip>
           </p>
         </div>
-        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showMcpServerDialog = true" rounded="xl"
-          size="x-large">
-          {{ tm('mcpServers.buttons.add') }}
-        </v-btn>
+        <div>
+          <v-btn color="primary" prepend-icon="mdi-tools" class="me-2" variant="tonal" @click="showToolsDialog = true"
+            rounded="xl" size="x-large">
+            {{ tm('functionTools.buttons.view') }}({{ tools.length }})
+          </v-btn>
+          <v-btn color="success" prepend-icon="mdi-plus" variant="tonal" @click="showMcpServerDialog = true"
+            rounded="xl" size="x-large">
+            {{ tm('mcpServers.buttons.add') }}
+          </v-btn>
+        </div>
       </v-row>
 
       <!-- 标签页切换 -->
@@ -45,200 +51,79 @@
         <!-- 本地服务器标签页内容 -->
         <v-window-item value="local">
           <!-- MCP 服务器部分 -->
-          <v-card class="mb-6" elevation="2">
-            <v-card-title class="d-flex align-center py-3 px-4">
-              <v-icon color="primary" class="me-2">mdi-server</v-icon>
-              <span class="text-h6">{{ tm('mcpServers.title') }}</span>
-              <v-spacer></v-spacer>
-              <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="getServers"
-                :loading="loadingGettingServers">
-                {{ tm('mcpServers.buttons.refresh') }}
-              </v-btn>
-              <v-btn color="primary" style="margin-left: 8px;" prepend-icon="mdi-plus" variant="tonal"
-                @click="showMcpServerDialog = true">
-                {{ tm('mcpServers.buttons.add') }}
-              </v-btn>
-            </v-card-title>
 
-            <v-divider></v-divider>
+          <div v-if="mcpServers.length === 0" class="text-center pa-8">
+            <v-icon size="64" color="grey-lighten-1">mdi-server-off</v-icon>
+            <p class="text-grey mt-4">{{ tm('mcpServers.empty') }}</p>
+          </div>
 
-            <v-card-text class="px-4 py-3">
-              <div v-if="mcpServers.length === 0" class="text-center pa-8">
-                <v-icon size="64" color="grey-lighten-1">mdi-server-off</v-icon>
-                <p class="text-grey mt-4">{{ tm('mcpServers.empty') }}</p>
-              </div>
-
-              <v-row v-else>
-                <v-col v-for="(server, index) in mcpServers || []" :key="index" cols="12" md="6" lg="4" xl="3">
-                  <item-card style="background-color: #f7f2f9;" :item="server" title-field="name" enabled-field="active"
-                    @toggle-enabled="updateServerStatus" @delete="deleteServer" @edit="editServer">
-                    <template v-slot:item-details="{ item }">
-                      <div class="d-flex align-center mb-2">
-                        <v-icon size="small" color="grey" class="me-2">mdi-file-code</v-icon>
-                        <span class="text-caption text-medium-emphasis text-truncate"
-                          :title="getServerConfigSummary(item)">
-                          {{ getServerConfigSummary(item) }}
-                        </span>
-                      </div>
-
-
-                      <div class="d-flex" style="gap: 8px;">
-                        <div>
-                          <div v-if="item.tools && item.tools.length > 0">
-                            <div class="d-flex align-center mb-1">
-                              <v-icon size="small" color="grey" class="me-2">mdi-tools</v-icon>
-                              <v-dialog max-width="600px">
-                                <template v-slot:activator="{ props: listToolsProps }">
-                                  <span class="text-caption text-medium-emphasis cursor-pointer" v-bind="listToolsProps"
-                                    style="text-decoration: underline;">
-                                    {{ tm('mcpServers.status.availableTools', { count: item.tools.length }) }} ({{
-                                      item.tools.length }})
-                                  </span>
-                                </template>
-                                <template v-slot:default="{ isActive }">
-                                  <v-card style="padding: 16px;">
-                                    <v-card-title class="d-flex align-center">
-                                      <span>{{ tm('mcpServers.status.availableTools') }}</span>
-                                    </v-card-title>
-                                    <v-card-text>
-                                      <ul>
-                                        <li v-for="(tool, idx) in item.tools" :key="idx" style="margin: 8px 0px;">{{
-                                          tool
-                                          }}
-                                        </li>
-                                      </ul>
-                                    </v-card-text>
-                                    <v-card-actions class="d-flex justify-end">
-                                      <v-btn variant="text" color="primary" @click="isActive.value = false">
-                                        Close
-                                      </v-btn>
-                                    </v-card-actions>
-                                  </v-card>
-                                </template>
-
-
-                              </v-dialog>
-                            </div>
-                          </div>
-                          <div v-else class="text-caption text-medium-emphasis">
-                            <v-icon size="small" color="warning" class="me-1">mdi-alert-circle</v-icon>
-                            {{ tm('mcpServers.status.noTools') }}
-                          </div>
-                        </div>
-                        <div v-if="mcpServerUpdateLoaders[item.name]" class="text-caption text-medium-emphasis">
-                          <v-progress-circular indeterminate color="primary" size="16"></v-progress-circular>
-                        </div>
-                      </div>
-
-
-                    </template>
-                  </item-card>
-                </v-col>
-              </v-row>
-            </v-card-text>
-          </v-card>
-
-          <!-- 函数工具部分 -->
-          <v-card elevation="0" class="mt-4">
-            <v-card-title class="d-flex align-center py-3 px-4">
-              <v-icon color="primary" class="me-2">mdi-function</v-icon>
-              <span class="text-h4">{{ tm('functionTools.title') }}</span>
-              <v-chip color="info" size="small" class="ml-2">{{ tools.length }}</v-chip>
-              <v-spacer></v-spacer>
-              <v-btn variant="text" color="primary" @click="showTools = !showTools">
-                {{ showTools ? tm('functionTools.buttons.collapse') : tm('functionTools.buttons.expand') }}
-                <v-icon>{{ showTools ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
-              </v-btn>
-            </v-card-title>
-
-            <v-divider></v-divider>
-
-            <v-expand-transition>
-              <v-card-text class="pa-0" v-if="showTools">
-                <div class="pa-4">
-                  <div v-if="tools.length === 0" class="text-center pa-8">
-                    <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
-                    <p class="text-grey mt-4">{{ tm('functionTools.empty') }}</p>
+          <v-row v-else>
+            <v-col v-for="(server, index) in mcpServers || []" :key="index" cols="12" md="6" lg="4" xl="3">
+              <item-card style="background-color: rgb(var(--v-theme-mcpCardBg));" :item="server" title-field="name" enabled-field="active"
+                @toggle-enabled="updateServerStatus" @delete="deleteServer" @edit="editServer">
+                <template v-slot:item-details="{ item }">
+                  <div class="d-flex align-center mb-2">
+                    <v-icon size="small" color="grey" class="me-2">mdi-file-code</v-icon>
+                    <span class="text-caption text-medium-emphasis text-truncate" :title="getServerConfigSummary(item)">
+                      {{ getServerConfigSummary(item) }}
+                    </span>
                   </div>
 
-                  <div v-else>
-                    <v-text-field v-model="toolSearch" prepend-inner-icon="mdi-magnify"
-                      :label="tm('functionTools.search')" variant="outlined" density="compact" class="mb-4" hide-details
-                      clearable></v-text-field>
 
-                    <v-expansion-panels v-model="openedPanel" multiple>
-                      <v-expansion-panel v-for="(tool, index) in filteredTools" :key="index" :value="index"
-                        class="mb-2 tool-panel" rounded="lg">
-                        <v-expansion-panel-title>
-                          <v-row no-gutters align="center">
-                            <v-col cols="3">
-                              <div class="d-flex align-center">
-                                <v-icon color="primary" class="me-2" size="small">
-                                  {{ tool.function.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
-                                </v-icon>
-                                <span class="text-body-1 text-high-emphasis font-weight-medium text-truncate"
-                                  :title="tool.function.name">
-                                  {{ formatToolName(tool.function.name) }}
-                                </span>
-                              </div>
-                            </v-col>
-                            <v-col cols="9" class="text-grey">
-                              {{ tool.function.description }}
-                            </v-col>
-                          </v-row>
-                        </v-expansion-panel-title>
+                  <div class="d-flex" style="gap: 8px;">
+                    <div>
+                      <div v-if="item.tools && item.tools.length > 0">
+                        <div class="d-flex align-center mb-1">
+                          <v-icon size="small" color="grey" class="me-2">mdi-tools</v-icon>
+                          <v-dialog max-width="600px">
+                            <template v-slot:activator="{ props: listToolsProps }">
+                              <span class="text-caption text-medium-emphasis cursor-pointer" v-bind="listToolsProps"
+                                style="text-decoration: underline;">
+                                {{ tm('mcpServers.status.availableTools', { count: item.tools.length }) }} ({{
+                                  item.tools.length }})
+                              </span>
+                            </template>
+                            <template v-slot:default="{ isActive }">
+                              <v-card style="padding: 16px;">
+                                <v-card-title class="d-flex align-center">
+                                  <span>{{ tm('mcpServers.status.availableTools') }}</span>
+                                </v-card-title>
+                                <v-card-text>
+                                  <ul>
+                                    <li v-for="(tool, idx) in item.tools" :key="idx" style="margin: 8px 0px;">{{
+                                      tool
+                                      }}
+                                    </li>
+                                  </ul>
+                                </v-card-text>
+                                <v-card-actions class="d-flex justify-end">
+                                  <v-btn variant="text" color="primary" @click="isActive.value = false">
+                                    Close
+                                  </v-btn>
+                                </v-card-actions>
+                              </v-card>
+                            </template>
 
-                        <v-expansion-panel-text>
-                          <v-card flat>
-                            <v-card-text>
-                              <p class="text-body-1 font-weight-medium mb-3">
-                                <v-icon color="primary" size="small" class="me-1">mdi-information</v-icon>
-                                {{ tm('functionTools.description') }}
-                              </p>
-                              <p class="text-body-2 ml-6 mb-4">{{ tool.function.description }}</p>
 
-                              <template v-if="tool.function.parameters && tool.function.parameters.properties">
-                                <p class="text-body-1 font-weight-medium mb-3">
-                                  <v-icon color="primary" size="small" class="me-1">mdi-code-json</v-icon>
-                                  {{ tm('functionTools.parameters') }}
-                                </p>
-
-                                <v-table density="compact" class="params-table mt-1">
-                                  <thead>
-                                    <tr>
-                                      <th>{{ tm('functionTools.table.paramName') }}</th>
-                                      <th>{{ tm('functionTools.table.type') }}</th>
-                                      <th>{{ tm('functionTools.table.description') }}</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    <tr v-for="(param, paramName) in tool.function.parameters.properties"
-                                      :key="paramName">
-                                      <td class="font-weight-medium">{{ paramName }}</td>
-                                      <td>
-                                        <v-chip size="x-small" color="primary" text class="text-caption">
-                                          {{ param.type }}
-                                        </v-chip>
-                                      </td>
-                                      <td>{{ param.description }}</td>
-                                    </tr>
-                                  </tbody>
-                                </v-table>
-                              </template>
-                              <div v-else class="text-center pa-4 text-medium-emphasis">
-                                <v-icon size="large" color="grey-lighten-1">mdi-code-brackets</v-icon>
-                                <p>{{ tm('functionTools.noParameters') }}</p>
-                              </div>
-                            </v-card-text>
-                          </v-card>
-                        </v-expansion-panel-text>
-                      </v-expansion-panel>
-                    </v-expansion-panels>
+                          </v-dialog>
+                        </div>
+                      </div>
+                      <div v-else class="text-caption text-medium-emphasis">
+                        <v-icon size="small" color="warning" class="me-1">mdi-alert-circle</v-icon>
+                        {{ tm('mcpServers.status.noTools') }}
+                      </div>
+                    </div>
+                    <div v-if="mcpServerUpdateLoaders[item.name]" class="text-caption text-medium-emphasis">
+                      <v-progress-circular indeterminate color="primary" size="16"></v-progress-circular>
+                    </div>
                   </div>
-                </div>
-              </v-card-text>
-            </v-expand-transition>
-          </v-card>
+
+
+                </template>
+              </item-card>
+            </v-col>
+          </v-row>
+
         </v-window-item>
 
         <!-- MCP市场标签页内容 -->
@@ -501,6 +386,106 @@
       </v-card>
     </v-dialog>
 
+    <!-- 函数工具对话框 -->
+    <v-dialog v-model="showToolsDialog" max-width="800px">
+      <v-card elevation="0" class="mt-4">
+        <v-card-title class="d-flex align-center py-3 px-4">
+          {{ tm('functionTools.title') }}
+          <v-chip color="info" size="small" class="ml-2">{{ tools.length }}</v-chip>
+        </v-card-title>
+        <v-expand-transition>
+          <v-card-text class="pa-0" v-if="showTools">
+            <div class="pa-4">
+              <div v-if="tools.length === 0" class="text-center pa-8">
+                <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
+                <p class="text-grey mt-4">{{ tm('functionTools.empty') }}</p>
+              </div>
+
+              <div v-else>
+                <v-text-field v-model="toolSearch" prepend-inner-icon="mdi-magnify" :label="tm('functionTools.search')"
+                  variant="outlined" density="compact" class="mb-4" hide-details clearable></v-text-field>
+
+                <v-expansion-panels v-model="openedPanel" multiple style="max-height: 500px; overflow-y: auto;">
+                  <v-expansion-panel v-for="(tool, index) in filteredTools" :key="index" :value="index"
+                    class="mb-2 tool-panel" rounded="lg">
+                    <v-expansion-panel-title>
+                      <v-row no-gutters align="center">
+                        <v-col cols="3">
+                          <div class="d-flex align-center">
+                            <v-icon color="primary" class="me-2" size="small">
+                              {{ tool.function.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
+                            </v-icon>
+                            <span class="text-body-1 text-high-emphasis font-weight-medium text-truncate"
+                              :title="tool.function.name">
+                              {{ formatToolName(tool.function.name) }}
+                            </span>
+                          </div>
+                        </v-col>
+                        <v-col cols="9" class="text-grey">
+                          {{ tool.function.description }}
+                        </v-col>
+                      </v-row>
+                    </v-expansion-panel-title>
+
+                    <v-expansion-panel-text>
+                      <v-card flat>
+                        <v-card-text>
+                          <p class="text-body-1 font-weight-medium mb-3">
+                            <v-icon color="primary" size="small" class="me-1">mdi-information</v-icon>
+                            {{ tm('functionTools.description') }}
+                          </p>
+                          <p class="text-body-2 ml-6 mb-4">{{ tool.function.description }}</p>
+
+                          <template v-if="tool.function.parameters && tool.function.parameters.properties">
+                            <p class="text-body-1 font-weight-medium mb-3">
+                              <v-icon color="primary" size="small" class="me-1">mdi-code-json</v-icon>
+                              {{ tm('functionTools.parameters') }}
+                            </p>
+
+                            <v-table density="compact" class="params-table mt-1">
+                              <thead>
+                                <tr>
+                                  <th>{{ tm('functionTools.table.paramName') }}</th>
+                                  <th>{{ tm('functionTools.table.type') }}</th>
+                                  <th>{{ tm('functionTools.table.description') }}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr v-for="(param, paramName) in tool.function.parameters.properties" :key="paramName">
+                                  <td class="font-weight-medium">{{ paramName }}</td>
+                                  <td>
+                                    <v-chip size="x-small" color="primary" text class="text-caption">
+                                      {{ param.type }}
+                                    </v-chip>
+                                  </td>
+                                  <td>{{ param.description }}</td>
+                                </tr>
+                              </tbody>
+                            </v-table>
+                          </template>
+                          <div v-else class="text-center pa-4 text-medium-emphasis">
+                            <v-icon size="large" color="grey-lighten-1">mdi-code-brackets</v-icon>
+                            <p>{{ tm('functionTools.noParameters') }}</p>
+                          </div>
+                        </v-card-text>
+                      </v-card>
+                    </v-expansion-panel-text>
+                  </v-expansion-panel>
+                </v-expansion-panels>
+              </div>
+            </div>
+          </v-card-text>
+        </v-expand-transition>
+
+        <v-card-actions class="pa-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="showToolsDialog = false">
+            {{ tm('dialogs.serverDetail.buttons.close') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 消息提示 -->
     <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack"
       location="top">
@@ -537,6 +522,7 @@ export default {
       showMcpServerDialog: false,
       showServerDetailDialog: false,
       addServerDialogMessage: "",
+      showToolsDialog: false,
       showTools: true,
       loading: false,
       loadingGettingServers: false,
