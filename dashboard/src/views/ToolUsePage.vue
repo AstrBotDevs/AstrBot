@@ -746,6 +746,7 @@ export default {
           .then(response => {
             this.loading = false;
             this.showMcpServerDialog = false;
+            this.addServerDialogMessage = "";
             this.getServers();
             this.getTools();
             this.showSuccess(response.data.message || this.tm('messages.saveSuccess'));
@@ -824,6 +825,7 @@ export default {
 
     closeServerDialog() {
       this.showMcpServerDialog = false;
+      this.addServerDialogMessage = '';
       this.resetForm();
     },
 

@@ -56,7 +56,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 
     url = cfg["url"]
     headers = cfg.get("headers", {})
-    timeout = cfg.get("timeout", 5)
+    timeout = cfg.get("timeout", 10)
 
     try:
         async with aiohttp.ClientSession() as session:
