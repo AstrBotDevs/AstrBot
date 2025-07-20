@@ -173,7 +173,9 @@ class LLMRequestSubStage(Stage):
             event=event,
             pipeline_ctx=self.ctx,
         )
-        logger.debug(f"handle provider[id: {provider.provider_config['id']}] request: {req}")
+        logger.debug(
+            f"handle provider[id: {provider.provider_config['id']}] request: {req}"
+        )
         await tool_loop_agent.reset(req=req, streaming=self.streaming_response)
 
         async def requesting():
@@ -229,7 +231,7 @@ class LLMRequestSubStage(Stage):
                     logger.error(traceback.format_exc())
                     event.set_result(
                         MessageEventResult().message(
-                            f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}"
+                            f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}\n\n请在控制台查看和分享错误详情。\n"
                         )
                     )
                     return

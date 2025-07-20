@@ -130,7 +130,7 @@ class MCPClient:
                     timeout=cfg.get("timeout", 5),
                     sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                streams = await self._streams_context.__aenter__()
+                streams = await self.exit_stack.enter_async_context(self._streams_context)
 
                 # Create a new client session
                 self.session = await self.exit_stack.enter_async_context(
@@ -148,7 +148,7 @@ class MCPClient:
                     sse_read_timeout=sse_read_timeout,
                     terminate_on_close=cfg.get("terminate_on_close", True),
                 )
-                read_s, write_s, _ = await self._streams_context.__aenter__()
+                read_s, write_s, _ = await self.exit_stack.enter_async_context(self._streams_context)
 
                 # Create a new client session
                 self.session = await self.exit_stack.enter_async_context(
@@ -356,12 +356,14 @@ class FuncCall:
             await self._init_mcp_client(name, cfg)
             await event.wait()
             logger.info(f"收到 MCP 客户端 {name} 终止信号")
-            await self._terminate_mcp_client(name)
         except Exception as e:
             import traceback
 
             traceback.print_exc()
             logger.error(f"初始化 MCP 客户端 {name} 失败: {e}")
+        finally:
+            # 无论如何都能清理
+            await self._terminate_mcp_client(name)
 
     async def _init_mcp_client(self, name: str, config: dict) -> None:
         """初始化单个MCP客户端"""
@@ -414,7 +416,7 @@ class FuncCall:
             try:
                 # 关闭MCP连接
                 await self.mcp_client_dict[name].cleanup()
-                del self.mcp_client_dict[name]
+                self.mcp_client_dict.pop(name)
             except Exception as e:
                 logger.info(f"清空 MCP 客户端资源 {name}: {e}。")
             # 移除关联的FuncTool
@@ -629,8 +631,3 @@ class FuncCall:
 
     def __repr__(self):
         return str(self.func_list)
-
-    async def terminate(self):
-        for name in self.mcp_client_dict.keys():
-            await self._terminate_mcp_client(name)
-            logger.debug(f"清理 MCP 客户端 {name} 资源")
