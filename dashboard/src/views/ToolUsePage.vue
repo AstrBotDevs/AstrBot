@@ -20,7 +20,8 @@
             </v-tooltip>
           </p>
         </div>
-        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showMcpServerDialog = true" rounded="xl" size="x-large">
+        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showMcpServerDialog = true" rounded="xl"
+          size="x-large">
           {{ tm('mcpServers.buttons.add') }}
         </v-btn>
       </v-row>
@@ -49,7 +50,8 @@
               <v-icon color="primary" class="me-2">mdi-server</v-icon>
               <span class="text-h6">{{ tm('mcpServers.title') }}</span>
               <v-spacer></v-spacer>
-              <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="getServers" :loading="loading">
+              <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="getServers"
+                :loading="loadingGettingServers">
                 {{ tm('mcpServers.buttons.refresh') }}
               </v-btn>
               <v-btn color="primary" style="margin-left: 8px;" prepend-icon="mdi-plus" variant="tonal"
@@ -68,38 +70,67 @@
 
               <v-row v-else>
                 <v-col v-for="(server, index) in mcpServers || []" :key="index" cols="12" md="6" lg="4" xl="3">
-                  <item-card
-                    style="background-color: #f7f2f9;"
-                    :item="server" 
-                    title-field="name" 
-                    enabled-field="active"
-                    @toggle-enabled="updateServerStatus"
-                    @delete="deleteServer" 
-                    @edit="editServer">
+                  <item-card style="background-color: #f7f2f9;" :item="server" title-field="name" enabled-field="active"
+                    @toggle-enabled="updateServerStatus" @delete="deleteServer" @edit="editServer">
                     <template v-slot:item-details="{ item }">
                       <div class="d-flex align-center mb-2">
                         <v-icon size="small" color="grey" class="me-2">mdi-file-code</v-icon>
-                        <span class="text-caption text-medium-emphasis text-truncate" :title="getServerConfigSummary(item)">
+                        <span class="text-caption text-medium-emphasis text-truncate"
+                          :title="getServerConfigSummary(item)">
                           {{ getServerConfigSummary(item) }}
                         </span>
                       </div>
 
-                      <div v-if="item.tools && item.tools.length > 0">
-                        <div class="d-flex align-center mb-1">
-                          <v-icon size="small" color="grey" class="me-2">mdi-tools</v-icon>
-                          <span class="text-caption text-medium-emphasis">{{ tm('mcpServers.status.availableTools') }} ({{ item.tools.length }})</span>
+
+                      <div class="d-flex" style="gap: 8px;">
+                        <div>
+                          <div v-if="item.tools && item.tools.length > 0">
+                            <div class="d-flex align-center mb-1">
+                              <v-icon size="small" color="grey" class="me-2">mdi-tools</v-icon>
+                              <v-dialog max-width="600px">
+                                <template v-slot:activator="{ props: listToolsProps }">
+                                  <span class="text-caption text-medium-emphasis cursor-pointer" v-bind="listToolsProps"
+                                    style="text-decoration: underline;">
+                                    {{ tm('mcpServers.status.availableTools', { count: item.tools.length }) }} ({{
+                                      item.tools.length }})
+                                  </span>
+                                </template>
+                                <template v-slot:default="{ isActive }">
+                                  <v-card style="padding: 16px;">
+                                    <v-card-title class="d-flex align-center">
+                                      <span>{{ tm('mcpServers.status.availableTools') }}</span>
+                                    </v-card-title>
+                                    <v-card-text>
+                                      <ul>
+                                        <li v-for="(tool, idx) in item.tools" :key="idx" style="margin: 8px 0px;">{{
+                                          tool
+                                          }}
+                                        </li>
+                                      </ul>
+                                    </v-card-text>
+                                    <v-card-actions class="d-flex justify-end">
+                                      <v-btn variant="text" color="primary" @click="isActive.value = false">
+                                        Close
+                                      </v-btn>
+                                    </v-card-actions>
+                                  </v-card>
+                                </template>
+
+
+                              </v-dialog>
+                            </div>
+                          </div>
+                          <div v-else class="text-caption text-medium-emphasis">
+                            <v-icon size="small" color="warning" class="me-1">mdi-alert-circle</v-icon>
+                            {{ tm('mcpServers.status.noTools') }}
+                          </div>
                         </div>
-                        <v-chip-group class="tool-chips">
-                          <v-chip v-for="(tool, idx) in item.tools" :key="idx" size="x-small" density="compact" color="info"
-                            class="text-caption">
-                            {{ tool }}
-                          </v-chip>
-                        </v-chip-group>
+                        <div v-if="mcpServerUpdateLoaders[item.name]" class="text-caption text-medium-emphasis">
+                          <v-progress-circular indeterminate color="primary" size="16"></v-progress-circular>
+                        </div>
                       </div>
-                      <div v-else class="text-caption text-medium-emphasis mt-2">
-                        <v-icon size="small" color="warning" class="me-1">mdi-alert-circle</v-icon>
-                        {{ tm('mcpServers.status.noTools') }}
-                      </div>
+
+
                     </template>
                   </item-card>
                 </v-col>
@@ -131,8 +162,9 @@
                   </div>
 
                   <div v-else>
-                    <v-text-field v-model="toolSearch" prepend-inner-icon="mdi-magnify" :label="tm('functionTools.search')" variant="outlined"
-                      density="compact" class="mb-4" hide-details clearable></v-text-field>
+                    <v-text-field v-model="toolSearch" prepend-inner-icon="mdi-magnify"
+                      :label="tm('functionTools.search')" variant="outlined" density="compact" class="mb-4" hide-details
+                      clearable></v-text-field>
 
                     <v-expansion-panels v-model="openedPanel" multiple>
                       <v-expansion-panel v-for="(tool, index) in filteredTools" :key="index" :value="index"
@@ -216,9 +248,9 @@
               <v-icon color="primary" class="me-2">mdi-store</v-icon>
               <span class="text-h6">{{ tm('marketplace.title') }}</span>
               <v-spacer></v-spacer>
-              <v-text-field v-model="marketplaceSearch" prepend-inner-icon="mdi-magnify" :label="tm('marketplace.search')"
-                variant="outlined" density="compact" hide-details class="mx-2" style="max-width: 300px" clearable
-                @update:model-value="searchMarketplaceServers"></v-text-field>
+              <v-text-field v-model="marketplaceSearch" prepend-inner-icon="mdi-magnify"
+                :label="tm('marketplace.search')" variant="outlined" density="compact" hide-details class="mx-2"
+                style="max-width: 300px" clearable @update:model-value="searchMarketplaceServers"></v-text-field>
               <v-btn color="primary" prepend-icon="mdi-refresh" variant="text" @click="fetchMarketplaceServers(1)"
                 :loading="marketplaceLoading">
                 {{ tm('marketplace.buttons.refresh') }}
@@ -256,7 +288,8 @@
                       <div class="d-flex align-center mb-2">
                         <v-icon size="small" color="grey" class="me-2">mdi-tools</v-icon>
                         <span class="text-caption text-medium-emphasis">
-                          {{ tm('marketplace.status.availableTools', { count: server.tools ? server.tools.length : 0 }) }}
+                          {{ tm('marketplace.status.availableTools', { count: server.tools ? server.tools.length : 0 })
+                          }}
                         </span>
                       </div>
 
@@ -310,31 +343,25 @@
 
         <v-card-text class="py-4">
           <v-form @submit.prevent="saveServer" ref="form">
-            <v-text-field v-model="currentServer.name" :label="tm('dialogs.addServer.fields.name')" variant="outlined" :rules="[v => !!v || tm('dialogs.addServer.fields.nameRequired')]"
-              required class="mb-3"></v-text-field>
-
-            <v-switch v-model="currentServer.active" :label="tm('dialogs.addServer.fields.enable')" color="primary" hide-details class="mb-3"></v-switch>
+            <v-text-field v-model="currentServer.name" :label="tm('dialogs.addServer.fields.name')" variant="outlined"
+              :rules="[v => !!v || tm('dialogs.addServer.fields.nameRequired')]" required class="mb-3"></v-text-field>
 
             <div class="mb-2 d-flex align-center">
               <span class="text-subtitle-1">{{ tm('dialogs.addServer.fields.config') }}</span>
-              <v-tooltip location="top">
-                <template v-slot:activator="{ props }">
-                  <v-icon v-bind="props" class="ms-2" size="small" color="primary">mdi-information</v-icon>
-                </template>
-                <div style="white-space: pre-line;">
-                  {{ tm('tooltip.serverConfig') }}
-                </div>
-              </v-tooltip>
               <v-spacer></v-spacer>
-              <v-btn size="small" color="info" variant="text" @click="setConfigTemplate" class="me-1">
-                {{ tm('mcpServers.buttons.useTemplate') }}
+              <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('stdio')" class="me-1">
+                {{ tm('mcpServers.buttons.useTemplateStdio') }}
+              </v-btn>
+              <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('streamable_http')"
+                class="me-1">
+                {{ tm('mcpServers.buttons.useTemplateStreamableHttp') }}
+              </v-btn>
+              <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('sse')" class="me-1">
+                {{ tm('mcpServers.buttons.useTemplateSse') }}
               </v-btn>
             </div>
-            <small>{{ tm('dialogs.addServer.configNotes.note1') }}</small>
-            <br>
-            <small>{{ tm('dialogs.addServer.configNotes.note2') }}</small>
 
-            <div class="monaco-container">
+            <div class="monaco-container" style="margin-top: 16px;">
               <VueMonacoEditor v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
                 minimap: {
                   enabled: false
@@ -353,14 +380,19 @@
             </div>
 
           </v-form>
-        </v-card-text>
+          <div style="margin-top: 8px;">
+            <small>{{ addServerDialogMessage }}</small>
+          </div>
 
-        <v-divider></v-divider>
+        </v-card-text>
 
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="closeServerDialog" :disabled="loading">
             {{ tm('dialogs.addServer.buttons.cancel') }}
+          </v-btn>
+          <v-btn variant="text" @click="testServerConnection" :disabled="loading">
+            {{ tm('dialogs.addServer.buttons.testConnection') }}
           </v-btn>
           <v-btn color="primary" @click="saveServer" :loading="loading" :disabled="!isServerFormValid">
             {{ tm('dialogs.addServer.buttons.save') }}
@@ -504,8 +536,11 @@ export default {
       tools: [],
       showMcpServerDialog: false,
       showServerDetailDialog: false,
+      addServerDialogMessage: "",
       showTools: true,
       loading: false,
+      loadingGettingServers: false,
+      mcpServerUpdateLoaders: {}, // record loading state for each server update
       isEditMode: false,
       serverConfigJson: '',
       jsonError: null,
@@ -575,10 +610,10 @@ export default {
       if (!this.marketplaceSearch.trim()) {
         return this.marketplaceServers;
       }
-      
+
       const searchTerm = this.marketplaceSearch.toLowerCase();
-      return this.marketplaceServers.filter(server => 
-        server.name.toLowerCase().includes(searchTerm) || 
+      return this.marketplaceServers.filter(server =>
+        server.name.toLowerCase().includes(searchTerm) ||
         (server.name_h && server.name_h.toLowerCase().includes(searchTerm)) ||
         (server.description && server.description.toLowerCase().includes(searchTerm))
       );
@@ -618,17 +653,21 @@ export default {
     },
 
     getServers() {
-      this.loading = true
+      this.loadingGettingServers = true;
       axios.get('/api/tools/mcp/servers')
         .then(response => {
           this.mcpServers = response.data.data || [];
+          this.mcpServers.forEach(server => {
+            // Ensure each server has a loader state
+            if (!this.mcpServerUpdateLoaders[server.name]) {
+              this.mcpServerUpdateLoaders[server.name] = false;
+            }
+          });
         })
         .catch(error => {
           this.showError(this.tm('messages.getServersError', { error: error.message }));
         }).finally(() => {
-          setTimeout(() => {
-            this.loading = false;
-          }, 500);
+          this.loadingGettingServers = false;
         });
     },
 
@@ -658,14 +697,28 @@ export default {
       }
     },
 
-    setConfigTemplate() {
-      // 设置一个基本的配置模板
-      const template = {
-        command: "python",
-        args: ["-m", "your_module"],
-        // 可以添加其他 MCP 支持的配置项
-      };
-
+    setConfigTemplate(type = 'stdio') {
+      let template = {};
+      if (type === 'streamable_http') {
+        template = {
+          transport: "streamable_http",
+          url: "your mcp server url",
+          headers: {},
+          timeout: 30,
+        };
+      } else if (type === 'sse') {
+        template = {
+          transport: "sse",
+          url: "your mcp server url",
+          headers: {},
+          timeout: 30,
+        };
+      } else {
+        template = {
+          command: "python",
+          args: ["-m", "your_module"],
+        };
+      }
       this.serverConfigJson = JSON.stringify(template, null, 2);
     },
 
@@ -693,6 +746,7 @@ export default {
           .then(response => {
             this.loading = false;
             this.showMcpServerDialog = false;
+            this.addServerDialogMessage = "";
             this.getServers();
             this.getTools();
             this.showSuccess(response.data.message || this.tm('messages.saveSuccess'));
@@ -753,6 +807,7 @@ export default {
 
     updateServerStatus(server) {
       // 切换服务器状态
+      this.mcpServerUpdateLoaders[server.name] = true;
       server.active = !server.active;
       axios.post('/api/tools/mcp/update', server)
         .then(response => {
@@ -761,14 +816,46 @@ export default {
         })
         .catch(error => {
           this.showError(this.tm('messages.updateError', { error: error.response?.data?.message || error.message }));
-          // 回滚状态
           server.active = !server.active;
+        })
+        .finally(() => {
+          this.mcpServerUpdateLoaders[server.name] = false;
         });
     },
 
     closeServerDialog() {
       this.showMcpServerDialog = false;
+      this.addServerDialogMessage = '';
       this.resetForm();
+    },
+
+    testServerConnection() {
+      if (!this.validateJson()) {
+        return;
+      }
+
+      this.loading = true;
+
+      let configObj;
+      try {
+        configObj = JSON.parse(this.serverConfigJson);
+      } catch (e) {
+        this.loading = false;
+        this.showError(this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }));
+        return;
+      }
+
+      axios.post('/api/tools/mcp/test', {
+        "mcp_server_config": configObj,
+      })
+        .then(response => {
+          this.loading = false;
+          this.addServerDialogMessage = `${response.data.message} (tools: ${response.data.data})`;
+        })
+        .catch(error => {
+          this.loading = false;
+          this.showError(this.tm('messages.testError', { error: error.response?.data?.message || error.message }));
+        });
     },
 
     resetForm() {
@@ -939,7 +1026,7 @@ export default {
 
 .monaco-container {
   border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
+  border-radius: 8px;
   height: 300px;
   margin-top: 4px;
   overflow: hidden;

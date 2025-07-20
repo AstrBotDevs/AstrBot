@@ -169,10 +169,7 @@ class ProviderManager:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
 
         # 初始化 MCP Client 连接
-        asyncio.create_task(
-            self.llm_tools.mcp_service_selector(), name="mcp-service-handler"
-        )
-        self.llm_tools.mcp_service_queue.put_nowait({"type": "init"})
+        asyncio.create_task(self.llm_tools.init_mcp_clients(), name="init_mcp_clients")
 
     async def load_provider(self, provider_config: dict):
         if not provider_config["enable"]:
@@ -422,7 +419,7 @@ class ProviderManager:
                 self.curr_tts_provider_inst = None
 
             if getattr(self.inst_map[provider_id], "terminate", None):
-                await self.inst_map[provider_id].terminate() # type: ignore
+                await self.inst_map[provider_id].terminate()  # type: ignore
 
             logger.info(
                 f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})"
@@ -432,6 +429,8 @@ class ProviderManager:
     async def terminate(self):
         for provider_inst in self.provider_insts:
             if hasattr(provider_inst, "terminate"):
-                await provider_inst.terminate() # type: ignore
-        # 清理 MCP Client 连接
-        await self.llm_tools.mcp_service_queue.put({"type": "terminate"})
+                await provider_inst.terminate()  # type: ignore
+        try:
+            await self.llm_tools.disable_mcp_server()
+        except Exception:
+            logger.error("Error while disabling MCP servers", exc_info=True)
