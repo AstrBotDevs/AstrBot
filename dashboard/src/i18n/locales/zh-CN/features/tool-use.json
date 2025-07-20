@@ -30,8 +30,7 @@
   "functionTools": {
     "title": "函数工具",
     "buttons": {
-      "expand": "展开",
-      "collapse": "收起"
+      "view": "查看工具"
     },
     "search": "搜索函数工具",
     "empty": "没有可用的函数工具",

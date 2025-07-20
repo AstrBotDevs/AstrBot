@@ -30,8 +30,7 @@
   "functionTools": {
     "title": "Function Tools",
     "buttons": {
-      "expand": "Expand",
-      "collapse": "Collapse"
+      "view": "View Tools"
     },
     "search": "Search function tools",
     "empty": "No function tools available",
