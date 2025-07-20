@@ -1,3 +1,6 @@
+import random
+import asyncio
+import math
 import traceback
 import astrbot.core.message.components as Comp
 from typing import Union, AsyncGenerator
@@ -10,7 +13,7 @@ from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.path_util import path_Mapping
-from .segmented_reply_manager import SegmentedReplyManager
+from astrbot.core.utils.session_lock import session_lock_manager
 
 
 @register_stage
@@ -70,13 +73,26 @@ class RespondStage(Stage):
             self.interval = [1.5, 3.5]
         logger.info(f"分段回复间隔时间：{self.interval}")
 
-        # 初始化分段回复管理器
-        self.segmented_reply_manager = SegmentedReplyManager()
-        self.segmented_reply_manager.initialize(
-            self.interval_method,
-            self.interval,
-            self.log_base
-        )
+    async def _word_cnt(self, text: str) -> int:
+        """分段回复 统计字数"""
+        if all(ord(c) < 128 for c in text):
+            word_count = len(text.split())
+        else:
+            word_count = len([c for c in text if c.isalnum()])
+        return word_count
+
+    async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
+        """分段回复 计算间隔时间"""
+        if self.interval_method == "log":
+            if isinstance(comp, Comp.Plain):
+                wc = await self._word_cnt(comp.text)
+                i = math.log(wc + 1, self.log_base)
+                return random.uniform(i, i + 0.5)
+            else:
+                return random.uniform(1, 1.75)
+        else:
+            # random
+            return random.uniform(self.interval[0], self.interval[1])
 
     async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]):
         """检查消息链是否为空
@@ -148,24 +164,41 @@ class RespondStage(Stage):
                 and event.get_platform_name()
                 not in ["qq_official", "weixin_official_account", "dingtalk"]
             ):
-                decorated_comps = []
-                if self.reply_with_mention:
-                    for comp in result.chain:
-                        if isinstance(comp, Comp.At):
-                            decorated_comps.append(comp)
-                            result.chain.remove(comp)
-                            break
-                if self.reply_with_quote:
-                    for comp in result.chain:
-                        if isinstance(comp, Comp.Reply):
-                            decorated_comps.append(comp)
-                            result.chain.remove(comp)
+                lock = await session_lock_manager.get_lock(event.unified_msg_origin)
+                async with lock:
+                    decorated_comps = []
+                    if self.reply_with_mention:
+                        for comp in result.chain:
+                            if isinstance(comp, Comp.At):
+                                decorated_comps.append(comp)
+                                result.chain.remove(comp)
+                                break
+                    if self.reply_with_quote:
+                        for comp in result.chain:
+                            if isinstance(comp, Comp.Reply):
+                                decorated_comps.append(comp)
+                                result.chain.remove(comp)
+                                break
+
+                    for rcomp in record_comps:
+                        i = await self._calc_comp_interval(rcomp)
+                        await asyncio.sleep(i)
+                        try:
+                            await event.send(MessageChain([rcomp]))
+                        except Exception as e:
+                            logger.error(f"发送消息失败: {e} chain: {result.chain}")
                             break
 
-                # 使用分段回复管理器处理
-                await self.segmented_reply_manager.enqueue_segmented_reply(
-                    event, decorated_comps, non_record_comps, record_comps
-                )
+                    # 分段回复
+                    for comp in non_record_comps:
+                        i = await self._calc_comp_interval(comp)
+                        await asyncio.sleep(i)
+                        try:
+                            await event.send(MessageChain([*decorated_comps, comp]))
+                            decorated_comps = []  # 清空已发送的装饰组件
+                        except Exception as e:
+                            logger.error(f"发送消息失败: {e} chain: {result.chain}")
+                            break
             else:
                 for rcomp in record_comps:
                     try:
@@ -202,8 +235,3 @@ class RespondStage(Stage):
                 return
 
         event.clear_result()
-
-    async def shutdown(self):
-        """关闭阶段，清理资源"""
-        if hasattr(self, "segmented_reply_manager"):
-            await self.segmented_reply_manager.shutdown()
