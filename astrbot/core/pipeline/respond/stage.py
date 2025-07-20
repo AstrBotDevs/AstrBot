@@ -1,6 +1,9 @@
+import random
+import asyncio
+import math
 import traceback
 import astrbot.core.message.components as Comp
-from typing import Union, AsyncGenerator
+from typing import Union, AsyncGenerator, List
 from ..stage import register_stage, Stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -10,7 +13,7 @@ from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.path_util import path_Mapping
-from .segmented_reply_manager import SegmentedReplyManager
+from astrbot.core.utils.session_lock import session_lock_manager
 
 
 @register_stage
@@ -70,13 +73,26 @@ class RespondStage(Stage):
             self.interval = [1.5, 3.5]
         logger.info(f"分段回复间隔时间：{self.interval}")
 
-        # 初始化分段回复管理器
-        self.segmented_reply_manager = SegmentedReplyManager()
-        self.segmented_reply_manager.initialize(
-            self.interval_method,
-            self.interval,
-            self.log_base
-        )
+    async def _word_cnt(self, text: str) -> int:
+        """分段回复 统计字数"""
+        if all(ord(c) < 128 for c in text):
+            word_count = len(text.split())
+        else:
+            word_count = len([c for c in text if c.isalnum()])
+        return word_count
+
+    async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
+        """分段回复 计算间隔时间"""
+        if self.interval_method == "log":
+            if isinstance(comp, Comp.Plain):
+                wc = await self._word_cnt(comp.text)
+                i = math.log(wc + 1, self.log_base)
+                return random.uniform(i, i + 0.5)
+            else:
+                return random.uniform(1, 1.75)
+        else:
+            # random
+            return random.uniform(self.interval[0], self.interval[1])
 
     async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]):
         """检查消息链是否为空
@@ -134,8 +150,6 @@ class RespondStage(Stage):
             except Exception as e:
                 logger.warning(f"空内容检查异常: {e}")
 
-            record_comps = [c for c in result.chain if isinstance(c, Comp.Record)]
-
             if (
                 self.enable_seg
                 and (
@@ -145,33 +159,67 @@ class RespondStage(Stage):
                 and event.get_platform_name()
                 not in ["qq_official", "weixin_official_account", "dingtalk"]
             ):
-                # 先提取装饰组件
-                decorated_comps = []
-                remaining_comps = []
+                # --- 新的分段回复逻辑 ---
+                lock = await session_lock_manager.get_lock(event.unified_msg_origin)
+                async with lock:
+                    # 1. 分类所有组件
+                    decorated_comps: List[BaseMessageComponent] = []
+                    content_comps: List[BaseMessageComponent] = []
+                    record_comps: List[BaseMessageComponent] = []
 
-                for comp in result.chain:
-                    if isinstance(comp, Comp.Record):
-                        continue  # 语音组件单独处理
-                    elif self.reply_with_mention and isinstance(comp, Comp.At):
-                        if not any(isinstance(dc, Comp.At) for dc in decorated_comps):
+                    for comp in result.chain:
+                        if isinstance(comp, Comp.Record):
+                            record_comps.append(comp)
+                        elif self.reply_with_quote and isinstance(comp, Comp.Reply):
                             decorated_comps.append(comp)
-                        continue
-                    elif self.reply_with_quote and isinstance(comp, Comp.Reply):
-                        if not any(isinstance(dc, Comp.Reply) for dc in decorated_comps):
+                        elif self.reply_with_mention and isinstance(comp, Comp.At):
                             decorated_comps.append(comp)
-                        continue
-                    else:
-                        remaining_comps.append(comp)
+                        else:
+                            # 过滤掉无效的空组件
+                            if self._component_validators.get(type(comp), lambda c: True)(comp):
+                                content_comps.append(comp)
 
-                # 使用分段回复管理器处理
-                await self.segmented_reply_manager.enqueue_segmented_reply(
-                    event, decorated_comps, remaining_comps, record_comps
-                )
+                    # 2. 优先发送语音组件
+                    for rcomp in record_comps:
+                        i = await self._calc_comp_interval(rcomp)
+                        await asyncio.sleep(i)
+                        try:
+                            await event.send(MessageChain([rcomp]))
+                        except Exception as e:
+                            logger.error(f"发送语音消息失败: {e} chain: {[rcomp]}")
+
+                    # 3. 发送内容组件
+                    if not content_comps:
+                        # 如果没有内容组件，但有装饰组件，则单独发送装饰组件
+                        if decorated_comps:
+                            await event.send(MessageChain(decorated_comps))
+                        return # 没有内容可发送，提前结束
+
+                    # 发送第一条消息：装饰组件 + 第一个内容组件
+                    first_message_chain = decorated_comps + [content_comps[0]]
+                    i = await self._calc_comp_interval(content_comps[0])
+                    await asyncio.sleep(i)
+                    try:
+                        await event.send(MessageChain(first_message_chain))
+                    except Exception as e:
+                        logger.error(f"发送第一条分段消息失败: {e} chain: {first_message_chain}")
+                        return # 如果第一条都失败了，后续的也没必要发了
+
+                    # 发送剩余的内容组件
+                    for comp in content_comps[1:]:
+                        i = await self._calc_comp_interval(comp)
+                        await asyncio.sleep(i)
+                        try:
+                            await event.send(MessageChain([comp]))
+                        except Exception as e:
+                            logger.error(f"发送后续分段消息失败: {e} chain: {[comp]}")
+                            break # 中断后续发送
             else:
+                # --- 原有的非分段回复逻辑 ---
+                record_comps = [c for c in result.chain if isinstance(c, Comp.Record)]
                 non_record_comps = [
                     c for c in result.chain if not isinstance(c, Comp.Record)
                 ]
-
                 for rcomp in record_comps:
                     try:
                         await event.send(MessageChain([rcomp]))
@@ -207,8 +255,3 @@ class RespondStage(Stage):
                 return
 
         event.clear_result()
-
-    async def shutdown(self):
-        """关闭阶段，清理资源"""
-        if hasattr(self, "segmented_reply_manager"):
-            await self.segmented_reply_manager.shutdown()
