@@ -3,6 +3,7 @@ import ExtensionCard from '@/components/shared/ExtensionCard.vue';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
+import ProxySelector from '@/components/shared/ProxySelector.vue';
 import axios from 'axios';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
@@ -1190,6 +1191,9 @@ onMounted(async () => {
                 hide-details
                 placeholder="https://github.com/username/repo"
               ></v-text-field>
+              <div class="mt-4">
+                <ProxySelector></ProxySelector>
+              </div>
             </div>
           </v-window-item>
         </v-window>
