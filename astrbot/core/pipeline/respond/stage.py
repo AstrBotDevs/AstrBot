@@ -164,22 +164,23 @@ class RespondStage(Stage):
                 and event.get_platform_name()
                 not in ["qq_official", "weixin_official_account", "dingtalk"]
             ):
-                lock = await session_lock_manager.get_lock(event.unified_msg_origin)
-                async with lock:
-                    decorated_comps = []
-                    if self.reply_with_mention:
-                        for comp in result.chain:
-                            if isinstance(comp, Comp.At):
-                                decorated_comps.append(comp)
-                                result.chain.remove(comp)
-                                break
-                    if self.reply_with_quote:
-                        for comp in result.chain:
-                            if isinstance(comp, Comp.Reply):
-                                decorated_comps.append(comp)
-                                result.chain.remove(comp)
-                                break
+                decorated_comps = []
+                if self.reply_with_mention:
+                    for comp in result.chain:
+                        if isinstance(comp, Comp.At):
+                            decorated_comps.append(comp)
+                            result.chain.remove(comp)
+                            break
+                if self.reply_with_quote:
+                    for comp in result.chain:
+                        if isinstance(comp, Comp.Reply):
+                            decorated_comps.append(comp)
+                            result.chain.remove(comp)
+                            break
 
+                lock = await session_lock_manager.get_lock(event.unified_msg_origin)
+                # leverage lock to guarentee the order of message sending among different events
+                async with lock:
                     for rcomp in record_comps:
                         i = await self._calc_comp_interval(rcomp)
                         await asyncio.sleep(i)
@@ -188,7 +189,6 @@ class RespondStage(Stage):
                         except Exception as e:
                             logger.error(f"发送消息失败: {e} chain: {result.chain}")
                             break
-
                     # 分段回复
                     for comp in non_record_comps:
                         i = await self._calc_comp_interval(comp)
