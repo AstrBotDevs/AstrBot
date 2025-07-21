@@ -163,7 +163,7 @@ class PluginManager:
             plugins.extend(_p)
         return plugins
 
-    async def _check_plugin_dept_update(self, target_plugin: str = None):
+    async def _check_plugin_dept_update(self, target_plugin: str | None = None):
         """检查插件的依赖
         如果 target_plugin 为 None，则检查所有插件的依赖
         """
