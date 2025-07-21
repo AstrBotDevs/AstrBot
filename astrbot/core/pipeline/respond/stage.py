@@ -178,9 +178,8 @@ class RespondStage(Stage):
                             result.chain.remove(comp)
                             break
 
-                lock = await session_lock_manager.get_lock(event.unified_msg_origin)
                 # leverage lock to guarentee the order of message sending among different events
-                async with lock:
+                async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                     for rcomp in record_comps:
                         i = await self._calc_comp_interval(rcomp)
                         await asyncio.sleep(i)
