@@ -1242,6 +1242,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
 
+    @filter.on_decorating_result()
+    async def decorate_result(self, event: AstrMessageEvent):
+        logger.debug("Decorating result for event: %s", event)
+
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""

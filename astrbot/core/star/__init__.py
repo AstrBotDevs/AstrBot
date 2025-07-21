@@ -10,7 +10,7 @@ from astrbot.core.star.star_tools import StarTools
 class Star(CommandParserMixin):
     """所有插件（Star）的父类，所有插件都应该继承于这个类"""
 
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config: dict | None = None):
         StarTools.initialize(context)
         self.context = context
 
@@ -41,8 +41,16 @@ class Star(CommandParserMixin):
             tmpl, data, return_url=return_url, options=options
         )
 
+    async def initialize(self):
+        """当插件被激活时会调用这个方法"""
+        pass
+
     async def terminate(self):
         """当插件被禁用、重载插件时会调用这个方法"""
+        pass
+
+    def __del__(self):
+        """[Deprecated] 当插件被禁用、重载插件时会调用这个方法"""
         pass
 
 

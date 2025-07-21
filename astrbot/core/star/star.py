@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 from astrbot.core.config import AstrBotConfig
 
 star_registry: list[StarMetadata] = []
 star_map: dict[str, StarMetadata] = {}
 """key 是模块路径，__module__"""
+
+if TYPE_CHECKING:
+    from . import Star
 
 
 @dataclass
@@ -29,12 +33,12 @@ class StarMetadata:
     repo: str | None = None
     """插件仓库地址"""
 
-    star_cls_type: type | None = None
+    star_cls_type: type[Star] | None = None
     """插件的类对象的类型"""
     module_path: str | None = None
     """插件的模块路径"""
 
-    star_cls: object | None = None
+    star_cls: Star | None = None
     """插件的类对象"""
     module: ModuleType | None = None
     """插件的模块对象"""
