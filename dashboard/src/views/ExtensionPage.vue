@@ -71,6 +71,7 @@ const uploadTab = ref('file');
 const showPluginFullName = ref(false);
 const marketSearch = ref("");
 const filterKeys = ['name', 'desc', 'author'];
+const refreshingMarket = ref(false);
 
 const plugin_handler_info_headers = computed(() => [
   { title: tm('table.headers.eventType'), key: 'event_type_h' },
@@ -560,6 +561,25 @@ const newExtension = async () => {
   }
 };
 
+// 刷新插件市场数据
+const refreshPluginMarket = async () => {
+  refreshingMarket.value = true;
+  try {
+    // 强制刷新插件市场数据
+    const data = await commonStore.getPluginCollections(true);
+    pluginMarketData.value = data;
+    trimExtensionName();
+    checkAlreadyInstalled();
+    checkUpdate();
+    
+    toast(tm('messages.refreshSuccess'), "success");
+  } catch (err) {
+    toast(tm('messages.refreshFailed') + " " + err, "error");
+  } finally {
+    refreshingMarket.value = false;
+  }
+};
+
 // 生命周期
 onMounted(async () => {
   await getExtensions();
@@ -851,8 +871,20 @@ onMounted(async () => {
             <div class="mt-4">
               <div class="d-flex align-center mb-2" style="justify-content: space-between;">
                 <h2>{{ tm('market.allPlugins') }}</h2>
-                <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details density="compact"
-                  style="margin-left: 12px" />
+                <div class="d-flex align-center">
+                  <v-btn 
+                    variant="tonal" 
+                    size="small" 
+                    @click="refreshPluginMarket" 
+                    :loading="refreshingMarket"
+                    class="mr-2"
+                  >
+                    <v-icon>mdi-refresh</v-icon>
+                    {{ tm('buttons.refresh') }}
+                  </v-btn>
+                  <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details density="compact"
+                    style="margin-left: 12px" />
+                </div>
               </div>
 
               <v-col cols="12" md="12" style="padding: 0px;">
