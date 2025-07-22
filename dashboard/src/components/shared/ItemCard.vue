@@ -9,6 +9,8 @@
             hide-details 
             density="compact" 
             :model-value="getItemEnabled()"
+            :loading="loading"
+            :disabled="loading"
             v-bind="props" 
             @update:model-value="toggleEnabled"
           ></v-switch>
@@ -77,6 +79,10 @@ export default {
     bglogo: {
       type: String,
       default: null
+    },
+    loading: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['toggle-enabled', 'delete', 'edit'],

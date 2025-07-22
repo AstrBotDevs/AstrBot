@@ -226,6 +226,9 @@
                                     <ProviderModelSelector ref="providerModelSelector" />
                                 </div>
                                 <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                                    <input type="file" ref="imageInput" @change="handleFileSelect" accept="image/*" style="display: none" multiple />
+                                    <v-btn @click="triggerImageInput" icon="mdi-plus" variant="text" color="deep-purple"
+                                        class="add-btn" size="small" />
                                     <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
                                         :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
                                         class="send-btn" size="small" />
@@ -668,40 +671,65 @@ export default {
             };
         },
 
+        async processAndUploadImage(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await axios.post('/api/chat/post_image', formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    }
+                });
+
+                const img = response.data.data.filename;
+                this.stagedImagesName.push(img); // Store just the filename
+                this.stagedImagesUrl.push(URL.createObjectURL(file)); // Create a blob URL for immediate display
+
+            } catch (err) {
+                console.error('Error uploading image:', err);
+            }
+        },
+
         async handlePaste(event) {
             console.log('Pasting image...');
             const items = event.clipboardData.items;
             for (let i = 0; i < items.length; i++) {
                 if (items[i].type.indexOf('image') !== -1) {
                     const file = items[i].getAsFile();
-                    const formData = new FormData();
-                    formData.append('file', file);
-
-                    try {
-                        const response = await axios.post('/api/chat/post_image', formData, {
-                            headers: {
-                                'Content-Type': 'multipart/form-data'
-                            }
-                        });
-
-                        const img = response.data.data.filename;
-                        this.stagedImagesName.push(img); // Store just the filename
-                        this.stagedImagesUrl.push(URL.createObjectURL(file)); // Create a blob URL for immediate display
-
-                    } catch (err) {
-                        console.error('Error uploading image:', err);
-                    }
+                    this.processAndUploadImage(file);
                 }
             }
         },
 
         removeImage(index) {
+            // Revoke the blob URL to prevent memory leaks
+            const urlToRevoke = this.stagedImagesUrl[index];
+            if (urlToRevoke && urlToRevoke.startsWith('blob:')) {
+                URL.revokeObjectURL(urlToRevoke);
+            }
+
             this.stagedImagesName.splice(index, 1);
             this.stagedImagesUrl.splice(index, 1);
         },
 
         clearMessage() {
             this.prompt = '';
+        },
+
+        triggerImageInput() {
+            this.$refs.imageInput.click();
+        },
+
+        handleFileSelect(event) {
+            const files = event.target.files;
+            if (files) {
+                for (const file of files) {
+                    this.processAndUploadImage(file);
+                }
+            }
+            // Reset the input value to allow selecting the same file again
+            event.target.value = '';
         },
         getConversations() {
             axios.get('/api/chat/conversations').then(response => {
@@ -846,33 +874,42 @@ export default {
                 // URL is already updated in newConversation method
             }
 
+            // 保存当前要发送的数据到临时变量
+            const promptToSend = this.prompt.trim();
+            const imageNamesToSend = [...this.stagedImagesName];
+            const audioNameToSend = this.stagedAudioUrl;
+
+            // 立即清空输入和附件预览
+            this.prompt = '';
+            this.stagedImagesName = [];
+            this.stagedImagesUrl = [];
+            this.stagedAudioUrl = "";
+
             // Create a message object with actual URLs for display
             const userMessage = {
                 type: 'user',
-                message: this.prompt.trim(), // 使用 trim() 去除前后空格
+                message: promptToSend,
                 image_url: [],
                 audio_url: null
             };
 
             // Convert image filenames to blob URLs for display
-            if (this.stagedImagesName.length > 0) {
-                for (let i = 0; i < this.stagedImagesName.length; i++) {
-                    // If it's just a filename, get the blob URL
-                    if (!this.stagedImagesName[i].startsWith('blob:')) {
-                        const imgUrl = await this.getMediaFile(this.stagedImagesName[i]);
-                        userMessage.image_url.push(imgUrl);
-                    } else {
-                        userMessage.image_url.push(this.stagedImagesName[i]);
+            if (imageNamesToSend.length > 0) {
+                const imagePromises = imageNamesToSend.map(name => {
+                    if (!name.startsWith('blob:')) {
+                        return this.getMediaFile(name);
                     }
-                }
+                    return Promise.resolve(name);
+                });
+                userMessage.image_url = await Promise.all(imagePromises);
             }
 
             // Convert audio filename to blob URL for display
-            if (this.stagedAudioUrl) {
-                if (!this.stagedAudioUrl.startsWith('blob:')) {
-                    userMessage.audio_url = await this.getMediaFile(this.stagedAudioUrl);
+            if (audioNameToSend) {
+                if (!audioNameToSend.startsWith('blob:')) {
+                    userMessage.audio_url = await this.getMediaFile(audioNameToSend);
                 } else {
-                    userMessage.audio_url = this.stagedAudioUrl;
+                    userMessage.audio_url = audioNameToSend;
                 }
             }
 
@@ -885,8 +922,6 @@ export default {
             const selection = this.$refs.providerModelSelector?.getCurrentSelection();
             const selectedProviderId = selection?.providerId || '';
             const selectedModelName = selection?.modelName || '';
-            let prompt = this.prompt.trim();
-            this.prompt = ''; // 清空输入框
 
             try {
                 const response = await fetch('/api/chat/send', {
@@ -896,10 +931,10 @@ export default {
                         'Authorization': 'Bearer ' + localStorage.getItem('token')
                     },
                     body: JSON.stringify({
-                        message: prompt,
+                        message: promptToSend,
                         conversation_id: this.currCid,
-                        image_url: this.stagedImagesName,
-                        audio_url: this.stagedAudioUrl ? [this.stagedAudioUrl] : [],
+                        image_url: imageNamesToSend,
+                        audio_url: audioNameToSend ? [audioNameToSend] : [],
                         selected_provider: selectedProviderId,
                         selected_model: selectedModelName
                     })
@@ -1003,11 +1038,7 @@ export default {
                     }
                 }
 
-                // Clear input after successful send
-                this.prompt = '';
-                this.stagedImagesName = [];
-                this.stagedImagesUrl = [];
-                this.stagedAudioUrl = "";
+                // Input and attachments are already cleared
                 this.loadingChat = false;
 
                 // get the latest conversations

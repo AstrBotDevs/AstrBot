@@ -39,6 +39,72 @@ SUPPORTED_TYPES = [
 ]  # json schema 支持的数据类型
 
 
+def _prepare_config(config: dict) -> dict:
+    """准备配置，处理嵌套格式"""
+    if "mcpServers" in config and config["mcpServers"]:
+        first_key = next(iter(config["mcpServers"]))
+        config = config["mcpServers"][first_key]
+    config.pop("active", None)
+    return config
+
+
+async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
+    """快速测试 MCP 服务器可达性"""
+    import aiohttp
+
+    cfg = _prepare_config(config.copy())
+
+    url = cfg["url"]
+    headers = cfg.get("headers", {})
+    timeout = cfg.get("timeout", 10)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            if cfg.get("transport") == "streamable_http":
+                test_payload = {
+                    "jsonrpc": "2.0",
+                    "method": "initialize",
+                    "id": 0,
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test-client", "version": "1.2.3"},
+                    },
+                }
+                async with session.post(
+                    url,
+                    headers={
+                        **headers,
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    json=test_payload,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response:
+                    if response.status == 200:
+                        return True, ""
+                    else:
+                        return False, f"HTTP {response.status}: {response.reason}"
+            else:
+                async with session.get(
+                    url,
+                    headers={
+                        **headers,
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response:
+                    if response.status == 200:
+                        return True, ""
+                    else:
+                        return False, f"HTTP {response.status}: {response.reason}"
+
+    except asyncio.TimeoutError:
+        return False, f"连接超时: {timeout}秒"
+    except Exception as e:
+        return False, f"{e!s}"
+
+
 @dataclass
 class FuncTool:
     """
@@ -80,12 +146,10 @@ class FuncTool:
             if not self.mcp_client or not self.mcp_client.session:
                 raise Exception(f"MCP client for {self.name} is not available")
             # 使用name属性而不是额外的mcp_tool_name
-            if ":" in self.name:
-                # 如果名字是格式为 mcp:server:tool_name，提取实际的工具名
-                actual_tool_name = self.name.split(":")[-1]
-                return await self.mcp_client.session.call_tool(actual_tool_name, args)
-            else:
-                return await self.mcp_client.session.call_tool(self.name, args)
+            actual_tool_name = (
+                self.name.split(":")[-1] if ":" in self.name else self.name
+            )
+            return await self.mcp_client.session.call_tool(actual_tool_name, args)
         else:
             raise Exception(f"Unknown function origin: {self.origin}")
 
@@ -100,6 +164,7 @@ class MCPClient:
         self.active: bool = True
         self.tools: List[mcp.Tool] = []
         self.server_errlogs: List[str] = []
+        self.running_event = asyncio.Event()
 
     async def connect_to_server(self, mcp_server_config: dict, name: str):
         """连接到 MCP 服务器
@@ -112,17 +177,19 @@ class MCPClient:
         Args:
             mcp_server_config (dict): Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
         """
-        cfg = mcp_server_config.copy()
-        if "mcpServers" in cfg and len(cfg["mcpServers"]) > 0:
-            key_0 = list(cfg["mcpServers"].keys())[0]
-            cfg = cfg["mcpServers"][key_0]
-        cfg.pop("active", None)  # Remove active flag from config
+        cfg = _prepare_config(mcp_server_config.copy())
+
+        def logging_callback(msg: str):
+            # 处理 MCP 服务的错误日志
+            print(f"MCP Server {name} Error: {msg}")
+            self.server_errlogs.append(msg)
 
         if "url" in cfg:
-            is_sse = True
-            if cfg.get("transport") == "streamable_http":
-                is_sse = False
-            if is_sse:
+            success, error_msg = await _quick_test_mcp_connection(cfg)
+            if not success:
+                raise Exception(error_msg)
+
+            if cfg.get("transport") != "streamable_http":
                 # SSE transport method
                 self._streams_context = sse_client(
                     url=cfg["url"],
@@ -130,11 +197,18 @@ class MCPClient:
                     timeout=cfg.get("timeout", 5),
                     sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                streams = await self.exit_stack.enter_async_context(self._streams_context)
+                streams = await self.exit_stack.enter_async_context(
+                    self._streams_context
+                )
 
                 # Create a new client session
+                read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 20))
                 self.session = await self.exit_stack.enter_async_context(
-                    mcp.ClientSession(*streams)
+                    mcp.ClientSession(
+                        *streams,
+                        read_timeout_seconds=read_timeout,
+                        logging_callback=logging_callback,  # type: ignore
+                    )
                 )
             else:
                 timeout = timedelta(seconds=cfg.get("timeout", 30))
@@ -148,11 +222,19 @@ class MCPClient:
                     sse_read_timeout=sse_read_timeout,
                     terminate_on_close=cfg.get("terminate_on_close", True),
                 )
-                read_s, write_s, _ = await self.exit_stack.enter_async_context(self._streams_context)
+                read_s, write_s, _ = await self.exit_stack.enter_async_context(
+                    self._streams_context
+                )
 
                 # Create a new client session
+                read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 20))
                 self.session = await self.exit_stack.enter_async_context(
-                    mcp.ClientSession(read_stream=read_s, write_stream=write_s)
+                    mcp.ClientSession(
+                        read_stream=read_s,
+                        write_stream=write_s,
+                        read_timeout_seconds=read_timeout,
+                        logging_callback=logging_callback,  # type: ignore
+                    )
                 )
 
         else:
@@ -172,7 +254,7 @@ class MCPClient:
                         logger=logger,
                         identifier=f"MCPServer-{name}",
                         callback=callback,
-                    ),
+                    ),  # type: ignore
                 ),
             )
 
@@ -180,19 +262,18 @@ class MCPClient:
             self.session = await self.exit_stack.enter_async_context(
                 mcp.ClientSession(*stdio_transport)
             )
-
         await self.session.initialize()
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
         """List all tools from the server and save them to self.tools"""
         response = await self.session.list_tools()
-        logger.debug(f"MCP server {self.name} list tools response: {response}")
         self.tools = response.tools
         return response
 
     async def cleanup(self):
         """Clean up resources"""
         await self.exit_stack.aclose()
+        self.running_event.set()  # Set the running event to indicate cleanup is done
 
 
 class FuncCall:
@@ -201,8 +282,6 @@ class FuncCall:
         """内部加载的 func tools"""
         self.mcp_client_dict: Dict[str, MCPClient] = {}
         """MCP 服务列表"""
-        self.mcp_service_queue = asyncio.Queue()
-        """用于外部控制 MCP 服务的启停"""
         self.mcp_client_event: Dict[str, asyncio.Event] = {}
 
     def empty(self) -> bool:
@@ -258,7 +337,7 @@ class FuncCall:
                 return f
         return None
 
-    async def _init_mcp_clients(self) -> None:
+    async def init_mcp_clients(self) -> None:
         """从项目根目录读取 mcp_server.json 文件，初始化 MCP 服务列表。文件格式如下：
         ```
         {
@@ -300,115 +379,64 @@ class FuncCall:
                 )
                 self.mcp_client_event[name] = event
 
-    async def mcp_service_selector(self):
-        """为了避免在不同异步任务中控制 MCP 服务导致的报错，整个项目统一通过这个 Task 来控制
-
-        使用 self.mcp_service_queue.put_nowait() 来控制 MCP 服务的启停，数据格式如下：
-
-        {"type": "init"} 初始化所有MCP客户端
-
-        {"type": "init", "name": "mcp_server_name", "cfg": {...}} 初始化指定的MCP客户端
-
-        {"type": "terminate"} 终止所有MCP客户端
-
-        {"type": "terminate", "name": "mcp_server_name"} 终止指定的MCP客户端
-        """
-        while True:
-            data = await self.mcp_service_queue.get()
-            if data["type"] == "init":
-                if "name" in data:
-                    event = asyncio.Event()
-                    asyncio.create_task(
-                        self._init_mcp_client_task_wrapper(
-                            data["name"], data["cfg"], event
-                        )
-                    )
-                    self.mcp_client_event[data["name"]] = event
-                else:
-                    await self._init_mcp_clients()
-            elif data["type"] == "terminate":
-                if "name" in data:
-                    # await self._terminate_mcp_client(data["name"])
-                    if data["name"] in self.mcp_client_event:
-                        self.mcp_client_event[data["name"]].set()
-                        self.mcp_client_event.pop(data["name"], None)
-                        self.func_list = [
-                            f
-                            for f in self.func_list
-                            if not (
-                                f.origin == "mcp" and f.mcp_server_name == data["name"]
-                            )
-                        ]
-                else:
-                    for name in self.mcp_client_dict.keys():
-                        # await self._terminate_mcp_client(name)
-                        # self.mcp_client_event[name].set()
-                        if name in self.mcp_client_event:
-                            self.mcp_client_event[name].set()
-                            self.mcp_client_event.pop(name, None)
-                    self.func_list = [f for f in self.func_list if f.origin != "mcp"]
-
     async def _init_mcp_client_task_wrapper(
-        self, name: str, cfg: dict, event: asyncio.Event
+        self,
+        name: str,
+        cfg: dict,
+        event: asyncio.Event,
+        ready_future: asyncio.Future = None,
     ) -> None:
         """初始化 MCP 客户端的包装函数，用于捕获异常"""
         try:
             await self._init_mcp_client(name, cfg)
+            tools = await self.mcp_client_dict[name].list_tools_and_save()
+            if ready_future and not ready_future.done():
+                # tell the caller we are ready
+                ready_future.set_result(tools)
             await event.wait()
             logger.info(f"收到 MCP 客户端 {name} 终止信号")
         except Exception as e:
-            import traceback
-
-            traceback.print_exc()
-            logger.error(f"初始化 MCP 客户端 {name} 失败: {e}")
+            logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
+            if ready_future and not ready_future.done():
+                ready_future.set_exception(e)
         finally:
             # 无论如何都能清理
             await self._terminate_mcp_client(name)
 
     async def _init_mcp_client(self, name: str, config: dict) -> None:
         """初始化单个MCP客户端"""
-        try:
-            # 先清理之前的客户端，如果存在
-            if name in self.mcp_client_dict:
-                await self._terminate_mcp_client(name)
+        # 先清理之前的客户端，如果存在
+        if name in self.mcp_client_dict:
+            await self._terminate_mcp_client(name)
 
-            mcp_client = MCPClient()
-            mcp_client.name = name
-            self.mcp_client_dict[name] = mcp_client
-            await mcp_client.connect_to_server(config, name)
-            tools_res = await mcp_client.list_tools_and_save()
-            tool_names = [tool.name for tool in tools_res.tools]
+        mcp_client = MCPClient()
+        mcp_client.name = name
+        self.mcp_client_dict[name] = mcp_client
+        await mcp_client.connect_to_server(config, name)
+        tools_res = await mcp_client.list_tools_and_save()
+        logger.debug(f"MCP server {name} list tools response: {tools_res}")
+        tool_names = [tool.name for tool in tools_res.tools]
 
-            # 移除该MCP服务之前的工具（如有）
-            self.func_list = [
-                f
-                for f in self.func_list
-                if not (f.origin == "mcp" and f.mcp_server_name == name)
-            ]
+        # 移除该MCP服务之前的工具（如有）
+        self.func_list = [
+            f
+            for f in self.func_list
+            if not (f.origin == "mcp" and f.mcp_server_name == name)
+        ]
 
-            # 将 MCP 工具转换为 FuncTool 并添加到 func_list
-            for tool in mcp_client.tools:
-                func_tool = FuncTool(
-                    name=tool.name,
-                    parameters=tool.inputSchema,
-                    description=tool.description,
-                    origin="mcp",
-                    mcp_server_name=name,
-                    mcp_client=mcp_client,
-                )
-                self.func_list.append(func_tool)
+        # 将 MCP 工具转换为 FuncTool 并添加到 func_list
+        for tool in mcp_client.tools:
+            func_tool = FuncTool(
+                name=tool.name,
+                parameters=tool.inputSchema,
+                description=tool.description,
+                origin="mcp",
+                mcp_server_name=name,
+                mcp_client=mcp_client,
+            )
+            self.func_list.append(func_tool)
 
-            logger.info(f"已连接 MCP 服务 {name}, Tools: {tool_names}")
-            return
-        except Exception as e:
-            import traceback
-
-            logger.error(traceback.format_exc())
-            logger.error(f"初始化 MCP 客户端 {name} 失败: {e}")
-            # 发生错误时确保客户端被清理
-            if name in self.mcp_client_dict:
-                await self._terminate_mcp_client(name)
-            return
+        logger.info(f"已连接 MCP 服务 {name}, Tools: {tool_names}")
 
     async def _terminate_mcp_client(self, name: str) -> None:
         """关闭并清理MCP客户端"""
@@ -418,7 +446,7 @@ class FuncCall:
                 await self.mcp_client_dict[name].cleanup()
                 self.mcp_client_dict.pop(name)
             except Exception as e:
-                logger.info(f"清空 MCP 客户端资源 {name}: {e}。")
+                logger.error(f"清空 MCP 客户端资源 {name}: {e}。")
             # 移除关联的FuncTool
             self.func_list = [
                 f
@@ -426,6 +454,103 @@ class FuncCall:
                 if not (f.origin == "mcp" and f.mcp_server_name == name)
             ]
             logger.info(f"已关闭 MCP 服务 {name}")
+
+    @staticmethod
+    async def test_mcp_server_connection(config: dict) -> list[str]:
+        if "url" in config:
+            success, error_msg = await _quick_test_mcp_connection(config)
+            if not success:
+                raise Exception(error_msg)
+
+        mcp_client = MCPClient()
+        try:
+            logger.debug(f"testing MCP server connection with config: {config}")
+            await mcp_client.connect_to_server(config, "test")
+            tools_res = await mcp_client.list_tools_and_save()
+            tool_names = [tool.name for tool in tools_res.tools]
+        finally:
+            logger.debug("Cleaning up MCP client after testing connection.")
+            await mcp_client.cleanup()
+        return tool_names
+
+    async def enable_mcp_server(
+        self,
+        name: str,
+        config: dict,
+        event: asyncio.Event | None = None,
+        ready_future: asyncio.Future | None = None,
+        timeout: int = 30,
+    ) -> None:
+        """Enable_mcp_server a new MCP server to the manager and initialize it.
+
+        Args:
+            name (str): The name of the MCP server.
+            config (dict): Configuration for the MCP server.
+            event (asyncio.Event): Event to signal when the MCP client is ready.
+            ready_future (asyncio.Future): Future to signal when the MCP client is ready.
+            timeout (int): Timeout for the initialization.
+        Raises:
+            TimeoutError: If the initialization does not complete within the specified timeout.
+            Exception: If there is an error during initialization.
+        """
+        if not event:
+            event = asyncio.Event()
+        if not ready_future:
+            ready_future = asyncio.Future()
+        if name in self.mcp_client_dict:
+            return
+        asyncio.create_task(
+            self._init_mcp_client_task_wrapper(name, config, event, ready_future)
+        )
+        try:
+            await asyncio.wait_for(ready_future, timeout=timeout)
+        finally:
+            self.mcp_client_event[name] = event
+
+        if ready_future.done() and ready_future.exception():
+            exc = ready_future.exception()
+            if exc is not None:
+                raise exc
+
+    async def disable_mcp_server(
+        self, name: str | None = None, timeout: float = 10
+    ) -> None:
+        """Disable an MCP server by its name.
+
+        Args:
+            name (str): The name of the MCP server to disable. If None, ALL MCP servers will be disabled.
+            timeout (int): Timeout.
+        """
+        if name:
+            if name not in self.mcp_client_event:
+                return
+            client = self.mcp_client_dict.get(name)
+            self.mcp_client_event[name].set()
+            if not client:
+                return
+            client_running_event = client.running_event
+            try:
+                await asyncio.wait_for(client_running_event.wait(), timeout=timeout)
+            finally:
+                self.mcp_client_event.pop(name, None)
+                self.func_list = [
+                    f
+                    for f in self.func_list
+                    if f.origin != "mcp" or f.mcp_server_name != name
+                ]
+        else:
+            running_events = [
+                client.running_event.wait() for client in self.mcp_client_dict.values()
+            ]
+            for key, event in self.mcp_client_event.items():
+                event.set()
+            # waiting for all clients to finish
+            try:
+                await asyncio.wait_for(asyncio.gather(*running_events), timeout=timeout)
+            finally:
+                self.mcp_client_event.clear()
+                self.mcp_client_dict.clear()
+                self.func_list = [f for f in self.func_list if f.origin != "mcp"]
 
     def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
         """

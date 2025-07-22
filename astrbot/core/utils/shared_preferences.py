@@ -1,7 +1,9 @@
 import json
 import os
+from typing import TypeVar
 from .astrbot_path import get_astrbot_data_path
 
+_VT = TypeVar("_VT")
 
 class SharedPreferences:
     def __init__(self, path=None):
@@ -24,7 +26,7 @@ class SharedPreferences:
             json.dump(self._data, f, indent=4, ensure_ascii=False)
             f.flush()
 
-    def get(self, key, default=None):
+    def get(self, key, default: _VT = None) -> _VT:
         return self._data.get(key, default)
 
     def put(self, key, value):
