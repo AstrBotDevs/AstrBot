@@ -157,15 +157,6 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "微信个人号(Gewechat)": {
-                        "id": "gwchat",
-                        "type": "gewechat",
-                        "enable": False,
-                        "base_url": "http://localhost:2531",
-                        "nickname": "soulter",
-                        "host": "这里填写你的局域网IP或者公网服务器IP",
-                        "port": 11451,
-                    },
                     "微信个人号(WeChatPadPro)": {
                         "id": "wechatpadpro",
                         "type": "wechatpadpro",
