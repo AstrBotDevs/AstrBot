@@ -1005,7 +1005,6 @@ export default {
       const colors = {
         'aiocqhttp': 'blue',
         'wechatpadpro': 'green',
-        'gewechat': 'green',
         'qq_official': 'purple',
         'telegram': 'light-blue',
         'discord': 'indigo',

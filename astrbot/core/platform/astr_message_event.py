@@ -227,7 +227,7 @@ class AstrMessageEvent(abc.ABC):
     ):
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
-        Fallback仅支持 aiocqhttp, gewechat。
+        Fallback仅支持 aiocqhttp。
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
@@ -419,7 +419,6 @@ class AstrMessageEvent(abc.ABC):
 
         适配情况:
 
-        - gewechat
         - aiocqhttp(OneBotv11)
         """
         ...
