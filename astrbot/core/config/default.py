@@ -814,6 +814,19 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                     },
+                    "ModelScope": {
+                        "id": "modelscope",
+                        "provider": "modelscope",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://api-inference.modelscope.cn/v1",
+                        "model_config": {
+                            "model": "Qwen/Qwen3-32B",
+                        },
+                    },
                     "FastGPT": {
                         "id": "fastgpt",
                         "provider": "fastgpt",
