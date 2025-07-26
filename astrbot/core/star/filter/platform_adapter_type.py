@@ -8,7 +8,6 @@ from typing import Union
 class PlatformAdapterType(enum.Flag):
     AIOCQHTTP = enum.auto()
     QQOFFICIAL = enum.auto()
-    GEWECHAT = enum.auto()
     TELEGRAM = enum.auto()
     WECOM = enum.auto()
     LARK = enum.auto()
@@ -22,7 +21,6 @@ class PlatformAdapterType(enum.Flag):
     ALL = (
         AIOCQHTTP
         | QQOFFICIAL
-        | GEWECHAT
         | TELEGRAM
         | WECOM
         | LARK
@@ -39,7 +37,6 @@ class PlatformAdapterType(enum.Flag):
 ADAPTER_NAME_2_TYPE = {
     "aiocqhttp": PlatformAdapterType.AIOCQHTTP,
     "qq_official": PlatformAdapterType.QQOFFICIAL,
-    "gewechat": PlatformAdapterType.GEWECHAT,
     "telegram": PlatformAdapterType.TELEGRAM,
     "wecom": PlatformAdapterType.WECOM,
     "lark": PlatformAdapterType.LARK,
