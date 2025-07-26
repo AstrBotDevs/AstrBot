@@ -159,7 +159,11 @@ export const useCommonStore = defineStore({
       if (!force && this.pluginMarketData.length > 0) {
         return Promise.resolve(this.pluginMarketData);
       }
-      return axios.get('/api/plugin/market_list')
+      
+      // 如果是强制刷新，添加 force_refresh 参数
+      const url = force ? '/api/plugin/market_list?force_refresh=true' : '/api/plugin/market_list';
+      
+      return axios.get(url)
         .then((res) => {
           let data = []
           for (let key in res.data.data) {

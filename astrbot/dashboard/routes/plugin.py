@@ -1,6 +1,8 @@
 import traceback
 import aiohttp
 import os
+import json
+from datetime import datetime
 
 import ssl
 import certifi
@@ -75,15 +77,28 @@ class PluginRoute(Route):
 
     async def get_online_plugins(self):
         custom = request.args.get("custom_registry")
+        force_refresh = request.args.get("force_refresh", "false").lower() == "true"
+
+        cache_file = "data/plugins.json"
 
         if custom:
             urls = [custom]
         else:
             urls = ["https://api.soulter.top/astrbot/plugins"]
 
+        # 如果不是强制刷新，先尝试加载缓存
+        cached_data = None
+        if not force_refresh:
+            cached_data = self._load_plugin_cache(cache_file)
+            if cached_data:
+                logger.debug("使用缓存的插件市场数据")
+
+        # 尝试获取远程数据
+        remote_data = None
         # 新增：创建 SSL 上下文，使用 certifi 提供的根证书
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
+
         for url in urls:
             try:
                 async with aiohttp.ClientSession(
@@ -91,14 +106,60 @@ class PluginRoute(Route):
                 ) as session:
                     async with session.get(url) as response:
                         if response.status == 200:
-                            result = await response.json()
-                            return Response().ok(result).__dict__
+                            remote_data = await response.json()
+
+                            # 检查远程数据是否为空
+                            if not remote_data or (
+                                isinstance(remote_data, dict) and len(remote_data) == 0
+                            ):
+                                logger.warning(f"远程插件市场数据为空: {url}")
+                                continue  # 继续尝试其他URL或使用缓存
+
+                            logger.info("成功获取远程插件市场数据")
+                            # 保存到缓存
+                            self._save_plugin_cache(cache_file, remote_data)
+                            return Response().ok(remote_data).__dict__
                         else:
                             logger.error(f"请求 {url} 失败，状态码：{response.status}")
             except Exception as e:
                 logger.error(f"请求 {url} 失败，错误：{e}")
 
-        return Response().error("获取插件列表失败").__dict__
+        # 如果远程获取失败，使用缓存数据
+        if cached_data:
+            logger.warning("远程插件市场数据获取失败，使用缓存数据")
+            return Response().ok(cached_data, "使用缓存数据，可能不是最新版本").__dict__
+
+        return Response().error("获取插件列表失败，且没有可用的缓存数据").__dict__
+
+    def _load_plugin_cache(self, cache_file: str):
+        """加载本地缓存的插件市场数据"""
+        try:
+            if os.path.exists(cache_file):
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                    # 检查缓存是否有效（可以添加过期时间检查）
+                    if "data" in cache_data and "timestamp" in cache_data:
+                        logger.debug(
+                            f"加载缓存文件: {cache_file}, 缓存时间: {cache_data['timestamp']}"
+                        )
+                        return cache_data["data"]
+        except Exception as e:
+            logger.warning(f"加载插件市场缓存失败: {e}")
+        return None
+
+    def _save_plugin_cache(self, cache_file: str, data):
+        """保存插件市场数据到本地缓存"""
+        try:
+            # 确保目录存在
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+
+            cache_data = {"timestamp": datetime.now().isoformat(), "data": data}
+
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(cache_data, f, ensure_ascii=False, indent=2)
+            logger.debug(f"插件市场数据已缓存到: {cache_file}")
+        except Exception as e:
+            logger.warning(f"保存插件市场缓存失败: {e}")
 
     async def get_plugins(self):
         _plugin_resp = []

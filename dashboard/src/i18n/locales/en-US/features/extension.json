@@ -32,7 +32,8 @@
     "cancel": "Cancel",
     "actions": "Actions",
     "back": "Back",
-    "selectFile": "Select File"
+    "selectFile": "Select File",
+    "refresh": "Refresh"
   },
   "status": {
     "enabled": "Enabled",
