@@ -128,6 +128,7 @@ class WakingCheckStage(Stage):
                         if not filter.filter(event, self.ctx.astrbot_config):
                             permission_not_pass = True
                             permission_filter_raise_error = filter.raise_error
+                            break
                     else:
                         if not filter.filter(event, self.ctx.astrbot_config):
                             passed = False
