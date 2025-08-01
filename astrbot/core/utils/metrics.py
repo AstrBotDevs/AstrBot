@@ -59,7 +59,6 @@ class Metric:
         try:
             if "adapter_name" in kwargs:
                 await db_helper.insert_platform_stats(
-                    bot_id=kwargs.get("bot_id", "default"),
                     platform_id=kwargs["adapter_name"],
                     platform_type=kwargs.get("adapter_type", "unknown"),
                 )

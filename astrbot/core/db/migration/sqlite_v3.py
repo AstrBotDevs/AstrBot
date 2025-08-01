@@ -1,20 +1,87 @@
 import sqlite3
-import os
 import time
-from astrbot.core.db.po import Platform, Stats, Conversation
-from . import BaseDatabase
+from astrbot.core.db.po import Platform, Stats
 from typing import Tuple, List, Dict, Any
+from dataclasses import dataclass
+
+@dataclass
+class Conversation:
+    """LLM 对话存储
+
+    对于网页聊天，history 存储了包括指令、回复、图片等在内的所有消息。
+    对于其他平台的聊天，不存储非 LLM 的回复（因为考虑到已经存储在各自的平台上）。
+    """
+
+    user_id: str
+    cid: str
+    history: str = ""
+    """字符串格式的列表。"""
+    created_at: int = 0
+    updated_at: int = 0
+    title: str = ""
+    persona_id: str = ""
 
 
-class SQLiteDatabase(BaseDatabase):
+INIT_SQL = """
+CREATE TABLE IF NOT EXISTS platform(
+    name VARCHAR(32),
+    count INTEGER,
+    timestamp INTEGER
+);
+CREATE TABLE IF NOT EXISTS llm(
+    name VARCHAR(32),
+    count INTEGER,
+    timestamp INTEGER
+);
+CREATE TABLE IF NOT EXISTS plugin(
+    name VARCHAR(32),
+    count INTEGER,
+    timestamp INTEGER
+);
+CREATE TABLE IF NOT EXISTS command(
+    name VARCHAR(32),
+    count INTEGER,
+    timestamp INTEGER
+);
+CREATE TABLE IF NOT EXISTS llm_history(
+    provider_type VARCHAR(32),
+    session_id VARCHAR(32),
+    content TEXT
+);
+
+-- ATRI
+CREATE TABLE IF NOT EXISTS atri_vision(
+    id TEXT,
+    url_or_path TEXT,
+    caption TEXT,
+    is_meme BOOLEAN,
+    keywords TEXT,
+    platform_name VARCHAR(32),
+    session_id VARCHAR(32),
+    sender_nickname VARCHAR(32),
+    timestamp INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS webchat_conversation(
+    user_id TEXT, -- 会话 id
+    cid TEXT, -- 对话 id
+    history TEXT,
+    created_at INTEGER,
+    updated_at INTEGER,
+    title TEXT,
+    persona_id TEXT
+);
+
+PRAGMA encoding = 'UTF-8';
+"""
+
+
+class SQLiteDatabase():
     def __init__(self, db_path: str) -> None:
         super().__init__()
         self.db_path = db_path
 
-        with open(
-            os.path.dirname(__file__) + "/sqlite_init.sql", "r", encoding="utf-8"
-        ) as f:
-            sql = f.read()
+        sql = INIT_SQL
 
         # 初始化数据库
         self.conn = self._get_conn(self.db_path)
@@ -115,7 +182,7 @@ class SQLiteDatabase(BaseDatabase):
 
         c.close()
 
-        return Stats(platform, [], [])
+        return Stats(platform=platform)
 
     def get_total_message_count(self) -> int:
         try:

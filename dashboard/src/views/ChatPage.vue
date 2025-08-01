@@ -147,24 +147,24 @@
                         <div v-else class="message-list">
                             <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
                                 <!-- 用户消息 -->
-                                <div v-if="msg.type == 'user'" class="user-message">
+                                <div v-if="msg.content.type == 'user'" class="user-message">
                                     <div class="message-bubble user-bubble"
-                                        :class="{ 'has-audio': msg.audio_url }"
+                                        :class="{ 'has-audio': msg.content.audio_url }"
                                         :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
-                                        <pre style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ msg.message }}</pre>
+                                        <pre style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ msg.content.message }}</pre>
 
                                         <!-- 图片附件 -->
-                                        <div class="image-attachments" v-if="msg.image_url && msg.image_url.length > 0">
-                                            <div v-for="(img, index) in msg.image_url" :key="index"
+                                        <div class="image-attachments" v-if="msg.content.image_url && msg.content.image_url.length > 0">
+                                            <div v-for="(img, index) in msg.content.image_url" :key="index"
                                                 class="image-attachment">
                                                 <img :src="img" class="attached-image" @click="openImagePreview(img)" />
                                             </div>
                                         </div>
 
                                         <!-- 音频附件 -->
-                                        <div class="audio-attachment" v-if="msg.audio_url && msg.audio_url.length > 0">
+                                        <div class="audio-attachment" v-if="msg.content.audio_url && msg.content.audio_url.length > 0">
                                             <audio controls class="audio-player">
-                                                <source :src="msg.audio_url" type="audio/wav">
+                                                <source :src="msg.content.audio_url" type="audio/wav">
                                                 {{ t('messages.errors.browser.audioNotSupported') }}
                                             </audio>
                                         </div>
@@ -179,22 +179,22 @@
                                     <div class="bot-message-content">
                                         <div class="message-bubble bot-bubble">
                                             <!-- Text -->
-                                            <div v-if="msg.message && msg.message.trim()" 
-                                                 v-html="md.render(msg.message)" 
+                                            <div v-if="msg.content.message && msg.content.message.trim()" 
+                                                 v-html="md.render(msg.content.message)" 
                                                  class="markdown-content"></div>
                                             
                                             <!-- Image -->
-                                            <div class="embedded-images" v-if="msg.embedded_images && msg.embedded_images.length > 0">
-                                                <div v-for="(img, imgIndex) in msg.embedded_images" :key="imgIndex"
+                                            <div class="embedded-images" v-if="msg.content.embedded_images && msg.content.embedded_images.length > 0">
+                                                <div v-for="(img, imgIndex) in msg.content.embedded_images" :key="imgIndex"
                                                      class="embedded-image">
                                                     <img :src="img" class="bot-embedded-image" @click="openImagePreview(img)" />
                                                 </div>
                                             </div>
                                             
                                             <!-- Audio -->
-                                            <div class="embedded-audio" v-if="msg.embedded_audio">
+                                            <div class="embedded-audio" v-if="msg.content.embedded_audio">
                                                 <audio controls class="audio-player">
-                                                    <source :src="msg.embedded_audio" type="audio/wav">
+                                                    <source :src="msg.content.embedded_audio" type="audio/wav">
                                                     {{ t('messages.errors.browser.audioNotSupported') }}
                                                 </audio>
                                             </div>
@@ -203,7 +203,7 @@
                                             <v-btn :icon="getCopyIcon(index)" size="small" variant="text"
                                                 class="copy-message-btn"
                                                 :class="{ 'copy-success': isCopySuccess(index) }"
-                                                @click="copyBotMessage(msg.message, index)"
+                                                @click="copyBotMessage(msg.content.message, index)"
                                                 :title="t('core.common.copy')" />
                                         </div>
                                     </div>
@@ -733,40 +733,42 @@ export default {
                 } else {
                     this.$router.push(`/chat/${cid[0]}`);
                 }
+                return
             }
 
             axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
                 this.currCid = cid[0];
-                let message = JSON.parse(response.data.data.history);
-                for (let i = 0; i < message.length; i++) {
-                    if (message[i].message.startsWith('[IMAGE]')) {
-                        let img = message[i].message.replace('[IMAGE]', '');
+                let history = response.data.data.history;
+                for (let i = 0; i < history.length; i++) {
+                    let content = history[i].content;
+                    if (content.message.startsWith('[IMAGE]')) {
+                        let img = content.message.replace('[IMAGE]', '');
                         const imageUrl = await this.getMediaFile(img);
-                        if (!message[i].embedded_images) {
-                            message[i].embedded_images = [];
+                        if (!content.embedded_images) {
+                            content.embedded_images = [];
                         }
-                        message[i].embedded_images.push(imageUrl);
-                        message[i].message = ''; // 清空message，避免显示标记文本
+                        content.embedded_images.push(imageUrl);
+                        content.message = ''; // 清空message，避免显示标记文本
                     }
                     
-                    if (message[i].message.startsWith('[RECORD]')) {
-                        let audio = message[i].message.replace('[RECORD]', '');
+                    if (content.message.startsWith('[RECORD]')) {
+                        let audio = content.message.replace('[RECORD]', '');
                         const audioUrl = await this.getMediaFile(audio);
-                        message[i].embedded_audio = audioUrl;
-                        message[i].message = ''; // 清空message，避免显示标记文本
+                        content.embedded_audio = audioUrl;
+                        content.message = ''; // 清空message，避免显示标记文本
                     }
                     
-                    if (message[i].image_url && message[i].image_url.length > 0) {
-                        for (let j = 0; j < message[i].image_url.length; j++) {
-                            message[i].image_url[j] = await this.getMediaFile(message[i].image_url[j]);
+                    if (content.image_url && content.image_url.length > 0) {
+                        for (let j = 0; j < content.image_url.length; j++) {
+                            content.image_url[j] = await this.getMediaFile(content.image_url[j]);
                         }
                     }
                     
-                    if (message[i].audio_url) {
-                        message[i].audio_url = await this.getMediaFile(message[i].audio_url);
+                    if (content.audio_url) {
+                        content.audio_url = await this.getMediaFile(content.audio_url);
                     }
                 }
-                this.messages = message;
+                this.messages = history;
                 this.initCodeCopyButtons();
                 this.initImageClickEvents();
             }).catch(err => {
@@ -876,7 +878,9 @@ export default {
                 }
             }
 
-            this.messages.push(userMessage);
+            this.messages.push({
+                "content": userMessage,
+            });
             this.scrollToBottom();
 
             this.loadingChat = true
@@ -960,7 +964,9 @@ export default {
                                     message: '',
                                     embedded_images: [imageUrl]
                                 }
-                                this.messages.push(bot_resp);
+                                this.messages.push({
+                                    "content": bot_resp
+                                });
                             } else if (chunk_json.type === 'record') {
                                 let audio = chunk_json.data.replace('[RECORD]', '');
                                 const audioUrl = await this.getMediaFile(audio);
@@ -969,14 +975,18 @@ export default {
                                     message: '',
                                     embedded_audio: audioUrl
                                 }
-                                this.messages.push(bot_resp);
+                                this.messages.push({
+                                    "content": bot_resp
+                                });
                             } else if (chunk_json.type === 'plain') {
                                 if (!in_streaming) {
                                     message_obj = {
                                         type: 'bot',
                                         message: this.ref(chunk_json.data),
                                     }
-                                    this.messages.push(message_obj);
+                                    this.messages.push({
+                                        "content": message_obj
+                                    });
                                     in_streaming = true;
                                 } else {
                                     message_obj.message.value += chunk_json.data;
@@ -1096,7 +1106,7 @@ export default {
         // 复制bot消息到剪贴板
         copyBotMessage(message, messageIndex) {
             // 获取对应的消息对象
-            const msgObj = this.messages[messageIndex];
+            const msgObj = this.messages[messageIndex].content;
             let textToCopy = '';
             
             // 如果有文本消息，添加到复制内容中

@@ -86,7 +86,7 @@ class StatRoute(Route):
             message_time_based_stats = []
 
             idx = 0
-            for bucket_end in range(start_time, now, 1800):
+            for bucket_end in range(start_time, now, 3600):
                 cnt = 0
                 while (
                     idx < len(stat.platform)

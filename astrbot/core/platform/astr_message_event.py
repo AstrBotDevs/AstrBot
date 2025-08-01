@@ -26,7 +26,7 @@ from .platform_metadata import PlatformMetadata
 
 
 @dataclass
-class MessageSesion:
+class MessageSession:
     platform_name: str
     message_type: MessageType
     session_id: str
@@ -37,8 +37,9 @@ class MessageSesion:
     @staticmethod
     def from_str(session_str: str):
         platform_name, message_type, session_id = session_str.split(":")
-        return MessageSesion(platform_name, MessageType(message_type), session_id)
+        return MessageSession(platform_name, MessageType(message_type), session_id)
 
+MessageSesion = MessageSession # back compatibility
 
 class AstrMessageEvent(abc.ABC):
     def __init__(

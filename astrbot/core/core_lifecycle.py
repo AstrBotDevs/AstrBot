@@ -29,8 +29,10 @@ from astrbot.core.updator import AstrBotUpdator
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
+from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star_handler import star_map
+from astrbot.core.db.migration.helper import do_migration_v4
 
 
 class AstrBotCoreLifecycle:
@@ -66,6 +68,9 @@ class AstrBotCoreLifecycle:
         else:
             logger.setLevel(self.astrbot_config["log_level"])  # 设置日志级别
 
+        await self.db.initialize()
+        await do_migration_v4(self.db, {})
+
         # 初始化事件队列
         self.event_queue = Queue()
 
@@ -77,6 +82,9 @@ class AstrBotCoreLifecycle:
 
         # 初始化对话管理器
         self.conversation_manager = ConversationManager(self.db)
+
+        # 初始化平台消息历史管理器
+        self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
 
         # 初始化提供给插件的上下文
         self.star_context = Context(

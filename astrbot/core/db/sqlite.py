@@ -1,67 +1,67 @@
-from datetime import datetime, timedelta
+import asyncio
 import typing as T
+import threading
+from datetime import datetime, timedelta
+from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import (
     ConversationV2,
     PlatformStat,
-    Base,
+    PlatformMessageHistory,
+    Attachment,
+    Persona,
+    Preference,
+    Stats as DeprecatedStats,
+    Platform as DeprecatedPlatformStat,
+    SQLModel,
 )
-from sqlalchemy import select, update, delete
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+from sqlalchemy import select, update, delete, text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import func
 
 
-class SQLiteDatabase:
+class SQLiteDatabase(BaseDatabase):
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
-
-        DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
-        self.engine = create_async_engine(
-            DATABASE_URL,
-            echo=True,
-            future=True,
-        )
-        self.AsyncSessionLocal = sessionmaker(
-            self.engine, class_=AsyncSession, expire_on_commit=False
-        )
+        self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
         self.inited = False
+        super().__init__()
 
-    async def init_db(self) -> None:
+    async def initialize(self) -> None:
         """Initialize the database by creating tables if they do not exist."""
         async with self.engine.begin() as conn:
-            await conn.execute("PRAGMA foreign_keys = ON;")
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(SQLModel.metadata.create_all)
             await conn.commit()
-
-    async def get_db(self) -> T.AsyncGenerator[AsyncSession, None]:
-        """Get a database session."""
-        if not self.inited:
-            await self.init_db()
-            self.inited = True
-        async with self.AsyncSessionLocal() as session:
-            yield session
 
     # ====
     # Platform Statistics
     # ====
 
     async def insert_platform_stats(
-        self, bot_id: str, platform_id: int, platform_type: str, count: int = 1
+        self,
+        platform_id: str,
+        platform_type: str,
+        count: int = 1,
+        timestamp: datetime = None,
     ) -> None:
         """Insert a new platform statistic record."""
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                current_hour = datetime.now().replace(minute=0, second=0, microsecond=0)
+                if timestamp is None:
+                    timestamp = datetime.now().replace(
+                        minute=0, second=0, microsecond=0
+                    )
+                current_hour = timestamp
                 await session.execute(
-                    """
-                    INSERT INTO platform_stats (timestamp, bot_id, platform_id, platform_type, count)
-                    VALUES (:timestamp, :bot_id, :platform_id, :platform_type, :count)
-                    ON CONFLICT(date, bot_id, platform_id, platform_type) DO UPDATE SET
+                    text("""
+                    INSERT INTO platform_stats (timestamp, platform_id, platform_type, count)
+                    VALUES (:timestamp, :platform_id, :platform_type, :count)
+                    ON CONFLICT(timestamp, platform_id, platform_type) DO UPDATE SET
                         count = platform_stats.count + EXCLUDED.count
-                    """,
+                    """),
                     {
                         "timestamp": current_hour,
-                        "bot_id": bot_id,
                         "platform_id": platform_id,
                         "platform_type": platform_type,
                         "count": count,
@@ -69,38 +69,30 @@ class SQLiteDatabase:
                 )
             await session.commit()
 
-    async def count_platform_stats(self, bot_id: str) -> int:
+    async def count_platform_stats(self) -> int:
         """Count the number of platform statistics records."""
         async with self.get_db() as session:
             session: AsyncSession
             result = await session.execute(
-                """
-                SELECT COUNT(*) FROM platform_stats
-                WHERE bot_id = :bot_id
-                """,
-                {
-                    "bot_id": bot_id,
-                },
+                select(func.count(PlatformStat.platform_id)).select_from(PlatformStat)
             )
             count = result.scalar_one_or_none()
             return count if count is not None else 0
 
-    async def get_platform_stats(
-        self, bot_id: str, offset_sec: int = 86400
-    ) -> T.List[PlatformStat]:
+    async def get_platform_stats(self, offset_sec: int = 86400) -> T.List[PlatformStat]:
         """Get platform statistics within the specified offset in seconds and group by platform_id."""
         async with self.get_db() as session:
             session: AsyncSession
             now = datetime.now()
             start_time = now - timedelta(seconds=offset_sec)
             result = await session.execute(
-                """
+                text("""
                 SELECT * FROM platform_stats
-                WHERE timestamp >= :start_time AND bot_id = :bot_id
+                WHERE timestamp >= :start_time
                 ORDER BY timestamp DESC
-                GROUP BY platform_id, bot_id
-                """,
-                {"start_time": start_time, "bot_id": bot_id},
+                GROUP BY platform_id
+                """),
+                {"start_time": start_time},
             )
             return result.scalars().all()
 
@@ -108,42 +100,44 @@ class SQLiteDatabase:
     # Conversation Management
     # ====
 
-    async def get_conversations(
-        self, bot_id: str, user_id: str
-    ) -> T.List[ConversationV2]:
-        """Get all conversations for a specific bot and user."""
+    async def get_conversations(self, user_id=None, platform_id=None, exclude_content=False):
         async with self.get_db() as session:
             session: AsyncSession
-            result = await session.execute(
-                """
-                SELECT * FROM conversations
-                WHERE bot_id = :bot_id AND user_id = :user_id
-                ORDER BY created_at DESC
-                """,
-                {"bot_id": bot_id, "user_id": user_id},
-            )
-            return result.scalars().all()
+            if exclude_content:
+                # 只选择需要的列，排除 content 字段
+                query = select(
+                    ConversationV2.inner_conversation_id,
+                    ConversationV2.conversation_id,
+                    ConversationV2.platform_id,
+                    ConversationV2.user_id,
+                    ConversationV2.created_at,
+                    ConversationV2.updated_at,
+                    ConversationV2.title,
+                    ConversationV2.persona_id
+                )
+            else:
+                query = select(ConversationV2)
 
-    async def get_conversation_by_id(
-        self,
-        conversation_id: int,
-        bot_id: str = "",
-    ) -> T.Optional[ConversationV2]:
-        """Get a specific conversation by its ID."""
+            if user_id:
+                query = query.where(ConversationV2.user_id == user_id)
+            if platform_id:
+                query = query.where(ConversationV2.platform_id == platform_id)
+            result = await session.execute(query)
+
+            if exclude_content:
+                # 返回元组列表而不是完整的模型对象
+                return result.all()
+            else:
+                return result.scalars().all()
+
+    async def get_conversation_by_id(self, cid):
         async with self.get_db() as session:
             session: AsyncSession
-            query = select(ConversationV2).where(
-                ConversationV2.conversation_id == conversation_id
-            )
-            if bot_id:
-                query = query.where(ConversationV2.bot_id == bot_id)
+            query = select(ConversationV2).where(ConversationV2.conversation_id == cid)
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
-    async def get_all_conversations(
-        self, page: int = 1, page_size: int = 20
-    ) -> T.List[ConversationV2]:
-        """Get all conversations with pagination."""
+    async def get_all_conversations(self, page=1, page_size=20):
         async with self.get_db() as session:
             session: AsyncSession
             offset = (page - 1) * page_size
@@ -157,14 +151,12 @@ class SQLiteDatabase:
 
     async def get_filtered_conversations(
         self,
-        page: int = 1,
-        page_size: int = 20,
-        platform_ids: list[str] | None = None,
-        bot_id: str = "",
-        search_query: str = "",
-        **kwargs: T.Any,
-    ) -> T.List[ConversationV2]:
-        """Get conversations filtered by platform IDs and search query."""
+        page=1,
+        page_size=20,
+        platform_ids=None,
+        search_query="",
+        **kwargs,
+    ):
         async with self.get_db() as session:
             session: AsyncSession
             offset = (page - 1) * page_size
@@ -172,64 +164,298 @@ class SQLiteDatabase:
 
             if platform_ids:
                 query = query.where(ConversationV2.platform_id.in_(platform_ids))
-            if bot_id:
-                query = query.where(ConversationV2.bot_id == bot_id)
             if search_query:
                 query = query.where(ConversationV2.title.ilike(f"%{search_query}%"))
 
             result = await session.execute(query.offset(offset).limit(page_size))
             return result.scalars().all()
 
-    async def creare_conversation(
+    async def create_conversation(
         self,
-        bot_id: str,
-        user_id: str,
-        title: str = None,
-        persona_id: int = None,
-    ) -> ConversationV2:
-        """Create a new conversation."""
+        user_id,
+        platform_id,
+        content=None,
+        title=None,
+        persona_id=None,
+        cid=None,
+        created_at=None,
+        updated_at=None,
+    ):
+        kwargs = {}
+        if cid:
+            kwargs["conversation_id"] = cid
+        if created_at:
+            kwargs["created_at"] = created_at
+        if updated_at:
+            kwargs["updated_at"] = updated_at
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
                 new_conversation = ConversationV2(
-                    bot_id=bot_id,
                     user_id=user_id,
+                    content=content or [],
+                    platform_id=platform_id,
                     title=title,
                     persona_id=persona_id,
+                    **kwargs,
                 )
                 session.add(new_conversation)
                 await session.commit()
                 return new_conversation
 
-    async def update_conversation(
-        self,
-        conversation_id: int,
-        title: str = None,
-        persona_id: int = None,
-    ) -> T.Optional[ConversationV2]:
-        """Update an existing conversation."""
+    async def update_conversation(self, cid, title=None, persona_id=None, content=None):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
                 query = update(ConversationV2).where(
-                    ConversationV2.conversation_id == conversation_id
+                    ConversationV2.conversation_id == cid
                 )
                 if title is not None:
                     query = query.values(title=title)
                 if persona_id is not None:
                     query = query.values(persona_id=persona_id)
+                if content is not None:
+                    query = query.values(content=content)
                 await session.execute(query)
                 await session.commit()
-                return await self.get_conversation_by_id(conversation_id)
+                return await self.get_conversation_by_id(cid)
 
-    async def delete_conversation(self, conversation_id: int) -> None:
-        """Delete a conversation by its ID."""
+    async def delete_conversation(self, cid):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
-                    delete(ConversationV2).where(
-                        ConversationV2.conversation_id == conversation_id
+                    delete(ConversationV2).where(ConversationV2.conversation_id == cid)
+                )
+                await session.commit()
+
+    async def insert_platform_message_history(
+        self,
+        platform_id,
+        user_id,
+        content,
+        sender_id=None,
+        sender_name=None,
+    ):
+        """Insert a new platform message history record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                new_history = PlatformMessageHistory(
+                    platform_id=platform_id,
+                    user_id=user_id,
+                    content=content,
+                    sender_id=sender_id,
+                    sender_name=sender_name,
+                )
+                session.add(new_history)
+                await session.commit()
+                return new_history
+
+    async def delete_platform_message_offset(
+        self, platform_id, user_id, offset_sec=86400
+    ):
+        """Delete platform message history records older than the specified offset."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                now = datetime.now()
+                cutoff_time = now - timedelta(seconds=offset_sec)
+                await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        PlatformMessageHistory.platform_id == platform_id,
+                        PlatformMessageHistory.user_id == user_id,
+                        PlatformMessageHistory.created_at < cutoff_time,
                     )
                 )
                 await session.commit()
+
+    async def get_platform_message_history(
+        self, platform_id, user_id, page=1, page_size=20
+    ):
+        """Get platform message history records."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            offset = (page - 1) * page_size
+            query = (
+                select(PlatformMessageHistory)
+                .where(
+                    PlatformMessageHistory.platform_id == platform_id,
+                    PlatformMessageHistory.user_id == user_id,
+                )
+                .order_by(PlatformMessageHistory.created_at.desc())
+            )
+            result = await session.execute(query.offset(offset).limit(page_size))
+            return result.scalars().all()
+
+    async def insert_attachment(self, path, type, mime_type):
+        """Insert a new attachment record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                new_attachment = Attachment(
+                    path=path,
+                    type=type,
+                    mime_type=mime_type,
+                )
+                session.add(new_attachment)
+                await session.commit()
+                return new_attachment
+
+    async def get_attachment_by_id(self, attachment_id):
+        """Get an attachment by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Attachment).where(Attachment.id == attachment_id)
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def insert_persona(self, persona_id, system_prompt, begin_dialogs=None):
+        """Insert a new persona record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                new_persona = Persona(
+                    persona_id=persona_id,
+                    system_prompt=system_prompt,
+                    begin_dialogs=begin_dialogs or [],
+                )
+                session.add(new_persona)
+                await session.commit()
+                return new_persona
+
+    async def get_persona_by_id(self, persona_id):
+        """Get a persona by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Persona).where(Persona.persona_id == persona_id)
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def get_personas(self):
+        """Get all personas for a specific bot."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Persona)
+            result = await session.execute(query)
+            return result.scalars().all()
+
+    async def insert_preference_or_update(self, key, value):
+        """Insert a new preference record or update if it exists."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                query = select(Preference).where(Preference.key == key)
+                result = await session.execute(query)
+                existing_preference = result.scalar_one_or_none()
+                if existing_preference:
+                    existing_preference.value = value
+                else:
+                    new_preference = Preference(key=key, value=value)
+                    session.add(new_preference)
+                await session.commit()
+                return existing_preference or new_preference
+
+    async def get_preference(self, key):
+        """Get a preference by key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Preference).where(Preference.key == key)
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    # ====
+    # Deprecated Methods
+    # ====
+
+    def get_base_stats(self, offset_sec=86400):
+        """Get base statistics within the specified offset in seconds."""
+
+        async def _inner():
+            async with self.get_db() as session:
+                session: AsyncSession
+                now = datetime.now()
+                start_time = now - timedelta(seconds=offset_sec)
+                result = await session.execute(
+                    select(PlatformStat).where(PlatformStat.timestamp >= start_time)
+                )
+                all_datas = result.scalars().all()
+                deprecated_stats = DeprecatedStats()
+                for data in all_datas:
+                    deprecated_stats.platform.append(
+                        DeprecatedPlatformStat(
+                            name=data.platform_id,
+                            count=data.count,
+                            timestamp=data.timestamp.timestamp(),
+                        )
+                    )
+                return deprecated_stats
+
+        result = None
+
+        def runner():
+            nonlocal result
+            result = asyncio.run(_inner())
+
+        t = threading.Thread(target=runner)
+        t.start()
+        t.join()
+        return result
+
+    def get_total_message_count(self):
+        """Get the total message count from platform statistics."""
+
+        async def _inner():
+            async with self.get_db() as session:
+                session: AsyncSession
+                result = await session.execute(
+                    select(func.sum(PlatformStat.count)).select_from(PlatformStat)
+                )
+                total_count = result.scalar_one_or_none()
+                return total_count if total_count is not None else 0
+
+        result = None
+
+        def runner():
+            nonlocal result
+            result = asyncio.run(_inner())
+
+        t = threading.Thread(target=runner)
+        t.start()
+        t.join()
+        return result
+
+    def get_grouped_base_stats(self, offset_sec=86400):
+        # group by platform_id
+        async def _inner():
+            async with self.get_db() as session:
+                session: AsyncSession
+                now = datetime.now()
+                start_time = now - timedelta(seconds=offset_sec)
+                result = await session.execute(
+                    select(PlatformStat.platform_id, func.sum(PlatformStat.count))
+                    .where(PlatformStat.timestamp >= start_time)
+                    .group_by(PlatformStat.platform_id)
+                )
+                grouped_stats = result.all()
+                deprecated_stats = DeprecatedStats()
+                for platform_id, count in grouped_stats:
+                    deprecated_stats.platform.append(
+                        DeprecatedPlatformStat(
+                            name=platform_id,
+                            count=count,
+                            timestamp=start_time.timestamp(),
+                        )
+                    )
+                return deprecated_stats
+
+        result = None
+
+        def runner():
+            nonlocal result
+            result = asyncio.run(_inner())
+
+        t = threading.Thread(target=runner)
+        t.start()
+        t.join()
+        return result
