@@ -2,6 +2,7 @@ import traceback
 import psutil
 import time
 import threading
+import aiohttp
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
 from quart import request
@@ -25,6 +26,7 @@ class StatRoute(Route):
             "/stat/version": ("GET", self.get_version),
             "/stat/start-time": ("GET", self.get_start_time),
             "/stat/restart-core": ("POST", self.restart_core),
+            "/stat/test-ghproxy-connection": ("POST", self.test_ghproxy_connection),
         }
         self.db_helper = db_helper
         self.register_routes()
@@ -45,11 +47,7 @@ class StatRoute(Route):
         """将总秒数转换为时分秒组件"""
         minutes, seconds = divmod(total_seconds, 60)
         hours, minutes = divmod(minutes, 60)
-        return {
-            "hours": hours,
-            "minutes": minutes,
-            "seconds": seconds
-        }
+        return {"hours": hours, "minutes": minutes, "seconds": seconds}
 
     def is_default_cred(self):
         username = self.config["dashboard"]["username"]
@@ -144,3 +142,40 @@ class StatRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(e.__str__()).__dict__
+
+    async def test_ghproxy_connection(self):
+        """
+        测试 GitHub 代理连接是否可用。
+        """
+        try:
+            data = await request.get_json()
+            proxy_url: str = data.get("proxy_url")
+
+            if not proxy_url:
+                return Response().error("proxy_url is required").__dict__
+
+            proxy_url = proxy_url.rstrip("/")
+
+            test_url = f"{proxy_url}/https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/.python-version"
+            start_time = time.time()
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    test_url, timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    if response.status == 200:
+                        end_time = time.time()
+                        _ = await response.text()
+                        ret = {
+                            "latency": round((end_time - start_time) * 1000, 2),
+                        }
+                        return Response().ok(data=ret).__dict__
+                    else:
+                        return (
+                            Response()
+                            .error(f"Failed. Status code: {response.status}")
+                            .__dict__
+                        )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"Error: {str(e)}").__dict__

@@ -364,7 +364,6 @@ export default {
                 'telegram': 'blue-lighten-1',
                 'qq_official': 'purple-lighten-1',
                 'qq_official_webhook': 'purple-lighten-2',
-                'gewechat': 'green-lighten-1',
                 'aiocqhttp': 'deep-purple-lighten-1',
                 'lark': 'cyan-darken-1',
                 'wecom': 'green-darken-1',

@@ -17,7 +17,7 @@
     "@tiptap/starter-kit": "2.1.7",
     "@tiptap/vue-3": "2.1.7",
     "apexcharts": "3.42.0",
-    "axios": "^1.6.2",
+    "axios": ">=1.6.2 <1.10.0 || >1.10.0 <2.0.0",
     "axios-mock-adapter": "^1.22.0",
     "chance": "1.1.11",
     "d3": "^7.9.0",

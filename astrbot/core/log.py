@@ -96,8 +96,6 @@ class LogBroker:
             Queue: 订阅者的队列, 可用于接收日志消息
         """
         q = Queue(maxsize=CACHED_SIZE + 10)
-        for log in self.log_cache:
-            q.put_nowait(log)
         self.subscribers.append(q)
         return q
 

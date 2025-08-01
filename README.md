@@ -53,7 +53,7 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 > 🪧 我们正基于前沿科研成果，设计并实现适用于角色扮演和情感陪伴的长短期记忆模型及情绪控制模型，旨在提升对话的真实性与情感表达能力。敬请期待 `v3.6.0` 版本！
 
 1. **大语言模型对话**。支持各种大语言模型，包括 OpenAI API、Google Gemini、Llama、Deepseek、ChatGLM 等，支持接入本地部署的大模型，通过 Ollama、LLMTuner。具有多轮对话、人格情境、多模态能力，支持图片理解、语音转文字（Whisper）。
-2. **多消息平台接入**。支持接入 QQ（OneBot、QQ 官方机器人平台）、QQ 频道、微信、企业微信、微信公众号、飞书、Telegram、钉钉、Discord、KOOK、VoceChat。支持速率限制、白名单、关键词过滤、百度内容审核。
+2. **多消息平台接入**。支持接入 QQ（OneBot、QQ 官方机器人平台）、QQ 频道、企业微信、微信公众号、飞书、Telegram、钉钉、Discord、KOOK、VoceChat。支持速率限制、白名单、关键词过滤、百度内容审核。
 3. **Agent**。原生支持部分 Agent 能力，如代码执行器、自然语言待办、网页搜索。对接 [Dify 平台](https://dify.ai/)，便捷接入 Dify 智能助手、知识库和 Dify 工作流。
 4. **插件扩展**。深度优化的插件机制，支持[开发插件](https://astrbot.app/dev/plugin.html)扩展功能，极简开发。已支持安装多个插件。
 5. **可视化管理面板**。支持可视化修改配置、插件管理、日志查看等功能，降低配置难度。集成 WebChat，可在面板上与大模型对话。
@@ -125,7 +125,6 @@ uvx astrbot init
 | -------- | ------- |
 | QQ(官方机器人接口) | ✔    |
 | QQ(OneBot)      | ✔    |
-| 微信个人号    | ✔    |
 | Telegram   | ✔    |
 | 企业微信    | ✔    |
 | 微信客服    | ✔    |
@@ -245,12 +244,6 @@ _✨ WebUI ✨_
 
 ![10k-star-banner-credit-by-kevin](https://github.com/user-attachments/assets/c97fc5fb-20b9-4bc8-9998-c20b930ab097)
 
-
-## Disclaimer
-
-1. The project is protected under the `AGPL-v3` opensource license.
-2. The deployment of WeChat (personal account) utilizes [Gewechat](https://github.com/Devo919/Gewechat) service. AstrBot only guarantees connectivity with Gewechat and recommends using a WeChat account that is not frequently used. In the event of account risk control, the author of this project shall not bear any responsibility.
-3. Please ensure compliance with local laws and regulations when using this project.
 
 _私は、高性能ですから!_
 

@@ -36,12 +36,13 @@ const PurpleThemeDark: ThemeTypes = {
     gray100: '#cccccccc',
     primary200: '#90caf9',
     secondary200: '#b39ddb',
-    background: '#111111',
+    background: '#1d1d1d',
     overlay: '#111111aa',
     codeBg: '#282833',
     preBg: 'rgb(23, 23, 23)',
     code: '#ffffffdd',
     chatMessageBubble: '#2d2e30',
+    mcpCardBg: '#2a2a2a',
   }
 };
 

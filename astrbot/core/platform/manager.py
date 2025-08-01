@@ -58,10 +58,6 @@ class PlatformManager:
                     from .sources.qqofficial_webhook.qo_webhook_adapter import (
                         QQOfficialWebhookPlatformAdapter,  # noqa: F401
                     )
-                case "gewechat":
-                    from .sources.gewechat.gewechat_platform_adapter import (
-                        GewechatPlatformAdapter,  # noqa: F401
-                    )
                 case "wechatpadpro":
                     from .sources.wechatpadpro.wechatpadpro_adapter import (
                         WeChatPadProAdapter,  # noqa: F401

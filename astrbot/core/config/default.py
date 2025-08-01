@@ -6,7 +6,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.22"
+VERSION = "3.5.23"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
 
 # 默认配置
@@ -156,15 +156,6 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
-                    },
-                    "微信个人号(Gewechat)": {
-                        "id": "gwchat",
-                        "type": "gewechat",
-                        "enable": False,
-                        "base_url": "http://localhost:2531",
-                        "nickname": "soulter",
-                        "host": "这里填写你的局域网IP或者公网服务器IP",
-                        "port": 11451,
                     },
                     "微信个人号(WeChatPadPro)": {
                         "id": "wechatpadpro",
@@ -1021,7 +1012,7 @@ CONFIG_METADATA_2 = {
                         "embedding_api_key": "",
                         "embedding_api_base": "",
                         "embedding_model": "",
-                        "embedding_dimensions": 1536,
+                        "embedding_dimensions": 1024,
                         "timeout": 20,
                     },
                     "Gemini Embedding": {
