@@ -1,4 +1,3 @@
-import os
 import aiohttp
 import datetime
 import builtins
@@ -16,7 +15,6 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_manager import PluginManager
@@ -1153,24 +1151,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
             sp.put("session_variables", session_vars)
             yield event.plain_result(f"会话 {uid} 变量 {key} 移除成功。")
 
-    @filter.command("gewe_logout")
-    async def gewe_logout(self, event: AstrMessageEvent):
-        platforms = self.context.platform_manager.platform_insts
-        for platform in platforms:
-            if platform.meta().name == "gewechat":
-                yield event.plain_result("正在登出 gewechat")
-                await platform.logout()
-                yield event.plain_result("已登出 gewechat，请重启 AstrBot")
-                return
-
-    @filter.command("gewe_code")
-    async def gewe_code(self, event: AstrMessageEvent, code: str):
-        """保存 gewechat 验证码"""
-        code_path = os.path.join(get_astrbot_data_path(), "temp", "gewe_code")
-        with open(code_path, "w", encoding="utf-8") as f:
-            f.write(code)
-        yield event.plain_result("验证码已保存。")
-
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         """群聊记忆增强"""
@@ -1241,6 +1221,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 except BaseException as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
+
+    @filter.on_decorating_result()
+    async def decorate_result(self, event: AstrMessageEvent):
+        logger.debug("Decorating result for event: %s", event)
 
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):

@@ -24,6 +24,7 @@
     "addPlatform": "Add Platform Adapter",
     "connectTitle": "Connect {name}",
     "viewTutorial": "View Tutorial",
+    "noTemplates": "No platform templates available",
     "idConflict": {
       "title": "ID Conflict Warning",
       "message": "Detected duplicate ID \"{id}\". Please use a new ID.",

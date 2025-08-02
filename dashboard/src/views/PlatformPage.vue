@@ -265,7 +265,7 @@ export default {
         return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
       } else if (name === 'wecom') {
         return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
-      } else if (name === 'gewechat' || name === 'wechatpadpro' || name === 'weixin_official_account' || name === 'wechat') {
+      } else if (name === 'wechatpadpro' || name === 'weixin_official_account' || name === 'wechat') {
         return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
       } else if (name === 'lark') {
         return new URL('@/assets/images/platform_logos/lark.png', import.meta.url).href
@@ -290,7 +290,6 @@ export default {
         "qq_official": "https://astrbot.app/deploy/platform/qqofficial/websockets.html",
         "aiocqhttp": "https://astrbot.app/deploy/platform/aiocqhttp/napcat.html",
         "wecom": "https://astrbot.app/deploy/platform/wecom.html",
-        "gewechat": "https://astrbot.app/deploy/platform/wechat/gewechat.html",
         "lark": "https://astrbot.app/deploy/platform/lark.html",
         "telegram": "https://astrbot.app/deploy/platform/telegram.html",
         "dingtalk": "https://astrbot.app/deploy/platform/dingtalk.html",

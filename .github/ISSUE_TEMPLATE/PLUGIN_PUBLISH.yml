@@ -1,0 +1,56 @@
+name: 🥳 发布插件
+description: 提交插件到插件市场
+title: "[Plugin] 插件名"
+labels: ["plugin-publish"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        欢迎发布插件到插件市场！
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 插件基本信息
+
+        请将插件信息填写到下方的 JSON 代码块中。其中 `tags`（插件标签）和 `social_link`（社交链接）选填。
+
+        不熟悉 JSON ？现在可以从 [这里](https://plugins.astrbot.app/#/submit) 获取你的 JSON 啦！获取到了记得复制粘贴过来哦！
+
+  - type: textarea
+    id: plugin-info
+    attributes:
+      label: 插件信息
+      description: 请在下方代码块中填写您的插件信息，确保反引号包裹了JSON
+      value: |
+        ```json
+        {
+          "name": "插件名",
+          "desc": "插件介绍",
+          "author": "作者名",
+          "repo": "插件仓库链接",
+          "tags": [],
+          "social_link": ""
+        }
+        ```
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 检查
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 插件检查清单
+      description: 请确认以下所有项目
+      options:
+        - label: 我的插件经过完整的测试
+          required: true
+        - label: 我的插件不包含恶意代码
+          required: true
+        - label: 我已阅读并同意遵守该项目的 [行为准则](https://docs.github.com/zh/site-policy/github-terms/github-community-code-of-conduct)。
+          required: true

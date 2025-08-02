@@ -30,7 +30,7 @@ def on_error(func, path, exc_info):
         raise exc_info[1]
 
 
-def remove_dir(file_path) -> bool:
+def remove_dir(file_path: str) -> bool:
     if not os.path.exists(file_path):
         return True
     shutil.rmtree(file_path, onerror=on_error)

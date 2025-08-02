@@ -15,7 +15,9 @@
     "buttons": {
       "refresh": "刷新",
       "add": "新增服务器",
-      "useTemplate": "使用模板"
+      "useTemplateStdio": "Stdio 模板",
+      "useTemplateStreamableHttp": "Streamable HTTP 模板",
+      "useTemplateSse": "SSE 模板"
     },
     "empty": "暂无 MCP 服务器，点击 新增服务器 添加",
     "status": {
@@ -28,8 +30,7 @@
   "functionTools": {
     "title": "函数工具",
     "buttons": {
-      "expand": "展开",
-      "collapse": "收起"
+      "view": "查看工具"
     },
     "search": "搜索函数工具",
     "empty": "没有可用的函数工具",
@@ -68,10 +69,6 @@
         "enable": "启用服务器",
         "config": "服务器配置"
       },
-      "configNotes": {
-        "note1": "1. 某些 MCP 服务器可能需要按照其要求在 env 中填充 `API_KEY` 或 `TOKEN` 等信息，请注意检查是否填写。",
-        "note2": "2. 当配置中指定 url 参数时：如果还同时指定 `transport` 参数的值为 `streamable_http`，则使用 Steamable HTTP，否则使用 SSE 连接。"
-      },
       "errors": {
         "configEmpty": "配置不能为空",
         "jsonFormat": "JSON 格式错误: {error}",
@@ -79,7 +76,8 @@
       },
       "buttons": {
         "cancel": "取消",
-        "save": "保存"
+        "save": "保存",
+        "testConnection": "测试连接"
       }
     },
     "serverDetail": {

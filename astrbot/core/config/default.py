@@ -157,15 +157,6 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "微信个人号(Gewechat)": {
-                        "id": "gwchat",
-                        "type": "gewechat",
-                        "enable": False,
-                        "base_url": "http://localhost:2531",
-                        "nickname": "soulter",
-                        "host": "这里填写你的局域网IP或者公网服务器IP",
-                        "port": 11451,
-                    },
                     "微信个人号(WeChatPadPro)": {
                         "id": "wechatpadpro",
                         "type": "wechatpadpro",
@@ -823,6 +814,19 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                     },
+                    "ModelScope": {
+                        "id": "modelscope",
+                        "provider": "modelscope",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://api-inference.modelscope.cn/v1",
+                        "model_config": {
+                            "model": "Qwen/Qwen3-32B",
+                        },
+                    },
                     "FastGPT": {
                         "id": "fastgpt",
                         "provider": "fastgpt",
@@ -1021,7 +1025,7 @@ CONFIG_METADATA_2 = {
                         "embedding_api_key": "",
                         "embedding_api_base": "",
                         "embedding_model": "",
-                        "embedding_dimensions": 1536,
+                        "embedding_dimensions": 1024,
                         "timeout": 20,
                     },
                     "Gemini Embedding": {

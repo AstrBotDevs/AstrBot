@@ -37,5 +37,6 @@ export type ThemeTypes = {
     preBg?: string;
     code?: string;
     chatMessageBubble?: string;
+    mcpCardBg?: string;
   };
 };
