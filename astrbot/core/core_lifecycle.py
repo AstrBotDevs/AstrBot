@@ -232,6 +232,6 @@ class AstrBotCoreLifecycle:
         platform_insts = self.platform_manager.get_insts()
         for platform_inst in platform_insts:
             tasks.append(
-                asyncio.create_task(platform_inst.run(), name=platform_inst.meta().name)
+                asyncio.create_task(platform_inst.run(), name=f"{platform_inst.meta().id}({platform_inst.meta().name})")
             )
         return tasks

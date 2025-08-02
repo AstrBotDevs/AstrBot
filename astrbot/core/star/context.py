@@ -2,7 +2,12 @@ from asyncio import Queue
 from typing import List, Union
 
 from astrbot.core import sp
-from astrbot.core.provider.provider import Provider, TTSProvider, STTProvider, EmbeddingProvider
+from astrbot.core.provider.provider import (
+    Provider,
+    TTSProvider,
+    STTProvider,
+    EmbeddingProvider,
+)
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -22,6 +27,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
     ADAPTER_NAME_2_TYPE,
 )
+from deprecated import deprecated
 
 
 class Context:
@@ -201,9 +207,12 @@ class Context:
         """
         return self._event_queue
 
-    def get_platform(self, platform_type: Union[PlatformAdapterType, str]) -> Platform:
+    @deprecated(version="4.0.0", reason="Use get_platform_inst instead")
+    def get_platform(self, platform_type: Union[PlatformAdapterType, str]) -> Platform | None:
         """
         获取指定类型的平台适配器。
+
+        该方法已经过时，请使用 get_platform_inst 方法。(>= AstrBot v4.0.0)
         """
         for platform in self.platform_manager.platform_insts:
             name = platform.meta().name
@@ -216,6 +225,20 @@ class Context:
                     and ADAPTER_NAME_2_TYPE[name] & platform_type
                 ):
                     return platform
+
+    def get_platform_inst(self, platform_id: str) -> Platform | None:
+        """
+        获取指定 ID 的平台适配器实例。
+
+        Args:
+            platform_id (str): 平台适配器的唯一标识符。你可以通过 event.get_platform_id() 获取。
+
+        Returns:
+            Platform: 平台适配器实例，如果未找到则返回 None。
+        """
+        for platform in self.platform_manager.platform_insts:
+            if platform.meta().id == platform_id:
+                return platform
 
     async def send_message(
         self, session: Union[str, MessageSesion], message_chain: MessageChain
@@ -240,7 +263,7 @@ class Context:
                 raise ValueError("不合法的 session 字符串: " + str(e))
 
         for platform in self.platform_manager.platform_insts:
-            if platform.meta().name == session.platform_name:
+            if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
                 return True
         return False

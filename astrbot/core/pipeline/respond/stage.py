@@ -128,7 +128,7 @@ class RespondStage(Stage):
             use_fallback = self.config.get("provider_settings", {}).get(
                 "streaming_segmented", False
             )
-            logger.info(f"应用流式输出({event.get_platform_name()})")
+            logger.info(f"应用流式输出({event.get_platform_id()})")
             await event.send_streaming(result.async_stream, use_fallback)
             return
         elif len(result.chain) > 0:

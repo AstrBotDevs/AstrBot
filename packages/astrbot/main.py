@@ -820,7 +820,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         if sid:
             session = str(
                 MessageSesion(
-                    platform_name=message.platform_meta.name,
+                    platform_name=message.platform_meta.id,
                     message_type=MessageType("GroupMessage"),
                     session_id=sid,
                 )
