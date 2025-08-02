@@ -255,7 +255,6 @@ class ChatRoute(Route):
             platform_id="webchat",
             content=[],
         )
-        print(f"webchat:FriendMessage:webchat!{username}!{webchat_conv_id}", conv_id)
         return Response().ok(data={"conversation_id": conv_id}).__dict__
 
     async def rename_conversation(self):

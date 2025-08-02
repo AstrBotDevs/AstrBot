@@ -107,11 +107,9 @@ class LLMRequestSubStage(Stage):
                     req.image_urls.append(image_path)
 
             # 获取对话上下文
-            print(event.unified_msg_origin)
             conversation_id = await self.conv_manager.get_curr_conversation_id(
                 event.unified_msg_origin
             )
-            print(f"curr conversation_id: {conversation_id}", self.conv_manager.session_conversations)
             if not conversation_id:
                 conversation_id = await self.conv_manager.new_conversation(
                     event.unified_msg_origin
