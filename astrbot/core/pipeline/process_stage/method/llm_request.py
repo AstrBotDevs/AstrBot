@@ -266,12 +266,12 @@ class LLMRequestSubStage(Stage):
         else:
             async for _ in requesting():
                 yield
+        await self._save_to_history(event, req, tool_loop_agent.get_final_llm_resp())
 
         # 异步处理 WebChat 特殊情况
         if event.get_platform_name() == "webchat":
             asyncio.create_task(self._handle_webchat(event, req, provider))
 
-        await self._save_to_history(event, req, tool_loop_agent.get_final_llm_resp())
 
     async def _handle_webchat(
         self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider

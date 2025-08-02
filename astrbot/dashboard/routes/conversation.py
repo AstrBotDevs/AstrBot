@@ -29,6 +29,7 @@ class ConversationRoute(Route):
             ),
         }
         self.db_helper = db_helper
+        self.conv_mgr = core_lifecycle.conversation_manager
         self.core_lifecycle = core_lifecycle
         self.register_routes()
 
@@ -54,7 +55,6 @@ class ConversationRoute(Route):
                 exclude_platforms.split(",") if exclude_platforms else []
             )
 
-            # 限制页面大小，防止请求过大数据
             if page < 1:
                 page = 1
             if page_size < 1:
@@ -62,9 +62,11 @@ class ConversationRoute(Route):
             if page_size > 100:
                 page_size = 100
 
-            # 使用数据库的分页方法获取会话列表和总数，传入筛选条件
             try:
-                conversations, total_count = self.db_helper.get_filtered_conversations(
+                (
+                    conversations,
+                    total_count,
+                ) = await self.conv_mgr.get_filtered_conversations(
                     page=page,
                     page_size=page_size,
                     platforms=platform_list,
@@ -108,7 +110,9 @@ class ConversationRoute(Route):
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
 
-            conversation = self.db_helper.get_conversation_by_user_id(user_id, cid)
+            conversation = await self.conv_mgr.get_conversation(
+                unified_msg_origin=user_id, conversation_id=cid
+            )
             if not conversation:
                 return Response().error("对话不存在").__dict__
 
@@ -143,14 +147,18 @@ class ConversationRoute(Route):
 
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
-            conversation = self.db_helper.get_conversation_by_user_id(user_id, cid)
+            conversation = await self.conv_mgr.get_conversation(
+                unified_msg_origin=user_id, conversation_id=cid
+            )
             if not conversation:
                 return Response().error("对话不存在").__dict__
-            if title is not None:
-                self.db_helper.update_conversation_title(user_id, cid, title)
-            if persona_id is not None:
-                self.db_helper.update_conversation_persona_id(user_id, cid, persona_id)
-
+            if title is not None or persona_id is not None:
+                await self.conv_mgr.update_conversation(
+                    unified_msg_origin=user_id,
+                    conversation_id=cid,
+                    title=title,
+                    persona_id=persona_id,
+                )
             return Response().ok({"message": "对话信息更新成功"}).__dict__
 
         except Exception as e:
@@ -201,11 +209,17 @@ class ConversationRoute(Route):
                     Response().error("history 必须是有效的 JSON 字符串或数组").__dict__
                 )
 
-            conversation = self.db_helper.get_conversation_by_user_id(user_id, cid)
+            conversation = await self.conv_mgr.get_conversation(
+                unified_msg_origin=user_id, conversation_id=cid
+            )
             if not conversation:
                 return Response().error("对话不存在").__dict__
 
-            self.db_helper.update_conversation(user_id, cid, history)
+            history = json.loads(history) if isinstance(history, str) else history
+
+            await self.conv_mgr.update_conversation(
+                unified_msg_origin=user_id, conversation_id=cid, history=history
+            )
 
             return Response().ok({"message": "对话历史更新成功"}).__dict__
 

@@ -6,8 +6,8 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "3.5.22"
-DB_PATH = os.path.join(get_astrbot_data_path(), "data_v3.db")
+VERSION = "4.0.0"
+DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
 DEFAULT_CONFIG = {

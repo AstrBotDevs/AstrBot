@@ -1,567 +1,461 @@
-import sqlite3
-import os
-import time
-from astrbot.core.db.po import Platform, Stats, LLMHistory, ATRIVision, Conversation
-from . import BaseDatabase
-from typing import Tuple, List, Dict, Any
+import asyncio
+import typing as T
+import threading
+from datetime import datetime, timedelta
+from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import (
+    ConversationV2,
+    PlatformStat,
+    PlatformMessageHistory,
+    Attachment,
+    Persona,
+    Preference,
+    Stats as DeprecatedStats,
+    Platform as DeprecatedPlatformStat,
+    SQLModel,
+)
+
+from sqlalchemy import select, update, delete, text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import func
 
 
 class SQLiteDatabase(BaseDatabase):
     def __init__(self, db_path: str) -> None:
-        super().__init__()
         self.db_path = db_path
-
-        with open(
-            os.path.dirname(__file__) + "/sqlite_init.sql", "r", encoding="utf-8"
-        ) as f:
-            sql = f.read()
-
-        # 初始化数据库
-        self.conn = self._get_conn(self.db_path)
-        c = self.conn.cursor()
-        c.executescript(sql)
-        self.conn.commit()
-
-        # 检查 webchat_conversation 的 title 字段是否存在
-        c.execute(
-            """
-            PRAGMA table_info(webchat_conversation)
-            """
-        )
-        res = c.fetchall()
-        has_title = False
-        has_persona_id = False
-        for row in res:
-            if row[1] == "title":
-                has_title = True
-            if row[1] == "persona_id":
-                has_persona_id = True
-        if not has_title:
-            c.execute(
-                """
-                ALTER TABLE webchat_conversation ADD COLUMN title TEXT;
-                """
-            )
-            self.conn.commit()
-        if not has_persona_id:
-            c.execute(
-                """
-                ALTER TABLE webchat_conversation ADD COLUMN persona_id TEXT;
-                """
-            )
-            self.conn.commit()
-
-        c.close()
-
-    def _get_conn(self, db_path: str) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.text_factory = str
-        return conn
-
-    def _exec_sql(self, sql: str, params: Tuple = None):
-        conn = self.conn
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            conn = self._get_conn(self.db_path)
-            c = conn.cursor()
-
-        if params:
-            c.execute(sql, params)
-            c.close()
-        else:
-            c.execute(sql)
-            c.close()
-
-        conn.commit()
-
-    def insert_platform_metrics(self, metrics: dict):
-        for k, v in metrics.items():
-            self._exec_sql(
-                """
-                INSERT INTO platform(name, count, timestamp) VALUES (?, ?, ?)
-                """,
-                (k, v, int(time.time())),
-            )
-
-    def insert_plugin_metrics(self, metrics: dict):
-        pass
-
-    def insert_command_metrics(self, metrics: dict):
-        for k, v in metrics.items():
-            self._exec_sql(
-                """
-                INSERT INTO command(name, count, timestamp) VALUES (?, ?, ?)
-                """,
-                (k, v, int(time.time())),
-            )
-
-    def insert_llm_metrics(self, metrics: dict):
-        for k, v in metrics.items():
-            self._exec_sql(
-                """
-                INSERT INTO llm(name, count, timestamp) VALUES (?, ?, ?)
-                """,
-                (k, v, int(time.time())),
-            )
-
-    def update_llm_history(self, session_id: str, content: str, provider_type: str):
-        res = self.get_llm_history(session_id, provider_type)
-        if res:
-            self._exec_sql(
-                """
-                UPDATE llm_history SET content = ? WHERE session_id = ? AND provider_type = ?
-                """,
-                (content, session_id, provider_type),
-            )
-        else:
-            self._exec_sql(
-                """
-                INSERT INTO llm_history(provider_type, session_id, content) VALUES (?, ?, ?)
-                """,
-                (provider_type, session_id, content),
-            )
-
-    def get_llm_history(
-        self, session_id: str = None, provider_type: str = None
-    ) -> Tuple:
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            c = self._get_conn(self.db_path).cursor()
-
-        conditions = []
-        params = []
-
-        if session_id:
-            conditions.append("session_id = ?")
-            params.append(session_id)
-
-        if provider_type:
-            conditions.append("provider_type = ?")
-            params.append(provider_type)
-
-        sql = "SELECT * FROM llm_history"
-        if conditions:
-            sql += " WHERE " + " AND ".join(conditions)
-
-        c.execute(sql, params)
-
-        res = c.fetchall()
-        histories = []
-        for row in res:
-            histories.append(LLMHistory(*row))
-        c.close()
-        return histories
-
-    def get_base_stats(self, offset_sec: int = 86400) -> Stats:
-        """获取 offset_sec 秒前到现在的基础统计数据"""
-        where_clause = f" WHERE timestamp >= {int(time.time()) - offset_sec}"
-
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            c = self._get_conn(self.db_path).cursor()
-
-        c.execute(
-            """
-            SELECT * FROM platform
-            """
-            + where_clause
-        )
-
-        platform = []
-        for row in c.fetchall():
-            platform.append(Platform(*row))
-
-        # c.execute(
-        #     '''
-        #     SELECT * FROM command
-        #     ''' + where_clause
-        # )
-
-        # command = []
-        # for row in c.fetchall():
-        #     command.append(Command(*row))
-
-        # c.execute(
-        #     '''
-        #     SELECT * FROM llm
-        #     ''' + where_clause
-        # )
-
-        # llm = []
-        # for row in c.fetchall():
-        #     llm.append(Provider(*row))
-
-        c.close()
-
-        return Stats(platform, [], [])
-
-    def get_total_message_count(self) -> int:
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            c = self._get_conn(self.db_path).cursor()
-
-        c.execute(
-            """
-            SELECT SUM(count) FROM platform
-            """
-        )
-        res = c.fetchone()
-        c.close()
-        return res[0]
-
-    def get_grouped_base_stats(self, offset_sec: int = 86400) -> Stats:
-        """获取 offset_sec 秒前到现在的基础统计数据(合并)"""
-        where_clause = f" WHERE timestamp >= {int(time.time()) - offset_sec}"
-
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            c = self._get_conn(self.db_path).cursor()
-
-        c.execute(
-            """
-            SELECT name, SUM(count), timestamp FROM platform
-            """
-            + where_clause
-            + " GROUP BY name"
-        )
-
-        platform = []
-        for row in c.fetchall():
-            platform.append(Platform(*row))
-
-        c.close()
-
-        return Stats(platform, [], [])
-
-    def get_conversation_by_user_id(self, user_id: str, cid: str) -> Conversation:
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            c = self._get_conn(self.db_path).cursor()
-
-        c.execute(
-            """
-            SELECT * FROM webchat_conversation WHERE user_id = ? AND cid = ?
-            """,
-            (user_id, cid),
-        )
-
-        res = c.fetchone()
-        c.close()
-
-        if not res:
-            return
-
-        return Conversation(*res)
-
-    def new_conversation(self, user_id: str, cid: str):
-        history = "[]"
-        updated_at = int(time.time())
-        created_at = updated_at
-        self._exec_sql(
-            """
-            INSERT INTO webchat_conversation(user_id, cid, history, updated_at, created_at) VALUES (?, ?, ?, ?, ?)
-            """,
-            (user_id, cid, history, updated_at, created_at),
-        )
-
-    def get_conversations(self, user_id: str) -> Tuple:
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            c = self._get_conn(self.db_path).cursor()
-
-        c.execute(
-            """
-            SELECT cid, created_at, updated_at, title, persona_id FROM webchat_conversation WHERE user_id = ? ORDER BY updated_at DESC
-            """,
-            (user_id,),
-        )
-
-        res = c.fetchall()
-        c.close()
-        conversations = []
-        for row in res:
-            cid = row[0]
-            created_at = row[1]
-            updated_at = row[2]
-            title = row[3]
-            persona_id = row[4]
-            conversations.append(
-                Conversation("", cid, "[]", created_at, updated_at, title, persona_id)
-            )
-        return conversations
-
-    def update_conversation(self, user_id: str, cid: str, history: str):
-        """更新对话，并且同时更新时间"""
-        updated_at = int(time.time())
-        self._exec_sql(
-            """
-            UPDATE webchat_conversation SET history = ?, updated_at = ? WHERE user_id = ? AND cid = ?
-            """,
-            (history, updated_at, user_id, cid),
-        )
-
-    def update_conversation_title(self, user_id: str, cid: str, title: str):
-        self._exec_sql(
-            """
-            UPDATE webchat_conversation SET title = ? WHERE user_id = ? AND cid = ?
-            """,
-            (title, user_id, cid),
-        )
-
-    def update_conversation_persona_id(self, user_id: str, cid: str, persona_id: str):
-        self._exec_sql(
-            """
-            UPDATE webchat_conversation SET persona_id = ? WHERE user_id = ? AND cid = ?
-            """,
-            (persona_id, user_id, cid),
-        )
-
-    def delete_conversation(self, user_id: str, cid: str):
-        self._exec_sql(
-            """
-            DELETE FROM webchat_conversation WHERE user_id = ? AND cid = ?
-            """,
-            (user_id, cid),
-        )
-
-    def insert_atri_vision_data(self, vision: ATRIVision):
-        ts = int(time.time())
-        keywords = ",".join(vision.keywords)
-        self._exec_sql(
-            """
-            INSERT INTO atri_vision(id, url_or_path, caption, is_meme, keywords, platform_name, session_id, sender_nickname, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                vision.id,
-                vision.url_or_path,
-                vision.caption,
-                vision.is_meme,
-                keywords,
-                vision.platform_name,
-                vision.session_id,
-                vision.sender_nickname,
-                ts,
-            ),
-        )
-
-    def get_atri_vision_data(self) -> Tuple:
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            c = self._get_conn(self.db_path).cursor()
-
-        c.execute(
-            """
-            SELECT * FROM atri_vision
-            """
-        )
-
-        res = c.fetchall()
-        visions = []
-        for row in res:
-            visions.append(ATRIVision(*row))
-        c.close()
-        return visions
-
-    def get_atri_vision_data_by_path_or_id(
-        self, url_or_path: str, id: str
-    ) -> ATRIVision:
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            c = self._get_conn(self.db_path).cursor()
-
-        c.execute(
-            """
-            SELECT * FROM atri_vision WHERE url_or_path = ? OR id = ?
-            """,
-            (url_or_path, id),
-        )
-
-        res = c.fetchone()
-        c.close()
-        if res:
-            return ATRIVision(*res)
-        return None
-
-    def get_all_conversations(
-        self, page: int = 1, page_size: int = 20
-    ) -> Tuple[List[Dict[str, Any]], int]:
-        """获取所有对话，支持分页，按更新时间降序排序"""
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            c = self._get_conn(self.db_path).cursor()
-
-        try:
-            # 获取总记录数
-            c.execute("""
-                SELECT COUNT(*) FROM webchat_conversation
-            """)
-            total_count = c.fetchone()[0]
-
-            # 计算偏移量
-            offset = (page - 1) * page_size
-
-            # 获取分页数据，按更新时间降序排序
-            c.execute(
-                """
-                SELECT user_id, cid, created_at, updated_at, title, persona_id
-                FROM webchat_conversation
-                ORDER BY updated_at DESC
-                LIMIT ? OFFSET ?
-            """,
-                (page_size, offset),
-            )
-
-            rows = c.fetchall()
-
-            conversations = []
-
-            for row in rows:
-                user_id, cid, created_at, updated_at, title, persona_id = row
-                # 确保 cid 是字符串类型且至少有8个字符，否则使用一个默认值
-                safe_cid = str(cid) if cid else "unknown"
-                display_cid = safe_cid[:8] if len(safe_cid) >= 8 else safe_cid
-
-                conversations.append(
-                    {
-                        "user_id": user_id or "",
-                        "cid": safe_cid,
-                        "title": title or f"对话 {display_cid}",
-                        "persona_id": persona_id or "",
-                        "created_at": created_at or 0,
-                        "updated_at": updated_at or 0,
-                    }
-                )
-
-            return conversations, total_count
-
-        except Exception as _:
-            # 返回空列表和0，确保即使出错也有有效的返回值
-            return [], 0
-        finally:
-            c.close()
-
-    def get_filtered_conversations(
+        self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
+        self.inited = False
+        super().__init__()
+
+    async def initialize(self) -> None:
+        """Initialize the database by creating tables if they do not exist."""
+        async with self.engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
+            await conn.commit()
+
+    # ====
+    # Platform Statistics
+    # ====
+
+    async def insert_platform_stats(
         self,
-        page: int = 1,
-        page_size: int = 20,
-        platforms: List[str] = None,
-        message_types: List[str] = None,
-        search_query: str = None,
-        exclude_ids: List[str] = None,
-        exclude_platforms: List[str] = None,
-    ) -> Tuple[List[Dict[str, Any]], int]:
-        """获取筛选后的对话列表"""
-        try:
-            c = self.conn.cursor()
-        except sqlite3.ProgrammingError:
-            c = self._get_conn(self.db_path).cursor()
-
-        try:
-            # 构建查询条件
-            where_clauses = []
-            params = []
-
-            # 平台筛选
-            if platforms and len(platforms) > 0:
-                platform_conditions = []
-                for platform in platforms:
-                    platform_conditions.append("user_id LIKE ?")
-                    params.append(f"{platform}:%")
-
-                if platform_conditions:
-                    where_clauses.append(f"({' OR '.join(platform_conditions)})")
-
-            # 消息类型筛选
-            if message_types and len(message_types) > 0:
-                message_type_conditions = []
-                for msg_type in message_types:
-                    message_type_conditions.append("user_id LIKE ?")
-                    params.append(f"%:{msg_type}:%")
-
-                if message_type_conditions:
-                    where_clauses.append(f"({' OR '.join(message_type_conditions)})")
-
-            # 搜索关键词
-            if search_query:
-                search_query = search_query.encode("unicode_escape").decode("utf-8")
-                where_clauses.append(
-                    "(title LIKE ? OR user_id LIKE ? OR cid LIKE ? OR history LIKE ?)"
-                )
-                search_param = f"%{search_query}%"
-                params.extend([search_param, search_param, search_param, search_param])
-
-            # 排除特定用户ID
-            if exclude_ids and len(exclude_ids) > 0:
-                for exclude_id in exclude_ids:
-                    where_clauses.append("user_id NOT LIKE ?")
-                    params.append(f"{exclude_id}%")
-
-            # 排除特定平台
-            if exclude_platforms and len(exclude_platforms) > 0:
-                for exclude_platform in exclude_platforms:
-                    where_clauses.append("user_id NOT LIKE ?")
-                    params.append(f"{exclude_platform}:%")
-
-            # 构建完整的 WHERE 子句
-            where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
-
-            # 构建计数查询
-            count_sql = f"SELECT COUNT(*) FROM webchat_conversation{where_sql}"
-
-            # 获取总记录数
-            c.execute(count_sql, params)
-            total_count = c.fetchone()[0]
-
-            # 计算偏移量
-            offset = (page - 1) * page_size
-
-            # 构建分页数据查询
-            data_sql = f"""
-                SELECT user_id, cid, created_at, updated_at, title, persona_id
-                FROM webchat_conversation
-                {where_sql}
-                ORDER BY updated_at DESC
-                LIMIT ? OFFSET ?
-            """
-            query_params = params + [page_size, offset]
-
-            # 获取分页数据
-            c.execute(data_sql, query_params)
-            rows = c.fetchall()
-
-            conversations = []
-
-            for row in rows:
-                user_id, cid, created_at, updated_at, title, persona_id = row
-                # 确保 cid 是字符串类型，否则使用一个默认值
-                safe_cid = str(cid) if cid else "unknown"
-                display_cid = safe_cid[:8] if len(safe_cid) >= 8 else safe_cid
-
-                conversations.append(
+        platform_id: str,
+        platform_type: str,
+        count: int = 1,
+        timestamp: datetime = None,
+    ) -> None:
+        """Insert a new platform statistic record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                if timestamp is None:
+                    timestamp = datetime.now().replace(
+                        minute=0, second=0, microsecond=0
+                    )
+                current_hour = timestamp
+                await session.execute(
+                    text("""
+                    INSERT INTO platform_stats (timestamp, platform_id, platform_type, count)
+                    VALUES (:timestamp, :platform_id, :platform_type, :count)
+                    ON CONFLICT(timestamp, platform_id, platform_type) DO UPDATE SET
+                        count = platform_stats.count + EXCLUDED.count
+                    """),
                     {
-                        "user_id": user_id or "",
-                        "cid": safe_cid,
-                        "title": title or f"对话 {display_cid}",
-                        "persona_id": persona_id or "",
-                        "created_at": created_at or 0,
-                        "updated_at": updated_at or 0,
-                    }
+                        "timestamp": current_hour,
+                        "platform_id": platform_id,
+                        "platform_type": platform_type,
+                        "count": count,
+                    },
                 )
 
-            return conversations, total_count
+    async def count_platform_stats(self) -> int:
+        """Count the number of platform statistics records."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(func.count(PlatformStat.platform_id)).select_from(PlatformStat)
+            )
+            count = result.scalar_one_or_none()
+            return count if count is not None else 0
 
-        except Exception as _:
-            # 返回空列表和0，确保即使出错也有有效的返回值
-            return [], 0
-        finally:
-            c.close()
+    async def get_platform_stats(self, offset_sec: int = 86400) -> T.List[PlatformStat]:
+        """Get platform statistics within the specified offset in seconds and group by platform_id."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            now = datetime.now()
+            start_time = now - timedelta(seconds=offset_sec)
+            result = await session.execute(
+                text("""
+                SELECT * FROM platform_stats
+                WHERE timestamp >= :start_time
+                ORDER BY timestamp DESC
+                GROUP BY platform_id
+                """),
+                {"start_time": start_time},
+            )
+            return result.scalars().all()
+
+    # ====
+    # Conversation Management
+    # ====
+
+    async def get_conversations(
+        self, user_id=None, platform_id=None
+    ):
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(ConversationV2)
+
+            if user_id:
+                query = query.where(ConversationV2.user_id == user_id)
+            if platform_id:
+                query = query.where(ConversationV2.platform_id == platform_id)
+            # order by
+            query = query.order_by(ConversationV2.created_at.desc())
+            result = await session.execute(query)
+
+            return result.scalars().all()
+
+    async def get_conversation_by_id(self, cid):
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(ConversationV2).where(ConversationV2.conversation_id == cid)
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def get_all_conversations(self, page=1, page_size=20):
+        async with self.get_db() as session:
+            session: AsyncSession
+            offset = (page - 1) * page_size
+            result = await session.execute(
+                select(ConversationV2)
+                .order_by(ConversationV2.created_at.desc())
+                .offset(offset)
+                .limit(page_size)
+            )
+            return result.scalars().all()
+
+    async def get_filtered_conversations(
+        self,
+        page=1,
+        page_size=20,
+        platform_ids=None,
+        search_query="",
+        **kwargs,
+    ):
+        async with self.get_db() as session:
+            session: AsyncSession
+            # Build the base query with filters
+            base_query = select(ConversationV2)
+
+            if platform_ids:
+                base_query = base_query.where(
+                    ConversationV2.platform_id.in_(platform_ids)
+                )
+            if search_query:
+                base_query = base_query.where(
+                    ConversationV2.title.ilike(f"%{search_query}%")
+                )
+
+            # Get total count matching the filters
+            count_query = select(func.count()).select_from(base_query.subquery())
+            total_count = await session.execute(count_query)
+            total = total_count.scalar_one()
+
+            # Get paginated results
+            offset = (page - 1) * page_size
+            result_query = (
+                base_query.order_by(ConversationV2.created_at.desc())
+                .offset(offset)
+                .limit(page_size)
+            )
+            result = await session.execute(result_query)
+            conversations = result.scalars().all()
+
+            return conversations, total
+
+    async def create_conversation(
+        self,
+        user_id,
+        platform_id,
+        content=None,
+        title=None,
+        persona_id=None,
+        cid=None,
+        created_at=None,
+        updated_at=None,
+    ):
+        kwargs = {}
+        if cid:
+            kwargs["conversation_id"] = cid
+        if created_at:
+            kwargs["created_at"] = created_at
+        if updated_at:
+            kwargs["updated_at"] = updated_at
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                new_conversation = ConversationV2(
+                    user_id=user_id,
+                    content=content or [],
+                    platform_id=platform_id,
+                    title=title,
+                    persona_id=persona_id,
+                    **kwargs,
+                )
+                session.add(new_conversation)
+                return new_conversation
+
+    async def update_conversation(self, cid, title=None, persona_id=None, content=None):
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                query = update(ConversationV2).where(
+                    ConversationV2.conversation_id == cid
+                )
+                values = {}
+                if title is not None:
+                    values["title"] = title
+                if persona_id is not None:
+                    values["persona_id"] = persona_id
+                if content is not None:
+                    values["content"] = content
+                if not values:
+                    return
+                query = query.values(**values)
+                await session.execute(query)
+                return await self.get_conversation_by_id(cid)
+
+    async def delete_conversation(self, cid):
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(ConversationV2).where(ConversationV2.conversation_id == cid)
+                )
+
+    async def insert_platform_message_history(
+        self,
+        platform_id,
+        user_id,
+        content,
+        sender_id=None,
+        sender_name=None,
+    ):
+        """Insert a new platform message history record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                new_history = PlatformMessageHistory(
+                    platform_id=platform_id,
+                    user_id=user_id,
+                    content=content,
+                    sender_id=sender_id,
+                    sender_name=sender_name,
+                )
+                session.add(new_history)
+                return new_history
+
+    async def delete_platform_message_offset(
+        self, platform_id, user_id, offset_sec=86400
+    ):
+        """Delete platform message history records older than the specified offset."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                now = datetime.now()
+                cutoff_time = now - timedelta(seconds=offset_sec)
+                await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        PlatformMessageHistory.platform_id == platform_id,
+                        PlatformMessageHistory.user_id == user_id,
+                        PlatformMessageHistory.created_at < cutoff_time,
+                    )
+                )
+
+    async def get_platform_message_history(
+        self, platform_id, user_id, page=1, page_size=20
+    ):
+        """Get platform message history records."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            offset = (page - 1) * page_size
+            query = (
+                select(PlatformMessageHistory)
+                .where(
+                    PlatformMessageHistory.platform_id == platform_id,
+                    PlatformMessageHistory.user_id == user_id,
+                )
+                .order_by(PlatformMessageHistory.created_at.desc())
+            )
+            result = await session.execute(query.offset(offset).limit(page_size))
+            return result.scalars().all()
+
+    async def insert_attachment(self, path, type, mime_type):
+        """Insert a new attachment record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                new_attachment = Attachment(
+                    path=path,
+                    type=type,
+                    mime_type=mime_type,
+                )
+                session.add(new_attachment)
+                return new_attachment
+
+    async def get_attachment_by_id(self, attachment_id):
+        """Get an attachment by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Attachment).where(Attachment.id == attachment_id)
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def insert_persona(self, persona_id, system_prompt, begin_dialogs=None):
+        """Insert a new persona record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                new_persona = Persona(
+                    persona_id=persona_id,
+                    system_prompt=system_prompt,
+                    begin_dialogs=begin_dialogs or [],
+                )
+                session.add(new_persona)
+                return new_persona
+
+    async def get_persona_by_id(self, persona_id):
+        """Get a persona by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Persona).where(Persona.persona_id == persona_id)
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def get_personas(self):
+        """Get all personas for a specific bot."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Persona)
+            result = await session.execute(query)
+            return result.scalars().all()
+
+    async def insert_preference_or_update(self, key, value):
+        """Insert a new preference record or update if it exists."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                query = select(Preference).where(Preference.key == key)
+                result = await session.execute(query)
+                existing_preference = result.scalar_one_or_none()
+                if existing_preference:
+                    existing_preference.value = value
+                else:
+                    new_preference = Preference(key=key, value=value)
+                    session.add(new_preference)
+                return existing_preference or new_preference
+
+    async def get_preference(self, key):
+        """Get a preference by key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Preference).where(Preference.key == key)
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    # ====
+    # Deprecated Methods
+    # ====
+
+    def get_base_stats(self, offset_sec=86400):
+        """Get base statistics within the specified offset in seconds."""
+
+        async def _inner():
+            async with self.get_db() as session:
+                session: AsyncSession
+                now = datetime.now()
+                start_time = now - timedelta(seconds=offset_sec)
+                result = await session.execute(
+                    select(PlatformStat).where(PlatformStat.timestamp >= start_time)
+                )
+                all_datas = result.scalars().all()
+                deprecated_stats = DeprecatedStats()
+                for data in all_datas:
+                    deprecated_stats.platform.append(
+                        DeprecatedPlatformStat(
+                            name=data.platform_id,
+                            count=data.count,
+                            timestamp=data.timestamp.timestamp(),
+                        )
+                    )
+                return deprecated_stats
+
+        result = None
+
+        def runner():
+            nonlocal result
+            result = asyncio.run(_inner())
+
+        t = threading.Thread(target=runner)
+        t.start()
+        t.join()
+        return result
+
+    def get_total_message_count(self):
+        """Get the total message count from platform statistics."""
+
+        async def _inner():
+            async with self.get_db() as session:
+                session: AsyncSession
+                result = await session.execute(
+                    select(func.sum(PlatformStat.count)).select_from(PlatformStat)
+                )
+                total_count = result.scalar_one_or_none()
+                return total_count if total_count is not None else 0
+
+        result = None
+
+        def runner():
+            nonlocal result
+            result = asyncio.run(_inner())
+
+        t = threading.Thread(target=runner)
+        t.start()
+        t.join()
+        return result
+
+    def get_grouped_base_stats(self, offset_sec=86400):
+        # group by platform_id
+        async def _inner():
+            async with self.get_db() as session:
+                session: AsyncSession
+                now = datetime.now()
+                start_time = now - timedelta(seconds=offset_sec)
+                result = await session.execute(
+                    select(PlatformStat.platform_id, func.sum(PlatformStat.count))
+                    .where(PlatformStat.timestamp >= start_time)
+                    .group_by(PlatformStat.platform_id)
+                )
+                grouped_stats = result.all()
+                deprecated_stats = DeprecatedStats()
+                for platform_id, count in grouped_stats:
+                    deprecated_stats.platform.append(
+                        DeprecatedPlatformStat(
+                            name=platform_id,
+                            count=count,
+                            timestamp=start_time.timestamp(),
+                        )
+                    )
+                return deprecated_stats
+
+        result = None
+
+        def runner():
+            nonlocal result
+            result = asyncio.run(_inner())
+
+        t = threading.Thread(target=runner)
+        t.start()
+        t.join()
+        return result
