@@ -28,6 +28,7 @@ from .platform_metadata import PlatformMetadata
 @dataclass
 class MessageSession:
     platform_name: str
+    """平台适配器实例的唯一标识符。自 AstrBot v4.0.0 起，该字段实际为 platform_id。"""
     message_type: MessageType
     session_id: str
 
@@ -39,7 +40,9 @@ class MessageSession:
         platform_name, message_type, session_id = session_str.split(":")
         return MessageSession(platform_name, MessageType(message_type), session_id)
 
-MessageSesion = MessageSession # back compatibility
+
+MessageSesion = MessageSession  # back compatibility
+
 
 class AstrMessageEvent(abc.ABC):
     def __init__(
@@ -65,7 +68,7 @@ class AstrMessageEvent(abc.ABC):
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras = {}
         self.session = MessageSesion(
-            platform_name=platform_meta.name,
+            platform_name=platform_meta.id,
             message_type=message_obj.type,
             session_id=session_id,
         )
@@ -83,9 +86,16 @@ class AstrMessageEvent(abc.ABC):
         self.platform = platform_meta
 
     def get_platform_name(self):
+        """获取这个事件所属的平台的类型（如 aiocqhttp, slack, discord 等）。
+
+        NOTE: 用户可能会同时运行多个相同类型的平台适配器。"""
         return self.platform_meta.name
 
     def get_platform_id(self):
+        """获取这个事件所属的平台的 ID。
+
+        NOTE: 用户可能会同时运行多个相同类型的平台适配器，但能确定的是 ID 是唯一的。
+        """
         return self.platform_meta.id
 
     def get_message_str(self) -> str:
