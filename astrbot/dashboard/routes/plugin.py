@@ -1,6 +1,8 @@
 import traceback
 import aiohttp
 import os
+import json
+from datetime import datetime
 
 import ssl
 import certifi
@@ -75,15 +77,33 @@ class PluginRoute(Route):
 
     async def get_online_plugins(self):
         custom = request.args.get("custom_registry")
+        force_refresh = request.args.get("force_refresh", "false").lower() == "true"
+
+        cache_file = "data/plugins.json"
 
         if custom:
             urls = [custom]
         else:
-            urls = ["https://api.soulter.top/astrbot/plugins"]
+            urls = [
+                "https://api.soulter.top/astrbot/plugins",
+                "https://github.com/AstrBotDevs/AstrBot_Plugins_Collection/raw/refs/heads/main/plugin_cache_original.json",
+            ]
 
-        # 新增：创建 SSL 上下文，使用 certifi 提供的根证书
+        # 如果不是强制刷新，先检查缓存是否有效
+        cached_data = None
+        if not force_refresh:
+            # 先检查MD5是否匹配，如果匹配则使用缓存
+            if await self._is_cache_valid(cache_file):
+                cached_data = self._load_plugin_cache(cache_file)
+                if cached_data:
+                    logger.debug("缓存MD5匹配，使用缓存的插件市场数据")
+                    return Response().ok(cached_data).__dict__
+
+        # 尝试获取远程数据
+        remote_data = None
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
+
         for url in urls:
             try:
                 async with aiohttp.ClientSession(
@@ -91,14 +111,123 @@ class PluginRoute(Route):
                 ) as session:
                     async with session.get(url) as response:
                         if response.status == 200:
-                            result = await response.json()
-                            return Response().ok(result).__dict__
+                            remote_data = await response.json()
+
+                            # 检查远程数据是否为空
+                            if not remote_data or (
+                                isinstance(remote_data, dict) and len(remote_data) == 0
+                            ):
+                                logger.warning(f"远程插件市场数据为空: {url}")
+                                continue  # 继续尝试其他URL或使用缓存
+
+                            logger.info("成功获取远程插件市场数据")
+                            # 获取最新的MD5并保存到缓存
+                            current_md5 = await self._get_remote_md5()
+                            self._save_plugin_cache(
+                                cache_file, remote_data, current_md5
+                            )
+                            return Response().ok(remote_data).__dict__
                         else:
                             logger.error(f"请求 {url} 失败，状态码：{response.status}")
             except Exception as e:
                 logger.error(f"请求 {url} 失败，错误：{e}")
 
-        return Response().error("获取插件列表失败").__dict__
+        # 如果远程获取失败，尝试使用缓存数据
+        if not cached_data:
+            cached_data = self._load_plugin_cache(cache_file)
+
+        if cached_data:
+            logger.warning("远程插件市场数据获取失败，使用缓存数据")
+            return Response().ok(cached_data, "使用缓存数据，可能不是最新版本").__dict__
+
+        return Response().error("获取插件列表失败，且没有可用的缓存数据").__dict__
+
+    async def _is_cache_valid(self, cache_file: str) -> bool:
+        """检查缓存是否有效（基于MD5）"""
+        try:
+            if not os.path.exists(cache_file):
+                return False
+
+            # 加载缓存文件
+            with open(cache_file, "r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+
+            cached_md5 = cache_data.get("md5")
+            if not cached_md5:
+                logger.debug("缓存文件中没有MD5信息")
+                return False
+
+            # 获取远程MD5
+            remote_md5 = await self._get_remote_md5()
+            if not remote_md5:
+                logger.warning("无法获取远程MD5，将使用缓存")
+                return True  # 如果无法获取远程MD5，认为缓存有效
+
+            is_valid = cached_md5 == remote_md5
+            logger.debug(
+                f"插件数据MD5: 本地={cached_md5}, 远程={remote_md5}, 有效={is_valid}"
+            )
+            return is_valid
+
+        except Exception as e:
+            logger.warning(f"检查缓存有效性失败: {e}")
+            return False
+
+    async def _get_remote_md5(self) -> str:
+        """获取远程插件数据的MD5"""
+        try:
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+            async with aiohttp.ClientSession(
+                trust_env=True, connector=connector
+            ) as session:
+                async with session.get(
+                    "https://api.soulter.top/astrbot/plugins-md5"
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data.get("md5", "")
+                    else:
+                        logger.error(f"获取MD5失败，状态码：{response.status}")
+                        return ""
+        except Exception as e:
+            logger.error(f"获取远程MD5失败: {e}")
+            return ""
+
+    def _load_plugin_cache(self, cache_file: str):
+        """加载本地缓存的插件市场数据"""
+        try:
+            if os.path.exists(cache_file):
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                    # 检查缓存是否有效
+                    if "data" in cache_data and "timestamp" in cache_data:
+                        logger.debug(
+                            f"加载缓存文件: {cache_file}, 缓存时间: {cache_data['timestamp']}"
+                        )
+                        return cache_data["data"]
+        except Exception as e:
+            logger.warning(f"加载插件市场缓存失败: {e}")
+        return None
+
+    def _save_plugin_cache(self, cache_file: str, data, md5: str = None):
+        """保存插件市场数据到本地缓存"""
+        try:
+            # 确保目录存在
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+
+            cache_data = {
+                "timestamp": datetime.now().isoformat(),
+                "data": data,
+                "md5": md5 or "",
+            }
+
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(cache_data, f, ensure_ascii=False, indent=2)
+            logger.debug(f"插件市场数据已缓存到: {cache_file}, MD5: {md5}")
+        except Exception as e:
+            logger.warning(f"保存插件市场缓存失败: {e}")
 
     async def get_plugins(self):
         _plugin_resp = []
