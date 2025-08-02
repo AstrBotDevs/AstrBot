@@ -100,24 +100,11 @@ class SQLiteDatabase(BaseDatabase):
     # ====
 
     async def get_conversations(
-        self, user_id=None, platform_id=None, exclude_content=False
+        self, user_id=None, platform_id=None
     ):
         async with self.get_db() as session:
             session: AsyncSession
-            if exclude_content:
-                # 只选择需要的列，排除 content 字段
-                query = select(
-                    ConversationV2.inner_conversation_id,
-                    ConversationV2.conversation_id,
-                    ConversationV2.platform_id,
-                    ConversationV2.user_id,
-                    ConversationV2.created_at,
-                    ConversationV2.updated_at,
-                    ConversationV2.title,
-                    ConversationV2.persona_id,
-                )
-            else:
-                query = select(ConversationV2)
+            query = select(ConversationV2)
 
             if user_id:
                 query = query.where(ConversationV2.user_id == user_id)
@@ -127,11 +114,7 @@ class SQLiteDatabase(BaseDatabase):
             query = query.order_by(ConversationV2.created_at.desc())
             result = await session.execute(query)
 
-            if exclude_content:
-                # 返回元组列表而不是完整的模型对象
-                return result.all()
-            else:
-                return result.scalars().all()
+            return result.scalars().all()
 
     async def get_conversation_by_id(self, cid):
         async with self.get_db() as session:
