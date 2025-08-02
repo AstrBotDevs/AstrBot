@@ -133,11 +133,12 @@ class ChatRoute(Route):
         if not conversation_id:
             return Response().error("conversation_id is empty").__dict__
 
-        # Get conversation-specific queues
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(conversation_id)
-
         # append user message
         webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
+
+        # Get conversation-specific queues
+        back_queue = webchat_queue_mgr.get_or_create_back_queue(webchat_conv_id)
+
         new_his = {"type": "user", "message": message}
         if image_url:
             new_his["image_url"] = image_url
@@ -186,11 +187,11 @@ class ChatRoute(Route):
                 return
 
         # Put message to conversation-specific queue
-        chat_queue = webchat_queue_mgr.get_or_create_queue(conversation_id)
+        chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)
         await chat_queue.put(
             (
                 username,
-                conversation_id,
+                webchat_conv_id,
                 {
                     "message": message,
                     "image_url": image_url,  # list
@@ -238,7 +239,7 @@ class ChatRoute(Route):
         webchat_queue_mgr.remove_queues(conversation_id)
         webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
         await self.conv_mgr.delete_conversation(
-            unified_msg_origin=f"webchat!{username}!{webchat_conv_id}",
+            unified_msg_origin=f"webchat:FriendMessage:webchat!{username}!{webchat_conv_id}",
             conversation_id=conversation_id,
         )
         await self.platform_history_mgr.delete(
@@ -250,10 +251,11 @@ class ChatRoute(Route):
         username = g.get("username", "guest")
         webchat_conv_id = str(uuid.uuid4())
         conv_id = await self.conv_mgr.new_conversation(
-            unified_msg_origin=f"webchat!{username}!{webchat_conv_id}",
+            unified_msg_origin=f"webchat:FriendMessage:webchat!{username}!{webchat_conv_id}",
             platform_id="webchat",
             content=[],
         )
+        print(f"webchat:FriendMessage:webchat!{username}!{webchat_conv_id}", conv_id)
         return Response().ok(data={"conversation_id": conv_id}).__dict__
 
     async def rename_conversation(self):
@@ -265,7 +267,7 @@ class ChatRoute(Route):
         title = post_data["title"]
 
         await self.conv_mgr.update_conversation(
-            unified_msg_origin="webchat", # fake
+            unified_msg_origin="webchat",  # fake
             conversation_id=conversation_id,
             title=title,
         )

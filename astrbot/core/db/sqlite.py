@@ -123,6 +123,8 @@ class SQLiteDatabase(BaseDatabase):
                 query = query.where(ConversationV2.user_id == user_id)
             if platform_id:
                 query = query.where(ConversationV2.platform_id == platform_id)
+            # order by
+            query = query.order_by(ConversationV2.created_at.desc())
             result = await session.execute(query)
 
             if exclude_content:

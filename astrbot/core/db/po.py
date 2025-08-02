@@ -48,7 +48,7 @@ class ConversationV2(SQLModel, table=True):
     )
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)
-    content: Optional[dict] = Field(default=None, sa_type=JSON)
+    content: Optional[list] = Field(default=None, sa_type=JSON)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

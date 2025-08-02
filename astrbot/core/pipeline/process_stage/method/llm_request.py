@@ -107,9 +107,11 @@ class LLMRequestSubStage(Stage):
                     req.image_urls.append(image_path)
 
             # 获取对话上下文
+            print(event.unified_msg_origin)
             conversation_id = await self.conv_manager.get_curr_conversation_id(
                 event.unified_msg_origin
             )
+            print(f"curr conversation_id: {conversation_id}", self.conv_manager.session_conversations)
             if not conversation_id:
                 conversation_id = await self.conv_manager.new_conversation(
                     event.unified_msg_origin
@@ -266,12 +268,12 @@ class LLMRequestSubStage(Stage):
         else:
             async for _ in requesting():
                 yield
+        await self._save_to_history(event, req, tool_loop_agent.get_final_llm_resp())
 
         # 异步处理 WebChat 特殊情况
         if event.get_platform_name() == "webchat":
             asyncio.create_task(self._handle_webchat(event, req, provider))
 
-        await self._save_to_history(event, req, tool_loop_agent.get_final_llm_resp())
 
     async def _handle_webchat(
         self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider

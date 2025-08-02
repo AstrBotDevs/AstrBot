@@ -5,7 +5,6 @@ AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json �
 在一个会话中可以建立多个对话, 并且支持对话的切换和删除
 """
 
-import uuid
 import json
 import asyncio
 from astrbot.core import sp
@@ -68,7 +67,6 @@ class ConversationManager:
         Returns:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
         """
-        conversation_id = str(uuid.uuid4())
         if not platform_id:
             # 如果没有提供 platform_id，则从 unified_msg_origin 中解析
             parts = unified_msg_origin.split(":")
@@ -83,7 +81,7 @@ class ConversationManager:
             title=title,
             persona_id=persona_id,
         )
-        self.session_conversations[unified_msg_origin] = conversation_id
+        self.session_conversations[unified_msg_origin] = conv.conversation_id
         sp.put("session_conversation", self.session_conversations)
         return str(conv.conversation_id)
 
