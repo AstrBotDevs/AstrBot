@@ -208,7 +208,7 @@ class Context:
         return self._event_queue
 
     @deprecated(version="4.0.0", reason="Use get_platform_inst instead")
-    def get_platform(self, platform_type: Union[PlatformAdapterType, str]) -> Platform:
+    def get_platform(self, platform_type: Union[PlatformAdapterType, str]) -> Platform | None:
         """
         获取指定类型的平台适配器。
 
@@ -226,7 +226,7 @@ class Context:
                 ):
                     return platform
 
-    def get_platform_inst(self, platform_id: str) -> Platform:
+    def get_platform_inst(self, platform_id: str) -> Platform | None:
         """
         获取指定 ID 的平台适配器实例。
 
@@ -239,7 +239,6 @@ class Context:
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == platform_id:
                 return platform
-        return None
 
     async def send_message(
         self, session: Union[str, MessageSesion], message_chain: MessageChain
