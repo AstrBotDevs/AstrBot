@@ -55,7 +55,7 @@ class ConversationV2(SQLModel, table=True):
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
     title: Optional[str] = Field(default=None, max_length=255)
-    persona_id: Optional[int] = Field(default=None)
+    persona_id: Optional[str] = Field(default=None)
 
     __table_args__ = (
         UniqueConstraint(

@@ -88,7 +88,6 @@ async def migration_conversation_table(
                         f"迁移旧会话 {conversation.get('cid', 'unknown')} 失败: {e}",
                         exc_info=True,
                     )
-            await dbsession.commit()
 
 
 async def migration_platform_table(
@@ -162,7 +161,6 @@ async def migration_platform_table(
                         f"迁移平台统计数据失败: {platform_id}, {platform_type}, 时间戳: {bucket_end}",
                         exc_info=True,
                     )
-            await dbsession.commit()
 
 
 async def migration_webchat_data(
@@ -214,4 +212,3 @@ async def migration_webchat_data(
                         f"迁移旧 WebChat 会话 {conversation.get('cid', 'unknown')} 失败",
                         exc_info=True,
                     )
-            await dbsession.commit()

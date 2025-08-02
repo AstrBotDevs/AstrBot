@@ -67,7 +67,6 @@ class SQLiteDatabase(BaseDatabase):
                         "count": count,
                     },
                 )
-            await session.commit()
 
     async def count_platform_stats(self) -> int:
         """Count the number of platform statistics records."""
@@ -220,7 +219,6 @@ class SQLiteDatabase(BaseDatabase):
                     **kwargs,
                 )
                 session.add(new_conversation)
-                await session.commit()
                 return new_conversation
 
     async def update_conversation(self, cid, title=None, persona_id=None, content=None):
@@ -230,14 +228,17 @@ class SQLiteDatabase(BaseDatabase):
                 query = update(ConversationV2).where(
                     ConversationV2.conversation_id == cid
                 )
+                values = {}
                 if title is not None:
-                    query = query.values(title=title)
+                    values["title"] = title
                 if persona_id is not None:
-                    query = query.values(persona_id=persona_id)
+                    values["persona_id"] = persona_id
                 if content is not None:
-                    query = query.values(content=content)
+                    values["content"] = content
+                if not values:
+                    return
+                query = query.values(**values)
                 await session.execute(query)
-                await session.commit()
                 return await self.get_conversation_by_id(cid)
 
     async def delete_conversation(self, cid):
@@ -247,7 +248,6 @@ class SQLiteDatabase(BaseDatabase):
                 await session.execute(
                     delete(ConversationV2).where(ConversationV2.conversation_id == cid)
                 )
-                await session.commit()
 
     async def insert_platform_message_history(
         self,
@@ -269,7 +269,6 @@ class SQLiteDatabase(BaseDatabase):
                     sender_name=sender_name,
                 )
                 session.add(new_history)
-                await session.commit()
                 return new_history
 
     async def delete_platform_message_offset(
@@ -288,7 +287,6 @@ class SQLiteDatabase(BaseDatabase):
                         PlatformMessageHistory.created_at < cutoff_time,
                     )
                 )
-                await session.commit()
 
     async def get_platform_message_history(
         self, platform_id, user_id, page=1, page_size=20
@@ -319,7 +317,6 @@ class SQLiteDatabase(BaseDatabase):
                     mime_type=mime_type,
                 )
                 session.add(new_attachment)
-                await session.commit()
                 return new_attachment
 
     async def get_attachment_by_id(self, attachment_id):
@@ -341,7 +338,6 @@ class SQLiteDatabase(BaseDatabase):
                     begin_dialogs=begin_dialogs or [],
                 )
                 session.add(new_persona)
-                await session.commit()
                 return new_persona
 
     async def get_persona_by_id(self, persona_id):
@@ -373,7 +369,6 @@ class SQLiteDatabase(BaseDatabase):
                 else:
                     new_preference = Preference(key=key, value=value)
                     session.add(new_preference)
-                await session.commit()
                 return existing_preference or new_preference
 
     async def get_preference(self, key):
