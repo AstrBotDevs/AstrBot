@@ -2,13 +2,14 @@ import inspect
 import traceback
 import typing as T
 from dataclasses import dataclass
+
+from astrbot.api import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star import PluginManager
-from astrbot.api import logger
-from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
-from astrbot.core.message.message_event_result import MessageEventResult, CommandResult
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 
 @dataclass
@@ -36,15 +37,27 @@ class PipelineContext:
         for handler in handlers:
             try:
                 logger.debug(
-                    f"hook(on_llm_request) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
+                    f"hook({hook_type.name}) -> {star_map.get(handler.handler_module_path, type('obj', (object,), {'name': 'unknown'})).name} - {handler.handler_name}"
                 )
-                await handler.handler(event, *args)
+
+                # 创建一个协程或异步生成器来执行处理函数
+                hook_call = handler.handler(event, *args)
+
+                # 判断其类型并用正确的方式执行
+                if inspect.isasyncgen(hook_call):
+                    # 如果是异步生成器，用 async for
+                    async for _ in hook_call:
+                        pass
+                elif inspect.iscoroutine(hook_call):
+                    # 如果是普通协程，用 await
+                    await hook_call
+
             except BaseException:
                 logger.error(traceback.format_exc())
 
             if event.is_stopped():
                 logger.info(
-                    f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
+                    f"{star_map.get(handler.handler_module_path, type('obj', (object,), {'name': 'unknown'})).name} - {handler.handler_name} 终止了事件传播。"
                 )
 
         return event.is_stopped()
