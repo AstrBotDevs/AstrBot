@@ -100,7 +100,9 @@ class SQLiteDatabase(BaseDatabase):
     # Conversation Management
     # ====
 
-    async def get_conversations(self, user_id=None, platform_id=None, exclude_content=False):
+    async def get_conversations(
+        self, user_id=None, platform_id=None, exclude_content=False
+    ):
         async with self.get_db() as session:
             session: AsyncSession
             if exclude_content:
@@ -113,7 +115,7 @@ class SQLiteDatabase(BaseDatabase):
                     ConversationV2.created_at,
                     ConversationV2.updated_at,
                     ConversationV2.title,
-                    ConversationV2.persona_id
+                    ConversationV2.persona_id,
                 )
             else:
                 query = select(ConversationV2)
@@ -159,16 +161,34 @@ class SQLiteDatabase(BaseDatabase):
     ):
         async with self.get_db() as session:
             session: AsyncSession
-            offset = (page - 1) * page_size
-            query = select(ConversationV2).order_by(ConversationV2.created_at.desc())
+            # Build the base query with filters
+            base_query = select(ConversationV2)
 
             if platform_ids:
-                query = query.where(ConversationV2.platform_id.in_(platform_ids))
+                base_query = base_query.where(
+                    ConversationV2.platform_id.in_(platform_ids)
+                )
             if search_query:
-                query = query.where(ConversationV2.title.ilike(f"%{search_query}%"))
+                base_query = base_query.where(
+                    ConversationV2.title.ilike(f"%{search_query}%")
+                )
 
-            result = await session.execute(query.offset(offset).limit(page_size))
-            return result.scalars().all()
+            # Get total count matching the filters
+            count_query = select(func.count()).select_from(base_query.subquery())
+            total_count = await session.execute(count_query)
+            total = total_count.scalar_one()
+
+            # Get paginated results
+            offset = (page - 1) * page_size
+            result_query = (
+                base_query.order_by(ConversationV2.created_at.desc())
+                .offset(offset)
+                .limit(page_size)
+            )
+            result = await session.execute(result_query)
+            conversations = result.scalars().all()
+
+            return conversations, total
 
     async def create_conversation(
         self,

@@ -32,7 +32,7 @@ class SessionManagementRoute(Route):
             "/session/update_name": ("POST", self.update_session_name),
             "/session/update_status": ("POST", self.update_session_status),
         }
-        self.db_helper = db_helper
+        self.conv_mgr = core_lifecycle.conversation_manager
         self.core_lifecycle = core_lifecycle
         self.register_routes()
 
@@ -90,8 +90,8 @@ class SessionManagementRoute(Route):
                 }
 
                 # 获取对话信息
-                conversation = self.db_helper.get_conversation_by_user_id(
-                    session_id, conversation_id
+                conversation = await self.conv_mgr.get_conversation(
+                    unified_msg_origin=session_id, conversation_id=conversation_id
                 )
                 if conversation:
                     session_info["persona_id"] = conversation.persona_id
@@ -358,8 +358,8 @@ class SessionManagementRoute(Route):
             )
 
             # 获取对话信息
-            conversation = self.db_helper.get_conversation_by_user_id(
-                session_id, conversation_id
+            conversation = await self.conv_mgr.get_conversation(
+                unified_msg_origin=session_id, conversation_id=conversation_id
             )
             if conversation:
                 session_info["persona_id"] = conversation.persona_id

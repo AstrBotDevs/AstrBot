@@ -171,6 +171,37 @@ class ConversationManager:
             convs_res.append(conv_res)
         return convs_res
 
+    async def get_filtered_conversations(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        platform_ids: list[str] | None = None,
+        search_query: str = "",
+        **kwargs,
+    ) -> tuple[list[Conversation], int]:
+        """获取过滤后的对话列表
+
+        Args:
+            page (int): 页码, 默认为 1
+            page_size (int): 每页大小, 默认为 20
+            platform_ids (list[str]): 平台 ID 列表, 可选
+            search_query (str): 搜索查询字符串, 可选
+        Returns:
+            conversations (list[Conversation]): 对话对象列表
+        """
+        convs, cnt = await self.db.get_filtered_conversations(
+            page=page,
+            page_size=page_size,
+            platform_ids=platform_ids,
+            search_query=search_query,
+            **kwargs,
+        )
+        convs_res = []
+        for conv in convs:
+            conv_res = self._convert_conv_from_v2_to_v1(conv)
+            convs_res.append(conv_res)
+        return convs_res, cnt
+
     async def update_conversation(
         self,
         unified_msg_origin: str,

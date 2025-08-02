@@ -241,6 +241,9 @@ class ChatRoute(Route):
             unified_msg_origin=f"webchat!{username}!{webchat_conv_id}",
             conversation_id=conversation_id,
         )
+        await self.platform_history_mgr.delete(
+            platform_id="webchat", user_id=webchat_conv_id, offset_sec=99999999
+        )
         return Response().ok().__dict__
 
     async def new_conversation(self):

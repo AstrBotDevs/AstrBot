@@ -119,7 +119,7 @@ class BaseDatabase(abc.ABC):
         platform_ids: list[str] | None = None,
         search_query: str = "",
         **kwargs,
-    ) -> list[ConversationV2]:
+    ) -> tuple[list[ConversationV2], int]:
         """Get conversations filtered by platform IDs and search query."""
         ...
 
