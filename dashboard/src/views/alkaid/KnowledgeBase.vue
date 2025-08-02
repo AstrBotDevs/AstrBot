@@ -12,7 +12,9 @@
                     :loading="installing">
                     {{ tm('notInstalled.install') }}
                 </v-btn>
-                <ConsoleDisplayer v-show="installing" style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%" :show-level-btns="false"></ConsoleDisplayer>
+                <ConsoleDisplayer v-show="installing"
+                    style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%"
+                    :show-level-btns="false"></ConsoleDisplayer>
             </div>
             <div v-else-if="kbCollections.length == 0" class="d-flex align-center justify-center flex-column"
                 style="flex-grow: 1; width: 100%; height: 100%;">
@@ -75,13 +77,16 @@
                     <v-form @submit.prevent="submitCreateForm">
 
 
-                        <v-text-field variant="outlined" v-model="newKB.name" :label="tm('createDialog.nameLabel')" required></v-text-field>
+                        <v-text-field variant="outlined" v-model="newKB.name" :label="tm('createDialog.nameLabel')"
+                            required></v-text-field>
 
-                        <v-textarea v-model="newKB.description" :label="tm('createDialog.descriptionLabel')" variant="outlined" :placeholder="tm('createDialog.descriptionPlaceholder')"
+                        <v-textarea v-model="newKB.description" :label="tm('createDialog.descriptionLabel')"
+                            variant="outlined" :placeholder="tm('createDialog.descriptionPlaceholder')"
                             rows="3"></v-textarea>
 
                         <v-select v-model="newKB.embedding_provider_id" :items="embeddingProviderConfigs"
-                            :item-props="embeddingModelProps" :label="tm('createDialog.embeddingModelLabel')" variant="outlined" class="mt-2">
+                            :item-props="embeddingModelProps" :label="tm('createDialog.embeddingModelLabel')"
+                            variant="outlined" class="mt-2">
                         </v-select>
 
                         <small>{{ tm('createDialog.tips') }}</small>
@@ -89,8 +94,10 @@
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer></v-spacer>
-                    <v-btn color="error" variant="text" @click="showCreateDialog = false">{{ tm('createDialog.cancel') }}</v-btn>
-                    <v-btn color="primary" variant="text" @click="submitCreateForm">{{ tm('createDialog.create') }}</v-btn>
+                    <v-btn color="error" variant="text" @click="showCreateDialog = false">{{ tm('createDialog.cancel')
+                        }}</v-btn>
+                    <v-btn color="primary" variant="text" @click="submitCreateForm">{{ tm('createDialog.create')
+                        }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -114,7 +121,8 @@
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer></v-spacer>
-                    <v-btn color="primary" variant="text" @click="showEmojiPicker = false">{{ tm('emojiPicker.close') }}</v-btn>
+                    <v-btn color="primary" variant="text" @click="showEmojiPicker = false">{{ tm('emojiPicker.close')
+                        }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -134,11 +142,13 @@
                 <div v-if="currentKB._embedding_provider_config" class="px-6 py-2">
                     <v-chip class="mr-2" color="primary" variant="tonal" size="small" rounded="sm">
                         <v-icon start size="small">mdi-database</v-icon>
-                        {{ tm('contentDialog.embeddingModel') }}: {{ currentKB._embedding_provider_config.embedding_model }}
+                        {{ tm('contentDialog.embeddingModel') }}: {{
+                            currentKB._embedding_provider_config.embedding_model }}
                     </v-chip>
                     <v-chip color="secondary" variant="tonal" size="small" rounded="sm">
                         <v-icon start size="small">mdi-vector-point</v-icon>
-                        {{ tm('contentDialog.vectorDimension') }}: {{ currentKB._embedding_provider_config.embedding_dimensions }}
+                        {{ tm('contentDialog.vectorDimension') }}: {{
+                            currentKB._embedding_provider_config.embedding_dimensions }}
                     </v-chip>
                     <small style="margin-left: 8px;">💡 使用方式: 在聊天页中输入 “/kb use {{ currentKB.collection_name }}”</small>
                 </div>
@@ -147,6 +157,7 @@
                     <v-tabs v-model="activeTab">
                         <v-tab value="upload">{{ tm('contentDialog.tabs.upload') }}</v-tab>
                         <v-tab value="search">{{ tm('contentDialog.tabs.search') }}</v-tab>
+                        <v-tab value="from-url">{{ tm('contentDialog.tabs.fromURL') }}</v-tab>
                     </v-tabs>
 
                     <v-window v-model="activeTab" class="mt-4">
@@ -169,7 +180,8 @@
                                 <v-card class="mt-4 chunk-settings-card" variant="outlined" color="grey-lighten-4">
                                     <v-card-title class="pa-4 pb-0 d-flex align-center">
                                         <v-icon color="primary" class="mr-2">mdi-puzzle-outline</v-icon>
-                                        <span class="text-subtitle-1 font-weight-bold">{{ tm('upload.chunkSettings.title') }}</span>
+                                        <span class="text-subtitle-1 font-weight-bold">{{
+                                            tm('upload.chunkSettings.title') }}</span>
                                         <v-tooltip location="top">
                                             <template v-slot:activator="{ props }">
                                                 <v-icon v-bind="props" class="ml-2" size="small" color="grey">
@@ -183,14 +195,16 @@
                                     </v-card-title>
                                     <v-card-text class="pa-4 pt-2">
                                         <div class="d-flex flex-wrap" style="gap: 8px">
-                                            <v-text-field v-model="chunkSize" :label="tm('upload.chunkSettings.chunkSizeLabel')" type="number"
-                                                :hint="tm('upload.chunkSettings.chunkSizeHint')" persistent-hint variant="outlined"
-                                                density="comfortable" class="flex-grow-1 chunk-field"
+                                            <v-text-field v-model="chunkSize"
+                                                :label="tm('upload.chunkSettings.chunkSizeLabel')" type="number"
+                                                :hint="tm('upload.chunkSettings.chunkSizeHint')" persistent-hint
+                                                variant="outlined" density="comfortable" class="flex-grow-1 chunk-field"
                                                 prepend-inner-icon="mdi-text-box-outline" min="50"></v-text-field>
 
-                                            <v-text-field v-model="overlap" :label="tm('upload.chunkSettings.overlapLabel')" type="number"
-                                                :hint="tm('upload.chunkSettings.overlapHint')" persistent-hint variant="outlined"
-                                                density="comfortable" class="flex-grow-1 chunk-field"
+                                            <v-text-field v-model="overlap"
+                                                :label="tm('upload.chunkSettings.overlapLabel')" type="number"
+                                                :hint="tm('upload.chunkSettings.overlapHint')" persistent-hint
+                                                variant="outlined" density="comfortable" class="flex-grow-1 chunk-field"
                                                 prepend-inner-icon="mdi-vector-intersection" min="0"></v-text-field>
                                         </div>
                                     </v-card-text>
@@ -225,12 +239,13 @@
                         <v-window-item value="search">
                             <div class="search-container pa-4">
                                 <v-form @submit.prevent="searchKnowledgeBase" class="d-flex align-center">
-                                    <v-text-field v-model="searchQuery" :label="tm('search.queryLabel')" append-icon="mdi-magnify"
-                                        variant="outlined" class="flex-grow-1 me-2" @click:append="searchKnowledgeBase"
-                                        @keyup.enter="searchKnowledgeBase" :placeholder="tm('search.queryPlaceholder')"
-                                        hide-details></v-text-field>
+                                    <v-text-field v-model="searchQuery" :label="tm('search.queryLabel')"
+                                        append-icon="mdi-magnify" variant="outlined" class="flex-grow-1 me-2"
+                                        @click:append="searchKnowledgeBase" @keyup.enter="searchKnowledgeBase"
+                                        :placeholder="tm('search.queryPlaceholder')" hide-details></v-text-field>
 
-                                    <v-select v-model="topK" :items="[3, 5, 10, 20]" :label="tm('search.resultCountLabel')" variant="outlined"
+                                    <v-select v-model="topK" :items="[3, 5, 10, 20]"
+                                        :label="tm('search.resultCountLabel')" variant="outlined"
                                         style="max-width: 120px;" hide-details></v-select>
                                 </v-form>
 
@@ -253,7 +268,8 @@
                                                     <v-spacer></v-spacer>
                                                     <v-chip v-if="result.score" size="small" color="primary"
                                                         variant="tonal">
-                                                        {{ tm('search.relevance') }}: {{ Math.round(result.score * 100) }}%
+                                                        {{ tm('search.relevance') }}: {{ Math.round(result.score * 100)
+                                                        }}%
                                                     </v-chip>
                                                 </div>
                                                 <div class="search-content">{{ result.content }}</div>
@@ -268,6 +284,17 @@
                                     </div>
                                 </div>
                             </div>
+                        </v-window-item>
+
+                        <!-- 从URL导入标签页 -->
+                        <v-window-item value="from-url">
+                            <ImportFromUrlTab 
+                                :currentKB="currentKB"
+                                :llmProviderConfigs="llmProviderConfigs"
+                                :embeddingProviderConfigs="embeddingProviderConfigs"
+                                @show-snackbar="showSnackbar"
+                                @refresh-collections="getKBCollections"
+                            />
                         </v-window-item>
                     </v-window>
                 </v-card-text>
@@ -284,8 +311,11 @@
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer></v-spacer>
-                    <v-btn color="grey-darken-1" variant="text" @click="showDeleteDialog = false">{{ tm('deleteDialog.cancel') }}</v-btn>
-                    <v-btn color="error" variant="text" @click="deleteKnowledgeBase" :loading="deleting">{{ tm('deleteDialog.delete') }}</v-btn>
+                    <v-btn color="grey-darken-1" variant="text" @click="showDeleteDialog = false">{{
+                        tm('deleteDialog.cancel')
+                        }}</v-btn>
+                    <v-btn color="error" variant="text" @click="deleteKnowledgeBase" :loading="deleting">{{
+                        tm('deleteDialog.delete') }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -301,11 +331,13 @@
 import axios from 'axios';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
+import ImportFromUrlTab from './components/ImportFromUrlTab.vue';
 
 export default {
     name: 'KnowledgeBase',
     components: {
         ConsoleDisplayer,
+        ImportFromUrlTab,
     },
     setup() {
         const { tm } = useModuleI18n('features/alkaid/knowledge-base');
@@ -375,20 +407,28 @@ export default {
                 collection_name: ''
             },
             deleting: false,
-            embeddingProviderConfigs: []
+            embeddingProviderConfigs: [],
+            llmProviderConfigs: [],
         }
     },
     mounted() {
         this.checkPlugin();
         this.getEmbeddingProviderList();
+        this.getLlmProviderList();
     },
     methods: {
+        llmModelProps(providerConfig) {
+            return {
+                title: providerConfig.llm_model || providerConfig.id,
+                subtitle: `Provider ID: ${providerConfig.id}`,
+            }
+        },
         embeddingModelProps(providerConfig) {
             return {
                 title: providerConfig.embedding_model,
-                subtitle: this.tm('createDialog.providerInfo', { 
-                    id: providerConfig.id, 
-                    dimensions: providerConfig.embedding_dimensions 
+                subtitle: this.tm('createDialog.providerInfo', {
+                    id: providerConfig.id,
+                    dimensions: providerConfig.embedding_dimensions
                 }),
             }
         },
@@ -704,7 +744,26 @@ export default {
 
         openUrl(url) {
             window.open(url, '_blank');
-        }
+        },
+
+        getLlmProviderList() {
+            axios.get('/api/config/provider/list', {
+                params: {
+                    provider_type: 'chat_completion'
+                }
+            })
+                .then(response => {
+                    if (response.data.status === 'ok') {
+                        this.llmProviderConfigs = response.data.data || [];
+                    } else {
+                        this.showSnackbar(response.data.message || 'Failed to get LLM provider list', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching LLM providers:', error);
+                    this.showSnackbar('Failed to get LLM provider list', 'error');
+                });
+        },
     }
 }
 </script>
