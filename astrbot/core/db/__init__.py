@@ -227,7 +227,7 @@ class BaseDatabase(abc.ABC):
         system_prompt: str = None,
         begin_dialogs: list[str] = None,
         tools: list[str] = None,
-    ) -> Persona:
+    ) -> Persona | None:
         """Update a persona's system prompt or begin dialogs."""
         ...
 
