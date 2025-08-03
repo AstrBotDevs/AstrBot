@@ -6,11 +6,11 @@ from .stat import StatRoute
 from .log import LogRoute
 from .static_file import StaticFileRoute
 from .chat import ChatRoute
-from .tools import ToolsRoute  # 导入新的ToolsRoute
+from .tools import ToolsRoute
 from .conversation import ConversationRoute
 from .file import FileRoute
 from .session_management import SessionManagementRoute
-
+from .persona import PersonaRoute
 
 __all__ = [
     "AuthRoute",
@@ -25,4 +25,5 @@ __all__ = [
     "ConversationRoute",
     "FileRoute",
     "SessionManagementRoute",
+    "PersonaRoute",
 ]

@@ -25,6 +25,7 @@ import zhCNDashboard from './locales/zh-CN/features/dashboard.json';
 import zhCNAlkaidIndex from './locales/zh-CN/features/alkaid/index.json';
 import zhCNAlkaidKnowledgeBase from './locales/zh-CN/features/alkaid/knowledge-base.json';
 import zhCNAlkaidMemory from './locales/zh-CN/features/alkaid/memory.json';
+import zhCNPersona from './locales/zh-CN/features/persona.json';
 
 import zhCNErrors from './locales/zh-CN/messages/errors.json';
 import zhCNSuccess from './locales/zh-CN/messages/success.json';
@@ -54,6 +55,7 @@ import enUSDashboard from './locales/en-US/features/dashboard.json';
 import enUSAlkaidIndex from './locales/en-US/features/alkaid/index.json';
 import enUSAlkaidKnowledgeBase from './locales/en-US/features/alkaid/knowledge-base.json';
 import enUSAlkaidMemory from './locales/en-US/features/alkaid/memory.json';
+import enUSPersona from './locales/en-US/features/persona.json';
 
 import enUSErrors from './locales/en-US/messages/errors.json';
 import enUSSuccess from './locales/en-US/messages/success.json';
@@ -88,7 +90,8 @@ export const translations = {
         index: zhCNAlkaidIndex,
         'knowledge-base': zhCNAlkaidKnowledgeBase,
         memory: zhCNAlkaidMemory
-      }
+      },
+      persona: zhCNPersona
     },
     messages: {
       errors: zhCNErrors,
@@ -123,7 +126,8 @@ export const translations = {
         index: enUSAlkaidIndex,
         'knowledge-base': enUSAlkaidKnowledgeBase,
         memory: enUSAlkaidMemory
-      }
+      },
+      persona: enUSPersona
     },
     messages: {
       errors: enUSErrors,

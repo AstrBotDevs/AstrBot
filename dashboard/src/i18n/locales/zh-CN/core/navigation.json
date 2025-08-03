@@ -2,6 +2,7 @@
   "dashboard": "统计",
   "platforms": "消息平台",
   "providers": "服务提供商",
+  "persona": "人格管理",
   "toolUse": "MCP",
   "config": "配置文件",
   "extension": "插件管理",

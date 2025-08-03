@@ -64,8 +64,12 @@ const sidebarItem: menu[] = [
     to: '/session-management'
   },
   {
+    title: 'core.navigation.persona',
+    icon: 'mdi-heart',
+    to: '/persona'
+  },
+  {
     title: 'core.navigation.console',
-
     icon: 'mdi-console',
     to: '/console'
   },

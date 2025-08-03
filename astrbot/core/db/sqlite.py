@@ -99,9 +99,7 @@ class SQLiteDatabase(BaseDatabase):
     # Conversation Management
     # ====
 
-    async def get_conversations(
-        self, user_id=None, platform_id=None
-    ):
+    async def get_conversations(self, user_id=None, platform_id=None):
         async with self.get_db() as session:
             session: AsyncSession
             query = select(ConversationV2)
@@ -340,6 +338,32 @@ class SQLiteDatabase(BaseDatabase):
             query = select(Persona)
             result = await session.execute(query)
             return result.scalars().all()
+
+    async def update_persona(self, persona_id, system_prompt=None, begin_dialogs=None):
+        """Update a persona's system prompt or begin dialogs."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                query = update(Persona).where(Persona.persona_id == persona_id)
+                values = {}
+                if system_prompt is not None:
+                    values["system_prompt"] = system_prompt
+                if begin_dialogs is not None:
+                    values["begin_dialogs"] = begin_dialogs
+                if not values:
+                    return
+                query = query.values(**values)
+                await session.execute(query)
+                return await self.get_persona_by_id(persona_id)
+
+    async def delete_persona(self, persona_id):
+        """Delete a persona by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(Persona).where(Persona.persona_id == persona_id)
+                )
 
     async def insert_preference_or_update(self, key, value):
         """Insert a new preference record or update if it exists."""

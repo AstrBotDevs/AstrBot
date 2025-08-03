@@ -17,6 +17,8 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.platform import Platform
 from astrbot.core.platform.manager import PlatformManager
+from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.persona_mgr import PersonaManager
 from .star import star_registry, StarMetadata, star_map
 from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
 from .filter.command import CommandFilter
@@ -62,6 +64,8 @@ class Context:
         provider_manager: ProviderManager = None,
         platform_manager: PlatformManager = None,
         conversation_manager: ConversationManager = None,
+        message_history_manager: PlatformMessageHistoryManager = None,
+        persona_manager: PersonaManager = None,
     ):
         self._event_queue = event_queue
         self._config = config
@@ -69,6 +73,8 @@ class Context:
         self.provider_manager = provider_manager
         self.platform_manager = platform_manager
         self.conversation_manager = conversation_manager
+        self.message_history_manager = message_history_manager
+        self.persona_manager = persona_manager
 
     def get_registered_star(self, star_name: str) -> StarMetadata:
         """根据插件名获取插件的 Metadata"""
@@ -208,7 +214,9 @@ class Context:
         return self._event_queue
 
     @deprecated(version="4.0.0", reason="Use get_platform_inst instead")
-    def get_platform(self, platform_type: Union[PlatformAdapterType, str]) -> Platform | None:
+    def get_platform(
+        self, platform_type: Union[PlatformAdapterType, str]
+    ) -> Platform | None:
         """
         获取指定类型的平台适配器。
 

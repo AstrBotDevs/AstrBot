@@ -1,21 +1,11 @@
 import abc
 from typing import List
-from typing import TypedDict, AsyncGenerator
+from typing import AsyncGenerator
 from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult, ProviderType
 from astrbot.core.provider.register import provider_cls_map
+from astrbot.core.db.po import Personality
 from dataclasses import dataclass
-
-
-class Personality(TypedDict):
-    prompt: str = ""
-    name: str = ""
-    begin_dialogs: List[str] = []
-    mood_imitation_dialogs: List[str] = []
-
-    # cache
-    _begin_dialogs_processed: List[dict] = []
-    _mood_imitation_dialogs_processed: str = ""
 
 
 @dataclass

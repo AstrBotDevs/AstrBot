@@ -220,6 +220,21 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def update_persona(
+        self,
+        persona_id: str,
+        system_prompt: str = None,
+        begin_dialogs: list[str] = None,
+    ) -> Persona:
+        """Update a persona's system prompt or begin dialogs."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_persona(self, persona_id: str) -> None:
+        """Delete a persona by its ID."""
+        ...
+
+    @abc.abstractmethod
     async def insert_preference_or_update(self, key: str, value: str) -> Preference:
         """Insert a new preference record."""
         ...
