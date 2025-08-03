@@ -115,8 +115,7 @@ DEFAULT_CONFIG = {
     "log_level": "INFO",
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
-    "knowledge_db": {},
-    "persona": [],
+    "persona": [], # deprecated
     "timezone": "",
     "callback_api_base": "",
 }
@@ -1698,43 +1697,6 @@ CONFIG_METADATA_2 = {
                         "description": "不支持流式回复的平台分段输出",
                         "type": "bool",
                         "hint": "启用后，若平台不支持流式回复，会分段输出。目前仅支持 aiocqhttp 两个平台，不支持或无需使用流式分段输出的平台会静默忽略此选项",
-                    },
-                },
-            },
-            "persona": {
-                "description": "人格情景设置",
-                "type": "list",
-                "config_template": {
-                    "新人格情景": {
-                        "name": "",
-                        "prompt": "",
-                        "begin_dialogs": [],
-                        "mood_imitation_dialogs": [],
-                    }
-                },
-                "tmpl_display_title": "name",
-                "items": {
-                    "name": {
-                        "description": "人格名称",
-                        "type": "string",
-                        "hint": "人格名称，用于在多个人格中区分。使用 /persona 指令可切换人格。在 大语言模型设置 处可以设置默认人格。",
-                    },
-                    "prompt": {
-                        "description": "设定(系统提示词)",
-                        "type": "text",
-                        "hint": "填写人格的身份背景、性格特征、兴趣爱好、个人经历、口头禅等。",
-                    },
-                    "begin_dialogs": {
-                        "description": "预设对话",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "可选。在每个对话前会插入这些预设对话。对话需要成对(用户和助手)，输入完一个角色的内容之后按【回车】。需要偶数个对话",
-                    },
-                    "mood_imitation_dialogs": {
-                        "description": "对话风格模仿",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "旨在让模型尽可能模仿学习到所填写的对话的语气风格。格式和 `预设对话` 一致。对话需要成对(用户和助手)，输入完一个角色的内容之后按【回车】。需要偶数个对话",
                     },
                 },
             },

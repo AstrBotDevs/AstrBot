@@ -9,7 +9,7 @@ from sqlmodel import (
     UniqueConstraint,
     Field,
 )
-from typing import Optional
+from typing import Optional, TypedDict
 
 
 class PlatformStat(SQLModel, table=True):
@@ -39,12 +39,14 @@ class PlatformStat(SQLModel, table=True):
 class ConversationV2(SQLModel, table=True):
     __tablename__ = "conversations"
 
-    inner_conversation_id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
+    inner_conversation_id: int = Field(
+        primary_key=True, sa_column_kwargs={"autoincrement": True}
+    )
     conversation_id: str = Field(
         max_length=36,
         nullable=False,
         unique=True,
-        default_factory=lambda: str(uuid.uuid4())
+        default_factory=lambda: str(uuid.uuid4()),
     )
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)
@@ -78,6 +80,8 @@ class Persona(SQLModel, table=True):
     system_prompt: str = Field(sa_type=Text, nullable=False)
     begin_dialogs: Optional[list] = Field(default=None, sa_type=JSON)
     """a list of strings, each representing a dialog to start with"""
+    tools: Optional[list] = Field(default=None, sa_type=JSON)
+    """None means use ALL tools for default, empty list means no tools, otherwise a list of tool names."""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -119,7 +123,9 @@ class PlatformMessageHistory(SQLModel, table=True):
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)  # An id of group, user in platform
     sender_id: Optional[str] = Field(default=None)  # ID of the sender in the platform
-    sender_name: Optional[str] = Field(default=None)  # Name of the sender in the platform
+    sender_name: Optional[str] = Field(
+        default=None
+    )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
@@ -136,12 +142,14 @@ class Attachment(SQLModel, table=True):
 
     __tablename__ = "attachments"
 
-    inner_attachment_id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
+    inner_attachment_id: int = Field(
+        primary_key=True, sa_column_kwargs={"autoincrement": True}
+    )
     attachment_id: str = Field(
         max_length=36,
         nullable=False,
         unique=True,
-        default_factory=lambda: str(uuid.uuid4())
+        default_factory=lambda: str(uuid.uuid4()),
     )
     path: str = Field(nullable=False)  # Path to the file on disk
     type: str = Field(nullable=False)  # Type of the file (e.g., 'image', 'file')
@@ -180,6 +188,25 @@ class Conversation:
     persona_id: str = ""
     created_at: int = 0
     updated_at: int = 0
+
+
+class Personality(TypedDict):
+    """LLM 人格类。
+
+    在 v4.0.0 版本及之后，推荐使用上面的 Persona 类。并且， mood_imitation_dialogs 字段已被废弃。
+    """
+
+    prompt: str = ""
+    name: str = ""
+    begin_dialogs: list[str] = []
+    mood_imitation_dialogs: list[str] = []
+    """情感模拟对话预设。在 v4.0.0 版本及之后，已被废弃。"""
+    tools: list[str] | None = None
+    """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
+
+    # cache
+    _begin_dialogs_processed: list[dict] = []
+    _mood_imitation_dialogs_processed: str = ""
 
 
 # ====

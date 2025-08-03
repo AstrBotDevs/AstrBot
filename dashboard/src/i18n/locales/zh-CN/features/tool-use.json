@@ -107,6 +107,9 @@
       "failed": "导入配置失败: {error}"
     },
     "configParseError": "配置解析错误: {error}",
-    "noAvailableConfig": "无可用配置"
+    "noAvailableConfig": "无可用配置",
+    "toggleToolSuccess": "工具状态切换成功!",
+    "toggleToolError": "工具状态切换失败: {error}",
+    "testError": "测试连接失败: {error}"
   }
-} 
+}

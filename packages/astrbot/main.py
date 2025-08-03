@@ -26,6 +26,7 @@ from .long_term_memory import LongTermMemory
 from astrbot.core import logger
 from astrbot.api.message_components import Plain, Image, Reply
 from astrbot.core.star.session_llm_manager import SessionServiceManager
+from astrbot.core.provider.func_tool_manager import ToolSet
 from typing import Union
 from enum import Enum
 
@@ -128,7 +129,6 @@ class Main(star.Star):
 /reset: 重置 LLM 会话
 /history: 当前对话的对话记录
 /persona: 人格情景(op)
-/tool ls: 函数工具
 /key: API Key(op)
 /websearch: 网页搜索
 {notice}"""
@@ -157,50 +157,22 @@ class Main(star.Star):
     @tool.command("ls")
     async def tool_ls(self, event: AstrMessageEvent):
         """查看函数工具列表"""
-        tm = self.context.get_llm_tool_manager()
-        msg = "函数工具：\n"
-        for tool in tm.func_list:
-            active = " (启用)" if tool.active else "(停用)"
-            msg += f"- {tool.name}: {tool.description} {active}\n"
-
-        msg += "\n使用 /tool on/off <工具名> 激活或者停用函数工具。/tool off_all 停用所有函数工具。"
-        event.set_result(MessageEventResult().message(msg).use_t2i(False))
+        event.set_result(MessageEventResult().message("tool 指令已经被移除。"))
 
     @tool.command("on")
     async def tool_on(self, event: AstrMessageEvent, tool_name: str):
         """启用一个函数工具"""
-        if self.context.activate_llm_tool(tool_name):
-            event.set_result(
-                MessageEventResult().message(f"激活工具 {tool_name} 成功。")
-            )
-        else:
-            event.set_result(
-                MessageEventResult().message(
-                    f"激活工具 {tool_name} 失败，未找到此工具。"
-                )
-            )
+        event.set_result(MessageEventResult().message("tool 指令已经被移除。"))
 
     @tool.command("off")
     async def tool_off(self, event: AstrMessageEvent, tool_name: str):
         """停用一个函数工具"""
-        if self.context.deactivate_llm_tool(tool_name):
-            event.set_result(
-                MessageEventResult().message(f"停用工具 {tool_name} 成功。")
-            )
-        else:
-            event.set_result(
-                MessageEventResult().message(
-                    f"停用工具 {tool_name} 失败，未找到此工具。"
-                )
-            )
+        event.set_result(MessageEventResult().message("tool 指令已经被移除。"))
 
     @tool.command("off_all")
     async def tool_all_off(self, event: AstrMessageEvent):
         """停用所有函数工具"""
-        tm = self.context.get_llm_tool_manager()
-        for tool in tm.func_list:
-            self.context.deactivate_llm_tool(tool.name)
-        event.set_result(MessageEventResult().message("停用所有工具成功。"))
+        event.set_result(MessageEventResult().message("tool 指令已经被移除。"))
 
     @filter.command_group("plugin")
     def plugin(self):
@@ -1264,26 +1236,34 @@ UID: {user_id} 此 ID 可用于设置管理员。
         if req.conversation:
             persona_id = req.conversation.persona_id
             if not persona_id and persona_id != "[%None]":  # [%None] 为用户取消人格
-                persona_id = self.context.provider_manager.selected_default_persona[
+                persona_id = self.context.persona_manager.selected_default_persona_v3[
                     "name"
                 ]
             persona = next(
                 builtins.filter(
                     lambda persona: persona["name"] == persona_id,
-                    self.context.provider_manager.personas,
+                    self.context.persona_manager.personas_v3,
                 ),
                 None,
             )
             if persona:
                 if prompt := persona["prompt"]:
                     req.system_prompt += prompt
-                if mood_dialogs := persona["_mood_imitation_dialogs_processed"]:
-                    req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
-                    req.system_prompt += mood_dialogs
-                if (
-                    begin_dialogs := persona["_begin_dialogs_processed"]
-                ) and not req.contexts:
+                if begin_dialogs := persona["_begin_dialogs_processed"]:
                     req.contexts[:0] = begin_dialogs
+            # tools select
+            tmgr = self.context.get_llm_tool_manager()
+            if (persona and persona.get("tools") is None) or not persona:
+                # select all
+                toolset = tmgr.get_full_tool_set()
+            else:
+                toolset = ToolSet()
+                for tool_name in persona["tools"]:
+                    tool = tmgr.get_func(tool_name)
+                    if tool:
+                        toolset.add_tool(tool)
+            req.func_tool = toolset
+            logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
 
         if quote:
             sender_info = ""

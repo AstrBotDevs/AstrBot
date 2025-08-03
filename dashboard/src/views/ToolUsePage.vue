@@ -405,24 +405,36 @@
                 <v-text-field v-model="toolSearch" prepend-inner-icon="mdi-magnify" :label="tm('functionTools.search')"
                   variant="outlined" density="compact" class="mb-4" hide-details clearable></v-text-field>
 
+                <small>复选框代表该工具是否被启用。</small>
+
                 <v-expansion-panels v-model="openedPanel" multiple style="max-height: 500px; overflow-y: auto;">
                   <v-expansion-panel v-for="(tool, index) in filteredTools" :key="index" :value="index"
                     class="mb-2 tool-panel" rounded="lg">
                     <v-expansion-panel-title>
                       <v-row no-gutters align="center">
+                        <v-col cols="1">
+                          <v-checkbox
+                            v-model="tool.active"
+                            color="primary"
+                            hide-details
+                            density="compact"
+                            @click.stop
+                            @change="toggleToolStatus(tool)"
+                          ></v-checkbox>
+                        </v-col>
                         <v-col cols="3">
                           <div class="d-flex align-center">
                             <v-icon color="primary" class="me-2" size="small">
-                              {{ tool.function.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
+                              {{ tool.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
                             </v-icon>
                             <span class="text-body-1 text-high-emphasis font-weight-medium text-truncate"
-                              :title="tool.function.name">
-                              {{ formatToolName(tool.function.name) }}
+                              :title="tool.name">
+                              {{ formatToolName(tool.name) }}
                             </span>
                           </div>
                         </v-col>
-                        <v-col cols="9" class="text-grey">
-                          {{ tool.function.description }}
+                        <v-col cols="8" class="text-grey">
+                          {{ tool.description }}
                         </v-col>
                       </v-row>
                     </v-expansion-panel-title>
@@ -434,9 +446,9 @@
                             <v-icon color="primary" size="small" class="me-1">mdi-information</v-icon>
                             {{ tm('functionTools.description') }}
                           </p>
-                          <p class="text-body-2 ml-6 mb-4">{{ tool.function.description }}</p>
+                          <p class="text-body-2 ml-6 mb-4">{{ tool.description }}</p>
 
-                          <template v-if="tool.function.parameters && tool.function.parameters.properties">
+                          <template v-if="tool.parameters && tool.parameters.properties">
                             <p class="text-body-1 font-weight-medium mb-3">
                               <v-icon color="primary" size="small" class="me-1">mdi-code-json</v-icon>
                               {{ tm('functionTools.parameters') }}
@@ -451,7 +463,7 @@
                                 </tr>
                               </thead>
                               <tbody>
-                                <tr v-for="(param, paramName) in tool.function.parameters.properties" :key="paramName">
+                                <tr v-for="(param, paramName) in tool.parameters.properties" :key="paramName">
                                   <td class="font-weight-medium">{{ paramName }}</td>
                                   <td>
                                     <v-chip size="x-small" color="primary" text class="text-caption">
@@ -562,8 +574,8 @@ export default {
 
       const searchTerm = this.toolSearch.toLowerCase();
       return this.tools.filter(tool =>
-        tool.function.name.toLowerCase().includes(searchTerm) ||
-        tool.function.description.toLowerCase().includes(searchTerm)
+        tool.name.toLowerCase().includes(searchTerm) ||
+        tool.description.toLowerCase().includes(searchTerm)
       );
     },
 
@@ -658,7 +670,7 @@ export default {
     },
 
     getTools() {
-      axios.get('/api/config/llmtools')
+      axios.get('/api/tools/list')
         .then(response => {
           this.tools = response.data.data || [];
         })
@@ -975,6 +987,28 @@ export default {
 
       } catch (e) {
         this.showError(this.tm('messages.importError.failed', { error: e.message }));
+      }
+    },
+
+    // 切换工具状态
+    async toggleToolStatus(tool) {
+      try {
+        const response = await axios.post('/api/tools/toggle-tool', {
+          name: tool.name,
+          activate: tool.active
+        });
+
+        if (response.data.status === 'ok') {
+          this.showSuccess(response.data.message || this.tm('messages.toggleToolSuccess'));
+        } else {
+          // 如果失败，恢复原状态
+          tool.active = !tool.active;
+          this.showError(response.data.message || this.tm('messages.toggleToolError'));
+        }
+      } catch (error) {
+        // 如果失败，恢复原状态
+        tool.active = !tool.active;
+        this.showError(this.tm('messages.toggleToolError', { error: error.response?.data?.message || error.message }));
       }
     }
   }

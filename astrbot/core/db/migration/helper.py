@@ -1,11 +1,13 @@
 import os
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.db import BaseDatabase
+from astrbot.core.config import AstrBotConfig
 from astrbot.api import logger
 from .migra_3_to_4 import (
     migration_conversation_table,
     migration_platform_table,
     migration_webchat_data,
+    migration_persona_data,
 )
 
 
@@ -24,7 +26,9 @@ async def check_migration_needed_v4(db_helper: BaseDatabase) -> bool:
 
 
 async def do_migration_v4(
-    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
+    db_helper: BaseDatabase,
+    platform_id_map: dict[str, dict[str, str]],
+    astrbot_config: AstrBotConfig,
 ):
     """
     执行数据库迁移
@@ -44,6 +48,9 @@ async def do_migration_v4(
 
     # 执行 WebChat 数据迁移
     await migration_webchat_data(db_helper, platform_id_map)
+
+    # 执行人格数据迁移
+    await migration_persona_data(db_helper, astrbot_config)
 
     # 标记迁移完成
     await db_helper.insert_preference_or_update("migration_done_v4", "true")

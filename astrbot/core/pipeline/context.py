@@ -55,7 +55,7 @@ class PipelineContext:
         handler: T.Awaitable,
         *args,
         **kwargs,
-    ) -> T.AsyncGenerator[None, None]:
+    ) -> T.AsyncGenerator[T.Any, None]:
         """执行事件处理函数并处理其返回结果
 
         该方法负责调用处理函数并处理不同类型的返回值。它支持两种类型的处理函数:
@@ -77,10 +77,16 @@ class PipelineContext:
         try:
             ready_to_call = handler(event, *args, **kwargs)
         except TypeError as _:
+            if self.plugin_manager:
+                context = self.plugin_manager.context
+            else:
+                raise ValueError(
+                    "Cannot call handler without a valid context or plugin manager."
+                )
             # 向下兼容
             trace_ = traceback.format_exc()
             # 以前的 handler 会额外传入一个参数, 但是 context 对象实际上在插件实例中有一份
-            ready_to_call = handler(event, self.plugin_manager.context, *args, **kwargs)
+            ready_to_call = handler(event, context, *args, **kwargs)
 
         if inspect.isasyncgen(ready_to_call):
             _has_yielded = False

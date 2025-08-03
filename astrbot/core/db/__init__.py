@@ -205,6 +205,7 @@ class BaseDatabase(abc.ABC):
         persona_id: str,
         system_prompt: str,
         begin_dialogs: list[str] = None,
+        tools: list[str] = None,
     ) -> Persona:
         """Insert a new persona record."""
         ...
@@ -217,6 +218,22 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_personas(self) -> list[Persona]:
         """Get all personas for a specific bot."""
+        ...
+
+    @abc.abstractmethod
+    async def update_persona(
+        self,
+        persona_id: str,
+        system_prompt: str = None,
+        begin_dialogs: list[str] = None,
+        tools: list[str] = None,
+    ) -> Persona | None:
+        """Update a persona's system prompt or begin dialogs."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_persona(self, persona_id: str) -> None:
+        """Delete a persona by its ID."""
         ...
 
     @abc.abstractmethod

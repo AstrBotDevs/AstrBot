@@ -19,6 +19,7 @@ from sqlalchemy import select, update, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
+NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 
 class SQLiteDatabase(BaseDatabase):
     def __init__(self, db_path: str) -> None:
@@ -99,9 +100,7 @@ class SQLiteDatabase(BaseDatabase):
     # Conversation Management
     # ====
 
-    async def get_conversations(
-        self, user_id=None, platform_id=None
-    ):
+    async def get_conversations(self, user_id=None, platform_id=None):
         async with self.get_db() as session:
             session: AsyncSession
             query = select(ConversationV2)
@@ -224,7 +223,7 @@ class SQLiteDatabase(BaseDatabase):
                     return
                 query = query.values(**values)
                 await session.execute(query)
-                return await self.get_conversation_by_id(cid)
+        return await self.get_conversation_by_id(cid)
 
     async def delete_conversation(self, cid):
         async with self.get_db() as session:
@@ -312,7 +311,9 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
-    async def insert_persona(self, persona_id, system_prompt, begin_dialogs=None):
+    async def insert_persona(
+        self, persona_id, system_prompt, begin_dialogs=None, tools=None
+    ):
         """Insert a new persona record."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -321,6 +322,7 @@ class SQLiteDatabase(BaseDatabase):
                     persona_id=persona_id,
                     system_prompt=system_prompt,
                     begin_dialogs=begin_dialogs or [],
+                    tools=tools,
                 )
                 session.add(new_persona)
                 return new_persona
@@ -340,6 +342,36 @@ class SQLiteDatabase(BaseDatabase):
             query = select(Persona)
             result = await session.execute(query)
             return result.scalars().all()
+
+    async def update_persona(
+        self, persona_id, system_prompt=None, begin_dialogs=None, tools=NOT_GIVEN
+    ):
+        """Update a persona's system prompt or begin dialogs."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                query = update(Persona).where(Persona.persona_id == persona_id)
+                values = {}
+                if system_prompt is not None:
+                    values["system_prompt"] = system_prompt
+                if begin_dialogs is not None:
+                    values["begin_dialogs"] = begin_dialogs
+                if tools is not NOT_GIVEN:
+                    values["tools"] = tools
+                if not values:
+                    return
+                query = query.values(**values)
+                await session.execute(query)
+        return await self.get_persona_by_id(persona_id)
+
+    async def delete_persona(self, persona_id):
+        """Delete a persona by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(Persona).where(Persona.persona_id == persona_id)
+                )
 
     async def insert_preference_or_update(self, key, value):
         """Insert a new preference record or update if it exists."""

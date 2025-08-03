@@ -57,6 +57,11 @@ const MainRoutes = {
       component: () => import('@/views/SessionManagementPage.vue')
     },
     {
+      name: 'Persona',
+      path: '/persona',
+      component: () => import('@/views/PersonaPage.vue')
+    },
+    {
       name: 'Console',
       path: '/console',
       component: () => import('@/views/ConsolePage.vue')

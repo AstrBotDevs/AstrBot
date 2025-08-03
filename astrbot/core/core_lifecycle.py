@@ -22,6 +22,7 @@ from astrbot.core.pipeline.scheduler import PipelineScheduler, PipelineContext
 from astrbot.core.star import PluginManager
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.star.context import Context
+from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core import LogBroker
 from astrbot.core.db import BaseDatabase
@@ -69,13 +70,23 @@ class AstrBotCoreLifecycle:
             logger.setLevel(self.astrbot_config["log_level"])  # 设置日志级别
 
         await self.db.initialize()
-        await do_migration_v4(self.db, {})
+
+        try:
+            await do_migration_v4(self.db, {}, self.astrbot_config)
+        except Exception as e:
+            logger.error(f"迁移到 v4.0.0 新版本数据格式失败: {e}")
 
         # 初始化事件队列
         self.event_queue = Queue()
 
+        # 初始化人格管理器
+        self.persona_mgr = PersonaManager(self.db, self.astrbot_config)
+        await self.persona_mgr.initialize()
+
         # 初始化供应商管理器
-        self.provider_manager = ProviderManager(self.astrbot_config, self.db)
+        self.provider_manager = ProviderManager(
+            self.astrbot_config, self.db, self.persona_mgr
+        )
 
         # 初始化平台管理器
         self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
@@ -94,6 +105,8 @@ class AstrBotCoreLifecycle:
             self.provider_manager,
             self.platform_manager,
             self.conversation_manager,
+            self.platform_message_history_manager,
+            self.persona_mgr,
         )
 
         # 初始化插件管理器
@@ -110,6 +123,7 @@ class AstrBotCoreLifecycle:
             PipelineContext(self.astrbot_config, self.plugin_manager)
         )
         await self.pipeline_scheduler.initialize()
+        self.star_context.pipeline_ctx = self.pipeline_scheduler.ctx
 
         # 初始化更新器
         self.astrbot_updator = AstrBotUpdator()
@@ -232,6 +246,9 @@ class AstrBotCoreLifecycle:
         platform_insts = self.platform_manager.get_insts()
         for platform_inst in platform_insts:
             tasks.append(
-                asyncio.create_task(platform_inst.run(), name=f"{platform_inst.meta().id}({platform_inst.meta().name})")
+                asyncio.create_task(
+                    platform_inst.run(),
+                    name=f"{platform_inst.meta().id}({platform_inst.meta().name})",
+                )
             )
         return tasks

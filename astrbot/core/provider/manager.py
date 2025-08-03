@@ -7,85 +7,27 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db import BaseDatabase
 
 from .entities import ProviderType
-from .provider import Personality, Provider, STTProvider, TTSProvider, EmbeddingProvider
+from .provider import Provider, STTProvider, TTSProvider, EmbeddingProvider
 from .register import llm_tools, provider_cls_map
+from ..persona_mgr import PersonaManager
 
 
 class ProviderManager:
-    def __init__(self, config: AstrBotConfig, db_helper: BaseDatabase):
+    def __init__(
+        self,
+        config: AstrBotConfig,
+        db_helper: BaseDatabase,
+        persona_mgr: PersonaManager,
+    ):
+        self.persona_mgr = persona_mgr
+        self.astrbot_config = config
         self.providers_config: List = config["provider"]
         self.provider_settings: dict = config["provider_settings"]
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
-        self.persona_configs: list = config.get("persona", [])
-        self.astrbot_config = config
 
-        # 人格情景管理
-        # 目前没有拆成独立的模块
-        self.default_persona_name = self.provider_settings.get(
-            "default_personality", "default"
-        )
-        self.personas: List[Personality] = []
-        self.selected_default_persona = None
-        for persona in self.persona_configs:
-            begin_dialogs = persona.get("begin_dialogs", [])
-            mood_imitation_dialogs = persona.get("mood_imitation_dialogs", [])
-            bd_processed = []
-            mid_processed = ""
-            if begin_dialogs:
-                if len(begin_dialogs) % 2 != 0:
-                    logger.error(
-                        f"{persona['name']} 人格情景预设对话格式不对，条数应该为偶数。"
-                    )
-                    begin_dialogs = []
-                user_turn = True
-                for dialog in begin_dialogs:
-                    bd_processed.append(
-                        {
-                            "role": "user" if user_turn else "assistant",
-                            "content": dialog,
-                            "_no_save": None,  # 不持久化到 db
-                        }
-                    )
-                    user_turn = not user_turn
-            if mood_imitation_dialogs:
-                if len(mood_imitation_dialogs) % 2 != 0:
-                    logger.error(
-                        f"{persona['name']} 对话风格对话格式不对，条数应该为偶数。"
-                    )
-                    mood_imitation_dialogs = []
-                user_turn = True
-                for dialog in mood_imitation_dialogs:
-                    role = "A" if user_turn else "B"
-                    mid_processed += f"{role}: {dialog}\n"
-                    if not user_turn:
-                        mid_processed += "\n"
-                    user_turn = not user_turn
-
-            try:
-                persona = Personality(
-                    **persona,
-                    _begin_dialogs_processed=bd_processed,
-                    _mood_imitation_dialogs_processed=mid_processed,
-                )
-                if persona["name"] == self.default_persona_name:
-                    self.selected_default_persona = persona
-                self.personas.append(persona)
-            except Exception as e:
-                logger.error(f"解析 Persona 配置失败：{e}")
-
-        if not self.selected_default_persona and len(self.personas) > 0:
-            # 默认选择第一个
-            self.selected_default_persona = self.personas[0]
-
-        if not self.selected_default_persona:
-            self.selected_default_persona = Personality(
-                prompt="You are a helpful and friendly assistant.",
-                name="default",
-                _begin_dialogs_processed=[],
-                _mood_imitation_dialogs_processed="",
-            )
-            self.personas.append(self.selected_default_persona)
+        # 人格相关属性，v4.0.0 版本后被废弃，推荐使用 PersonaManager
+        self.default_persona_name = persona_mgr.default_persona
 
         self.provider_insts: List[Provider] = []
         """加载的 Provider 的实例"""
@@ -112,6 +54,21 @@ class ProviderManager:
         kdb_cfg = config.get("knowledge_db", {})
         if kdb_cfg and len(kdb_cfg):
             self.curr_kdb_name = list(kdb_cfg.keys())[0]
+
+    @property
+    def persona_configs(self) -> list:
+        """动态获取最新的 persona 配置"""
+        return self.persona_mgr.persona_v3_config
+
+    @property
+    def personas(self) -> list:
+        """动态获取最新的 personas 列表"""
+        return self.persona_mgr.personas_v3
+
+    @property
+    def selected_default_persona(self):
+        """动态获取最新的默认选中 persona"""
+        return self.persona_mgr.selected_default_persona_v3
 
     async def set_provider(
         self, provider_id: str, provider_type: ProviderType, umo: str = None
