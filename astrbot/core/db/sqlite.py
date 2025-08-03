@@ -19,6 +19,7 @@ from sqlalchemy import select, update, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
+NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 
 class SQLiteDatabase(BaseDatabase):
     def __init__(self, db_path: str) -> None:
@@ -343,7 +344,7 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalars().all()
 
     async def update_persona(
-        self, persona_id, system_prompt=None, begin_dialogs=None, tools=None
+        self, persona_id, system_prompt=None, begin_dialogs=None, tools=NOT_GIVEN
     ):
         """Update a persona's system prompt or begin dialogs."""
         async with self.get_db() as session:
@@ -355,7 +356,7 @@ class SQLiteDatabase(BaseDatabase):
                     values["system_prompt"] = system_prompt
                 if begin_dialogs is not None:
                     values["begin_dialogs"] = begin_dialogs
-                if tools is not None:
+                if tools is not NOT_GIVEN:
                     values["tools"] = tools
                 if not values:
                     return

@@ -414,6 +414,18 @@ export default {
     watch: {
         toolSearch() {
             // 响应式搜索，无需额外处理
+        },
+        
+        toolSelectValue(newValue) {
+            if (newValue === '0') {
+                // 选择全部工具
+                this.personaForm.tools = null;
+            } else if (newValue === '1') {
+                // 选择指定工具，如果当前是null，则转换为空数组
+                if (this.personaForm.tools === null) {
+                    this.personaForm.tools = [];
+                }
+            }
         }
     },
 
@@ -475,6 +487,7 @@ export default {
                 begin_dialogs: [],
                 tools: []
             };
+            this.toolSelectValue = '1'; // 默认选择指定工具
             this.expandedPanels = [];
             this.showPersonaDialog = true;
         },
@@ -487,6 +500,8 @@ export default {
                 begin_dialogs: [...(persona.begin_dialogs || [])],
                 tools: persona.tools === null ? null : [...(persona.tools || [])]
             };
+            // 根据 tools 的值设置 toolSelectValue
+            this.toolSelectValue = persona.tools === null ? '0' : '1';
             this.expandedPanels = [];
             this.showPersonaDialog = true;
         },
@@ -505,6 +520,7 @@ export default {
                 begin_dialogs: [],
                 tools: []
             };
+            this.toolSelectValue = '1'; // 重置为默认值
         },
 
         async savePersona() {
@@ -587,12 +603,14 @@ export default {
                 // 从全选状态转换为去除该服务器工具的状态
                 this.personaForm.tools = this.availableTools.map(tool => tool.name)
                     .filter(toolName => !server.tools.includes(toolName));
+                this.toolSelectValue = '1'; // 切换到指定工具模式
                 return;
             }
 
             // 确保tools是数组
             if (!Array.isArray(this.personaForm.tools)) {
                 this.personaForm.tools = [];
+                this.toolSelectValue = '1';
             }
 
             // 检查是否所有服务器的工具都已选中
@@ -620,6 +638,7 @@ export default {
                 // 如果是全选状态，点击某个工具表示要取消选择该工具
                 // 所以创建一个包含所有其他工具的数组
                 this.personaForm.tools = this.availableTools.map(tool => tool.name).filter(name => name !== toolName);
+                this.toolSelectValue = '1'; // 切换到指定工具模式
             } else if (Array.isArray(this.personaForm.tools)) {
                 const index = this.personaForm.tools.indexOf(toolName);
                 if (index !== -1) {
@@ -632,6 +651,7 @@ export default {
             } else {
                 // 如果tools不是数组也不是null，初始化为数组
                 this.personaForm.tools = [toolName];
+                this.toolSelectValue = '1';
             }
         },
 
@@ -665,6 +685,7 @@ export default {
             if (this.personaForm.tools === null) {
                 // 创建一个包含所有工具的数组，然后移除指定工具
                 this.personaForm.tools = this.availableTools.map(tool => tool.name).filter(name => name !== toolName);
+                this.toolSelectValue = '1'; // 切换到指定工具模式
             } else if (Array.isArray(this.personaForm.tools)) {
                 const index = this.personaForm.tools.indexOf(toolName);
                 if (index !== -1) {
