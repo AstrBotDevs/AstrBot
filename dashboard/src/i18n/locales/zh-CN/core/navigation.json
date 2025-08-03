@@ -4,6 +4,7 @@
   "providers": "服务提供商",
   "toolUse": "MCP",
   "config": "配置文件",
+  "commandPermission": "指令权限管理",
   "extension": "插件管理",
   "extensionMarketplace": "插件市场",
   "chat": "聊天",

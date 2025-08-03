@@ -4,6 +4,7 @@
   "providers": "Providers",
   "toolUse": "MCP Tools",
   "config": "Config",
+  "commandPermission": "Command Permission",
   "extension": "Extensions",
   "extensionMarketplace": "Extension Market",
   "chat": "Chat",
