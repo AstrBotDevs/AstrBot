@@ -105,6 +105,8 @@ class AstrBotCoreLifecycle:
             self.provider_manager,
             self.platform_manager,
             self.conversation_manager,
+            self.platform_message_history_manager,
+            self.persona_mgr,
         )
 
         # 初始化插件管理器
@@ -121,6 +123,7 @@ class AstrBotCoreLifecycle:
             PipelineContext(self.astrbot_config, self.plugin_manager)
         )
         await self.pipeline_scheduler.initialize()
+        self.star_context.pipeline_ctx = self.pipeline_scheduler.ctx
 
         # 初始化更新器
         self.astrbot_updator = AstrBotUpdator()

@@ -11,9 +11,15 @@ class PersonaManager:
         _ps: dict = astrbot_config["provider_settings"]
         self.default_persona: str = _ps.get("default_personality", "default")
         self.personas: list[Persona] = []
+        self.selected_default_persona: Persona | None = None
+
+        self.personas_v3: list[Personality] = []
+        self.selected_default_persona_v3: Personality | None = None
+        self.persona_v3_config: list[dict] = []
 
     async def initialize(self):
         self.personas = await self.get_all_personas()
+        self.get_v3_persona_data()
         logger.info(f"已加载 {len(self.personas)} 个人格。")
 
     async def get_persona(self, persona_id: str):
@@ -29,23 +35,28 @@ class PersonaManager:
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
         await self.db.delete_persona(persona_id)
         self.personas = [p for p in self.personas if p.persona_id != persona_id]
+        self.get_v3_persona_data()
 
     async def update_persona(
         self,
         persona_id: str,
         system_prompt: str = None,
         begin_dialogs: list[str] = None,
+        tools: list[str] = None,
     ):
-        """更新指定 persona 的信息"""
+        """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         existing_persona = await self.db.get_persona_by_id(persona_id)
         if not existing_persona:
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
-        persona = self.db.update_persona(persona_id, system_prompt, begin_dialogs)
+        persona = await self.db.update_persona(
+            persona_id, system_prompt, begin_dialogs, tools=tools
+        )
         if persona:
             for i, p in enumerate(self.personas):
                 if p.persona_id == persona_id:
                     self.personas[i] = persona
                     break
+        self.get_v3_persona_data()
         return persona
 
     async def get_all_personas(self) -> list[Persona]:
@@ -53,15 +64,20 @@ class PersonaManager:
         return await self.db.get_personas()
 
     async def create_persona(
-        self, persona_id: str, system_prompt: str, begin_dialogs: list[str] = None
+        self,
+        persona_id: str,
+        system_prompt: str,
+        begin_dialogs: list[str] = None,
+        tools: list[str] = None,
     ) -> Persona:
-        """创建新的 persona"""
+        """创建新的 persona。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         if await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} already exists.")
         new_persona = await self.db.insert_persona(
-            persona_id, system_prompt, begin_dialogs
+            persona_id, system_prompt, begin_dialogs, tools=tools
         )
         self.personas.append(new_persona)
+        self.get_v3_persona_data()
         return new_persona
 
     def get_v3_persona_data(
@@ -80,20 +96,21 @@ class PersonaManager:
                 "name": persona.persona_id,
                 "begin_dialogs": persona.begin_dialogs or [],
                 "mood_imitation_dialogs": [],  # deprecated
+                "tools": persona.tools,
             }
             for persona in self.personas
         ]
 
-        v3_personas: list[Personality] = []
+        personas_v3: list[Personality] = []
         selected_default_persona: Personality | None = None
 
-        for persona in v3_persona_config:
-            begin_dialogs = persona.get("begin_dialogs", [])
+        for persona_cfg in v3_persona_config:
+            begin_dialogs = persona_cfg.get("begin_dialogs", [])
             bd_processed = []
             if begin_dialogs:
                 if len(begin_dialogs) % 2 != 0:
                     logger.error(
-                        f"{persona['name']} 人格情景预设对话格式不对，条数应该为偶数。"
+                        f"{persona_cfg['name']} 人格情景预设对话格式不对，条数应该为偶数。"
                     )
                     begin_dialogs = []
                 user_turn = True
@@ -109,26 +126,37 @@ class PersonaManager:
 
             try:
                 persona = Personality(
-                    **persona,
+                    **persona_cfg,
                     _begin_dialogs_processed=bd_processed,
                     _mood_imitation_dialogs_processed="",  # deprecated
                 )
                 if persona["name"] == self.default_persona:
                     selected_default_persona = persona
-                v3_personas.append(persona)
+                personas_v3.append(persona)
             except Exception as e:
                 logger.error(f"解析 Persona 配置失败：{e}")
 
-        if not selected_default_persona and len(v3_personas) > 0:
+        if not selected_default_persona and len(personas_v3) > 0:
             # 默认选择第一个
-            selected_default_persona = v3_personas[0]
+            selected_default_persona = personas_v3[0]
 
         if not selected_default_persona:
             selected_default_persona = Personality(
                 prompt="You are a helpful and friendly assistant.",
                 name="default",
+                tools=None,
                 _begin_dialogs_processed=[],
             )
-            v3_personas.append(selected_default_persona)
+            personas_v3.append(selected_default_persona)
 
-        return v3_persona_config, v3_personas, selected_default_persona
+        self.personas_v3 = personas_v3
+        self.selected_default_persona_v3 = selected_default_persona
+        self.persona_v3_config = v3_persona_config
+        self.selected_default_persona = Persona(
+            persona_id=selected_default_persona["name"],
+            system_prompt=selected_default_persona["prompt"],
+            begin_dialogs=selected_default_persona["begin_dialogs"],
+            tools=selected_default_persona["tools"] or None,
+        )
+
+        return v3_persona_config, personas_v3, selected_default_persona

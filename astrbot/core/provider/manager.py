@@ -58,20 +58,17 @@ class ProviderManager:
     @property
     def persona_configs(self) -> list:
         """动态获取最新的 persona 配置"""
-        persona_configs, _, _ = self.persona_mgr.get_v3_persona_data()
-        return persona_configs
+        return self.persona_mgr.persona_v3_config
 
     @property
     def personas(self) -> list:
         """动态获取最新的 personas 列表"""
-        _, personas, _ = self.persona_mgr.get_v3_persona_data()
-        return personas
+        return self.persona_mgr.personas_v3
 
     @property
     def selected_default_persona(self):
         """动态获取最新的默认选中 persona"""
-        _, _, selected_default_persona = self.persona_mgr.get_v3_persona_data()
-        return selected_default_persona
+        return self.persona_mgr.selected_default_persona_v3
 
     async def set_provider(
         self, provider_id: str, provider_type: ProviderType, umo: str = None

@@ -21,6 +21,7 @@ from mcp.types import (
     EmbeddedResource,
     TextResourceContents,
     BlobResourceContents,
+    CallToolResult,
 )
 from astrbot.core.star.star_handler import EventType
 from astrbot import logger
@@ -193,50 +194,25 @@ class ToolLoopAgent(BaseAgentRunner):
                 if not req.func_tool:
                     return
                 func_tool = req.func_tool.get_func(func_tool_name)
-                if func_tool.origin == "mcp":
-                    logger.info(
-                        f"从 MCP 服务 {func_tool.mcp_server_name} 调用工具函数：{func_tool.name}，参数：{func_tool_args}"
-                    )
-                    client = req.func_tool.mcp_client_dict[func_tool.mcp_server_name]
-                    res = await client.session.call_tool(func_tool.name, func_tool_args)
-                    if not res:
-                        continue
-                    if isinstance(res.content[0], TextContent):
-                        tool_call_result_blocks.append(
-                            ToolCallMessageSegment(
-                                role="tool",
-                                tool_call_id=func_tool_id,
-                                content=res.content[0].text,
-                            )
-                        )
-                        yield MessageChain().message(res.content[0].text)
-                    elif isinstance(res.content[0], ImageContent):
-                        tool_call_result_blocks.append(
-                            ToolCallMessageSegment(
-                                role="tool",
-                                tool_call_id=func_tool_id,
-                                content="返回了图片(已直接发送给用户)",
-                            )
-                        )
-                        yield MessageChain(type="tool_direct_result").base64_image(
-                            res.content[0].data
-                        )
-                    elif isinstance(res.content[0], EmbeddedResource):
-                        resource = res.content[0].resource
-                        if isinstance(resource, TextResourceContents):
+                logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
+                executor = func_tool.execute(
+                    event=self.event,
+                    pipeline_context=self.pipeline_ctx,
+                    **func_tool_args,
+                )
+                async for resp in executor:
+                    if isinstance(resp, CallToolResult):
+                        res = resp
+                        if isinstance(res.content[0], TextContent):
                             tool_call_result_blocks.append(
                                 ToolCallMessageSegment(
                                     role="tool",
                                     tool_call_id=func_tool_id,
-                                    content=resource.text,
+                                    content=res.content[0].text,
                                 )
                             )
-                            yield MessageChain().message(resource.text)
-                        elif (
-                            isinstance(resource, BlobResourceContents)
-                            and resource.mimeType
-                            and resource.mimeType.startswith("image/")
-                        ):
+                            yield MessageChain().message(res.content[0].text)
+                        elif isinstance(res.content[0], ImageContent):
                             tool_call_result_blocks.append(
                                 ToolCallMessageSegment(
                                     role="tool",
@@ -247,41 +223,54 @@ class ToolLoopAgent(BaseAgentRunner):
                             yield MessageChain(type="tool_direct_result").base64_image(
                                 res.content[0].data
                             )
-                        else:
-                            tool_call_result_blocks.append(
-                                ToolCallMessageSegment(
-                                    role="tool",
-                                    tool_call_id=func_tool_id,
-                                    content="返回的数据类型不受支持",
-                                )
-                            )
-                            yield MessageChain().message("返回的数据类型不受支持。")
-                else:
-                    logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
-                    # 尝试调用工具函数
-                    wrapper = self.pipeline_ctx.call_handler(
-                        self.event, func_tool.handler, **func_tool_args
-                    )
-                    async for resp in wrapper:
-                        if resp is not None:
-                            # Tool 返回结果
-                            tool_call_result_blocks.append(
-                                ToolCallMessageSegment(
-                                    role="tool",
-                                    tool_call_id=func_tool_id,
-                                    content=resp,
-                                )
-                            )
-                            yield MessageChain().message(resp)
-                        else:
-                            # Tool 直接请求发送消息给用户
-                            # 这里我们将直接结束 Agent Loop。
-                            self._transition_state(AgentState.DONE)
-                            if res := self.event.get_result():
-                                if res.chain:
-                                    yield MessageChain(
-                                        chain=res.chain, type="tool_direct_result"
+                        elif isinstance(res.content[0], EmbeddedResource):
+                            resource = res.content[0].resource
+                            if isinstance(resource, TextResourceContents):
+                                tool_call_result_blocks.append(
+                                    ToolCallMessageSegment(
+                                        role="tool",
+                                        tool_call_id=func_tool_id,
+                                        content=resource.text,
                                     )
+                                )
+                                yield MessageChain().message(resource.text)
+                            elif (
+                                isinstance(resource, BlobResourceContents)
+                                and resource.mimeType
+                                and resource.mimeType.startswith("image/")
+                            ):
+                                tool_call_result_blocks.append(
+                                    ToolCallMessageSegment(
+                                        role="tool",
+                                        tool_call_id=func_tool_id,
+                                        content="返回了图片(已直接发送给用户)",
+                                    )
+                                )
+                                yield MessageChain(
+                                    type="tool_direct_result"
+                                ).base64_image(res.content[0].data)
+                            else:
+                                tool_call_result_blocks.append(
+                                    ToolCallMessageSegment(
+                                        role="tool",
+                                        tool_call_id=func_tool_id,
+                                        content="返回的数据类型不受支持",
+                                    )
+                                )
+                                yield MessageChain().message("返回的数据类型不受支持。")
+                    elif resp is None:
+                        # Tool 直接请求发送消息给用户
+                        # 这里我们将直接结束 Agent Loop。
+                        self._transition_state(AgentState.DONE)
+                        if res := self.event.get_result():
+                            if res.chain:
+                                yield MessageChain(
+                                    chain=res.chain, type="tool_direct_result"
+                                )
+                    else:
+                        logger.warning(
+                            f"Tool 返回了不支持的类型: {type(resp)}，将忽略。"
+                        )
 
                 self.event.clear_result()
             except Exception as e:

@@ -107,6 +107,9 @@
       "failed": "Import configuration failed: {error}"
     },
     "configParseError": "Configuration parse error: {error}",
-    "noAvailableConfig": "No available configuration"
+    "noAvailableConfig": "No available configuration",
+    "toggleToolSuccess": "Tool status toggled successfully!",
+    "toggleToolError": "Failed to toggle tool status: {error}",
+    "testError": "Test connection failed: {error}"
   }
 } 

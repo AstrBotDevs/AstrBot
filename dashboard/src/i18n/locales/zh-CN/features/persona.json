@@ -22,7 +22,21 @@
     "presetDialogs": "预设对话",
     "presetDialogsHelp": "添加一些预设的对话来帮助机器人更好地理解角色设定。对话数量必须为偶数（用户和助手轮流对话）。",
     "userMessage": "用户消息",
-    "assistantMessage": "助手消息"
+    "assistantMessage": "助手消息",
+    "tools": "工具选择",
+    "toolsHelp": "为这个人格选择可用的工具。工具可以让机器人执行特定的功能，如搜索、计算、获取信息等。",
+    "toolsSelection": "工具选择操作",
+    "selectAllTools": "选择所有工具",
+    "clearAllTools": "清空选择",
+    "allSelected": "全选",
+    "mcpServersQuickSelect": "MCP 服务器快速选择",
+    "searchTools": "搜索工具",
+    "selectedTools": "已选择的工具",
+    "noToolsAvailable": "暂无可用工具",
+    "noToolsFound": "未找到匹配的工具",
+    "loadingTools": "正在加载工具...",
+    "allToolsAvailable": "使用所有可用工具",
+    "noToolsSelected": "未选择任何工具"
   },
   "dialog": {
     "create": {

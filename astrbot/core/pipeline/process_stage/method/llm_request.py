@@ -100,7 +100,8 @@ class LLMRequestSubStage(Stage):
                 if not event.message_str.startswith(self.provider_wake_prefix):
                     return
             req.prompt = event.message_str[len(self.provider_wake_prefix) :]
-            req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
+            # func_tool selection 现在已经转移到 packages/astrbot 插件中进行选择。
+            # req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     image_path = await comp.convert_to_file_path()
@@ -274,7 +275,6 @@ class LLMRequestSubStage(Stage):
         if event.get_platform_name() == "webchat":
             asyncio.create_task(self._handle_webchat(event, req, provider))
 
-
     async def _handle_webchat(
         self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider
     ):
@@ -307,19 +307,10 @@ class LLMRequestSubStage(Stage):
                 if not title or "<None>" in title:
                     return
                 await self.conv_manager.update_conversation_title(
-                    event.unified_msg_origin, title=title
+                    unified_msg_origin=event.unified_msg_origin,
+                    title=title,
+                    conversation_id=req.conversation.cid,
                 )
-                # 由于 WebChat 平台特殊性，其有两个对话，因此我们要更新两个对话的标题
-                # webchat adapter 中，session_id 的格式是 f"webchat!{username}!{cid}"
-                # TODO: 优化 WebChat 适配器的对话管理
-                if event.session_id:
-                    username, cid = event.session_id.split("!")[1:3]
-                    db_helper = self.ctx.plugin_manager.context._db
-                    db_helper.update_conversation_title(
-                        user_id=username,
-                        cid=cid,
-                        title=title,
-                    )
 
     async def _save_to_history(
         self,

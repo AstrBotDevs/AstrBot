@@ -11,7 +11,7 @@ from astrbot.core.provider.provider import (
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.provider.func_tool_manager import FuncCall
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.manager import ProviderManager
@@ -30,6 +30,11 @@ from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
 )
 from deprecated import deprecated
+
+from typing_extensions import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from astrbot.core.pipeline.context import PipelineContext
 
 
 class Context:
@@ -51,6 +56,8 @@ class Context:
     platform_manager: PlatformManager = None
 
     registered_web_apis: list = []
+
+    pipeline_ctx: "PipelineContext" = None
 
     # back compatibility
     _register_tasks: List[Awaitable] = []
@@ -86,7 +93,7 @@ class Context:
         """获取当前载入的所有插件 Metadata 的列表"""
         return star_registry
 
-    def get_llm_tool_manager(self) -> FuncCall:
+    def get_llm_tool_manager(self) -> FunctionToolManager:
         """获取 LLM Tool Manager，其用于管理注册的所有的 Function-calling tools"""
         return self.provider_manager.llm_tools
 
@@ -96,40 +103,14 @@ class Context:
         Returns:
             如果没找到，会返回 False
         """
-        func_tool = self.provider_manager.llm_tools.get_func(name)
-        if func_tool is not None:
-            if func_tool.handler_module_path in star_map:
-                if not star_map[func_tool.handler_module_path].activated:
-                    raise ValueError(
-                        f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用，请先在管理面板启用再激活此工具。"
-                    )
-
-            func_tool.active = True
-
-            inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
-            if name in inactivated_llm_tools:
-                inactivated_llm_tools.remove(name)
-                sp.put("inactivated_llm_tools", inactivated_llm_tools)
-
-            return True
-        return False
+        return self.provider_manager.llm_tools.activate_llm_tool(name, star_map)
 
     def deactivate_llm_tool(self, name: str) -> bool:
         """停用一个已经注册的函数调用工具。
 
         Returns:
             如果没找到，会返回 False"""
-        func_tool = self.provider_manager.llm_tools.get_func(name)
-        if func_tool is not None:
-            func_tool.active = False
-
-            inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
-            if name not in inactivated_llm_tools:
-                inactivated_llm_tools.append(name)
-                sp.put("inactivated_llm_tools", inactivated_llm_tools)
-
-            return True
-        return False
+        return self.provider_manager.llm_tools.deactivate_llm_tool(name)
 
     def register_provider(self, provider: Provider):
         """
@@ -275,6 +256,9 @@ class Context:
                 await platform.send_by_session(session, message_chain)
                 return True
         return False
+
+    def get_pipeline_context(self) -> "PipelineContext":
+        return self.pipeline_ctx
 
     """
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。

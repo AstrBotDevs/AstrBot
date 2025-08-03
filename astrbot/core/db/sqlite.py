@@ -222,7 +222,7 @@ class SQLiteDatabase(BaseDatabase):
                     return
                 query = query.values(**values)
                 await session.execute(query)
-                return await self.get_conversation_by_id(cid)
+        return await self.get_conversation_by_id(cid)
 
     async def delete_conversation(self, cid):
         async with self.get_db() as session:
@@ -310,7 +310,9 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
-    async def insert_persona(self, persona_id, system_prompt, begin_dialogs=None):
+    async def insert_persona(
+        self, persona_id, system_prompt, begin_dialogs=None, tools=None
+    ):
         """Insert a new persona record."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -319,6 +321,7 @@ class SQLiteDatabase(BaseDatabase):
                     persona_id=persona_id,
                     system_prompt=system_prompt,
                     begin_dialogs=begin_dialogs or [],
+                    tools=tools,
                 )
                 session.add(new_persona)
                 return new_persona
@@ -339,7 +342,9 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalars().all()
 
-    async def update_persona(self, persona_id, system_prompt=None, begin_dialogs=None):
+    async def update_persona(
+        self, persona_id, system_prompt=None, begin_dialogs=None, tools=None
+    ):
         """Update a persona's system prompt or begin dialogs."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -350,11 +355,13 @@ class SQLiteDatabase(BaseDatabase):
                     values["system_prompt"] = system_prompt
                 if begin_dialogs is not None:
                     values["begin_dialogs"] = begin_dialogs
+                if tools is not None:
+                    values["tools"] = tools
                 if not values:
                     return
                 query = query.values(**values)
                 await session.execute(query)
-                return await self.get_persona_by_id(persona_id)
+        return await self.get_persona_by_id(persona_id)
 
     async def delete_persona(self, persona_id):
         """Delete a persona by its ID."""

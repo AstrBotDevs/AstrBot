@@ -1,5 +1,4 @@
 import traceback
-import json
 from .route import Route, Response, RouteContext
 from astrbot.core import logger
 from quart import request
@@ -38,6 +37,7 @@ class PersonaRoute(Route):
                             "persona_id": persona.persona_id,
                             "system_prompt": persona.system_prompt,
                             "begin_dialogs": persona.begin_dialogs or [],
+                            "tools": persona.tools,
                             "created_at": persona.created_at.isoformat()
                             if persona.created_at
                             else None,
@@ -74,6 +74,7 @@ class PersonaRoute(Route):
                         "persona_id": persona.persona_id,
                         "system_prompt": persona.system_prompt,
                         "begin_dialogs": persona.begin_dialogs or [],
+                        "tools": persona.tools,
                         "created_at": persona.created_at.isoformat()
                         if persona.created_at
                         else None,
@@ -95,6 +96,7 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id", "").strip()
             system_prompt = data.get("system_prompt", "").strip()
             begin_dialogs = data.get("begin_dialogs", [])
+            tools = data.get("tools")
 
             if not persona_id:
                 return Response().error("人格ID不能为空").__dict__
@@ -114,6 +116,7 @@ class PersonaRoute(Route):
                 persona_id=persona_id,
                 system_prompt=system_prompt,
                 begin_dialogs=begin_dialogs if begin_dialogs else None,
+                tools=tools if tools else None,
             )
 
             return (
@@ -125,6 +128,7 @@ class PersonaRoute(Route):
                             "persona_id": persona.persona_id,
                             "system_prompt": persona.system_prompt,
                             "begin_dialogs": persona.begin_dialogs or [],
+                            "tools": persona.tools or [],
                             "created_at": persona.created_at.isoformat()
                             if persona.created_at
                             else None,
@@ -149,6 +153,7 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
             system_prompt = data.get("system_prompt")
             begin_dialogs = data.get("begin_dialogs")
+            tools = data.get("tools")
 
             if not persona_id:
                 return Response().error("缺少必要参数: persona_id").__dict__
@@ -165,6 +170,7 @@ class PersonaRoute(Route):
                 persona_id=persona_id,
                 system_prompt=system_prompt,
                 begin_dialogs=begin_dialogs,
+                tools=tools,
             )
 
             return Response().ok({"message": "人格更新成功"}).__dict__

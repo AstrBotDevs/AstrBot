@@ -205,6 +205,7 @@ class BaseDatabase(abc.ABC):
         persona_id: str,
         system_prompt: str,
         begin_dialogs: list[str] = None,
+        tools: list[str] = None,
     ) -> Persona:
         """Insert a new persona record."""
         ...
@@ -225,6 +226,7 @@ class BaseDatabase(abc.ABC):
         persona_id: str,
         system_prompt: str = None,
         begin_dialogs: list[str] = None,
+        tools: list[str] = None,
     ) -> Persona:
         """Update a persona's system prompt or begin dialogs."""
         ...
