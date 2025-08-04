@@ -78,6 +78,10 @@ AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用
 
 请参阅官方文档 [宝塔面板部署](https://astrbot.app/deploy/astrbot/btpanel.html) 。
 
+#### 1Panel 部署
+
+请参阅官方文档 [1Panel 部署](https://astrbot.app/deploy/astrbot/1panel.html) 。
+
 #### CasaOS 部署
 
 社区贡献的部署方式。

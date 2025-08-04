@@ -32,7 +32,8 @@
     "cancel": "取消",
     "actions": "操作",
     "back": "返回",
-    "selectFile": "选择文件"
+    "selectFile": "选择文件",
+    "refresh": "刷新"
   },
   "status": {
     "enabled": "启用",

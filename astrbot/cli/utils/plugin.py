@@ -117,6 +117,9 @@ def build_plug_list(plugins_dir: Path) -> list:
             # 从 metadata.yaml 加载元数据
             metadata = load_yaml_metadata(plugin_dir)
 
+            if "desc" not in metadata and "description" in metadata:
+                metadata["desc"] = metadata["description"]
+
             # 如果成功加载元数据，添加到结果列表
             if metadata and all(
                 k in metadata for k in ["name", "desc", "version", "author", "repo"]
