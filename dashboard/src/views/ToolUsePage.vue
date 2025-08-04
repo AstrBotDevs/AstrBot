@@ -25,9 +25,13 @@
             rounded="xl" size="x-large">
             {{ tm('functionTools.buttons.view') }}({{ tools.length }})
           </v-btn>
-          <v-btn color="success" prepend-icon="mdi-plus" variant="tonal" @click="showMcpServerDialog = true"
-            rounded="xl" size="x-large">
+          <v-btn color="success" prepend-icon="mdi-plus" class="me-2" variant="tonal"
+            @click="showMcpServerDialog = true" rounded="xl" size="x-large">
             {{ tm('mcpServers.buttons.add') }}
+          </v-btn>
+          <v-btn color="success" prepend-icon="mdi-refresh" variant="tonal" @click="showSyncMcpServerDialog = true"
+            rounded="xl" size="x-large">
+            {{ tm('mcpServers.buttons.sync') }}
           </v-btn>
         </div>
       </v-row>
@@ -59,8 +63,8 @@
 
           <v-row v-else>
             <v-col v-for="(server, index) in mcpServers || []" :key="index" cols="12" md="6" lg="4" xl="3">
-              <item-card style="background-color: rgb(var(--v-theme-mcpCardBg));" :item="server" title-field="name" enabled-field="active"
-                @toggle-enabled="updateServerStatus" @delete="deleteServer" @edit="editServer">
+              <item-card style="background-color: rgb(var(--v-theme-mcpCardBg));" :item="server" title-field="name"
+                enabled-field="active" @toggle-enabled="updateServerStatus" @delete="deleteServer" @edit="editServer">
                 <template v-slot:item-details="{ item }">
                   <div class="d-flex align-center mb-2">
                     <v-icon size="small" color="grey" class="me-2">mdi-file-code</v-icon>
@@ -286,6 +290,63 @@
       </v-card>
     </v-dialog>
 
+
+    <!-- 添加/编辑 MCP 服务器对话框 -->
+    <v-dialog v-model="showSyncMcpServerDialog" max-width="500px" persistent>
+      <v-card>
+        <v-card-title class="bg-primary text-white py-3">
+          <span>同步外部平台 MCP 服务器</span>
+        </v-card-title>
+
+        <v-card-text class="py-4">
+          <v-select v-model="selectedMcpServerProvider" :items="mcpServerProviderList"
+            label="选择平台" variant="outlined" required></v-select>
+          <div v-if="selectedMcpServerProvider === 'modelscope'">
+            <v-timeline align="start" side="end">
+              <v-timeline-item icon="mdi-numeric-1" icon-color="rgb(var(--v-theme-background))">
+                <div>
+                  <div class="text-h4">发现 MCP 服务器</div>
+                  <p class="mt-2">
+                    访问 <a href="https://www.modelscope.cn/mcp" target="_blank">ModelScope 平台</a> 浏览需要的 MCP 服务器。
+                  </p>
+                </div>
+              </v-timeline-item>
+
+              <v-timeline-item icon="mdi-numeric-2" icon-color="rgb(var(--v-theme-background))">
+                <div>
+                  <div class="text-h4">获取访问令牌</div>
+                  <p class="mt-2">
+                    从<a href="https://modelscope.cn/my/myaccesstoken" target="_blank">账户设置</a>中获取个人访问令牌。
+                  </p>
+                </div>
+              </v-timeline-item>
+
+              <v-timeline-item icon="mdi-numeric-3" icon-color="rgb(var(--v-theme-background))">
+                <div>
+                  <div class="text-h4">输入您的访问令牌</div>
+                  <p class="mt-2">
+                    输入您的访问令牌以同步 MCP 服务器。
+                  </p>
+                  <v-text-field v-model="mcpProviderToken" type="password" variant="outlined"
+                    label="访问令牌" class="mt-2" hide-details/>
+                </div>
+              </v-timeline-item>
+            </v-timeline>
+          </div>
+        </v-card-text>
+
+        <v-card-actions class="pa-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="showSyncMcpServerDialog = false" :disabled="loading">
+            {{ tm('dialogs.addServer.buttons.cancel') }}
+          </v-btn>
+          <v-btn color="primary" @click="syncMcpServers" :loading="loading" :disabled="loading">
+            {{ tm('dialogs.addServer.buttons.sync') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 服务器详情对话框 -->
     <v-dialog v-model="showServerDetailDialog" max-width="800px">
       <v-card>
@@ -413,14 +474,8 @@
                     <v-expansion-panel-title>
                       <v-row no-gutters align="center">
                         <v-col cols="1">
-                          <v-checkbox
-                            v-model="tool.active"
-                            color="primary"
-                            hide-details
-                            density="compact"
-                            @click.stop
-                            @change="toggleToolStatus(tool)"
-                          ></v-checkbox>
+                          <v-checkbox v-model="tool.active" color="primary" hide-details density="compact" @click.stop
+                            @change="toggleToolStatus(tool)"></v-checkbox>
                         </v-col>
                         <v-col cols="3">
                           <div class="d-flex align-center">
@@ -532,6 +587,12 @@ export default {
       mcpServers: [],
       tools: [],
       showMcpServerDialog: false,
+
+      selectedMcpServerProvider: "modelscope",
+      mcpServerProviderList: ["modelscope"],
+      mcpProviderToken: '',
+      
+      showSyncMcpServerDialog: false,
       showServerDetailDialog: false,
       addServerDialogMessage: "",
       showToolsDialog: false,
@@ -1009,6 +1070,52 @@ export default {
         // 如果失败，恢复原状态
         tool.active = !tool.active;
         this.showError(this.tm('messages.toggleToolError', { error: error.response?.data?.message || error.message }));
+      }
+    },
+
+    // 同步 MCP 服务器
+    async syncMcpServers() {
+      if (!this.selectedMcpServerProvider) {
+        this.showError(this.tm('syncProvider.status.selectProvider'));
+        return;
+      }
+
+      this.loading = true;
+
+      try {
+        const requestData = {
+          name: this.selectedMcpServerProvider
+        };
+
+        // 根据不同平台添加相应的参数
+        if (this.selectedMcpServerProvider === 'modelscope') {
+          if (!this.mcpProviderToken.trim()) {
+            this.showError(this.tm('syncProvider.status.enterToken'));
+            this.loading = false;
+            return;
+          }
+          requestData.access_token = this.mcpProviderToken.trim();
+        }
+
+        const response = await axios.post('/api/tools/mcp/sync-provider', requestData);
+
+        if (response.data.status === 'ok') {
+          this.showSuccess(response.data.message || this.tm('syncProvider.messages.syncSuccess'));
+          this.showSyncMcpServerDialog = false;
+          this.mcpProviderToken = '';
+          // 刷新服务器列表
+          this.getServers();
+          this.getTools();
+        } else {
+          this.showError(response.data.message || this.tm('syncProvider.messages.syncError', { error: 'Unknown error' }));
+        }
+      } catch (error) {
+        console.error('同步 MCP 服务器失败:', error);
+        this.showError(this.tm('syncProvider.messages.syncError', { 
+          error: error.response?.data?.message || error.message || '网络连接或访问令牌问题' 
+        }));
+      } finally {
+        this.loading = false;
       }
     }
   }

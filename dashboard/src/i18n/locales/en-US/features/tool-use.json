@@ -17,7 +17,8 @@
       "add": "Add Server",
       "useTemplateStdio": "Stdio Template",
       "useTemplateStreamableHttp": "Streamable HTTP Template",
-      "useTemplateSse": "SSE Template"
+      "useTemplateSse": "SSE Template",
+      "sync": "Sync MCP Servers"
     },
     "empty": "No MCP servers available, click Add Server to add one",
     "status": {
@@ -77,7 +78,8 @@
       "buttons": {
         "cancel": "Cancel",
         "save": "Save",
-        "testConnection": "Test Connection"
+        "testConnection": "Test Connection",
+        "sync": "Sync"
       }
     },
     "serverDetail": {
