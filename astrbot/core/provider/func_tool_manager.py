@@ -3,6 +3,7 @@ import json
 import os
 import asyncio
 import logging
+import aiohttp
 from datetime import timedelta
 from deprecated import deprecated
 
@@ -870,6 +871,100 @@ class FunctionToolManager:
 
             return True
         return False
+
+    @property
+    def mcp_config_path(self):
+        data_dir = get_astrbot_data_path()
+        return os.path.join(data_dir, "mcp_server.json")
+
+    def load_mcp_config(self):
+        if not os.path.exists(self.mcp_config_path):
+            # 配置文件不存在，创建默认配置
+            os.makedirs(os.path.dirname(self.mcp_config_path), exist_ok=True)
+            with open(self.mcp_config_path, "w", encoding="utf-8") as f:
+                json.dump(DEFAULT_MCP_CONFIG, f, ensure_ascii=False, indent=4)
+            return DEFAULT_MCP_CONFIG
+
+        try:
+            with open(self.mcp_config_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"加载 MCP 配置失败: {e}")
+            return DEFAULT_MCP_CONFIG
+
+    def save_mcp_config(self, config: dict):
+        try:
+            with open(self.mcp_config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, ensure_ascii=False, indent=4)
+            return True
+        except Exception as e:
+            logger.error(f"保存 MCP 配置失败: {e}")
+            return False
+
+    async def sync_modelscope_mcp_servers(self, access_token: str) -> None:
+        """从 ModelScope 平台同步 MCP 服务器配置"""
+        base_url = "https://www.modelscope.cn/openapi/v1"
+        url = f"{base_url}/mcp/servers/operational"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        mcp_server_list = data.get("data", {}).get(
+                            "mcp_server_list", []
+                        )
+                        local_mcp_config = self.load_mcp_config()
+
+                        synced_count = 0
+                        for server in mcp_server_list:
+                            server_name = server["name"]
+                            operational_urls = server.get("operational_urls", [])
+                            if not operational_urls:
+                                continue
+                            url_info = operational_urls[0]
+                            server_url = url_info.get("url")
+                            if not server_url:
+                                continue
+                            # 添加到配置中(同名会覆盖)
+                            local_mcp_config["mcpServers"][server_name] = {
+                                "url": server_url,
+                                "transport": "sse",
+                                "active": True,
+                                "provider": "modelscope",
+                            }
+                            synced_count += 1
+
+                        if synced_count > 0:
+                            self.save_mcp_config(local_mcp_config)
+                            tasks = []
+                            for server in mcp_server_list:
+                                name = server["name"]
+                                tasks.append(
+                                    self.enable_mcp_server(
+                                        name=name,
+                                        config=local_mcp_config["mcpServers"][name],
+                                    )
+                                )
+                            await asyncio.gather(*tasks)
+                            logger.info(
+                                f"从 ModelScope 同步了 {synced_count} 个 MCP 服务器"
+                            )
+                        else:
+                            logger.warning("没有找到可用的 ModelScope MCP 服务器")
+                    else:
+                        raise Exception(
+                            f"ModelScope API 请求失败: HTTP {response.status}"
+                        )
+
+        except aiohttp.ClientError as e:
+            raise Exception(f"网络连接错误: {str(e)}")
+        except Exception as e:
+            raise Exception(f"同步 ModelScope MCP 服务器时发生错误: {str(e)}")
 
     def __str__(self):
         return str(self.func_list)
