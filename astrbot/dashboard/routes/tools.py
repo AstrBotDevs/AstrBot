@@ -23,7 +23,6 @@ class ToolsRoute(Route):
             "/tools/mcp/add": ("POST", self.add_mcp_server),
             "/tools/mcp/update": ("POST", self.update_mcp_server),
             "/tools/mcp/delete": ("POST", self.delete_mcp_server),
-            "/tools/mcp/market": ("GET", self.get_mcp_markets),
             "/tools/mcp/test": ("POST", self.test_mcp_connection),
             "/tools/list": ("GET", self.get_tool_list),
             "/tools/toggle-tool": ("POST", self.toggle_tool),
