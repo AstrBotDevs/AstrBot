@@ -267,31 +267,6 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除 MCP 服务器失败: {str(e)}").__dict__
 
-    async def get_mcp_markets(self):
-        page = request.args.get("page", 1, type=int)
-        page_size = request.args.get("page_size", 10, type=int)
-        BASE_URL = (
-            "https://api.soulter.top/astrbot/mcpservers?page={}&page_size={}".format(
-                page,
-                page_size,
-            )
-        )
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{BASE_URL}") as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        return Response().ok(data["data"]).__dict__
-                    else:
-                        return (
-                            Response()
-                            .error(f"获取市场数据失败: HTTP {response.status}")
-                            .__dict__
-                        )
-        except Exception as _:
-            logger.error(traceback.format_exc())
-        return Response().error("获取市场数据失败").__dict__
-
     async def test_mcp_connection(self):
         """
         测试 MCP 服务器连接
