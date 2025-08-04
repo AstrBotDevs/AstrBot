@@ -63,7 +63,7 @@ class Waiter(Star):
                             else:
                                 # 创建新对话
                                 curr_cid = await self.context.conversation_manager.new_conversation(
-                                    event.unified_msg_origin
+                                    event.unified_msg_origin, platform_id=event.get_platform_id()
                                 )
 
                             # 使用 LLM 生成回复

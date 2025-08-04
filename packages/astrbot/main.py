@@ -638,7 +638,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
         session_curr_cid = await conv_mgr.get_curr_conversation_id(umo)
 
         if not session_curr_cid:
-            session_curr_cid = await conv_mgr.new_conversation(umo)
+            session_curr_cid = await conv_mgr.new_conversation(
+                umo, message.get_platform_id()
+            )
 
         contexts, total_pages = await conv_mgr.get_human_readable_context(
             umo, session_curr_cid, page, size_per_page
@@ -763,7 +765,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             return
 
         cid = await self.context.conversation_manager.new_conversation(
-            message.unified_msg_origin
+            message.unified_msg_origin, message.get_platform_id()
         )
 
         # 长期记忆
@@ -797,7 +799,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     session_id=sid,
                 )
             )
-            cid = await self.context.conversation_manager.new_conversation(session)
+            cid = await self.context.conversation_manager.new_conversation(
+                session, message.get_platform_id()
+            )
             message.set_result(
                 MessageEventResult().message(
                     f"群聊 {session} 已切换到新对话: 新对话({cid[:4]})。"

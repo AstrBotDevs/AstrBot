@@ -113,14 +113,14 @@ class LLMRequestSubStage(Stage):
             )
             if not conversation_id:
                 conversation_id = await self.conv_manager.new_conversation(
-                    event.unified_msg_origin
+                    event.unified_msg_origin, event.get_platform_id()
                 )
             conversation = await self.conv_manager.get_conversation(
                 event.unified_msg_origin, conversation_id
             )
             if not conversation:
                 conversation_id = await self.conv_manager.new_conversation(
-                    event.unified_msg_origin
+                    event.unified_msg_origin, event.get_platform_id()
                 )
                 conversation = await self.conv_manager.get_conversation(
                     event.unified_msg_origin, conversation_id
