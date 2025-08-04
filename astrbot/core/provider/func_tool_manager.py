@@ -906,7 +906,7 @@ class FunctionToolManager:
         base_url = "https://www.modelscope.cn/openapi/v1"
         url = f"{base_url}/mcp/servers/operational"
         headers = {
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": f"Bearer {access_token.strip()}",
             "Content-Type": "application/json",
         }
 
