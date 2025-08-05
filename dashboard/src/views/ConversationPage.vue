@@ -318,12 +318,16 @@
 <script>
 import axios from 'axios';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import { marked } from 'marked';
+import MarkdownIt from 'markdown-it';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 
-marked.setOptions({
-    breaks: true
+// 配置markdown-it，默认安全设置
+const md = new MarkdownIt({
+    html: false,        // 禁用HTML标签（关键！）
+    breaks: true,       // 换行转<br>
+    linkify: true,      // 自动转链接
+    typographer: false  // 禁用智能引号（避免干扰）
 });
 
 export default {
@@ -360,7 +364,6 @@ export default {
                 'telegram': 'blue-lighten-1',
                 'qq_official': 'purple-lighten-1',
                 'qq_official_webhook': 'purple-lighten-2',
-                'gewechat': 'green-lighten-1',
                 'aiocqhttp': 'deep-purple-lighten-1',
                 'lark': 'cyan-darken-1',
                 'wecom': 'green-darken-1',
@@ -879,8 +882,9 @@ export default {
                 // 处理字符串内容
                 final_content = content;
             } else if (!final_content) return this.tm('status.emptyContent');
-            // 使用marked处理Markdown格式
-            return marked(final_content);
+            
+            // 使用markdown-it处理，默认安全（html: false会禁用HTML标签）
+            return md.render(final_content);
         },
 
         // 显示成功消息

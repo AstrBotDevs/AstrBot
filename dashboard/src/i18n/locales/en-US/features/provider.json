@@ -29,6 +29,7 @@
     "noData": "Click \"Refresh Status\" button to get service provider availability",
     "available": "Available",
     "unavailable": "Unavailable",
+    "pending": "Pending...",
     "errorMessage": "Error Message"
   },
   "logs": {

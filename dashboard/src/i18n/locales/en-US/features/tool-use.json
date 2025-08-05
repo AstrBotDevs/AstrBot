@@ -15,7 +15,9 @@
     "buttons": {
       "refresh": "Refresh",
       "add": "Add Server",
-      "useTemplate": "Use Template"
+      "useTemplateStdio": "Stdio Template",
+      "useTemplateStreamableHttp": "Streamable HTTP Template",
+      "useTemplateSse": "SSE Template"
     },
     "empty": "No MCP servers available, click Add Server to add one",
     "status": {
@@ -28,8 +30,7 @@
   "functionTools": {
     "title": "Function Tools",
     "buttons": {
-      "expand": "Expand",
-      "collapse": "Collapse"
+      "view": "View Tools"
     },
     "search": "Search function tools",
     "empty": "No function tools available",
@@ -68,10 +69,6 @@
         "enable": "Enable Server",
         "config": "Server Configuration"
       },
-      "configNotes": {
-        "note1": "1. Some MCP servers may require filling in `API_KEY` or `TOKEN` information in env according to their requirements, please check if filled.",
-        "note2": "2. When url parameter is specified in configuration: if `transport` parameter is also specified as `streamable_http`, Streamable HTTP is used, otherwise SSE connection is used."
-      },
       "errors": {
         "configEmpty": "Configuration cannot be empty",
         "jsonFormat": "JSON format error: {error}",
@@ -79,7 +76,8 @@
       },
       "buttons": {
         "cancel": "Cancel",
-        "save": "Save"
+        "save": "Save",
+        "testConnection": "Test Connection"
       }
     },
     "serverDetail": {

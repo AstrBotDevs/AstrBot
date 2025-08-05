@@ -1,8 +1,16 @@
-from ..star import star_registry, StarMetadata, star_map
+import warnings
+
+from astrbot.core.star import StarMetadata, star_map
+
+_warned_register_star = False
 
 
 def register_star(name: str, author: str, desc: str, version: str, repo: str = None):
     """注册一个插件(Star)。
+
+    [DEPRECATED] 该装饰器已废弃，将在未来版本中移除。
+    在 v3.5.19 版本之后（不含），您不需要使用该装饰器来装饰插件类，
+    AstrBot 会自动识别继承自 Star 的类并将其作为插件类加载。
 
     Args:
         name: 插件名称。
@@ -21,18 +29,32 @@ def register_star(name: str, author: str, desc: str, version: str, repo: str = N
     帮助信息会被自动提取。使用 `/plugin <插件名> 可以查看帮助信息。`
     """
 
-    def decorator(cls):
-        star_metadata = StarMetadata(
-            name=name,
-            author=author,
-            desc=desc,
-            version=version,
-            repo=repo,
-            star_cls_type=cls,
-            module_path=cls.__module__,
+    global _warned_register_star
+    if not _warned_register_star:
+        _warned_register_star = True
+        warnings.warn(
+            "The 'register_star' decorator is deprecated and will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
         )
-        star_registry.append(star_metadata)
-        star_map[cls.__module__] = star_metadata
+
+    def decorator(cls):
+        if not star_map.get(cls.__module__):
+            metadata = StarMetadata(
+                name=name,
+                author=author,
+                desc=desc,
+                version=version,
+                repo=repo,
+            )
+            star_map[cls.__module__] = metadata
+        else:
+            star_map[cls.__module__].name = name
+            star_map[cls.__module__].author = author
+            star_map[cls.__module__].desc = desc
+            star_map[cls.__module__].version = version
+            star_map[cls.__module__].repo = repo
+
         return cls
 
     return decorator

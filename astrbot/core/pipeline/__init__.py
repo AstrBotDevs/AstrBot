@@ -1,22 +1,24 @@
 from astrbot.core.message.message_event_result import (
-    MessageEventResult,
     EventResultType,
+    MessageEventResult,
 )
 
-from .waking_check.stage import WakingCheckStage
-from .whitelist_check.stage import WhitelistCheckStage
-from .rate_limit_check.stage import RateLimitStage
 from .content_safety_check.stage import ContentSafetyCheckStage
 from .platform_compatibility.stage import PlatformCompatibilityStage
 from .preprocess_stage.stage import PreProcessStage
 from .process_stage.stage import ProcessStage
-from .result_decorate.stage import ResultDecorateStage
+from .rate_limit_check.stage import RateLimitStage
 from .respond.stage import RespondStage
+from .result_decorate.stage import ResultDecorateStage
+from .session_status_check.stage import SessionStatusCheckStage
+from .waking_check.stage import WakingCheckStage
+from .whitelist_check.stage import WhitelistCheckStage
 
 # 管道阶段顺序
 STAGES_ORDER = [
     "WakingCheckStage",  # 检查是否需要唤醒
     "WhitelistCheckStage",  # 检查是否在群聊/私聊白名单
+    "SessionStatusCheckStage",  # 检查会话是否整体启用
     "RateLimitStage",  # 检查会话是否超过频率限制
     "ContentSafetyCheckStage",  # 检查内容安全
     "PlatformCompatibilityStage",  # 检查所有处理器的平台兼容性
@@ -29,6 +31,7 @@ STAGES_ORDER = [
 __all__ = [
     "WakingCheckStage",
     "WhitelistCheckStage",
+    "SessionStatusCheckStage",
     "RateLimitStage",
     "ContentSafetyCheckStage",
     "PlatformCompatibilityStage",

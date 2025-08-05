@@ -110,6 +110,9 @@ class ProviderRequest:
     tool_calls_result: list[ToolCallsResult] | ToolCallsResult | None = None
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
 
+    model: str | None = None
+    """模型名称，为 None 时使用提供商的默认模型"""
+
     def __repr__(self):
         return f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, image_urls={self.image_urls}, func_tool={self.func_tool}, contexts={self._print_friendly_context()}, system_prompt={self.system_prompt.strip()}, tool_calls_result={self.tool_calls_result})"
 

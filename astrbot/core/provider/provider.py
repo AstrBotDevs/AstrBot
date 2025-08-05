@@ -2,7 +2,8 @@ import abc
 from typing import List
 from typing import TypedDict, AsyncGenerator
 from astrbot.core.provider.func_tool_manager import FuncCall
-from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
+from astrbot.core.provider.entities import LLMResponse, ToolCallsResult, ProviderType
+from astrbot.core.provider.register import provider_cls_map
 from dataclasses import dataclass
 
 
@@ -22,6 +23,7 @@ class ProviderMeta:
     id: str
     model: str
     type: str
+    provider_type: ProviderType
 
 
 class AbstractProvider(abc.ABC):
@@ -40,10 +42,14 @@ class AbstractProvider(abc.ABC):
 
     def meta(self) -> ProviderMeta:
         """获取 Provider 的元数据"""
+        provider_type_name = self.provider_config["type"]
+        meta_data = provider_cls_map.get(provider_type_name)
+        provider_type = meta_data.provider_type if meta_data else None
         return ProviderMeta(
             id=self.provider_config["id"],
             model=self.get_model(),
-            type=self.provider_config["type"],
+            type=provider_type_name,
+            provider_type=provider_type,
         )
 
 
@@ -88,6 +94,7 @@ class Provider(AbstractProvider):
         contexts: list = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
+        model: str | None = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -116,6 +123,7 @@ class Provider(AbstractProvider):
         contexts: list = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
+        model: str | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。

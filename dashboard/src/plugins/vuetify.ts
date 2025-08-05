@@ -19,7 +19,7 @@ export default createVuetify({
   defaults: {
     VBtn: {},
     VCard: {
-      rounded: 'md'
+      rounded: 'lg'
     },
     VTextField: {
       rounded: 'lg'

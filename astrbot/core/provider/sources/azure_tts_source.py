@@ -19,6 +19,7 @@ from ..register import register_provider_adapter
 TEMP_DIR = Path("data/temp/azure_tts")
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
+
 class OTTSProvider:
     def __init__(self, config: Dict):
         self.skey = config["OTTS_SKEY"]
@@ -70,12 +71,12 @@ class OTTSProvider:
                         "style": voice_params["style"],
                         "role": voice_params["role"],
                         "rate": voice_params["rate"],
-                        "volume": voice_params["volume"]
+                        "volume": voice_params["volume"],
                     },
                     headers={
                         "User-Agent": f"AstrBot/{VERSION}",
-                        "UAK": "AstrBot/AzureTTS"
-                    }
+                        "UAK": "AstrBot/AzureTTS",
+                    },
                 )
                 response.raise_for_status()
                 file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -88,14 +89,19 @@ class OTTSProvider:
                     raise RuntimeError(f"OTTS请求失败: {str(e)}") from e
                 await asyncio.sleep(0.5 * (attempt + 1))
 
+
 class AzureNativeProvider(TTSProvider):
     def __init__(self, provider_config: dict, provider_settings: dict):
         super().__init__(provider_config, provider_settings)
-        self.subscription_key = provider_config.get("azure_tts_subscription_key", "").strip()
+        self.subscription_key = provider_config.get(
+            "azure_tts_subscription_key", ""
+        ).strip()
         if not re.fullmatch(r"^[a-zA-Z0-9]{32}$", self.subscription_key):
             raise ValueError("无效的Azure订阅密钥")
         self.region = provider_config.get("azure_tts_region", "eastus").strip()
-        self.endpoint = f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1"
+        self.endpoint = (
+            f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1"
+        )
         self.client = None
         self.token = None
         self.token_expire = 0
@@ -104,15 +110,17 @@ class AzureNativeProvider(TTSProvider):
             "style": provider_config.get("azure_tts_style", "cheerful"),
             "role": provider_config.get("azure_tts_role", "Boy"),
             "rate": provider_config.get("azure_tts_rate", "1"),
-            "volume": provider_config.get("azure_tts_volume", "100")
+            "volume": provider_config.get("azure_tts_volume", "100"),
         }
 
     async def __aenter__(self):
-        self.client = AsyncClient(headers={
-            "User-Agent": f"AstrBot/{VERSION}",
-            "Content-Type": "application/ssml+xml",
-            "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm"
-        })
+        self.client = AsyncClient(
+            headers={
+                "User-Agent": f"AstrBot/{VERSION}",
+                "Content-Type": "application/ssml+xml",
+                "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
+            }
+        )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -120,10 +128,11 @@ class AzureNativeProvider(TTSProvider):
             await self.client.aclose()
 
     async def _refresh_token(self):
-        token_url = f"https://{self.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken"
+        token_url = (
+            f"https://{self.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken"
+        )
         response = await self.client.post(
-            token_url,
-            headers={"Ocp-Apim-Subscription-Key": self.subscription_key}
+            token_url, headers={"Ocp-Apim-Subscription-Key": self.subscription_key}
         )
         response.raise_for_status()
         self.token = response.text
@@ -150,8 +159,8 @@ class AzureNativeProvider(TTSProvider):
             content=ssml,
             headers={
                 "Authorization": f"Bearer {self.token}",
-                "User-Agent": f"AstrBot/{VERSION}"
-            }
+                "User-Agent": f"AstrBot/{VERSION}",
+            },
         )
         response.raise_for_status()
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -159,6 +168,7 @@ class AzureNativeProvider(TTSProvider):
             for chunk in response.iter_bytes(4096):
                 f.write(chunk)
         return str(file_path.resolve())
+
 
 @register_provider_adapter("azure_tts", "Azure TTS", ProviderType.TEXT_TO_SPEECH)
 class AzureTTSProvider(TTSProvider):
@@ -183,7 +193,7 @@ class AzureTTSProvider(TTSProvider):
                 error_msg = (
                     f"JSON解析失败，请检查格式（错误位置：行 {e.lineno} 列 {e.colno}）\n"
                     f"错误详情: {e.msg}\n"
-                    f"错误上下文: {json_str[max(0, e.pos-30):e.pos+30]}"
+                    f"错误上下文: {json_str[max(0, e.pos - 30) : e.pos + 30]}"
                 )
                 raise ValueError(error_msg) from e
             except KeyError as e:
@@ -202,8 +212,8 @@ class AzureTTSProvider(TTSProvider):
                         "style": self.provider_config.get("azure_tts_style"),
                         "role": self.provider_config.get("azure_tts_role"),
                         "rate": self.provider_config.get("azure_tts_rate"),
-                        "volume": self.provider_config.get("azure_tts_volume")
-                    }
+                        "volume": self.provider_config.get("azure_tts_volume"),
+                    },
                 )
         else:
             async with self.provider as provider:

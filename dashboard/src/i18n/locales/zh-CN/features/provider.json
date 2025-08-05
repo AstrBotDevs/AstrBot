@@ -29,6 +29,7 @@
     "noData": "点击\"刷新状态\"按钮获取服务提供商可用性",
     "available": "可用",
     "unavailable": "不可用",
+    "pending": "检查中...",
     "errorMessage": "错误信息"
   },
   "logs": {

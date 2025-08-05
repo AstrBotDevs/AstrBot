@@ -235,6 +235,7 @@ class ProviderAnthropic(Provider):
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -259,7 +260,7 @@ class ProviderAnthropic(Provider):
         system_prompt, new_messages = self._prepare_payload(context_query)
 
         model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = self.get_model()
+        model_config["model"] = model or self.get_model()
 
         payloads = {"messages": new_messages, **model_config}
 
@@ -285,6 +286,7 @@ class ProviderAnthropic(Provider):
         contexts=...,
         system_prompt=None,
         tool_calls_result=None,
+        model=None,
         **kwargs,
     ):
         if contexts is None:
@@ -300,12 +302,16 @@ class ProviderAnthropic(Provider):
 
         # tool calls result
         if tool_calls_result:
-            context_query.extend(tool_calls_result.to_openai_messages())
+            if not isinstance(tool_calls_result, list):
+                context_query.extend(tool_calls_result.to_openai_messages())
+            else:
+                for tcr in tool_calls_result:
+                    context_query.extend(tcr.to_openai_messages())
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
         model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = self.get_model()
+        model_config["model"] = model or self.get_model()
 
         payloads = {"messages": new_messages, **model_config}
 

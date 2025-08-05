@@ -94,12 +94,6 @@ DEFAULT_CONFIG = {
 PATH = os.path.join(get_astrbot_data_path(), "config", "python_interpreter.json")
 
 
-@star.register(
-    name="astrbot-python-interpreter",
-    desc="Python 代码执行器",
-    author="Soulter",
-    version="0.0.1",
-)
 class Main(star.Star):
     """基于 Docker 沙箱的 Python 代码执行器"""
 
@@ -135,9 +129,9 @@ class Main(star.Star):
             logger.info(
                 "Docker 不可用，代码解释器将无法使用，astrbot-python-interpreter 将自动禁用。"
             )
-            await self.context._star_manager.turn_off_plugin(
-                "astrbot-python-interpreter"
-            )
+            # await self.context._star_manager.turn_off_plugin(
+            #     "astrbot-python-interpreter"
+            # )
 
     async def file_upload(self, file_path: str):
         """
