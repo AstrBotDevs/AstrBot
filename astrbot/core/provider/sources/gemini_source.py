@@ -344,30 +344,31 @@ class ProviderGoogleGenAI(Provider):
 
         if not result_parts:
             logger.debug(result.candidates)
-            raise Exception("API 返回的内容为空。")
+            logger.info("API 可能返回了空消息。")
 
         chain = []
         part: types.Part
 
+        if result_parts:    # 避免遍历None导致报错
         # 暂时这样Fallback
-        if all(
-            part.inline_data and part.inline_data.mime_type.startswith("image/")
-            for part in result_parts
-        ):
-            chain.append(Comp.Plain("这是图片"))
-        for part in result_parts:
-            if part.text:
-                chain.append(Comp.Plain(part.text))
-            elif part.function_call:
-                llm_response.role = "tool"
-                llm_response.tools_call_name.append(part.function_call.name)
-                llm_response.tools_call_args.append(part.function_call.args)
-                # gemini 返回的 function_call.id 可能为 None
-                llm_response.tools_call_ids.append(
-                    part.function_call.id or part.function_call.name
-                )
-            elif part.inline_data and part.inline_data.mime_type.startswith("image/"):
-                chain.append(Comp.Image.fromBytes(part.inline_data.data))
+            if all(
+                part.inline_data and part.inline_data.mime_type.startswith("image/")
+                for part in result_parts
+            ):
+                chain.append(Comp.Plain("这是图片"))
+            for part in result_parts:
+                if part.text:
+                    chain.append(Comp.Plain(part.text))
+                elif part.function_call:
+                    llm_response.role = "tool"
+                    llm_response.tools_call_name.append(part.function_call.name)
+                    llm_response.tools_call_args.append(part.function_call.args)
+                    # gemini 返回的 function_call.id 可能为 None
+                    llm_response.tools_call_ids.append(
+                        part.function_call.id or part.function_call.name
+                    )
+                elif part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                    chain.append(Comp.Image.fromBytes(part.inline_data.data))
         return MessageChain(chain=chain)
 
     async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
