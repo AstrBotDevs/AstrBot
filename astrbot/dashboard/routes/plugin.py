@@ -286,14 +286,6 @@ class PluginRoute(Route):
                             f"{filter.parent_command_names[0]} {filter.command_name}"
                         )
                         info["cmd"] = info["cmd"].strip()
-                        if (
-                            self.core_lifecycle.astrbot_config["wake_prefix"]
-                            and len(self.core_lifecycle.astrbot_config["wake_prefix"])
-                            > 0
-                        ):
-                            info["cmd"] = (
-                                f"{self.core_lifecycle.astrbot_config['wake_prefix'][0]}{info['cmd']}"
-                            )
                     elif isinstance(filter, CommandGroupFilter):
                         info["type"] = "指令组"
                         info["cmd"] = filter.get_complete_command_names()[0]
@@ -301,14 +293,6 @@ class PluginRoute(Route):
                         info["sub_command"] = filter.print_cmd_tree(
                             filter.sub_command_filters
                         )
-                        if (
-                            self.core_lifecycle.astrbot_config["wake_prefix"]
-                            and len(self.core_lifecycle.astrbot_config["wake_prefix"])
-                            > 0
-                        ):
-                            info["cmd"] = (
-                                f"{self.core_lifecycle.astrbot_config['wake_prefix'][0]}{info['cmd']}"
-                            )
                     elif isinstance(filter, RegexFilter):
                         info["type"] = "正则匹配"
                         info["cmd"] = filter.regex_str

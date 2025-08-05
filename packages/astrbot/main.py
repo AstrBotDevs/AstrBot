@@ -60,9 +60,6 @@ class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
         cfg = context.get_config()
-        self.prompt_prefix = cfg["provider_settings"]["prompt_prefix"]
-        self.identifier = cfg["provider_settings"]["identifier"]
-        self.enable_datetime = cfg["provider_settings"]["datetime_system_prompt"]
         self.timezone = cfg.get("timezone")
         if not self.timezone:
             # 系统默认时区
@@ -70,18 +67,10 @@ class Main(star.Star):
         else:
             logger.info(f"Timezone set to: {self.timezone}")
         self.ltm = None
-        if (
-            self.context.get_config()["provider_ltm_settings"]["group_icl_enable"]
-            or self.context.get_config()["provider_ltm_settings"]["active_reply"][
-                "enable"
-            ]
-        ):
-            try:
-                self.ltm = LongTermMemory(
-                    self.context.get_config()["provider_ltm_settings"], self.context
-                )
-            except BaseException as e:
-                logger.error(f"聊天增强 err: {e}")
+        try:
+            self.ltm = LongTermMemory(self.context.astrbot_config_mgr, self.context)
+        except BaseException as e:
+            logger.error(f"聊天增强 err: {e}")
 
     async def _query_astrbot_notice(self):
         try:
@@ -92,6 +81,12 @@ class Main(star.Star):
                     return (await resp.json())["notice"]
         except BaseException:
             return ""
+
+    def ltm_enabled(self, event: AstrMessageEvent):
+        ltmse = self.context.get_config(umo=event.unified_msg_origin)[
+            "provider_ltm_settings"
+        ]
+        return ltmse["group_icl_enable"] or ltmse["active_reply"]["enable"]
 
     @filter.command("help")
     async def help(self, event: AstrMessageEvent):
@@ -139,7 +134,7 @@ class Main(star.Star):
     @filter.command("llm")
     async def llm(self, event: AstrMessageEvent):
         """开启/关闭 LLM"""
-        cfg = self.context.get_config()
+        cfg = self.context.get_config(umo=event.unified_msg_origin)
         enable = cfg["provider_settings"]["enable"]
         if enable:
             cfg["provider_settings"]["enable"] = False
@@ -294,7 +289,7 @@ class Main(star.Star):
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent):
         """开关文本转图片"""
-        config = self.context.get_config()
+        config = self.context.get_config(umo=event.unified_msg_origin)
         if config["t2i"]:
             config["t2i"] = False
             config.save_config()
@@ -376,8 +371,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。"
                 )
             )
-        self.context.get_config()["platform_settings"]["id_whitelist"].append(str(sid))
-        self.context.get_config().save_config()
+        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        cfg["platform_settings"]["id_whitelist"].append(str(sid))
+        cfg.save_config()
         event.set_result(MessageEventResult().message("添加白名单成功。"))
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -385,10 +381,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def dwl(self, event: AstrMessageEvent, sid: str):
         """删除白名单。dwl <sid>"""
         try:
-            self.context.get_config()["platform_settings"]["id_whitelist"].remove(
-                str(sid)
-            )
-            self.context.get_config().save_config()
+            cfg = self.context.get_config(umo=event.unified_msg_origin)
+            cfg["platform_settings"]["id_whitelist"].remove(str(sid))
+            cfg.save_config()
             event.set_result(MessageEventResult().message("删除白名单成功。"))
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
@@ -551,7 +546,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         )
 
         ret = "清除会话 LLM 聊天历史成功。"
-        if self.ltm:
+        if self.ltm and self.ltm_enabled(message):
             cnt = await self.ltm.remove_session(event=message)
             ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
 
@@ -769,7 +764,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         )
 
         # 长期记忆
-        if self.ltm:
+        if self.ltm and self.ltm_enabled(message):
             try:
                 await self.ltm.remove_session(event=message)
             except Exception as e:
@@ -1137,7 +1132,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 has_image_or_plain = True
                 break
 
-        if self.ltm and has_image_or_plain:
+        if self.ltm_enabled(event) and self.ltm and has_image_or_plain:
             need_active = await self.ltm.need_active_reply(event)
 
             group_icl_enable = self.context.get_config()["provider_ltm_settings"][
@@ -1205,8 +1200,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
-        if self.prompt_prefix:
-            req.prompt = self.prompt_prefix + req.prompt
+        cfg = self.context.get_config(umo=event.unified_msg_origin)["provider_settings"]
+        if prefix := cfg.get("prompt_prefix"):
+            req.prompt = prefix + req.prompt
 
         # 解析引用内容
         quote = None
@@ -1215,14 +1211,14 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 quote = comp
                 break
 
-        if self.identifier:
+        if cfg.get("identifier"):
             user_id = event.message_obj.sender.user_id
             user_nickname = event.message_obj.sender.nickname
             user_info = f"\n[User ID: {user_id}, Nickname: {user_nickname}]\n"
             req.prompt = user_info + req.prompt
 
         # 启用附加时间戳
-        if self.enable_datetime:
+        if cfg.get("datetime_system_prompt"):
             current_time = None
             if self.timezone:
                 # 启用时区
@@ -1300,7 +1296,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
 
-        if self.ltm:
+        if self.ltm and self.ltm_enabled(event):
             try:
                 await self.ltm.on_req_llm(event, req)
             except BaseException as e:
@@ -1309,7 +1305,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.after_message_sent()
     async def after_llm_req(self, event: AstrMessageEvent):
         """在 LLM 请求后记录对话"""
-        if self.ltm:
+        if self.ltm and self.ltm_enabled(event):
             try:
                 await self.ltm.after_req_llm(event)
             except BaseException as e:

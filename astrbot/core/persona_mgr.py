@@ -1,15 +1,14 @@
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, Personality
-from astrbot.core.config import AstrBotConfig
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot import logger
 
 
 class PersonaManager:
-    def __init__(self, db_helper: BaseDatabase, astrbot_config: AstrBotConfig):
+    def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager):
         self.db = db_helper
-        self.config = astrbot_config
-        _ps: dict = astrbot_config["provider_settings"]
-        self.default_persona: str = _ps.get("default_personality", "default")
+        default_ps = acm.default_conf.get("provider_settings", {})
+        self.default_persona: str = default_ps.get("default_personality", "default")
         self.personas: list[Persona] = []
         self.selected_default_persona: Persona | None = None
 

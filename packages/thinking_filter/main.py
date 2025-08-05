@@ -8,15 +8,13 @@ from openai.types.chat.chat_completion import ChatCompletion
 class R1Filter(Star):
     def __init__(self, context: Context):
         super().__init__(context)
-        self.display_reasoning_text = (
-            self.context.get_config()
-            .get("provider_settings", {})
-            .get("display_reasoning_text", False)
-        )
 
     @filter.on_llm_response()
     async def resp(self, event: AstrMessageEvent, response: LLMResponse):
-        if self.display_reasoning_text:
+        cfg = self.context.get_config(umo=event.unified_msg_origin).get(
+            "provider_settings", {}
+        )
+        if cfg.get("display_reasoning_text", False):
             # 显示推理内容的处理逻辑
             if (
                 response

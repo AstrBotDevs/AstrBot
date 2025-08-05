@@ -19,9 +19,6 @@ class Waiter(Star):
     def __init__(self, context: Context):
         super().__init__(context)
 
-        self.p_settings: dict = self.context.get_config()["platform_settings"]
-        self.wake_prefix = self.context.get_config()["wake_prefix"]
-
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)
     async def handle_session_control_agent(self, event: AstrMessageEvent):
         """会话控制代理"""
@@ -36,16 +33,19 @@ class Waiter(Star):
         """实现了对只有一个 @ 的消息内容的处理"""
         try:
             messages = event.get_messages()
+            cfg = self.context.get_config(umo=event.unified_msg_origin)
+            p_settings = cfg["platform_settings"]
+            wake_prefix = cfg.get("wake_prefix", [])
             if len(messages) == 1:
                 if (
                     isinstance(messages[0], Comp.At)
                     and str(messages[0].qq) == str(event.get_self_id())
-                    and self.p_settings.get("empty_mention_waiting", True)
+                    and p_settings.get("empty_mention_waiting", True)
                 ) or (
                     isinstance(messages[0], Comp.Plain)
-                    and messages[0].text.strip() in self.wake_prefix
+                    and messages[0].text.strip() in wake_prefix
                 ):
-                    if self.p_settings.get("empty_mention_waiting_need_reply", True):
+                    if p_settings.get("empty_mention_waiting_need_reply", True):
                         try:
                             # 尝试使用 LLM 生成更生动的回复
                             func_tools_mgr = self.context.get_llm_tool_manager()
@@ -63,7 +63,8 @@ class Waiter(Star):
                             else:
                                 # 创建新对话
                                 curr_cid = await self.context.conversation_manager.new_conversation(
-                                    event.unified_msg_origin, platform_id=event.get_platform_id()
+                                    event.unified_msg_origin,
+                                    platform_id=event.get_platform_id(),
                                 )
 
                             # 使用 LLM 生成回复
