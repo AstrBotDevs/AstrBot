@@ -18,6 +18,9 @@ class PlatformManager:
 
         self.platforms_config = config["platform"]
         self.settings = config["platform_settings"]
+        """NOTE: 这里是 default 的配置文件，以保证最大的兼容性；
+        这个配置中的 unique_session 需要特殊处理，
+        约定整个项目中对 unique_session 的引用都从 default 的配置中获取"""
         self.event_queue = event_queue
 
     async def initialize(self):

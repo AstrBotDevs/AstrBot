@@ -22,19 +22,6 @@ class Main(star.Star):
         self.sogo_search = Sogo()
         self.google = Google()
 
-        self.websearch_link = self.context.get_config()["provider_settings"].get(
-            "web_search_link", False
-        )
-
-    async def initialize(self):
-        websearch = self.context.get_config()["provider_settings"]["web_search"]
-        if websearch:
-            self.context.activate_llm_tool("web_search")
-            self.context.activate_llm_tool("fetch_url")
-        else:
-            self.context.deactivate_llm_tool("web_search")
-            self.context.deactivate_llm_tool("fetch_url")
-
     async def _tidy_text(self, text: str) -> str:
         """清理文本，去除空格、换行符等"""
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
@@ -54,34 +41,7 @@ class Main(star.Star):
 
     @filter.command("websearch")
     async def websearch(self, event: AstrMessageEvent, oper: str = None) -> str:
-        websearch = self.context.get_config()["provider_settings"]["web_search"]
-        if oper is None:
-            status = "开启" if websearch else "关闭"
-            event.set_result(
-                MessageEventResult().message(
-                    "当前网页搜索功能状态："
-                    + status
-                    + "。使用 /websearch on 或者 off 启用或者关闭。"
-                )
-            )
-            return
-
-        if oper == "on":
-            self.context.get_config()["provider_settings"]["web_search"] = True
-            self.context.get_config().save_config()
-            self.context.activate_llm_tool("web_search")
-            self.context.activate_llm_tool("fetch_url")
-            event.set_result(MessageEventResult().message("已开启网页搜索功能"))
-        elif oper == "off":
-            self.context.get_config()["provider_settings"]["web_search"] = False
-            self.context.get_config().save_config()
-            self.context.deactivate_llm_tool("web_search")
-            self.context.deactivate_llm_tool("fetch_url")
-            event.set_result(MessageEventResult().message("已关闭网页搜索功能"))
-        else:
-            event.set_result(
-                MessageEventResult().message("操作参数错误，应为 on 或 off")
-            )
+        event.set_result(MessageEventResult().message("此指令已经被废弃，请在 WebUI 中开启或关闭网页搜索功能。"))
 
     @llm_tool("web_search")
     async def search_from_search_engine(
@@ -93,6 +53,9 @@ class Main(star.Star):
             query(string): 和用户的问题最相关的搜索关键词，用于在 Google 上搜索。
         """
         logger.info("web_searcher - search_from_search_engine: " + query)
+        websearch_link = self.context.get_config(umo=event.unified_msg_origin)[
+            "provider_settings"
+        ].get("web_search_link", False)
         results = []
         RESULT_NUM = 5
         try:
@@ -128,13 +91,13 @@ class Main(star.Star):
 
             header = f"{idx}. {i.title} "
 
-            if self.websearch_link and i.url:
+            if websearch_link and i.url:
                 header += i.url
 
             ret += f"{header}\n{i.snippet}\n{site_result}\n\n"
             idx += 1
 
-        if self.websearch_link:
+        if websearch_link:
             ret += "针对问题，请根据上面的结果分点总结，并且在结尾处附上对应内容的参考链接（如有）。"
 
         return ret
