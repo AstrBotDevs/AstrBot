@@ -202,6 +202,14 @@ class Main(star.Star):
             self.context.deactivate_llm_tool(tool.name)
         event.set_result(MessageEventResult().message("停用所有工具成功。"))
 
+    @tool.command("on_all")
+    async def tool_all_on(self, event: AstrMessageEvent):
+        """启用所有函数工具"""
+        tm = self.context.get_llm_tool_manager()
+        for tool in tm.func_list:
+            self.context.activate_llm_tool(tool.name)
+        event.set_result(MessageEventResult().message("启用所有工具成功。"))
+
     @filter.command_group("plugin")
     def plugin(self):
         pass
