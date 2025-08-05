@@ -24,6 +24,7 @@
     "addPlatform": "添加平台适配器",
     "connectTitle": "接入 {name}",
     "viewTutorial": "查看接入教程",
+    "noTemplates": "暂无平台模板",
     "idConflict": {
       "title": "ID 冲突警告",
       "message": "检测到 ID \"{id}\" 重复。请使用一个新的 ID。",
