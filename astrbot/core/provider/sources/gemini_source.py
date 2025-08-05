@@ -356,7 +356,7 @@ class ProviderGoogleGenAI(Provider):
             for part in result_parts
         ):
             chain.append(Comp.Plain("这是图片"))
-        for part in result_parts:   
+        for part in result_parts:
             if part.text:
                 chain.append(Comp.Plain(part.text))
             elif part.function_call:
