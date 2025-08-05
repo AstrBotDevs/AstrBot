@@ -1,10 +1,10 @@
 <script setup>
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import ListConfigItem from './ListConfigItem.vue'
 import { useI18n } from '@/i18n/composables'
 
-defineProps({
+const props = defineProps({
   metadata: {
     type: Object,
     required: true
@@ -16,10 +16,20 @@ defineProps({
   metadataKey: {
     type: String,
     required: true
+  },
+  isEditing: {
+    type: Boolean,
+    default: false
   }
 })
 
 const { t } = useI18n()
+
+const filteredIterable = computed(() => {
+  if (!props.iterable) return {}
+  const { hint, ...rest } = props.iterable
+  return rest
+})
 
 const dialog = ref(false)
 const currentEditingKey = ref('')
@@ -54,7 +64,19 @@ function saveEditedContent() {
   <v-card-text class="px-0 py-1">
     <!-- Object Type Configuration -->
     <div v-if="metadata[metadataKey]?.type === 'object' || metadata[metadataKey]?.config_template" class="object-config">
-      <div v-for="(val, key, index) in iterable" :key="key" class="config-item">
+      <!-- Provider-level hint -->
+      <v-alert
+        v-if="iterable.hint && !isEditing"
+        type="info"
+        variant="tonal"
+        class="mb-4"
+        border="start"
+        density="compact"
+      >
+        {{ iterable.hint }}
+      </v-alert>
+
+      <div v-for="(val, key, index) in filteredIterable" :key="key" class="config-item">
         <!-- Nested Object -->
         <div v-if="metadata[metadataKey].items[key]?.type === 'object'" class="nested-object">
           <div v-if="metadata[metadataKey].items[key] && !metadata[metadataKey].items[key]?.invisible" class="nested-container">
