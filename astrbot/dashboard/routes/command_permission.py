@@ -1,4 +1,5 @@
 import traceback
+import time
 from typing import List, Dict, Any
 
 from .route import Route, Response, RouteContext
@@ -27,6 +28,9 @@ class CommandPermissionRoute(Route):
             "/command_permission/get_commands": ("GET", self.get_all_commands),
         }
         self.core_lifecycle = core_lifecycle
+        self._commands_cache = None
+        self._cache_timestamp = 0
+        self._cache_ttl = 60  # 缓存60秒
         self.register_routes()
 
     async def get_command_permissions(self) -> Response:
@@ -54,79 +58,93 @@ class CommandPermissionRoute(Route):
             logger.error(f"/api/command_permission/get: {traceback.format_exc()}")
             return Response().error("获取指令权限配置失败").__dict__
 
+    def _get_permission_info(self, handler: StarHandlerMetadata, plugin) -> tuple[str, bool]:
+        """提取权限信息的辅助函数"""
+        sp = SharedPreferences()
+        alter_cmd_cfg = sp.get("alter_cmd", {})
+        current_permission = "member"  # 默认权限
+        
+        if (plugin.name in alter_cmd_cfg and 
+            handler.handler_name in alter_cmd_cfg[plugin.name]):
+            current_permission = alter_cmd_cfg[plugin.name][handler.handler_name].get("permission", "member")
+        
+        # 检查是否有默认的权限过滤器
+        has_default_admin = False
+        for f in handler.event_filters:
+            if isinstance(f, PermissionTypeFilter):
+                if f.permission_type.name == "ADMIN":
+                    has_default_admin = True
+                    if current_permission == "member":
+                        current_permission = "admin"
+                break
+        
+        return current_permission, has_default_admin
+
+    def _is_cache_valid(self) -> bool:
+        """检查缓存是否有效"""
+        return (self._commands_cache is not None and 
+                time.time() - self._cache_timestamp < self._cache_ttl)
+    
+    def _invalidate_cache(self):
+        """清空缓存"""
+        self._commands_cache = None
+        self._cache_timestamp = 0
+    
+    def _build_commands_list(self) -> list:
+        """构建指令列表（无缓存）"""
+        commands = []
+        
+        # 遍历所有注册的处理器
+        for handler in star_handlers_registry:
+            if not isinstance(handler, StarHandlerMetadata):
+                logger.warning(f"Handler {handler} is not an instance of StarHandlerMetadata, skipping.")
+                continue
+            plugin = star_map.get(handler.handler_module_path)
+            
+            if not plugin:
+                continue
+            
+            # 查找指令过滤器
+            for filter_ in handler.event_filters:
+                if isinstance(filter_, CommandFilter):
+                    current_permission, has_default_admin = self._get_permission_info(handler, plugin)
+                    
+                    commands.append({
+                        "command_name": filter_.command_name,
+                        "plugin_name": plugin.name,
+                        "handler_name": handler.handler_name,
+                        "description": getattr(handler, 'description', ''),
+                        "current_permission": current_permission,
+                        "has_default_admin": has_default_admin,
+                        "id": f"{plugin.name}.{handler.handler_name}"
+                    })
+                elif isinstance(filter_, CommandGroupFilter):
+                    current_permission, has_default_admin = self._get_permission_info(handler, plugin)
+                    
+                    commands.append({
+                        "command_name": filter_.group_name,
+                        "plugin_name": plugin.name,
+                        "handler_name": handler.handler_name,
+                        "description": getattr(handler, 'description', ''),
+                        "current_permission": current_permission,
+                        "has_default_admin": has_default_admin,
+                        "is_group": True,
+                        "id": f"{plugin.name}.{handler.handler_name}"
+                    })
+        
+        return commands
+    
     async def get_all_commands(self) -> Response:
         """获取所有可用的指令列表"""
         try:
-            commands = []
-            
-            # 遍历所有注册的处理器
-            for handler in star_handlers_registry:
-                assert isinstance(handler, StarHandlerMetadata)
-                plugin = star_map.get(handler.handler_module_path)
-                
-                if not plugin:
-                    continue
-                
-                # 查找指令过滤器
-                for filter_ in handler.event_filters:
-                    if isinstance(filter_, CommandFilter):
-                        # 检查当前权限配置
-                        sp = SharedPreferences()
-                        alter_cmd_cfg = sp.get("alter_cmd", {})
-                        current_permission = "member"  # 默认权限
-                        
-                        if (plugin.name in alter_cmd_cfg and 
-                            handler.handler_name in alter_cmd_cfg[plugin.name]):
-                            current_permission = alter_cmd_cfg[plugin.name][handler.handler_name].get("permission", "member")
-                        
-                        # 检查是否有默认的权限过滤器
-                        has_default_admin = False
-                        for f in handler.event_filters:
-                            if isinstance(f, PermissionTypeFilter):
-                                if f.permission_type.name == "ADMIN":
-                                    has_default_admin = True
-                                    if current_permission == "member":
-                                        current_permission = "admin"
-                                break
-                        
-                        commands.append({
-                            "command_name": filter_.command_name,
-                            "plugin_name": plugin.name,
-                            "handler_name": handler.handler_name,
-                            "description": getattr(handler, 'description', ''),
-                            "current_permission": current_permission,
-                            "has_default_admin": has_default_admin,
-                            "id": f"{plugin.name}.{handler.handler_name}"
-                        })
-                    elif isinstance(filter_, CommandGroupFilter):
-                        # 处理指令组
-                        sp = SharedPreferences()
-                        alter_cmd_cfg = sp.get("alter_cmd", {})
-                        current_permission = "member"
-                        
-                        if (plugin.name in alter_cmd_cfg and 
-                            handler.handler_name in alter_cmd_cfg[plugin.name]):
-                            current_permission = alter_cmd_cfg[plugin.name][handler.handler_name].get("permission", "member")
-                        
-                        has_default_admin = False
-                        for f in handler.event_filters:
-                            if isinstance(f, PermissionTypeFilter):
-                                if f.permission_type.name == "ADMIN":
-                                    has_default_admin = True
-                                    if current_permission == "member":
-                                        current_permission = "admin"
-                                break
-                        
-                        commands.append({
-                            "command_name": filter_.group_name,
-                            "plugin_name": plugin.name,
-                            "handler_name": handler.handler_name,
-                            "description": getattr(handler, 'description', ''),
-                            "current_permission": current_permission,
-                            "has_default_admin": has_default_admin,
-                            "is_group": True,
-                            "id": f"{plugin.name}.{handler.handler_name}"
-                        })
+            # 检查缓存
+            if self._is_cache_valid():
+                commands = self._commands_cache
+            else:
+                # 重新构建并缓存
+                commands = self._build_commands_list()
+                self._commands_cache = commands
+                self._cache_timestamp = time.time()
             
             return Response().ok({"commands": commands}).__dict__
         except Exception:
@@ -144,11 +162,22 @@ class CommandPermissionRoute(Route):
             handler_name = data.get("handler_name")
             permission = data.get("permission")
             
-            if not all([plugin_name, handler_name, permission]):
-                return Response().error("参数不完整").__dict__
+            missing_params = []
+            if not plugin_name:
+                missing_params.append("plugin_name")
+            if not handler_name:
+                missing_params.append("handler_name")
+            if not permission:
+                missing_params.append("permission")
+            if missing_params:
+                return Response().error(f"参数不完整，缺少: {', '.join(missing_params)}").__dict__
             
-            if permission not in ["admin", "member"]:
+            normalized_permission = permission.lower()
+            if normalized_permission not in ["admin", "member"]:
                 return Response().error("权限类型错误，只能是 admin 或 member").__dict__
+            
+            # 使用规范化后的权限值
+            permission = normalized_permission
             
             # 查找对应的处理器
             found_handler = None
@@ -175,11 +204,16 @@ class CommandPermissionRoute(Route):
             alter_cmd_cfg[plugin_name][handler_name]["permission"] = permission
             sp.put("alter_cmd", alter_cmd_cfg)
             
+            # 清空缓存，因为权限配置已经改变
+            self._invalidate_cache()
+            
             # 动态更新权限过滤器
+            from astrbot.core.star.filter.permission import PermissionType
             found_permission_filter = False
+            
+            # 更新第一个 PermissionTypeFilter（与项目其他部分保持一致）
             for filter_ in found_handler.event_filters:
                 if isinstance(filter_, PermissionTypeFilter):
-                    from astrbot.core.star.filter.permission import PermissionType
                     if permission == "admin":
                         filter_.permission_type = PermissionType.ADMIN
                     else:
@@ -189,7 +223,6 @@ class CommandPermissionRoute(Route):
             
             if not found_permission_filter:
                 # 如果没有权限过滤器，则添加一个
-                from astrbot.core.star.filter.permission import PermissionType
                 new_filter = PermissionTypeFilter(
                     PermissionType.ADMIN if permission == "admin" else PermissionType.MEMBER
                 )

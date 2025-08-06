@@ -76,7 +76,6 @@
               :headers="headers"
               :items="filteredCommands"
               :loading="loading"
-              :search="searchText"
               class="elevation-1"
             >
               <template v-slot:item.command_name="{ item }">
@@ -239,10 +238,23 @@ const pluginOptions = computed(() => {
 const filteredCommands = computed(() => {
   let filtered = commands.value
 
+  // 文本搜索过滤
+  if (searchText.value) {
+    const searchLower = searchText.value.toLowerCase()
+    filtered = filtered.filter(cmd => 
+      cmd.command_name.toLowerCase().includes(searchLower) ||
+      cmd.plugin_name.toLowerCase().includes(searchLower) ||
+      cmd.handler_name.toLowerCase().includes(searchLower) ||
+      (cmd.description && cmd.description.toLowerCase().includes(searchLower))
+    )
+  }
+
+  // 插件过滤
   if (filterPlugin.value) {
     filtered = filtered.filter(cmd => cmd.plugin_name === filterPlugin.value)
   }
 
+  // 权限过滤
   if (filterPermission.value) {
     filtered = filtered.filter(cmd => cmd.current_permission === filterPermission.value)
   }
