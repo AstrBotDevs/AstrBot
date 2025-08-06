@@ -51,20 +51,25 @@ DEFAULT_CONFIG = {
     "provider_settings": {
         "enable": True,
         "default_provider_id": "",
+        "default_image_caption_provider_id": "",
+        "image_caption_prompt": "Please describe the image using Chinese.",
+        "provider_pool": ["all"], # "all" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
+        "websearch_provider": "default",
+        "websearch_tavily_key": "",
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
         "datetime_system_prompt": True,
         "default_personality": "default",
+        "persona_pool": ["all"],
         "prompt_prefix": "",
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "separate_provider": True,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -119,6 +124,7 @@ DEFAULT_CONFIG = {
     "timezone": "",
     "callback_api_base": "",
 }
+
 
 
 # 配置项的中文描述、值类型
@@ -1623,11 +1629,6 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "如需切换大语言模型提供商，请使用 /provider 命令。",
                     },
-                    "separate_provider": {
-                        "description": "提供商会话隔离",
-                        "type": "bool",
-                        "hint": "启用后，每个会话支持独立选择文本生成、STT、TTS 等提供商。如果会话在使用 /provider 指令时提示无权限，可以将会话加入管理员名单或者使用 /alter_cmd provider member 将指令设为非管理员指令。",
-                    },
                     "default_provider_id": {
                         "description": "默认模型提供商 ID",
                         "type": "string",
@@ -1881,6 +1882,315 @@ CONFIG_METADATA_2 = {
             },
         },
     },
+}
+
+
+CONFIG_METADATA_3 = {
+    "ai_group": {
+        "name": "AI 配置",
+        "metadata": {
+            "ai": {
+                "description": "模型",
+                "type": "object",
+                "items": {
+                    "provider_settings.enable": {
+                        "description": "启用大语言模型聊天",
+                        "type": "bool",
+                    },
+                    "provider_settings.default_provider_id": {
+                        "description": "默认聊天模型",
+                        "type": "string",
+                        "_special": "select_provider",
+                    },
+                    "provider_settings.default_image_caption_provider_id": {
+                        "description": "默认图片转述模型",
+                        "type": "string",
+                        "_special": "select_provider",
+                    },
+                    "provider_settings.image_caption_prompt": {
+                        "description": "图片转述提示词",
+                        "type": "text",
+                    },
+                    # "provider_settings.provider_pool": {
+                    #     "description": "可切换的模型池",
+                    #     "_special": "provider_pool",
+                    #     "type": "list",
+                    #     "items": {"type": "string"},
+                    # }
+                }
+            },
+            "persona": {
+                "description": "人格",
+                "type": "object",
+                "items": {
+                    "provider_settings.default_personality": {
+                        "description": "默认采用的人格",
+                        "type": "string",
+                        "_special": "select_persona",
+                    },
+                    # "provider_settings.persona_pool": {
+                    #     "description": "可切换的人格池",
+                    #     "_special": "persona_pool",
+                    #     "type": "list",
+                    #     "items": {"type": "string"},
+                    # }
+                }
+            },
+            "websearch": {
+                "description": "网页搜索",
+                "type": "object",
+                "items": {
+                    "provider_settings.web_search": {
+                        "description": "启用网页搜索",
+                        "type": "bool",
+                    },
+                    "provider_settings.websearch_provider": {
+                        "description": "网页搜索提供商",
+                        "type": "string",
+                        "options": ["default", "tavily"],
+                    },
+                    "provider_settings.websearch_tavily_key": {
+                        "description": "Tavily API Key",
+                        "type": "string",
+                    },
+                    "provider_settings.web_search_link": {
+                        "description": "显示来源引用",
+                        "type": "bool",
+                    },
+                }
+            },
+            "others": {
+                "description": "其他配置",
+                "type": "object",
+                "items": {
+                    "provider_settings.display_reasoning_text": {
+                        "description": "显示思考内容",
+                        "type": "bool",
+                    },
+                    "provider_settings.identifier": {
+                        "description": "用户感知",
+                        "type": "bool",
+                    },
+                    "provider_settings.datetime_system_prompt": {
+                        "description": "现实世界时间感知",
+                        "type": "bool",
+                    },
+                    "provider_settings.show_tool_use_status": {
+                        "description": "输出函数调用状态",
+                        "type": "bool",
+                    },
+                    "provider_settings.streaming_response": {
+                        "description": "流式回复",
+                        "type": "bool",
+                    },
+                    "provider_settings.streaming_segmented": {
+                        "description": "不支持流式回复的平台采取分段输出",
+                        "type": "bool",
+                    },
+                    "provider_settings.max_context_length": {
+                        "description": "最多携带对话轮数",
+                        "type": "int",
+                        "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条。-1 为不限制。",
+                    },
+                    "provider_settings.dequeue_context_length": {
+                        "description": "丢弃对话轮数",
+                        "type": "int",
+                        "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数。",
+                    },
+                    "provider_settings.wake_prefix": {
+                        "description": "LLM 聊天额外唤醒前缀 ",
+                        "type": "string",
+                    },
+                    "provider_settings.prompt_prefix": {
+                        "description": "额外前缀提示词",
+                        "type": "string",
+                    },
+                    "provider_settings.dual_output": {
+                        "description": "开启 TTS 时同时输出语音和文字内容",
+                        "type": "bool",
+                    },
+                }
+            }
+        }
+    },
+    "platform_group": {
+        "name": "平台配置",
+        "metadata": {
+            "general": {
+                "description": "基本",
+                "type": "object",
+                "items": {
+                    "admins_id": {
+                        "description": "管理员 ID",
+                        "type": "list",
+                        "items": {"type": "string"},
+                    },
+                    "platform_settings.unique_session": {
+                        "description": "隔离会话",
+                        "type": "bool",
+                    },
+                    "wake_prefix": {
+                        "description": "唤醒词",
+                        "type": "list",
+                        "items": {"type": "string"},
+                    },
+                    "platform_settings.friend_message_needs_wake_prefix": {
+                        "description": "私聊消息需要唤醒词",
+                        "type": "bool",
+                    },
+                    "platform_settings.reply_prefix": {
+                        "description": "回复时的文本前缀",
+                        "type": "string",
+                    },
+                    "platform_settings.reply_with_mention": {
+                        "description": "回复时 @ 发送人",
+                        "type": "bool",
+                    },
+                    "platform_settings.reply_with_quote": {
+                        "description": "回复时引用发送人消息",
+                        "type": "bool",
+                    },
+                    "platform_settings.forward_threshold": {
+                        "description": "转发消息的字数阈值",
+                        "type": "int",
+                    },
+                    "platform_settings.empty_mention_waiting": {
+                        "description": "只 @ 机器人是否触发等待",
+                        "type": "bool",
+                    },
+                }
+            },
+            "t2i": {
+                "description": "文本转图像",
+                "type": "object",
+                "items": {
+                    "t2i": {
+                        "description": "文本转图像输出",
+                        "type": "bool",
+                    },
+                    "t2i_word_threshold": {
+                        "description": "文本转图像字数阈值",
+                        "type": "int",
+                        "condition": {"t2i": True},
+                    },
+                }
+            },
+
+            "others": {
+                "description": "其他配置",
+                "type": "object",
+                "items": {
+                    "platform_settings.ignore_bot_self_message": {
+                        "description": "是否忽略机器人自身的消息",
+                        "type": "bool",
+                    },
+                    "platform_settings.ignore_at_all": {
+                        "description": "是否忽略 @ 全体成员事件",
+                        "type": "bool",
+                    },
+                    "platform_settings.no_permission_reply": {
+                        "description": "用户权限不足时是否回复",
+                        "type": "bool",
+                    },
+                }
+            },
+            "segmented_reply": {
+                "description": "分段回复",
+                "type": "object",
+                "items": {
+                    "platform_settings.segmented_reply.enable": {
+                        "description": "启用分段回复",
+                        "type": "bool",
+                    },
+                    "platform_settings.segmented_reply.only_llm_result": {
+                        "description": "仅对 LLM 结果分段",
+                        "type": "bool",
+                        "condition": {"platform_settings.segmented_reply.enable": True},
+                    },
+                    "platform_settings.segmented_reply.interval_method": {
+                        "description": "间隔方法",
+                        "type": "string",
+                        "options": ["random", "fixed"],
+                        "condition": {"platform_settings.segmented_reply.enable": True},
+                    },
+                    "platform_settings.segmented_reply.interval": {
+                        "description": "间隔时间",
+                        "type": "string",
+                        "hint": "格式：最小值,最大值（如：1.5,3.5）",
+                        "condition": {"platform_settings.segmented_reply.enable": True},
+                    },
+                    "platform_settings.segmented_reply.log_base": {
+                        "description": "对数底数",
+                        "type": "float",
+                        "condition": {"platform_settings.segmented_reply.enable": True},
+                    },
+                    "platform_settings.segmented_reply.words_count_threshold": {
+                        "description": "字数阈值",
+                        "type": "int",
+                        "condition": {"platform_settings.segmented_reply.enable": True},
+                    },
+                    "platform_settings.segmented_reply.regex": {
+                        "description": "分段正则表达式",
+                        "type": "string",
+                        "condition": {"platform_settings.segmented_reply.enable": True},
+                    },
+                    "platform_settings.segmented_reply.content_cleanup_rule": {
+                        "description": "内容清理规则",
+                        "type": "string",
+                        "condition": {"platform_settings.segmented_reply.enable": True},
+                    },
+                }
+            },
+            "ltm": {
+                "description": "群聊上下文感知（原聊天记忆增强）",
+                "type": "object",
+                "items": {
+                    "provider_ltm_settings.group_icl_enable": {
+                        "description": "启用群聊上下文感知",
+                        "type": "bool",
+                    },
+                    "provider_ltm_settings.group_message_max_cnt": {
+                        "description": "最大消息数量",
+                        "type": "int",
+                        "condition": {"provider_ltm_settings.group_icl_enable": True},
+                    },
+                    "provider_ltm_settings.image_caption": {
+                        "description": "图片描述",
+                        "type": "bool",
+                        "condition": {"provider_ltm_settings.group_icl_enable": True},
+                    },
+                    "provider_ltm_settings.active_reply.enable": {
+                        "description": "主动回复",
+                        "type": "bool",
+                        "condition": {"provider_ltm_settings.group_icl_enable": True},
+                    },
+                    "provider_ltm_settings.active_reply.method": {
+                        "description": "主动回复方法",
+                        "type": "string",
+                        "options": ["possibility_reply"],
+                        "condition": {"provider_ltm_settings.active_reply.enable": True},
+                    },
+                    "provider_ltm_settings.active_reply.possibility_reply": {
+                        "description": "回复概率",
+                        "type": "float",
+                        "hint": "0.0-1.0 之间的数值",
+                        "condition": {"provider_ltm_settings.active_reply.enable": True},
+                    },
+                    "provider_ltm_settings.active_reply.prompt": {
+                        "description": "主动回复提示词",
+                        "type": "text",
+                        "condition": {"provider_ltm_settings.active_reply.enable": True},
+                    },
+                    "provider_ltm_settings.active_reply.whitelist": {
+                        "description": "主动回复白名单",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "condition": {"provider_ltm_settings.active_reply.enable": True},
+                    },
+                }
+            }
+        },
+    }
 }
 
 DEFAULT_VALUE_MAP = {

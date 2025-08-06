@@ -1,124 +1,104 @@
-
-
 <template>
-  <v-card style="margin-bottom: 16px;">
-    <v-card-text style="padding: 0;">
-      <div>
-        <v-btn-group variant="outlined" divided>
-          <v-btn icon="mdi-text-box-edit-outline" style="width: 80px;" :color="editorTab === 0 ? 'primary' : ''"
-            @click="editorTab = 0">
-          </v-btn>
-          <v-btn icon="mdi-code-json" style="width: 80px;" :color="editorTab === 1 ? 'primary' : ''"
-            @click="configToString(); editorTab = 1;"></v-btn>
-        </v-btn-group>
-        <v-btn v-if="editorTab === 1" style="margin-left: 16px;" size="small" @click="configToString()">{{ tm('editor.revertCode') }}</v-btn>
-        <v-btn v-if="editorTab === 1 && config_data_has_changed" style="margin-left: 16px;" size="small"
-          @click="applyStrConfig()">{{ tm('editor.applyConfig') }}</v-btn>
-        <small v-if="editorTab === 1" style="margin-left: 16px;">💡 {{ tm('editor.applyTip') }}</small>
-      </div>
+  <div>
+    <v-row>
+      <v-col v-for="configInfo in configInfoList" :key="configInfo.id" cols="12" md="6" lg="4" xl="3">
+        <v-card class="config-info-card" elevation="2" rounded="lg"
+          @click="selectedConfigInfo = configInfo; getConfig(configInfo.id);">
+          <v-card-title class="d-flex justify-space-between align-center">
+            <div class="text-truncate ml-2">
+              {{ configInfo.name }}
+            </div>
+          </v-card-title>
 
-    </v-card-text>
-  </v-card>
-
-  <!-- 可视化编辑 -->
-  <v-card v-if="editorTab === 0">
-    <v-tabs v-model="tab" align-tabs="left" color="deep-purple-accent-4">
-      <v-tab v-for="(val, key, index) in metadata" :key="index" :value="index"
-        style="font-weight: 1000; font-size: 15px">
-        {{ metadata[key]['name'] }}
-      </v-tab>
-    </v-tabs>
-    <v-tabs-window v-model="tab">
-      <v-tabs-window-item v-for="(val, key, index) in metadata" v-show="index == tab" :key="index">
-        <v-container fluid>
-
-          <div v-for="(val2, key2, index2) in metadata[key]['metadata']">
-            <!-- <h3>{{ metadata[key]['metadata'][key2]['description'] }}</h3> -->
-            <div v-if="metadata[key]['metadata'][key2]?.config_template"
-              v-show="key2 !== 'platform' && key2 !== 'provider'" style="border: 1px solid var(--v-theme-border); padding: 8px; margin-bottom: 16px; border-radius: 10px">
-              <!-- 带有 config_template 的配置项 -->
-              <v-list-item-title style="font-weight: bold;">
-                {{ metadata[key]['metadata'][key2]['description'] }} ({{ key2 }})
-              </v-list-item-title>
-              <v-tabs style="margin-top: 16px;" align-tabs="left" color="deep-purple-accent-4"
-              
-                v-model="config_template_tab">
-                <v-tab v-if="metadata[key]['metadata'][key2]?.tmpl_display_title"
-                  v-for="(item, index) in config_data[key2]" :key="index" :value="index">
-                  {{ item[metadata[key]['metadata'][key2]?.tmpl_display_title] }}
-                </v-tab>
-                <v-tab v-else v-for="(item, index) in config_data[key2]" :key="index + '_'" :value="index">
-                  {{ item.id }}({{ item.type }})
-                </v-tab>
-                <v-menu>
-                  <template v-slot:activator="{ props }">
-                    <v-btn variant="plain" size="large" v-bind="props">
-                      <v-icon>mdi-plus</v-icon>
-                    </v-btn>
-                  </template>
-                  <v-list @update:selected="addFromDefaultConfigTmpl($event, key, key2)">
-                    <v-list-item v-for="(item, index) in metadata[key]['metadata'][key2]?.config_template" :key="index"
-                      :value="index">
-                      <v-list-item-title>{{ index }}</v-list-item-title>
-                    </v-list-item>
-                  </v-list>
-                </v-menu>
-              </v-tabs>
-              <v-tabs-window v-model="config_template_tab">
-                <v-tabs-window-item v-for="(config_item, index) in config_data[key2]"
-                  v-show="config_template_tab === index" :key="index" :value="index">
-                  <div style="padding: 16px;">
-                    <v-btn variant="tonal" rounded="xl" color="error" @click="deleteItem(key2, index)">
-                      {{ tm('actions.delete') }}
-                    </v-btn>
-
-                    <AstrBotConfig :metadata="metadata[key]['metadata']" :iterable="config_item" :metadataKey="key2">
-                    </AstrBotConfig>
-                  </div>
-                </v-tabs-window-item>
-              </v-tabs-window>
+          <v-card-text>
+            <div class="system-prompt-preview">
+              {{ configInfo.umop }}
             </div>
 
-            <div v-else>
-              <!-- 如果配置项是一个 object，那么 iterable 需要取到这个 object 的值，否则取到整个 config_data -->
-              <div v-if="metadata[key]['metadata'][key2]['type'] == 'object'" style="border: 1px solid var(--v-theme-border); padding: 8px; margin-bottom: 16px; border-radius: 10px">
-                <AstrBotConfig
-                  :metadata="metadata[key]['metadata']" :iterable="config_data[key2]" :metadataKey="key2">
-                </AstrBotConfig>
-              </div>
-              <AstrBotConfig v-else :metadata="metadata[key]['metadata']" :iterable="config_data" :metadataKey="key2">
-              </AstrBotConfig>
+            <div class="mt-3 text-caption text-medium-emphasis">
+              {{ configInfo.path }}
             </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+  </div>
 
-          </div>
+  <div v-if="selectedConfigInfo" class="mt-4" style="display: flex; flex-direction: column; align-items: center;">
+
+    <!-- 可视化编辑 -->
+    <div class="config-panel" :class="$vuetify.display.mobile ? '' : 'd-flex'">
+      <v-tabs 
+        v-model="tab" 
+        :direction="$vuetify.display.mobile ? 'horizontal' : 'vertical'"
+        :align-tabs="$vuetify.display.mobile ? 'left' : 'start'"
+        color="deep-purple-accent-4"
+        class="config-tabs"
+      >
+        <v-tab v-for="(val, key, index) in metadata" :key="index" :value="index"
+          style="font-weight: 1000; font-size: 15px">
+          {{ metadata[key]['name'] }}
+        </v-tab>
+      </v-tabs>
+      <v-tabs-window v-model="tab" class="config-tabs-window">
+        <v-tabs-window-item v-for="(val, key, index) in metadata" v-show="index == tab" :key="index">
+          <v-container fluid>
+            <div v-for="(val2, key2, index2) in metadata[key]['metadata']" :key="key2">
+              <!-- Support both traditional and JSON selector metadata -->
+              <AstrBotConfigV4 :metadata="{ [key2]: metadata[key]['metadata'][key2] }" :iterable="config_data"
+                :metadataKey="key2">
+              </AstrBotConfigV4>
+            </div>
+          </v-container>
+        </v-tabs-window-item>
 
 
+        <div style="margin-left: 16px; padding-bottom: 16px">
+          <small>{{ tm('help.helpPrefix') }}
+            <a href="https://astrbot.app/" target="_blank">{{ tm('help.documentation') }}</a>
+            {{ tm('help.helpMiddle') }}
+            <a href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft"
+              target="_blank">{{ tm('help.support') }}</a>{{ tm('help.helpSuffix') }}
+          </small>
+        </div>
 
-        </v-container>
-      </v-tabs-window-item>
+      </v-tabs-window>
+    </div>
 
+    <v-btn icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
+      color="darkprimary" @click="updateConfig">
+    </v-btn>
 
-      <div style="margin-left: 16px; padding-bottom: 16px">
-        <small>{{ tm('help.helpPrefix') }} 
-          <a href="https://astrbot.app/" target="_blank">{{ tm('help.documentation') }}</a>
-          {{ tm('help.helpMiddle') }} 
-          <a href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft" target="_blank">{{ tm('help.support') }}</a>{{ tm('help.helpSuffix') }}
-        </small>
-      </div>
+    <v-btn icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
+      @click="configToString(); codeEditorDialog = true">
+    </v-btn>
 
-    </v-tabs-window>
-  </v-card>
+  </div>
 
-  <!-- 代码编辑 -->
-  <v-card v-else style="background-color: #1e1e1e;">
-    <VueMonacoEditor theme="vs-dark" language="json" height="80vh" style="padding-top: 16px; padding-bottom: 16px;"
-      v-model:value="config_data_str">
-    </VueMonacoEditor>
-  </v-card>
-
-  <v-btn icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;" color="darkprimary"
-    @click="updateConfig">
-  </v-btn>
+  <!-- Full Screen Editor Dialog -->
+  <v-dialog v-model="codeEditorDialog" fullscreen transition="dialog-bottom-transition" scrollable>
+    <v-card>
+      <v-toolbar color="primary" dark>
+        <v-btn icon @click="codeEditorDialog = false">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+        <v-toolbar-title>编辑配置文件</v-toolbar-title>
+        <v-spacer></v-spacer>
+        <v-toolbar-items style="display: flex; align-items: center;">
+          <v-btn style="margin-left: 16px;" size="small" @click="configToString()">{{
+            tm('editor.revertCode') }}</v-btn>
+          <v-btn v-if="config_data_has_changed" style="margin-left: 16px;" size="small" @click="applyStrConfig()">{{
+            tm('editor.applyConfig') }}</v-btn>
+          <small style="margin-left: 16px;">💡 {{ tm('editor.applyTip') }}</small>
+        </v-toolbar-items>
+      </v-toolbar>
+      <v-card-text class="pa-0">
+        <VueMonacoEditor language="json" theme="vs-dark" style="height: calc(100vh - 64px);"
+          v-model:value="config_data_str">
+        </VueMonacoEditor>
+      </v-card-text>
+    </v-card>
+  </v-dialog>
 
   <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack">
     {{ save_message }}
@@ -130,23 +110,22 @@
 
 <script>
 import axios from 'axios';
-import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
+import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import config from '@/config';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 
 export default {
   name: 'ConfigPage',
   components: {
-    AstrBotConfig,
+    AstrBotConfigV4,
     VueMonacoEditor,
     WaitingForRestart
   },
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n('features/config');
-    
+
     return {
       t,
       tm
@@ -172,6 +151,7 @@ export default {
   },
   data() {
     return {
+      codeEditorDialog: false,
       config_data_has_changed: false,
       config_data_str: "",
       config_data: {
@@ -179,30 +159,43 @@ export default {
       },
       fetched: false,
       metadata: {},
-      provider_config_tmpl: {},
-      adapter_config_tmpl: {}, // 平台适配器
       save_message_snack: false,
       save_message: "",
       save_message_success: "",
       namespace: "",
       tab: 0,
-      editorTab: 0, // 0: visual, 1: code
 
       config_template_tab: 0,
+
+      // 多配置文件管理
+      selectedConfigInfo: null, // 用于存储当前选中的配置项信息
+      configInfoList: [],
     }
   },
   mounted() {
-    this.getConfig();
+    this.getConfigInfoList()
   },
   methods: {
-    getConfig() {
-      // 获取配置
-      axios.get('/api/config/get').then((res) => {
+    getConfigInfoList() {
+      // 获取配置列表
+      axios.get('/api/config/abconfs').then((res) => {
+        this.configInfoList = res.data.data.info_list;
+      }).catch((err) => {
+        this.save_message = this.messages.loadError;
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+      });
+    },
+
+    getConfig(abconf_id) {
+      axios.get('/api/config/abconf', {
+        params: {
+          id: abconf_id
+        }
+      }).then((res) => {
         this.config_data = res.data.data.config;
         this.fetched = true
         this.metadata = res.data.data.metadata;
-        this.provider_config_tmpl = res.data.data.provider_config_tmpl;
-        this.adapter_config_tmpl = res.data.data.adapter_config_tmpl;
       }).catch((err) => {
         this.save_message = this.messages.loadError;
         this.save_message_snack = true;
@@ -250,7 +243,6 @@ export default {
 
       let tmpl = this.metadata[group_name]['metadata'][config_item_name]['config_template'][val];
       let new_tmpl_cfg = JSON.parse(JSON.stringify(tmpl));
-      // new_tmpl_cfg.id = "new_" + val + "_" + this.config_data[config_item_name].length;
       this.config_data[config_item_name].push(new_tmpl_cfg);
       this.config_template_tab = this.config_data[config_item_name].length - 1;
     },
@@ -276,5 +268,45 @@ export default {
 <style>
 .v-tab {
   text-transform: none !important;
+}
+
+@media (min-width: 768px) {
+  .config-tabs {
+    display: flex;
+    max-width: 200px;
+    margin: 16px 16px 0 0;
+  }
+
+  .config-panel {
+    width: 750px;
+  }
+  
+  .config-tabs-window {
+    flex: 1;
+  }
+  
+  .config-tabs .v-tab {
+    justify-content: flex-start !important;
+    text-align: left;
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 767px) {
+  .config-tabs {
+    width: 100%;
+  }
+
+  .v-container {
+    padding: 4px;
+  }
+  
+  .config-panel {
+    width: 100%;
+  }
+  
+  .config-tabs-window {
+    margin-top: 16px;
+  }
 }
 </style>
