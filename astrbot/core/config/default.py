@@ -757,6 +757,19 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek/deepseek-r1",
                         },
                     },
+                    "优云智算": {
+                        "id": "compshare",
+                        "provider": "compshare",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.modelverse.cn/v1",
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "moonshotai/Kimi-K2-Instruct",
+                        },
+                    },
                     "Kimi": {
                         "id": "moonshot",
                         "provider": "moonshot",
