@@ -1,18 +1,37 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 
+interface LogCacheItem {
+  type: string;
+  data: string;
+}
+
+interface PluginData {
+  name: string;
+  desc: string;
+  author: string;
+  repo: string;
+  installed: boolean;
+  version: string;
+  social_link?: string;
+  tags: string[];
+  logo: string;
+  pinned: boolean;
+  stars: number;
+  updated_at: string;
+}
+
 export const useCommonStore = defineStore({
   id: 'common',
   state: () => ({
-    // @ts-ignore
-    eventSource: null,
-    log_cache: [],
+    eventSource: null as AbortController | null,
+    log_cache: [] as LogCacheItem[],
     sse_connected: false,
 
     log_cache_max_len: 1000,
     startTime: -1,
 
-    pluginMarketData: [],
+    pluginMarketData: [] as PluginData[],
   }),
   actions: {
     async createEventSource() {
@@ -52,12 +71,16 @@ export const useCommonStore = defineStore({
         console.log('SSE stream opened');
         this.sse_connected = true;
 
+        if (!response.body) {
+          throw new Error('Response body is null');
+        }
+        
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
 
         let incompleteLine = ""; // 用于存储不完整的行
 
-        const handleIncompleteLine = (line) => {
+        const handleIncompleteLine = (line: string): LogCacheItem | null => {
           incompleteLine += line;
           // if can parse as JSON, return it
           try {
@@ -69,7 +92,8 @@ export const useCommonStore = defineStore({
           }
         }
 
-        const processStream = ({ done, value }) => {
+        const processStream = (result: ReadableStreamReadResult<Uint8Array>): Promise<any> | undefined => {
+          const { done, value } = result;
           // get bytes length
           const bytesLength = value ? value.byteLength : 0;
           console.log(`Received ${bytesLength} bytes from live log`);
@@ -91,7 +115,7 @@ export const useCommonStore = defineStore({
             if (line.startsWith('data:')) {
               const data = line.substring(5).trim();
               // {"type":"log","data":"[2021-08-01 00:00:00] INFO: Hello, world!"}
-              let data_json = {}
+              let data_json: any = {}
               try {
                 data_json = JSON.parse(data);
               } catch (e) {
@@ -104,8 +128,8 @@ export const useCommonStore = defineStore({
                   return; // 如果无法解析，跳过当前行
                 }
               }
-              if (data_json.type === 'log') {
-                this.log_cache.push(data_json);
+              if (data_json && data_json.type === 'log') {
+                this.log_cache.push(data_json as LogCacheItem);
                 if (this.log_cache.length > this.log_cache_max_len) {
                   this.log_cache.shift();
                 }
@@ -113,7 +137,7 @@ export const useCommonStore = defineStore({
             } else {
               const parsedData = handleIncompleteLine(line);
               if (parsedData && parsedData.type === 'log') {
-                this.log_cache.push(parsedData);
+                this.log_cache.push(parsedData as LogCacheItem);
                 if (this.log_cache.length > this.log_cache_max_len) {
                   this.log_cache.shift();
                 }
@@ -127,7 +151,7 @@ export const useCommonStore = defineStore({
       }).catch(error => {
         console.error('SSE error:', error);
         // Attempt to reconnect after a delay
-        this.log_cache.push('SSE Connection failed, retrying in 5 seconds...');
+        this.log_cache.push({ type: 'log', data: 'SSE Connection failed, retrying in 5 seconds...' });
         setTimeout(() => {
           this.eventSource = null;
           this.createEventSource();
