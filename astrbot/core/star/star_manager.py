@@ -809,11 +809,11 @@ class PluginManager:
         if star_metadata.star_cls is None:
             return
 
-        if hasattr(star_metadata.star_cls, "__del__"):
+        if '__del__' in star_metadata.star_cls_type.__dict__:
             asyncio.get_event_loop().run_in_executor(
                 None, star_metadata.star_cls.__del__
             )
-        elif hasattr(star_metadata.star_cls, "terminate"):
+        elif 'terminate' in star_metadata.star_cls_type.__dict__:
             await star_metadata.star_cls.terminate()
 
     async def turn_on_plugin(self, plugin_name: str):
