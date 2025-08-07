@@ -2,6 +2,8 @@ import asyncio
 import os
 import uuid
 import time
+from urllib.parse import urlparse, unquote
+import platform
 
 
 class FileTokenService:
@@ -15,7 +17,9 @@ class FileTokenService:
     async def _cleanup_expired_tokens(self):
         """清理过期的令牌"""
         now = time.time()
-        expired_tokens = [token for token, (_, expire) in self.staged_files.items() if expire < now]
+        expired_tokens = [
+            token for token, (_, expire) in self.staged_files.items() if expire < now
+        ]
         for token in expired_tokens:
             self.staged_files.pop(token, None)
 
@@ -32,15 +36,35 @@ class FileTokenService:
         Raises:
             FileNotFoundError: 当路径不存在时抛出
         """
+
+        # 处理 file:///
+        try:
+            parsed_uri = urlparse(file_path)
+            if parsed_uri.scheme == "file":
+                local_path = unquote(parsed_uri.path)
+                if platform.system() == "Windows" and local_path.startswith("/"):
+                    local_path = local_path[1:]
+            else:
+                # 如果没有 file:/// 前缀，则认为是普通路径
+                local_path = file_path
+        except Exception:
+            # 解析失败时，按原路径处理
+            local_path = file_path
+
         async with self.lock:
             await self._cleanup_expired_tokens()
 
-            if not os.path.exists(file_path):
-                raise FileNotFoundError(f"文件不存在: {file_path}")
+            if not os.path.exists(local_path):
+                raise FileNotFoundError(
+                    f"文件不存在: {local_path} (原始输入: {file_path})"
+                )
 
             file_token = str(uuid.uuid4())
-            expire_time = time.time() + (timeout if timeout is not None else self.default_timeout)
-            self.staged_files[file_token] = (file_path, expire_time)
+            expire_time = time.time() + (
+                timeout if timeout is not None else self.default_timeout
+            )
+            # 存储转换后的真实路径
+            self.staged_files[file_token] = (local_path, expire_time)
             return file_token
 
     async def handle_file(self, file_token: str) -> str:
