@@ -2,7 +2,6 @@ import asyncio
 import base64
 import json
 import logging
-import random
 from collections.abc import AsyncGenerator
 from typing import Optional
 
@@ -93,28 +92,6 @@ class ProviderGoogleGenAI(Provider):
             if (threshold_str := user_safety_config.get(config_key))
             and threshold_str in self.THRESHOLD_MAPPING
         ]
-
-    async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
-        """处理API错误，返回是否需要重试"""
-        if e.code == 429 or "API key not valid" in e.message:
-            keys.remove(self.chosen_api_key)
-            if len(keys) > 0:
-                self.set_key(random.choice(keys))
-                logger.info(
-                    f"检测到 Key 异常({e.message})，正在尝试更换 API Key 重试... 当前 Key: {self.chosen_api_key[:12]}..."
-                )
-                await asyncio.sleep(1)
-                return True
-            else:
-                logger.error(
-                    f"检测到 Key 异常({e.message})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}..."
-                )
-                raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
-        else:
-            logger.error(
-                f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}"
-            )
-            raise e
 
     async def _prepare_query_config(
         self,
@@ -259,12 +236,10 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
-        native_tool_enabled = any(
-            [
-                self.provider_config.get("gm_native_coderunner", False),
-                self.provider_config.get("gm_native_search", False),
-            ]
-        )
+        native_tool_enabled = any([
+            self.provider_config.get("gm_native_coderunner", False),
+            self.provider_config.get("gm_native_search", False),
+        ])
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -532,55 +507,43 @@ class ProviderGoogleGenAI(Provider):
         model_config["model"] = model or self.get_model()
         payloads = {"messages": context_query, **model_config}
 
-        other_keys = [k for k in self.api_keys if k != self.chosen_api_key]
-        keys_to_try = [self.chosen_api_key] + other_keys
-        
+        keys_to_try = [self.chosen_api_key] + [
+            k for k in self.api_keys if k != self.chosen_api_key
+        ]
+
         last_key_exception = None
 
         # 外层循环负责实现Key的轮询。
         for key_index, key in enumerate(keys_to_try):
             if self.chosen_api_key != key:
                 self.set_key(key)
-            
-            try:
-                # 第一次尝试
-                response = await self._query(payloads, func_tool)
-                return response  
 
-            except APIError as e:
-                # 判断是否是Key相关问题
-                if e.code == 429 or "API key not valid" in e.message:
-                    # Key的问题。记录错误，通过continue跳过后续的网络重试，进入下一个Key的循环。
-                    logger.warning(
-                        f"检测到 Key #{key_index + 1} ({self.chosen_api_key[:12]}) 异常，正在尝试更换 API Key 重试。"
-                    )
-                    last_key_exception = e
-                    continue
-                else:
-                    # 未知Error，直接抛出。
-                    logger.error(f"发生错误: {e}")
-                    raise e
-
-            except Exception as e:
-                # 当前同一个Key进行一次重试。
-                logger.warning(
-                    f"发生网络错误，将为 Key #{key_index + 1} ({self.chosen_api_key[:12]}) 重试一次: {e}"
-                )
-                await asyncio.sleep(1)  # 重试前短暂等待。
-
+            for attempt in range(2):
                 try:
-                    # 进行第二次网络重试。
                     response = await self._query(payloads, func_tool)
                     return response
-                except Exception as final_e:
-                    # 如果网络重试仍然失败，记录错误并抛出异常。
-                    logger.error(f"网络重试失败，请求终止: {final_e}")
-                    raise final_e
+                except APIError as e:
+                    if e.code == 429 or "API key not valid" in e.message:
+                        logger.warning(
+                            f"检测到 Key #{key_index + 1} ({key[:12]}) 异常：{e.message}"
+                        )
+                        last_key_exception = e
+                        break
+                    else:
+                        logger.error(f"API错误: {e}")
+                        raise
+                except Exception as e:
+                    if attempt == 0:
+                        logger.warning(
+                            f"发生网络错误，将为 Key #{key_index + 1} ({key[:12]}) 重试一次: {e}"
+                        )
+                        await asyncio.sleep(1)
+                    else:
+                        logger.error(f"网络重试失败，请求终止: {e}")
+                        raise
 
         # 外层循环正常结束，意味着所有Key都已尝试过且都因Key问题失败。
-        raise Exception(
-            f"所有 Key 均已尝试失败，最后一次错误: {last_key_exception}"
-        )
+        raise Exception(f"所有 Key 均已尝试失败，最后一次错误: {last_key_exception}")
 
     async def text_chat_stream(
         self,
@@ -617,9 +580,10 @@ class ProviderGoogleGenAI(Provider):
         payloads = {"messages": context_query, **model_config}
 
         # 优先尝试当前Key。
-        other_keys = [k for k in self.api_keys if k != self.chosen_api_key]
-        keys_to_try = [self.chosen_api_key] + other_keys
-        
+        keys_to_try = [self.chosen_api_key] + [
+            k for k in self.api_keys if k != self.chosen_api_key
+        ]
+
         last_key_exception = None
 
         # 遍历所有Key。
@@ -628,42 +592,33 @@ class ProviderGoogleGenAI(Provider):
             if self.chosen_api_key != key:
                 self.set_key(key)
 
-            try:
-                async for response in self._query_stream(payloads, func_tool):
-                    yield response
-                return
-
-            except APIError as e:
-                if e.code == 429 or "API key not valid" in e.message:
-                    # 记录并继续下一个Key。
-                    logger.warning(
-                        f"检测到 Key #{key_index + 1} ({self.chosen_api_key[:12]}) 异常，正在尝试更换 API Key 重试。"
-                    )
-                    last_key_exception = e
-                    continue
-                else:
-                    # 其它Error，直接抛出。
-                    logger.error(f"发生错误: {e}")
-                    raise e
-
-            except Exception as e:
-                logger.warning(f"发生网络错误，将为 Key #{key_index + 1} ({self.chosen_api_key[:12]}) 重试一次: {e}")
-                await asyncio.sleep(1)
-
+            for attempt in range(2):
                 try:
-                    # 第二次网络重试。
                     async for response in self._query_stream(payloads, func_tool):
                         yield response
-                    return  
-                except Exception as final_e:
-                    # 重试失败
-                    logger.error(f"网络重试失败，请求终止: {final_e}")
-                    raise final_e
+                    return
+                except APIError as e:
+                    if e.code == 429 or "API key not valid" in e.message:
+                        logger.warning(
+                            f"检测到 Key #{key_index + 1} ({key[:12]}) 异常：{e.message}"
+                        )
+                        last_key_exception = e
+                        break
+                    else:
+                        logger.error(f"API错误: {e}")
+                        raise
+                except Exception as e:
+                    if attempt == 0:
+                        logger.warning(
+                            f"发生网络错误，将为 Key #{key_index + 1} ({key[:12]}) 重试一次: {e}"
+                        )
+                        await asyncio.sleep(1)
+                    else:
+                        logger.error(f"网络重试失败，请求终止: {e}")
+                        raise
 
         # 所有Key都尝试失败。
-        raise Exception(
-            f"所有 Key 均已尝试失败，最后一次错误: {last_key_exception}"
-        )
+        raise Exception(f"所有 Key 均已尝试失败，最后一次错误: {last_key_exception}")
 
     async def get_models(self):
         try:
@@ -707,12 +662,10 @@ class ProviderGoogleGenAI(Provider):
                 if not image_data:
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
-                user_content["content"].append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": image_data},
-                    }
-                )
+                user_content["content"].append({
+                    "type": "image_url",
+                    "image_url": {"url": image_data},
+                })
             return user_content
         else:
             return {"role": "user", "content": text}
