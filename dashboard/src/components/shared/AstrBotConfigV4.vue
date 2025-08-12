@@ -83,6 +83,33 @@ function openEditorDialog(key, value, theme, language) {
 function saveEditedContent() {
   dialog.value = false
 }
+
+function shouldShowItem(itemMeta, itemKey) {
+  if (!itemMeta?.condition) {
+    return true
+  }
+  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
+    const actualValue = getValueBySelector(props.iterable, conditionKey)
+    if (actualValue !== expectedValue) {
+      return false
+    }
+  }
+  return true
+}
+
+function hasVisibleItemsAfter(items, currentIndex) {
+  const itemEntries = Object.entries(items)
+  
+  // 检查当前索引之后是否还有可见的配置项
+  for (let i = currentIndex + 1; i < itemEntries.length; i++) {
+    const [itemKey, itemMeta] = itemEntries[i]
+    if (shouldShowItem(itemMeta, itemKey)) {
+      return true
+    }
+  }
+  
+  return false
+}
 </script>
 
 <template>
@@ -103,7 +130,7 @@ function saveEditedContent() {
     <div v-if="metadata[metadataKey]?.type === 'object'" class="object-config">
       <div v-for="(itemMeta, itemKey, index) in metadata[metadataKey].items" :key="itemKey" class="config-item">
         <!-- Check if itemKey is a JSON selector -->
-        <template v-if="true">
+        <template v-if="shouldShowItem(itemMeta, itemKey)">
           <!-- JSON Selector Property -->
           <v-row v-if="!itemMeta?.invisible" class="config-row">
             <v-col cols="12" sm="6" class="property-info">
@@ -158,8 +185,12 @@ function saveEditedContent() {
                   color="primary" inset density="compact" hide-details style="display: flex; justify-content: end;"></v-switch>
 
                 <!-- List item for JSON selector -->
-                <ListConfigItem v-else-if="itemMeta?.type === 'list'" :value="createSelectorModel(itemKey).value"
-                  class="config-field" />
+                <ListConfigItem 
+                  v-else-if="itemMeta?.type === 'list'"
+                  v-model="createSelectorModel(itemKey).value"
+                  button-text="修改"
+                  class="config-field"
+                />
 
                 <!-- Fallback for JSON selector -->
                 <v-text-field v-else v-model="createSelectorModel(itemKey).value" density="compact" variant="outlined"
@@ -169,6 +200,18 @@ function saveEditedContent() {
                 <ProviderSelector 
                   v-model="createSelectorModel(itemKey).value"
                   :provider-type="'chat_completion'"
+                />
+              </div>
+              <div v-else-if="itemMeta?._special === 'select_provider_stt'">
+                <ProviderSelector 
+                  v-model="createSelectorModel(itemKey).value"
+                  :provider-type="'speech_to_text'"
+                />
+              </div>
+              <div v-else-if="itemMeta?._special === 'select_provider_tts'">
+                <ProviderSelector 
+                  v-model="createSelectorModel(itemKey).value"
+                  :provider-type="'text_to_speech'"
                 />
               </div>
               <div v-else-if="itemMeta?._special === 'provider_pool'">
@@ -193,7 +236,7 @@ function saveEditedContent() {
             </v-col>
           </v-row>
         </template>
-        <v-divider class="config-divider" v-if="index < Object.keys(metadata[metadataKey].items).length - 1"></v-divider>
+        <v-divider class="config-divider" v-if="shouldShowItem(itemMeta, itemKey) && hasVisibleItemsAfter(metadata[metadataKey].items, index)"></v-divider>
       </div>
 
     </div>

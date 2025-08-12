@@ -4,7 +4,11 @@ import os
 from .route import Route, Response, RouteContext
 from astrbot.core.provider.entities import ProviderType
 from quart import request
-from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP, CONFIG_METADATA_3
+from astrbot.core.config.default import (
+    CONFIG_METADATA_2,
+    DEFAULT_VALUE_MAP,
+    CONFIG_METADATA_3,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -161,15 +165,18 @@ class ConfigRoute(Route):
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
         self.acm = core_lifecycle.astrbot_config_mgr
         self.routes = {
-            "/config/abconf/new": ("POST", self.get_abconf_list),
+            "/config/abconf/new": ("POST", self.create_abconf),
             "/config/abconf": ("GET", self.get_abconf),
             "/config/abconfs": ("GET", self.get_abconf_list),
+            "/config/abconf/delete": ("POST", self.delete_abconf),
+            "/config/abconf/update": ("POST", self.update_abconf),
             "/config/get": ("GET", self.get_configs),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
             "/config/plugin/update": ("POST", self.post_plugin_configs),
             "/config/platform/new": ("POST", self.post_new_platform),
             "/config/platform/update": ("POST", self.post_update_platform),
             "/config/platform/delete": ("POST", self.post_delete_platform),
+            "/config/platform/list": ("GET", self.get_platform_list),
             "/config/provider/new": ("POST", self.post_new_provider),
             "/config/provider/update": ("POST", self.post_update_provider),
             "/config/provider/delete": ("POST", self.post_delete_provider),
@@ -189,13 +196,12 @@ class ConfigRoute(Route):
         post_data = await request.json
         if not post_data:
             return Response().error("缺少配置数据").__dict__
-        config = post_data["config"]
         umo_parts = post_data["umo_parts"]
         name = post_data.get("name", None)
 
         try:
-            self.acm.create_conf(umo_parts=umo_parts, config=config, name=name)
-            return Response().ok(message="创建成功").__dict__
+            conf_id = self.acm.create_conf(umo_parts=umo_parts, name=name)
+            return Response().ok(message="创建成功", data={"conf_id": conf_id}).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
 
@@ -214,6 +220,53 @@ class ConfigRoute(Route):
             )
         except ValueError as e:
             return Response().error(str(e)).__dict__
+
+    async def delete_abconf(self):
+        """删除指定 AstrBot 配置文件"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        conf_id = post_data.get("id")
+        if not conf_id:
+            return Response().error("缺少配置文件 ID").__dict__
+
+        try:
+            success = self.acm.delete_conf(conf_id)
+            if success:
+                return Response().ok(message="删除成功").__dict__
+            else:
+                return Response().error("删除失败").__dict__
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"删除配置文件失败: {str(e)}").__dict__
+
+    async def update_abconf(self):
+        """更新指定 AstrBot 配置文件信息"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        conf_id = post_data.get("id")
+        if not conf_id:
+            return Response().error("缺少配置文件 ID").__dict__
+
+        name = post_data.get("name")
+        umo_parts = post_data.get("umo_parts")
+
+        try:
+            success = self.acm.update_conf_info(conf_id, name=name, umo_parts=umo_parts)
+            if success:
+                return Response().ok(message="更新成功").__dict__
+            else:
+                return Response().error("更新失败").__dict__
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"更新配置文件失败: {str(e)}").__dict__
 
     async def _test_single_provider(self, provider):
         """辅助函数：测试单个 provider 的可用性"""
@@ -462,6 +515,13 @@ class ConfigRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
+
+    async def get_platform_list(self):
+        """获取所有平台的列表"""
+        platform_list = []
+        for platform in self.config["platform"]:
+            platform_list.append(platform)
+        return Response().ok({"platforms": platform_list}).__dict__
 
     async def post_astrbot_configs(self):
         post_configs = await request.json
