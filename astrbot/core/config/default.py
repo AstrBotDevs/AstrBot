@@ -1700,61 +1700,40 @@ CONFIG_METADATA_2 = {
                 "type": "bool",
             },
             "t2i_word_threshold": {
-                "description": "文本转图像字数阈值",
                 "type": "int",
-                "hint": "超出此字符长度的文本将会被转换成图片。字数不能低于 50。",
             },
             "admins_id": {
-                "description": "管理员 ID",
                 "type": "list",
                 "items": {"type": "string"},
-                "hint": "管理员 ID 列表，管理员可以使用一些特权命令，如 `update`, `plugin` 等。ID 可以通过 `/sid` 指令获得。回车添加，可添加多个。",
             },
             "http_proxy": {
-                "description": "HTTP 代理",
                 "type": "string",
-                "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`",
             },
             "timezone": {
-                "description": "时区",
                 "type": "string",
-                "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab",
             },
             "callback_api_base": {
-                "description": "对外可达的回调接口地址",
                 "type": "string",
-                "hint": "外部服务可能会通过 AstrBot 生成的回调链接（如文件下载链接）访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址（host），因此需要通过此配置项显式指定 “外部服务如何访问 AstrBot” 的地址。如 http://localhost:6185，https://example.com 等。",
             },
             "log_level": {
-                "description": "控制台日志级别",
                 "type": "string",
-                "hint": "控制台输出日志的级别。",
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
             "t2i_strategy": {
                 "type": "string",
-                "hint": "文本转图像策略。`remote` 为使用远程基于 HTML 的渲染服务，`local` 为使用 PIL 本地渲染。当使用 local 时，将 ttf 字体命名为 'font.ttf' 放在 data/ 目录下可自定义字体。",
                 "options": ["remote", "local"],
             },
             "t2i_endpoint": {
-                "description": "文本转图像服务接口",
                 "type": "string",
-                "hint": "当 t2i_strategy 为 remote 时生效。为空时使用 AstrBot API 服务",
             },
             "t2i_use_file_service": {
-                "description": "本地文本转图像使用文件服务提供文件",
                 "type": "bool",
-                "hint": "当 t2i_strategy 为 local 并且配置 callback_api_base 时生效。是否使用文件服务提供文件。",
             },
             "pip_install_arg": {
-                "description": "pip 安装参数",
                 "type": "string",
-                "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。",
             },
             "pypi_index_url": {
-                "description": "PyPI 软件仓库地址",
                 "type": "string",
-                "hint": "安装 Python 依赖时请求的 PyPI 软件仓库地址。默认为 https://mirrors.aliyun.com/pypi/simple/",
             },
         },
     },
@@ -1777,13 +1756,13 @@ CONFIG_METADATA_3 = {
                         "description": "默认聊天模型",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空时使用第一个模型。"
+                        "hint": "留空时使用第一个模型。",
                     },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。"
+                        "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。",
                     },
                     "provider_stt_settings.provider_id": {
                         "description": "语音转文本模型",
@@ -1909,7 +1888,7 @@ CONFIG_METADATA_3 = {
                     "platform_settings.unique_session": {
                         "description": "隔离会话",
                         "type": "bool",
-                        "hint": "启用后，群成员的上下文独立。"
+                        "hint": "启用后，群成员的上下文独立。",
                     },
                     "wake_prefix": {
                         "description": "唤醒词",
@@ -2002,7 +1981,7 @@ CONFIG_METADATA_3 = {
                     "platform_settings.content_safety.baidu_aip.enable": {
                         "description": "使用百度内容安全审核",
                         "type": "bool",
-                        "hint": "您需要手动安装 baidu-aip 库。"
+                        "hint": "您需要手动安装 baidu-aip 库。",
                     },
                     "platform_settings.content_safety.baidu_aip.app_id": {
                         "description": "App ID",
@@ -2097,7 +2076,7 @@ CONFIG_METADATA_3 = {
                         "hint": "格式：最小值,最大值（如：1.5,3.5）",
                         "condition": {
                             "platform_settings.segmented_reply.interval_method": "random",
-                        }
+                        },
                     },
                     "platform_settings.segmented_reply.log_base": {
                         "description": "对数底数",
@@ -2105,7 +2084,7 @@ CONFIG_METADATA_3 = {
                         "hint": "对数间隔的底数，默认为 2.0。取值范围为 1.0-10.0。",
                         "condition": {
                             "platform_settings.segmented_reply.interval_method": "log",
-                        }
+                        },
                     },
                     "platform_settings.segmented_reply.words_count_threshold": {
                         "description": "分段回复字数阈值",
@@ -2149,7 +2128,7 @@ CONFIG_METADATA_3 = {
                         "options": ["possibility_reply"],
                         "condition": {
                             "provider_ltm_settings.active_reply.enable": True,
-                        }
+                        },
                     },
                     "provider_ltm_settings.active_reply.possibility_reply": {
                         "description": "回复概率",
@@ -2157,7 +2136,7 @@ CONFIG_METADATA_3 = {
                         "hint": "0.0-1.0 之间的数值",
                         "condition": {
                             "provider_ltm_settings.active_reply.enable": True,
-                        }
+                        },
                     },
                     "provider_ltm_settings.active_reply.whitelist": {
                         "description": "主动回复白名单",
@@ -2166,13 +2145,73 @@ CONFIG_METADATA_3 = {
                         "hint": "为空时不启用白名单过滤。使用 /sid 获取 ID。",
                         "condition": {
                             "provider_ltm_settings.active_reply.enable": True,
-                        }
+                        },
                     },
                 },
             },
         },
     },
 }
+
+CONFIG_METADATA_3_SYSTEM = {
+    "system_group": {
+        "name": "系统配置",
+        "metadata": {
+            "system": {
+                "description": "系统配置",
+                "type": "object",
+                "items": {
+                    "t2i_strategy": {
+                        "description": "文本转图像策略",
+                        "type": "string",
+                        "hint": "文本转图像策略。`remote` 为使用远程基于 HTML 的渲染服务，`local` 为使用 PIL 本地渲染。当使用 local 时，将 ttf 字体命名为 'font.ttf' 放在 data/ 目录下可自定义字体。",
+                        "options": ["remote", "local"],
+                    },
+                    "t2i_endpoint": {
+                        "description": "文本转图像服务接口",
+                        "type": "string",
+                        "hint": "为空时使用 AstrBot API 服务",
+                        "condition": {
+                            "t2i_strategy": "remote",
+                        },
+                    },
+                    "log_level": {
+                        "description": "控制台日志级别",
+                        "type": "string",
+                        "hint": "控制台输出日志的级别。",
+                        "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                    },
+                    "pip_install_arg": {
+                        "description": "pip 安装额外参数",
+                        "type": "string",
+                        "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。",
+                    },
+                    "pypi_index_url": {
+                        "description": "PyPI 软件仓库地址",
+                        "type": "string",
+                        "hint": "安装 Python 依赖时请求的 PyPI 软件仓库地址。默认为 https://mirrors.aliyun.com/pypi/simple/",
+                    },
+                    "callback_api_base": {
+                        "description": "对外可达的回调接口地址",
+                        "type": "string",
+                        "hint": "外部服务可能会通过 AstrBot 生成的回调链接（如文件下载链接）访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址（host），因此需要通过此配置项显式指定 “外部服务如何访问 AstrBot” 的地址。如 http://localhost:6185，https://example.com 等。",
+                    },
+                    "timezone": {
+                        "description": "时区",
+                        "type": "string",
+                        "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab",
+                    },
+                    "http_proxy": {
+                        "description": "HTTP 代理",
+                        "type": "string",
+                        "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`",
+                    },
+                },
+            }
+        },
+    }
+}
+
 
 DEFAULT_VALUE_MAP = {
     "int": 0,

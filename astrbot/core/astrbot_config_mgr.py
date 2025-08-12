@@ -53,7 +53,7 @@ class AstrBotConfigManager:
                 )
                 continue
 
-    def _is_umo_match(p1: str, p2: str) -> bool:
+    def _is_umo_match(self, p1: str, p2: str) -> bool:
         """判断 p2 umo 是否逻辑包含于 p1 umo"""
         p1 = p1.split(":")
         p2 = p2.split(":")

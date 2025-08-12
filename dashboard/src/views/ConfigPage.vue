@@ -1,49 +1,39 @@
 <template>
 
   <div style="display: flex; flex-direction: column; align-items: center;">
-    <div v-if="selectedConfigID" class="mt-4 config-panel"
+    <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel"
       style="display: flex; flex-direction: column; align-items: start;">
 
+      <!-- 普通配置选择区域 -->
       <div class="d-flex flex-row pr-4"
         style="margin-bottom: 16px; align-items: center; gap: 12px; justify-content: space-between; width: 100%;">
-        <div class="d-flex flex-row align-center" style="gap: 12px;">
-          <v-select style="width: 200px;" v-model="selectedConfigID" :items="configInfoList" item-title="name"
+        <div class="d-flex flex-row align-center" style="gap: 12px;" >
+          <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" v-if="!isSystemConfig"
             item-value="id" label="选择配置文件" hide-details density="compact" rounded="md" variant="outlined"
-            @update:model-value="getConfig">
+            @update:model-value="onConfigSelect">
             <template v-slot:item="{ props: itemProps, item }">
-              <v-list-item v-bind="itemProps" :subtitle="formatUmop(item.raw.umop)"></v-list-item>
+              <v-list-item v-bind="itemProps"
+                :subtitle="item.raw.id === '_%manage%_' ? '管理所有配置文件' : formatUmop(item.raw.umop)"
+                :class="item.raw.id === '_%manage%_' ? 'text-primary' : ''">
+              </v-list-item>
             </template>
           </v-select>
-          <small v-if="selectedConfigInfo">
-            {{ formatUmop(selectedConfigInfo.umop) }}
-          </small>
-
         </div>
 
-        <div class="d-flex align-center" style="gap: 8px;">
-          <v-btn 
-            v-if="selectedConfigID && selectedConfigID !== 'default'" 
-            color="warning" 
-            @click="onClickEditConfig" 
-            variant="tonal" 
-            prepend-icon="mdi-pencil"
-            size="small">
-            编辑信息
+        <v-btn-toggle v-model="configType" mandatory color="primary" variant="outlined" density="comfortable"
+          rounded="md" @update:model-value="onConfigTypeToggle">
+          <v-btn value="normal" prepend-icon="mdi-cog" size="large" >
+            普通
           </v-btn>
-          <v-btn 
-            v-if="selectedConfigID && selectedConfigID !== 'default'" 
-            color="error" 
-            @click="onClickDeleteConfig" 
-            variant="tonal" 
-            prepend-icon="mdi-delete"
-            size="small">
-            删除
+          <v-btn value="system" prepend-icon="mdi-cog-outline" size="large">
+            系统
           </v-btn>
-          <v-btn size="small" color="primary" @click="onClickCreateConfig" variant="tonal" prepend-icon="mdi-plus">新配置文件</v-btn>
-        </div>
+        </v-btn-toggle>
       </div>
 
-      <div v-if="selectedConfigID && fetched" style="width: 100%;">
+      <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear>
+
+      <div v-if="(selectedConfigID || isSystemConfig) && fetched" style="width: 100%;">
         <!-- 可视化编辑 -->
         <div :class="$vuetify.display.mobile ? '' : 'd-flex'">
           <v-tabs v-model="tab" :direction="$vuetify.display.mobile ? 'horizontal' : 'vertical'"
@@ -117,85 +107,67 @@
     </v-card>
   </v-dialog>
 
-  <!-- New Config Dialog -->
-  <v-dialog v-model="newConfigDialog" max-width="600px">
+  <!-- Config Management Dialog -->
+  <v-dialog v-model="configManageDialog" max-width="800px">
     <v-card>
-      <v-card-title>
-        <span class="text-h4">新建配置文件</span>
+      <v-card-title class="d-flex align-center justify-space-between">
+        <span class="text-h4">配置文件管理</span>
+        <v-btn icon="mdi-close" variant="text" @click="configManageDialog = false"></v-btn>
       </v-card-title>
+
       <v-card-text>
         <small>AstrBot 支持针对不同消息平台实例分别设置配置文件。默认会使用 `default` 配置。</small>
-        <div class="mt-1">
-          <small v-if="conflictMessage">{{ conflictMessage }}</small>
-        </div>
-        <h3 class="mt-4">名称</h3>
-
-        <v-text-field v-model="newConfigInfo.name" label="Name" variant="outlined" density="compact" rounded="md"
-          hide-details class="mt-4"></v-text-field>
-
-        <h3 class="mt-4">应用于</h3>
-
-        <v-select v-model="newConfigInfo.umop" :items="platformList" item-title="id" item-value="id" label="选择应用平台"
-          hide-details density="compact" rounded="md" variant="outlined" class="mt-4" multiple
-          @update:model-value="checkPlatformConflictOnSelect">
-          <template v-slot:item="{ props: itemProps, item }">
-            <v-list-item v-bind="itemProps" :subtitle="item.raw.type"></v-list-item>
-          </template>
-        </v-select>
-
-        
-
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn color="blue-darken-1" variant="text" @click="newConfigDialog = false">
-          取消
-        </v-btn>
-        <v-btn color="blue-darken-1" variant="text" @click="createNewConfig">
-          创建
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <!-- Edit Config Info Dialog -->
-  <v-dialog v-model="editConfigDialog" max-width="600px">
-    <v-card>
-      <v-card-title>
-        <span class="text-h4">编辑配置文件信息</span>
-      </v-card-title>
-      <v-card-text>
-        <div class="mt-1">
-          <small v-if="editConflictMessage">{{ editConflictMessage }}</small>
+        <div class="mt-6 mb-4">
+          <v-btn prepend-icon="mdi-plus" @click="startCreateConfig" variant="tonal" color="primary">
+            新建配置文件
+          </v-btn>
         </div>
 
-        <h3 class="mt-4">名称</h3>
+        <!-- Config List -->
+        <v-list lines="two">
+          <v-list-item v-for="config in configInfoList" :key="config.id" :title="config.name">
+            <v-list-item-subtitle>当前应用于: {{ formatUmop(config.umop) }} </v-list-item-subtitle>
 
-        <v-text-field v-model="editConfigInfo.name" label="Name" variant="outlined" density="compact" rounded="md"
-          hide-details class="mt-4"></v-text-field>
+            <template v-slot:append v-if="config.id !== 'default'">
+              <div class="d-flex align-center" style="gap: 8px;">
+                <v-btn icon="mdi-pencil" size="small" variant="text" color="warning"
+                  @click="startEditConfig(config)"></v-btn>
+                <v-btn icon="mdi-delete" size="small" variant="text" color="error"
+                  @click="confirmDeleteConfig(config)"></v-btn>
+              </div>
+            </template>
+          </v-list-item>
+        </v-list>
 
-        <h3 class="mt-4">应用于</h3>
+        <!-- Create/Edit Form -->
+        <v-divider v-if="showConfigForm" class="my-6"></v-divider>
 
-        <v-select v-model="editConfigInfo.umop" :items="platformList" item-title="id" item-value="id" label="选择应用平台"
-          hide-details density="compact" rounded="md" variant="outlined" class="mt-4" multiple
-          @update:model-value="checkEditPlatformConflictOnSelect">
-          <template v-slot:item="{ props: itemProps, item }">
-            <v-list-item v-bind="itemProps" :subtitle="item.raw.type"></v-list-item>
-          </template>
-        </v-select>
+        <div v-if="showConfigForm">
+          <h3 class="mb-4">{{ isEditingConfig ? '编辑配置文件' : '新建配置文件' }}</h3>
 
+          <div class="mb-4">
+            <small v-if="conflictMessage">⚠ {{ conflictMessage }}</small>
+          </div>
 
+          <v-text-field v-model="configFormData.name" label="配置文件名称" variant="outlined" class="mb-4"
+            hide-details></v-text-field>
 
+          <v-select v-model="configFormData.umop" :items="platformList" item-title="id" item-value="id" label="应用于平台"
+            variant="outlined" hide-details multiple @update:model-value="checkPlatformConflictOnForm">
+            <template v-slot:item="{ props: itemProps, item }">
+              <v-list-item v-bind="itemProps" :subtitle="item.raw.type"></v-list-item>
+            </template>
+          </v-select>
+
+          <div class="d-flex justify-end mt-4" style="gap: 8px;">
+            <v-btn variant="text" @click="cancelConfigForm">取消</v-btn>
+            <v-btn color="primary" @click="saveConfigForm"
+              :disabled="!configFormData.name || !configFormData.umop.length || !!conflictMessage">
+              {{ isEditingConfig ? '更新' : '创建' }}
+            </v-btn>
+          </div>
+        </div>
       </v-card-text>
-      <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn color="blue-darken-1" variant="text" @click="editConfigDialog = false">
-          取消
-        </v-btn>
-        <v-btn color="blue-darken-1" variant="text" @click="updateConfigInfo">
-          更新
-        </v-btn>
-      </v-card-actions>
     </v-card>
   </v-dialog>
 
@@ -247,6 +219,15 @@ export default {
     selectedConfigInfo() {
       return this.configInfoList.find(info => info.id === this.selectedConfigID) || {};
     },
+    configSelectItems() {
+      const items = [...this.configInfoList];
+      items.push({
+        id: '_%manage%_',
+        name: '管理配置文件...',
+        umop: []
+      });
+      return items;
+    },
   },
   watch: {
     config_data_str: function (val) {
@@ -256,8 +237,9 @@ export default {
   data() {
     return {
       codeEditorDialog: false,
-      newConfigDialog: false,
-      editConfigDialog: false,
+      configManageDialog: false,
+      showConfigForm: false,
+      isEditingConfig: false,
       config_data_has_changed: false,
       config_data_str: "",
       config_data: {
@@ -268,29 +250,31 @@ export default {
       save_message_snack: false,
       save_message: "",
       save_message_success: "",
-      namespace: "",
-      tab: 0,
 
-      config_template_tab: 0,
+      tab: 0, // 用于切换配置标签页
+
+      // 配置类型切换
+      configType: 'normal', // 'normal' 或 'system'
+
+      // 系统配置开关
+      isSystemConfig: false,
 
       // 多配置文件管理
       selectedConfigID: null, // 用于存储当前选中的配置项信息
       configInfoList: [],
       platformList: [],
-      newConfigInfo: {
+      configFormData: {
         name: '',
         umop: [],
       },
-      editConfigInfo: {
-        name: '',
-        umop: [],
-      },
+      editingConfigId: null,
       conflictMessage: '', // 冲突提示信息
-      editConflictMessage: '', // 编辑时的冲突提示信息
     }
   },
   mounted() {
     this.getConfigInfoList("default");
+    // 初始化配置类型状态
+    this.configType = this.isSystemConfig ? 'system' : 'normal';
   },
   methods: {
     getConfigInfoList(abconf_id) {
@@ -322,10 +306,16 @@ export default {
     },
     getConfig(abconf_id) {
       this.fetched = false
+      const params = {};
+
+      if (this.isSystemConfig) {
+        params.system_config = '1';
+      } else {
+        params.id = abconf_id || this.selectedConfigID;
+      }
+
       axios.get('/api/config/abconf', {
-        params: {
-          id: abconf_id
-        }
+        params: params
       }).then((res) => {
         this.config_data = res.data.data.config;
         this.fetched = true
@@ -338,12 +328,29 @@ export default {
     },
     updateConfig() {
       if (!this.fetched) return;
-      axios.post('/api/config/astrbot/update', this.config_data).then((res) => {
+
+      const postData = {
+        config: this.config_data
+      };
+
+      if (this.isSystemConfig) {
+        postData.conf_id = 'default';
+      } else {
+        postData.conf_id = this.selectedConfigID;
+      }
+      let that = this;
+
+      axios.post('/api/config/astrbot/update', postData).then((res) => {
         if (res.data.status === "ok") {
           this.save_message = res.data.message || this.messages.saveSuccess;
           this.save_message_snack = true;
           this.save_message_success = "success";
-          this.$refs.wfr.check();
+
+          if (that.isSystemConfig) {
+            axios.post('/api/stat/restart-core').then(() => {
+              this.$refs.wfr.check();
+            })
+          }
         } else {
           this.save_message = res.data.message || this.messages.saveError;
           this.save_message_snack = true;
@@ -372,57 +379,21 @@ export default {
         this.save_message_snack = true;
       }
     },
-    addFromDefaultConfigTmpl(val, group_name, config_item_name) {
-      console.log(val);
-
-      let tmpl = this.metadata[group_name]['metadata'][config_item_name]['config_template'][val];
-      let new_tmpl_cfg = JSON.parse(JSON.stringify(tmpl));
-      this.config_data[config_item_name].push(new_tmpl_cfg);
-      this.config_template_tab = this.config_data[config_item_name].length - 1;
-    },
-    deleteItem(config_item_name, index) {
-      console.log(config_item_name, index);
-      let new_list = [];
-      for (let i = 0; i < this.config_data[config_item_name].length; i++) {
-        if (i !== index) {
-          new_list.push(this.config_data[config_item_name][i]);
-        }
-      }
-      this.config_data[config_item_name] = new_list;
-
-      if (this.config_template_tab > 0) {
-        this.config_template_tab -= 1;
-      }
-    },
     createNewConfig() {
-      if (!this.newConfigInfo.name || !this.newConfigInfo.umop.length) {
-        this.save_message = "请填写配置名称和选择应用平台";
-        this.save_message_snack = true;
-        this.save_message_success = "error";
-        return;
-      }
-
-      // 如果有冲突，阻止创建
-      if (this.conflictMessage) {
-        return;
-      }
-
-      this.newConfigDialog = false;
       // 修正为 umo part 形式
       // 暂时只支持 platform:: 形式
-      for (let i = 0; i < this.newConfigInfo.umop.length; i++) {
-        this.newConfigInfo.umop[i] += "::" // 即 platform:: 形式，代表应用于所有该平台的所有会话
-      }
+      const umo_parts = this.configFormData.umop.map(platform => platform + "::");
 
       axios.post('/api/config/abconf/new', {
-        umo_parts: this.newConfigInfo.umop,
-        name: this.newConfigInfo.name
+        umo_parts: umo_parts,
+        name: this.configFormData.name
       }).then((res) => {
         if (res.data.status === "ok") {
           this.save_message = res.data.message;
           this.save_message_snack = true;
           this.save_message_success = "success";
           this.getConfigInfoList(res.data.data.conf_id);
+          this.cancelConfigForm();
         } else {
           this.save_message = res.data.message;
           this.save_message_snack = true;
@@ -464,13 +435,107 @@ export default {
 
       return conflictConfigs;
     },
-    checkPlatformConflictOnSelect() {
-      if (!this.newConfigInfo.umop || this.newConfigInfo.umop.length === 0) {
+    onConfigSelect(value) {
+      if (value === '_%manage%_') {
+        this.configManageDialog = true;
+        this.getPlatformList();
+        // 重置选择到之前的值
+        this.$nextTick(() => {
+          this.selectedConfigID = this.selectedConfigInfo.id || 'default';
+        });
+      } else {
+        this.getConfig(value);
+      }
+    },
+    startCreateConfig() {
+      this.showConfigForm = true;
+      this.isEditingConfig = false;
+      this.configFormData = {
+        name: '',
+        umop: [],
+      };
+      this.editingConfigId = null;
+      this.conflictMessage = '';
+    },
+    startEditConfig(config) {
+      this.showConfigForm = true;
+      this.isEditingConfig = true;
+      this.editingConfigId = config.id;
+      this.configFormData = {
+        name: config.name || '',
+        umop: config.umop ? config.umop.map(part => part.split("::")[0]).filter(p => p) : [],
+      };
+      this.conflictMessage = '';
+    },
+    cancelConfigForm() {
+      this.showConfigForm = false;
+      this.isEditingConfig = false;
+      this.editingConfigId = null;
+      this.configFormData = {
+        name: '',
+        umop: [],
+      };
+      this.conflictMessage = '';
+    },
+    saveConfigForm() {
+      if (!this.configFormData.name || !this.configFormData.umop.length) {
+        this.save_message = "请填写配置名称和选择应用平台";
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+        return;
+      }
+
+      if (this.conflictMessage) {
+        return;
+      }
+
+      if (this.isEditingConfig) {
+        this.updateConfigInfo();
+      } else {
+        this.createNewConfig();
+      }
+    },
+    confirmDeleteConfig(config) {
+      if (confirm(`确定要删除配置文件 "${config.name}" 吗？此操作不可恢复。`)) {
+        this.deleteConfig(config.id);
+      }
+    },
+    deleteConfig(configId) {
+      axios.post('/api/config/abconf/delete', {
+        id: configId
+      }).then((res) => {
+        if (res.data.status === "ok") {
+          this.save_message = res.data.message;
+          this.save_message_snack = true;
+          this.save_message_success = "success";
+          // 删除成功后，更新配置列表
+          this.getConfigInfoList("default");
+        } else {
+          this.save_message = res.data.message;
+          this.save_message_snack = true;
+          this.save_message_success = "error";
+        }
+      }).catch((err) => {
+        console.error(err);
+        this.save_message = "删除配置文件失败";
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+      });
+    },
+    checkPlatformConflictOnForm() {
+      if (!this.configFormData.umop || this.configFormData.umop.length === 0) {
         this.conflictMessage = '';
         return;
       }
 
-      const conflictConfigs = this.checkPlatformConflict(this.newConfigInfo.umop);
+      // 检查与其他配置文件的冲突
+      let conflictConfigs = this.checkPlatformConflict(this.configFormData.umop);
+
+      // 如果是编辑模式，排除当前编辑的配置文件
+      if (this.isEditingConfig && this.editingConfigId) {
+        conflictConfigs = conflictConfigs.filter(config => config.id !== this.editingConfigId);
+      }
+
       if (conflictConfigs.length > 0) {
         const conflictNames = conflictConfigs.map(config => config.name).join(', ');
         this.conflictMessage = `提示：选择的平台与现有配置文件重复：${conflictNames}。AstrBot 将只会应用首个匹配的配置文件。`;
@@ -478,81 +543,22 @@ export default {
         this.conflictMessage = '';
       }
     },
-    onClickCreateConfig() {
-      this.newConfigDialog = true;
-      this.newConfigInfo = {
-        name: '',
-        umop: [],
-      };
-      this.conflictMessage = ''; // 重置冲突信息
-      if (!this.platformList.length) {
-        this.getPlatformList();
-      }
-    },
-    onClickEditConfig() {
-      this.editConfigDialog = true;
-      const currentConfig = this.selectedConfigInfo;
-      this.editConfigInfo = {
-        name: currentConfig.name || '',
-        umop: currentConfig.umop ? currentConfig.umop.map(part => part.split("::")[0]).filter(p => p) : [],
-      };
-      this.editConflictMessage = ''; // 重置冲突信息
-      if (!this.platformList.length) {
-        this.getPlatformList();
-      }
-    },
-    onClickDeleteConfig() {
-      if (confirm(`确定要删除配置文件 "${this.selectedConfigInfo.name}" 吗？此操作不可恢复。`)) {
-        axios.post('/api/config/abconf/delete', {
-          id: this.selectedConfigID
-        }).then((res) => {
-          if (res.data.status === "ok") {
-            this.save_message = res.data.message;
-            this.save_message_snack = true;
-            this.save_message_success = "success";
-            // 删除成功后，切换到默认配置
-            this.getConfigInfoList("default");
-          } else {
-            this.save_message = res.data.message;
-            this.save_message_snack = true;
-            this.save_message_success = "error";
-          }
-        }).catch((err) => {
-          console.error(err);
-          this.save_message = "删除配置文件失败";
-          this.save_message_snack = true;
-          this.save_message_success = "error";
-        });
-      }
-    },
     updateConfigInfo() {
-      if (!this.editConfigInfo.name || !this.editConfigInfo.umop.length) {
-        this.save_message = "请填写配置名称和选择应用平台";
-        this.save_message_snack = true;
-        this.save_message_success = "error";
-        return;
-      }
-
-      // 如果有冲突，阻止更新
-      if (this.editConflictMessage) {
-        return;
-      }
-
-      this.editConfigDialog = false;
       // 修正为 umo part 形式
       // 暂时只支持 platform:: 形式
-      const umo_parts = this.editConfigInfo.umop.map(platform => platform + "::");
+      const umo_parts = this.configFormData.umop.map(platform => platform + "::");
 
       axios.post('/api/config/abconf/update', {
-        id: this.selectedConfigID,
-        name: this.editConfigInfo.name,
+        id: this.editingConfigId,
+        name: this.configFormData.name,
         umo_parts: umo_parts
       }).then((res) => {
         if (res.data.status === "ok") {
           this.save_message = res.data.message;
           this.save_message_snack = true;
           this.save_message_success = "success";
-          this.getConfigInfoList(this.selectedConfigID);
+          this.getConfigInfoList(this.editingConfigId);
+          this.cancelConfigForm();
         } else {
           this.save_message = res.data.message;
           this.save_message_snack = true;
@@ -564,24 +570,6 @@ export default {
         this.save_message_snack = true;
         this.save_message_success = "error";
       });
-    },
-    checkEditPlatformConflictOnSelect() {
-      if (!this.editConfigInfo.umop || this.editConfigInfo.umop.length === 0) {
-        this.editConflictMessage = '';
-        return;
-      }
-
-      // 检查与其他配置文件的冲突 (排除当前编辑的配置文件)
-      const conflictConfigs = this.checkPlatformConflict(this.editConfigInfo.umop).filter(
-        config => config.id !== this.selectedConfigID
-      );
-      
-      if (conflictConfigs.length > 0) {
-        const conflictNames = conflictConfigs.map(config => config.name).join(', ');
-        this.editConflictMessage = `提示：选择的平台与现有配置文件重复：${conflictNames}。AstrBot 将只会应用首个匹配的配置文件。`;
-      } else {
-        this.editConflictMessage = '';
-      }
     },
     formatUmop(umop) {
       if (!umop) {
@@ -598,6 +586,42 @@ export default {
       }
       ret = ret.slice(0, -1);
       return ret;
+    },
+    onConfigTypeToggle() {
+      this.isSystemConfig = this.configType === 'system';
+      this.tab = 0; // 重置标签页
+      this.fetched = false; // 重置加载状态
+
+      if (this.isSystemConfig) {
+        // 切换到系统配置
+        this.getConfig();
+      } else {
+        // 切换回普通配置，如果有选中的配置文件则加载，否则加载default
+        if (this.selectedConfigID) {
+          this.getConfig(this.selectedConfigID);
+        } else {
+          this.getConfigInfoList("default");
+        }
+      }
+    },
+    onSystemConfigToggle() {
+      // 保持向后兼容性，更新 configType
+      this.configType = this.isSystemConfig ? 'system' : 'normal';
+
+      this.tab = 0; // 重置标签页
+      this.fetched = false; // 重置加载状态
+
+      if (this.isSystemConfig) {
+        // 切换到系统配置
+        this.getConfig();
+      } else {
+        // 切换回普通配置，如果有选中的配置文件则加载，否则加载default
+        if (this.selectedConfigID) {
+          this.getConfig(this.selectedConfigID);
+        } else {
+          this.getConfigInfoList("default");
+        }
+      }
     }
   },
 }
@@ -607,6 +631,20 @@ export default {
 <style>
 .v-tab {
   text-transform: none !important;
+}
+
+/* 按钮切换样式优化 */
+.v-btn-toggle .v-btn {
+  transition: all 0.3s ease !important;
+}
+
+.v-btn-toggle .v-btn:not(.v-btn--active) {
+  opacity: 0.7;
+}
+
+.v-btn-toggle .v-btn.v-btn--active {
+  opacity: 1;
+  font-weight: 600;
 }
 
 @media (min-width: 768px) {

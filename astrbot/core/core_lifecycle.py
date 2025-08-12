@@ -127,9 +127,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化消息事件流水线调度器
 
-        self.pipeline_scheduler_mapping = await self.load_pipline_scheduler(
-            self.astrbot_config_mgr
-        )
+        self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
         # 初始化更新器
         self.astrbot_updator = AstrBotUpdator()
@@ -261,19 +259,32 @@ class AstrBotCoreLifecycle:
             )
         return tasks
 
-    async def load_pipline_scheduler(
-        self, abconf_mgr: AstrBotConfigManager
-    ) -> dict[str, PipelineScheduler]:
+    async def load_pipeline_scheduler(self) -> dict[str, PipelineScheduler]:
         """加载消息事件流水线调度器
 
         Returns:
             dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
         """
         mapping = {}
-        for conf_id, ab_config in abconf_mgr.confs.items():
+        for conf_id, ab_config in self.astrbot_config_mgr.confs.items():
             scheduler = PipelineScheduler(
                 PipelineContext(ab_config, self.plugin_manager, conf_id)
             )
             await scheduler.initialize()
             mapping[conf_id] = scheduler
         return mapping
+
+    async def reload_pipeline_scheduler(self, conf_id: str):
+        """重新加载消息事件流水线调度器
+
+        Returns:
+            dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
+        """
+        ab_config = self.astrbot_config_mgr.confs.get(conf_id)
+        if not ab_config:
+            raise ValueError(f"配置文件 {conf_id} 不存在")
+        scheduler = PipelineScheduler(
+            PipelineContext(ab_config, self.plugin_manager, conf_id)
+        )
+        await scheduler.initialize()
+        self.pipeline_scheduler_mapping[conf_id] = scheduler

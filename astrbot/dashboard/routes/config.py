@@ -8,6 +8,7 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_2,
     DEFAULT_VALUE_MAP,
     CONFIG_METADATA_3,
+    CONFIG_METADATA_3_SYSTEM,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -208,10 +209,18 @@ class ConfigRoute(Route):
     async def get_abconf(self):
         """获取指定 AstrBot 配置文件"""
         abconf_id = request.args.get("id")
-        if not abconf_id:
+        system_config = request.args.get("system_config", "0").lower() == "1"
+        if not abconf_id and not system_config:
             return Response().error("缺少配置文件 ID").__dict__
 
         try:
+            if system_config:
+                abconf = self.acm.confs["default"]
+                return (
+                    Response()
+                    .ok({"config": abconf, "metadata": CONFIG_METADATA_3_SYSTEM})
+                    .__dict__
+                )
             abconf = self.acm.confs[abconf_id]
             return (
                 Response()
@@ -524,10 +533,13 @@ class ConfigRoute(Route):
         return Response().ok({"platforms": platform_list}).__dict__
 
     async def post_astrbot_configs(self):
-        post_configs = await request.json
+        data = await request.json
+        config = data.get("config", None)
+        conf_id = data.get("conf_id", None)
         try:
-            await self._save_astrbot_configs(post_configs)
-            return Response().ok(None, "保存成功~ 机器人正在重载配置。").__dict__
+            await self._save_astrbot_configs(config, conf_id)
+            await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+            return Response().ok(None, "保存成功~").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
@@ -686,10 +698,12 @@ class ConfigRoute(Route):
 
         return ret
 
-    async def _save_astrbot_configs(self, post_configs: dict):
+    async def _save_astrbot_configs(self, post_configs: dict, conf_id: str = None):
         try:
-            save_config(post_configs, self.config, is_core=True)
-            await self.core_lifecycle.restart()
+            if conf_id not in self.acm.confs:
+                raise ValueError(f"配置文件 {conf_id} 不存在")
+            astrbot_config = self.acm.confs[conf_id]
+            save_config(post_configs, astrbot_config, is_core=True)
         except Exception as e:
             raise e
 

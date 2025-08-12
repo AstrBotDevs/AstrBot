@@ -5,7 +5,7 @@ import ListConfigItem from './ListConfigItem.vue'
 import ProviderSelector from './ProviderSelector.vue'
 import PersonaSelector from './PersonaSelector.vue'
 import { useI18n } from '@/i18n/composables'
-import axios from 'axios'
+
 
 const props = defineProps({
   metadata: {
