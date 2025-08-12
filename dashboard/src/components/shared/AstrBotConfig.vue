@@ -176,7 +176,7 @@ function saveEditedContent() {
                 <!-- List item -->
                 <ListConfigItem
                   v-else-if="metadata[metadataKey].items[key]?.type === 'list' && !metadata[metadataKey].items[key]?.invisible"
-                  :value="iterable[key]"
+                  v-model="iterable[key]"
                   class="config-field"
                 />
               </div>
@@ -287,9 +287,9 @@ function saveEditedContent() {
             ></v-switch>
             
             <!-- List item -->
-            <ListConfigItem
+            <ListConfigItem 
               v-else-if="metadata[metadataKey]?.type === 'list' && !metadata[metadataKey]?.invisible"
-              :value="iterable[metadataKey]"
+              v-model="iterable[metadataKey]"
               class="config-field"
             />
           </div>

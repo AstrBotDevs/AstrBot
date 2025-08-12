@@ -6,7 +6,7 @@
       </span>
       <div v-else class="d-flex flex-wrap ga-2">
         <v-chip v-for="item in displayItems" :key="item" size="x-small" label color="primary">
-          {{ item }}
+          {{ item.length > 20 ? item.slice(0, 20) + '...' : item }}
         </v-chip>
         <v-chip v-if="modelValue.length > maxDisplayItems" size="x-small" label color="grey-lighten-1">
           +{{ modelValue.length - maxDisplayItems }}

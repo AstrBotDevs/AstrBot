@@ -118,7 +118,7 @@ DEFAULT_CONFIG = {
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
     "persona": [],  # deprecated
-    "timezone": "",
+    "timezone": "Asia/Shanghai",
     "callback_api_base": "",
 }
 
