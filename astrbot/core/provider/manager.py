@@ -3,7 +3,7 @@ import traceback
 from typing import List
 
 from astrbot.core import logger, sp
-from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 
 from .entities import ProviderType
@@ -15,12 +15,13 @@ from ..persona_mgr import PersonaManager
 class ProviderManager:
     def __init__(
         self,
-        config: AstrBotConfig,
+        acm: AstrBotConfigManager,
         db_helper: BaseDatabase,
         persona_mgr: PersonaManager,
     ):
         self.persona_mgr = persona_mgr
-        self.astrbot_config = config
+        self.acm = acm
+        config = acm.confs["default"]
         self.providers_config: List = config["provider"]
         self.provider_settings: dict = config["provider_settings"]
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
@@ -42,11 +43,11 @@ class ProviderManager:
         self.llm_tools = llm_tools
 
         self.curr_provider_inst: Provider | None = None
-        """默认的 Provider 实例"""
+        """默认的 Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.curr_stt_provider_inst: STTProvider | None = None
-        """默认的 Speech To Text Provider 实例"""
+        """默认的 Speech To Text Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.curr_tts_provider_inst: TTSProvider | None = None
-        """默认的 Text To Speech Provider 实例"""
+        """默认的 Text To Speech Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.db_helper = db_helper
 
     @property
@@ -61,7 +62,7 @@ class ProviderManager:
 
     @property
     def selected_default_persona(self):
-        """动态获取最新的默认选中 persona"""
+        """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
         return self.persona_mgr.selected_default_persona_v3
 
     async def set_provider(
@@ -72,7 +73,9 @@ class ProviderManager:
         Args:
             provider_id (str): 提供商 ID。
             provider_type (ProviderType): 提供商类型。
-            umo (str, optional): 用户会话 ID，用于提供商会话隔离。当用户启用了提供商会话隔离时此参数才生效。
+            umo (str, optional): 用户会话 ID，用于提供商会话隔离。
+
+        Version 4.0.0: 这个版本下已经默认隔离提供商
         """
         if provider_id not in self.inst_map:
             raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
@@ -91,6 +94,57 @@ class ProviderManager:
             sp.put("curr_provider_stt", provider_id)
         elif provider_type == ProviderType.CHAT_COMPLETION:
             sp.put("curr_provider", provider_id)
+
+    async def get_provider_by_id(self, provider_id: str) -> Provider | None:
+        """根据提供商 ID 获取提供商实例"""
+        return self.inst_map.get(provider_id)
+
+    def get_using_provider(self, provider_type: ProviderType, umo=None):
+        """获取正在使用的提供商实例。
+
+        Args:
+            provider_type (ProviderType): 提供商类型。
+            umo (str, optional): 用户会话 ID，用于提供商会话隔离。
+
+        Returns:
+            Provider: 正在使用的提供商实例。
+        """
+        provider = None
+        if umo:
+            perf = sp.get("session_provider_perf", {})
+            session_perf = perf.get(umo, {})
+            provider_id = session_perf.get(provider_type.value)
+            if provider_id:
+                provider = self.inst_map.get(provider_id)
+        if not provider:
+            # default setting
+            config = self.acm.get_conf(umo)
+            if provider_type == ProviderType.CHAT_COMPLETION:
+                provider_id = config["provider_settings"].get("default_provider_id")
+                provider = self.inst_map.get(provider_id)
+                if not provider:
+                    provider = self.provider_insts[0] if self.provider_insts else None
+            elif provider_type == ProviderType.SPEECH_TO_TEXT:
+                provider_id = config["provider_stt_settings"].get("provider_id")
+                if not provider_id:
+                    return None
+                provider = self.inst_map.get(provider_id)
+                if not provider:
+                    provider = (
+                        self.stt_provider_insts[0] if self.stt_provider_insts else None
+                    )
+            elif provider_type == ProviderType.TEXT_TO_SPEECH:
+                provider_id = config["provider_tts_settings"].get("provider_id")
+                if not provider_id:
+                    return None
+                provider = self.inst_map.get(provider_id)
+                if not provider:
+                    provider = (
+                        self.tts_provider_insts[0] if self.tts_provider_insts else None
+                    )
+            else:
+                raise ValueError(f"Unknown provider type: {provider_type}")
+        return provider
 
     async def initialize(self):
         # 逐个初始化提供商

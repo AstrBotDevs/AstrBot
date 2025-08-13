@@ -64,9 +64,10 @@ class ResultDecorateStage(Stage):
         ]
         self.content_safe_check_stage = None
         if self.content_safe_check_reply:
-            for stage in registered_stages:
-                if stage.__class__.__name__ == "ContentSafetyCheckStage":
-                    self.content_safe_check_stage = stage
+            for stage_cls in registered_stages:
+                if stage_cls.__name__ == "ContentSafetyCheckStage":
+                    self.content_safe_check_stage = stage_cls()
+                    await self.content_safe_check_stage.initialize(ctx)
 
     async def process(
         self, event: AstrMessageEvent

@@ -74,7 +74,10 @@ class AstrBotConfigManager:
         if isinstance(umo, MessageSession):
             umo = str(umo)
         else:
-            umo = str(MessageSession.from_str(umo))  # validate
+            try:
+                umo = str(MessageSession.from_str(umo))  # validate
+            except Exception:
+                return DEFAULT_CONFIG_CONF_INFO
 
         for uuid_, meta in abconf_data.items():
             for pattern in meta["umop"]:
@@ -107,8 +110,10 @@ class AstrBotConfigManager:
         }
         self.sp.put("abconf_mapping", abconf_data)
 
-    def get_conf(self, umo: str | MessageSession) -> AstrBotConfig:
+    def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
         """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
+        if not umo:
+            return self.confs["default"]
         if isinstance(umo, MessageSession):
             umo = f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
 
@@ -182,7 +187,9 @@ class AstrBotConfigManager:
             return False
 
         # 获取配置文件路径
-        conf_path = os.path.join(get_astrbot_config_path(), abconf_data[conf_id]["path"])
+        conf_path = os.path.join(
+            get_astrbot_config_path(), abconf_data[conf_id]["path"]
+        )
 
         # 删除配置文件
         try:
@@ -204,7 +211,9 @@ class AstrBotConfigManager:
         logger.info(f"成功删除配置文件 {conf_id}")
         return True
 
-    def update_conf_info(self, conf_id: str, name: str = None, umo_parts: list[str] = None) -> bool:
+    def update_conf_info(
+        self, conf_id: str, name: str = None, umo_parts: list[str] = None
+    ) -> bool:
         """更新配置文件信息
 
         Args:
@@ -234,7 +243,9 @@ class AstrBotConfigManager:
                 if isinstance(part, MessageSession):
                     part = str(part)
                 elif not isinstance(part, str):
-                    raise ValueError("umo_parts must be a list of strings or MessageSession instances")
+                    raise ValueError(
+                        "umo_parts must be a list of strings or MessageSession instances"
+                    )
             abconf_data[conf_id]["umop"] = umo_parts
 
         # 保存更新

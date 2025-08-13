@@ -701,11 +701,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
         """生成所有对话的标题字典"""
         _titles = {}
         for conv in conversations_all:
-            persona_id = conv.persona_id
-            if not persona_id or persona_id == "[%None]":
-                persona_id = self.context.provider_manager.selected_default_persona[
-                    "name"
-                ]
             title = conv.title if conv.title else "新对话"
             _titles[conv.cid] = title
 
@@ -713,9 +708,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
         for conv in conversations_paged:
             persona_id = conv.persona_id
             if not persona_id or persona_id == "[%None]":
-                persona_id = self.context.provider_manager.selected_default_persona[
-                    "name"
-                ]
+                persona = await self.context.persona_manager.get_default_persona_v3(
+                    umo=message.unified_msg_origin
+                )
+                persona_id = persona["name"]
             title = _titles.get(conv.cid, "新对话")
             ret += f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
             global_index += 1
@@ -981,22 +977,22 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("persona")
     async def persona(self, message: AstrMessageEvent):
         l = message.message_str.split(" ")  # noqa: E741
+        umo = message.unified_msg_origin
 
         curr_persona_name = "无"
-        cid = await self.context.conversation_manager.get_curr_conversation_id(
-            message.unified_msg_origin
+        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
+        default_persona = await self.context.persona_manager.get_default_persona_v3(
+            umo=umo
         )
         curr_cid_title = "无"
         if cid:
             conversation = await self.context.conversation_manager.get_conversation(
-                unified_msg_origin=message.unified_msg_origin,
+                unified_msg_origin=umo,
                 conversation_id=cid,
                 create_if_not_exists=True,
             )
             if not conversation.persona_id and not conversation.persona_id == "[%None]":
-                curr_persona_name = (
-                    self.context.provider_manager.selected_default_persona["name"]
-                )
+                curr_persona_name = default_persona["name"]
             else:
                 curr_persona_name = conversation.persona_id
 
@@ -1014,7 +1010,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 - 人格情景详细信息: `/persona view 人格`
 - 取消人格: `/persona unset`
 
-默认人格情景: {self.context.provider_manager.selected_default_persona["name"]}
+默认人格情景: {default_persona["name"]}
 当前对话 {curr_cid_title} 的人格情景: {curr_persona_name}
 
 配置人格情景请前往管理面板-配置页

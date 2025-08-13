@@ -91,7 +91,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化供应商管理器
         self.provider_manager = ProviderManager(
-            self.astrbot_config, self.db, self.persona_mgr
+            self.astrbot_config_mgr, self.db, self.persona_mgr
         )
 
         # 初始化平台管理器

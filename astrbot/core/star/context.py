@@ -141,12 +141,10 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入并且用户启用了提供商会话隔离，则使用该会话偏好的提供商。
         """
-        if umo:
-            perf = sp.get("session_provider_perf", {})
-            prov_id = perf.get(umo, {}).get(ProviderType.CHAT_COMPLETION.value, None)
-            if inst := self.provider_manager.inst_map.get(prov_id, None):
-                return inst
-        return self.provider_manager.curr_provider_inst
+        return self.provider_manager.get_using_provider(
+            provider_type=ProviderType.CHAT_COMPLETION,
+            umo=umo,
+        )
 
     def get_using_tts_provider(self, umo: str = None) -> TTSProvider:
         """
@@ -155,12 +153,10 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
-        if umo:
-            perf = sp.get("session_provider_perf", {})
-            prov_id = perf.get(umo, {}).get(ProviderType.TEXT_TO_SPEECH.value, None)
-            if inst := self.provider_manager.inst_map.get(prov_id, None):
-                return inst
-        return self.provider_manager.curr_tts_provider_inst
+        return self.provider_manager.get_using_provider(
+            provider_type=ProviderType.TEXT_TO_SPEECH,
+            umo=umo,
+        )
 
     def get_using_stt_provider(self, umo: str = None) -> STTProvider:
         """
@@ -169,12 +165,10 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
-        if umo:
-            perf = sp.get("session_provider_perf", {})
-            prov_id = perf.get(umo, {}).get(ProviderType.SPEECH_TO_TEXT.value, None)
-            if inst := self.provider_manager.inst_map.get(prov_id, None):
-                return inst
-        return self.provider_manager.curr_stt_provider_inst
+        return self.provider_manager.get_using_provider(
+            provider_type=ProviderType.SPEECH_TO_TEXT,
+            umo=umo,
+        )
 
     def get_config(self, umo: str = None) -> AstrBotConfig:
         """获取 AstrBot 的配置。"""

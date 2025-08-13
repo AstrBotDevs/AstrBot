@@ -1,12 +1,21 @@
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, Personality
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.platform.message_session import MessageSession
 from astrbot import logger
+
+DEFAULT_PERSONALITY = Personality(
+    prompt="You are a helpful and friendly assistant.",
+    name="default",
+    tools=None,
+    _begin_dialogs_processed=[],
+)
 
 
 class PersonaManager:
     def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager):
         self.db = db_helper
+        self.acm = acm
         default_ps = acm.default_conf.get("provider_settings", {})
         self.default_persona: str = default_ps.get("default_personality", "default")
         self.personas: list[Persona] = []
@@ -27,6 +36,21 @@ class PersonaManager:
         if not persona:
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
         return persona
+
+    async def get_default_persona_v3(
+        self, umo: str | MessageSession | None = None
+    ) -> Personality:
+        """获取默认 persona"""
+        cfg = self.acm.get_conf(umo)
+        default_persona_id = cfg.get("provider_settings", {}).get(
+            "default_personality", "default"
+        )
+        if not default_persona_id or default_persona_id == "default":
+            return DEFAULT_PERSONALITY
+        try:
+            return next(p for p in self.personas_v3 if p["name"] == default_persona_id)
+        except ValueError:
+            return DEFAULT_PERSONALITY
 
     async def delete_persona(self, persona_id: str):
         """删除指定 persona"""
@@ -140,12 +164,7 @@ class PersonaManager:
             selected_default_persona = personas_v3[0]
 
         if not selected_default_persona:
-            selected_default_persona = Personality(
-                prompt="You are a helpful and friendly assistant.",
-                name="default",
-                tools=None,
-                _begin_dialogs_processed=[],
-            )
+            selected_default_persona = DEFAULT_PERSONALITY
             personas_v3.append(selected_default_persona)
 
         self.personas_v3 = personas_v3
