@@ -338,7 +338,6 @@ export default {
       } else {
         postData.conf_id = this.selectedConfigID;
       }
-      let that = this;
 
       axios.post('/api/config/astrbot/update', postData).then((res) => {
         if (res.data.status === "ok") {
@@ -346,7 +345,7 @@ export default {
           this.save_message_snack = true;
           this.save_message_success = "success";
 
-          if (that.isSystemConfig) {
+          if (this.isSystemConfig) {
             axios.post('/api/stat/restart-core').then(() => {
               this.$refs.wfr.check();
             })
