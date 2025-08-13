@@ -1230,6 +1230,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             req.system_prompt += f"\nCurrent datetime: {current_time}\n"
 
         if req.conversation:
+            # persona inject
             persona_id = req.conversation.persona_id
             if not persona_id and persona_id != "[%None]":  # [%None] 为用户取消人格
                 persona_id = self.context.persona_manager.selected_default_persona_v3[
@@ -1247,6 +1248,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     req.system_prompt += prompt
                 if begin_dialogs := persona["_begin_dialogs_processed"]:
                     req.contexts[:0] = begin_dialogs
+
             # tools select
             tmgr = self.context.get_llm_tool_manager()
             if (persona and persona.get("tools") is None) or not persona:
@@ -1260,6 +1262,27 @@ UID: {user_id} 此 ID 可用于设置管理员。
                         toolset.add_tool(tool)
             req.func_tool = toolset
             logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
+
+            # image caption
+            img_cap_prov_id = cfg.get("default_image_caption_provider_id")
+            if img_cap_prov_id and req.image_urls:
+                img_cap_prompt = cfg.get(
+                    "image_caption_prompt", "Please describe the image."
+                )
+                try:
+                    if prov := self.context.get_provider_by_id(img_cap_prov_id):
+                        logger.debug(
+                            f"Processing image caption with provider: {img_cap_prov_id}"
+                        )
+                        llm_resp = await prov.text_chat(
+                            prompt=img_cap_prompt,
+                            image_urls=req.image_urls,
+                        )
+                        if llm_resp.completion_text:
+                            req.prompt = f"(Image Caption: {llm_resp.completion_text})\n\n{req.prompt}"
+                        req.image_urls = []
+                except Exception as e:
+                    logger.error(f"处理图片描述失败: {e}")
 
         if quote:
             sender_info = ""
@@ -1304,7 +1327,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         if self.ltm and self.ltm_enabled(event):
             try:
                 await self.ltm.after_req_llm(event)
-            except BaseException as e:
+            except Exception as e:
                 logger.error(f"ltm: {e}")
 
     @filter.permission_type(filter.PermissionType.ADMIN)

@@ -65,6 +65,20 @@ class LLMRequestSubStage(Stage):
 
         return _ctx.get_using_provider(umo=event.unified_msg_origin)
 
+    async def _get_session_conv(self, event: AstrMessageEvent):
+        umo = event.unified_msg_origin
+        conv_mgr = self.conv_manager
+
+        # 获取对话上下文
+        cid = await conv_mgr.get_curr_conversation_id(umo)
+        if not cid:
+            cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
+        conversation = await conv_mgr.get_conversation(umo, cid)
+        if not conversation:
+            cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
+            conversation = await conv_mgr.get_conversation(umo, cid)
+        return conversation
+
     async def process(
         self, event: AstrMessageEvent, _nested: bool = False
     ) -> Union[None, AsyncGenerator[None, None]]:
@@ -107,24 +121,7 @@ class LLMRequestSubStage(Stage):
                     image_path = await comp.convert_to_file_path()
                     req.image_urls.append(image_path)
 
-            # 获取对话上下文
-            conversation_id = await self.conv_manager.get_curr_conversation_id(
-                event.unified_msg_origin
-            )
-            if not conversation_id:
-                conversation_id = await self.conv_manager.new_conversation(
-                    event.unified_msg_origin, event.get_platform_id()
-                )
-            conversation = await self.conv_manager.get_conversation(
-                event.unified_msg_origin, conversation_id
-            )
-            if not conversation:
-                conversation_id = await self.conv_manager.new_conversation(
-                    event.unified_msg_origin, event.get_platform_id()
-                )
-                conversation = await self.conv_manager.get_conversation(
-                    event.unified_msg_origin, conversation_id
-                )
+            conversation = await self._get_session_conv(event)
             req.conversation = conversation
             req.contexts = json.loads(conversation.history)
 
@@ -167,6 +164,13 @@ class LLMRequestSubStage(Stage):
 
         # fix messages
         req.contexts = self.fix_messages(req.contexts)
+
+        # check provider modalities
+        # 如果提供商不支持图像，但请求中包含图像，则清空图像列表。图片转述的检测和调用发生在这之前，因此这里可以这样处理。
+        if req.image_urls:
+            provider_cfg = provider.provider_config.get("modalities", ["text", "image"])
+            if "image" not in provider_cfg:
+                req.image_urls = []
 
         # Call Agent
         tool_loop_agent = ToolLoopAgent(

@@ -536,11 +536,6 @@ export default {
       this.showAddProviderDialog = false;
     },
 
-    // 废弃旧方法，保留为兼容
-    addFromDefaultConfigTmpl(index) {
-      this.selectProviderTemplate(index[0]);
-    },
-
     configExistingProvider(provider) {
       this.newSelectedProviderName = provider.id;
       this.newSelectedProviderConfig = {};
@@ -575,11 +570,13 @@ export default {
             if (!(key in target)) {
               target[key] = Array.isArray(reference[key]) ? [] : {};
             }
-            mergeConfigWithOrder(
-              target[key],
-              source && source[key] ? source[key] : {},
-              reference[key]
-            );
+            if (!Array.isArray(reference[key])) {
+              mergeConfigWithOrder(
+                target[key],
+                source && source[key] ? source[key] : {},
+                reference[key]
+              );
+            }
           } else if (!(key in target)) {
             // 只有当target中不存在该键时才从reference复制
             target[key] = reference[key];

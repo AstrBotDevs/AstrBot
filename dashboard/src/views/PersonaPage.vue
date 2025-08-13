@@ -487,7 +487,7 @@ export default {
                 begin_dialogs: [],
                 tools: []
             };
-            this.toolSelectValue = '1'; // 默认选择指定工具
+            this.toolSelectValue = '0';
             this.expandedPanels = [];
             this.showPersonaDialog = true;
         },
