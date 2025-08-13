@@ -197,7 +197,7 @@ class ToolLoopAgent(BaseAgentRunner):
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
                 executor = func_tool.execute(
                     event=self.event,
-                    pipeline_context=self.pipeline_ctx,
+                    call_handler_func=self.pipeline_ctx.call_handler,
                     **func_tool_args,
                 )
                 async for resp in executor:

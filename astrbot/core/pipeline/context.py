@@ -2,7 +2,7 @@ import inspect
 import traceback
 import typing as T
 from dataclasses import dataclass
-from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config import AstrBotConfig
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star import PluginManager
 from astrbot.api import logger
@@ -17,6 +17,7 @@ class PipelineContext:
 
     astrbot_config: AstrBotConfig  # AstrBot 配置对象
     plugin_manager: PluginManager  # 插件管理器对象
+    astrbot_config_id: str
 
     async def call_event_hook(
         self,

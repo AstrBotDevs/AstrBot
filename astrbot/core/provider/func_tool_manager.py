@@ -34,7 +34,6 @@ from typing_extensions import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
-    from astrbot.core.pipeline.context import PipelineContext
 
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
@@ -80,14 +79,14 @@ class FunctionTool:
     async def execute(
         self,
         event: AstrMessageEvent = None,
-        pipeline_context: "PipelineContext" = None,
+        call_handler_func: Awaitable = None,
         **tool_args,
     ) -> AsyncGenerator[Any | mcp.types.CallToolResult, None]:
         """执行函数调用。
 
         Args:
             event (AstrMessageEvent): 事件对象, 当 origin 为 local 时必须提供。
-            pipeline_context (PipelineContext): 流水线调度器上下文, 当 origin 为 local 时必须提供。
+            call_handler_func (AsyncGenerator): 用于调用处理函数的异步生成器, 当 origin 为 mcp 时必须提供。
             **kwargs: 函数调用的参数。
 
         Returns:
@@ -96,7 +95,7 @@ class FunctionTool:
         if self.origin == "local":
             if not event:
                 raise ValueError("Event must be provided for local function tools.")
-            wrapper = pipeline_context.call_handler(
+            wrapper = call_handler_func(
                 event=event,
                 handler=self.handler,
                 **tool_args,
@@ -207,7 +206,7 @@ class ToolSet:
         """Get all function tools."""
         return self.get_tool(name)
 
-    def openai_schema(self, omit_empty_parameters: bool = False) -> List[Dict]:
+    def openai_schema(self, omit_empty_parameter_field: bool = False) -> List[Dict]:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
         for tool in self.tools:
@@ -219,7 +218,7 @@ class ToolSet:
                 },
             }
 
-            if tool.parameters.get("properties") or not omit_empty_parameters:
+            if tool.parameters.get("properties") or not omit_empty_parameter_field:
                 func_def["function"]["parameters"] = tool.parameters
 
             result.append(func_def)
@@ -319,8 +318,8 @@ class ToolSet:
         return declarations
 
     @deprecated(reason="Use openai_schema() instead", version="4.0.0")
-    def get_func_desc_openai_style(self, omit_empty_parameters: bool = False):
-        return self.openai_schema(omit_empty_parameters)
+    def get_func_desc_openai_style(self, omit_empty_parameter_field: bool = False):
+        return self.openai_schema(omit_empty_parameter_field)
 
     @deprecated(reason="Use anthropic_schema() instead", version="4.0.0")
     def get_func_desc_anthropic_style(self):
@@ -817,7 +816,7 @@ class FunctionToolManager:
         """
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
-        return toolset.openai_schema(omit_empty_parameters=omit_empty_parameter_field)
+        return toolset.openai_schema(omit_empty_parameter_field=omit_empty_parameter_field)
 
     def get_func_desc_anthropic_style(self) -> list:
         """

@@ -18,6 +18,7 @@ from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.platform import Platform
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.persona_mgr import PersonaManager
 from .star import star_registry, StarMetadata, star_map
 from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
@@ -30,11 +31,6 @@ from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
 )
 from deprecated import deprecated
-
-from typing_extensions import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from astrbot.core.pipeline.context import PipelineContext
 
 
 class Context:
@@ -57,8 +53,6 @@ class Context:
 
     registered_web_apis: list = []
 
-    pipeline_ctx: "PipelineContext" = None
-
     # back compatibility
     _register_tasks: List[Awaitable] = []
     _star_manager = None
@@ -73,6 +67,7 @@ class Context:
         conversation_manager: ConversationManager = None,
         message_history_manager: PlatformMessageHistoryManager = None,
         persona_manager: PersonaManager = None,
+        astrbot_config_mgr: AstrBotConfigManager = None,
     ):
         self._event_queue = event_queue
         self._config = config
@@ -82,6 +77,7 @@ class Context:
         self.conversation_manager = conversation_manager
         self.message_history_manager = message_history_manager
         self.persona_manager = persona_manager
+        self.astrbot_config_mgr = astrbot_config_mgr
 
     def get_registered_star(self, star_name: str) -> StarMetadata:
         """根据插件名获取插件的 Metadata"""
@@ -145,7 +141,7 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入并且用户启用了提供商会话隔离，则使用该会话偏好的提供商。
         """
-        if umo and self._config["provider_settings"]["separate_provider"]:
+        if umo:
             perf = sp.get("session_provider_perf", {})
             prov_id = perf.get(umo, {}).get(ProviderType.CHAT_COMPLETION.value, None)
             if inst := self.provider_manager.inst_map.get(prov_id, None):
@@ -159,7 +155,7 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
-        if umo and self._config["provider_settings"]["separate_provider"]:
+        if umo:
             perf = sp.get("session_provider_perf", {})
             prov_id = perf.get(umo, {}).get(ProviderType.TEXT_TO_SPEECH.value, None)
             if inst := self.provider_manager.inst_map.get(prov_id, None):
@@ -173,16 +169,20 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
-        if umo and self._config["provider_settings"]["separate_provider"]:
+        if umo:
             perf = sp.get("session_provider_perf", {})
             prov_id = perf.get(umo, {}).get(ProviderType.SPEECH_TO_TEXT.value, None)
             if inst := self.provider_manager.inst_map.get(prov_id, None):
                 return inst
         return self.provider_manager.curr_stt_provider_inst
 
-    def get_config(self) -> AstrBotConfig:
+    def get_config(self, umo: str = None) -> AstrBotConfig:
         """获取 AstrBot 的配置。"""
-        return self._config
+        if not umo:
+            # using default config
+            return self._config
+        else:
+            return self.astrbot_config_mgr.get_conf(umo)
 
     def get_db(self) -> BaseDatabase:
         """获取 AstrBot 数据库。"""
@@ -256,9 +256,6 @@ class Context:
                 await platform.send_by_session(session, message_chain)
                 return True
         return False
-
-    def get_pipeline_context(self) -> "PipelineContext":
-        return self.pipeline_ctx
 
     """
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。
