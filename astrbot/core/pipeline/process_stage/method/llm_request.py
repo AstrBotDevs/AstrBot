@@ -65,7 +65,7 @@ class LLMRequestSubStage(Stage):
 
         return _ctx.get_using_provider(umo=event.unified_msg_origin)
 
-    async def _get_session_conv(self, event: AstrMessageEvent, umo: str):
+    async def _get_session_conv(self, event: AstrMessageEvent):
         umo = event.unified_msg_origin
         conv_mgr = self.conv_manager
 
@@ -75,7 +75,7 @@ class LLMRequestSubStage(Stage):
             cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
         conversation = await conv_mgr.get_conversation(umo, cid)
         if not conversation:
-            cid = await conv_mgr.new_conversation(conv_mgr, event.get_platform_id())
+            cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
             conversation = await conv_mgr.get_conversation(umo, cid)
         return conversation
 
@@ -121,7 +121,7 @@ class LLMRequestSubStage(Stage):
                     image_path = await comp.convert_to_file_path()
                     req.image_urls.append(image_path)
 
-            conversation = await self._get_session_conv(event, event.unified_msg_origin)
+            conversation = await self._get_session_conv(event)
             req.conversation = conversation
             req.contexts = json.loads(conversation.history)
 

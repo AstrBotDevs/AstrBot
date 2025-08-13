@@ -1281,7 +1281,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                         if llm_resp.completion_text:
                             req.prompt = f"(Image Caption: {llm_resp.completion_text})\n\n{req.prompt}"
                         req.image_urls = []
-                except BaseException as e:
+                except Exception as e:
                     logger.error(f"处理图片描述失败: {e}")
 
         if quote:
@@ -1327,7 +1327,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         if self.ltm and self.ltm_enabled(event):
             try:
                 await self.ltm.after_req_llm(event)
-            except BaseException as e:
+            except Exception as e:
                 logger.error(f"ltm: {e}")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
