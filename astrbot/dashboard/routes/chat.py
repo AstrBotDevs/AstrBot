@@ -30,7 +30,6 @@ class ChatRoute(Route):
             "/chat/get_file": ("GET", self.get_file),
             "/chat/post_image": ("POST", self.post_image),
             "/chat/post_file": ("POST", self.post_file),
-            "/chat/status": ("GET", self.status),
         }
         self.core_lifecycle = core_lifecycle
         self.register_routes()
@@ -40,19 +39,6 @@ class ChatRoute(Route):
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
         self.conv_mgr = core_lifecycle.conversation_manager
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
-
-    async def status(self):
-        has_llm_enabled = (
-            self.core_lifecycle.provider_manager.curr_provider_inst is not None
-        )
-        has_stt_enabled = (
-            self.core_lifecycle.provider_manager.curr_stt_provider_inst is not None
-        )
-        return (
-            Response()
-            .ok(data={"llm_enabled": has_llm_enabled, "stt_enabled": has_stt_enabled})
-            .__dict__
-        )
 
     async def get_file(self):
         filename = request.args.get("filename")

@@ -49,12 +49,6 @@ class ProviderManager:
         """默认的 Text To Speech Provider 实例"""
         self.db_helper = db_helper
 
-        # kdb(experimental)
-        self.curr_kdb_name = ""
-        kdb_cfg = config.get("knowledge_db", {})
-        if kdb_cfg and len(kdb_cfg):
-            self.curr_kdb_name = list(kdb_cfg.keys())[0]
-
     @property
     def persona_configs(self) -> list:
         """动态获取最新的 persona 配置"""

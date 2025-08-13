@@ -363,9 +363,6 @@ export default {
             stagedAudioUrl: "",
             mediaRecorder: null,
 
-            status: {},
-            statusText: '',
-
             eventSource: null,
             eventSourceReader: null,
 
@@ -618,15 +615,6 @@ export default {
                         img.onclick = () => this.openImagePreview(img.src);
                     }
                 });
-            });
-        },
-
-        checkStatus() {
-            axios.get('/api/chat/status').then(response => {
-                console.log(response.data);
-                this.status = response.data.data;
-            }).catch(err => {
-                console.error(err);
             });
         },
 
