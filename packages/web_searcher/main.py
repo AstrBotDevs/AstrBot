@@ -58,7 +58,7 @@ class Main(star.Star):
         except BaseException:
             site_result = ""
         site_result = (
-            site_result[:700] + "..." if len(site_result) > 700 else site_result
+            f"{site_result[:700]}..." if len(site_result) > 700 else site_result
         )
 
         header = f"{idx}. {result.title} "
@@ -171,7 +171,7 @@ class Main(star.Star):
             query(string): 和用户的问题最相关的搜索关键词，用于在 Google 上搜索。
             max_results(number): 返回的最大搜索结果数量，默认为 5。
         """
-        logger.info("web_searcher - search_from_search_engine: " + query)
+        logger.info(f"web_searcher - search_from_search_engine: {query}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         websearch_link = cfg["provider_settings"].get("web_search_link", False)
 
@@ -232,7 +232,7 @@ class Main(star.Star):
             start_date(string): Optional. The start date for the search results in the format 'YYYY-MM-DD'.
             end_date(string): Optional. The end date for the search results in the format 'YYYY-MM-DD'.
         """
-        logger.info("web_searcher - search_from_search_engine: " + query)
+        logger.info(f"web_searcher - search_from_tavily: {query}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         websearch_link = cfg["provider_settings"].get("web_search_link", False)
         tavily_key = cfg.get("provider_settings", {}).get("websearch_tavily_key", None)
@@ -267,9 +267,9 @@ class Main(star.Star):
             return "Error: Tavily web searcher does not return any results."
 
         ret_ls = []
-        for idx, result in enumerate(results):
+        for result in results:
             ret_ls.append(f"\nTitle: {result.title}")
-            ret_ls.append(f"URL: {result.snippet}")
+            ret_ls.append(f"URL: {result.url}")
             ret_ls.append(f"Content: {result.snippet}")
         ret = "\n".join(ret_ls)
 
@@ -302,7 +302,7 @@ class Main(star.Star):
         }
         results = await self._extract_tavily(cfg, payload)
         ret_ls = []
-        for idx, result in enumerate(results):
+        for result in results:
             ret_ls.append(f"URL: {result.get('url', 'No URL')}")
             ret_ls.append(f"Content: {result.get('raw_content', 'No content')}")
         ret = "\n".join(ret_ls)
@@ -327,9 +327,8 @@ class Main(star.Star):
 
         if not websearch_enable:
             # pop tools
-            for tool in tool_set:
-                if tool.name in self.TOOLS:
-                    tool_set.remove_tool(tool.name)
+            for tool_name in self.TOOLS:
+                tool_set.remove_tool(tool_name)
             return
 
         func_tool_mgr = self.context.get_llm_tool_manager()
