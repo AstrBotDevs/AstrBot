@@ -99,6 +99,11 @@ class ProviderOpenAIOfficial(Provider):
         for key in to_del:
             del payloads[key]
 
+        # 针对 ModelScope 的特殊处理：非流式调用必须设置 enable_thinking=false
+        if (self.provider_config.get("provider") == "modelscope" or 
+            "modelscope.cn" in str(self.provider_config.get("api_base", ""))):
+            extra_body["enable_thinking"] = False
+
         completion = await self.client.chat.completions.create(
             **payloads, stream=False, extra_body=extra_body
         )
