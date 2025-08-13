@@ -206,7 +206,7 @@ class ToolSet:
         """Get all function tools."""
         return self.get_tool(name)
 
-    def openai_schema(self, omit_empty_parameters: bool = False) -> List[Dict]:
+    def openai_schema(self, omit_empty_parameter_field: bool = False) -> List[Dict]:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
         for tool in self.tools:
@@ -218,7 +218,7 @@ class ToolSet:
                 },
             }
 
-            if tool.parameters.get("properties") or not omit_empty_parameters:
+            if tool.parameters.get("properties") or not omit_empty_parameter_field:
                 func_def["function"]["parameters"] = tool.parameters
 
             result.append(func_def)
@@ -318,8 +318,8 @@ class ToolSet:
         return declarations
 
     @deprecated(reason="Use openai_schema() instead", version="4.0.0")
-    def get_func_desc_openai_style(self, omit_empty_parameters: bool = False):
-        return self.openai_schema(omit_empty_parameters)
+    def get_func_desc_openai_style(self, omit_empty_parameter_field: bool = False):
+        return self.openai_schema(omit_empty_parameter_field)
 
     @deprecated(reason="Use anthropic_schema() instead", version="4.0.0")
     def get_func_desc_anthropic_style(self):
@@ -816,7 +816,7 @@ class FunctionToolManager:
         """
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
-        return toolset.openai_schema(omit_empty_parameters=omit_empty_parameter_field)
+        return toolset.openai_schema(omit_empty_parameter_field=omit_empty_parameter_field)
 
     def get_func_desc_anthropic_style(self) -> list:
         """
