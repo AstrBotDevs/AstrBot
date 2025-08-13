@@ -98,9 +98,35 @@ function saveEditedContent() {
 
             <v-col cols="12" sm="5" class="config-input">
               <div v-if="metadata[metadataKey].items[key]" class="w-100">
+                <!-- List item with options-->
+                <div v-if="metadata[metadataKey].items[key]?.type === 'list' && metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible && metadata[metadataKey].items[key]?.render_type === 'checkbox'" 
+                  class="d-flex flex-wrap gap-20">
+                  <v-checkbox
+                    v-for="(option, index) in metadata[metadataKey].items[key]?.options"
+                    v-model="iterable[key]"
+                    :label="metadata[metadataKey].items[key]?.labels ? metadata[metadataKey].items[key].labels[index] : option"
+                    :value="option"
+                    class="mr-2"
+                    color="primary"
+                    hide-details
+                  ></v-checkbox>
+                </div>
+                <!-- List item with options-->
+                <v-combobox
+                  v-else-if="metadata[metadataKey].items[key]?.type === 'list' && metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible"
+                  v-model="iterable[key]"
+                  :items="metadata[metadataKey].items[key]?.options"
+                  :disabled="metadata[metadataKey].items[key]?.readonly"
+                  density="compact"
+                  variant="outlined"
+                  class="config-field"
+                  hide-details
+                  chips
+                  multiple
+                ></v-combobox>
                 <!-- Select input -->
                 <v-select
-                  v-if="metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible"
+                  v-else-if="metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible"
                   v-model="iterable[key]"
                   :items="metadata[metadataKey].items[key]?.options"
                   :disabled="metadata[metadataKey].items[key]?.readonly"

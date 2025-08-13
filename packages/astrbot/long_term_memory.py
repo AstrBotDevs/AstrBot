@@ -30,8 +30,8 @@ class LongTermMemory:
             logger.error(e)
             max_cnt = 300
         image_caption = cfg["image_caption"]
-        image_caption_prompt = cfg["image_caption_prompt"] # TODO: 去掉这个配置项
-        image_caption_provider_id = cfg["image_caption_provider_id"] # TODO: 去掉这个配置项
+        image_caption_prompt = cfg["image_caption_prompt"]
+        image_caption_provider_id = cfg["image_caption_provider_id"]
         active_reply = cfg["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]

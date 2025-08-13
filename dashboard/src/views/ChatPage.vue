@@ -457,7 +457,6 @@ export default {
         // Theme is now handled globally by the customizer store.
         // 设置输入框标签
         this.inputFieldLabel = this.tm('input.chatPrompt');
-        this.checkStatus();
         this.getConversations();
         let inputField = document.getElementById('input-field');
         inputField.addEventListener('paste', this.handlePaste);

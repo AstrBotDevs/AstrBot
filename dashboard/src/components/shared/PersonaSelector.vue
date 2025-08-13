@@ -4,7 +4,7 @@
       未选择
     </span>
     <span v-else>
-      {{ modelValue }}
+      {{ modelValue === 'default' ? '默认人格' : modelValue }}
     </span>
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
       {{ buttonText }}
@@ -30,7 +30,7 @@
             :active="selectedPersona === persona.persona_id"
             rounded="md"
             class="ma-1">
-            <v-list-item-title>{{ persona.persona_id }}</v-list-item-title>
+            <v-list-item-title>{{ persona.persona_id === 'default' ? '默认人格' : persona.persona_id }}</v-list-item-title>
             <v-list-item-subtitle>
               {{ persona.system_prompt ? persona.system_prompt.substring(0, 50) + '...' : '无描述' }}
             </v-list-item-subtitle>
@@ -101,11 +101,24 @@ async function loadPersonas() {
   try {
     const response = await axios.get('/api/persona/list')
     if (response.data.status === 'ok') {
-      personaList.value = response.data.data || []
+      const personas = response.data.data || []
+      // 添加默认人格选项
+      personaList.value = [
+        {
+          persona_id: 'default',
+          system_prompt: 'You are a helpful and friendly assistant.'
+        },
+        ...personas
+      ]
     }
   } catch (error) {
     console.error('加载人格列表失败:', error)
-    personaList.value = []
+    personaList.value = [
+      {
+        persona_id: 'default',
+        system_prompt: 'You are a helpful and friendly assistant.'
+      }
+    ]
   } finally {
     loading.value = false
   }

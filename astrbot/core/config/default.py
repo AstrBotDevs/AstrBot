@@ -559,6 +559,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "gpt-4o-mini",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "Azure OpenAI": {
                         "id": "azure",
@@ -573,6 +574,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "gpt-4o-mini",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "xAI": {
                         "id": "xai",
@@ -586,6 +588,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "grok-2-latest",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "Anthropic": {
                         "id": "claude",
@@ -600,6 +603,7 @@ CONFIG_METADATA_2 = {
                             "model": "claude-3-5-sonnet-latest",
                             "max_tokens": 4096,
                         },
+                        "modalities": ["text", "image"],
                     },
                     "Ollama": {
                         "id": "ollama_default",
@@ -612,6 +616,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "llama3.1-8b",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "LM Studio": {
                         "id": "lm_studio",
@@ -624,6 +629,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "llama-3.1-8b",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "Gemini(OpenAI兼容)": {
                         "id": "gemini_default",
@@ -637,6 +643,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "gemini-1.5-flash",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "Gemini": {
                         "id": "gemini_default",
@@ -663,6 +670,7 @@ CONFIG_METADATA_2 = {
                         "gm_thinking_config": {
                             "budget": 0,
                         },
+                        "modalities": ["text", "image"],
                     },
                     "DeepSeek": {
                         "id": "deepseek_default",
@@ -676,6 +684,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "deepseek-chat",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "302.AI": {
                         "id": "302ai",
@@ -689,6 +698,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "gpt-4.1-mini",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "硅基流动": {
                         "id": "siliconflow",
@@ -702,6 +712,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "deepseek-ai/DeepSeek-V3",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "PPIO派欧云": {
                         "id": "ppio",
@@ -715,6 +726,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "deepseek/deepseek-r1",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "Kimi": {
                         "id": "moonshot",
@@ -728,6 +740,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "moonshot-v1-8k",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "智谱 AI": {
                         "id": "zhipu_default",
@@ -741,6 +754,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "glm-4-flash",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "Dify": {
                         "id": "dify_app_default",
@@ -785,6 +799,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "Qwen/Qwen3-32B",
                         },
+                        "modalities": ["text", "image"],
                     },
                     "FastGPT": {
                         "id": "fastgpt",
@@ -1001,6 +1016,15 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "modalities": {
+                        "description": "模型能力",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "options": ["text", "image"],
+                        "labels": ["文本", "图像"],
+                        "render_type": "checkbox",
+                        "hint": "模型支持的模态。如所填写的模型不支持图像，请取消勾选图像。",
+                    },
                     "provider": {
                         "type": "string",
                         "invisible": True,
