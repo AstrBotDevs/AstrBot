@@ -342,6 +342,12 @@ class ToolSet:
     def __iter__(self):
         return iter(self.tools)
 
+    def __repr__(self):
+        return f"ToolSet(tools={self.tools})"
+
+    def __str__(self):
+        return f"ToolSet(tools={self.tools})"
+
 
 def _prepare_config(config: dict) -> dict:
     """准备配置，处理嵌套格式"""
