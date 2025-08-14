@@ -39,7 +39,7 @@
                         v-if="!sidebarCollapsed">
                         <v-card v-if="conversations.length > 0" flat style="background-color: transparent;">
                             <v-list density="compact" nav class="conversation-list"
-                                style="background-color: transparent;" @update:selected="getConversationMessages">
+                                style="background-color: transparent;" v-model:selected="selectedConversations" @update:selected="getConversationMessages">
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                     rounded="lg" class="conversation-item" active-color="secondary">
                                     <v-list-item-title v-if="!sidebarCollapsed" class="conversation-title">{{ item.title
@@ -351,6 +351,7 @@ export default {
             prompt: '',
             messages: [],
             conversations: [],
+            selectedConversations: [], // 用于控制左侧列表的选中状态
             currCid: '',
             stagedImagesName: [], // 用于存储图片**文件名**的数组
             stagedImagesUrl: [], // 用于存储图片的blob URL数组
@@ -445,8 +446,17 @@ export default {
                 if (this.pendingCid && newConversations.length > 0) {
                     const conversation = newConversations.find(c => c.cid === this.pendingCid);
                     if (conversation) {
+                        // 先设置选中状态，然后加载对话消息
+                        this.selectedConversations = [this.pendingCid];
                         this.getConversationMessages([this.pendingCid]);
                         this.pendingCid = null;
+                    }
+                } else {
+                    // 如果没有URL参数指定的对话，且当前没有选中对话，则默认打开第一个对话
+                    if (!this.currCid && newConversations.length > 0) {
+                        const firstConversation = newConversations[0];
+                        this.selectedConversations = [firstConversation.cid];
+                        this.getConversationMessages([firstConversation.cid]);
                     }
                 }
             }
@@ -472,12 +482,6 @@ export default {
 
         // 添加keyup事件监听
         document.addEventListener('keyup', this.handleInputKeyUp);
-
-        // 从 localStorage 获取侧边栏折叠状态
-        const savedCollapseState = localStorage.getItem('sidebarCollapsed');
-        if (savedCollapseState !== null) {
-            this.sidebarCollapsed = JSON.parse(savedCollapseState);
-        }
     },
 
     beforeUnmount() {
@@ -729,6 +733,13 @@ export default {
                         this.getConversationMessages([this.pendingCid]);
                         this.pendingCid = null;
                     }
+                } else {
+                    // 如果没有URL参数指定的对话，且当前没有选中对话，则默认打开第一个对话
+                    if (!this.currCid && this.conversations.length > 0) {
+                        const firstConversation = this.conversations[0];
+                        this.selectedConversations = [firstConversation.cid];
+                        this.getConversationMessages([firstConversation.cid]);
+                    }
                 }
             }).catch(err => {
                 if (err.response.status === 401) {
@@ -753,6 +764,8 @@ export default {
 
             axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
                 this.currCid = cid[0];
+                // Update the selected conversation in the sidebar
+                this.selectedConversations = [cid[0]];
                 let history = response.data.data.history;
                 for (let i = 0; i < history.length; i++) {
                     let content = history[i].content;
@@ -810,6 +823,7 @@ export default {
 
         newC() {
             this.currCid = '';
+            this.selectedConversations = []; // 清除选中状态
             this.messages = [];
             if (this.$route.path.startsWith('/chatbox')) {
                 this.$router.push('/chatbox');
@@ -838,6 +852,7 @@ export default {
             axios.get('/api/chat/delete_conversation?conversation_id=' + cid).then(response => {
                 this.getConversations();
                 this.currCid = '';
+                this.selectedConversations = []; // 清除选中状态
                 this.messages = [];
             }).catch(err => {
                 console.error(err);
