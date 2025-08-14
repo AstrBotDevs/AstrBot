@@ -344,7 +344,8 @@ class ProviderGoogleGenAI(Provider):
 
         if not result_parts:
             logger.debug(result.candidates)
-            raise Exception("API 返回的内容为空。")
+            logger.debug("API 可能返回了空消息。")
+            return MessageChain(chain=[])
 
         chain = []
         part: types.Part
