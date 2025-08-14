@@ -47,8 +47,6 @@
         </div>
       </v-card-text>
       
-      <v-divider></v-divider>
-      
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelSelection">取消</v-btn>
