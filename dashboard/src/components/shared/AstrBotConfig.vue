@@ -48,6 +48,47 @@ function openEditorDialog(key, value, theme, language) {
 function saveEditedContent() {
   dialog.value = false
 }
+
+function getValueBySelector(obj, selector) {
+  const keys = selector.split('.')
+  let current = obj
+  for (const key of keys) {
+    if (current && typeof current === 'object' && key in current) {
+      current = current[key]
+    } else {
+      return undefined
+    }
+  }
+  return current
+}
+
+function shouldShowItem(itemMeta, itemKey) {
+  if (!itemMeta?.condition) {
+    return true
+  }
+  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
+    const actualValue = getValueBySelector(props.iterable, conditionKey)
+    if (actualValue !== expectedValue) {
+      return false
+    }
+  }
+  return true
+}
+
+function hasVisibleItemsAfter(items, currentIndex) {
+  const itemEntries = Object.entries(items)
+  
+  // 检查当前索引之后是否还有可见的配置项
+  for (let i = currentIndex + 1; i < itemEntries.length; i++) {
+    const [itemKey, itemValue] = itemEntries[i]
+    const itemMeta = props.metadata[props.metadataKey].items[itemKey]
+    if (!itemMeta?.invisible && shouldShowItem(itemMeta, itemKey)) {
+      return true
+    }
+  }
+  
+  return false
+}
 </script>
 
 <template>
@@ -79,7 +120,7 @@ function saveEditedContent() {
       <div v-for="(val, key, index) in filteredIterable" :key="key" class="config-item">
         <!-- Nested Object -->
         <div v-if="metadata[metadataKey].items[key]?.type === 'object'" class="nested-object">
-          <div v-if="metadata[metadataKey].items[key] && !metadata[metadataKey].items[key]?.invisible" class="nested-container">
+          <div v-if="metadata[metadataKey].items[key] && !metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="nested-container">
             <v-expand-transition>
               <AstrBotConfig :metadata="metadata[metadataKey].items" :iterable="iterable[key]" :metadataKey="key">
               </AstrBotConfig>
@@ -89,7 +130,7 @@ function saveEditedContent() {
         
         <!-- Regular Property -->
         <template v-else>
-          <v-row v-if="!metadata[metadataKey].items[key]?.invisible" class="config-row">
+          <v-row v-if="!metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="config-row">
             <v-col cols="12" sm="6" class="property-info">
               <v-list-item density="compact">
                 <v-list-item-title class="property-name">
@@ -244,7 +285,7 @@ function saveEditedContent() {
           </v-row>
 
           <v-divider 
-            v-if="index !== Object.keys(iterable).length - 1 && !metadata[metadataKey].items[key]?.invisible"
+            v-if="hasVisibleItemsAfter(filteredIterable, index) && !metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)"
             class="config-divider"
           ></v-divider>
         </template>
