@@ -75,7 +75,8 @@
     "usage": "使用方式: 在聊天页中输入 \"/kb use {name}\"",
     "tabs": {
       "upload": "上传文件",
-      "search": "搜索内容"
+      "search": "搜索内容",
+      "fromURL": "从URL导入"
     }
   },
   "upload": {
@@ -132,5 +133,26 @@
     "deleteFailed": "删除失败",
     "deleteKnowledgeBaseFailed": "删除知识库失败",
     "getEmbeddingModelListFailed": "获取嵌入模型列表失败"
+  },
+  "importFromUrl": {
+    "title": "从 URL 导入",
+    "urlLabel": "网页 URL",
+    "urlPlaceholder": "请输入要提取知识的网页地址",
+    "optionsTitle": "导入选项",
+    "tooltip": "这些选项控制如何从URL内容中提取和处理文本。\n留空将使用插件的默认设置。\n启用LLM文本修复和摘要后可能花费时间较长。",
+    "useLlmRepairLabel": "启用LLM文本修复",
+    "useClusteringSummaryLabel": "启用聚类摘要",
+    "repairLlmProviderIdLabel": "文本修复模型",
+    "summarizeLlmProviderIdLabel": "摘要模型",
+    "embeddingProviderIdLabel": "嵌入模型",
+    "chunkSizeLabel": "分片长度",
+    "chunkOverlapLabel": "重叠长度",
+    "startImport": "开始导入",
+    "importing": "正在导入...",
+    "importSuccess": "导入成功",
+    "importFailed": "导入失败",
+    "uploadingChunks": "内容提取成功，正在上传分片...",
+    "preRequisite": "提示：请先前往插件市场安装 astrbot_plugin_url_2_knowledge_base 并根据插件文档内的指示完成 playwright 安装后才可使用本功能",
+    "allChunksUploaded": "所有分片上传成功"
   }
-} 
+}
