@@ -230,6 +230,7 @@
             :iterable="newSelectedProviderConfig"
             :metadata="metadata['provider_group']?.metadata"
             metadataKey="provider"
+            :is-editing="updatingMode"
           />
         </v-card-text>
 
