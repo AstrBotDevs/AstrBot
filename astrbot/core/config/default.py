@@ -70,6 +70,7 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
+        "max_agent_step": 30
     },
     "provider_stt_settings": {
         "enable": False,
@@ -1676,6 +1677,10 @@ CONFIG_METADATA_2 = {
                     "streaming_segmented": {
                         "type": "bool",
                     },
+                    "max_agent_step": {
+                        "description": "工具调用轮数上限",
+                        "type": "int",
+                    },
                 },
             },
             "provider_stt_settings": {
@@ -1891,6 +1896,10 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_settings.show_tool_use_status": {
                         "description": "输出函数调用状态",
+                        "type": "bool",
+                    },
+                    "provider_settings.max_agent_step": {
+                        "description": "工具调用轮数上限",
                         "type": "bool",
                     },
                     "provider_settings.streaming_response": {
