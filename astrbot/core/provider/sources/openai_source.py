@@ -100,7 +100,7 @@ class ProviderOpenAIOfficial(Provider):
             del payloads[key]
 
         # 针对 qwen3 模型的特殊处理：非流式调用必须设置 enable_thinking=false
-        model = payloads.get("model", "") or ""
+        model = payloads.get("model", "")
         if "qwen3" in model.lower():
             extra_body["enable_thinking"] = False
 
