@@ -234,7 +234,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   v-model="createSelectorModel(itemKey).value"
                   button-text="选择人格池..."
                 />
-              </div>              <div v-else-if="itemMeta?._special === 'select_knowledgebase'">
+              </div>
+              <div v-else-if="itemMeta?._special === 'select_knowledgebase'">
                 <KnowledgeBaseSelector 
                   v-model="createSelectorModel(itemKey).value"
                 />
