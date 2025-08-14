@@ -99,9 +99,9 @@ class ProviderOpenAIOfficial(Provider):
         for key in to_del:
             del payloads[key]
 
-        # 针对 ModelScope 的特殊处理：非流式调用必须设置 enable_thinking=false
-        if (self.provider_config.get("provider") == "modelscope" or 
-            "modelscope.cn" in str(self.provider_config.get("api_base", ""))):
+        # 针对 Qwen/Qwen3 模型的特殊处理：非流式调用必须设置 enable_thinking=false
+        model = payloads.get("model", "")
+        if model.startswith("Qwen/Qwen3"):
             extra_body["enable_thinking"] = False
 
         completion = await self.client.chat.completions.create(
