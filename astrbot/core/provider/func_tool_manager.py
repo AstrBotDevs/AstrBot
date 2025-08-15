@@ -1,3 +1,5 @@
+# TODO: 将此文件组件挪到 astrbot/core/agent 中
+
 from __future__ import annotations
 import json
 import os
@@ -68,7 +70,7 @@ class FunctionTool:
     """函数工具的来源, local 为本地函数工具, mcp 为 MCP 服务"""
 
     # MCP 相关字段
-    mcp_server_name: str = None
+    mcp_server_name: str = None1
     """MCP 服务名称，当 origin 为 mcp 时有效"""
     mcp_client: MCPClient = None
     """MCP 客户端，当 origin 为 mcp 时有效"""
