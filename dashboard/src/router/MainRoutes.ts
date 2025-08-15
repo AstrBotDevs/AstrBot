@@ -105,6 +105,11 @@ const MainRoutes = {
       name: 'About',
       path: '/about',
       component: () => import('@/views/AboutPage.vue')
+    },
+    {
+      name: 'CommandPermission',
+      path: '/command-permission',
+      component: () => import('@/views/CommandPermissionPage.vue')
     }
   ]
 };

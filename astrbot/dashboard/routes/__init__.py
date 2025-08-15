@@ -10,6 +10,7 @@ from .tools import ToolsRoute  # 导入新的ToolsRoute
 from .conversation import ConversationRoute
 from .file import FileRoute
 from .session_management import SessionManagementRoute
+from .command_permission import CommandPermissionRoute
 
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "ConversationRoute",
     "FileRoute",
     "SessionManagementRoute",
+    "CommandPermissionRoute",
 ]
