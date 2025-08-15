@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import ListConfigItem from './ListConfigItem.vue'
 import ProviderSelector from './ProviderSelector.vue'
 import PersonaSelector from './PersonaSelector.vue'
+import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import { useI18n } from '@/i18n/composables'
 
 
@@ -196,6 +197,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 <v-text-field v-else v-model="createSelectorModel(itemKey).value" density="compact" variant="outlined"
                   class="config-field" hide-details></v-text-field>
               </div>
+
+              <!-- Special handling for specific metadata types -->
               <div v-else-if="itemMeta?._special === 'select_provider'">
                 <ProviderSelector 
                   v-model="createSelectorModel(itemKey).value"
@@ -230,6 +233,11 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 <PersonaSelector 
                   v-model="createSelectorModel(itemKey).value"
                   button-text="选择人格池..."
+                />
+              </div>
+              <div v-else-if="itemMeta?._special === 'select_knowledgebase'">
+                <KnowledgeBaseSelector 
+                  v-model="createSelectorModel(itemKey).value"
                 />
               </div>
 

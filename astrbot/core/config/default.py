@@ -121,6 +121,7 @@ DEFAULT_CONFIG = {
     "persona": [],  # deprecated
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
+    "default_kb_collection": "",  # 默认知识库名称
 }
 
 
@@ -557,10 +558,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.openai.com/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "gpt-4o-mini",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
                         "modalities": ["text", "image"],
                         "hint": "也兼容所有与OpenAI API兼容的服务。",
                     },
@@ -574,10 +572,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "gpt-4o-mini",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
                         "modalities": ["text", "image"],
                     },
                     "xAI": {
@@ -589,10 +584,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.x.ai/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "grok-2-latest",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "grok-2-latest", "temperature": 0.4},
                         "modalities": ["text", "image"],
                     },
                     "Anthropic": {
@@ -608,12 +600,12 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "claude-3-5-sonnet-latest",
                             "max_tokens": 4096,
-                            "temperature": 0.2
+                            "temperature": 0.2,
                         },
                         "modalities": ["text", "image"],
                     },
                     "Ollama": {
-                        "hint":"启用前请确保已正确安装并运行 Ollama 服务端，Ollama默认不带鉴权，无需修改key",
+                        "hint": "启用前请确保已正确安装并运行 Ollama 服务端，Ollama默认不带鉴权，无需修改key",
                         "id": "ollama_default",
                         "provider": "ollama",
                         "type": "openai_chat_completion",
@@ -621,10 +613,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["ollama"],  # ollama 的 key 默认是 ollama
                         "api_base": "http://localhost:11434/v1",
-                        "model_config": {
-                            "model": "llama3.1-8b",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "llama3.1-8b", "temperature": 0.4},
                         "modalities": ["text", "image"],
                     },
                     "LM Studio": {
@@ -651,7 +640,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "model_config": {
                             "model": "gemini-1.5-flash",
-                            "temperature": 0.4
+                            "temperature": 0.4,
                         },
                         "modalities": ["text", "image"],
                     },
@@ -666,7 +655,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "model_config": {
                             "model": "gemini-2.0-flash-exp",
-                            "temperature": 0.4
+                            "temperature": 0.4,
                         },
                         "gm_resp_image_modal": False,
                         "gm_native_search": False,
@@ -692,10 +681,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "deepseek-chat",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "deepseek-chat", "temperature": 0.4},
                         "modalities": ["text", "image"],
                     },
                     "302.AI": {
@@ -707,10 +693,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.302.ai/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "gpt-4.1-mini",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "gpt-4.1-mini", "temperature": 0.4},
                         "modalities": ["text", "image"],
                     },
                     "硅基流动": {
@@ -724,7 +707,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.siliconflow.cn/v1",
                         "model_config": {
                             "model": "deepseek-ai/DeepSeek-V3",
-                            "temperature": 0.4
+                            "temperature": 0.4,
                         },
                         "modalities": ["text", "image"],
                     },
@@ -739,7 +722,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "model_config": {
                             "model": "deepseek/deepseek-r1",
-                            "temperature": 0.4
+                            "temperature": 0.4,
                         },
                     },
                     "优云智算": {
@@ -765,10 +748,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.moonshot.cn/v1",
-                        "model_config": {
-                            "model": "moonshot-v1-8k",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "moonshot-v1-8k", "temperature": 0.4},
                         "modalities": ["text", "image"],
                     },
                     "智谱 AI": {
@@ -798,7 +778,7 @@ CONFIG_METADATA_2 = {
                         "dify_query_input_key": "astrbot_text_query",
                         "variables": {},
                         "timeout": 60,
-                        "hint": "请确保你在 AstrBot 里设置的 APP 类型和 Dify 里面创建的应用的类型一致！"
+                        "hint": "请确保你在 AstrBot 里设置的 APP 类型和 Dify 里面创建的应用的类型一致！",
                     },
                     "阿里云百炼应用": {
                         "id": "dashscope",
@@ -826,10 +806,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api-inference.modelscope.cn/v1",
-                        "model_config": {
-                            "model": "Qwen/Qwen3-32B",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "Qwen/Qwen3-32B", "temperature": 0.4},
                         "modalities": ["text", "image"],
                     },
                     "FastGPT": {
@@ -1794,6 +1771,9 @@ CONFIG_METADATA_2 = {
             "pypi_index_url": {
                 "type": "string",
             },
+            "default_kb_collection": {
+                "type": "string",
+            },
         },
     },
 }
@@ -1849,6 +1829,17 @@ CONFIG_METADATA_3 = {
                         "description": "默认采用的人格",
                         "type": "string",
                         "_special": "select_persona",
+                    },
+                },
+            },
+            "knowledgebase": {
+                "description": "知识库",
+                "type": "object",
+                "items": {
+                    "default_kb_collection": {
+                        "description": "默认使用的知识库",
+                        "type": "string",
+                        "_special": "select_knowledgebase",
                     },
                 },
             },
