@@ -48,7 +48,12 @@ class WeChatKF(BaseWeChatAPI):
         注意：可能会出现返回条数少于limit的情况，需结合返回的has_more字段判断是否继续请求。
         :return: 接口调用结果
         """
-        data = {"token": token, "cursor": cursor, "limit": limit, "open_kfid": open_kfid}
+        data = {
+            "token": token,
+            "cursor": cursor,
+            "limit": limit,
+            "open_kfid": open_kfid,
+        }
         return self._post("kf/sync_msg", data=data)
 
     def get_service_state(self, open_kfid, external_userid):
@@ -72,7 +77,9 @@ class WeChatKF(BaseWeChatAPI):
         }
         return self._post("kf/service_state/get", data=data)
 
-    def trans_service_state(self, open_kfid, external_userid, service_state, servicer_userid=""):
+    def trans_service_state(
+        self, open_kfid, external_userid, service_state, servicer_userid=""
+    ):
         """
         变更会话状态
 
@@ -180,7 +187,9 @@ class WeChatKF(BaseWeChatAPI):
         """
         return self._get("kf/customer/get_upgrade_service_config")
 
-    def upgrade_service(self, open_kfid, external_userid, service_type, member=None, groupchat=None):
+    def upgrade_service(
+        self, open_kfid, external_userid, service_type, member=None, groupchat=None
+    ):
         """
         为客户升级为专员或客户群服务
 
@@ -246,7 +255,9 @@ class WeChatKF(BaseWeChatAPI):
         data = {"open_kfid": open_kfid, "start_time": start_time, "end_time": end_time}
         return self._post("kf/get_corp_statistic", data=data)
 
-    def get_servicer_statistic(self, start_time, end_time, open_kfid=None, servicer_userid=None):
+    def get_servicer_statistic(
+        self, start_time, end_time, open_kfid=None, servicer_userid=None
+    ):
         """
         获取「客户数据统计」接待人员明细数据
 

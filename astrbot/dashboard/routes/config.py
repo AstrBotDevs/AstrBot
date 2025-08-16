@@ -210,11 +210,16 @@ class ConfigRoute(Route):
                 response = await asyncio.wait_for(
                     provider.text_chat(prompt="REPLY `PONG` ONLY"), timeout=45.0
                 )
-                logger.debug(f"Received response from {status_info['name']}: {response}")
+                logger.debug(
+                    f"Received response from {status_info['name']}: {response}"
+                )
                 if response is not None:
                     status_info["status"] = "available"
                     response_text_snippet = ""
-                    if hasattr(response, "completion_text") and response.completion_text:
+                    if (
+                        hasattr(response, "completion_text")
+                        and response.completion_text
+                    ):
                         response_text_snippet = (
                             response.completion_text[:70] + "..."
                             if len(response.completion_text) > 70
@@ -233,29 +238,48 @@ class ConfigRoute(Route):
                         f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{response_text_snippet}'"
                     )
                 else:
-                    status_info["error"] = "Test call returned None, but expected an LLMResponse object."
-                    logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None.")
+                    status_info["error"] = (
+                        "Test call returned None, but expected an LLMResponse object."
+                    )
+                    logger.warning(
+                        f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None."
+                    )
 
             except asyncio.TimeoutError:
-                status_info["error"] = "Connection timed out after 45 seconds during test call."
-                logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) timed out.")
+                status_info["error"] = (
+                    "Connection timed out after 45 seconds during test call."
+                )
+                logger.warning(
+                    f"Provider {status_info['name']} (ID: {status_info['id']}) timed out."
+                )
             except Exception as e:
                 error_message = str(e)
                 status_info["error"] = error_message
-                logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}")
-                logger.debug(f"Traceback for {status_info['name']}:\n{traceback.format_exc()}")
+                logger.warning(
+                    f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}"
+                )
+                logger.debug(
+                    f"Traceback for {status_info['name']}:\n{traceback.format_exc()}"
+                )
 
         elif provider_capability_type == ProviderType.EMBEDDING:
             try:
                 # For embedding, we can call the get_embedding method with a short prompt.
                 embedding_result = await provider.get_embedding("health_check")
-                if isinstance(embedding_result, list) and (not embedding_result or isinstance(embedding_result[0], float)):
+                if isinstance(embedding_result, list) and (
+                    not embedding_result or isinstance(embedding_result[0], float)
+                ):
                     status_info["status"] = "available"
                 else:
                     status_info["status"] = "unavailable"
-                    status_info["error"] = f"Embedding test failed: unexpected result type {type(embedding_result)}"
+                    status_info["error"] = (
+                        f"Embedding test failed: unexpected result type {type(embedding_result)}"
+                    )
             except Exception as e:
-                logger.error(f"Error testing embedding provider {provider_name}: {e}", exc_info=True)
+                logger.error(
+                    f"Error testing embedding provider {provider_name}: {e}",
+                    exc_info=True,
+                )
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"Embedding test failed: {str(e)}"
 
@@ -267,41 +291,71 @@ class ConfigRoute(Route):
                     status_info["status"] = "available"
                 else:
                     status_info["status"] = "unavailable"
-                    status_info["error"] = f"TTS test failed: unexpected result type {type(audio_result)}"
+                    status_info["error"] = (
+                        f"TTS test failed: unexpected result type {type(audio_result)}"
+                    )
             except Exception as e:
-                logger.error(f"Error testing TTS provider {provider_name}: {e}", exc_info=True)
+                logger.error(
+                    f"Error testing TTS provider {provider_name}: {e}", exc_info=True
+                )
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"TTS test failed: {str(e)}"
         elif provider_capability_type == ProviderType.SPEECH_TO_TEXT:
             try:
-                logger.debug(f"Sending health check audio to provider: {status_info['name']}")
-                sample_audio_path = os.path.join(get_astrbot_path(), "samples", "stt_health_check.wav")
+                logger.debug(
+                    f"Sending health check audio to provider: {status_info['name']}"
+                )
+                sample_audio_path = os.path.join(
+                    get_astrbot_path(), "samples", "stt_health_check.wav"
+                )
                 if not os.path.exists(sample_audio_path):
                     status_info["status"] = "unavailable"
-                    status_info["error"] = "STT test failed: sample audio file not found."
-                    logger.warning(f"STT test for {status_info['name']} failed: sample audio file not found at {sample_audio_path}")
+                    status_info["error"] = (
+                        "STT test failed: sample audio file not found."
+                    )
+                    logger.warning(
+                        f"STT test for {status_info['name']} failed: sample audio file not found at {sample_audio_path}"
+                    )
                 else:
                     text_result = await provider.get_text(sample_audio_path)
                     if isinstance(text_result, str) and text_result:
                         status_info["status"] = "available"
-                        snippet = text_result[:70] + "..." if len(text_result) > 70 else text_result
-                        logger.info(f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{snippet}'")
+                        snippet = (
+                            text_result[:70] + "..."
+                            if len(text_result) > 70
+                            else text_result
+                        )
+                        logger.info(
+                            f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{snippet}'"
+                        )
                     else:
                         status_info["status"] = "unavailable"
-                        status_info["error"] = f"STT test failed: unexpected result type {type(text_result)}"
-                        logger.warning(f"STT test for {status_info['name']} failed: unexpected result type {type(text_result)}")
+                        status_info["error"] = (
+                            f"STT test failed: unexpected result type {type(text_result)}"
+                        )
+                        logger.warning(
+                            f"STT test for {status_info['name']} failed: unexpected result type {type(text_result)}"
+                        )
             except Exception as e:
-                logger.error(f"Error testing STT provider {provider_name}: {e}", exc_info=True)
+                logger.error(
+                    f"Error testing STT provider {provider_name}: {e}", exc_info=True
+                )
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"STT test failed: {str(e)}"
         else:
-            logger.debug(f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}")
+            logger.debug(
+                f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}"
+            )
             status_info["status"] = "available"
-            status_info["error"] = "This provider type is not tested and is assumed to be available."
+            status_info["error"] = (
+                "This provider type is not tested and is assumed to be available."
+            )
 
         return status_info
 
-    def _error_response(self, message: str, status_code: int = 500, log_fn=logger.error):
+    def _error_response(
+        self, message: str, status_code: int = 500, log_fn=logger.error
+    ):
         log_fn(message)
         # 记录更详细的traceback信息，但只在是严重错误时
         if status_code == 500:
@@ -312,7 +366,9 @@ class ConfigRoute(Route):
         """API: check a single LLM Provider's status by id"""
         provider_id = request.args.get("id")
         if not provider_id:
-            return self._error_response("Missing provider_id parameter", 400, logger.warning)
+            return self._error_response(
+                "Missing provider_id parameter", 400, logger.warning
+            )
 
         logger.info(f"API call: /config/provider/check_one id={provider_id}")
         try:
@@ -320,16 +376,21 @@ class ConfigRoute(Route):
             target = prov_mgr.inst_map.get(provider_id)
 
             if not target:
-                logger.warning(f"Provider with id '{provider_id}' not found in provider_manager.")
-                return Response().error(f"Provider with id '{provider_id}' not found").__dict__
+                logger.warning(
+                    f"Provider with id '{provider_id}' not found in provider_manager."
+                )
+                return (
+                    Response()
+                    .error(f"Provider with id '{provider_id}' not found")
+                    .__dict__
+                )
 
             result = await self._test_single_provider(target)
             return Response().ok(result).__dict__
 
         except Exception as e:
             return self._error_response(
-                f"Critical error checking provider {provider_id}: {e}",
-                500
+                f"Critical error checking provider {provider_id}: {e}", 500
             )
 
     async def get_configs(self):

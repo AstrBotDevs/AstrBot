@@ -43,22 +43,38 @@ class ProviderOpenAIOfficial(Provider):
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
+
+        # 获取代理配置，优先使用提供商配置的代理，如果没有则使用环境变量
+        self.http_proxy = provider_config.get("http_proxy", "") or os.environ.get(
+            "http_proxy", None
+        )
+
         # 适配 azure openai #332
         if "api_version" in provider_config:
             # 使用 azure api
-            self.client = AsyncAzureOpenAI(
-                api_key=self.chosen_api_key,
-                api_version=provider_config.get("api_version", None),
-                base_url=provider_config.get("api_base", None),
-                timeout=self.timeout,
-            )
+            kwargs = {
+                "api_key": self.chosen_api_key,
+                "api_version": provider_config.get("api_version", None),
+                "base_url": provider_config.get("api_base", None),
+                "timeout": self.timeout,
+            }
+            if self.http_proxy:
+                import httpx
+
+                kwargs["http_client"] = httpx.AsyncClient(proxy=self.http_proxy)
+            self.client = AsyncAzureOpenAI(**kwargs)
         else:
             # 使用 openai api
-            self.client = AsyncOpenAI(
-                api_key=self.chosen_api_key,
-                base_url=provider_config.get("api_base", None),
-                timeout=self.timeout,
-            )
+            kwargs = {
+                "api_key": self.chosen_api_key,
+                "base_url": provider_config.get("api_base", None),
+                "timeout": self.timeout,
+            }
+            if self.http_proxy:
+                import httpx
+
+                kwargs["http_client"] = httpx.AsyncClient(proxy=self.http_proxy)
+            self.client = AsyncOpenAI(**kwargs)
 
         self.default_params = inspect.signature(
             self.client.chat.completions.create
@@ -338,10 +354,9 @@ class ProviderOpenAIOfficial(Provider):
                 logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
 
             if "Connection error." in str(e):
-                proxy = os.environ.get("http_proxy", None)
-                if proxy:
+                if self.http_proxy:
                     logger.error(
-                        f"可能为代理原因，请检查代理是否正常。当前代理: {proxy}"
+                        f"可能为代理原因，请检查代理是否正常。当前代理: {self.http_proxy}"
                     )
 
             raise e
