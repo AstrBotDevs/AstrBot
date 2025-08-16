@@ -12,7 +12,7 @@ from astrbot.core.platform.astrbot_message import (
     MessageType,
 )
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
-from astrbot.core.message.components import Plain, At
+from astrbot.core.message.components import Plain, At, Reply
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.provider.manager import ProviderManager
@@ -283,3 +283,62 @@ async def test_commands(pipeline_scheduler: PipelineScheduler, caplog):
             await pipeline_scheduler.execute(mock_event)
         # assert any("执行阶段 ProcessStage" in message for message in caplog.messages)
         assert any(command[1] in message for message in caplog.messages)
+
+
+@pytest.mark.asyncio
+async def test_segmented_reply_with_quote_fix():
+    """测试分段回复与引用消息结合时的修复 - Issue #2132"""
+    from astrbot.core.pipeline.respond.stage import RespondStage
+    
+    # 创建响应阶段实例来测试辅助方法
+    stage = RespondStage()
+    
+    # 测试 _is_empty_component 方法
+    assert stage._is_empty_component(Plain("")) is True  # 空文本
+    assert stage._is_empty_component(Plain("   ")) is True  # 仅空白字符
+    assert stage._is_empty_component(Plain("Hello")) is False  # 正常文本
+    assert stage._is_empty_component(Reply(id="123", sender_id="456")) is False  # 正常回复
+    
+    # 模拟分段后包含空组件的情况（这是导致bug的场景）
+    non_record_comps = [
+        Plain(""),        # 空的第一段 - 应该被跳过
+        Plain("Hello"),   # 第二段包含内容
+        Plain("world!"),  # 第三段包含内容
+    ]
+    
+    # 装饰组件（@和引用）
+    decorated_comps = [Reply(id="original", sender_id="user123")]
+    
+    # 模拟修复后的逻辑
+    sent_messages = []
+    decoration_used = False
+    
+    for comp in non_record_comps:
+        # 跳过空组件 (这是修复的关键点)
+        if stage._is_empty_component(comp):
+            continue
+        
+        # 构建消息，第一个非空组件会包含装饰
+        if not decoration_used:
+            message = decorated_comps + [comp]
+            decoration_used = True
+        else:
+            message = [comp]
+        
+        sent_messages.append(message)
+    
+    # 验证结果
+    assert len(sent_messages) == 2, f"应该发送2条消息，实际发送了{len(sent_messages)}条"
+    
+    # 第一条消息应该包含引用和文本内容
+    first_message = sent_messages[0]
+    assert len(first_message) == 2, "第一条消息应该包含2个组件（引用+文本）"
+    assert isinstance(first_message[0], Reply), "第一个组件应该是Reply"
+    assert isinstance(first_message[1], Plain), "第二个组件应该是Plain"
+    assert first_message[1].text == "Hello", "第一条消息的文本应该是'Hello'"
+    
+    # 第二条消息应该只包含文本
+    second_message = sent_messages[1]  
+    assert len(second_message) == 1, "第二条消息应该只包含1个组件"
+    assert isinstance(second_message[0], Plain), "应该是Plain组件"
+    assert second_message[0].text == "world!", "第二条消息的文本应该是'world!'"

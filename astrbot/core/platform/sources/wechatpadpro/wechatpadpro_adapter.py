@@ -213,10 +213,10 @@ class WeChatPadProAdapter(Platform):
     def _extract_auth_key(self, data):
         """Helper method to extract auth_key from response data."""
         if isinstance(data, dict):
-            auth_keys = data.get("authKeys") # 新接口
+            auth_keys = data.get("authKeys")  # 新接口
             if isinstance(auth_keys, list) and auth_keys:
                 return auth_keys[0]
-        elif isinstance(data, list) and data: # 旧接口
+        elif isinstance(data, list) and data:  # 旧接口
             return data[0]
         return None
 
@@ -234,7 +234,9 @@ class WeChatPadProAdapter(Platform):
             try:
                 async with session.post(url, params=params, json=payload) as response:
                     if response.status != 200:
-                        logger.error(f"生成授权码失败: {response.status}, {await response.text()}")
+                        logger.error(
+                            f"生成授权码失败: {response.status}, {await response.text()}"
+                        )
                         return
 
                     response_data = await response.json()
@@ -245,7 +247,9 @@ class WeChatPadProAdapter(Platform):
                         if self.auth_key:
                             logger.info("成功获取授权码")
                         else:
-                            logger.error(f"生成授权码成功但未找到授权码: {response_data}")
+                            logger.error(
+                                f"生成授权码成功但未找到授权码: {response_data}"
+                            )
                     else:
                         logger.error(f"生成授权码失败: {response_data}")
             except aiohttp.ClientConnectorError as e:

@@ -5,6 +5,7 @@ from .astrbot_path import get_astrbot_data_path
 
 _VT = TypeVar("_VT")
 
+
 class SharedPreferences:
     def __init__(self, path=None):
         if path is None:

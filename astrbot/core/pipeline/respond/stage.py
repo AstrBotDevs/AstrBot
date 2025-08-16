@@ -94,6 +94,20 @@ class RespondStage(Stage):
             # random
             return random.uniform(self.interval[0], self.interval[1])
 
+    def _is_empty_component(self, comp: BaseMessageComponent) -> bool:
+        """检查单个消息组件是否为空
+
+        Args:
+            comp (BaseMessageComponent): 消息组件
+
+        Returns:
+            bool: 如果组件为空则返回 True
+        """
+        comp_type = type(comp)
+        if comp_type in self._component_validators:
+            return not self._component_validators[comp_type](comp)
+        return True
+
     async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]):
         """检查消息链是否为空
 
@@ -104,12 +118,8 @@ class RespondStage(Stage):
             return True
 
         for comp in chain:
-            comp_type = type(comp)
-
-            # 检查组件类型是否在字典中
-            if comp_type in self._component_validators:
-                if self._component_validators[comp_type](comp):
-                    return False
+            if not self._is_empty_component(comp):
+                return False
 
         # 如果所有组件都为空
         return True
@@ -190,6 +200,10 @@ class RespondStage(Stage):
                             break
                     # 分段回复
                     for comp in non_record_comps:
+                        # 跳过空组件，避免发送只有装饰组件的空消息
+                        if self._is_empty_component(comp):
+                            continue
+
                         i = await self._calc_comp_interval(comp)
                         await asyncio.sleep(i)
                         try:
