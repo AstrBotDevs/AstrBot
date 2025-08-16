@@ -1,5 +1,4 @@
 import os
-import asyncio
 from .log import LogManager, LogBroker  # noqa
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 from astrbot.core.utils.shared_preferences import SharedPreferences
