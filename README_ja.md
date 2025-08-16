@@ -72,6 +72,7 @@ AstrBot は、疎結合、非同期、複数のメッセージプラットフォ
 | [Telegram](https://github.com/Soulter/astrbot_plugin_telegram)   | ✔    | プライベートチャット、グループチャット | テキスト、画像 |
 | [WeChat(企業 WeChat)](https://github.com/Soulter/astrbot_plugin_wecom)    | ✔    | プライベートチャット | テキスト、画像、音声 |
 | Feishu   | ✔    | グループチャット | テキスト、画像 |
+| Matrix (Element等)   | ✔    | プライベートチャット、グループチャット | テキスト、画像、ファイル |
 | WeChat 対話オープンプラットフォーム | 🚧    | 計画中 | - |
 | Discord   | 🚧    | 計画中 | - |
 | WhatsApp   | 🚧    | 計画中 | - |

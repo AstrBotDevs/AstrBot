@@ -110,6 +110,7 @@ uv run main.py
 | 钉钉   | ✔    |
 | Slack   | ✔    |
 | Discord   | ✔    |
+| Matrix (Element等)   | ✔    |
 | [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
 | 微信对话开放平台 | 🚧    |
