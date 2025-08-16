@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import mcp
 from datetime import timedelta
 from typing import Optional
 from contextlib import AsyncExitStack
