@@ -1316,6 +1316,16 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
 
+        # Add Telegram topic context for shared conversations
+        if event.get_platform_name() == "telegram":
+            topic_id = event.get_extra("telegram_topic_id")
+            base_group_id = event.get_extra("telegram_base_group_id")
+            if topic_id and base_group_id:
+                req.system_prompt += (
+                    f"\n[Context: This message is from Telegram topic "
+                    f"#{topic_id} in group {base_group_id}]\n"
+                )
+
         if self.ltm:
             try:
                 await self.ltm.on_req_llm(event, req)

@@ -223,9 +223,10 @@ class TelegramPlatformAdapter(Platform):
             message.type = MessageType.GROUP_MESSAGE
             message.group_id = str(update.message.chat.id)
             if update.message.message_thread_id:
-                # Topic Group
+                # Topic Group - keep topic info in group_id for message routing,
+                # but use base group_id for session_id to share conversations
                 message.group_id += "#" + str(update.message.message_thread_id)
-                message.session_id = message.group_id
+                # session_id remains the base group_id for shared conversation
 
         message.message_id = str(update.message.message_id)
         message.sender = MessageMember(
@@ -349,6 +350,13 @@ class TelegramPlatformAdapter(Platform):
             session_id=message.session_id,
             client=self.client,
         )
+
+        # Store topic information for shared conversations
+        if message.type == MessageType.GROUP_MESSAGE and "#" in message.group_id:
+            group_id, topic_id = message.group_id.split("#")
+            message_event.set_extra("telegram_topic_id", topic_id)
+            message_event.set_extra("telegram_base_group_id", group_id)
+
         self.commit_event(message_event)
 
     def get_client(self) -> ExtBot:
