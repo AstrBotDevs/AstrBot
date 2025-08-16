@@ -2,18 +2,16 @@ from dataclasses import dataclass
 from typing import Any, Generic
 from typing_extensions import TypeVar
 
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
 TContext = TypeVar("TContext", default=Any)
 
 
 @dataclass
-class RunContext(Generic[TContext]):
+class ContextWrapper(Generic[TContext]):
     """A context for running an agent, which can be used to pass additional data or state."""
 
     context: TContext
-
-class AgentRunContext:
-    request: ProviderRequest | None
-    streaming: bool
     event: AstrMessageEvent
-    pipeline_ctx: PipelineContext
 
+NoContext = ContextWrapper[None]

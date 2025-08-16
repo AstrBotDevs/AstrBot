@@ -2,7 +2,7 @@
 本地 Agent 模式的 AstrBot 插件调用 Stage
 """
 
-from ...context import PipelineContext
+from ...context import PipelineContext, call_handler
 from ..stage import Stage
 from typing import Dict, Any, List, AsyncGenerator, Union
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -50,7 +50,7 @@ class StarRequestSubStage(Stage):
                 logger.debug(
                     f"plugin -> {star_map.get(handler.handler_module_path).name} - {handler.handler_name}"
                 )
-                wrapper = self.ctx.call_handler(event, handler.handler, **params)
+                wrapper = call_handler(event, handler.handler, **params)
                 async for ret in wrapper:
                     yield ret
                 event.clear_result()  # 清除上一个 handler 的结果

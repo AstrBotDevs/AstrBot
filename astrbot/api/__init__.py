@@ -3,5 +3,6 @@ from astrbot import logger
 from astrbot.core import html_renderer
 from astrbot.core import sp
 from astrbot.core.star.register import register_llm_tool as llm_tool
+from astrbot.core.star.register import register_agent as agent
 
-__all__ = ["AstrBotConfig", "logger", "html_renderer", "llm_tool", "sp"]
+__all__ = ["AstrBotConfig", "logger", "html_renderer", "llm_tool", "agent", "sp"]

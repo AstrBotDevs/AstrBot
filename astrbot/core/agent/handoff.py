@@ -1,23 +1,28 @@
+from typing import Generic
 from .tool import FunctionTool
+from .agent import Agent
+from .run_context import TContext
 
 
-class Handoff(FunctionTool):
+class HandoffTool(FunctionTool, Generic[TContext]):
     """Handoff tool for delegating tasks to another agent."""
 
-    def __init__(
-        self, name: str, description: str | None = None, parameters: dict | None = None
-    ):
+    def __init__(self, agent: Agent[TContext], parameters: dict | None = None):
+        self.agent = agent
         super().__init__(
-            name=name,
+            name=f"transfer_to_{agent.name}",
             parameters=parameters or self.default_parameters(),
-            description=description or self.default_description(name),
+            description=agent.instructions or self.default_description(agent.name),
         )
 
     def default_parameters(self) -> dict:
         return {
-            "input": {
-                "type": "string",
-                "description": "The input to be handed off to another agent. This should be a clear and concise request or task.",
+            "type": "object",
+            "properties": {
+                "input": {
+                    "type": "string",
+                    "description": "The input to be handed off to another agent. This should be a clear and concise request or task.",
+                },
             },
         }
 

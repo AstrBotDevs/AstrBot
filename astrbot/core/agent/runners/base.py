@@ -1,9 +1,10 @@
 import abc
 import typing as T
 from enum import Enum, auto
-from ..run_context import RunContext, TContext
+from ..run_context import ContextWrapper, TContext
 from ..response import AgentResponse
 from ..hooks import BaseAgentRunHooks
+from ..tool_executor import BaseFunctionToolExecutor
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import LLMResponse
 
@@ -22,7 +23,8 @@ class BaseAgentRunner(T.Generic[TContext]):
     async def reset(
         self,
         provider: Provider,
-        run_context: RunContext[TContext],
+        run_context: ContextWrapper[TContext],
+        tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
         **kwargs: T.Any,
     ) -> None:

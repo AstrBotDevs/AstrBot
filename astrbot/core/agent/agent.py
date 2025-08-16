@@ -1,8 +1,13 @@
 from dataclasses import dataclass
-from .tool import ToolSet
+from .tool import FunctionTool
+from typing import Generic
+from .run_context import TContext
+from .hooks import BaseAgentRunHooks
+
 
 @dataclass
-class Agent:
+class Agent(Generic[TContext]):
     name: str
     instructions: str | None = None
-    tools: ToolSet | None = None
+    tools: list[str, FunctionTool] | None = None
+    run_hooks: BaseAgentRunHooks[TContext] | None = None

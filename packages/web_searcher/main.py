@@ -5,7 +5,7 @@ import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api.provider import ProviderRequest
-from astrbot.api import llm_tool, logger, AstrBotConfig
+from astrbot.api import llm_tool, agent, logger, AstrBotConfig
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from .engines import SearchResult
 from .engines.bing import Bing
@@ -161,7 +161,11 @@ class Main(star.Star):
             )
         )
 
-    @llm_tool("web_search")
+    @agent(name="web_searcher", instruction="This is a web searcher agent. It provides web search and content extraction tools.")
+    def web_searcher(self):
+        pass
+
+    @web_searcher.llm_tool(name="web_search")
     async def search_from_search_engine(
         self, event: AstrMessageEvent, query: str, max_results: int = 5
     ) -> str:
@@ -196,7 +200,7 @@ class Main(star.Star):
 
         return ret
 
-    @llm_tool("fetch_url")
+    @web_searcher.llm_tool(name="fetch_url")
     async def fetch_website_content(self, event: AstrMessageEvent, url: str) -> str:
         """fetch the content of a website with the given web url
 
@@ -206,109 +210,109 @@ class Main(star.Star):
         resp = await self._get_from_url(url)
         return resp
 
-    @llm_tool("web_search_tavily")
-    async def search_from_tavily(
-        self,
-        event: AstrMessageEvent,
-        query: str,
-        max_results: int = 5,
-        search_depth: str = "basic",
-        topic: str = "general",
-        days: int = 3,
-        time_range: str = "",
-        start_date: str = "",
-        end_date: str = "",
-    ) -> str:
-        """A web search tool that uses Tavily to search the web for relevant content.
-        Ideal for gathering current information, news, and detailed web content analysis.
+    # @web_searcher.llm_tool("web_search_tavily")
+    # async def search_from_tavily(
+    #     self,
+    #     event: AstrMessageEvent,
+    #     query: str,
+    #     max_results: int = 5,
+    #     search_depth: str = "basic",
+    #     topic: str = "general",
+    #     days: int = 3,
+    #     time_range: str = "",
+    #     start_date: str = "",
+    #     end_date: str = "",
+    # ) -> str:
+    #     """A web search tool that uses Tavily to search the web for relevant content.
+    #     Ideal for gathering current information, news, and detailed web content analysis.
 
-        Args:
-            query(string): Required. Search query.
-            max_results(number): Optional. The maximum number of results to return. Default is 5. Range is 5-20.
-            search_depth(string): Optional. The depth of the search, must be one of 'basic', 'advanced'. Default is "basic".
-            topic(string): Optional. The topic of the search, must be one of 'general', 'news'. Default is "general".
-            days(number): Optional. The number of days back from the current date to include in the search results. Please note that this feature is only available when using the 'news' search topic.
-            time_range(string): Optional. The time range back from the current date to include in the search results. This feature is available for both 'general' and 'news' search topics. Must be one of 'day', 'week', 'month', 'year'.
-            start_date(string): Optional. The start date for the search results in the format 'YYYY-MM-DD'.
-            end_date(string): Optional. The end date for the search results in the format 'YYYY-MM-DD'.
-        """
-        logger.info(f"web_searcher - search_from_tavily: {query}")
-        cfg = self.context.get_config(umo=event.unified_msg_origin)
-        websearch_link = cfg["provider_settings"].get("web_search_link", False)
-        tavily_key = cfg.get("provider_settings", {}).get("websearch_tavily_key", None)
-        if not tavily_key:
-            raise ValueError("Error: Tavily API key is not configured in AstrBot.")
+    #     Args:
+    #         query(string): Required. Search query.
+    #         max_results(number): Optional. The maximum number of results to return. Default is 5. Range is 5-20.
+    #         search_depth(string): Optional. The depth of the search, must be one of 'basic', 'advanced'. Default is "basic".
+    #         topic(string): Optional. The topic of the search, must be one of 'general', 'news'. Default is "general".
+    #         days(number): Optional. The number of days back from the current date to include in the search results. Please note that this feature is only available when using the 'news' search topic.
+    #         time_range(string): Optional. The time range back from the current date to include in the search results. This feature is available for both 'general' and 'news' search topics. Must be one of 'day', 'week', 'month', 'year'.
+    #         start_date(string): Optional. The start date for the search results in the format 'YYYY-MM-DD'.
+    #         end_date(string): Optional. The end date for the search results in the format 'YYYY-MM-DD'.
+    #     """
+    #     logger.info(f"web_searcher - search_from_tavily: {query}")
+    #     cfg = self.context.get_config(umo=event.unified_msg_origin)
+    #     websearch_link = cfg["provider_settings"].get("web_search_link", False)
+    #     tavily_key = cfg.get("provider_settings", {}).get("websearch_tavily_key", None)
+    #     if not tavily_key:
+    #         raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
-        # build payload
-        payload = {
-            "query": query,
-            "max_results": max_results,
-        }
-        if search_depth not in ["basic", "advanced"]:
-            search_depth = "basic"
-        payload["search_depth"] = search_depth
+    #     # build payload
+    #     payload = {
+    #         "query": query,
+    #         "max_results": max_results,
+    #     }
+    #     if search_depth not in ["basic", "advanced"]:
+    #         search_depth = "basic"
+    #     payload["search_depth"] = search_depth
 
-        if topic not in ["general", "news"]:
-            topic = "general"
-        payload["topic"] = topic
+    #     if topic not in ["general", "news"]:
+    #         topic = "general"
+    #     payload["topic"] = topic
 
-        if topic == "news":
-            payload["days"] = days
+    #     if topic == "news":
+    #         payload["days"] = days
 
-        if time_range in ["day", "week", "month", "year"]:
-            payload["time_range"] = time_range
-        if start_date:
-            payload["start_date"] = start_date
-        if end_date:
-            payload["end_date"] = end_date
+    #     if time_range in ["day", "week", "month", "year"]:
+    #         payload["time_range"] = time_range
+    #     if start_date:
+    #         payload["start_date"] = start_date
+    #     if end_date:
+    #         payload["end_date"] = end_date
 
-        results = await self._web_search_tavily(cfg, payload)
-        if not results:
-            return "Error: Tavily web searcher does not return any results."
+    #     results = await self._web_search_tavily(cfg, payload)
+    #     if not results:
+    #         return "Error: Tavily web searcher does not return any results."
 
-        ret_ls = []
-        for result in results:
-            ret_ls.append(f"\nTitle: {result.title}")
-            ret_ls.append(f"URL: {result.url}")
-            ret_ls.append(f"Content: {result.snippet}")
-        ret = "\n".join(ret_ls)
+    #     ret_ls = []
+    #     for result in results:
+    #         ret_ls.append(f"\nTitle: {result.title}")
+    #         ret_ls.append(f"URL: {result.url}")
+    #         ret_ls.append(f"Content: {result.snippet}")
+    #     ret = "\n".join(ret_ls)
 
-        if websearch_link:
-            ret += "\n\n针对问题，请根据上面的结果分点总结，并且在结尾处附上对应内容的参考链接（如有）。"
-        return ret
+    #     if websearch_link:
+    #         ret += "\n\n针对问题，请根据上面的结果分点总结，并且在结尾处附上对应内容的参考链接（如有）。"
+    #     return ret
 
-    @llm_tool("tavily_extract_web_page")
-    async def tavily_extract_web_page(
-        self, event: AstrMessageEvent, url: str = "", extract_depth: str = "basic"
-    ) -> str:
-        """Extract the content of a web page using Tavily.
+    # @web_searcher.llm_tool("tavily_extract_web_page")
+    # async def tavily_extract_web_page(
+    #     self, event: AstrMessageEvent, url: str = "", extract_depth: str = "basic"
+    # ) -> str:
+    #     """Extract the content of a web page using Tavily.
 
-        Args:
-            url(string): Required. An URl to extract content from.
-            extract_depth(string): Optional. The depth of the extraction, must be one of 'basic', 'advanced'. Default is "basic".
-        """
-        cfg = self.context.get_config(umo=event.unified_msg_origin)
-        tavily_key = cfg.get("provider_settings", {}).get("websearch_tavily_key", None)
-        if not tavily_key:
-            raise ValueError("Error: Tavily API key is not configured in AstrBot.")
+    #     Args:
+    #         url(string): Required. An URl to extract content from.
+    #         extract_depth(string): Optional. The depth of the extraction, must be one of 'basic', 'advanced'. Default is "basic".
+    #     """
+    #     cfg = self.context.get_config(umo=event.unified_msg_origin)
+    #     tavily_key = cfg.get("provider_settings", {}).get("websearch_tavily_key", None)
+    #     if not tavily_key:
+    #         raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
-        if not url:
-            raise ValueError("Error: url must be a non-empty string.")
-        if extract_depth not in ["basic", "advanced"]:
-            extract_depth = "basic"
-        payload = {
-            "urls": [url],
-            "extract_depth": extract_depth,
-        }
-        results = await self._extract_tavily(cfg, payload)
-        ret_ls = []
-        for result in results:
-            ret_ls.append(f"URL: {result.get('url', 'No URL')}")
-            ret_ls.append(f"Content: {result.get('raw_content', 'No content')}")
-        ret = "\n".join(ret_ls)
-        if not ret:
-            return "Error: Tavily web searcher does not return any results."
-        return ret
+    #     if not url:
+    #         raise ValueError("Error: url must be a non-empty string.")
+    #     if extract_depth not in ["basic", "advanced"]:
+    #         extract_depth = "basic"
+    #     payload = {
+    #         "urls": [url],
+    #         "extract_depth": extract_depth,
+    #     }
+    #     results = await self._extract_tavily(cfg, payload)
+    #     ret_ls = []
+    #     for result in results:
+    #         ret_ls.append(f"URL: {result.get('url', 'No URL')}")
+    #         ret_ls.append(f"Content: {result.get('raw_content', 'No content')}")
+    #     ret = "\n".join(ret_ls)
+    #     if not ret:
+    #         return "Error: Tavily web searcher does not return any results."
+    #     return ret
 
     @filter.on_llm_request(priority=-10000)
     async def edit_web_search_tools(
