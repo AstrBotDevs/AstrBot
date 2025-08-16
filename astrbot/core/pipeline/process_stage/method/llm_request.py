@@ -57,115 +57,146 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             AsyncGenerator[None | mcp.types.CallToolResult, None]
         """
         if isinstance(tool, HandoffTool):
-            input_ = tool_args.get("input", "agent")
-            agent_runner = AgentRunner()
-
-            # make toolset for the agent
-            tools = tool.agent.tools
-            if tools:
-                toolset = ToolSet()
-                for t in tools:
-                    if isinstance(t, str):
-                        _t = llm_tools.get_func(t)
-                        if _t:
-                            toolset.add_tool(_t)
-                    elif isinstance(t, FunctionTool):
-                        toolset.add_tool(t)
-            else:
-                toolset = None
-
-            request = ProviderRequest(
-                prompt=input_,
-                system_prompt=tool.description,
-                image_urls=[],  # 暂时不传递原始 agent 的上下文
-                contexts=[],  # 暂时不传递原始 agent 的上下文
-                func_tool=toolset,
-            )
-            astr_agent_ctx = AstrAgentContext(
-                provider=run_context.context.provider,
-                first_provider_request=run_context.context.first_provider_request,
-                curr_provider_request=request,
-                streaming=run_context.context.streaming,
-            )
-
-            logger.debug(f"正在将任务委托给 Agent: {tool.agent.name}, input: {input_}")
-            await run_context.event.send(
-                MessageChain().message("✨ 正在将任务委托给 Agent: " + tool.agent.name)
-            )
-
-            await agent_runner.reset(
-                provider=run_context.context.provider,
-                request=request,
-                run_context=AgentContextWrapper(
-                    context=astr_agent_ctx, event=run_context.event
-                ),
-                tool_executor=FunctionToolExecutor(),
-                agent_hooks=tool.agent.run_hooks
-                or BaseAgentRunHooks[AstrAgentContext](),
-                streaming=run_context.context.streaming,
-            )
-
-            async for _ in run_agent(agent_runner, 15, True):
-                pass
-
-            if agent_runner.done():
-                llm_response = agent_runner.get_final_llm_resp()
-                logger.debug(
-                    f"Agent  {tool.agent.name} 任务完成, response: {llm_response.completion_text}"
-                )
-
-                result = (
-                    f"Agent {tool.agent.name} respond with: {llm_response.completion_text}\n\n"
-                    "Note: If the result is error or need user provide more information, please provide more information to the agent(you can ask user for more information first)."
-                )
-
-                text_content = mcp.types.TextContent(
-                    type="text",
-                    text=result,
-                )
-                yield mcp.types.CallToolResult(content=[text_content])
-            else:
-                yield mcp.types.TextContent(
-                    type="text",
-                    text=f"error when deligate task to {tool.agent.name}",
-                )
-                yield mcp.types.CallToolResult(content=[text_content])
+            async for r in cls._execute_handoff(tool, run_context, **tool_args):
+                yield r
             return
 
         if tool.origin == "local":
-            if not run_context.event:
-                raise ValueError("Event must be provided for local function tools.")
-            wrapper = call_handler(
-                event=run_context.event,
-                handler=tool.handler,
-                **tool_args,
-            )
-            async for resp in wrapper:
-                if resp is not None:
-                    text_content = mcp.types.TextContent(
-                        type="text",
-                        text=str(resp),
-                    )
-                    yield mcp.types.CallToolResult(content=[text_content])
-                else:
-                    # NOTE: Tool 在这里直接请求发送消息给用户
-                    # TODO: 是否需要判断 event.get_result() 是否为空?
-                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
-                    yield None
+            async for r in cls._execute_local(tool, run_context, **tool_args):
+                yield r
+            return
 
         elif tool.origin == "mcp":
-            if not tool.mcp_client:
-                raise ValueError("MCP client is not available for MCP function tools.")
-            res = await tool.mcp_client.session.call_tool(
-                name=tool.name,
-                arguments=tool_args,
-            )
-            if not res:
-                return
-            yield res
+            async for r in cls._execute_mcp(tool, run_context, **tool_args):
+                yield r
+            return
 
+        raise Exception(f"Unknown function origin: {tool.origin}")
+
+    @classmethod
+    async def _execute_handoff(
+        cls,
+        tool: HandoffTool,
+        run_context: ContextWrapper[AstrAgentContext],
+        **tool_args,
+    ):
+        input_ = tool_args.get("input", "agent")
+        agent_runner = AgentRunner()
+
+        # make toolset for the agent
+        tools = tool.agent.tools
+        if tools:
+            toolset = ToolSet()
+            for t in tools:
+                if isinstance(t, str):
+                    _t = llm_tools.get_func(t)
+                    if _t:
+                        toolset.add_tool(_t)
+                elif isinstance(t, FunctionTool):
+                    toolset.add_tool(t)
         else:
-            raise Exception(f"Unknown function origin: {tool.origin}")
+            toolset = None
+
+        request = ProviderRequest(
+            prompt=input_,
+            system_prompt=tool.description,
+            image_urls=[],  # 暂时不传递原始 agent 的上下文
+            contexts=[],  # 暂时不传递原始 agent 的上下文
+            func_tool=toolset,
+        )
+        astr_agent_ctx = AstrAgentContext(
+            provider=run_context.context.provider,
+            first_provider_request=run_context.context.first_provider_request,
+            curr_provider_request=request,
+            streaming=run_context.context.streaming,
+        )
+
+        logger.debug(f"正在将任务委托给 Agent: {tool.agent.name}, input: {input_}")
+        await run_context.event.send(
+            MessageChain().message("✨ 正在将任务委托给 Agent: " + tool.agent.name)
+        )
+
+        await agent_runner.reset(
+            provider=run_context.context.provider,
+            request=request,
+            run_context=AgentContextWrapper(
+                context=astr_agent_ctx, event=run_context.event
+            ),
+            tool_executor=FunctionToolExecutor(),
+            agent_hooks=tool.agent.run_hooks or BaseAgentRunHooks[AstrAgentContext](),
+            streaming=run_context.context.streaming,
+        )
+
+        async for _ in run_agent(agent_runner, 15, True):
+            pass
+
+        if agent_runner.done():
+            llm_response = agent_runner.get_final_llm_resp()
+            logger.debug(
+                f"Agent  {tool.agent.name} 任务完成, response: {llm_response.completion_text}"
+            )
+
+            result = (
+                f"Agent {tool.agent.name} respond with: {llm_response.completion_text}\n\n"
+                "Note: If the result is error or need user provide more information, please provide more information to the agent(you can ask user for more information first)."
+            )
+
+            text_content = mcp.types.TextContent(
+                type="text",
+                text=result,
+            )
+            yield mcp.types.CallToolResult(content=[text_content])
+        else:
+            yield mcp.types.TextContent(
+                type="text",
+                text=f"error when deligate task to {tool.agent.name}",
+            )
+            yield mcp.types.CallToolResult(content=[text_content])
+        return
+
+    @classmethod
+    async def _execute_local(
+        cls,
+        tool: FunctionTool,
+        run_context: ContextWrapper[AstrAgentContext],
+        **tool_args,
+    ):
+        if not run_context.event:
+            raise ValueError("Event must be provided for local function tools.")
+        wrapper = call_handler(
+            event=run_context.event,
+            handler=tool.handler,
+            **tool_args,
+        )
+        async for resp in wrapper:
+            if resp is not None:
+                text_content = mcp.types.TextContent(
+                    type="text",
+                    text=str(resp),
+                )
+                yield mcp.types.CallToolResult(content=[text_content])
+            else:
+                # NOTE: Tool 在这里直接请求发送消息给用户
+                # TODO: 是否需要判断 event.get_result() 是否为空?
+                # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
+                yield None
+
+    @classmethod
+    async def _execute_mcp(
+        cls,
+        tool: FunctionTool,
+        run_context: ContextWrapper[AstrAgentContext],
+        **tool_args,
+    ):
+        if not tool.mcp_client:
+            raise ValueError("MCP client is not available for MCP function tools.")
+        res = await tool.mcp_client.session.call_tool(
+            name=tool.name,
+            arguments=tool_args,
+        )
+        if not res:
+            return
+        yield res
 
 
 class MainAgentHooks(BaseAgentRunHooks[AgentContextWrapper]):

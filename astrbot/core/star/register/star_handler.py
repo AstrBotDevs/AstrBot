@@ -410,9 +410,7 @@ def register_agent(
         tools: Agent 使用的工具列表
         run_hooks: Agent 运行时的钩子函数
     """
-    tools_ = tools
-    if not tools_:
-        tools_ = []
+    tools_ = tools or []
 
     def decorator(_):
         AstrAgent = Agent[AstrAgentContext]
