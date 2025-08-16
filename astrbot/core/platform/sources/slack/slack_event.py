@@ -75,7 +75,13 @@ class SlackMessageEvent(AstrMessageEvent):
                     "text": {"type": "mrkdwn", "text": "文件上传失败"},
                 }
             file_url = response["files"][0]["permalink"]
-            return {"type": "section", "text": {"type": "mrkdwn", "text": f"文件: <{file_url}|{segment.name or '文件'}>"}}
+            return {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"文件: <{file_url}|{segment.name or '文件'}>",
+                },
+            }
         else:
             return {"type": "section", "text": {"type": "mrkdwn", "text": str(segment)}}
 

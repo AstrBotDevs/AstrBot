@@ -65,7 +65,7 @@ DEFAULT_CONFIG = {
         "show_tool_use_status": False,
         "streaming_segmented": False,
         "separate_provider": True,
-        "max_agent_step": 30
+        "max_agent_step": 30,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -598,11 +598,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.openai.com/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "gpt-4o-mini",
-                            "temperature": 0.4
-                        },
-                        "hint": "也兼容所有与OpenAI API兼容的服务。"
+                        "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
+                        "hint": "也兼容所有与OpenAI API兼容的服务。",
                     },
                     "Azure OpenAI": {
                         "id": "azure",
@@ -614,10 +611,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "gpt-4o-mini",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
                     },
                     "xAI": {
                         "id": "xai",
@@ -628,10 +622,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.x.ai/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "grok-2-latest",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "grok-2-latest", "temperature": 0.4},
                     },
                     "Anthropic": {
                         "hint": "注意Claude系列模型的温度调节范围为0到1.0，超出可能导致报错",
@@ -646,11 +637,11 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "claude-3-5-sonnet-latest",
                             "max_tokens": 4096,
-                            "temperature": 0.2
+                            "temperature": 0.2,
                         },
                     },
                     "Ollama": {
-                        "hint":"启用前请确保已正确安装并运行 Ollama 服务端，Ollama默认不带鉴权，无需修改key",
+                        "hint": "启用前请确保已正确安装并运行 Ollama 服务端，Ollama默认不带鉴权，无需修改key",
                         "id": "ollama_default",
                         "provider": "ollama",
                         "type": "openai_chat_completion",
@@ -658,10 +649,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["ollama"],  # ollama 的 key 默认是 ollama
                         "api_base": "http://localhost:11434/v1",
-                        "model_config": {
-                            "model": "llama3.1-8b",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "llama3.1-8b", "temperature": 0.4},
                     },
                     "LM Studio": {
                         "id": "lm_studio",
@@ -686,7 +674,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "model_config": {
                             "model": "gemini-1.5-flash",
-                            "temperature": 0.4
+                            "temperature": 0.4,
                         },
                     },
                     "Gemini": {
@@ -700,7 +688,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "model_config": {
                             "model": "gemini-2.0-flash-exp",
-                            "temperature": 0.4
+                            "temperature": 0.4,
                         },
                         "gm_resp_image_modal": False,
                         "gm_native_search": False,
@@ -725,10 +713,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "deepseek-chat",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "deepseek-chat", "temperature": 0.4},
                     },
                     "302.AI": {
                         "id": "302ai",
@@ -739,10 +724,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.302.ai/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "gpt-4.1-mini",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "gpt-4.1-mini", "temperature": 0.4},
                     },
                     "硅基流动": {
                         "id": "siliconflow",
@@ -755,7 +737,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.siliconflow.cn/v1",
                         "model_config": {
                             "model": "deepseek-ai/DeepSeek-V3",
-                            "temperature": 0.4
+                            "temperature": 0.4,
                         },
                     },
                     "PPIO派欧云": {
@@ -769,7 +751,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "model_config": {
                             "model": "deepseek/deepseek-r1",
-                            "temperature": 0.4
+                            "temperature": 0.4,
                         },
                     },
                     "优云智算": {
@@ -794,10 +776,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.moonshot.cn/v1",
-                        "model_config": {
-                            "model": "moonshot-v1-8k",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "moonshot-v1-8k", "temperature": 0.4},
                     },
                     "智谱 AI": {
                         "id": "zhipu_default",
@@ -825,7 +804,7 @@ CONFIG_METADATA_2 = {
                         "dify_query_input_key": "astrbot_text_query",
                         "variables": {},
                         "timeout": 60,
-                        "hint": "请确保你在 AstrBot 里设置的 APP 类型和 Dify 里面创建的应用的类型一致！"
+                        "hint": "请确保你在 AstrBot 里设置的 APP 类型和 Dify 里面创建的应用的类型一致！",
                     },
                     "阿里云百炼应用": {
                         "id": "dashscope",
@@ -853,10 +832,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api-inference.modelscope.cn/v1",
-                        "model_config": {
-                            "model": "Qwen/Qwen3-32B",
-                            "temperature": 0.4
-                        },
+                        "model_config": {"model": "Qwen/Qwen3-32B", "temperature": 0.4},
                     },
                     "FastGPT": {
                         "id": "fastgpt",

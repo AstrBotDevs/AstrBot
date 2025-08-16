@@ -16,7 +16,13 @@ def check_astrbot_root(path: str | Path) -> bool:
 
 def get_astrbot_root() -> Path:
     """获取Astrbot根目录路径"""
-    return Path.cwd()
+    import os
+
+    # 使用与core应用相同的路径解析逻辑，优先使用ASTRBOT_ROOT环境变量
+    if path := os.environ.get("ASTRBOT_ROOT"):
+        return Path(path)
+    else:
+        return Path.cwd()
 
 
 async def check_dashboard(astrbot_root: Path) -> None:
