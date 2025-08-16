@@ -65,6 +65,21 @@
                     <v-icon color="primary" class="me-2">mdi-message</v-icon>
                     <span class="text-h6">{{ tm('history.title') }}</span>
                     <v-chip color="info" size="small" class="ml-2">{{ pagination.total || 0 }}</v-chip>
+                    
+                    <!-- 批量操作按钮组 -->
+                    <div v-if="selectedCount > 0" class="ml-4 d-flex align-center">
+                        <v-chip color="secondary" size="small" class="mr-2">
+                            已选择 {{ selectedCount }} 个
+                        </v-chip>
+                        <v-btn color="error" size="small" variant="tonal" 
+                               prepend-icon="mdi-delete-multiple" @click="confirmBulkDelete" class="mr-2">
+                            批量删除
+                        </v-btn>
+                        <v-btn color="grey" size="small" variant="text" @click="clearSelection">
+                            取消选择
+                        </v-btn>
+                    </div>
+                    
                     <v-spacer></v-spacer>
                     <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="fetchConversations"
                         :loading="loading">
@@ -79,6 +94,25 @@
                         hide-default-footer items-per-page="10" class="elevation-0"
                         :items-per-page="pagination.page_size" :items-per-page-options="[10, 20, 50, 100]"
                         @update:options="handleTableOptions">
+                        <template v-slot:header.selection="{ column }">
+                            <v-checkbox 
+                                :model-value="isAllSelected"
+                                :indeterminate="isIndeterminate"
+                                @update:model-value="toggleAllSelection"
+                                hide-details
+                                density="compact">
+                            </v-checkbox>
+                        </template>
+                        
+                        <template v-slot:item.selection="{ item }">
+                            <v-checkbox 
+                                :model-value="isSelected(item)"
+                                @update:model-value="toggleSelection(item)"
+                                hide-details
+                                density="compact">
+                            </v-checkbox>
+                        </template>
+                        
                         <template v-slot:item.title="{ item }">
                             <div class="d-flex align-center">
                                 <v-icon color="primary" class="mr-2">mdi-chat</v-icon>
@@ -308,6 +342,39 @@
             </v-card>
         </v-dialog>
 
+        <!-- 批量删除确认对话框 -->
+        <v-dialog v-model="dialogBulkDelete" max-width="500px">
+            <v-card>
+                <v-card-title class="bg-error text-white py-3">
+                    <v-icon color="white" class="me-2">mdi-delete-multiple</v-icon>
+                    <span>批量删除确认</span>
+                </v-card-title>
+
+                <v-card-text class="py-4">
+                    <p>您确定要删除选中的 {{ selectedCount }} 个对话吗？此操作无法撤销。</p>
+                    <div v-if="selectedCount <= 5" class="mt-3">
+                        <div class="text-caption text-medium-emphasis mb-2">将要删除的对话：</div>
+                        <div v-for="conv in selectedConversations" :key="`${conv.user_id}-${conv.cid}`" 
+                             class="text-body-2 ml-2 mb-1">
+                            • {{ conv.title || '无标题' }}
+                        </div>
+                    </div>
+                </v-card-text>
+
+                <v-divider></v-divider>
+
+                <v-card-actions class="pa-4">
+                    <v-spacer></v-spacer>
+                    <v-btn variant="text" @click="dialogBulkDelete = false" :disabled="loading">
+                        取消
+                    </v-btn>
+                    <v-btn color="error" @click="bulkDeleteConversations" :loading="loading">
+                        确认删除
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
         <!-- 消息提示 -->
         <v-snackbar :timeout="3000" elevation="24" :color="messageType" v-model="showMessage" location="top">
             {{ message }}
@@ -396,6 +463,10 @@ export default {
             selectedConversation: null,
             conversationHistory: [],
 
+            // 批量选择相关
+            selectedConversations: [],
+            dialogBulkDelete: false,
+
             // 编辑表单
             editedItem: {
                 user_id: '',
@@ -453,6 +524,7 @@ export default {
         // 动态表头
         tableHeaders() {
             return [
+                { title: '', key: 'selection', sortable: false, width: '50px' },
                 { title: this.tm('table.headers.title'), key: 'title', sortable: true },
                 { title: this.tm('table.headers.platform'), key: 'platform', sortable: true, width: '120px' },
                 { title: this.tm('table.headers.type'), key: 'messageType', sortable: true, width: '100px' },
@@ -505,6 +577,23 @@ export default {
                 messageTypes: this.messageTypeFilter,
                 search: this.search
             };
+        },
+
+        // 是否全选
+        isAllSelected() {
+            return this.conversations.length > 0 && 
+                   this.selectedConversations.length === this.conversations.length;
+        },
+
+        // 是否部分选中
+        isIndeterminate() {
+            return this.selectedConversations.length > 0 && 
+                   this.selectedConversations.length < this.conversations.length;
+        },
+
+        // 选中的对话数量
+        selectedCount() {
+            return this.selectedConversations.length;
         }
     },
 
@@ -836,6 +925,87 @@ export default {
                 }
             } catch (error) {
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.deleteError'));
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        // 切换单个对话选中状态
+        toggleSelection(item) {
+            const index = this.selectedConversations.findIndex(conv => 
+                conv.user_id === item.user_id && conv.cid === item.cid
+            );
+            
+            if (index > -1) {
+                this.selectedConversations.splice(index, 1);
+            } else {
+                this.selectedConversations.push(item);
+            }
+        },
+
+        // 检查对话是否被选中
+        isSelected(item) {
+            return this.selectedConversations.some(conv => 
+                conv.user_id === item.user_id && conv.cid === item.cid
+            );
+        },
+
+        // 全选/取消全选
+        toggleAllSelection() {
+            if (this.isAllSelected) {
+                this.selectedConversations = [];
+            } else {
+                this.selectedConversations = [...this.conversations];
+            }
+        },
+
+        // 清除所有选择
+        clearSelection() {
+            this.selectedConversations = [];
+        },
+
+        // 确认批量删除
+        confirmBulkDelete() {
+            if (this.selectedConversations.length === 0) {
+                this.showErrorMessage('请先选择要删除的对话');
+                return;
+            }
+            this.dialogBulkDelete = true;
+        },
+
+        // 批量删除对话
+        async bulkDeleteConversations() {
+            this.loading = true;
+            try {
+                const response = await axios.post('/api/conversation/bulk_delete', {
+                    conversations: this.selectedConversations.map(conv => ({
+                        user_id: conv.user_id,
+                        cid: conv.cid
+                    }))
+                });
+
+                if (response.data.status === "ok") {
+                    // 从本地数据中移除已删除的对话
+                    this.selectedConversations.forEach(deletedConv => {
+                        const index = this.conversations.findIndex(conv => 
+                            conv.user_id === deletedConv.user_id && conv.cid === deletedConv.cid
+                        );
+                        if (index !== -1) {
+                            this.conversations.splice(index, 1);
+                        }
+                    });
+
+                    this.dialogBulkDelete = false;
+                    this.clearSelection();
+                    this.showSuccessMessage(response.data.message || '批量删除成功');
+                    
+                    // 刷新数据
+                    this.fetchConversations();
+                } else {
+                    this.showErrorMessage(response.data.message || '批量删除失败');
+                }
+            } catch (error) {
+                this.showErrorMessage(error.response?.data?.message || error.message || '批量删除失败');
             } finally {
                 this.loading = false;
             }
