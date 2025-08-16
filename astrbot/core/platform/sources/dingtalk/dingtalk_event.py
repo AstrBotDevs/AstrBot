@@ -55,7 +55,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
 
                 except Exception as e:
                     logger.error(f"钉钉图片处理失败: {e}")
-                    logger.warning(f"跳过图片发送: {image_path}")
+                    logger.warning(f"跳过图片发送: {segment.file}")
                     continue
     async def send(self, message: MessageChain):
         await self.send_with_client(self.client, message)
