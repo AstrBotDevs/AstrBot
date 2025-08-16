@@ -30,9 +30,11 @@ class Main(star.Star):
         websearch = self.context.get_config()["provider_settings"]["web_search"]
         if websearch:
             self.context.activate_llm_tool("web_search")
+            self.context.activate_llm_tool("googleSearch")
             self.context.activate_llm_tool("fetch_url")
         else:
             self.context.deactivate_llm_tool("web_search")
+            self.context.deactivate_llm_tool("googleSearch")
             self.context.deactivate_llm_tool("fetch_url")
 
     async def _tidy_text(self, text: str) -> str:
@@ -70,12 +72,14 @@ class Main(star.Star):
             self.context.get_config()["provider_settings"]["web_search"] = True
             self.context.get_config().save_config()
             self.context.activate_llm_tool("web_search")
+            self.context.activate_llm_tool("googleSearch")
             self.context.activate_llm_tool("fetch_url")
             event.set_result(MessageEventResult().message("已开启网页搜索功能"))
         elif oper == "off":
             self.context.get_config()["provider_settings"]["web_search"] = False
             self.context.get_config().save_config()
             self.context.deactivate_llm_tool("web_search")
+            self.context.deactivate_llm_tool("googleSearch")
             self.context.deactivate_llm_tool("fetch_url")
             event.set_result(MessageEventResult().message("已关闭网页搜索功能"))
         else:
@@ -138,6 +142,16 @@ class Main(star.Star):
             ret += "针对问题，请根据上面的结果分点总结，并且在结尾处附上对应内容的参考链接（如有）。"
 
         return ret
+
+    @llm_tool("googleSearch")
+    async def google_search_alias(self, event: AstrMessageEvent, query: str) -> str:
+        """Search the internet to answer user questions using Google search. Call this tool when users need to search the web for real-time information.
+
+        Args:
+            query(string): The most relevant search keywords for the user's question, used to search on Google.
+        """
+        # This is an alias for web_search to provide better OpenAI API compatibility
+        return await self.search_from_search_engine(event, query)
 
     @llm_tool("fetch_url")
     async def fetch_website_content(self, event: AstrMessageEvent, url: str) -> str:
