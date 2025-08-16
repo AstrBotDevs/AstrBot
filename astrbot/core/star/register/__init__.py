@@ -11,6 +11,7 @@ from .star_handler import (
     register_on_llm_request,
     register_on_llm_response,
     register_llm_tool,
+    register_agent,
     register_on_decorating_result,
     register_after_message_sent,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "register_on_llm_request",
     "register_on_llm_response",
     "register_llm_tool",
+    "register_agent",
     "register_on_decorating_result",
     "register_after_message_sent",
 ]

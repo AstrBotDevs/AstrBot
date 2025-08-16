@@ -5,7 +5,7 @@ import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api.provider import ProviderRequest
-from astrbot.api import llm_tool, logger, AstrBotConfig
+from astrbot.api import llm_tool, agent, logger, AstrBotConfig
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from .engines import SearchResult
 from .engines.bing import Bing
@@ -161,7 +161,7 @@ class Main(star.Star):
             )
         )
 
-    @llm_tool("web_search")
+    @llm_tool(name="web_search")
     async def search_from_search_engine(
         self, event: AstrMessageEvent, query: str, max_results: int = 5
     ) -> str:
@@ -196,7 +196,7 @@ class Main(star.Star):
 
         return ret
 
-    @llm_tool("fetch_url")
+    @llm_tool(name="fetch_url")
     async def fetch_website_content(self, event: AstrMessageEvent, url: str) -> str:
         """fetch the content of a website with the given web url
 

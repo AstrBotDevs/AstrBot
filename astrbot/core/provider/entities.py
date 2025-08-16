@@ -5,7 +5,7 @@ from astrbot.core.utils.io import download_image_by_url
 from astrbot import logger
 from dataclasses import dataclass, field
 from typing import List, Dict, Type
-from .func_tool_manager import FunctionToolManager, ToolSet
+from astrbot.core.agent.tool import ToolSet
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_message_tool_call import (
     ChatCompletionMessageToolCall,
@@ -97,7 +97,7 @@ class ProviderRequest:
     """会话 ID"""
     image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""
-    func_tool: FunctionToolManager | ToolSet | None = None
+    func_tool: ToolSet | None = None
     """可用的函数工具"""
     contexts: list[dict] = field(default_factory=list)
     """上下文。格式与 openai 的上下文格式一致：
