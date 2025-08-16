@@ -8,6 +8,7 @@ from ..entities import ProviderType
 from ..register import register_provider_adapter
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.ffmpeg_helper import get_ffmpeg_path
 
 """
 edge_tts 方式，能够免费、快速生成语音，使用需要先安装edge-tts库
@@ -67,9 +68,12 @@ class ProviderEdgeTTS(TTSProvider):
                 logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
                 # use ffmpeg command line
 
+                # Get the ffmpeg executable path
+                ffmpeg_cmd = get_ffmpeg_path()
+
                 # 使用ffmpeg将MP3转换为标准WAV格式
                 p = await asyncio.create_subprocess_exec(
-                    "ffmpeg",
+                    ffmpeg_cmd,
                     "-y",  # 覆盖输出文件
                     "-i",
                     mp3_path,  # 输入文件

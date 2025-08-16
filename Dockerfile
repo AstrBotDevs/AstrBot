@@ -24,7 +24,7 @@ RUN uv pip install socksio uv pyffmpeg pilk --no-cache-dir --system
 RUN python -c "from pyffmpeg import FFmpeg; ff = FFmpeg();"
 
 # add /root/.pyffmpeg/bin/ffmpeg to PATH, inorder to use ffmpeg
-RUN echo 'export PATH=$PATH:/root/.pyffmpeg/bin' >> ~/.bashrc
+ENV PATH=$PATH:/root/.pyffmpeg/bin
 
 EXPOSE 6185 
 EXPOSE 6186
