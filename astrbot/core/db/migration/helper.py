@@ -43,14 +43,14 @@ async def do_migration_v4(
     # 执行会话表迁移
     await migration_conversation_table(db_helper, platform_id_map)
 
-    # 执行平台统计表迁移
-    await migration_platform_table(db_helper, platform_id_map)
+    # 执行人格数据迁移
+    await migration_persona_data(db_helper, astrbot_config)
 
     # 执行 WebChat 数据迁移
     await migration_webchat_data(db_helper, platform_id_map)
 
-    # 执行人格数据迁移
-    await migration_persona_data(db_helper, astrbot_config)
+    # 执行平台统计表迁移
+    await migration_platform_table(db_helper, platform_id_map)
 
     # 标记迁移完成
     await db_helper.insert_preference_or_update("migration_done_v4", "true")

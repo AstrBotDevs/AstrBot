@@ -7,8 +7,11 @@ from astrbot import logger
 DEFAULT_PERSONALITY = Personality(
     prompt="You are a helpful and friendly assistant.",
     name="default",
+    begin_dialogs=[],
+    mood_imitation_dialogs=[],
     tools=None,
     _begin_dialogs_processed=[],
+    _mood_imitation_dialogs_processed="",
 )
 
 
