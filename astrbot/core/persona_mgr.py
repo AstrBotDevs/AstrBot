@@ -52,7 +52,7 @@ class PersonaManager:
             return DEFAULT_PERSONALITY
         try:
             return next(p for p in self.personas_v3 if p["name"] == default_persona_id)
-        except ValueError:
+        except Exception:
             return DEFAULT_PERSONALITY
 
     async def delete_persona(self, persona_id: str):

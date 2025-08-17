@@ -68,7 +68,7 @@ async def migration_conversation_table(
                     platform_id = get_platform_id(
                         platform_id_map, session.platform_name
                     )
-                    session.platform_name = platform_id  # 更新平台名称为新的 ID
+                    session.platform_id = platform_id  # 更新平台名称为新的 ID
                     conv_v2 = ConversationV2(
                         user_id=str(session),
                         content=json.loads(conv.history) if conv.history else [],
