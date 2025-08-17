@@ -1,7 +1,7 @@
 import abc
 from typing import List
 from typing import AsyncGenerator
-from astrbot.core.provider.func_tool_manager import FunctionToolManager, ToolSet
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult, ProviderType
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.db.po import Personality
@@ -80,7 +80,7 @@ class Provider(AbstractProvider):
         prompt: str,
         session_id: str = None,
         image_urls: list[str] = None,
-        func_tool: FunctionToolManager | ToolSet = None,
+        func_tool: ToolSet = None,
         contexts: list = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
@@ -109,7 +109,7 @@ class Provider(AbstractProvider):
         prompt: str,
         session_id: str = None,
         image_urls: list[str] = None,
-        func_tool: FunctionToolManager | ToolSet = None,
+        func_tool: ToolSet = None,
         contexts: list = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,

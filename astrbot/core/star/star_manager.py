@@ -22,6 +22,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_path,
 )
 from astrbot.core.utils.io import remove_dir
+from astrbot.core.agent.handoff import HandoffTool, FunctionTool
 
 from . import StarMetadata
 from .context import Context
@@ -503,17 +504,27 @@ class PluginManager:
                         )
                     # 绑定 llm_tool handler
                     for func_tool in llm_tools.func_list:
-                        if (
-                            func_tool.handler
-                            and func_tool.handler.__module__ == metadata.module_path
-                        ):
-                            func_tool.handler_module_path = metadata.module_path
-                            func_tool.handler = functools.partial(
-                                func_tool.handler,
-                                metadata.star_cls,  # type: ignore
-                            )
-                        if func_tool.name in inactivated_llm_tools:
-                            func_tool.active = False
+                        if isinstance(func_tool, HandoffTool):
+                            need_apply = []
+                            sub_tools = func_tool.agent.tools
+                            for sub_tool in sub_tools:
+                                if isinstance(sub_tool, FunctionTool):
+                                    need_apply.append(sub_tool)
+                        else:
+                            need_apply = [func_tool]
+
+                        for ft in need_apply:
+                            if (
+                                ft.handler
+                                and ft.handler.__module__ == metadata.module_path
+                            ):
+                                ft.handler_module_path = metadata.module_path
+                                ft.handler = functools.partial(
+                                    ft.handler,
+                                    metadata.star_cls,  # type: ignore
+                                )
+                            if ft.name in inactivated_llm_tools:
+                                ft.active = False
 
                 else:
                     # v3.4.0 以前的方式注册插件
