@@ -11,6 +11,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.config import VERSION
 from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core import DEMO_MODE
+from astrbot.core.db.migration.helper import check_migration_needed_v4
 
 
 class StatRoute(Route):
@@ -59,6 +60,8 @@ class StatRoute(Route):
         )
 
     async def get_version(self):
+        need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
+
         return (
             Response()
             .ok(
@@ -66,6 +69,7 @@ class StatRoute(Route):
                     "version": VERSION,
                     "dashboard_version": await get_dashboard_version(),
                     "change_pwd_hint": self.is_default_cred(),
+                    "need_migration": need_migration,
                 }
             )
             .__dict__

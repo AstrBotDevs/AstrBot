@@ -34,7 +34,6 @@ from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryMana
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star_handler import star_map
-from astrbot.core.db.migration.helper import do_migration_v4
 
 
 class AstrBotCoreLifecycle:
@@ -71,11 +70,6 @@ class AstrBotCoreLifecycle:
             logger.setLevel(self.astrbot_config["log_level"])  # 设置日志级别
 
         await self.db.initialize()
-
-        try:
-            await do_migration_v4(self.db, {}, self.astrbot_config)
-        except Exception as e:
-            logger.error(f"迁移到 v4.0.0 新版本数据格式失败: {e}")
 
         # 初始化 AstrBot 配置管理器
         self.astrbot_config_mgr = AstrBotConfigManager(
