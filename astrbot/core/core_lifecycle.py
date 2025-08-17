@@ -59,7 +59,7 @@ class AstrBotCoreLifecycle:
             if "http_proxy" in os.environ:
                 del os.environ["http_proxy"]
             logger.debug("HTTP proxy cleared")
-        os.environ["no_proxy"] = "localhost"
+        os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
 
     async def initialize(self):
         """
