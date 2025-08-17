@@ -65,6 +65,7 @@ DEFAULT_CONFIG = {
         "show_tool_use_status": False,
         "streaming_segmented": False,
         "separate_provider": True,
+        "max_agent_step": 30
     },
     "provider_stt_settings": {
         "enable": False,
@@ -1728,6 +1729,10 @@ CONFIG_METADATA_2 = {
                         "description": "不支持流式回复的平台分段输出",
                         "type": "bool",
                         "hint": "启用后，若平台不支持流式回复，会分段输出。目前仅支持 aiocqhttp 两个平台，不支持或无需使用流式分段输出的平台会静默忽略此选项",
+                    },
+                    "max_agent_step": {
+                        "description": "工具调用轮数上限",
+                        "type": "int",
                     },
                 },
             },
