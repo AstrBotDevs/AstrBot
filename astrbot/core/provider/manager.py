@@ -66,7 +66,7 @@ class ProviderManager:
         return self.persona_mgr.selected_default_persona_v3
 
     async def set_provider(
-        self, provider_id: str, provider_type: ProviderType, umo: str = None
+        self, provider_id: str, provider_type: ProviderType, umo: str | None = None
     ):
         """设置提供商。
 
@@ -80,20 +80,20 @@ class ProviderManager:
         if provider_id not in self.inst_map:
             raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
         if umo:
-            perf = sp.get("session_provider_perf", {})
-            session_perf = perf.get(umo, {})
-            session_perf[provider_type.value] = provider_id
-            perf[umo] = session_perf
-            sp.put("session_provider_perf", perf)
+            await sp.session_put(
+                umo,
+                f"provider_perf_{provider_type.value}",
+                provider_id,
+            )
             return
         # 不启用提供商会话隔离模式的情况
         self.curr_provider_inst = self.inst_map[provider_id]
         if provider_type == ProviderType.TEXT_TO_SPEECH:
-            sp.put("curr_provider_tts", provider_id)
+            sp.put("curr_provider_tts", provider_id, scope="global", scope_id="global")
         elif provider_type == ProviderType.SPEECH_TO_TEXT:
-            sp.put("curr_provider_stt", provider_id)
+            sp.put("curr_provider_stt", provider_id, scope="global", scope_id="global")
         elif provider_type == ProviderType.CHAT_COMPLETION:
-            sp.put("curr_provider", provider_id)
+            sp.put("curr_provider", provider_id, scope="global", scope_id="global")
 
     async def get_provider_by_id(self, provider_id: str) -> Provider | None:
         """根据提供商 ID 获取提供商实例"""
@@ -111,9 +111,12 @@ class ProviderManager:
         """
         provider = None
         if umo:
-            perf = sp.get("session_provider_perf", {})
-            session_perf = perf.get(umo, {})
-            provider_id = session_perf.get(provider_type.value)
+            provider_id = sp.get(
+                f"provider_perf_{provider_type.value}",
+                None,
+                scope="umo",
+                scope_id=umo,
+            )
             if provider_id:
                 provider = self.inst_map.get(provider_id)
         if not provider:
@@ -153,13 +156,22 @@ class ProviderManager:
 
         # 设置默认提供商
         selected_provider_id = sp.get(
-            "curr_provider", self.provider_settings.get("default_provider_id")
+            "curr_provider",
+            self.provider_settings.get("default_provider_id"),
+            scope="global",
+            scope_id="global",
         )
         selected_stt_provider_id = sp.get(
-            "curr_provider_stt", self.provider_stt_settings.get("provider_id")
+            "curr_provider_stt",
+            self.provider_stt_settings.get("provider_id"),
+            scope="global",
+            scope_id="global",
         )
         selected_tts_provider_id = sp.get(
-            "curr_provider_tts", self.provider_tts_settings.get("provider_id")
+            "curr_provider_tts",
+            self.provider_tts_settings.get("provider_id"),
+            scope="global",
+            scope_id="global",
         )
         self.curr_provider_inst = self.inst_map.get(selected_provider_id)
         if not self.curr_provider_inst and self.provider_insts:

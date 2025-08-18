@@ -75,8 +75,7 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         # 获得会话变量
         payload_vars = self.variables.copy()
         # 动态变量
-        session_vars = sp.get("session_variables", {})
-        session_var = session_vars.get(session_id, {})
+        session_var = await sp.session_get(session_id, "session_variables", default={})
         payload_vars.update(session_var)
 
         if (

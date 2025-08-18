@@ -374,10 +374,9 @@ class PluginManager:
                 - success (bool): 是否全部加载成功
                 - error_message (str|None): 错误信息，成功时为 None
         """
-        inactivated_plugins: list = sp.get("inactivated_plugins", [])
-        inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
-
-        alter_cmd = sp.get("alter_cmd", {})
+        inactivated_plugins = await sp.global_get("inactivated_plugins", [])
+        inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
+        alter_cmd = await sp.global_get("alter_cmd", {})
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -787,12 +786,12 @@ class PluginManager:
             await self._terminate_plugin(plugin)
 
             # 加入到 shared_preferences 中
-            inactivated_plugins: list = sp.get("inactivated_plugins", [])
+            inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
             if plugin.module_path not in inactivated_plugins:
                 inactivated_plugins.append(plugin.module_path)
 
             inactivated_llm_tools: list = list(
-                set(sp.get("inactivated_llm_tools", []))
+                set(await sp.global_get("inactivated_llm_tools", []))
             )  # 后向兼容
 
             # 禁用插件启用的 llm_tool
@@ -802,8 +801,8 @@ class PluginManager:
                     if func_tool.name not in inactivated_llm_tools:
                         inactivated_llm_tools.append(func_tool.name)
 
-            sp.put("inactivated_plugins", inactivated_plugins)
-            sp.put("inactivated_llm_tools", inactivated_llm_tools)
+            await sp.global_put("inactivated_plugins", inactivated_plugins)
+            await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
 
             plugin.activated = False
 
@@ -829,11 +828,11 @@ class PluginManager:
 
     async def turn_on_plugin(self, plugin_name: str):
         plugin = self.context.get_registered_star(plugin_name)
-        inactivated_plugins: list = sp.get("inactivated_plugins", [])
-        inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
+        inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
+        inactivated_llm_tools: list = await sp.global_get("inactivated_llm_tools", [])
         if plugin.module_path in inactivated_plugins:
             inactivated_plugins.remove(plugin.module_path)
-        sp.put("inactivated_plugins", inactivated_plugins)
+        await sp.global_put("inactivated_plugins", inactivated_plugins)
 
         # 启用插件启用的 llm_tool
         for func_tool in llm_tools.func_list:
@@ -843,7 +842,7 @@ class PluginManager:
             ):
                 inactivated_llm_tools.remove(func_tool.name)
                 func_tool.active = True
-        sp.put("inactivated_llm_tools", inactivated_llm_tools)
+        await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
 
         await self.reload(plugin_name)
 

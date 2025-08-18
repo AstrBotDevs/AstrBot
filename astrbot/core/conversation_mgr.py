@@ -6,7 +6,6 @@ AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json �
 """
 
 import json
-import asyncio
 from astrbot.core import sp
 from typing import Dict, List
 from astrbot.core.db import BaseDatabase
@@ -17,25 +16,9 @@ class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
     def __init__(self, db_helper: BaseDatabase):
-        # session_conversations 字典记录会话ID-对话ID 映射关系
-        self.session_conversations: Dict[str, str] = sp.get("session_conversation", {})
+        self.session_conversations: Dict[str, str] = {}
         self.db = db_helper
         self.save_interval = 60  # 每 60 秒保存一次
-        self._start_periodic_save()
-
-    def _start_periodic_save(self):
-        """启动定时保存任务"""
-        asyncio.create_task(self._periodic_save())
-
-    async def _periodic_save(self):
-        """定时保存会话对话映射关系到存储中"""
-        while True:
-            await asyncio.sleep(self.save_interval)
-            self._save_to_storage()
-
-    def _save_to_storage(self):
-        """保存会话对话映射关系到存储中"""
-        sp.put("session_conversation", self.session_conversations)
 
     def _convert_conv_from_v2_to_v1(self, conv_v2: ConversationV2) -> Conversation:
         """将 ConversationV2 对象转换为 Conversation 对象"""
@@ -55,10 +38,10 @@ class ConversationManager:
     async def new_conversation(
         self,
         unified_msg_origin: str,
-        platform_id: str = None,
-        content: list[dict] = None,
-        title: str = None,
-        persona_id: str = None,
+        platform_id: str | None = None,
+        content: list[dict] | None = None,
+        title: str | None = None,
+        persona_id: str | None = None,
     ) -> str:
         """新建对话，并将当前会话的对话转移到新对话
 
@@ -82,8 +65,8 @@ class ConversationManager:
             persona_id=persona_id,
         )
         self.session_conversations[unified_msg_origin] = conv.conversation_id
-        sp.put("session_conversation", self.session_conversations)
-        return str(conv.conversation_id)
+        await sp.session_put(unified_msg_origin, "sel_conv_id", conv.conversation_id)
+        return conv.conversation_id
 
     async def switch_conversation(self, unified_msg_origin: str, conversation_id: str):
         """切换会话的对话
@@ -93,10 +76,10 @@ class ConversationManager:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
         """
         self.session_conversations[unified_msg_origin] = conversation_id
-        sp.put("session_conversation", self.session_conversations)
+        await sp.session_put(unified_msg_origin, "sel_conv_id", conversation_id)
 
     async def delete_conversation(
-        self, unified_msg_origin: str, conversation_id: str = None
+        self, unified_msg_origin: str, conversation_id: str | None = None
     ):
         """删除会话的对话，当 conversation_id 为 None 时删除会话当前的对话
 
@@ -113,9 +96,9 @@ class ConversationManager:
             await self.db.delete_conversation(cid=conversation_id)
             if f:
                 self.session_conversations.pop(unified_msg_origin, None)
-                sp.put("session_conversation", self.session_conversations)
+                await sp.session_remove(unified_msg_origin, "sel_conv_id")
 
-    async def get_curr_conversation_id(self, unified_msg_origin: str) -> str:
+    async def get_curr_conversation_id(self, unified_msg_origin: str) -> str | None:
         """获取会话当前的对话 ID
 
         Args:
@@ -123,7 +106,12 @@ class ConversationManager:
         Returns:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
         """
-        return self.session_conversations.get(unified_msg_origin, None)
+        ret = self.session_conversations.get(unified_msg_origin, None)
+        if not ret:
+            ret = await sp.session_get(unified_msg_origin, "sel_conv_id", None)
+            if ret:
+                self.session_conversations[unified_msg_origin] = ret
+        return ret
 
     async def get_conversation(
         self,
@@ -150,7 +138,7 @@ class ConversationManager:
         return conv_res
 
     async def get_conversations(
-        self, unified_msg_origin: str = None, platform_id: str = None
+        self, unified_msg_origin: str | None = None, platform_id: str | None = None
     ) -> List[Conversation]:
         """获取对话列表
 
@@ -203,10 +191,10 @@ class ConversationManager:
     async def update_conversation(
         self,
         unified_msg_origin: str,
-        conversation_id: str = None,
-        history: list[dict] = None,
-        title: str = None,
-        persona_id: str = None,
+        conversation_id: str | None = None,
+        history: list[dict] | None = None,
+        title: str | None = None,
+        persona_id: str | None = None,
     ):
         """更新会话的对话
 
@@ -216,8 +204,8 @@ class ConversationManager:
             history (List[Dict]): 对话历史记录, 是一个字典列表, 每个字典包含 role 和 content 字段
         """
         if not conversation_id:
-            # 如果没有提供 conversation_id，则从 session_conversations 中获取当前的
-            conversation_id = self.session_conversations.get(unified_msg_origin)
+            # 如果没有提供 conversation_id，则获取当前的
+            conversation_id = await self.get_curr_conversation_id(unified_msg_origin)
         if conversation_id:
             await self.db.update_conversation(
                 cid=conversation_id,
@@ -227,7 +215,7 @@ class ConversationManager:
             )
 
     async def update_conversation_title(
-        self, unified_msg_origin: str, title: str, conversation_id: str = None
+        self, unified_msg_origin: str, title: str, conversation_id: str | None = None
     ):
         """更新会话的对话标题
 
@@ -245,7 +233,10 @@ class ConversationManager:
         )
 
     async def update_conversation_persona_id(
-        self, unified_msg_origin: str, persona_id: str, conversation_id: str = None
+        self,
+        unified_msg_origin: str,
+        persona_id: str,
+        conversation_id: str | None = None,
     ):
         """更新会话的对话 Persona ID
 

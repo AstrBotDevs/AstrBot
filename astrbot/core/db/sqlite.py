@@ -21,6 +21,7 @@ from sqlalchemy.sql import func
 
 NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 
+
 class SQLiteDatabase(BaseDatabase):
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -373,28 +374,76 @@ class SQLiteDatabase(BaseDatabase):
                     delete(Persona).where(Persona.persona_id == persona_id)
                 )
 
-    async def insert_preference_or_update(self, key, value):
+    async def insert_preference_or_update(self, scope, scope_id, key, value):
         """Insert a new preference record or update if it exists."""
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                query = select(Preference).where(Preference.key == key)
+                query = select(Preference).where(
+                    Preference.scope == scope,
+                    Preference.scope_id == scope_id,
+                    Preference.key == key,
+                )
                 result = await session.execute(query)
                 existing_preference = result.scalar_one_or_none()
                 if existing_preference:
                     existing_preference.value = value
                 else:
-                    new_preference = Preference(key=key, value=value)
+                    new_preference = Preference(
+                        scope=scope, scope_id=scope_id, key=key, value=value
+                    )
                     session.add(new_preference)
                 return existing_preference or new_preference
 
-    async def get_preference(self, key):
+    async def get_preference(self, scope, scope_id, key):
         """Get a preference by key."""
         async with self.get_db() as session:
             session: AsyncSession
-            query = select(Preference).where(Preference.key == key)
+            query = select(Preference).where(
+                Preference.scope == scope,
+                Preference.scope_id == scope_id,
+                Preference.key == key,
+            )
             result = await session.execute(query)
             return result.scalar_one_or_none()
+
+    async def get_preferences(self, scope, scope_id=None, key=None):
+        """Get all preferences for a specific scope ID or key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Preference).where(Preference.scope == scope)
+            if scope_id is not None:
+                query = query.where(Preference.scope_id == scope_id)
+            if key is not None:
+                query = query.where(Preference.key == key)
+            result = await session.execute(query)
+            return result.scalars().all()
+
+    async def remove_preference(self, scope, scope_id, key):
+        """Remove a preference by scope ID and key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(Preference).where(
+                        Preference.scope == scope,
+                        Preference.scope_id == scope_id,
+                        Preference.key == key,
+                    )
+                )
+            await session.commit()
+
+    async def clear_preferences(self, scope, scope_id):
+        """Clear all preferences for a specific scope ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(Preference).where(
+                        Preference.scope == scope, Preference.scope_id == scope_id
+                    )
+                )
+            await session.commit()
 
     # ====
     # Deprecated Methods

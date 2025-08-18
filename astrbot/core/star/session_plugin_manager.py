@@ -22,7 +22,9 @@ class SessionPluginManager:
             bool: True表示启用，False表示禁用
         """
         # 获取会话插件配置
-        session_plugin_config = sp.get("session_plugin_config", {}) or {}
+        session_plugin_config = sp.get(
+            "session_plugin_config", {}, scope="umo", scope_id=session_id
+        )
         session_config = session_plugin_config.get(session_id, {})
 
         enabled_plugins = session_config.get("enabled_plugins", [])
@@ -51,7 +53,9 @@ class SessionPluginManager:
             enabled: True表示启用，False表示禁用
         """
         # 获取当前配置
-        session_plugin_config = sp.get("session_plugin_config", {}) or {}
+        session_plugin_config = sp.get(
+            "session_plugin_config", {}, scope="umo", scope_id=session_id
+        )
         if session_id not in session_plugin_config:
             session_plugin_config[session_id] = {
                 "enabled_plugins": [],
@@ -79,7 +83,9 @@ class SessionPluginManager:
         session_config["enabled_plugins"] = enabled_plugins
         session_config["disabled_plugins"] = disabled_plugins
         session_plugin_config[session_id] = session_config
-        sp.put("session_plugin_config", session_plugin_config)
+        sp.put(
+            "session_plugin_config", session_plugin_config, scope="umo", scope_id=session_id
+        )
 
         logger.info(
             f"会话 {session_id} 的插件 {plugin_name} 状态已更新为: {'启用' if enabled else '禁用'}"
@@ -95,7 +101,9 @@ class SessionPluginManager:
         Returns:
             Dict[str, List[str]]: 包含enabled_plugins和disabled_plugins的字典
         """
-        session_plugin_config = sp.get("session_plugin_config", {}) or {}
+        session_plugin_config = sp.get(
+            "session_plugin_config", {}, scope="umo", scope_id=session_id
+        )
         return session_plugin_config.get(
             session_id, {"enabled_plugins": [], "disabled_plugins": []}
         )

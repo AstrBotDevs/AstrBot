@@ -425,10 +425,17 @@ class FunctionToolManager:
         if func_tool is not None:
             func_tool.active = False
 
-            inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
+            inactivated_llm_tools: list = sp.get(
+                "inactivated_llm_tools", [], scope="global", scope_id="global"
+            )
             if name not in inactivated_llm_tools:
                 inactivated_llm_tools.append(name)
-                sp.put("inactivated_llm_tools", inactivated_llm_tools)
+                sp.put(
+                    "inactivated_llm_tools",
+                    inactivated_llm_tools,
+                    scope="global",
+                    scope_id="global",
+                )
 
             return True
         return False
@@ -445,10 +452,17 @@ class FunctionToolManager:
 
             func_tool.active = True
 
-            inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
+            inactivated_llm_tools: list = sp.get(
+                "inactivated_llm_tools", [], scope="global", scope_id="global"
+            )
             if name in inactivated_llm_tools:
                 inactivated_llm_tools.remove(name)
-                sp.put("inactivated_llm_tools", inactivated_llm_tools)
+                sp.put(
+                    "inactivated_llm_tools",
+                    inactivated_llm_tools,
+                    scope="global",
+                    scope_id="global",
+                )
 
             return True
         return False
