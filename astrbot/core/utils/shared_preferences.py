@@ -19,6 +19,10 @@ class SharedPreferences:
         self.path = json_storage_path
         self.db_helper = db_helper
 
+        self._sync_loop = asyncio.new_event_loop()
+        t = threading.Thread(target=self._sync_loop.run_forever, daemon=True)
+        t.start()
+
     async def get_async(
         self,
         scope: str,
@@ -75,14 +79,10 @@ class SharedPreferences:
         return await self.get_async("umo", umo, key, default)
 
     @overload
-    async def global_get(
-        self, key: None, default: Any = None
-    ) -> list[Preference]: ...
+    async def global_get(self, key: None, default: Any = None) -> list[Preference]: ...
 
     @overload
-    async def global_get(
-        self, key: str, default: _VT = None
-    ) -> _VT: ...
+    async def global_get(self, key: str, default: _VT = None) -> _VT: ...
 
     async def global_get(
         self, key: str | None, default: _VT = None
@@ -134,81 +134,47 @@ class SharedPreferences:
         scope_id: str | None = "",
     ) -> _VT:
         """获取偏好设置（已弃用）"""
-        result: _VT | None = None
+        if scope_id == "":
+            scope_id = "unknown"
+        if scope_id is None or key is None:
+            # result = asyncio.run(self.range_get_async(scope, scope_id, key))
+            raise ValueError(
+                "scope_id and key cannot be None when getting a specific preference."
+            )
+        result = asyncio.run_coroutine_threadsafe(
+            self.get_async(scope or "unknown", scope_id or "unknown", key, default),
+            self._sync_loop,
+        ).result()
 
-        def runner():
-            nonlocal result, scope, scope_id
-            scope = scope or "unknown"
-            if scope_id == "":
-                scope_id = "unknown"
-            if scope_id is None or key is None:
-                # result = asyncio.run(self.range_get_async(scope, scope_id, key))
-                raise ValueError(
-                    "scope_id and key cannot be None when getting a specific preference."
-                )
-            else:
-                result = asyncio.run(self.get_async(scope, scope_id, key, default))
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
-
-        if result is None:
-            return default
-
-        return result
+        return result if result is not None else default
 
     def range_get(
         self, scope: str, scope_id: str | None = None, key: str | None = None
     ) -> list[Preference]:
         """获取指定范围的偏好设置（已弃用）"""
-        result: list[Preference] = []
-
-        def runner():
-            nonlocal result, scope, scope_id, key
-            result = asyncio.run(self.range_get_async(scope, scope_id, key))
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
+        result = asyncio.run_coroutine_threadsafe(
+            self.range_get_async(scope, scope_id, key), self._sync_loop
+        ).result()
 
         return result
 
     def put(self, key, value, scope: str | None = None, scope_id: str | None = None):
         """设置偏好设置（已弃用）"""
-
-        def runner():
-            nonlocal scope, scope_id
-            scope = scope or "unknown"
-            scope_id = scope_id or "unknown"
-            asyncio.run(self.put_async(scope, scope_id, key, value))
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
+        asyncio.run_coroutine_threadsafe(
+            self.put_async(scope or "unknown", scope_id or "unknown", key, value),
+            self._sync_loop,
+        ).result()
 
     def remove(self, key, scope: str | None = None, scope_id: str | None = None):
         """删除偏好设置（已弃用）"""
-
-        def runner():
-            nonlocal scope, scope_id
-            scope = scope or "unknown"
-            scope_id = scope_id or "unknown"
-            asyncio.run(self.remove_async(scope, scope_id, key))
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
+        asyncio.run_coroutine_threadsafe(
+            self.remove_async(scope or "unknown", scope_id or "unknown", key),
+            self._sync_loop,
+        ).result()
 
     def clear(self, scope: str | None = None, scope_id: str | None = None):
         """清空偏好设置（已弃用）"""
-
-        def runner():
-            nonlocal scope, scope_id
-            scope = scope or "unknown"
-            scope_id = scope_id or "unknown"
-            asyncio.run(self.clear_async(scope, scope_id))
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
+        asyncio.run_coroutine_threadsafe(
+            self.clear_async(scope or "unknown", scope_id or "unknown"),
+            self._sync_loop,
+        ).result()

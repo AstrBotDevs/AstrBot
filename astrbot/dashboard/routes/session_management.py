@@ -42,9 +42,6 @@ class SessionManagementRoute(Route):
             session_conversations = {}
             for pref in preferences:
                 session_conversations[pref.scope_id] = pref.value["val"]
-
-            logger.debug(session_conversations)
-
             provider_manager = self.core_lifecycle.provider_manager
             persona_mgr = self.core_lifecycle.persona_mgr
             personas = persona_mgr.personas_v3
