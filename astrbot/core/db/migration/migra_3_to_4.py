@@ -2,8 +2,9 @@ import json
 import datetime
 from .. import BaseDatabase
 from .sqlite_v3 import SQLiteDatabase as SQLiteV3DatabaseV3
+from .shared_preferences_v3 import sp as sp_v3
 from astrbot.core.config.default import DB_PATH
-from astrbot.api import logger
+from astrbot.api import logger, sp
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.platform.astr_message_event import MessageSesion
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,7 +90,7 @@ async def migration_conversation_table(
 
 
 async def migration_platform_table(
-    db_helper: BaseDatabase, platform_id_map: dict[str, str]
+    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
 ):
     db_helper_v3 = SQLiteV3DatabaseV3(
         db_path=DB_PATH.replace("data_v4.db", "data_v3.db")
@@ -122,9 +123,7 @@ async def migration_platform_table(
             for bucket_idx, bucket_end in enumerate(range(start_time, end_time, 3600)):
                 if bucket_idx % 500 == 0:
                     progress = int((bucket_idx + 1) / total_buckets * 100)
-                    logger.info(
-                        f"进度: {progress}% ({bucket_idx + 1}/{total_buckets})"
-                    )
+                    logger.info(f"进度: {progress}% ({bucket_idx + 1}/{total_buckets})")
                 cnt = 0
                 while (
                     idx < len(platform_stats_v3)
@@ -258,3 +257,82 @@ async def migration_persona_data(
             )
         except Exception as e:
             logger.error(f"解析 Persona 配置失败：{e}")
+
+
+async def migration_preferences(
+    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
+):
+    # 1. global scope migration
+    keys = [
+        "inactivated_llm_tools",
+        "inactivated_plugins",
+        "curr_provider",
+        "curr_provider_tts",
+        "curr_provider_stt",
+        "alter_cmd",
+    ]
+    for key in keys:
+        value = sp_v3.get(key)
+        if value is not None:
+            await sp.put_async("global", "global", key, value)
+            logger.info(f"迁移全局偏好设置 {key} 成功，值: {value}")
+
+    # 2. umo scope migration
+    session_conversation = sp_v3.get("session_conversation", default={})
+    for umo, conversation_id in session_conversation.items():
+        if not umo or not conversation_id:
+            continue
+        try:
+            session = MessageSesion.from_str(session_str=umo)
+            platform_id = get_platform_id(platform_id_map, session.platform_name)
+            session.platform_id = platform_id
+            await sp.put_async("umo", str(session), "sel_conv_id", conversation_id)
+            logger.info(f"迁移会话 {umo} 的对话数据到新表成功，平台 ID: {platform_id}")
+        except Exception as e:
+            logger.error(f"迁移会话 {umo} 的对话数据失败: {e}", exc_info=True)
+
+    session_service_config = sp_v3.get("session_service_config", default={})
+    for umo, config in session_service_config.items():
+        if not umo or not config:
+            continue
+        try:
+            session = MessageSesion.from_str(session_str=umo)
+            platform_id = get_platform_id(platform_id_map, session.platform_name)
+            session.platform_id = platform_id
+
+            await sp.put_async("umo", str(session), "session_service_config", config)
+
+            logger.info(f"迁移会话 {umo} 的服务配置到新表成功，平台 ID: {platform_id}")
+        except Exception as e:
+            logger.error(f"迁移会话 {umo} 的服务配置失败: {e}", exc_info=True)
+
+    session_variables = sp_v3.get("session_variables", default={})
+    for umo, variables in session_variables.items():
+        if not umo or not variables:
+            continue
+        try:
+            session = MessageSesion.from_str(session_str=umo)
+            platform_id = get_platform_id(platform_id_map, session.platform_name)
+            session.platform_id = platform_id
+            await sp.put_async("umo", str(session), "session_variables", variables)
+        except Exception as e:
+            logger.error(f"迁移会话 {umo} 的变量失败: {e}", exc_info=True)
+
+    session_provider_perf = sp_v3.get("session_provider_perf", default={})
+    for umo, perf in session_provider_perf.items():
+        if not umo or not perf:
+            continue
+        try:
+            session = MessageSesion.from_str(session_str=umo)
+            platform_id = get_platform_id(platform_id_map, session.platform_name)
+            session.platform_id = platform_id
+
+            for provider_type, provider_id in perf.items():
+                await sp.put_async(
+                    "umo", str(session), f"provider_perf_{provider_type}", provider_id
+                )
+            logger.info(
+                f"迁移会话 {umo} 的提供商偏好到新表成功，平台 ID: {platform_id}"
+            )
+        except Exception as e:
+            logger.error(f"迁移会话 {umo} 的提供商偏好失败: {e}", exc_info=True)

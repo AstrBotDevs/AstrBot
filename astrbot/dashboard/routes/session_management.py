@@ -38,7 +38,13 @@ class SessionManagementRoute(Route):
     async def list_sessions(self):
         """获取所有会话的列表，包括 persona 和 provider 信息"""
         try:
-            session_conversations = sp.get("session_conversation", {}) or {}
+            preferences = await sp.session_get(umo=None, key="sel_conv_id", default=[])
+            session_conversations = {}
+            for pref in preferences:
+                session_conversations[pref.scope_id] = pref.value["val"]
+
+            logger.debug(session_conversations)
+
             provider_manager = self.core_lifecycle.provider_manager
             persona_mgr = self.core_lifecycle.persona_mgr
             personas = persona_mgr.personas_v3
@@ -51,13 +57,9 @@ class SessionManagementRoute(Route):
                     "session_id": session_id,
                     "conversation_id": conversation_id,
                     "persona_id": None,
-                    "persona_name": None,
                     "chat_provider_id": None,
-                    "chat_provider_name": None,
                     "stt_provider_id": None,
-                    "stt_provider_name": None,
                     "tts_provider_id": None,
-                    "tts_provider_name": None,
                     "session_enabled": SessionServiceManager.is_session_enabled(
                         session_id
                     ),
@@ -92,16 +94,15 @@ class SessionManagementRoute(Route):
                     if conversation.persona_id and conversation.persona_id != "[%None]":
                         for persona in personas:
                             if persona["name"] == conversation.persona_id:
-                                session_info["persona_name"] = persona["name"]
+                                session_info["persona_id"] = persona["name"]
                                 break
                     elif conversation.persona_id == "[%None]":
-                        session_info["persona_name"] = "无人格"
+                        session_info["persona_id"] = "无人格"
                     else:
                         # 使用默认人格
                         default_persona = persona_mgr.selected_default_persona_v3
                         if default_persona:
                             session_info["persona_id"] = default_persona["name"]
-                            session_info["persona_name"] = default_persona["name"]
 
                 # 获取 provider 信息
                 provider_manager = self.core_lifecycle.provider_manager
@@ -117,15 +118,12 @@ class SessionManagementRoute(Route):
                 if chat_provider:
                     meta = chat_provider.meta()
                     session_info["chat_provider_id"] = meta.id
-                    session_info["chat_provider_name"] = meta.id
                 if tts_provider:
                     meta = tts_provider.meta()
                     session_info["tts_provider_id"] = meta.id
-                    session_info["tts_provider_name"] = meta.id
                 if stt_provider:
                     meta = stt_provider.meta()
                     session_info["stt_provider_id"] = meta.id
-                    session_info["stt_provider_name"] = meta.id
 
                 sessions.append(session_info)
 

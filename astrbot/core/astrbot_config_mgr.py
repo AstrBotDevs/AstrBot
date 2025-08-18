@@ -40,7 +40,9 @@ class AstrBotConfigManager:
 
     def _load_all_configs(self):
         """Load all configurations from the shared preferences."""
-        abconf_data = self.sp.get("abconf_mapping", {})
+        abconf_data = self.sp.get(
+            "abconf_mapping", {}, scope="global", scope_id="global"
+        )
         for uuid_, meta in abconf_data.items():
             filename = meta["path"]
             conf_path = os.path.join(get_astrbot_config_path(), filename)
@@ -55,13 +57,13 @@ class AstrBotConfigManager:
 
     def _is_umo_match(self, p1: str, p2: str) -> bool:
         """判断 p2 umo 是否逻辑包含于 p1 umo"""
-        p1 = p1.split(":")
-        p2 = p2.split(":")
+        p1_ls = p1.split(":")
+        p2_ls = p2.split(":")
 
-        if len(p1) != 3 or len(p2) != 3:
+        if len(p1_ls) != 3 or len(p2_ls) != 3:
             return False  # 非法格式
 
-        return all(p == "" or p == t for p, t in zip(p1, p2))
+        return all(p == "" or p == t for p, t in zip(p1_ls, p2_ls))
 
     def _load_conf_mapping(self, umo: str | MessageSession) -> ConfInfo:
         """获取指定 umo 的配置文件 uuid, 如果不存在则返回默认配置(返回 "default")
@@ -70,7 +72,9 @@ class AstrBotConfigManager:
             ConfInfo: 包含配置文件的 uuid, 路径和名称等信息, 是一个 dict 类型
         """
         # uuid -> { "umop": list, "path": str, "name": str }
-        abconf_data = self.sp.get("abconf_mapping", {})  # default is not included here
+        abconf_data = self.sp.get(
+            "abconf_mapping", {}, scope="global", scope_id="global"
+        )
         if isinstance(umo, MessageSession):
             umo = str(umo)
         else:
@@ -91,7 +95,7 @@ class AstrBotConfigManager:
         abconf_path: str,
         abconf_id: str,
         umo_parts: list[str] | list[MessageSession],
-        abconf_name: str = None,
+        abconf_name: str | None = None,
     ) -> None:
         """保存配置文件的映射关系"""
         for part in umo_parts:
@@ -101,14 +105,16 @@ class AstrBotConfigManager:
                 raise ValueError(
                     "umo_parts must be a list of strings or MessageSession instances"
                 )
-        abconf_data = self.sp.get("abconf_mapping", {})
+        abconf_data = self.sp.get(
+            "abconf_mapping", {}, scope="global", scope_id="global"
+        )
         random_word = abconf_name or uuid.uuid4().hex[:8]
         abconf_data[abconf_id] = {
             "umop": umo_parts,
             "path": abconf_path,
             "name": random_word,
         }
-        self.sp.put("abconf_mapping", abconf_data)
+        self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
 
     def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
         """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
@@ -141,7 +147,10 @@ class AstrBotConfigManager:
         """获取所有配置文件的元数据列表"""
         conf_list = []
         conf_list.append(DEFAULT_CONFIG_CONF_INFO)
-        for uuid_, meta in self.sp.get("abconf_mapping", {}).items():
+        abconf_mapping = self.sp.get(
+            "abconf_mapping", {}, scope="global", scope_id="global"
+        )
+        for uuid_, meta in abconf_mapping.items():
             conf_list.append(ConfInfo(**meta, id=uuid_))
         return conf_list
 
@@ -149,7 +158,7 @@ class AstrBotConfigManager:
         self,
         umo_parts: list[str] | list[MessageSession],
         config: dict = DEFAULT_CONFIG,
-        name: str = None,
+        name: str | None = None,
     ) -> str:
         """
         umo 由三个部分组成 [platform_id]:[message_type]:[session_id]。
@@ -181,7 +190,9 @@ class AstrBotConfigManager:
             raise ValueError("不能删除默认配置文件")
 
         # 从映射中移除
-        abconf_data = self.sp.get("abconf_mapping", {})
+        abconf_data = self.sp.get(
+            "abconf_mapping", {}, scope="global", scope_id="global"
+        )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
             return False
@@ -206,13 +217,13 @@ class AstrBotConfigManager:
 
         # 从映射中移除
         del abconf_data[conf_id]
-        self.sp.put("abconf_mapping", abconf_data)
+        self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
 
         logger.info(f"成功删除配置文件 {conf_id}")
         return True
 
     def update_conf_info(
-        self, conf_id: str, name: str = None, umo_parts: list[str] = None
+        self, conf_id: str, name: str | None = None, umo_parts: list[str] | None = None
     ) -> bool:
         """更新配置文件信息
 
@@ -227,7 +238,9 @@ class AstrBotConfigManager:
         if conf_id == "default":
             raise ValueError("不能更新默认配置文件的信息")
 
-        abconf_data = self.sp.get("abconf_mapping", {})
+        abconf_data = self.sp.get(
+            "abconf_mapping", {}, scope="global", scope_id="global"
+        )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
             return False
@@ -249,11 +262,13 @@ class AstrBotConfigManager:
             abconf_data[conf_id]["umop"] = umo_parts
 
         # 保存更新
-        self.sp.put("abconf_mapping", abconf_data)
+        self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
         logger.info(f"成功更新配置文件 {conf_id} 的信息")
         return True
 
-    def g(self, umo: str = None, key: str = None, default: _VT = None) -> _VT:
+    def g(
+        self, umo: str | None = None, key: str | None = None, default: _VT = None
+    ) -> _VT:
         """获取配置项。umo 为 None 时使用默认配置"""
         if umo is None:
             return self.confs["default"].get(key, default)

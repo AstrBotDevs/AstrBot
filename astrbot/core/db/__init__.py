@@ -74,7 +74,7 @@ class BaseDatabase(abc.ABC):
         platform_id: str,
         platform_type: str,
         count: int = 1,
-        timestamp: datetime.datetime = None,
+        timestamp: datetime.datetime | None = None,
     ) -> None:
         """Insert a new platform statistic record."""
         ...
@@ -91,7 +91,7 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_conversations(
-        self, user_id: str = None, platform_id: str = None
+        self, user_id: str | None = None, platform_id: str | None = None
     ) -> list[ConversationV2]:
         """Get all conversations for a specific user and platform_id(optional).
 
@@ -128,12 +128,12 @@ class BaseDatabase(abc.ABC):
         self,
         user_id: str,
         platform_id: str,
-        content: list[dict] = None,
-        title: str = None,
-        persona_id: str = None,
-        cid: str = None,
-        created_at: datetime.datetime = None,
-        updated_at: datetime.datetime = None,
+        content: list[dict] | None = None,
+        title: str | None = None,
+        persona_id: str | None = None,
+        cid: str | None = None,
+        created_at: datetime.datetime | None = None,
+        updated_at: datetime.datetime | None = None,
     ) -> ConversationV2:
         """Create a new conversation."""
         ...
@@ -142,9 +142,9 @@ class BaseDatabase(abc.ABC):
     async def update_conversation(
         self,
         cid: str,
-        title: str = None,
-        persona_id: str = None,
-        content: list[dict] = None,
+        title: str | None = None,
+        persona_id: str | None = None,
+        content: list[dict] | None = None,
     ) -> None:
         """Update a conversation's history."""
         ...
@@ -160,8 +160,8 @@ class BaseDatabase(abc.ABC):
         platform_id: str,
         user_id: str,
         content: list[dict],
-        sender_id: str = None,
-        sender_name: str = None,
+        sender_id: str | None = None,
+        sender_name: str | None = None,
     ) -> None:
         """Insert a new platform message history record."""
         ...
@@ -204,8 +204,8 @@ class BaseDatabase(abc.ABC):
         self,
         persona_id: str,
         system_prompt: str,
-        begin_dialogs: list[str] = None,
-        tools: list[str] = None,
+        begin_dialogs: list[str] | None = None,
+        tools: list[str] | None = None,
     ) -> Persona:
         """Insert a new persona record."""
         ...
@@ -224,9 +224,9 @@ class BaseDatabase(abc.ABC):
     async def update_persona(
         self,
         persona_id: str,
-        system_prompt: str = None,
-        begin_dialogs: list[str] = None,
-        tools: list[str] = None,
+        system_prompt: str | None = None,
+        begin_dialogs: list[str] | None = None,
+        tools: list[str] | None = None,
     ) -> Persona | None:
         """Update a persona's system prompt or begin dialogs."""
         ...
@@ -237,13 +237,32 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def insert_preference_or_update(self, key: str, value: str) -> Preference:
+    async def insert_preference_or_update(
+        self, scope: str, scope_id: str, key: str, value: dict
+    ) -> Preference:
         """Insert a new preference record."""
         ...
 
     @abc.abstractmethod
-    async def get_preference(self, key: str) -> Preference:
-        """Get a preference by bot ID and key."""
+    async def get_preference(self, scope: str, scope_id: str, key: str) -> Preference:
+        """Get a preference by scope ID and key."""
+        ...
+
+    @abc.abstractmethod
+    async def get_preferences(
+        self, scope: str, scope_id: str | None = None, key: str | None = None
+    ) -> list[Preference]:
+        """Get all preferences for a specific scope ID or key."""
+        ...
+
+    @abc.abstractmethod
+    async def remove_preference(self, scope: str, scope_id: str, key: str) -> None:
+        """Remove a preference by scope ID and key."""
+        ...
+
+    @abc.abstractmethod
+    async def clear_preferences(self, scope: str, scope_id: str) -> None:
+        """Clear all preferences for a specific scope ID."""
         ...
 
     # @abc.abstractmethod

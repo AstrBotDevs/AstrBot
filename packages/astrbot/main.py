@@ -503,7 +503,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         scene = RstScene.get_scene(is_group, is_unique_session)
 
-        alter_cmd_cfg = sp.get("alter_cmd", {})
+        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {})
         plugin_config = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_config.get("reset", {})
 
@@ -1101,29 +1101,22 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str):
         # session_id = event.get_session_id()
         uid = event.unified_msg_origin
-        session_vars = sp.get("session_variables", {})
-
-        session_var = session_vars.get(uid, {})
+        session_var = await sp.session_get(uid, "session_variables", {})
         session_var[key] = value
-
-        session_vars[uid] = session_var
-
-        sp.put("session_variables", session_vars)
+        await sp.session_put(uid, "session_variables", session_var)
 
         yield event.plain_result(f"会话 {uid} 变量 {key} 存储成功。使用 /unset 移除。")
 
     @filter.command("unset")
     async def unset_variable(self, event: AstrMessageEvent, key: str):
         uid = event.unified_msg_origin
-        session_vars = sp.get("session_variables", {})
-
-        session_var = session_vars.get(uid, {})
+        session_var = await sp.session_get(umo="uid", key="session_variables", default={})
 
         if key not in session_var:
             yield event.plain_result("没有那个变量名。格式 /unset 变量名。")
         else:
             del session_var[key]
-            sp.put("session_variables", session_vars)
+            await sp.session_put(uid, "session_variables", session_var)
             yield event.plain_result(f"会话 {uid} 变量 {key} 移除成功。")
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
@@ -1356,7 +1349,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         #    对reset权限进行特殊处理
         # ============================
         if cmd_name == "reset" and cmd_type == "config":
-            alter_cmd_cfg = sp.get("alter_cmd", {})
+            alter_cmd_cfg = await sp.global_get("alter_cmd", {})
             plugin_ = alter_cmd_cfg.get("astrbot", {})
             reset_cfg = plugin_.get("reset", {})
 
@@ -1391,7 +1384,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             scene = RstScene.from_index(scene_num)
             scene_key = scene.key
 
-            self.update_reset_permission(scene_key, perm_type)
+            await self.update_reset_permission(scene_key, perm_type)
 
             yield event.plain_result(
                 f"已将 reset 命令在{scene.name}场景下的权限设为{perm_type}"
@@ -1422,14 +1415,14 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         found_plugin = star_map[found_command.handler_module_path]
 
-        alter_cmd_cfg = sp.get("alter_cmd", {})
+        alter_cmd_cfg = await sp.global_get("alter_cmd", {})
         plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
         cfg = plugin_.get(found_command.handler_name, {})
         cfg["permission"] = cmd_type
         plugin_[found_command.handler_name] = cfg
         alter_cmd_cfg[found_plugin.name] = plugin_
 
-        sp.put("alter_cmd", alter_cmd_cfg)
+        await sp.global_put("alter_cmd", alter_cmd_cfg)
 
         # 注入权限过滤器
         found_permission_filter = False
@@ -1453,17 +1446,17 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         yield event.plain_result(f"已将 {cmd_name} 设置为 {cmd_type} 指令")
 
-    def update_reset_permission(self, scene_key: str, perm_type: str):
+    async def update_reset_permission(self, scene_key: str, perm_type: str):
         """更新reset命令在特定场景下的权限设置
 
         Args:
             scene_key (str): 场景编号，1-3
             perm_type (str): 权限类型，admin或member
         """
-        alter_cmd_cfg = sp.get("alter_cmd", {})
+        alter_cmd_cfg = await sp.global_get("alter_cmd", {})
         plugin_cfg = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_cfg.get("reset", {})
         reset_cfg[scene_key] = perm_type
         plugin_cfg["reset"] = reset_cfg
         alter_cmd_cfg["astrbot"] = plugin_cfg
-        sp.put("alter_cmd", alter_cmd_cfg)
+        await sp.global_put("alter_cmd", alter_cmd_cfg)
