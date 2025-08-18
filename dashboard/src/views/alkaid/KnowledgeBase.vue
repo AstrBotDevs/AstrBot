@@ -36,6 +36,14 @@
                     @click="$router.push('/extension?open_config=astrbot_plugin_knowledge_base')">
                     {{ tm('list.config') }}
                 </v-btn>
+                <v-btn class="mb-4 ml-4" prepend-icon="mdi-update" variant="tonal" color="warning"
+                    @click="checkPluginUpdate" :loading="checkingUpdate">
+                    {{ tm('list.checkUpdate') }}
+                </v-btn>
+                <v-btn v-if="pluginHasUpdate" class="mb-4 ml-4" prepend-icon="mdi-download" variant="tonal" color="primary"
+                    @click="updatePlugin" :loading="updatingPlugin">
+                    {{ tm('list.updatePlugin', { version: pluginLatestVersion }) }}
+                </v-btn>
 
                 <div class="kb-grid">
                     <div v-for="(kb, index) in kbCollections" :key="index" class="kb-card"
@@ -496,6 +504,12 @@ export default {
             },
             importing: false,
             pollingInterval: null,
+            // 插件更新相关
+            checkingUpdate: false,
+            updatingPlugin: false,
+            pluginHasUpdate: false,
+            pluginCurrentVersion: '',
+            pluginLatestVersion: '',
         }
     },
     computed: {
@@ -564,7 +578,10 @@ export default {
                     }
                     if (response.data.data.length > 0) {
                         this.installed = true;
+                        this.pluginCurrentVersion = response.data.data[0].version || '未知';
                         this.getKBCollections();
+                        // 自动检查更新
+                        this.checkPluginUpdate();
                     } else {
                         this.installed = false;
                     }
@@ -573,6 +590,70 @@ export default {
                     console.error('Error checking plugin:', error);
                     this.showSnackbar(this.tm('messages.checkPluginFailed'), 'error');
                 })
+        },
+
+        async checkPluginUpdate() {
+            this.checkingUpdate = true;
+            this.pluginHasUpdate = false;
+            try {
+                // 获取在线插件数据
+                const onlineResponse = await axios.get('/api/plugin/market_list');
+                if (onlineResponse.data.status === 'ok') {
+                    const knowledgeBasePlugin = onlineResponse.data.data['astrbot_plugin_knowledge_base'];
+                    if (knowledgeBasePlugin) {
+                        this.pluginLatestVersion = knowledgeBasePlugin.version || '未知';
+                        
+                        // 比较版本
+                        if (this.pluginCurrentVersion && this.pluginLatestVersion && 
+                            this.pluginCurrentVersion !== '未知' && this.pluginLatestVersion !== '未知') {
+                            this.pluginHasUpdate = this.pluginCurrentVersion != this.pluginLatestVersion
+                        }
+                        
+                        if (this.pluginHasUpdate) {
+                            this.showSnackbar(this.tm('messages.updateAvailable', { 
+                                current: this.pluginCurrentVersion, 
+                                latest: this.pluginLatestVersion 
+                            }), 'info');
+                        } else {
+                            this.showSnackbar(this.tm('messages.pluginUpToDate'), 'success');
+                        }
+                    } else {
+                        this.showSnackbar(this.tm('messages.pluginNotFoundInMarket'), 'warning');
+                    }
+                } else {
+                    this.showSnackbar(this.tm('messages.checkUpdateFailed'), 'error');
+                }
+            } catch (error) {
+                console.error('Error checking plugin update:', error);
+                this.showSnackbar(this.tm('messages.checkUpdateFailed'), 'error');
+            } finally {
+                this.checkingUpdate = false;
+            }
+        },
+
+        async updatePlugin() {
+            this.updatingPlugin = true;
+            try {
+                const response = await axios.post('/api/plugin/update', {
+                    name: 'astrbot_plugin_knowledge_base',
+                    proxy: localStorage.getItem('selectedGitHubProxy') || ""
+                });
+
+                if (response.data.status === 'ok') {
+                    this.showSnackbar(this.tm('messages.updateSuccess'), 'success');
+                    this.pluginHasUpdate = false;
+                    this.pluginCurrentVersion = this.pluginLatestVersion;
+                    // 刷新插件信息
+                    this.checkPlugin();
+                } else {
+                    this.showSnackbar(response.data.message || this.tm('messages.updateFailed'), 'error');
+                }
+            } catch (error) {
+                console.error('Error updating plugin:', error);
+                this.showSnackbar(this.tm('messages.updatePluginFailed'), 'error');
+            } finally {
+                this.updatingPlugin = false;
+            }
         },
 
         installPlugin() {

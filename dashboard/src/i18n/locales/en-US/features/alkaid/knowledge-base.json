@@ -1,21 +1,6 @@
 {
   "title": "Knowledge Base",
   "subtitle": "Manage and query knowledge base content",
-  "upload": {
-    "title": "Upload Documents",
-    "selectFiles": "Select Files",
-    "supportedFormats": "Supported Formats",
-    "dragDrop": "Drag files here",
-    "processing": "Processing...",
-    "success": "Upload Successful",
-    "error": "Upload Failed"
-  },
-  "search": {
-    "placeholder": "Search knowledge base...",
-    "results": "Search Results",
-    "noResults": "No relevant content found",
-    "searching": "Searching..."
-  },
   "documents": {
     "title": "Document List",
     "name": "Document Name",
@@ -42,6 +27,8 @@
     "title": "Knowledge Base List",
     "create": "Create Knowledge Base",
     "config": "Configure",
+    "checkUpdate": "Check Plugin Update",
+    "updatePlugin": "Update Plugin to {version}",
     "knowledgeCount": "knowledge items",
     "tips": "Tips: Learn how to use through /kb command in chat page!"
   },
@@ -132,7 +119,14 @@
     "knowledgeBaseDeleted": "Knowledge base deleted successfully",
     "deleteFailed": "Deletion failed",
     "deleteKnowledgeBaseFailed": "Failed to delete knowledge base",
-    "getEmbeddingModelListFailed": "Failed to get embedding model list"
+    "getEmbeddingModelListFailed": "Failed to get embedding model list",
+    "updateAvailable": "New version available: {current} -> {latest}",
+    "pluginUpToDate": "Plugin is up to date",
+    "pluginNotFoundInMarket": "Plugin not found in market",
+    "checkUpdateFailed": "Failed to check for updates",
+    "updateSuccess": "Plugin updated successfully",
+    "updateFailed": "Update failed",
+    "updatePluginFailed": "Failed to update plugin"
   },
   "importFromUrl": {
     "title": "Import from URL",

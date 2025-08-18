@@ -585,9 +585,19 @@ onMounted(async () => {
   await getExtensions();
 
   // 检查是否有 open_config 参数
-  const urlParams = new URLSearchParams(window.location.search);
+  let urlParams;
+  if (window.location.hash) {
+    // For hash mode (#/path?param=value)
+    const hashQuery = window.location.hash.split('?')[1] || '';
+    urlParams = new URLSearchParams(hashQuery);
+  } else {
+    // For history mode (/path?param=value)
+    urlParams = new URLSearchParams(window.location.search);
+  }
+  console.log("URL Parameters:", urlParams.toString());
   const plugin_name = urlParams.get('open_config');
   if (plugin_name) {
+    console.log(`Opening config for plugin: ${plugin_name}`);
     openExtensionConfig(plugin_name);
   }
 
