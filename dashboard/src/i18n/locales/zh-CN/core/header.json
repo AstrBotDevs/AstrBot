@@ -25,6 +25,12 @@
       "dev": "🧐 开发版(master 分支)"
     },
     "updateToLatest": "更新到最新版本",
+    "preRelease": "预发布",
+    "preReleaseWarning": {
+      "title": "预发布版本提醒",
+      "description": "标有预发布标签的版本可能存在未知问题或 Bug，不建议在生产环境使用。如发现问题，请提交至 ",
+      "issueLink": "GitHub Issues"
+    },
     "tip": "💡 TIP: 跳到旧版本或者切换到某个版本不会重新下载管理面板文件，这可能会造成部分数据显示错误。您可在",
     "tipLink": "此处",
     "tipContinue": "找到对应的面板文件 dist.zip，解压后替换 data/dist 文件夹即可。当然，前端源代码在 dashboard 目录下，你也可以自己使用 npm install 和 npm build 构建。",
