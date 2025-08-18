@@ -559,8 +559,8 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.openai.com/v1",
                         "timeout": 120,
                         "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
-                        "modalities": ["text", "image"],
-                        "hint": "也兼容所有与OpenAI API兼容的服务。",
+                        "modalities": ["text", "image", "tool_use"],
+                        "hint": "也兼容所有与 OpenAI API 兼容的服务。",
                     },
                     "Azure OpenAI": {
                         "id": "azure",
@@ -573,7 +573,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "",
                         "timeout": 120,
                         "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "xAI": {
                         "id": "xai",
@@ -585,7 +585,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.x.ai/v1",
                         "timeout": 120,
                         "model_config": {"model": "grok-2-latest", "temperature": 0.4},
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Anthropic": {
                         "hint": "注意Claude系列模型的温度调节范围为0到1.0，超出可能导致报错",
@@ -602,7 +602,7 @@ CONFIG_METADATA_2 = {
                             "max_tokens": 4096,
                             "temperature": 0.2,
                         },
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Ollama": {
                         "hint": "启用前请确保已正确安装并运行 Ollama 服务端，Ollama默认不带鉴权，无需修改key",
@@ -614,7 +614,7 @@ CONFIG_METADATA_2 = {
                         "key": ["ollama"],  # ollama 的 key 默认是 ollama
                         "api_base": "http://localhost:11434/v1",
                         "model_config": {"model": "llama3.1-8b", "temperature": 0.4},
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "LM Studio": {
                         "id": "lm_studio",
@@ -627,7 +627,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "llama-3.1-8b",
                         },
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Gemini(OpenAI兼容)": {
                         "id": "gemini_default",
@@ -642,7 +642,7 @@ CONFIG_METADATA_2 = {
                             "model": "gemini-1.5-flash",
                             "temperature": 0.4,
                         },
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Gemini": {
                         "id": "gemini_default",
@@ -670,7 +670,7 @@ CONFIG_METADATA_2 = {
                         "gm_thinking_config": {
                             "budget": 0,
                         },
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "DeepSeek": {
                         "id": "deepseek_default",
@@ -682,7 +682,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
                         "model_config": {"model": "deepseek-chat", "temperature": 0.4},
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "302.AI": {
                         "id": "302ai",
@@ -694,7 +694,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.302.ai/v1",
                         "timeout": 120,
                         "model_config": {"model": "gpt-4.1-mini", "temperature": 0.4},
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "硅基流动": {
                         "id": "siliconflow",
@@ -709,7 +709,7 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek-ai/DeepSeek-V3",
                             "temperature": 0.4,
                         },
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "PPIO派欧云": {
                         "id": "ppio",
@@ -737,7 +737,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "moonshotai/Kimi-K2-Instruct",
                         },
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Kimi": {
                         "id": "moonshot",
@@ -749,7 +749,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "api_base": "https://api.moonshot.cn/v1",
                         "model_config": {"model": "moonshot-v1-8k", "temperature": 0.4},
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "智谱 AI": {
                         "id": "zhipu_default",
@@ -763,7 +763,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "glm-4-flash",
                         },
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Dify": {
                         "id": "dify_app_default",
@@ -807,7 +807,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "api_base": "https://api-inference.modelscope.cn/v1",
                         "model_config": {"model": "Qwen/Qwen3-32B", "temperature": 0.4},
-                        "modalities": ["text", "image"],
+                        "modalities": ["text", "image", "tool_use"],
                     },
                     "FastGPT": {
                         "id": "fastgpt",
@@ -1028,8 +1028,8 @@ CONFIG_METADATA_2 = {
                         "description": "模型能力",
                         "type": "list",
                         "items": {"type": "string"},
-                        "options": ["text", "image"],
-                        "labels": ["文本", "图像"],
+                        "options": ["text", "image", "tool_use"],
+                        "labels": ["文本", "图像", "工具使用"],
                         "render_type": "checkbox",
                         "hint": "模型支持的模态。如所填写的模型不支持图像，请取消勾选图像。",
                     },

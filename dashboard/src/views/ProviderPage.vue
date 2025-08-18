@@ -569,7 +569,13 @@ export default {
         for (let key in reference) {
           if (typeof reference[key] === 'object' && reference[key] !== null) {
             if (!(key in target)) {
-              target[key] = Array.isArray(reference[key]) ? [] : {};
+              // 如果target中没有这个key
+              if (Array.isArray(reference[key])) {
+                // 复制
+                target[key] = [...reference[key]]
+              } else {
+                target[key] = {};
+              }
             }
             if (!Array.isArray(reference[key])) {
               mergeConfigWithOrder(
@@ -579,7 +585,6 @@ export default {
               );
             }
           } else if (!(key in target)) {
-            // 只有当target中不存在该键时才从reference复制
             target[key] = reference[key];
           }
         }

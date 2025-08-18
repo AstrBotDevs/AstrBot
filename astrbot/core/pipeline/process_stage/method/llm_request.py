@@ -414,11 +414,17 @@ class LLMRequestSubStage(Stage):
         req.contexts = self.fix_messages(req.contexts)
 
         # check provider modalities
-        # 如果提供商不支持图像，但请求中包含图像，则清空图像列表。图片转述的检测和调用发生在这之前，因此这里可以这样处理。
+        # 如果提供商不支持图像/工具使用，但请求中包含图像/工具列表，则清空。图片转述等的检测和调用发生在这之前，因此这里可以这样处理。
         if req.image_urls:
-            provider_cfg = provider.provider_config.get("modalities", ["text", "image"])
+            provider_cfg = provider.provider_config.get("modalities", ["image"])
             if "image" not in provider_cfg:
+                logger.debug(f"用户设置提供商 {provider} 不支持图像，清空图像列表。")
                 req.image_urls = []
+        if req.func_tool:
+            provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
+            if "tool_use" not in provider_cfg:
+                logger.debug(f"用户设置提供商 {provider} 不支持工具使用，清空工具列表。")
+                req.func_tool = None
 
         # run agent
         agent_runner = AgentRunner()
