@@ -365,7 +365,7 @@ commonStore.getStartTime();
                 </div>
 
                 <v-alert
-                  v-if="releases.some(item => isPreRelease(item.tag_name))"
+                  v-if="releases.some(item => isPreRelease(item['tag_name']))"
                   type="warning"
                   variant="tonal"
                   border="start"
