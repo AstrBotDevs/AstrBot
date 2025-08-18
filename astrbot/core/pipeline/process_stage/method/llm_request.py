@@ -531,6 +531,10 @@ class LLMRequestSubStage(Stage):
         ):
             return
 
+        if not llm_response.completion_text and not req.tool_calls_result:
+            logger.debug("LLM 响应为空，不保存记录。")
+            return
+
         # 历史上下文
         messages = copy.deepcopy(req.contexts)
         # 这一轮对话请求的用户输入
