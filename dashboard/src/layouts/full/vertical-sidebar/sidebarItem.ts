@@ -39,14 +39,24 @@ const sidebarItem: menu[] = [
     to: '/tool-use'
   },
   {
-    title: 'core.navigation.config',
-    icon: 'mdi-cog',
-    to: '/config',
+    title: 'core.navigation.persona',
+    icon: 'mdi-heart',
+    to: '/persona'
   },
   {
     title: 'core.navigation.extension',
     icon: 'mdi-puzzle',
     to: '/extension'
+  },
+  {
+    title: 'core.navigation.knowledgeBase',
+    icon: 'mdi-text-box-search',
+    to: '/alkaid/knowledge-base',
+  },
+  {
+    title: 'core.navigation.config',
+    icon: 'mdi-cog',
+    to: '/config',
   },
   {
     title: 'core.navigation.chat',
@@ -64,24 +74,9 @@ const sidebarItem: menu[] = [
     to: '/session-management'
   },
   {
-    title: 'core.navigation.persona',
-    icon: 'mdi-heart',
-    to: '/persona'
-  },
-  {
     title: 'core.navigation.console',
     icon: 'mdi-console',
     to: '/console'
-  },
-  {
-    title: 'core.navigation.alkaid',
-    icon: 'mdi-test-tube',
-    to: '/alkaid'
-  },
-  {
-    title: 'core.navigation.about',
-    icon: 'mdi-information',
-    to: '/about'
   },
   // {
   //   title: 'Project ATRI',
