@@ -1029,7 +1029,7 @@ CONFIG_METADATA_2 = {
                         "provider_type": "rerank",
                         "enable": True,
                         "rerank_api_key": "",
-                        "rerank_api_base": "http://127.0.0:8000",
+                        "rerank_api_base": "http://127.0.0.1:8000",
                         "rerank_model": "BAAI/bge-reranker-base",
                         "timeout": 20,
                     },
