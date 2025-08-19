@@ -40,8 +40,8 @@
                     @click="checkPluginUpdate" :loading="checkingUpdate">
                     {{ tm('list.checkUpdate') }}
                 </v-btn>
-                <v-btn v-if="pluginHasUpdate" class="mb-4 ml-4" prepend-icon="mdi-download" variant="tonal" color="primary"
-                    @click="updatePlugin" :loading="updatingPlugin">
+                <v-btn v-if="pluginHasUpdate" class="mb-4 ml-4" prepend-icon="mdi-download" variant="tonal"
+                    color="primary" @click="updatePlugin" :loading="updatingPlugin">
                     {{ tm('list.updatePlugin', { version: pluginLatestVersion }) }}
                 </v-btn>
 
@@ -94,7 +94,12 @@
 
                         <v-select v-model="newKB.embedding_provider_id" :items="embeddingProviderConfigs"
                             :item-props="embeddingModelProps" :label="tm('createDialog.embeddingModelLabel')"
-                            variant="outlined" class="mt-2">
+                            variant="outlined" density="comfortable">
+                        </v-select>
+
+                        <v-select v-model="newKB.rerank_provider_id" :items="rerankProviderConfigs"
+                            :item-props="rerankModelProps" :label="tm('createDialog.rerankModelLabel')"
+                            variant="outlined" density="comfortable">
                         </v-select>
 
                         <small>{{ tm('createDialog.tips') }}</small>
@@ -103,9 +108,9 @@
                 <v-card-actions>
                     <v-spacer></v-spacer>
                     <v-btn color="error" variant="text" @click="showCreateDialog = false">{{ tm('createDialog.cancel')
-                        }}</v-btn>
+                    }}</v-btn>
                     <v-btn color="primary" variant="text" @click="submitCreateForm">{{ tm('createDialog.create')
-                        }}</v-btn>
+                    }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -130,7 +135,7 @@
                 <v-card-actions>
                     <v-spacer></v-spacer>
                     <v-btn color="primary" variant="text" @click="showEmojiPicker = false">{{ tm('emojiPicker.close')
-                        }}</v-btn>
+                    }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -153,12 +158,14 @@
                         {{ tm('contentDialog.embeddingModel') }}: {{
                             currentKB._embedding_provider_config.embedding_model }}
                     </v-chip>
-                    <v-chip color="secondary" variant="tonal" size="small" rounded="sm">
-                        <v-icon start size="small">mdi-vector-point</v-icon>
-                        {{ tm('contentDialog.vectorDimension') }}: {{
-                            currentKB._embedding_provider_config.embedding_dimensions }}
+
+                    <v-chip v-if="currentKB.rerank_provider_id" color="tertiary" variant="tonal" size="small"
+                        rounded="sm">
+                        <v-icon start size="small">mdi-sort-variant</v-icon>
+                        重排序模型: {{ rerankProviderConfigs.
+                            find(provider => provider.id === currentKB.rerank_provider_id)?.rerank_model || '未设置' }}
                     </v-chip>
-                    <small style="margin-left: 8px;">💡 使用方式: 在聊天页中输入 “/kb use {{ currentKB.collection_name }}”</small>
+                    <small style="margin-left: 8px;">💡 使用方式: 在聊天页中输入 "/kb use {{ currentKB.collection_name }}"</small>
                 </div>
 
                 <v-card-text>
@@ -177,21 +184,16 @@
                                 </div>
 
                                 <!-- 数据源选择下拉列表 -->
-                                <v-select
-                                    v-model="dataSource" 
-                                    :items="dataSourceOptions" 
-                                    :label="'数据源选择'"
-                                    variant="outlined" 
-                                    item-title="title"
-                                    item-value="value"
-                                    prepend-inner-icon="mdi-database"
-                                ></v-select>
+                                <v-select v-model="dataSource" :items="dataSourceOptions" :label="'数据源选择'"
+                                    variant="outlined" item-title="title" item-value="value"
+                                    prepend-inner-icon="mdi-database"></v-select>
 
                                 <!-- 从文件导入 -->
                                 <div v-if="dataSource === 'file'" class="mt-4">
                                     <div class="upload-zone" @dragover.prevent @drop.prevent="onFileDrop"
                                         @click="triggerFileInput">
-                                        <input type="file" ref="fileInput" style="display: none" @change="onFileSelected" />
+                                        <input type="file" ref="fileInput" style="display: none"
+                                            @change="onFileSelected" />
                                         <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
                                         <p class="mt-2">{{ tm('upload.dropzone') }}</p>
                                     </div>
@@ -218,13 +220,15 @@
                                                 <v-text-field v-model="chunkSize"
                                                     :label="tm('upload.chunkSettings.chunkSizeLabel')" type="number"
                                                     :hint="tm('upload.chunkSettings.chunkSizeHint')" persistent-hint
-                                                    variant="outlined" density="comfortable" class="flex-grow-1 chunk-field"
+                                                    variant="outlined" density="comfortable"
+                                                    class="flex-grow-1 chunk-field"
                                                     prepend-inner-icon="mdi-text-box-outline" min="50"></v-text-field>
 
                                                 <v-text-field v-model="overlap"
                                                     :label="tm('upload.chunkSettings.overlapLabel')" type="number"
                                                     :hint="tm('upload.chunkSettings.overlapHint')" persistent-hint
-                                                    variant="outlined" density="comfortable" class="flex-grow-1 chunk-field"
+                                                    variant="outlined" density="comfortable"
+                                                    class="flex-grow-1 chunk-field"
                                                     prepend-inner-icon="mdi-vector-intersection" min="0"></v-text-field>
                                             </div>
                                         </v-card-text>
@@ -236,7 +240,8 @@
                                                 <v-icon class="me-2">{{ getFileIcon(selectedFile.name) }}</v-icon>
                                                 <span style="font-weight: 1000;">{{ selectedFile.name }}</span>
                                             </div>
-                                            <v-btn size="small" color="error" variant="text" @click="selectedFile = null">
+                                            <v-btn size="small" color="error" variant="text"
+                                                @click="selectedFile = null">
                                                 <v-icon>mdi-close</v-icon>
                                             </v-btn>
                                         </div>
@@ -260,15 +265,18 @@
                                         {{ tm('importFromUrl.preRequisite') }}
                                     </v-alert>
                                     <v-text-field v-model="importUrl" :label="tm('importFromUrl.urlLabel')"
-                                        :placeholder="tm('importFromUrl.urlPlaceholder')" variant="outlined" class="mb-4" hide-details></v-text-field>
+                                        :placeholder="tm('importFromUrl.urlPlaceholder')" variant="outlined"
+                                        class="mb-4" hide-details></v-text-field>
 
                                     <v-card class="mb-4" variant="outlined" color="grey-lighten-4">
                                         <v-card-title class="pa-4 pb-0 d-flex align-center">
                                             <v-icon color="primary" class="mr-2">mdi-cog-outline</v-icon>
-                                            <span class="text-subtitle-1 font-weight-bold">{{ tm('importFromUrl.optionsTitle') }}</span>
+                                            <span class="text-subtitle-1 font-weight-bold">{{
+                                                tm('importFromUrl.optionsTitle') }}</span>
                                             <v-tooltip location="top">
                                                 <template v-slot:activator="{ props }">
-                                                    <v-icon v-bind="props" class="ml-2" size="small" color="grey">mdi-information-outline</v-icon>
+                                                    <v-icon v-bind="props" class="ml-2" size="small"
+                                                        color="grey">mdi-information-outline</v-icon>
                                                 </template>
                                                 <span>{{ tm('importFromUrl.tooltip') }}</span>
                                             </v-tooltip>
@@ -276,40 +284,53 @@
                                         <v-card-text class="pa-4 pt-2">
                                             <v-row>
                                                 <v-col cols="12" md="6">
-                                                    <v-switch hide-details v-model="importOptions.use_llm_repair" :label="tm('importFromUrl.useLlmRepairLabel')"
-                                                        color="primary" inset></v-switch>
+                                                    <v-switch hide-details v-model="importOptions.use_llm_repair"
+                                                        :label="tm('importFromUrl.useLlmRepairLabel')" color="primary"
+                                                        inset></v-switch>
                                                 </v-col>
                                                 <v-col cols="12" md="6">
-                                                    <v-switch v-model="importOptions.use_clustering_summary" hide-details
-                                                        :label="tm('importFromUrl.useClusteringSummaryLabel')" color="primary" inset></v-switch>
+                                                    <v-switch v-model="importOptions.use_clustering_summary"
+                                                        hide-details
+                                                        :label="tm('importFromUrl.useClusteringSummaryLabel')"
+                                                        color="primary" inset></v-switch>
                                                 </v-col>
                                                 <v-row class="pa-4">
                                                     <!-- Optional Repair Selector -->
-                                                    <v-col v-if="importOptions.use_llm_repair" :md="optionalSelectorColWidth" cols="12">
-                                                        <v-select v-model="importOptions.repair_llm_provider_id" :items="llmProviderConfigs" item-value="id"
-                                                            :item-props="llmModelProps" :label="tm('importFromUrl.repairLlmProviderIdLabel')" variant="outlined"
-                                                            clearable hide-details></v-select>
+                                                    <v-col v-if="importOptions.use_llm_repair"
+                                                        :md="optionalSelectorColWidth" cols="12">
+                                                        <v-select v-model="importOptions.repair_llm_provider_id"
+                                                            :items="llmProviderConfigs" item-value="id"
+                                                            :item-props="llmModelProps"
+                                                            :label="tm('importFromUrl.repairLlmProviderIdLabel')"
+                                                            variant="outlined" clearable hide-details></v-select>
                                                     </v-col>
 
                                                     <!-- Optional Summary Selector -->
-                                                    <v-col v-if="importOptions.use_clustering_summary" :md="optionalSelectorColWidth" cols="12">
-                                                        <v-select v-model="importOptions.summarize_llm_provider_id" :items="llmProviderConfigs" item-value="id"
-                                                            :item-props="llmModelProps" :label="tm('importFromUrl.summarizeLlmProviderIdLabel')" variant="outlined"
-                                                            clearable hide-details></v-select>
+                                                    <v-col v-if="importOptions.use_clustering_summary"
+                                                        :md="optionalSelectorColWidth" cols="12">
+                                                        <v-select v-model="importOptions.summarize_llm_provider_id"
+                                                            :items="llmProviderConfigs" item-value="id"
+                                                            :item-props="llmModelProps"
+                                                            :label="tm('importFromUrl.summarizeLlmProviderIdLabel')"
+                                                            variant="outlined" clearable hide-details></v-select>
                                                     </v-col>
 
                                                     <v-col cols="12" md="6">
-                                                        <v-select v-model="importOptions.embedding_provider_id" :items="embeddingProviderConfigs" item-value="id"
-                                                            :item-props="embeddingModelProps" :label="tm('importFromUrl.embeddingProviderIdLabel')"
+                                                        <v-select v-model="importOptions.embedding_provider_id"
+                                                            :items="embeddingProviderConfigs" item-value="id"
+                                                            :item-props="embeddingModelProps"
+                                                            :label="tm('importFromUrl.embeddingProviderIdLabel')"
                                                             variant="outlined" clearable hide-details></v-select>
                                                     </v-col>
                                                     <v-col cols="12" md="3">
-                                                        <v-text-field v-model="importOptions.chunk_size" :label="tm('importFromUrl.chunkSizeLabel')" type="number"
+                                                        <v-text-field v-model="importOptions.chunk_size"
+                                                            :label="tm('importFromUrl.chunkSizeLabel')" type="number"
                                                             variant="outlined" clearable hide-details></v-text-field>
                                                     </v-col>
                                                     <v-col cols="12" md="3">
-                                                        <v-text-field v-model="importOptions.chunk_overlap" :label="tm('importFromUrl.chunkOverlapLabel')"
-                                                            type="number" variant="outlined" clearable hide-details></v-text-field>
+                                                        <v-text-field v-model="importOptions.chunk_overlap"
+                                                            :label="tm('importFromUrl.chunkOverlapLabel')" type="number"
+                                                            variant="outlined" clearable hide-details></v-text-field>
                                                     </v-col>
                                                 </v-row>
                                             </v-row>
@@ -317,7 +338,8 @@
                                     </v-card>
 
                                     <div class="text-center">
-                                        <v-btn color="primary" variant="elevated" :loading="importing" :disabled="!importUrl" @click="startImportFromUrl">
+                                        <v-btn color="primary" variant="elevated" :loading="importing"
+                                            :disabled="!importUrl" @click="startImportFromUrl">
                                             {{ tm('importFromUrl.startImport') }}
                                         </v-btn>
                                     </div>
@@ -392,7 +414,7 @@
                     <v-spacer></v-spacer>
                     <v-btn color="grey-darken-1" variant="text" @click="showDeleteDialog = false">{{
                         tm('deleteDialog.cancel')
-                        }}</v-btn>
+                    }}</v-btn>
                     <v-btn color="error" variant="text" @click="deleteKnowledgeBase" :loading="deleting">{{
                         tm('deleteDialog.delete') }}</v-btn>
                 </v-card-actions>
@@ -431,7 +453,8 @@ export default {
                 name: '',
                 emoji: '🙂',
                 description: '',
-                embedding_provider_id: ''
+                embedding_provider_id: null,
+                rerank_provider_id: null,
             },
             snackbar: {
                 show: false,
@@ -490,6 +513,7 @@ export default {
             },
             deleting: false,
             embeddingProviderConfigs: [],
+            rerankProviderConfigs: [],
             llmProviderConfigs: [],
             // URL导入相关数据
             importUrl: '',
@@ -551,8 +575,7 @@ export default {
     },
     mounted() {
         this.checkPlugin();
-        this.getEmbeddingProviderList();
-        this.getLlmProviderList();
+        this.getProviderList();
     },
     methods: {
         llmModelProps(providerConfig) {
@@ -567,6 +590,14 @@ export default {
                 subtitle: this.tm('createDialog.providerInfo', {
                     id: providerConfig.id,
                     dimensions: providerConfig.embedding_dimensions
+                }),
+            }
+        },
+        rerankModelProps(providerConfig) {
+            return {
+                title: providerConfig.rerank_model,
+                subtitle: this.tm('createDialog.rerankProviderInfo', {
+                    id: providerConfig.id,
                 }),
             }
         },
@@ -602,17 +633,17 @@ export default {
                     const knowledgeBasePlugin = onlineResponse.data.data['astrbot_plugin_knowledge_base'];
                     if (knowledgeBasePlugin) {
                         this.pluginLatestVersion = knowledgeBasePlugin.version || '未知';
-                        
+
                         // 比较版本
-                        if (this.pluginCurrentVersion && this.pluginLatestVersion && 
+                        if (this.pluginCurrentVersion && this.pluginLatestVersion &&
                             this.pluginCurrentVersion !== '未知' && this.pluginLatestVersion !== '未知') {
                             this.pluginHasUpdate = this.pluginCurrentVersion != this.pluginLatestVersion
                         }
-                        
+
                         if (this.pluginHasUpdate) {
-                            this.showSnackbar(this.tm('messages.updateAvailable', { 
-                                current: this.pluginCurrentVersion, 
-                                latest: this.pluginLatestVersion 
+                            this.showSnackbar(this.tm('messages.updateAvailable', {
+                                current: this.pluginCurrentVersion,
+                                latest: this.pluginLatestVersion
                             }), 'info');
                         } else {
                             this.showSnackbar(this.tm('messages.pluginUpToDate'), 'success');
@@ -693,11 +724,15 @@ export default {
             if (typeof this.newKB.embedding_provider_id === 'object') {
                 this.newKB.embedding_provider_id = this.newKB.embedding_provider_id.id || '';
             }
+            if (typeof this.newKB.rerank_provider_id === 'object') {
+                this.newKB.rerank_provider_id = this.newKB.rerank_provider_id.id || '';
+            }
             axios.post('/api/plug/alkaid/kb/create_collection', {
                 collection_name: name,
                 emoji: emoji,
                 description: description,
-                embedding_provider_id: this.newKB.embedding_provider_id || ''
+                embedding_provider_id: this.newKB.embedding_provider_id || '',
+                rerank_provider_id: this.newKB.rerank_provider_id || ''
             })
                 .then(response => {
                     if (response.data.status === 'ok') {
@@ -934,15 +969,17 @@ export default {
                 });
         },
 
-        getEmbeddingProviderList() {
+        getProviderList() {
             axios.get('/api/config/provider/list', {
                 params: {
-                    provider_type: 'embedding'
+                    provider_type: 'embedding,rerank,chat_completion'
                 }
             })
                 .then(response => {
                     if (response.data.status === 'ok') {
-                        this.embeddingProviderConfigs = response.data.data || [];
+                        this.embeddingProviderConfigs = response.data.data.filter(provider => provider.provider_type === 'embedding');
+                        this.rerankProviderConfigs = response.data.data.filter(provider => provider.provider_type === 'rerank');
+                        this.llmProviderConfigs = response.data.data.filter(provider => provider.provider_type === 'chat_completion');
                     } else {
                         this.showSnackbar(response.data.message || this.tm('messages.getEmbeddingModelListFailed'), 'error');
                         return [];
@@ -957,25 +994,6 @@ export default {
 
         openUrl(url) {
             window.open(url, '_blank');
-        },
-
-        getLlmProviderList() {
-            axios.get('/api/config/provider/list', {
-                params: {
-                    provider_type: 'chat_completion'
-                }
-            })
-                .then(response => {
-                    if (response.data.status === 'ok') {
-                        this.llmProviderConfigs = response.data.data || [];
-                    } else {
-                        this.showSnackbar(response.data.message || 'Failed to get LLM provider list', 'error');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching LLM providers:', error);
-                    this.showSnackbar('Failed to get LLM provider list', 'error');
-                });
         },
 
         // URL导入相关方法

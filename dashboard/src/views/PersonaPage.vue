@@ -74,7 +74,7 @@
                         <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-account-group</v-icon>
                         <h3 class="text-h5 mb-2">{{ tm('empty.title') }}</h3>
                         <p class="text-body-1 text-medium-emphasis mb-4">{{ tm('empty.description') }}</p>
-                        <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" @click="openCreateDialog">
+                        <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="openCreateDialog">
                             {{ tm('buttons.createFirst') }}
                         </v-btn>
                     </v-card>
@@ -92,7 +92,7 @@
         <!-- 创建/编辑人格对话框 -->
         <v-dialog v-model="showPersonaDialog" max-width="800px" persistent>
             <v-card>
-                <v-card-title class="text-h5">
+                <v-card-title class="text-h2">
                     {{ editingPersona ? tm('dialog.edit.title') : tm('dialog.create.title') }}
                 </v-card-title>
 

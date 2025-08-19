@@ -40,6 +40,7 @@
     "embeddingModelLabel": "Embedding Model",
     "rerankModelLabel": "Rerank Model",
     "providerInfo": "Provider ID: {id} | Embedding Model Dimensions: {dimensions}",
+    "rerankProviderInfo": "Provider ID: {id}",
     "tips": "Tips: Once you choose an embedding model for a knowledge base, please do not modify the provider's model or vector dimension information, otherwise it will seriously affect the recall rate of the knowledge base or even cause errors.",
     "cancel": "Cancel",
     "create": "Create"

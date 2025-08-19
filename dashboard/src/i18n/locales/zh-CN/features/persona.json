@@ -1,6 +1,6 @@
 {
   "page": {
-    "description": "管理和配置聊天机器人的人格角色设定"
+    "description": "管理人格角色设定"
   },
   "buttons": {
     "create": "创建人格",
@@ -20,11 +20,11 @@
     "personaId": "人格 ID",
     "systemPrompt": "系统提示词",
     "presetDialogs": "预设对话",
-    "presetDialogsHelp": "添加一些预设的对话来帮助机器人更好地理解角色设定。对话数量必须为偶数（用户和助手轮流对话）。",
+    "presetDialogsHelp": "添加一些预设的对话来帮助机器人更好地理解角色设定。",
     "userMessage": "用户消息",
-    "assistantMessage": "助手消息",
+    "assistantMessage": "AI 回答",
     "tools": "工具选择",
-    "toolsHelp": "为这个人格选择可用的工具。工具可以让机器人执行特定的功能，如搜索、计算、获取信息等。",
+    "toolsHelp": "为这个人格选择可用的外部工具。外部工具给了 AI 接触外部环境的能力，如搜索、计算、获取信息等。",
     "toolsSelection": "工具选择操作",
     "selectAllTools": "选择所有工具",
     "clearAllTools": "清空选择",
@@ -48,7 +48,7 @@
   },
   "empty": {
     "title": "暂无人格配置",
-    "description": "创建您的第一个人格来开始使用个性化的聊天机器人"
+    "description": "来创建一个吧！"
   },
   "validation": {
     "required": "此字段为必填项",

@@ -40,6 +40,7 @@
     "embeddingModelLabel": "嵌入模型(Embedding Model)",
     "rerankModelLabel": "重排序模型(Rerank Model)",
     "providerInfo": "提供商 ID: {id} | 嵌入模型维度: {dimensions}",
+    "rerankProviderInfo": "提供商 ID: {id}",
     "tips": "Tips: 一旦选择了一个知识库的嵌入模型，请不要再修改该提供商的模型或者向量维度信息，否则将严重影响该知识库的召回率甚至报错。",
     "cancel": "取消",
     "create": "创建"

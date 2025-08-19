@@ -496,10 +496,11 @@ class ConfigRoute(Route):
         provider_type = request.args.get("provider_type", None)
         if not provider_type:
             return Response().error("缺少参数 provider_type").__dict__
+        provider_type_ls = provider_type.split(",")
         provider_list = []
         astrbot_config = self.core_lifecycle.astrbot_config
         for provider in astrbot_config["provider"]:
-            if provider.get("provider_type", None) == provider_type:
+            if provider.get("provider_type", None) in provider_type_ls:
                 provider_list.append(provider)
         return Response().ok(provider_list).__dict__
 

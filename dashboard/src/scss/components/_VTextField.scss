@@ -12,25 +12,15 @@
 }
 
 // 亮色主题样式
-.v-theme--PurpleTheme .v-text-field .v-field__outline {
-  --v-field-border-width: 2px !important;
+.v-theme--PurpleTheme .v-field__outline {
+  --v-field-border-width: 1.2px !important;
   --v-field-border-opacity: 1 !important;
-  color: rgba(149, 117, 205, 0.6) !important;
-  border-color: rgba(149, 117, 205, 0.6) !important;
-}
-
-.v-theme--PurpleTheme .v-text-field:hover .v-field__outline {
-  --v-field-border-width: 2px !important;
-  --v-field-border-opacity: 1 !important;
-  color: rgba(149, 117, 205, 0.6) !important;
-  border-color: rgba(149, 117, 205, 0.6) !important;
+  border-color: #d1cfcf;
 }
 
 .v-theme--PurpleTheme .v-text-field .v-field--focused .v-field__outline {
-  --v-field-border-width: 2.5px !important;
+  --v-field-border-width: 2px !important;
   --v-field-border-opacity: 1 !important;
-  color: rgba(149, 117, 205, 0.8) !important;
-  border-color: rgba(149, 117, 205, 0.8) !important;
 }
 
 // 深色主题样式
