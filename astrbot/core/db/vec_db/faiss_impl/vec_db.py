@@ -112,7 +112,6 @@ class FaissVecDB(BaseVecDB):
             reranked_results = sorted(
                 reranked_results, key=lambda x: x.relevance_score, reverse=True
             )
-            print(f"Reranked results: {reranked_results}")
             top_k_results = [
                 top_k_results[reranked_result.index] for reranked_result in reranked_results
             ]
