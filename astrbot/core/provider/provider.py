@@ -2,7 +2,12 @@ import abc
 from typing import List
 from typing import AsyncGenerator
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.provider.entities import LLMResponse, ToolCallsResult, ProviderType
+from astrbot.core.provider.entities import (
+    LLMResponse,
+    ToolCallsResult,
+    ProviderType,
+    RerankResult,
+)
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.db.po import Personality
 from dataclasses import dataclass
@@ -195,4 +200,18 @@ class EmbeddingProvider(AbstractProvider):
     @abc.abstractmethod
     def get_dim(self) -> int:
         """获取向量的维度"""
+        ...
+
+
+class RerankProvider(AbstractProvider):
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        super().__init__(provider_config)
+        self.provider_config = provider_config
+        self.provider_settings = provider_settings
+
+    @abc.abstractmethod
+    async def rerank(
+        self, query: str, documents: list[str], top_n: int | None = None
+    ) -> list[RerankResult]:
+        """获取查询和文档的重排序分数"""
         ...

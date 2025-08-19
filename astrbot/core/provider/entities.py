@@ -20,6 +20,7 @@ class ProviderType(enum.Enum):
     SPEECH_TO_TEXT = "speech_to_text"
     TEXT_TO_SPEECH = "text_to_speech"
     EMBEDDING = "embedding"
+    RERANK = "rerank"
 
 
 @dataclass
@@ -293,3 +294,10 @@ class LLMResponse:
                 }
             )
         return ret
+
+@dataclass
+class RerankResult:
+    index: int
+    """在候选列表中的索引位置"""
+    relevance_score: float
+    """相关性分数"""

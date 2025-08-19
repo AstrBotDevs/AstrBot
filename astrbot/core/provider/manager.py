@@ -279,6 +279,10 @@ class ProviderManager:
                     from .sources.gemini_embedding_source import (
                         GeminiEmbeddingProvider as GeminiEmbeddingProvider,
                     )
+                case "vllm_rerank":
+                    from .sources.vllm_rerank_source import (
+                        VLLMRerankProvider as VLLMRerankProvider,
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。"
@@ -362,7 +366,7 @@ class ProviderManager:
                 if not self.curr_provider_inst:
                     self.curr_provider_inst = inst
 
-            elif provider_metadata.provider_type == ProviderType.EMBEDDING:
+            elif provider_metadata.provider_type in [ProviderType.EMBEDDING, ProviderType.RERANK]:
                 inst = provider_metadata.cls_type(
                     provider_config, self.provider_settings
                 )

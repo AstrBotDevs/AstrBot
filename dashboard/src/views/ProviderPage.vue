@@ -41,6 +41,10 @@
             <v-icon start>mdi-code-json</v-icon>
             {{ tm('providers.tabs.embedding') }}
           </v-tab>
+          <v-tab value="rerank" class="font-weight-medium px-3">
+            <v-icon start>mdi-compare-vertical</v-icon>
+            {{ tm('providers.tabs.rerank') }}
+          </v-tab>
         </v-tabs>
 
         <v-row v-if="filteredProviders.length === 0">
@@ -178,10 +182,14 @@
               <v-icon start>mdi-code-json</v-icon>
               {{ tm('dialogs.addProvider.tabs.embedding') }}
             </v-tab>
+            <v-tab value="rerank" class="font-weight-medium px-3">
+              <v-icon start>mdi-compare-vertical</v-icon>
+              {{ tm('dialogs.addProvider.tabs.rerank') }}
+            </v-tab>
           </v-tabs>
 
           <v-window v-model="activeProviderTab" class="mt-4">
-            <v-window-item v-for="tabType in ['chat_completion', 'speech_to_text', 'text_to_speech', 'embedding']"
+            <v-window-item v-for="tabType in ['chat_completion', 'speech_to_text', 'text_to_speech', 'embedding', 'rerank']"
                           :key="tabType"
                           :value="tabType">
               <v-row class="mt-1">
@@ -407,7 +415,8 @@ export default {
           'chat_completion': this.tm('providers.tabs.chatCompletion'),
           'speech_to_text': this.tm('providers.tabs.speechToText'),
           'text_to_speech': this.tm('providers.tabs.textToSpeech'),
-          'embedding': this.tm('providers.tabs.embedding')
+          'embedding': this.tm('providers.tabs.embedding'),
+          'rerank': this.tm('providers.tabs.rerank')
         },
         success: {
           update: this.tm('messages.success.update'),
@@ -509,6 +518,7 @@ export default {
         'minimax': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/minimax.svg',
         '302ai': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/1.53.0/files/icons/ai302-color.svg',
         'microsoft': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/microsoft.svg',
+        'vllm': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/vllm.svg',
       };
       return icons[type] || '';
     },
@@ -522,6 +532,8 @@ export default {
     getProviderDescription(template, name) {
       if (name == 'OpenAI') {
         return this.tm('providers.description.openai', { type: template.type });
+      } else if (name == 'vLLM Rerank') {
+        return this.tm('providers.description.vllm_rerank', { type: template.type });
       }
       return this.tm('providers.description.default', { type: template.type });
     },
