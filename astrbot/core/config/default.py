@@ -70,7 +70,7 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "max_agent_step": 30
+        "max_agent_step": 30,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -1022,8 +1022,33 @@ CONFIG_METADATA_2 = {
                         "embedding_dimensions": 768,
                         "timeout": 20,
                     },
+                    "vLLM Rerank": {
+                        "id": "vllm_rerank",
+                        "type": "vllm_rerank",
+                        "provider": "vllm",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "rerank_api_key": "",
+                        "rerank_api_base": "http://127.0.0.1:8000",
+                        "rerank_model": "BAAI/bge-reranker-base",
+                        "timeout": 20,
+                    },
                 },
                 "items": {
+                    "rerank_api_base": {
+                        "description": "重排序模型 API Base URL",
+                        "type": "string",
+                        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。",
+                    },
+                    "rerank_api_key": {
+                        "description": "API Key",
+                        "type": "string",
+                        "hint": "如果不需要 API Key, 请留空。",
+                    },
+                    "rerank_model": {
+                        "description": "重排序模型名称",
+                        "type": "string",
+                    },
                     "modalities": {
                         "description": "模型能力",
                         "type": "list",
