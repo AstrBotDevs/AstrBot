@@ -7,12 +7,15 @@ from .run_context import TContext
 class HandoffTool(FunctionTool, Generic[TContext]):
     """Handoff tool for delegating tasks to another agent."""
 
-    def __init__(self, agent: Agent[TContext], parameters: dict | None = None):
+    def __init__(
+        self, agent: Agent[TContext], parameters: dict | None = None, **kwargs
+    ):
         self.agent = agent
         super().__init__(
             name=f"transfer_to_{agent.name}",
             parameters=parameters or self.default_parameters(),
             description=agent.instructions or self.default_description(agent.name),
+            **kwargs,
         )
 
     def default_parameters(self) -> dict:

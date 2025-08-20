@@ -40,8 +40,6 @@ class PluginRoute(Route):
             "/plugin/on": ("POST", self.on_plugin),
             "/plugin/reload": ("POST", self.reload_plugins),
             "/plugin/readme": ("GET", self.get_plugin_readme),
-            "/plugin/platform_enable/get": ("GET", self.get_plugin_platform_enable),
-            "/plugin/platform_enable/set": ("POST", self.set_plugin_platform_enable),
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
@@ -482,90 +480,3 @@ class PluginRoute(Route):
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
             return Response().error(f"读取README文件失败: {str(e)}").__dict__
-
-    async def get_plugin_platform_enable(self):
-        """获取插件在各平台的可用性配置"""
-        try:
-            platform_enable = self.core_lifecycle.astrbot_config.get(
-                "platform_settings", {}
-            ).get("plugin_enable", {})
-
-            # 获取所有可用平台
-            platforms = []
-
-            for platform in self.core_lifecycle.astrbot_config.get("platform", []):
-                platform_type = platform.get("type", "")
-                platform_id = platform.get("id", "")
-
-                platforms.append(
-                    {
-                        "name": platform_id,  # 使用type作为name，这是系统内部使用的平台名称
-                        "id": platform_id,  # 保留id字段以便前端可以显示
-                        "type": platform_type,
-                        "display_name": f"{platform_type}({platform_id})",
-                    }
-                )
-
-            adjusted_platform_enable = {}
-            for platform_id, plugins in platform_enable.items():
-                adjusted_platform_enable[platform_id] = plugins
-
-            # 获取所有插件，包括系统内部插件
-            plugins = []
-            for plugin in self.plugin_manager.context.get_all_stars():
-                plugins.append(
-                    {
-                        "name": plugin.name,
-                        "desc": plugin.desc,
-                        "reserved": plugin.reserved,  # 添加reserved标志
-                    }
-                )
-
-            logger.debug(
-                f"获取插件平台配置: 原始配置={platform_enable}, 调整后={adjusted_platform_enable}"
-            )
-
-            return (
-                Response()
-                .ok(
-                    {
-                        "platforms": platforms,
-                        "plugins": plugins,
-                        "platform_enable": adjusted_platform_enable,
-                    }
-                )
-                .__dict__
-            )
-        except Exception as e:
-            logger.error(f"/api/plugin/platform_enable/get: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
-
-    async def set_plugin_platform_enable(self):
-        """设置插件在各平台的可用性配置"""
-        if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .__dict__
-            )
-
-        try:
-            data = await request.json
-            platform_enable = data.get("platform_enable", {})
-
-            # 更新配置
-            config = self.core_lifecycle.astrbot_config
-            platform_settings = config.get("platform_settings", {})
-            platform_settings["plugin_enable"] = platform_enable
-            config["platform_settings"] = platform_settings
-            config.save_config()
-
-            # 更新插件的平台兼容性缓存
-            await self.plugin_manager.update_all_platform_compatibility()
-
-            logger.info(f"插件平台可用性配置已更新: {platform_enable}")
-
-            return Response().ok(None, "插件平台可用性配置已更新").__dict__
-        except Exception as e:
-            logger.error(f"/api/plugin/platform_enable/set: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__

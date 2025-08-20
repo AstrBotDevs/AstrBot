@@ -99,7 +99,7 @@ class ResultDecorateStage(Stage):
 
         # 发送消息前事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnDecoratingResultEvent, platform_id=event.get_platform_id()
+            EventType.OnDecoratingResultEvent, plugins_name=event.plugins_name
         )
         for handler in handlers:
             try:

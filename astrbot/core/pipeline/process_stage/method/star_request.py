@@ -33,16 +33,6 @@ class StarRequestSubStage(Stage):
             handlers_parsed_params = {}
 
         for handler in activated_handlers:
-            # 检查处理器是否在当前平台兼容
-            if (
-                hasattr(handler, "platform_compatible")
-                and handler.platform_compatible is False
-            ):
-                logger.debug(
-                    f"处理器 {handler.handler_name} 在当前平台不兼容，跳过执行"
-                )
-                continue
-
             params = handlers_parsed_params.get(handler.handler_full_name, {})
             try:
                 if handler.handler_module_path not in star_map:

@@ -45,14 +45,6 @@ const readmeDialog = reactive({
   pluginName: '',
   repoUrl: null
 });
-// 平台插件配置
-const platformEnableDialog = ref(false);
-const platformEnableData = reactive({
-  platforms: [],
-  plugins: [],
-  platform_enable: {}
-});
-const loadingPlatformData = ref(false);
 
 // 新增变量支持列表视图
 const isListView = ref(false);
@@ -326,100 +318,7 @@ const viewReadme = (plugin) => {
   readmeDialog.show = true;
 };
 
-// 获取插件平台可用性配置
-const getPlatformEnableConfig = async () => {
-  loadingPlatformData.value = true;
-  try {
-    const res = await axios.get('/api/plugin/platform_enable/get');
-    if (res.data.status === "error") {
-      toast(res.data.message, "error");
-      return;
-    }
 
-    platformEnableData.platforms = res.data.data.platforms;
-    platformEnableData.plugins = res.data.data.plugins;
-    platformEnableData.platform_enable = res.data.data.platform_enable;
-
-    // 如果没有平台，给出提示但仍显示对话框
-    if (platformEnableData.platforms.length === 0) {
-      toast(tm('dialogs.platformConfig.noAdaptersDesc'), "warning");
-    } else {
-      // 确保每个平台都有一个配置对象
-      platformEnableData.platforms.forEach(platform => {
-        if (!platformEnableData.platform_enable[platform.name]) {
-          platformEnableData.platform_enable[platform.name] = {};
-        }
-
-        // 确保每个插件在每个平台都有一个配置项
-        platformEnableData.plugins.forEach(plugin => {
-          if (platformEnableData.platform_enable[platform.name][plugin.name] === undefined) {
-            platformEnableData.platform_enable[platform.name][plugin.name] = true; // 默认启用
-          }
-        });
-      });
-    }
-
-    platformEnableDialog.value = true;
-  } catch (err) {
-    toast(tm('messages.getPlatformConfigFailed') + " " + err, "error");
-  } finally {
-    loadingPlatformData.value = false;
-  }
-};
-
-// 保存插件平台可用性配置
-const savePlatformEnableConfig = async () => {
-  loadingPlatformData.value = true;
-  try {
-    const res = await axios.post('/api/plugin/platform_enable/set', {
-      platform_enable: platformEnableData.platform_enable
-    });
-
-    if (res.data.status === "error") {
-      toast(res.data.message, "error");
-      return;
-    }
-
-    toast(res.data.message, "success");
-    platformEnableDialog.value = false;
-  } catch (err) {
-    toast(tm('messages.savePlatformConfigFailed') + " " + err, "error");
-  } finally {
-    loadingPlatformData.value = false;
-  }
-};
-
-// 全选指定平台的所有插件
-const selectAllPluginsForPlatform = (platformName, isSelected, onlyReserved = null) => {
-  // 确保平台存在于platform_enable中
-  if (!platformEnableData.platform_enable[platformName]) {
-    platformEnableData.platform_enable[platformName] = {};
-  }
-
-  // 为所有插件设置相同的状态
-  platformEnableData.plugins.forEach(plugin => {
-    // 如果onlyReserved为null，处理所有插件
-    // 如果onlyReserved为true，只处理系统插件
-    // 如果onlyReserved为false，只处理非系统插件
-    if (onlyReserved === null || plugin.reserved === onlyReserved) {
-      platformEnableData.platform_enable[platformName][plugin.name] = isSelected;
-    }
-  });
-};
-
-// 反选指定平台的所有插件
-const toggleAllPluginsForPlatform = (platformName) => {
-  // 确保平台存在于platform_enable中
-  if (!platformEnableData.platform_enable[platformName]) {
-    platformEnableData.platform_enable[platformName] = {};
-  }
-
-  // 对每个插件进行反选操作
-  platformEnableData.plugins.forEach(plugin => {
-    const currentState = platformEnableData.platform_enable[platformName][plugin.name];
-    platformEnableData.platform_enable[platformName][plugin.name] = !currentState;
-  });
-};
 
 const open = (link) => {
   if (link) {
@@ -683,11 +582,6 @@ onMounted(async () => {
                 <v-btn class="ml-2" variant="tonal" @click="toggleShowReserved">
                   <v-icon>{{ showReserved ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
                   {{ showReserved ? tm('buttons.hideSystemPlugins') : tm('buttons.showSystemPlugins') }}
-                </v-btn>
-
-                <v-btn class="ml-2" variant="tonal" @click="getPlatformEnableConfig">
-                  <v-icon>mdi-cog</v-icon>
-                  {{ tm('buttons.platformConfig') }}
                 </v-btn>
 
                 <v-btn class="ml-2" color="primary" variant="tonal" @click="dialog = true">
@@ -964,96 +858,6 @@ onMounted(async () => {
       <small> <a href="https://github.com/Soulter/AstrBot_Plugins_Collection">{{ tm('market.submitRepo') }}</a></small>
     </v-col>
   </v-row>
-
-  <!-- 插件平台配置对话框 -->
-  <v-dialog v-model="platformEnableDialog" max-width="900" persistent>
-    <v-card class="rounded-lg">
-      <v-toolbar color="primary" density="comfortable" flat>
-        <v-toolbar-title class="text-white">{{ tm('dialogs.platformConfig.title') }}</v-toolbar-title>
-        <v-spacer></v-spacer>
-        <v-btn icon @click="platformEnableDialog = false" variant="text" color="white">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </v-toolbar>
-
-      <v-card-text class="pt-4">
-        <p class="text-body-2 mb-4">{{ tm('dialogs.platformConfig.description') }}</p>
-
-        <v-overlay :model-value="loadingPlatformData" class="align-center justify-center" persistent>
-          <v-progress-circular color="primary" indeterminate size="64"></v-progress-circular>
-        </v-overlay>
-
-        <div v-if="platformEnableData.platforms.length === 0" class="text-center pa-8">
-          <v-icon icon="mdi-alert" color="warning" size="64" class="mb-4"></v-icon>
-          <div class="text-h5 mb-2">{{ tm('dialogs.platformConfig.noAdapters') }}</div>
-          <div class="text-body-1 mb-4">{{ tm('dialogs.platformConfig.noAdaptersDesc') }}</div>
-          <v-btn color="primary" to="/platforms" variant="elevated">{{ tm('dialogs.platformConfig.goPlatforms')
-            }}</v-btn>
-        </div>
-
-        <v-sheet v-else class="rounded-lg overflow-hidden">
-          <v-table hover class="elevation-1">
-            <thead>
-              <tr>
-                <th class="text-left">{{ tm('table.headers.name') }}</th>
-                <th v-for="platform in platformEnableData.platforms" :key="platform.name">
-                  <div class="d-flex align-center">
-                    {{ platform.display_name }}
-                    <v-menu>
-                      <template v-slot:activator="{ props }">
-                        <v-btn icon density="compact" variant="text" size="small" v-bind="props" class="ms-1">
-                          <v-icon>mdi-dots-vertical</v-icon>
-                        </v-btn>
-                      </template>
-                      <v-list>
-                        <v-list-item @click="selectAllPluginsForPlatform(platform.name, true)">
-                          <v-list-item-title>{{ tm('dialogs.platformConfig.selectAll') }}</v-list-item-title>
-                        </v-list-item>
-                        <v-list-item @click="selectAllPluginsForPlatform(platform.name, true, false)">
-                          <v-list-item-title>{{ tm('dialogs.platformConfig.selectAllNormal') }}</v-list-item-title>
-                        </v-list-item>
-                        <v-list-item @click="selectAllPluginsForPlatform(platform.name, true, true)">
-                          <v-list-item-title>{{ tm('dialogs.platformConfig.selectAllSystem') }}</v-list-item-title>
-                        </v-list-item>
-                        <v-list-item @click="selectAllPluginsForPlatform(platform.name, false)">
-                          <v-list-item-title>{{ tm('dialogs.platformConfig.selectNone') }}</v-list-item-title>
-                        </v-list-item>
-                        <v-list-item @click="toggleAllPluginsForPlatform(platform.name)">
-                          <v-list-item-title>{{ tm('dialogs.platformConfig.toggleAll') }}</v-list-item-title>
-                        </v-list-item>
-                      </v-list>
-                    </v-menu>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="plugin in platformEnableData.plugins" :key="plugin.name">
-                <td>
-                  <div class="d-flex align-center">
-                    {{ plugin.name }}
-                    <v-chip v-if="plugin.reserved" color="primary" size="x-small" class="ml-2">{{ tm('status.system')
-                      }}</v-chip>
-                  </div>
-                  <div class="text-caption text-grey">{{ plugin.desc }}</div>
-                </td>
-                <td v-for="platform in platformEnableData.platforms" :key="platform.name">
-                  <v-checkbox v-model="platformEnableData.platform_enable[platform.name][plugin.name]" hide-details
-                    density="compact"></v-checkbox>
-                </td>
-              </tr>
-            </tbody>
-          </v-table>
-        </v-sheet>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn color="grey" text @click="platformEnableDialog = false">{{ tm('buttons.close') }}</v-btn>
-        <v-btn v-if="platformEnableData.platforms.length > 0" color="primary" @click="savePlatformEnableConfig">{{
-          tm('buttons.save') }}</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
 
   <!-- 配置对话框 -->
   <v-dialog v-model="configDialog" width="1000">
