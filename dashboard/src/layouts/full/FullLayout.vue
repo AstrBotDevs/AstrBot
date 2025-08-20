@@ -8,7 +8,7 @@ import MigrationDialog from '@/components/shared/MigrationDialog.vue';
 import { useCustomizerStore } from '@/stores/customizer';
 
 const customizer = useCustomizerStore();
-const migrationDialog = ref(null);
+const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
 
 // 检查是否需要迁移
 const checkMigration = async () => {
@@ -16,7 +16,7 @@ const checkMigration = async () => {
     const response = await axios.get('/api/stat/version');
     if (response.data.status === 'ok' && response.data.data.need_migration) {
       // 需要迁移，显示迁移对话框
-      if (migrationDialog.value) {
+      if (migrationDialog.value && typeof migrationDialog.value.open === 'function') {
         const result = await migrationDialog.value.open();
         if (result.success) {
           // 迁移成功，可以显示成功消息
