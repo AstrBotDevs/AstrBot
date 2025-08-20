@@ -427,16 +427,16 @@ class LLMRequestSubStage(Stage):
             if "tool_use" not in provider_cfg:
                 logger.debug(f"用户设置提供商 {provider} 不支持工具使用，清空工具列表。")
                 req.func_tool = None
-            # 插件可用性设置
-            if event.plugins_name is not None and req.func_tool:
-                new_tool_set = ToolSet()
-                for tool in req.func_tool.tools:
-                    plugin = star_map.get(tool.handler_module_path)
-                    if not plugin:
-                        continue
-                    if plugin.name in event.plugins_name or plugin.reserved:
-                        new_tool_set.add_tool(tool)
-                req.func_tool = new_tool_set
+        # 插件可用性设置
+        if event.plugins_name is not None and req.func_tool:
+            new_tool_set = ToolSet()
+            for tool in req.func_tool.tools:
+                plugin = star_map.get(tool.handler_module_path)
+                if not plugin:
+                    continue
+                if plugin.name in event.plugins_name or plugin.reserved:
+                    new_tool_set.add_tool(tool)
+            req.func_tool = new_tool_set
 
         # run agent
         agent_runner = AgentRunner()
