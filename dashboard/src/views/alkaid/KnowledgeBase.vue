@@ -63,9 +63,6 @@
                         </div>
                     </div>
                 </div>
-                <div style="padding: 16px; text-align: center;">
-                    <small style="color: #a3a3a3">{{ tm('list.tips') }}</small>
-                </div>
 
             </div>
 
