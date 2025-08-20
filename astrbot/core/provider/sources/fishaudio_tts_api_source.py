@@ -24,8 +24,8 @@ class ServeTTSRequest(BaseModel):
     # 参考音频
     references: list[ServeReferenceAudio] = []
     # 参考模型 ID
-    # 例如 https://fish.audio/m/7f92f8afb8ec43bf81429cc1c9199cb1/
-    # 其中reference_id为 7f92f8afb8ec43bf81429cc1c9199cb1
+    # 例如 https://fish.audio/m/626bb6d3f3364c9cbc3aa6a67300a664/
+    # 其中reference_id为 626bb6d3f3364c9cbc3aa6a67300a664
     reference_id: str | None = None
     # 对中英文文本进行标准化，这可以提高数字的稳定性
     normalize: bool = True
@@ -44,7 +44,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key: str = provider_config.get("api_key", "")
-        self.character: str = provider_config.get("fishaudio-tts-character", "可莉")
+        self.reference_id: str = provider_config.get("fishaudio-tts-reference-id", "626bb6d3f3364c9cbc3aa6a67300a664")
         self.api_base: str = provider_config.get(
             "api_base", "https://api.fish-audio.cn/v1"
         )
@@ -53,39 +53,11 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         }
         self.set_model(provider_config.get("model", None))
 
-    async def _get_reference_id_by_character(self, character: str) -> str:
-        """
-        获取角色的reference_id
-
-        Args:
-            character: 角色名称
-
-        Returns:
-            reference_id: 角色的reference_id
-
-        exception:
-            APIException: 获取语音角色列表为空
-        """
-        sort_options = ["score", "task_count", "created_at"]
-        async with AsyncClient(base_url=self.api_base.replace("/v1", "")) as client:
-            for sort_by in sort_options:
-                params = {"title": character, "sort_by": sort_by}
-                response = await client.get(
-                    "/model", params=params, headers=self.headers
-                )
-                resp_data = response.json()
-                if resp_data["total"] == 0:
-                    continue
-                for item in resp_data["items"]:
-                    if character in item["title"]:
-                        return item["_id"]
-            return None
-
     async def _generate_request(self, text: str) -> dict:
         return ServeTTSRequest(
             text=text,
             format="wav",
-            reference_id=await self._get_reference_id_by_character(self.character),
+            reference_id=self.reference_id,
         )
 
     async def get_audio(self, text: str) -> str:
