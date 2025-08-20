@@ -25,6 +25,12 @@
       "dev": "🧐 Development (master branch)"
     },
     "updateToLatest": "Update to Latest Version",
+    "preRelease": "Pre-release",
+    "preReleaseWarning": {
+      "title": "Pre-release Version Notice",
+      "description": "Versions marked as pre-release may contain unknown issues or bugs and are not recommended for production use. If you encounter any problems, please visit ",
+      "issueLink": "GitHub Issues"
+    },
     "tip": "💡 TIP: Switching to an older version or a specific version will not re-download the dashboard files, which may cause some data display errors. You can find the corresponding dashboard files dist.zip at",
     "tipLink": "here",
     "tipContinue": ", extract and replace the data/dist folder. Of course, the frontend source code is in the dashboard directory, you can also build it yourself using npm install and npm build.",
