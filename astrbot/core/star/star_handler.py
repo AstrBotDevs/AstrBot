@@ -135,16 +135,5 @@ class StarHandlerMetadata:
         if not plugin or not plugin.name:
             return True
 
-        # 先检查插件是否被激活
-        if not plugin.activated:
-            return False
-
-        # 直接使用StarMetadata中缓存的supported_platforms判断平台兼容性
-        if (
-            hasattr(plugin, "supported_platforms")
-            and platform_id in plugin.supported_platforms
-        ):
-            return plugin.supported_platforms[platform_id]
-
-        # 如果没有缓存数据，默认允许执行
-        return True
+        # 检查插件是否被激活
+        return plugin.activated

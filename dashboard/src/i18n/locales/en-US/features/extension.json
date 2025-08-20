@@ -16,7 +16,6 @@
   "buttons": {
     "showSystemPlugins": "Show System Extensions",
     "hideSystemPlugins": "Hide System Extensions",
-    "platformConfig": "Platform Command Config",
     "install": "Install",
     "uninstall": "Uninstall",
     "update": "Update",
@@ -88,18 +87,6 @@
       "title": "Error Information",
       "checkConsole": "Please check console for details"
     },
-    "platformConfig": {
-      "title": "Platform Command Availability Configuration",
-      "description": "Set the availability of each extension on different platforms, check to enable",
-      "noAdapters": "No Platform Adapters Found",
-      "noAdaptersDesc": "Please add and configure platform adapters in Platform Management first, then set extension platform availability",
-      "goPlatforms": "Go to Platform Management",
-      "selectAll": "Select All",
-      "selectAllNormal": "Select All Normal Extensions",
-      "selectAllSystem": "Select All System Extensions",
-      "selectNone": "Select None",
-      "toggleAll": "Toggle All"
-    },
     "config": {
       "title": "Extension Configuration",
       "noConfig": "This extension has no configuration"
@@ -137,8 +124,6 @@
     "installing": "Installing extension from file",
     "installingFromUrl": "Installing extension from URL...",
     "installFailed": "Extension installation failed:",
-    "getPlatformConfigFailed": "Failed to get platform extension config:",
-    "savePlatformConfigFailed": "Failed to save platform extension config:",
     "getMarketDataFailed": "Failed to get extension market data:",
     "hasUpdate": "New version available:",
     "confirmDelete": "Are you sure you want to delete this extension?",
