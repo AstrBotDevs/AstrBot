@@ -5,6 +5,7 @@ import ListConfigItem from './ListConfigItem.vue'
 import ProviderSelector from './ProviderSelector.vue'
 import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
+import PluginSetSelector from './PluginSetSelector.vue'
 import { useI18n } from '@/i18n/composables'
 
 
@@ -240,7 +241,34 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   v-model="createSelectorModel(itemKey).value"
                 />
               </div>
+              <div v-else-if="itemMeta?._special === 'select_plugin_set'">
+                <PluginSetSelector 
+                  v-model="createSelectorModel(itemKey).value"
+                />
+              </div>
+            </v-col>
+          </v-row>
 
+          <!-- Plugin Set Selector 全宽显示区域 -->
+          <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'" class="plugin-set-display-row">
+            <v-col cols="12" class="plugin-set-display">
+              <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0" class="selected-plugins-full-width">
+                <div class="plugins-header">
+                  <small class="text-grey">已选择的插件：</small>
+                </div>
+                <div class="d-flex flex-wrap ga-2 mt-2">
+                  <v-chip 
+                    v-for="plugin in (createSelectorModel(itemKey).value || [])" 
+                    :key="plugin" 
+                    size="small" 
+                    label 
+                    color="primary" 
+                    variant="outlined"
+                  >
+                    {{ plugin === '*' ? '所有插件' : plugin }}
+                  </v-chip>
+                </div>
+              </div>
             </v-col>
           </v-row>
         </template>
@@ -384,6 +412,26 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
 .editor-fullscreen-btn:hover {
   background-color: rgba(0, 0, 0, 0.5);
+}
+
+.plugin-set-display-row {
+  margin: 16px;
+  margin-top: 0;
+}
+
+.plugin-set-display {
+  padding: 0 8px;
+}
+
+.selected-plugins-full-width {
+  background-color: rgba(var(--v-theme-primary), 0.05);
+  border: 1px solid rgba(var(--v-theme-primary), 0.1);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.plugins-header {
+  margin-bottom: 4px;
 }
 
 @media (max-width: 600px) {

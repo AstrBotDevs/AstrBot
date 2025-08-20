@@ -13,7 +13,6 @@ DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
-        "plugin_enable": {},
         "unique_session": False,
         "rate_limit": {
             "time": 60,
@@ -53,7 +52,7 @@ DEFAULT_CONFIG = {
         "default_provider_id": "",
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
-        "provider_pool": ["all"],  # "all" 表示使用所有可用的提供者
+        "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
         "websearch_provider": "default",
@@ -63,7 +62,7 @@ DEFAULT_CONFIG = {
         "identifier": False,
         "datetime_system_prompt": True,
         "default_personality": "default",
-        "persona_pool": ["all"],
+        "persona_pool": ["*"],
         "prompt_prefix": "",
         "max_context_length": -1,
         "dequeue_context_length": 1,
@@ -122,6 +121,7 @@ DEFAULT_CONFIG = {
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
     "default_kb_collection": "",  # 默认知识库名称
+    "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
 }
 
 
@@ -387,9 +387,6 @@ CONFIG_METADATA_2 = {
             "platform_settings": {
                 "type": "object",
                 "items": {
-                    "plugin_enable": {
-                        "invisible": True,  # 隐藏插件启用配置
-                    },
                     "unique_session": {
                         "type": "bool",
                     },
@@ -2129,8 +2126,25 @@ CONFIG_METADATA_3 = {
             },
         },
     },
+    "plugin_group": {
+        "name": "插件配置",
+        "metadata": {
+            "plugin": {
+                "description": "插件",
+                "type": "object",
+                "items": {
+                    "plugin_set": {
+                        "description": "可用插件",
+                        "type": "bool",
+                        "hint": "默认启用全部未被禁用的插件。若插件在插件页面被禁用，则此处的选择不会生效。",
+                        "_special": "select_plugin_set",
+                    },
+                },
+            },
+        },
+    },
     "ext_group": {
-        "name": "扩展配置",
+        "name": "扩展功能",
         "metadata": {
             "segmented_reply": {
                 "description": "分段回复",
