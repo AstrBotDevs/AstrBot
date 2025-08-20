@@ -6,6 +6,7 @@ import uuid
 
 from typing import List, Union, Optional, AsyncGenerator
 
+from astrbot import logger
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
     Plain,
@@ -63,6 +64,9 @@ class AstrMessageEvent(abc.ABC):
         """在此次事件中是否有过至少一次发送消息的操作"""
         self.call_llm = False
         """是否在此消息事件中禁止默认的 LLM 请求"""
+
+        self.plugins_name: list[str] | None = None
+        """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
 
         # back_compability
         self.platform = platform_meta
@@ -181,6 +185,7 @@ class AstrMessageEvent(abc.ABC):
         """
         清除额外的信息。
         """
+        logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
         self._extras.clear()
 
     def is_private_chat(self) -> bool:

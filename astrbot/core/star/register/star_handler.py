@@ -412,7 +412,7 @@ def register_agent(
     """
     tools_ = tools or []
 
-    def decorator(_):
+    def decorator(awaitable: Awaitable):
         AstrAgent = Agent[AstrAgentContext]
         agent = AstrAgent(
             name=name,
@@ -420,7 +420,9 @@ def register_agent(
             tools=tools_,
             run_hooks=run_hooks or BaseAgentRunHooks[AstrAgentContext](),
         )
-        llm_tools.func_list.append(HandoffTool(agent=agent))
+        handoff_tool = HandoffTool(agent=agent)
+        handoff_tool.handler=awaitable
+        llm_tools.func_list.append(handoff_tool)
         return RegisteringAgent(agent)
 
     return decorator
