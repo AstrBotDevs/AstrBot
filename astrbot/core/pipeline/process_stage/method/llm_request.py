@@ -171,11 +171,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         async for resp in wrapper:
             if resp is not None:
-                text_content = mcp.types.TextContent(
-                    type="text",
-                    text=str(resp),
-                )
-                yield mcp.types.CallToolResult(content=[text_content])
+                if isinstance(resp, mcp.types.CallToolResult):
+                    yield resp
+                else:
+                    text_content = mcp.types.TextContent(
+                        type="text",
+                        text=str(resp),
+                    )
+                    yield mcp.types.CallToolResult(content=[text_content])
             else:
                 # NOTE: Tool 在这里直接请求发送消息给用户
                 # TODO: 是否需要判断 event.get_result() 是否为空?
