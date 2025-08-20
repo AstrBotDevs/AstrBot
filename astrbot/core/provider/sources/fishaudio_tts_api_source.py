@@ -1,5 +1,6 @@
 import os
 import uuid
+import re
 import ormsgpack
 from pydantic import BaseModel, conint
 from httpx import AsyncClient
@@ -53,11 +54,37 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         }
         self.set_model(provider_config.get("model", None))
 
+    def _validate_reference_id(self, reference_id: str) -> bool:
+        """
+        验证reference_id格式是否有效
+
+        Args:
+            reference_id: 参考模型ID
+
+        Returns:
+            bool: ID是否有效
+        """
+        if not reference_id or not reference_id.strip():
+            return False
+
+        # FishAudio的reference_id通常是32位十六进制字符串
+        # 例如: 626bb6d3f3364c9cbc3aa6a67300a664
+        pattern = r'^[a-fA-F0-9]{32}$'
+        return bool(re.match(pattern, reference_id.strip()))
+
     async def _generate_request(self, text: str) -> dict:
+        # 验证reference_id
+        if not self._validate_reference_id(self.reference_id):
+            raise ValueError(
+                f"无效的FishAudio参考模型ID: '{self.reference_id}'. "
+                f"请确保ID是32位十六进制字符串（例如: 626bb6d3f3364c9cbc3aa6a67300a664）。"
+                f"您可以从 https://fish.audio/zh-CN/discovery 获取有效的模型ID。"
+            )
+
         return ServeTTSRequest(
             text=text,
             format="wav",
-            reference_id=self.reference_id,
+            reference_id=self.reference_id.strip(),
         )
 
     async def get_audio(self, text: str) -> str:
