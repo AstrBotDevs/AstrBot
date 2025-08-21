@@ -237,7 +237,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_id=result.get("id", "")
                 )
         except Exception as e:
-            print(f"上传请求错误: {e}")
+            logger.error(f"上传请求错误: {e}")
         
         return None
     
