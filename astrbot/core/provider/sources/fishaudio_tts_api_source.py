@@ -45,7 +45,8 @@ class ProviderFishAudioTTSAPI(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key: str = provider_config.get("api_key", "")
-        self.reference_id: str = provider_config.get("fishaudio-tts-reference-id", "626bb6d3f3364c9cbc3aa6a67300a664")
+        self.reference_id: str = provider_config.get("fishaudio-tts-reference-id", "")
+        self.character: str = provider_config.get("fishaudio-tts-character", "可莉")
         self.api_base: str = provider_config.get(
             "api_base", "https://api.fish-audio.cn/v1"
         )
@@ -53,6 +54,34 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
         self.set_model(provider_config.get("model", None))
+
+    async def _get_reference_id_by_character(self, character: str) -> str:
+        """
+        获取角色的reference_id
+
+        Args:
+            character: 角色名称
+
+        Returns:
+            reference_id: 角色的reference_id
+
+        exception:
+            APIException: 获取语音角色列表为空
+        """
+        sort_options = ["score", "task_count", "created_at"]
+        async with AsyncClient(base_url=self.api_base.replace("/v1", "")) as client:
+            for sort_by in sort_options:
+                params = {"title": character, "sort_by": sort_by}
+                response = await client.get(
+                    "/model", params=params, headers=self.headers
+                )
+                resp_data = response.json()
+                if resp_data["total"] == 0:
+                    continue
+                for item in resp_data["items"]:
+                    if character in item["title"]:
+                        return item["_id"]
+            return None
 
     def _validate_reference_id(self, reference_id: str) -> bool:
         """
@@ -73,18 +102,24 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         return bool(re.match(pattern, reference_id.strip()))
 
     async def _generate_request(self, text: str) -> dict:
-        # 验证reference_id
-        if not self._validate_reference_id(self.reference_id):
-            raise ValueError(
-                f"无效的FishAudio参考模型ID: '{self.reference_id}'. "
-                f"请确保ID是32位十六进制字符串（例如: 626bb6d3f3364c9cbc3aa6a67300a664）。"
-                f"您可以从 https://fish.audio/zh-CN/discovery 获取有效的模型ID。"
-            )
+        # 向前兼容逻辑：优先使用reference_id，如果没有则使用角色名称查询
+        if self.reference_id and self.reference_id.strip():
+            # 验证reference_id格式
+            if not self._validate_reference_id(self.reference_id):
+                raise ValueError(
+                    f"无效的FishAudio参考模型ID: '{self.reference_id}'. "
+                    f"请确保ID是32位十六进制字符串（例如: 626bb6d3f3364c9cbc3aa6a67300a664）。"
+                    f"您可以从 https://fish.audio/zh-CN/discovery 获取有效的模型ID。"
+                )
+            reference_id = self.reference_id.strip()
+        else:
+            # 回退到原来的角色名称查询逻辑
+            reference_id = await self._get_reference_id_by_character(self.character)
 
         return ServeTTSRequest(
             text=text,
             format="wav",
-            reference_id=self.reference_id.strip(),
+            reference_id=reference_id,
         )
 
     async def get_audio(self, text: str) -> str:
