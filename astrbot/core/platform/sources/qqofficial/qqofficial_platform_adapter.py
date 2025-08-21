@@ -156,6 +156,7 @@ class QQOfficialPlatformAdapter(Platform):
             abm.self_id = "unknown_selfid"
             msg.append(At(qq="qq_official"))
             msg.append(Plain(abm.message_str))
+            logger.warning(f"QQ offical adapter message: {message.attachments}")#use to debug
             if message.attachments:
                 for i in message.attachments:
                     if i.content_type.startswith("image"):
