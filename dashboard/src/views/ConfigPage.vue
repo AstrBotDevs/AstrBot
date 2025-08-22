@@ -287,7 +287,7 @@
           <div class="d-flex justify-end mt-4" style="gap: 8px;">
             <v-btn variant="text" @click="cancelConfigForm">取消</v-btn>
             <v-btn color="primary" @click="saveConfigForm"
-              :disabled="!configFormData.name || !configFormData.umop.length || !!conflictMessage">
+              :disabled="!configFormData.name || !configFormData.umop.length">
               {{ isEditingConfig ? '更新' : '创建' }}
             </v-btn>
           </div>
@@ -357,15 +357,6 @@ export default {
   watch: {
     config_data_str: function (val) {
       this.config_data_has_changed = true;
-    },
-    appliedToRadioValue: function (newVal) {
-      if (newVal === '0') {
-        // 切换到平台模式
-        this.configFormData.umop = [];
-      } else if (newVal === '1') {
-        // 切换到自定义规则模式
-        this.resetCustomRules();
-      }
     },
     customRuleInputMode: function (newVal) {
       if (newVal === 'builder') {
@@ -710,7 +701,7 @@ export default {
     formatConflictMessage(conflictDetails) {
       if (conflictDetails.length === 0) return '';
       
-      let message = '⚠️ <strong>规则冲突：</strong><br><br>';
+      let message = '⚠️ <strong>规则冲突警告：</strong><br><br>';
       
       // 按优先级排序（最先创建的配置文件优先级最高）
       const sortedDetails = [...conflictDetails].sort((a, b) => 
@@ -750,7 +741,7 @@ export default {
         }
       });
       
-      message += '<br><small><strong>💡 说明：</strong> AstrBot 按配置文件创建顺序匹配规则，先创建的配置文件优先级更高。当多个配置文件的规则匹配同一个消息时，只有优先级最高的配置文件会生效（default 配置文件除外）。</small>';
+      message += '<br><small><strong>💡 说明：</strong> 您仍可创建此配置文件。AstrBot 按配置文件创建顺序匹配规则，先创建的配置文件优先级更高。当多个配置文件的规则匹配同一个消息会话来源时，优先级最高的配置文件会生效（default 配置文件除外）。</small>';
       
       return message;
     },
@@ -795,34 +786,18 @@ export default {
       this.resetCustomRules();
     },
     startEditConfig(config) {
+      this.appliedToRadioValue = "1";
       this.showConfigForm = true;
       this.isEditingConfig = true;
       this.editingConfigId = config.id;
-      
-      // 根据现有规则来判断是平台模式还是自定义模式
-      const isCustomMode = config.umop && config.umop.some(part => {
-        const segments = part.split(':');
-        return segments.length === 3 || (segments.length === 2 && segments[1] !== '');
-      });
-      
-      this.appliedToRadioValue = isCustomMode ? '1' : '0';
-      
-      if (isCustomMode) {
-        // 自定义模式 - 解析现有规则
-        this.parseExistingCustomRules(config.umop || []);
-        this.configFormData = {
-          name: config.name || '',
-          umop: [...(config.umop || [])],
-        };
-      } else {
-        // 平台模式
-        this.configFormData = {
-          name: config.name || '',
-          umop: config.umop ? config.umop.map(part => part.split("::")[0]).filter(p => p) : [],
-        };
-        this.resetCustomRules();
-      }
-      
+
+      this.parseExistingCustomRules(config.umop || []);
+
+      this.configFormData = {
+        name: config.name || '',
+        umop: [...(config.umop || [])],
+      };
+
       this.conflictMessage = '';
     },
     cancelConfigForm() {
@@ -841,10 +816,6 @@ export default {
         this.save_message = "请填写配置名称和选择应用平台";
         this.save_message_snack = true;
         this.save_message_success = "error";
-        return;
-      }
-
-      if (this.conflictMessage) {
         return;
       }
 
