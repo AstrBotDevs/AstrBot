@@ -106,9 +106,9 @@ class ProviderOpenAIOfficial(Provider):
             
         # 针对 deepseek 模型的特殊处理：deepseek-reasoner调用必须移除 tools ，否则将被切换至 deepseek-chat
         model = payloads.get("model", "")
-        if model == "deepseek-reasoner":
-            if "tools" in payloads:
-                del payloads["tools"]
+        if model == "deepseek-reasoner" and "tools" in payloads:
+            del payloads["tools"]
+
                 
         completion = await self.client.chat.completions.create(
             **payloads, stream=False, extra_body=extra_body
