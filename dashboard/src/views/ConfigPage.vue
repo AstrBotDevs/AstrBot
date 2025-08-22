@@ -7,10 +7,10 @@
       <!-- 普通配置选择区域 -->
       <div class="d-flex flex-row pr-4"
         style="margin-bottom: 16px; align-items: center; gap: 12px; justify-content: space-between; width: 100%;">
-        <div class="d-flex flex-row align-center" style="gap: 12px;" >
-          <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" v-if="!isSystemConfig"
-            item-value="id" label="选择配置文件" hide-details density="compact" rounded="md" variant="outlined"
-            @update:model-value="onConfigSelect">
+        <div class="d-flex flex-row align-center" style="gap: 12px;">
+          <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name"
+            v-if="!isSystemConfig" item-value="id" label="选择配置文件" hide-details density="compact" rounded="md"
+            variant="outlined" @update:model-value="onConfigSelect">
             <template v-slot:item="{ props: itemProps, item }">
               <v-list-item v-bind="itemProps"
                 :subtitle="item.raw.id === '_%manage%_' ? '管理所有配置文件' : formatUmop(item.raw.umop)"
@@ -22,7 +22,7 @@
 
         <v-btn-toggle v-model="configType" mandatory color="primary" variant="outlined" density="comfortable"
           rounded="md" @update:model-value="onConfigTypeToggle">
-          <v-btn value="normal" prepend-icon="mdi-cog" size="large" >
+          <v-btn value="normal" prepend-icon="mdi-cog" size="large">
             普通
           </v-btn>
           <v-btn value="system" prepend-icon="mdi-cog-outline" size="large">
@@ -146,23 +146,148 @@
           <h3 class="mb-4">{{ isEditingConfig ? '编辑配置文件' : '新建配置文件' }}</h3>
 
           <div class="mb-4">
-            <small v-if="conflictMessage">⚠ {{ conflictMessage }}</small>
+            <div v-if="conflictMessage" class="text-warning">
+              <div v-html="conflictMessage" style="font-size: 0.875rem; line-height: 1.4;"></div>
+            </div>
           </div>
 
-          <v-text-field v-model="configFormData.name" label="配置文件名称" variant="outlined" class="mb-4"
+          <h4>名称</h4>
+
+          <v-text-field v-model="configFormData.name" label="填写配置文件名称" variant="outlined" class="mt-4 mb-4"
             hide-details></v-text-field>
 
-          <v-select v-model="configFormData.umop" :items="platformList" item-title="id" item-value="id" label="应用于平台"
-            variant="outlined" hide-details multiple @update:model-value="checkPlatformConflictOnForm">
-            <template v-slot:item="{ props: itemProps, item }">
-              <v-list-item v-bind="itemProps" :subtitle="item.raw.type"></v-list-item>
-            </template>
-          </v-select>
+          <h4>应用于</h4>
+
+          <v-radio-group class="mt-2" v-model="appliedToRadioValue" hide-details="true">
+            <v-radio value="0">
+              <template v-slot:label>
+                <span>指定消息平台...</span>
+              </template>
+            </v-radio>
+            <v-select v-if="appliedToRadioValue === '0'" v-model="configFormData.umop" :items="platformList" item-title="id" item-value="id"
+                  label="选择已配置的消息平台(可多选)" variant="outlined" hide-details multiple class="ma-2"
+                  @update:model-value="checkPlatformConflictOnForm">
+                  <template v-slot:item="{ props: itemProps, item }">
+                    <v-list-item v-bind="itemProps" :subtitle="item.raw.type"></v-list-item>
+                  </template>
+            </v-select>
+            <v-radio value="1" label="自定义规则(实验性)">
+            </v-radio>
+            
+            <!-- 自定义规则界面 -->
+            <div v-if="appliedToRadioValue === '1'" class="ma-2">
+              <small class="text-medium-emphasis mb-4 d-block">UMO 格式: [platform_id]:[message_type]:[session_id]。通配符 * 或留空表示全部。使用 /sid 查看某个聊天的 UMO。</small>
+              
+              <!-- 输入方式切换 -->
+              <v-btn-toggle v-model="customRuleInputMode" mandatory color="primary" variant="outlined" density="compact"
+                rounded="md" class="mb-4">
+                <v-btn value="builder" prepend-icon="mdi-tune" size="x-small">
+                  可视化
+                </v-btn>
+                <v-btn value="manual" prepend-icon="mdi-code-tags" size="x-small">
+                  手动编辑
+                </v-btn>
+              </v-btn-toggle>
+              
+              <!-- 快速规则构建 -->
+              <div v-if="customRuleInputMode === 'builder'" class="mb-4">
+                <div v-for="(rule, index) in customRules" :key="index" class="d-flex align-center mb-2" style="gap: 8px;">
+                  <v-select 
+                    v-model="rule.platform" 
+                    :items="[{ id: '*', type: '所有平台' }, ...platformList]" 
+                    item-title="id" 
+                    item-value="id"
+                    label="平台" 
+                    variant="outlined" 
+                    density="compact"
+                    style="min-width: 120px;"
+                    @update:model-value="updateCustomRule(index)">
+                    <template v-slot:item="{ props: itemProps, item }">
+                      <v-list-item v-bind="itemProps" :subtitle="item.raw.type"></v-list-item>
+                    </template>
+                  </v-select>
+                  
+                  <v-select 
+                    v-model="rule.messageType" 
+                    :items="messageTypeOptions" 
+                    item-title="label" 
+                    item-value="value"
+                    label="消息类型" 
+                    variant="outlined" 
+                    density="compact"
+                    style="min-width: 130px;"
+                    @update:model-value="updateCustomRule(index)">
+                  </v-select>
+                  
+                  <v-text-field 
+                    v-model="rule.sessionId" 
+                    label="会话ID" 
+                    variant="outlined" 
+                    density="compact"
+                    placeholder="* 或留空表示全部"
+                    style="min-width: 120px;"
+                    @update:model-value="updateCustomRule(index)">
+                  </v-text-field>
+                  
+                  <v-btn 
+                    icon="mdi-delete" 
+                    size="small" 
+                    variant="text" 
+                    color="error"
+                    @click="removeCustomRule(index)"
+                    :disabled="customRules.length === 1">
+                  </v-btn>
+                </div>
+                
+                <v-btn 
+                  prepend-icon="mdi-plus" 
+                  size="small" 
+                  variant="tonal" 
+                  color="primary"
+                  @click="addCustomRule">
+                  添加规则
+                </v-btn>
+              </div>
+              
+              <!-- 手动输入 -->
+              <div v-if="customRuleInputMode === 'manual'" class="mb-4">
+                <v-textarea 
+                  v-model="manualRulesText" 
+                  label="手动输入规则(每行一个)" 
+                  variant="outlined"
+                  rows="4"
+                  placeholder="每行一个规则，例如：&#10;platform1:GroupMessage:*&#10;*:FriendMessage:session123&#10;*:*:*"
+                  @update:model-value="updateManualRules">
+                </v-textarea>
+              </div>
+              
+              <!-- 规则预览 -->
+              <div class="mb-2">
+                <small class="text-medium-emphasis">
+                  <strong>预览:</strong> 
+                  <span v-if="!configFormData.umop.length" class="text-error">未配置任何规则</span>
+                  <div v-else class="mt-1">
+                    <v-chip 
+                      v-for="(rule, index) in configFormData.umop" 
+                      :key="index" 
+                      size="x-small" 
+                      rounded="sm"
+                      class="mr-1">
+                      {{ rule }}
+                    </v-chip>
+                  </div>
+                  <small>这些规则对应的会话将使用此配置文件。</small>
+                </small>
+              </div>
+            </div>
+          </v-radio-group>
+
+
 
           <div class="d-flex justify-end mt-4" style="gap: 8px;">
             <v-btn variant="text" @click="cancelConfigForm">取消</v-btn>
             <v-btn color="primary" @click="saveConfigForm"
-              :disabled="!configFormData.name || !configFormData.umop.length || !!conflictMessage">
+              :disabled="!configFormData.name || !configFormData.umop.length">
               {{ isEditingConfig ? '更新' : '创建' }}
             </v-btn>
           </div>
@@ -232,6 +357,15 @@ export default {
   watch: {
     config_data_str: function (val) {
       this.config_data_has_changed = true;
+    },
+    customRuleInputMode: function (newVal) {
+      if (newVal === 'builder') {
+        // 切换到快速构建，从手动输入同步数据
+        this.syncCustomRulesFromManual();
+      } else if (newVal === 'manual') {
+        // 切换到手动输入，从快速构建同步数据
+        this.syncManualRulesText();
+      }
     }
   },
   data() {
@@ -260,6 +394,7 @@ export default {
       isSystemConfig: false,
 
       // 多配置文件管理
+      appliedToRadioValue: '0',
       selectedConfigID: null, // 用于存储当前选中的配置项信息
       configInfoList: [],
       platformList: [],
@@ -269,6 +404,22 @@ export default {
       },
       editingConfigId: null,
       conflictMessage: '', // 冲突提示信息
+      
+      // 自定义规则相关
+      customRuleInputMode: 'builder', // 'builder' 或 'manual'
+      customRules: [
+        {
+          platform: '*',
+          messageType: '*',
+          sessionId: '*'
+        }
+      ],
+      manualRulesText: '',
+      messageTypeOptions: [
+        { label: '所有消息类型', value: '*' },
+        { label: '群组消息', value: 'GroupMessage' },
+        { label: '私聊消息', value: 'FriendMessage' }
+      ],
     }
   },
   mounted() {
@@ -379,9 +530,15 @@ export default {
       }
     },
     createNewConfig() {
-      // 修正为 umo part 形式
-      // 暂时只支持 platform:: 形式
-      const umo_parts = this.configFormData.umop.map(platform => platform + "::");
+      let umo_parts = [];
+      
+      if (this.appliedToRadioValue === '0') {
+        // 修正为 umo part 形式 - 指定平台
+        umo_parts = this.configFormData.umop.map(platform => platform + "::");
+      } else if (this.appliedToRadioValue === '1') {
+        // 自定义规则
+        umo_parts = [...this.configFormData.umop]; // 直接使用 umop，它已经包含完整的规则
+      }
 
       axios.post('/api/config/abconf/new', {
         umo_parts: umo_parts,
@@ -405,7 +562,7 @@ export default {
         this.save_message_success = "error";
       });
     },
-    checkPlatformConflict(newPlatforms) {
+    checkPlatformConflict(newRules) {
       const conflictConfigs = [];
 
       // 遍历现有的配置文件，排除名为 "default" 的配置
@@ -415,16 +572,8 @@ export default {
         }
 
         if (config.umop && config.umop.length > 0) {
-          // 获取现有配置的平台列表
-          const existingPlatforms = config.umop.map(umop => {
-            const platformPart = umop.split(":")[0];
-            return platformPart === "" ? "*" : platformPart; // 空字符串表示所有平台
-          });
-
-          // 检查是否有重复的平台
-          const hasConflict = newPlatforms.some(newPlatform => {
-            return existingPlatforms.includes(newPlatform) || existingPlatforms.includes("*");
-          }) || (newPlatforms.includes("*") && existingPlatforms.length > 0);
+          // 检查是否有冲突
+          const hasConflict = this.hasUmoConflict(newRules, config.umop);
 
           if (hasConflict) {
             conflictConfigs.push(config);
@@ -433,6 +582,185 @@ export default {
       }
 
       return conflictConfigs;
+    },
+    
+    hasUmoConflict(newRules, existingRules) {
+      // 检查新规则与现有规则是否有冲突
+      for (const newRule of newRules) {
+        for (const existingRule of existingRules) {
+          if (this.isUmoMatch(newRule, existingRule) || this.isUmoMatch(existingRule, newRule)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+    
+    isUmoMatch(p1, p2) {
+      // 判断 p2 umo 是否逻辑包含于 p1 umo
+      // 基于后端的 _is_umo_match 逻辑
+      
+      // 先标准化规则格式
+      const p1_normalized = this.normalizeUmoRule(p1);
+      const p2_normalized = this.normalizeUmoRule(p2);
+      
+      const p1_parts = p1_normalized.split(":");
+      const p2_parts = p2_normalized.split(":");
+
+      if (p1_parts.length !== 3 || p2_parts.length !== 3) {
+        return false; // 非法格式
+      }
+
+      // 检查每个部分是否匹配
+      return p1_parts.every((p, index) => {
+        const t = p2_parts[index];
+        return p === "" || p === "*" || p === t;
+      });
+    },
+    
+    normalizeUmoRule(rule) {
+      // 标准化规则格式
+      if (typeof rule !== 'string') {
+        return "*:*:*";
+      }
+      
+      const parts = rule.split(":");
+      
+      if (parts.length === 2 && parts[1] === "") {
+        // 传统格式 "platform::" -> "platform:*:*"
+        return `${parts[0] || "*"}:*:*`;
+      } else if (parts.length === 3) {
+        // 已经是完整格式，只需要处理空字符串
+        return parts.map(part => part === "" ? "*" : part).join(":");
+      } else if (parts.length === 1) {
+        // 只有平台 "platform" -> "platform:*:*"
+        return `${parts[0] || "*"}:*:*`;
+      }
+      
+      // 默认返回通配符
+      return "*:*:*";
+    },
+    
+    getDetailedConflictInfo(newRules) {
+      const conflictDetails = [];
+      
+      // 获取所有配置文件及其优先级（按创建时间排序，早创建的优先级高）
+      const sortedConfigs = [...this.configInfoList]
+        .filter(config => config.name !== 'default')
+        .sort((a, b) => {
+          // 假设按字母顺序排序作为优先级（实际应该按创建时间）
+          return a.id.localeCompare(b.id);
+        });
+
+      for (const config of sortedConfigs) {
+        if (!config.umop || config.umop.length === 0) continue;
+        
+        const conflictingRules = [];
+        
+        for (const newRule of newRules) {
+          for (const existingRule of config.umop) {
+            if (this.isUmoMatch(newRule, existingRule) || this.isUmoMatch(existingRule, newRule)) {
+              conflictingRules.push({
+                newRule: newRule,
+                existingRule: existingRule,
+                matchType: this.getMatchType(newRule, existingRule)
+              });
+            }
+          }
+        }
+        
+        if (conflictingRules.length > 0) {
+          conflictDetails.push({
+            config: config,
+            conflicts: conflictingRules
+          });
+        }
+      }
+      
+      return conflictDetails;
+    },
+    
+    getMatchType(rule1, rule2) {
+      const r1_normalized = this.normalizeUmoRule(rule1);
+      const r2_normalized = this.normalizeUmoRule(rule2);
+      
+      const isR1MatchR2 = this.isUmoMatch(rule1, rule2);
+      const isR2MatchR1 = this.isUmoMatch(rule2, rule1);
+      
+      if (isR1MatchR2 && isR2MatchR1) {
+        return 'exact'; // 完全匹配
+      } else if (isR1MatchR2) {
+        return 'new_covers_existing'; // 新规则覆盖现有规则
+      } else if (isR2MatchR1) {
+        return 'existing_covers_new'; // 现有规则覆盖新规则
+      }
+      
+      return 'overlap'; // 部分重叠
+    },
+    
+    formatConflictMessage(conflictDetails) {
+      if (conflictDetails.length === 0) return '';
+      
+      let message = '⚠️ <strong>规则冲突警告：</strong><br><br>';
+      
+      // 按优先级排序（最先创建的配置文件优先级最高）
+      const sortedDetails = [...conflictDetails].sort((a, b) => 
+        a.config.id.localeCompare(b.config.id)
+      );
+      
+      sortedDetails.forEach((detail, index) => {
+        const configName = detail.config.name || detail.config.id;
+        message += `<strong>${index + 1}. 与配置文件 "${configName}" 冲突：</strong><br>`;
+        
+        detail.conflicts.forEach(conflict => {
+          const newRuleFormatted = this.formatRuleForDisplay(conflict.newRule);
+          const existingRuleFormatted = this.formatRuleForDisplay(conflict.existingRule);
+          
+          switch (conflict.matchType) {
+            case 'exact':
+              message += `规则完全相同: <code>${newRuleFormatted}</code><br>`;
+              message += `<span style="color: orange;">"${configName}" 将覆盖当前配置</span><br>`;
+              break;
+            case 'new_covers_existing':
+              message += `当前规则 <code>${newRuleFormatted}</code> 包含现有规则 <code>${existingRuleFormatted}</code><br>`;
+              message += `<span style="color: red;">"${configName}" 的规则将优先匹配</span><br>`;
+              break;
+            case 'existing_covers_new':
+              message += `现有规则 <code>${existingRuleFormatted}</code> 包含当前规则 <code>${newRuleFormatted}</code><br>`;
+              message += `<span style="color: red;">"${configName}" 的规则将优先匹配</span><br>`;
+              break;
+            case 'overlap':
+              message += `规则重叠: <code>${newRuleFormatted}</code> ↔ <code>${existingRuleFormatted}</code><br>`;
+              message += `<span style="color: orange;">"${configName}" 在匹配范围内优先</span><br>`;
+              break;
+          }
+        });
+        
+        if (index < sortedDetails.length - 1) {
+          message += '<br>';
+        }
+      });
+      
+      message += '<br><small><strong>💡 说明：</strong> 您仍可创建此配置文件。AstrBot 按配置文件创建顺序匹配规则，先创建的配置文件优先级更高。当多个配置文件的规则匹配同一个消息会话来源时，优先级最高的配置文件会生效（default 配置文件除外）。</small>';
+      
+      return message;
+    },
+    
+    formatRuleForDisplay(rule) {
+      const parts = this.normalizeUmoRule(rule).split(':');
+      const platform = parts[0] === '*' || parts[0] === '' ? '任意平台' : parts[0];
+      const messageType = parts[1] === '*' || parts[1] === '' ? '任意消息' : this.getMessageTypeLabel(parts[1]);
+      const sessionId = parts[2] === '*' || parts[2] === '' ? '任意会话' : parts[2];
+      
+      return `${platform}:${messageType}:${sessionId}`;
+    },
+    
+    getMessageTypeLabel(messageType) {
+      const typeMap = {
+        'GroupMessage': '群组消息',
+        'FriendMessage': '私聊消息',
+      };
+      return typeMap[messageType] || messageType;
     },
     onConfigSelect(value) {
       if (value === '_%manage%_') {
@@ -455,15 +783,21 @@ export default {
       };
       this.editingConfigId = null;
       this.conflictMessage = '';
+      this.resetCustomRules();
     },
     startEditConfig(config) {
+      this.appliedToRadioValue = "1";
       this.showConfigForm = true;
       this.isEditingConfig = true;
       this.editingConfigId = config.id;
+
+      this.parseExistingCustomRules(config.umop || []);
+
       this.configFormData = {
         name: config.name || '',
-        umop: config.umop ? config.umop.map(part => part.split("::")[0]).filter(p => p) : [],
+        umop: [...(config.umop || [])],
       };
+
       this.conflictMessage = '';
     },
     cancelConfigForm() {
@@ -475,6 +809,7 @@ export default {
         umop: [],
       };
       this.conflictMessage = '';
+      this.resetCustomRules();
     },
     saveConfigForm() {
       if (!this.configFormData.name || !this.configFormData.umop.length) {
@@ -484,15 +819,111 @@ export default {
         return;
       }
 
-      if (this.conflictMessage) {
-        return;
-      }
-
       if (this.isEditingConfig) {
         this.updateConfigInfo();
       } else {
         this.createNewConfig();
       }
+    },
+    
+    // 自定义规则相关方法
+    addCustomRule() {
+      this.customRules.push({
+        platform: '*',
+        messageType: '*',
+        sessionId: '*'
+      });
+      this.updateCustomRulesFromBuilder();
+    },
+    
+    removeCustomRule(index) {
+      if (this.customRules.length > 1) {
+        this.customRules.splice(index, 1);
+        this.updateCustomRulesFromBuilder();
+      }
+    },
+    
+    updateCustomRule(index) {
+      this.updateCustomRulesFromBuilder();
+    },
+    
+    updateCustomRulesFromBuilder() {
+      // 从规则构建器更新 umop
+      const rules = this.customRules.map(rule => {
+        const platform = rule.platform === '*' ? '' : rule.platform;
+        const messageType = rule.messageType === '*' ? '' : rule.messageType;
+        const sessionId = rule.sessionId === '*' ? '' : (rule.sessionId || '');
+        return `${platform}:${messageType}:${sessionId}`;
+      });
+      
+      this.configFormData.umop = rules;
+      this.syncManualRulesText();
+      // 触发冲突检测
+      this.checkPlatformConflictOnForm();
+    },
+    
+    updateManualRules() {
+      // 从手动输入更新 umop
+      const rules = this.manualRulesText
+        .split('\n')
+        .map(rule => rule.trim())
+        .filter(rule => rule);
+      
+      this.configFormData.umop = rules;
+      this.syncCustomRulesFromManual();
+      // 触发冲突检测
+      this.checkPlatformConflictOnForm();
+    },
+    
+    syncManualRulesText() {
+      // 同步到手动输入文本区域
+      this.manualRulesText = this.configFormData.umop.join('\n');
+    },
+    
+    syncCustomRulesFromManual() {
+      // 从手动输入同步到规则构建器
+      this.customRules = this.configFormData.umop.map(rule => {
+        const parts = rule.split(':');
+        return {
+          platform: parts[0] || '*',
+          messageType: parts[1] || '*',
+          sessionId: parts[2] || '*'
+        };
+      });
+    },
+    
+    resetCustomRules() {
+      this.customRuleInputMode = 'builder'; // 重置为快速构建模式
+      this.customRules = [
+        {
+          platform: '*',
+          messageType: '*',
+          sessionId: '*'
+        }
+      ];
+      this.manualRulesText = '';
+      if (this.appliedToRadioValue === '1') {
+        this.updateCustomRulesFromBuilder();
+      }
+    },
+    
+    parseExistingCustomRules(umop) {
+      // 解析现有的自定义规则
+      if (!umop || umop.length === 0) {
+        this.resetCustomRules();
+        return;
+      }
+      
+      this.customRules = umop.map(rule => {
+        const parts = rule.split(':');
+        return {
+          platform: parts[0] || '*',
+          messageType: parts[1] || '*', 
+          sessionId: parts[2] || '*'
+        };
+      });
+      
+      this.syncManualRulesText();
     },
     confirmDeleteConfig(config) {
       if (confirm(`确定要删除配置文件 "${config.name}" 吗？此操作不可恢复。`)) {
@@ -527,25 +958,41 @@ export default {
         return;
       }
 
+      // 准备用于冲突检测的规则列表
+      let rulesToCheck = [];
+      
+      if (this.appliedToRadioValue === '0') {
+        // 平台模式：转换为标准UMO格式
+        rulesToCheck = this.configFormData.umop.map(platform => `${platform}:*:*`);
+      } else {
+        // 自定义模式：直接使用规则
+        rulesToCheck = [...this.configFormData.umop];
+      }
+
       // 检查与其他配置文件的冲突
-      let conflictConfigs = this.checkPlatformConflict(this.configFormData.umop);
+      let conflictDetails = this.getDetailedConflictInfo(rulesToCheck);
 
       // 如果是编辑模式，排除当前编辑的配置文件
       if (this.isEditingConfig && this.editingConfigId) {
-        conflictConfigs = conflictConfigs.filter(config => config.id !== this.editingConfigId);
+        conflictDetails = conflictDetails.filter(detail => detail.config.id !== this.editingConfigId);
       }
 
-      if (conflictConfigs.length > 0) {
-        const conflictNames = conflictConfigs.map(config => config.name).join(', ');
-        this.conflictMessage = `提示：选择的平台与现有配置文件重复：${conflictNames}。AstrBot 将只会应用首个匹配的配置文件。`;
+      if (conflictDetails.length > 0) {
+        this.conflictMessage = this.formatConflictMessage(conflictDetails);
       } else {
         this.conflictMessage = '';
       }
     },
     updateConfigInfo() {
-      // 修正为 umo part 形式
-      // 暂时只支持 platform:: 形式
-      const umo_parts = this.configFormData.umop.map(platform => platform + "::");
+      let umo_parts = [];
+      
+      if (this.appliedToRadioValue === '0') {
+        // 修正为 umo part 形式 - 指定平台
+        umo_parts = this.configFormData.umop.map(platform => platform + "::");
+      } else if (this.appliedToRadioValue === '1') {
+        // 自定义规则
+        umo_parts = [...this.configFormData.umop]; // 直接使用 umop，它已经包含完整的规则
+      }
 
       axios.post('/api/config/abconf/update', {
         id: this.editingConfigId,
@@ -576,11 +1023,24 @@ export default {
       }
       let ret = ""
       for (let i = 0; i < umop.length; i++) {
-        let platformPart = umop[i].split(":")[0];
-        if (platformPart === "") {
-          return "所有平台";
+        const parts = umop[i].split(":");
+        if (parts.length === 3) {
+          // 自定义规则格式 platform:messageType:sessionId
+          const platform = parts[0] || "*";
+          const messageType = parts[1] || "*";
+          const sessionId = parts[2] || "*";
+          if (platform === "*" && messageType === "*" && sessionId === "*") {
+            return "所有平台";
+          }
+          ret += `${platform}:${messageType}:${sessionId},`;
         } else {
-          ret += platformPart + ",";
+          // 传统平台格式
+          let platformPart = umop[i].split(":")[0];
+          if (platformPart === "") {
+            return "所有平台";
+          } else {
+            ret += platformPart + ",";
+          }
         }
       }
       ret = ret.slice(0, -1);
@@ -644,6 +1104,25 @@ export default {
 .v-btn-toggle .v-btn.v-btn--active {
   opacity: 1;
   font-weight: 600;
+}
+
+/* 冲突消息样式 */
+.text-warning code {
+  background-color: rgba(255, 193, 7, 0.1);
+  color: #e65100;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.text-warning strong {
+  color: #f57c00;
+}
+
+.text-warning small {
+  color: #6c757d;
+  font-style: italic;
 }
 
 @media (min-width: 768px) {
