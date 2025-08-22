@@ -15,7 +15,7 @@ import time
 import threading
 import os
 from .event_bus import EventBus
-from . import astrbot_config
+from . import astrbot_config, html_renderer
 from asyncio import Queue
 from typing import List
 from astrbot.core.pipeline.scheduler import PipelineScheduler, PipelineContext
@@ -77,6 +77,8 @@ class AstrBotCoreLifecycle:
             logger.setLevel(self.astrbot_config["log_level"])  # 设置日志级别
 
         await self.db.initialize()
+
+        await html_renderer.initialize()
 
         # 初始化 AstrBot 配置管理器
         self.astrbot_config_mgr = AstrBotConfigManager(
