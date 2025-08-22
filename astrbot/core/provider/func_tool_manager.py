@@ -1,5 +1,3 @@
-# TODO: 将此文件组件挪到 astrbot/core/agent 中
-
 from __future__ import annotations
 import json
 import os

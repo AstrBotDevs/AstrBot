@@ -108,6 +108,11 @@ class ToolSet:
         """Get all function tools."""
         return self.get_tool(name)
 
+    @property
+    def func_list(self) -> list[FunctionTool]:
+        """Get the list of function tools."""
+        return self.tools
+
     def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict]:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
