@@ -146,7 +146,9 @@
           <h3 class="mb-4">{{ isEditingConfig ? '编辑配置文件' : '新建配置文件' }}</h3>
 
           <div class="mb-4">
-            <small v-if="conflictMessage">⚠ {{ conflictMessage }}</small>
+            <div v-if="conflictMessage" class="text-warning">
+              <div v-html="conflictMessage" style="font-size: 0.875rem; line-height: 1.4;"></div>
+            </div>
           </div>
 
           <h4>名称</h4>
@@ -174,18 +176,16 @@
             
             <!-- 自定义规则界面 -->
             <div v-if="appliedToRadioValue === '1'" class="ma-2">
-              <small class="text-medium-emphasis mb-4 d-block">
-                💡 UMO 规则格式: [platform_id]:[message_type]:[session_id]，支持通配符 * 或留空表示全部。
-              </small>
+              <small class="text-medium-emphasis mb-4 d-block">UMO 格式: [platform_id]:[message_type]:[session_id]。通配符 * 或留空表示全部。使用 /sid 查看某个聊天的 UMO。</small>
               
               <!-- 输入方式切换 -->
               <v-btn-toggle v-model="customRuleInputMode" mandatory color="primary" variant="outlined" density="compact"
                 rounded="md" class="mb-4">
                 <v-btn value="builder" prepend-icon="mdi-tune" size="x-small">
-                  快速构建
+                  可视化
                 </v-btn>
                 <v-btn value="manual" prepend-icon="mdi-code-tags" size="x-small">
-                  手动输入
+                  手动编辑
                 </v-btn>
               </v-btn-toggle>
               
@@ -427,8 +427,7 @@ export default {
       messageTypeOptions: [
         { label: '所有消息类型', value: '*' },
         { label: '群组消息', value: 'GroupMessage' },
-        { label: '私聊消息', value: 'FriendMessage' },
-        { label: '其他消息', value: 'OtherMessage' }
+        { label: '私聊消息', value: 'FriendMessage' }
       ],
     }
   },
@@ -572,7 +571,7 @@ export default {
         this.save_message_success = "error";
       });
     },
-    checkPlatformConflict(newPlatforms) {
+    checkPlatformConflict(newRules) {
       const conflictConfigs = [];
 
       // 遍历现有的配置文件，排除名为 "default" 的配置
@@ -582,16 +581,8 @@ export default {
         }
 
         if (config.umop && config.umop.length > 0) {
-          // 获取现有配置的平台列表
-          const existingPlatforms = config.umop.map(umop => {
-            const platformPart = umop.split(":")[0];
-            return platformPart === "" || platformPart === "*" ? "*" : platformPart; // 空字符串表示所有平台
-          });
-
-          // 检查是否有重复的平台
-          const hasConflict = newPlatforms.some(newPlatform => {
-            return existingPlatforms.includes(newPlatform) || existingPlatforms.includes("*");
-          }) || (newPlatforms.includes("*") && existingPlatforms.length > 0);
+          // 检查是否有冲突
+          const hasConflict = this.hasUmoConflict(newRules, config.umop);
 
           if (hasConflict) {
             conflictConfigs.push(config);
@@ -600,6 +591,185 @@ export default {
       }
 
       return conflictConfigs;
+    },
+    
+    hasUmoConflict(newRules, existingRules) {
+      // 检查新规则与现有规则是否有冲突
+      for (const newRule of newRules) {
+        for (const existingRule of existingRules) {
+          if (this.isUmoMatch(newRule, existingRule) || this.isUmoMatch(existingRule, newRule)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+    
+    isUmoMatch(p1, p2) {
+      // 判断 p2 umo 是否逻辑包含于 p1 umo
+      // 基于后端的 _is_umo_match 逻辑
+      
+      // 先标准化规则格式
+      const p1_normalized = this.normalizeUmoRule(p1);
+      const p2_normalized = this.normalizeUmoRule(p2);
+      
+      const p1_parts = p1_normalized.split(":");
+      const p2_parts = p2_normalized.split(":");
+
+      if (p1_parts.length !== 3 || p2_parts.length !== 3) {
+        return false; // 非法格式
+      }
+
+      // 检查每个部分是否匹配
+      return p1_parts.every((p, index) => {
+        const t = p2_parts[index];
+        return p === "" || p === "*" || p === t;
+      });
+    },
+    
+    normalizeUmoRule(rule) {
+      // 标准化规则格式
+      if (typeof rule !== 'string') {
+        return "*:*:*";
+      }
+      
+      const parts = rule.split(":");
+      
+      if (parts.length === 2 && parts[1] === "") {
+        // 传统格式 "platform::" -> "platform:*:*"
+        return `${parts[0] || "*"}:*:*`;
+      } else if (parts.length === 3) {
+        // 已经是完整格式，只需要处理空字符串
+        return parts.map(part => part === "" ? "*" : part).join(":");
+      } else if (parts.length === 1) {
+        // 只有平台 "platform" -> "platform:*:*"
+        return `${parts[0] || "*"}:*:*`;
+      }
+      
+      // 默认返回通配符
+      return "*:*:*";
+    },
+    
+    getDetailedConflictInfo(newRules) {
+      const conflictDetails = [];
+      
+      // 获取所有配置文件及其优先级（按创建时间排序，早创建的优先级高）
+      const sortedConfigs = [...this.configInfoList]
+        .filter(config => config.name !== 'default')
+        .sort((a, b) => {
+          // 假设按字母顺序排序作为优先级（实际应该按创建时间）
+          return a.id.localeCompare(b.id);
+        });
+
+      for (const config of sortedConfigs) {
+        if (!config.umop || config.umop.length === 0) continue;
+        
+        const conflictingRules = [];
+        
+        for (const newRule of newRules) {
+          for (const existingRule of config.umop) {
+            if (this.isUmoMatch(newRule, existingRule) || this.isUmoMatch(existingRule, newRule)) {
+              conflictingRules.push({
+                newRule: newRule,
+                existingRule: existingRule,
+                matchType: this.getMatchType(newRule, existingRule)
+              });
+            }
+          }
+        }
+        
+        if (conflictingRules.length > 0) {
+          conflictDetails.push({
+            config: config,
+            conflicts: conflictingRules
+          });
+        }
+      }
+      
+      return conflictDetails;
+    },
+    
+    getMatchType(rule1, rule2) {
+      const r1_normalized = this.normalizeUmoRule(rule1);
+      const r2_normalized = this.normalizeUmoRule(rule2);
+      
+      const isR1MatchR2 = this.isUmoMatch(rule1, rule2);
+      const isR2MatchR1 = this.isUmoMatch(rule2, rule1);
+      
+      if (isR1MatchR2 && isR2MatchR1) {
+        return 'exact'; // 完全匹配
+      } else if (isR1MatchR2) {
+        return 'new_covers_existing'; // 新规则覆盖现有规则
+      } else if (isR2MatchR1) {
+        return 'existing_covers_new'; // 现有规则覆盖新规则
+      }
+      
+      return 'overlap'; // 部分重叠
+    },
+    
+    formatConflictMessage(conflictDetails) {
+      if (conflictDetails.length === 0) return '';
+      
+      let message = '⚠️ <strong>规则冲突：</strong><br><br>';
+      
+      // 按优先级排序（最先创建的配置文件优先级最高）
+      const sortedDetails = [...conflictDetails].sort((a, b) => 
+        a.config.id.localeCompare(b.config.id)
+      );
+      
+      sortedDetails.forEach((detail, index) => {
+        const configName = detail.config.name || detail.config.id;
+        message += `<strong>${index + 1}. 与配置文件 "${configName}" 冲突：</strong><br>`;
+        
+        detail.conflicts.forEach(conflict => {
+          const newRuleFormatted = this.formatRuleForDisplay(conflict.newRule);
+          const existingRuleFormatted = this.formatRuleForDisplay(conflict.existingRule);
+          
+          switch (conflict.matchType) {
+            case 'exact':
+              message += `规则完全相同: <code>${newRuleFormatted}</code><br>`;
+              message += `<span style="color: orange;">"${configName}" 将覆盖当前配置</span><br>`;
+              break;
+            case 'new_covers_existing':
+              message += `当前规则 <code>${newRuleFormatted}</code> 包含现有规则 <code>${existingRuleFormatted}</code><br>`;
+              message += `<span style="color: red;">"${configName}" 的规则将优先匹配</span><br>`;
+              break;
+            case 'existing_covers_new':
+              message += `现有规则 <code>${existingRuleFormatted}</code> 包含当前规则 <code>${newRuleFormatted}</code><br>`;
+              message += `<span style="color: red;">"${configName}" 的规则将优先匹配</span><br>`;
+              break;
+            case 'overlap':
+              message += `规则重叠: <code>${newRuleFormatted}</code> ↔ <code>${existingRuleFormatted}</code><br>`;
+              message += `<span style="color: orange;">"${configName}" 在匹配范围内优先</span><br>`;
+              break;
+          }
+        });
+        
+        if (index < sortedDetails.length - 1) {
+          message += '<br>';
+        }
+      });
+      
+      message += '<br><small><strong>💡 说明：</strong> AstrBot 按配置文件创建顺序匹配规则，先创建的配置文件优先级更高。当多个配置文件的规则匹配同一个消息时，只有优先级最高的配置文件会生效（default 配置文件除外）。</small>';
+      
+      return message;
+    },
+    
+    formatRuleForDisplay(rule) {
+      const parts = this.normalizeUmoRule(rule).split(':');
+      const platform = parts[0] === '*' || parts[0] === '' ? '任意平台' : parts[0];
+      const messageType = parts[1] === '*' || parts[1] === '' ? '任意消息' : this.getMessageTypeLabel(parts[1]);
+      const sessionId = parts[2] === '*' || parts[2] === '' ? '任意会话' : parts[2];
+      
+      return `${platform}:${messageType}:${sessionId}`;
+    },
+    
+    getMessageTypeLabel(messageType) {
+      const typeMap = {
+        'GroupMessage': '群组消息',
+        'FriendMessage': '私聊消息',
+      };
+      return typeMap[messageType] || messageType;
     },
     onConfigSelect(value) {
       if (value === '_%manage%_') {
@@ -717,6 +887,8 @@ export default {
       
       this.configFormData.umop = rules;
       this.syncManualRulesText();
+      // 触发冲突检测
+      this.checkPlatformConflictOnForm();
     },
     
     updateManualRules() {
@@ -728,6 +900,8 @@ export default {
       
       this.configFormData.umop = rules;
       this.syncCustomRulesFromManual();
+      // 触发冲突检测
+      this.checkPlatformConflictOnForm();
     },
     
     syncManualRulesText() {
@@ -813,17 +987,27 @@ export default {
         return;
       }
 
+      // 准备用于冲突检测的规则列表
+      let rulesToCheck = [];
+      
+      if (this.appliedToRadioValue === '0') {
+        // 平台模式：转换为标准UMO格式
+        rulesToCheck = this.configFormData.umop.map(platform => `${platform}:*:*`);
+      } else {
+        // 自定义模式：直接使用规则
+        rulesToCheck = [...this.configFormData.umop];
+      }
+
       // 检查与其他配置文件的冲突
-      let conflictConfigs = this.checkPlatformConflict(this.configFormData.umop);
+      let conflictDetails = this.getDetailedConflictInfo(rulesToCheck);
 
       // 如果是编辑模式，排除当前编辑的配置文件
       if (this.isEditingConfig && this.editingConfigId) {
-        conflictConfigs = conflictConfigs.filter(config => config.id !== this.editingConfigId);
+        conflictDetails = conflictDetails.filter(detail => detail.config.id !== this.editingConfigId);
       }
 
-      if (conflictConfigs.length > 0) {
-        const conflictNames = conflictConfigs.map(config => config.name).join(', ');
-        this.conflictMessage = `提示：选择的平台与现有配置文件重复：${conflictNames}。AstrBot 将只会应用首个匹配的配置文件。`;
+      if (conflictDetails.length > 0) {
+        this.conflictMessage = this.formatConflictMessage(conflictDetails);
       } else {
         this.conflictMessage = '';
       }
@@ -949,6 +1133,25 @@ export default {
 .v-btn-toggle .v-btn.v-btn--active {
   opacity: 1;
   font-weight: 600;
+}
+
+/* 冲突消息样式 */
+.text-warning code {
+  background-color: rgba(255, 193, 7, 0.1);
+  color: #e65100;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.text-warning strong {
+  color: #f57c00;
+}
+
+.text-warning small {
+  color: #6c757d;
+  font-style: italic;
 }
 
 @media (min-width: 768px) {
