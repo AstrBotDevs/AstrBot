@@ -7,10 +7,10 @@
       <!-- 普通配置选择区域 -->
       <div class="d-flex flex-row pr-4"
         style="margin-bottom: 16px; align-items: center; gap: 12px; justify-content: space-between; width: 100%;">
-        <div class="d-flex flex-row align-center" style="gap: 12px;" >
-          <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" v-if="!isSystemConfig"
-            item-value="id" label="选择配置文件" hide-details density="compact" rounded="md" variant="outlined"
-            @update:model-value="onConfigSelect">
+        <div class="d-flex flex-row align-center" style="gap: 12px;">
+          <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name"
+            v-if="!isSystemConfig" item-value="id" label="选择配置文件" hide-details density="compact" rounded="md"
+            variant="outlined" @update:model-value="onConfigSelect">
             <template v-slot:item="{ props: itemProps, item }">
               <v-list-item v-bind="itemProps"
                 :subtitle="item.raw.id === '_%manage%_' ? '管理所有配置文件' : formatUmop(item.raw.umop)"
@@ -22,7 +22,7 @@
 
         <v-btn-toggle v-model="configType" mandatory color="primary" variant="outlined" density="comfortable"
           rounded="md" @update:model-value="onConfigTypeToggle">
-          <v-btn value="normal" prepend-icon="mdi-cog" size="large" >
+          <v-btn value="normal" prepend-icon="mdi-cog" size="large">
             普通
           </v-btn>
           <v-btn value="system" prepend-icon="mdi-cog-outline" size="large">
@@ -149,15 +149,140 @@
             <small v-if="conflictMessage">⚠ {{ conflictMessage }}</small>
           </div>
 
-          <v-text-field v-model="configFormData.name" label="配置文件名称" variant="outlined" class="mb-4"
+          <h4>名称</h4>
+
+          <v-text-field v-model="configFormData.name" label="填写配置文件名称" variant="outlined" class="mt-4 mb-4"
             hide-details></v-text-field>
 
-          <v-select v-model="configFormData.umop" :items="platformList" item-title="id" item-value="id" label="应用于平台"
-            variant="outlined" hide-details multiple @update:model-value="checkPlatformConflictOnForm">
-            <template v-slot:item="{ props: itemProps, item }">
-              <v-list-item v-bind="itemProps" :subtitle="item.raw.type"></v-list-item>
-            </template>
-          </v-select>
+          <h4>应用于</h4>
+
+          <v-radio-group class="mt-2" v-model="appliedToRadioValue" hide-details="true">
+            <v-radio value="0">
+              <template v-slot:label>
+                <span>指定消息平台...</span>
+              </template>
+            </v-radio>
+            <v-select v-if="appliedToRadioValue === '0'" v-model="configFormData.umop" :items="platformList" item-title="id" item-value="id"
+                  label="选择已配置的消息平台(可多选)" variant="outlined" hide-details multiple class="ma-2"
+                  @update:model-value="checkPlatformConflictOnForm">
+                  <template v-slot:item="{ props: itemProps, item }">
+                    <v-list-item v-bind="itemProps" :subtitle="item.raw.type"></v-list-item>
+                  </template>
+            </v-select>
+            <v-radio value="1" label="自定义规则(实验性)">
+            </v-radio>
+            
+            <!-- 自定义规则界面 -->
+            <div v-if="appliedToRadioValue === '1'" class="ma-2">
+              <small class="text-medium-emphasis mb-4 d-block">
+                💡 UMO 规则格式: [platform_id]:[message_type]:[session_id]，支持通配符 * 或留空表示全部。
+              </small>
+              
+              <!-- 输入方式切换 -->
+              <v-btn-toggle v-model="customRuleInputMode" mandatory color="primary" variant="outlined" density="compact"
+                rounded="md" class="mb-4">
+                <v-btn value="builder" prepend-icon="mdi-tune" size="x-small">
+                  快速构建
+                </v-btn>
+                <v-btn value="manual" prepend-icon="mdi-code-tags" size="x-small">
+                  手动输入
+                </v-btn>
+              </v-btn-toggle>
+              
+              <!-- 快速规则构建 -->
+              <div v-if="customRuleInputMode === 'builder'" class="mb-4">
+                <div v-for="(rule, index) in customRules" :key="index" class="d-flex align-center mb-2" style="gap: 8px;">
+                  <v-select 
+                    v-model="rule.platform" 
+                    :items="[{ id: '*', type: '所有平台' }, ...platformList]" 
+                    item-title="id" 
+                    item-value="id"
+                    label="平台" 
+                    variant="outlined" 
+                    density="compact"
+                    style="min-width: 120px;"
+                    @update:model-value="updateCustomRule(index)">
+                    <template v-slot:item="{ props: itemProps, item }">
+                      <v-list-item v-bind="itemProps" :subtitle="item.raw.type"></v-list-item>
+                    </template>
+                  </v-select>
+                  
+                  <v-select 
+                    v-model="rule.messageType" 
+                    :items="messageTypeOptions" 
+                    item-title="label" 
+                    item-value="value"
+                    label="消息类型" 
+                    variant="outlined" 
+                    density="compact"
+                    style="min-width: 130px;"
+                    @update:model-value="updateCustomRule(index)">
+                  </v-select>
+                  
+                  <v-text-field 
+                    v-model="rule.sessionId" 
+                    label="会话ID" 
+                    variant="outlined" 
+                    density="compact"
+                    placeholder="* 或留空表示全部"
+                    style="min-width: 120px;"
+                    @update:model-value="updateCustomRule(index)">
+                  </v-text-field>
+                  
+                  <v-btn 
+                    icon="mdi-delete" 
+                    size="small" 
+                    variant="text" 
+                    color="error"
+                    @click="removeCustomRule(index)"
+                    :disabled="customRules.length === 1">
+                  </v-btn>
+                </div>
+                
+                <v-btn 
+                  prepend-icon="mdi-plus" 
+                  size="small" 
+                  variant="tonal" 
+                  color="primary"
+                  @click="addCustomRule">
+                  添加规则
+                </v-btn>
+              </div>
+              
+              <!-- 手动输入 -->
+              <div v-if="customRuleInputMode === 'manual'" class="mb-4">
+                <v-textarea 
+                  v-model="manualRulesText" 
+                  label="手动输入规则(每行一个)" 
+                  variant="outlined"
+                  rows="4"
+                  placeholder="每行一个规则，例如：&#10;platform1:GroupMessage:*&#10;*:FriendMessage:session123&#10;*:*:*"
+                  @update:model-value="updateManualRules">
+                </v-textarea>
+              </div>
+              
+              <!-- 规则预览 -->
+              <div class="mb-2">
+                <small class="text-medium-emphasis">
+                  <strong>预览:</strong> 
+                  <span v-if="!configFormData.umop.length" class="text-error">未配置任何规则</span>
+                  <div v-else class="mt-1">
+                    <v-chip 
+                      v-for="(rule, index) in configFormData.umop" 
+                      :key="index" 
+                      size="x-small" 
+                      rounded="sm"
+                      class="mr-1">
+                      {{ rule }}
+                    </v-chip>
+                  </div>
+                  <small>这些规则对应的会话将使用此配置文件。</small>
+                </small>
+              </div>
+            </div>
+          </v-radio-group>
+
+
 
           <div class="d-flex justify-end mt-4" style="gap: 8px;">
             <v-btn variant="text" @click="cancelConfigForm">取消</v-btn>
@@ -232,6 +357,24 @@ export default {
   watch: {
     config_data_str: function (val) {
       this.config_data_has_changed = true;
+    },
+    appliedToRadioValue: function (newVal) {
+      if (newVal === '0') {
+        // 切换到平台模式
+        this.configFormData.umop = [];
+      } else if (newVal === '1') {
+        // 切换到自定义规则模式
+        this.resetCustomRules();
+      }
+    },
+    customRuleInputMode: function (newVal) {
+      if (newVal === 'builder') {
+        // 切换到快速构建，从手动输入同步数据
+        this.syncCustomRulesFromManual();
+      } else if (newVal === 'manual') {
+        // 切换到手动输入，从快速构建同步数据
+        this.syncManualRulesText();
+      }
     }
   },
   data() {
@@ -260,6 +403,7 @@ export default {
       isSystemConfig: false,
 
       // 多配置文件管理
+      appliedToRadioValue: '0',
       selectedConfigID: null, // 用于存储当前选中的配置项信息
       configInfoList: [],
       platformList: [],
@@ -269,6 +413,23 @@ export default {
       },
       editingConfigId: null,
       conflictMessage: '', // 冲突提示信息
+      
+      // 自定义规则相关
+      customRuleInputMode: 'builder', // 'builder' 或 'manual'
+      customRules: [
+        {
+          platform: '*',
+          messageType: '*',
+          sessionId: '*'
+        }
+      ],
+      manualRulesText: '',
+      messageTypeOptions: [
+        { label: '所有消息类型', value: '*' },
+        { label: '群组消息', value: 'GroupMessage' },
+        { label: '私聊消息', value: 'FriendMessage' },
+        { label: '其他消息', value: 'OtherMessage' }
+      ],
     }
   },
   mounted() {
@@ -379,9 +540,15 @@ export default {
       }
     },
     createNewConfig() {
-      // 修正为 umo part 形式
-      // 暂时只支持 platform:: 形式
-      const umo_parts = this.configFormData.umop.map(platform => platform + "::");
+      let umo_parts = [];
+      
+      if (this.appliedToRadioValue === '0') {
+        // 修正为 umo part 形式 - 指定平台
+        umo_parts = this.configFormData.umop.map(platform => platform + "::");
+      } else if (this.appliedToRadioValue === '1') {
+        // 自定义规则
+        umo_parts = [...this.configFormData.umop]; // 直接使用 umop，它已经包含完整的规则
+      }
 
       axios.post('/api/config/abconf/new', {
         umo_parts: umo_parts,
@@ -418,7 +585,7 @@ export default {
           // 获取现有配置的平台列表
           const existingPlatforms = config.umop.map(umop => {
             const platformPart = umop.split(":")[0];
-            return platformPart === "" ? "*" : platformPart; // 空字符串表示所有平台
+            return platformPart === "" || platformPart === "*" ? "*" : platformPart; // 空字符串表示所有平台
           });
 
           // 检查是否有重复的平台
@@ -455,15 +622,37 @@ export default {
       };
       this.editingConfigId = null;
       this.conflictMessage = '';
+      this.resetCustomRules();
     },
     startEditConfig(config) {
       this.showConfigForm = true;
       this.isEditingConfig = true;
       this.editingConfigId = config.id;
-      this.configFormData = {
-        name: config.name || '',
-        umop: config.umop ? config.umop.map(part => part.split("::")[0]).filter(p => p) : [],
-      };
+      
+      // 根据现有规则来判断是平台模式还是自定义模式
+      const isCustomMode = config.umop && config.umop.some(part => {
+        const segments = part.split(':');
+        return segments.length === 3 || (segments.length === 2 && segments[1] !== '');
+      });
+      
+      this.appliedToRadioValue = isCustomMode ? '1' : '0';
+      
+      if (isCustomMode) {
+        // 自定义模式 - 解析现有规则
+        this.parseExistingCustomRules(config.umop || []);
+        this.configFormData = {
+          name: config.name || '',
+          umop: [...(config.umop || [])],
+        };
+      } else {
+        // 平台模式
+        this.configFormData = {
+          name: config.name || '',
+          umop: config.umop ? config.umop.map(part => part.split("::")[0]).filter(p => p) : [],
+        };
+        this.resetCustomRules();
+      }
+      
       this.conflictMessage = '';
     },
     cancelConfigForm() {
@@ -475,6 +664,7 @@ export default {
         umop: [],
       };
       this.conflictMessage = '';
+      this.resetCustomRules();
     },
     saveConfigForm() {
       if (!this.configFormData.name || !this.configFormData.umop.length) {
@@ -493,6 +683,102 @@ export default {
       } else {
         this.createNewConfig();
       }
+    },
+    
+    // 自定义规则相关方法
+    addCustomRule() {
+      this.customRules.push({
+        platform: '*',
+        messageType: '*',
+        sessionId: '*'
+      });
+      this.updateCustomRulesFromBuilder();
+    },
+    
+    removeCustomRule(index) {
+      if (this.customRules.length > 1) {
+        this.customRules.splice(index, 1);
+        this.updateCustomRulesFromBuilder();
+      }
+    },
+    
+    updateCustomRule(index) {
+      this.updateCustomRulesFromBuilder();
+    },
+    
+    updateCustomRulesFromBuilder() {
+      // 从规则构建器更新 umop
+      const rules = this.customRules.map(rule => {
+        const platform = rule.platform === '*' ? '' : rule.platform;
+        const messageType = rule.messageType === '*' ? '' : rule.messageType;
+        const sessionId = rule.sessionId === '*' ? '' : (rule.sessionId || '');
+        return `${platform}:${messageType}:${sessionId}`;
+      });
+      
+      this.configFormData.umop = rules;
+      this.syncManualRulesText();
+    },
+    
+    updateManualRules() {
+      // 从手动输入更新 umop
+      const rules = this.manualRulesText
+        .split('\n')
+        .map(rule => rule.trim())
+        .filter(rule => rule);
+      
+      this.configFormData.umop = rules;
+      this.syncCustomRulesFromManual();
+    },
+    
+    syncManualRulesText() {
+      // 同步到手动输入文本区域
+      this.manualRulesText = this.configFormData.umop.join('\n');
+    },
+    
+    syncCustomRulesFromManual() {
+      // 从手动输入同步到规则构建器
+      this.customRules = this.configFormData.umop.map(rule => {
+        const parts = rule.split(':');
+        return {
+          platform: parts[0] || '*',
+          messageType: parts[1] || '*',
+          sessionId: parts[2] || '*'
+        };
+      });
+    },
+    
+    resetCustomRules() {
+      this.customRuleInputMode = 'builder'; // 重置为快速构建模式
+      this.customRules = [
+        {
+          platform: '*',
+          messageType: '*',
+          sessionId: '*'
+        }
+      ];
+      this.manualRulesText = '';
+      if (this.appliedToRadioValue === '1') {
+        this.updateCustomRulesFromBuilder();
+      }
+    },
+    
+    parseExistingCustomRules(umop) {
+      // 解析现有的自定义规则
+      if (!umop || umop.length === 0) {
+        this.resetCustomRules();
+        return;
+      }
+      
+      this.customRules = umop.map(rule => {
+        const parts = rule.split(':');
+        return {
+          platform: parts[0] || '*',
+          messageType: parts[1] || '*', 
+          sessionId: parts[2] || '*'
+        };
+      });
+      
+      this.syncManualRulesText();
     },
     confirmDeleteConfig(config) {
       if (confirm(`确定要删除配置文件 "${config.name}" 吗？此操作不可恢复。`)) {
@@ -543,9 +829,15 @@ export default {
       }
     },
     updateConfigInfo() {
-      // 修正为 umo part 形式
-      // 暂时只支持 platform:: 形式
-      const umo_parts = this.configFormData.umop.map(platform => platform + "::");
+      let umo_parts = [];
+      
+      if (this.appliedToRadioValue === '0') {
+        // 修正为 umo part 形式 - 指定平台
+        umo_parts = this.configFormData.umop.map(platform => platform + "::");
+      } else if (this.appliedToRadioValue === '1') {
+        // 自定义规则
+        umo_parts = [...this.configFormData.umop]; // 直接使用 umop，它已经包含完整的规则
+      }
 
       axios.post('/api/config/abconf/update', {
         id: this.editingConfigId,
@@ -576,11 +868,24 @@ export default {
       }
       let ret = ""
       for (let i = 0; i < umop.length; i++) {
-        let platformPart = umop[i].split(":")[0];
-        if (platformPart === "") {
-          return "所有平台";
+        const parts = umop[i].split(":");
+        if (parts.length === 3) {
+          // 自定义规则格式 platform:messageType:sessionId
+          const platform = parts[0] || "*";
+          const messageType = parts[1] || "*";
+          const sessionId = parts[2] || "*";
+          if (platform === "*" && messageType === "*" && sessionId === "*") {
+            return "所有平台";
+          }
+          ret += `${platform}:${messageType}:${sessionId},`;
         } else {
-          ret += platformPart + ",";
+          // 传统平台格式
+          let platformPart = umop[i].split(":")[0];
+          if (platformPart === "") {
+            return "所有平台";
+          } else {
+            ret += platformPart + ",";
+          }
         }
       }
       ret = ret.slice(0, -1);

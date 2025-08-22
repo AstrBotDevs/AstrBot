@@ -63,7 +63,7 @@ class AstrBotConfigManager:
         if len(p1_ls) != 3 or len(p2_ls) != 3:
             return False  # 非法格式
 
-        return all(p == "" or p == t for p, t in zip(p1_ls, p2_ls))
+        return all(p == "" or p == "*" or p == t for p, t in zip(p1_ls, p2_ls))
 
     def _load_conf_mapping(self, umo: str | MessageSession) -> ConfInfo:
         """获取指定 umo 的配置文件 uuid, 如果不存在则返回默认配置(返回 "default")
