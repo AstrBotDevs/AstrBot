@@ -103,7 +103,13 @@ class ProviderOpenAIOfficial(Provider):
         model = payloads.get("model", "")
         if "qwen3" in model.lower():
             extra_body["enable_thinking"] = False
-
+            
+        # 针对 deepseek 模型的特殊处理：deepseek-reasoner调用必须移除 tools ，否则将被切换至 deepseek-chat
+        model = payloads.get("model", "")
+        if model == "deepseek-reasoner":
+            if "tools" in payloads:
+                del payloads["tools"]
+                
         completion = await self.client.chat.completions.create(
             **payloads, stream=False, extra_body=extra_body
         )
