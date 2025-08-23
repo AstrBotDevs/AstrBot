@@ -2,6 +2,9 @@
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ListConfigItem from './ListConfigItem.vue'
+import ProviderSelector from './ProviderSelector.vue'
+import PersonaSelector from './PersonaSelector.vue'
+import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import { useI18n } from '@/i18n/composables'
 
 const props = defineProps({
@@ -161,8 +164,37 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
             <v-col cols="12" sm="5" class="config-input">
               <div v-if="metadata[metadataKey].items[key]" class="w-100">
+                <!-- Special handling for specific metadata types -->
+                <div v-if="metadata[metadataKey].items[key]?._special === 'select_provider'">
+                  <ProviderSelector 
+                    v-model="iterable[key]"
+                    :provider-type="'chat_completion'"
+                  />
+                </div>
+                <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_provider_stt'">
+                  <ProviderSelector 
+                    v-model="iterable[key]"
+                    :provider-type="'speech_to_text'"
+                  />
+                </div>
+                <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_provider_tts'">
+                  <ProviderSelector 
+                    v-model="iterable[key]"
+                    :provider-type="'text_to_speech'"
+                  />
+                </div>
+                <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_persona'">
+                  <PersonaSelector 
+                    v-model="iterable[key]"
+                  />
+                </div>
+                <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_knowledgebase'">
+                  <KnowledgeBaseSelector 
+                    v-model="iterable[key]"
+                  />
+                </div>
                 <!-- List item with options-->
-                <div v-if="metadata[metadataKey].items[key]?.type === 'list' && metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible && metadata[metadataKey].items[key]?.render_type === 'checkbox'" 
+                <div v-else-if="metadata[metadataKey].items[key]?.type === 'list' && metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible && metadata[metadataKey].items[key]?.render_type === 'checkbox'" 
                   class="d-flex flex-wrap gap-20">
                   <v-checkbox
                     v-for="(option, index) in metadata[metadataKey].items[key]?.options"
