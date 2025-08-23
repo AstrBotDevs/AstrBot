@@ -118,6 +118,72 @@ async def download_image_by_url(
     except Exception as e:
         raise e
 
+def save_temp_file(data: Union[bytes, Image.Image], suffix: str = "null") -> str:
+    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+    # 获得文件创建时间，清除超过 12 小时的
+    try:
+        for f in os.listdir(temp_dir):
+            path = os.path.join(temp_dir, f)
+            if os.path.isfile(path):
+                ctime = os.path.getctime(path)
+                if time.time() - ctime > 3600 * 12:
+                    os.remove(path)
+    except Exception as e:
+        print(f"清除临时文件失败: {e}")
+
+    # 获得时间戳
+    timestamp = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    p = os.path.join(temp_dir, f"{timestamp}.{suffix}")
+
+    if isinstance(data, Image.Image):
+        data.save(p)
+    else:
+        with open(p, "wb") as f:
+            f.write(data)
+    return p
+async def download_file_by_url(
+    url: str,suffix:str, post: bool = False, post_data: dict = None, path=None
+) -> str:
+    """
+    下载临时文件
+    """
+    try:
+        ssl_context = ssl.create_default_context(
+            cafile=certifi.where()
+        )  # 使用 certifi 提供的 CA 证书
+        connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
+        async with aiohttp.ClientSession(
+            trust_env=True, connector=connector
+        ) as session:
+            if post:
+                async with session.post(url, json=post_data) as resp:
+                    if not path:
+                        return save_temp_file(await resp.read(), suffix)
+                    else:
+                        with open(path, "wb") as f:
+                            f.write(await resp.read())
+                        return path
+            else:
+                async with session.get(url) as resp:
+                    if not path:
+                        return save_temp_file(await resp.read(), suffix)
+                    else:
+                        with open(path, "wb") as f:
+                            f.write(await resp.read())
+                        return path
+    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
+        # 关闭SSL验证
+        ssl_context = ssl.create_default_context()
+        ssl_context.set_ciphers("DEFAULT")
+        async with aiohttp.ClientSession() as session:
+            if post:
+                async with session.get(url, ssl=ssl_context) as resp:
+                    return save_temp_file(await resp.read(), suffix)
+            else:
+                async with session.get(url, ssl=ssl_context) as resp:
+                    return save_temp_file(await resp.read(), suffix)
+    except Exception as e:
+        raise e
 
 async def download_file(url: str, path: str, show_progress: bool = False):
     """

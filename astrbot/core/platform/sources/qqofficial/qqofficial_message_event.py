@@ -3,10 +3,10 @@ import botpy.message
 import botpy.types
 import botpy.types.message
 import asyncio
-from astrbot.core.utils.io import file_to_base64, download_image_by_url
+from astrbot.core.utils.io import file_to_base64, download_image_by_url, download_file_by_url
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.api.message_components import Plain, Image
+from astrbot.api.message_components import Plain, Image, Record, Video
 from botpy import Client
 from botpy.http import Route
 from astrbot.api import logger
@@ -85,9 +85,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             plain_text,
             image_base64,
             image_path,
+            Record_base64,
+            Record_path,
+            video_base64,
+            video_path,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
 
-        if not plain_text and not image_base64 and not image_path:
+        if not plain_text and not image_base64 and not image_path and not Record_base64 and not Record_path and not video_base64 and not video_path:
             return
 
         payload = {
@@ -101,8 +105,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         match type(source):
             case botpy.message.GroupMessage:
                 if image_base64:
-                    media = await self.upload_group_and_c2c_image(
+                    media = await self.upload_group_and_c2c_file(
                         image_base64, 1, group_openid=source.group_openid
+                    )
+                    payload["media"] = media
+                    payload["msg_type"] = 7
+                if Record_base64:
+                    media = await self.upload_group_and_c2c_file(
+                        Record_base64, 3, group_openid=source.group_openid
+                    )
+                    payload["media"] = media
+                    payload["msg_type"] = 7
+                if video_base64:
+                    media = await self.upload_group_and_c2c_file(
+                        video_base64, 2, group_openid=source.group_openid
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
@@ -111,8 +127,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 )
             case botpy.message.C2CMessage:
                 if image_base64:
-                    media = await self.upload_group_and_c2c_image(
+                    media = await self.upload_group_and_c2c_file(
                         image_base64, 1, openid=source.author.user_openid
+                    )
+                    payload["media"] = media
+                    payload["msg_type"] = 7
+                if Record_base64:
+                    media = await self.upload_group_and_c2c_file(
+                        Record_base64, 3, openid=source.author.user_openid
+                    )
+                    payload["media"] = media
+                    payload["msg_type"] = 7
+                if video_base64:
+                    media = await self.upload_group_and_c2c_file(
+                        video_base64, 2, openid=source.author.user_openid
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
@@ -144,11 +172,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return ret
 
-    async def upload_group_and_c2c_image(
-        self, image_base64: str, file_type: int, **kwargs
+    async def upload_group_and_c2c_file(
+        self, file_base64: str, file_type: int, **kwargs
     ) -> botpy.types.message.Media:
         payload = {
-            "file_data": image_base64,
+            "file_data": file_base64,
             "file_type": file_type,
             "srv_send_msg": False,
         }
@@ -191,6 +219,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         plain_text = ""
         image_base64 = None  # only one img supported
         image_file_path = None
+        Record_base64 = None 
+        Record_file_path = None
+        video_base64 = None
+        video_file_path = None
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
@@ -206,6 +238,30 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 else:
                     image_base64 = file_to_base64(i.file)
                 image_base64 = image_base64.removeprefix("base64://")
+            elif isinstance(i, Record) and not Record_base64:
+                if i.file and i.file.startswith("file:///"):
+                    Record_base64 = file_to_base64(i.file[8:])
+                    Record_file_path = i.file[8:]
+                elif i.file and i.file.startswith("http"):
+                    Record_file_path = await download_file_by_url(i.file,"silk")
+                    Record_base64 = file_to_base64(Record_file_path)
+                elif i.file and i.file.startswith("base64://"):
+                    Record_base64 = i.file
+                else:
+                    Record_base64 = file_to_base64(i.file)
+                Record_base64 = Record_base64.removeprefix("base64://")
+            elif isinstance(i, Video) and not video_base64:
+                if i.file and i.file.startswith("file:///"):
+                    video_base64 = file_to_base64(i.file[8:])
+                    video_file_path = i.file[8:]
+                elif i.file and i.file.startswith("http"):
+                    video_file_path = await download_file_by_url(i.file,"mp4")
+                    video_base64 = file_to_base64(video_file_path)
+                elif i.file and i.file.startswith("base64://"):
+                    video_base64 = i.file
+                else:
+                    video_base64 = file_to_base64(i.file)
+                video_base64 = video_base64.removeprefix("base64://")
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
-        return plain_text, image_base64, image_file_path
+        return plain_text, image_base64, image_file_path, Record_base64, Record_file_path, video_base64, video_file_path
