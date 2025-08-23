@@ -144,8 +144,6 @@ class RespondStage(Stage):
             try:
                 if await self._is_empty_message_chain(result.chain):
                     logger.info("消息为空，跳过发送阶段")
-                    event.clear_result()
-                    event.stop_event()
                     return
             except Exception as e:
                 logger.warning(f"空内容检查异常: {e}")
