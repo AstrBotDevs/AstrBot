@@ -99,10 +99,13 @@ class ProviderOpenAIOfficial(Provider):
         for key in to_del:
             del payloads[key]
 
-        # 针对 qwen3 模型的特殊处理：非流式调用必须设置 enable_thinking=false
         model = payloads.get("model", "")
+        # 针对 qwen3 模型的特殊处理：非流式调用必须设置 enable_thinking=false
         if "qwen3" in model.lower():
-            extra_body["enable_thinking"] = False
+            extra_body["enable_thinking"] = False 
+        # 针对 deepseek 模型的特殊处理：deepseek-reasoner调用必须移除 tools ，否则将被切换至 deepseek-chat
+        elif model == "deepseek-reasoner" and "tools" in payloads:
+            del payloads["tools"]
 
         completion = await self.client.chat.completions.create(
             **payloads, stream=False, extra_body=extra_body
