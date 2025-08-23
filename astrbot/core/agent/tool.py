@@ -8,12 +8,12 @@ from .mcp_client import MCPClient
 class FunctionTool:
     """A class representing a function tool that can be used in function calling."""
 
-    name: str
-    parameters: dict
-    description: str
-    handler: Awaitable = None
+    name: str | None = None
+    parameters: dict | None = None
+    description: str | None = None
+    handler: Awaitable | None = None
     """处理函数, 当 origin 为 mcp 时，这个为空"""
-    handler_module_path: str = None
+    handler_module_path: str | None = None
     """处理函数的模块路径，当 origin 为 mcp 时，这个为空
 
     必须要保留这个字段, handler 在初始化会被 functools.partial 包装，导致 handler 的 __module__ 为 functools
@@ -25,9 +25,9 @@ class FunctionTool:
     """函数工具的来源, local 为本地函数工具, mcp 为 MCP 服务"""
 
     # MCP 相关字段
-    mcp_server_name: str = None
+    mcp_server_name: str | None = None
     """MCP 服务名称，当 origin 为 mcp 时有效"""
-    mcp_client: MCPClient = None
+    mcp_client: MCPClient | None = None
     """MCP 客户端，当 origin 为 mcp 时有效"""
 
     def __repr__(self):

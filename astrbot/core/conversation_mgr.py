@@ -211,7 +211,7 @@ class ConversationManager:
                 cid=conversation_id,
                 title=title,
                 persona_id=persona_id,
-                content=history or [],
+                content=history,
             )
 
     async def update_conversation_title(
