@@ -139,6 +139,14 @@ def conf():
     - dashboard.password: Dashboard 密码
 
     - callback_api_base: 回调接口基址
+
+    可用子命令:
+
+    - set: 设置配置项值
+
+    - get: 获取配置项值
+
+    - login-info: 显示 Web 管理面板登录信息
     """
     pass
 
@@ -204,3 +212,44 @@ def get_config(key: str = None):
                 click.echo(f"  {key}: {value}")
             except (KeyError, TypeError):
                 pass
+
+
+@conf.command(name="login-info")
+def get_login_info():
+    """显示 Web 管理面板的登录信息
+
+    在 Docker 环境中使用示例:
+    docker exec -e ASTRBOT_ROOT=/AstrBot astrbot-container astrbot conf login-info
+    """
+    config = _load_config()
+
+    try:
+        username = _get_nested_item(config, "dashboard.username")
+        # 注意：我们不显示实际的MD5哈希密码，而是提示用户如何重置
+        click.echo("🔐 Web 管理面板登录信息:")
+        click.echo(f"  用户名: {username}")
+        click.echo("  密码: [已加密存储]")
+        click.echo()
+        click.echo("💡 如需重置密码，请使用以下命令:")
+        click.echo("  astrbot conf set dashboard.password <新密码>")
+        click.echo()
+        click.echo("🌐 访问地址:")
+
+        # 尝试获取端口信息
+        try:
+            port = _get_nested_item(config, "dashboard.port")
+            click.echo(f"  http://localhost:{port}")
+            click.echo(f"  http://your-server-ip:{port}")
+        except (KeyError, TypeError):
+            click.echo("  http://localhost:6185 (默认端口)")
+            click.echo("  http://your-server-ip:6185 (默认端口)")
+
+        click.echo()
+        click.echo("📋 Docker 环境使用说明:")
+        click.echo("  如果在 Docker 中运行，请使用以下命令格式:")
+        click.echo("  docker exec -e ASTRBOT_ROOT=/AstrBot <容器名> astrbot conf login-info")
+
+    except KeyError:
+        click.echo("❌ 无法找到登录配置，请先运行 'astrbot init' 初始化")
+    except Exception as e:
+        raise click.UsageError(f"获取登录信息失败: {str(e)}")
