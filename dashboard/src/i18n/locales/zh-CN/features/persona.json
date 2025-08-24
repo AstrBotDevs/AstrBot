@@ -1,0 +1,67 @@
+{
+  "page": {
+    "description": "管理人格角色设定"
+  },
+  "buttons": {
+    "create": "创建人格",
+    "createFirst": "创建第一个人格",
+    "edit": "编辑",
+    "delete": "删除",
+    "cancel": "取消",
+    "save": "保存",
+    "addDialogPair": "添加对话对"
+  },
+  "labels": {
+    "presetDialogs": "预设对话 ({count} 对)",
+    "createdAt": "创建时间",
+    "updatedAt": "更新时间"
+  },
+  "form": {
+    "personaId": "人格 ID",
+    "systemPrompt": "系统提示词",
+    "presetDialogs": "预设对话",
+    "presetDialogsHelp": "添加一些预设的对话来帮助机器人更好地理解角色设定。",
+    "userMessage": "用户消息",
+    "assistantMessage": "AI 回答",
+    "tools": "工具选择",
+    "toolsHelp": "为这个人格选择可用的外部工具。外部工具给了 AI 接触外部环境的能力，如搜索、计算、获取信息等。",
+    "toolsSelection": "工具选择操作",
+    "selectAllTools": "选择所有工具",
+    "clearAllTools": "清空选择",
+    "allSelected": "全选",
+    "mcpServersQuickSelect": "MCP 服务器快速选择",
+    "searchTools": "搜索工具",
+    "selectedTools": "已选择的工具",
+    "noToolsAvailable": "暂无可用工具",
+    "noToolsFound": "未找到匹配的工具",
+    "loadingTools": "正在加载工具...",
+    "allToolsAvailable": "使用所有可用工具",
+    "noToolsSelected": "未选择任何工具"
+  },
+  "dialog": {
+    "create": {
+      "title": "创建新人格"
+    },
+    "edit": {
+      "title": "编辑人格"
+    }
+  },
+  "empty": {
+    "title": "暂无人格配置",
+    "description": "来创建一个吧！"
+  },
+  "validation": {
+    "required": "此字段为必填项",
+    "minLength": "最少需要 {min} 个字符",
+    "alphanumeric": "只能包含字母、数字、下划线和连字符",
+    "dialogRequired": "{type}不能为空"
+  },
+  "messages": {
+    "loadError": "加载人格列表失败",
+    "saveSuccess": "保存成功",
+    "saveError": "保存失败",
+    "deleteConfirm": "确定要删除人格 \"{id}\" 吗？此操作不可撤销。",
+    "deleteSuccess": "删除成功",
+    "deleteError": "删除失败"
+  }
+}

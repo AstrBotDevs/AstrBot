@@ -128,7 +128,7 @@ class RespondStage(Stage):
             use_fallback = self.config.get("provider_settings", {}).get(
                 "streaming_segmented", False
             )
-            logger.info(f"应用流式输出({event.get_platform_name()})")
+            logger.info(f"应用流式输出({event.get_platform_id()})")
             await event.send_streaming(result.async_stream, use_fallback)
             return
         elif len(result.chain) > 0:
@@ -214,7 +214,7 @@ class RespondStage(Stage):
             )
 
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnAfterMessageSentEvent, platform_id=event.get_platform_id()
+            EventType.OnAfterMessageSentEvent, plugins_name=event.plugins_name
         )
         for handler in handlers:
             try:

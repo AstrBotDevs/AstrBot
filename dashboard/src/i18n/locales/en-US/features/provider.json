@@ -11,7 +11,8 @@
       "chatCompletion": "Chat Completion",
       "speechToText": "Speech to Text",
       "textToSpeech": "Text to Speech",
-      "embedding": "Embedding"
+      "embedding": "Embedding",
+      "rerank": "Rerank"
     },
     "empty": {
       "all": "No service providers available, click Add Provider to add one",
@@ -44,7 +45,8 @@
         "basic": "Basic",
         "speechToText": "Speech to Text",
         "textToSpeech": "Text to Speech",
-        "embedding": "Embedding"
+        "embedding": "Embedding",
+        "rerank": "Rerank"
       },
       "noTemplates": "No {type} type provider templates available"
     },
