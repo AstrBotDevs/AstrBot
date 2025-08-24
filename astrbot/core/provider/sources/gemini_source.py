@@ -431,6 +431,7 @@ class ProviderGoogleGenAI(Provider):
                 continue
 
         llm_response = LLMResponse("assistant")
+        llm_response.raw_completion = result
         llm_response.result_chain = self._process_content_parts(result, llm_response)
         return llm_response
 
@@ -470,6 +471,10 @@ class ProviderGoogleGenAI(Provider):
                     raise
                 continue
 
+        # Accumulate the complete response text for the final response
+        accumulated_text = ""
+        final_response = None
+
         async for chunk in result:
             llm_response = LLMResponse("assistant", is_chunk=True)
 
@@ -477,26 +482,42 @@ class ProviderGoogleGenAI(Provider):
                 part.function_call for part in chunk.candidates[0].content.parts
             ):
                 llm_response = LLMResponse("assistant", is_chunk=False)
+                llm_response.raw_completion = chunk
                 llm_response.result_chain = self._process_content_parts(
                     chunk, llm_response
                 )
                 yield llm_response
-                break
+                return
 
             if chunk.text:
+                accumulated_text += chunk.text
                 llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
                 yield llm_response
 
             if chunk.candidates[0].finish_reason:
-                llm_response = LLMResponse("assistant", is_chunk=False)
-                if not chunk.candidates[0].content.parts:
-                    llm_response.result_chain = MessageChain(chain=[Comp.Plain(" ")])
-                else:
-                    llm_response.result_chain = self._process_content_parts(
-                        chunk, llm_response
+                # Process the final chunk for potential tool calls or other content
+                if chunk.candidates[0].content.parts:
+                    final_response = LLMResponse("assistant", is_chunk=False)
+                    final_response.raw_completion = chunk
+                    final_response.result_chain = self._process_content_parts(
+                        chunk, final_response
                     )
-                yield llm_response
                 break
+
+        # Yield final complete response with accumulated text
+        if not final_response:
+            final_response = LLMResponse("assistant", is_chunk=False)
+
+        # Set the complete accumulated text in the final response
+        if accumulated_text:
+            final_response.result_chain = MessageChain(
+                chain=[Comp.Plain(accumulated_text)]
+            )
+        elif not final_response.result_chain:
+            # If no text was accumulated and no final response was set, provide empty space
+            final_response.result_chain = MessageChain(chain=[Comp.Plain(" ")])
+
+        yield final_response
 
     async def text_chat(
         self,
