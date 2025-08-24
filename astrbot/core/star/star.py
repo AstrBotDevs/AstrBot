@@ -32,6 +32,8 @@ class StarMetadata:
     """插件版本"""
     repo: str | None = None
     """插件仓库地址"""
+    dependencies: list[str] = field(default_factory=list)
+    """插件依赖列表"""
 
     star_cls_type: type[Star] | None = None
     """插件的类对象的类型"""
