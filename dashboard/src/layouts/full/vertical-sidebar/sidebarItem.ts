@@ -44,6 +44,11 @@ const sidebarItem: menu[] = [
     to: '/config',
   },
   {
+    title: 'core.navigation.commandPermission',
+    icon: 'mdi-shield-key',
+    to: '/command-permission',
+  },
+  {
     title: 'core.navigation.extension',
     icon: 'mdi-puzzle',
     to: '/extension'
