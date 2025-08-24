@@ -6,7 +6,6 @@ from astrbot.core.star.register import register_llm_tool as llm_tool
 from astrbot.core.star.register import register_agent as agent
 from astrbot.core.agent.tool import ToolSet, FunctionTool
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
-from astrbot.core.pipeline.process_stage.method.llm_request import FunctionToolExecutor
 
 __all__ = [
     "AstrBotConfig",
@@ -17,6 +16,5 @@ __all__ = [
     "sp",
     "ToolSet",
     "FunctionTool",
-    "FunctionToolExecutor",
     "BaseFunctionToolExecutor",
 ]
