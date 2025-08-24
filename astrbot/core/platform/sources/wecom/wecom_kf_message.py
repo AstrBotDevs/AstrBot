@@ -26,6 +26,7 @@ from optionaldict import optionaldict
 
 from wechatpy.client.api.base import BaseWeChatAPI
 
+
 class WeChatKFMessage(BaseWeChatAPI):
     """
     发送微信客服消息
@@ -125,35 +126,55 @@ class WeChatKFMessage(BaseWeChatAPI):
             msg={"msgtype": "news", "link": {"link": articles_data}},
         )
 
-    def send_msgmenu(self, user_id, open_kfid, head_content, menu_list, tail_content, msgid=""):
+    def send_msgmenu(
+        self, user_id, open_kfid, head_content, menu_list, tail_content, msgid=""
+    ):
         return self.send(
             user_id,
             open_kfid,
             msgid,
             msg={
                 "msgtype": "msgmenu",
-                "msgmenu": {"head_content": head_content, "list": menu_list, "tail_content": tail_content},
+                "msgmenu": {
+                    "head_content": head_content,
+                    "list": menu_list,
+                    "tail_content": tail_content,
+                },
             },
         )
 
-    def send_location(self, user_id, open_kfid, name, address, latitude, longitude, msgid=""):
+    def send_location(
+        self, user_id, open_kfid, name, address, latitude, longitude, msgid=""
+    ):
         return self.send(
             user_id,
             open_kfid,
             msgid,
             msg={
                 "msgtype": "location",
-                "msgmenu": {"name": name, "address": address, "latitude": latitude, "longitude": longitude},
+                "msgmenu": {
+                    "name": name,
+                    "address": address,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                },
             },
         )
 
-    def send_miniprogram(self, user_id, open_kfid, appid, title, thumb_media_id, pagepath, msgid=""):
+    def send_miniprogram(
+        self, user_id, open_kfid, appid, title, thumb_media_id, pagepath, msgid=""
+    ):
         return self.send(
             user_id,
             open_kfid,
             msgid,
             msg={
                 "msgtype": "miniprogram",
-                "msgmenu": {"appid": appid, "title": title, "thumb_media_id": thumb_media_id, "pagepath": pagepath},
+                "msgmenu": {
+                    "appid": appid,
+                    "title": title,
+                    "thumb_media_id": thumb_media_id,
+                    "pagepath": pagepath,
+                },
             },
         )
