@@ -20,6 +20,43 @@ class ProviderZhipu(ProviderOpenAIOfficial):
             default_persona,
         )
 
+    async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
+        # Check if ZhiPu web search is enabled
+        zhipu_web_search = self.provider_config.get("zhipu_web_search", False)
+
+        if zhipu_web_search:
+            model = payloads.get("model", "").lower()
+
+            # Add networking tools based on model type
+            if model == "glm-4-alltools":
+                # For glm-4-alltools model, use web_browser
+                zhipu_tools = [{"type": "web_browser"}]
+            else:
+                # For other models, use web_search
+                zhipu_tools = [
+                    {
+                        "type": "web_search",
+                        "web_search": {"enable": True, "search_result": True},
+                    }
+                ]
+
+            # Add ZhiPu-specific networking tools to the payload
+            if "tools" not in payloads:
+                payloads["tools"] = []
+            payloads["tools"].extend(zhipu_tools)
+
+            logger.debug(
+                f"ZhiPu networking tools added for model {model}: {zhipu_tools}"
+            )
+
+            # If ZhiPu native networking is enabled, skip AstrBot function tools
+            if tools:
+                logger.warning("智谱联网搜索已启用，函数工具将被忽略")
+                tools = None
+
+        # Call the parent implementation with modified payloads
+        return await super()._query(payloads, tools)
+
     async def text_chat(
         self,
         prompt: str,
