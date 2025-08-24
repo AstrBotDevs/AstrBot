@@ -1,4 +1,5 @@
 import json
+import os
 import anthropic
 import base64
 from typing import List
@@ -40,9 +41,22 @@ class ProviderAnthropic(Provider):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
-        self.client = AsyncAnthropic(
-            api_key=self.chosen_api_key, timeout=self.timeout, base_url=self.base_url
+        # 获取代理配置，优先使用提供商配置的代理，如果没有则使用环境变量
+        self.http_proxy = provider_config.get("http_proxy", "") or os.environ.get(
+            "http_proxy", None
         )
+
+        kwargs = {
+            "api_key": self.chosen_api_key,
+            "timeout": self.timeout,
+            "base_url": self.base_url,
+        }
+        if self.http_proxy:
+            import httpx
+
+            kwargs["http_client"] = httpx.AsyncClient(proxy=self.http_proxy)
+
+        self.client = AsyncAnthropic(**kwargs)
 
         self.set_model(provider_config["model_config"]["model"])
 
