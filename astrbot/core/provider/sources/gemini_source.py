@@ -96,18 +96,21 @@ class ProviderGoogleGenAI(Provider):
 
     async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
         """处理API错误，返回是否需要重试"""
-        if e.code == 429 or "API key not valid" in e.message:
+        error_str = str(e)  # 将异常转换为字符串
+        # if e.code == 429 or (e.code and e.code >= 500) or "API key not valid" in error_str:
+        # 类似500，503 这种临时的服务器错误是否需要重试,暂时不做处理
+        if e.code == 429 or "API key not valid" in error_str:
             keys.remove(self.chosen_api_key)
             if len(keys) > 0:
                 self.set_key(random.choice(keys))
                 logger.info(
-                    f"检测到 Key 异常({e.message})，正在尝试更换 API Key 重试... 当前 Key: {self.chosen_api_key[:12]}..."
+                    f"检测到 Key 异常({error_str})，正在尝试更换 API Key 重试... 当前 Key: {self.chosen_api_key[:12]}..."
                 )
                 await asyncio.sleep(1)
                 return True
             else:
                 logger.error(
-                    f"检测到 Key 异常({e.message})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}..."
+                    f"检测到 Key 异常({error_str})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}..."
                 )
                 raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
         else:
@@ -409,19 +412,20 @@ class ProviderGoogleGenAI(Provider):
                 break
 
             except APIError as e:
-                if "Developer instruction is not enabled" in e.message:
+                error_str = str(e)
+                if "Developer instruction is not enabled" in error_str:
                     logger.warning(
                         f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)"
                     )
                     system_instruction = None
-                elif "Function calling is not enabled" in e.message:
+                elif "Function calling is not enabled" in error_str:
                     logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除")
                     tools = None
                 elif (
-                    "Multi-modal output is not supported" in e.message
+                    "Multi-modal output is not supported" in error_str
                     or "Model does not support the requested response modalities"
-                    in e.message
-                    or "only supports text output" in e.message
+                    in error_str
+                    or "only supports text output" in error_str
                 ):
                     logger.warning(
                         f"{self.get_model()} 不支持多模态输出，降级为文本模态"
@@ -461,12 +465,13 @@ class ProviderGoogleGenAI(Provider):
                 )
                 break
             except APIError as e:
-                if "Developer instruction is not enabled" in e.message:
+                error_str = str(e)
+                if "Developer instruction is not enabled" in error_str:
                     logger.warning(
                         f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)"
                     )
                     system_instruction = None
-                elif "Function calling is not enabled" in e.message:
+                elif "Function calling is not enabled" in error_str:
                     logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除")
                     tools = None
                 else:
