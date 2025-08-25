@@ -14,6 +14,8 @@ from .star_handler import (
     register_agent,
     register_on_decorating_result,
     register_after_message_sent,
+    register_on_tool_start,
+    register_on_tool_end,
 )
 
 __all__ = [
@@ -32,4 +34,6 @@ __all__ = [
     "register_agent",
     "register_on_decorating_result",
     "register_after_message_sent",
+    "register_on_tool_start",
+    "register_on_tool_end",
 ]

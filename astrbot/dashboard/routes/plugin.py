@@ -51,6 +51,8 @@ class PluginRoute(Route):
             EventType.OnLLMResponseEvent: "LLM 响应后",
             EventType.OnDecoratingResultEvent: "回复消息前",
             EventType.OnCallingFuncToolEvent: "函数工具",
+            EventType.OnToolStartEvent: "Tool 请求开始",
+            EventType.OnToolEndEvent: "Tool 请求完成",
             EventType.OnAfterMessageSentEvent: "发送消息后",
         }
 

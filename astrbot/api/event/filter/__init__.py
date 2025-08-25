@@ -12,6 +12,8 @@ from astrbot.core.star.register import (
     register_llm_tool as llm_tool,
     register_on_decorating_result as on_decorating_result,
     register_after_message_sent as after_message_sent,
+    register_on_tool_start as on_tool_start,
+    register_on_tool_end as on_tool_end,
 )
 
 from astrbot.core.star.filter.event_message_type import (
@@ -46,4 +48,6 @@ __all__ = [
     "on_decorating_result",
     "after_message_sent",
     "on_llm_response",
+    "on_tool_start",
+    "on_tool_end",
 ]

@@ -24,7 +24,7 @@ from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
 from .astrbot_message import AstrBotMessage, Group
 from .platform_metadata import PlatformMetadata
-from .message_session import MessageSession, MessageSesion # noqa
+from .message_session import MessageSession, MessageSesion  # noqa
 
 
 class AstrMessageEvent(abc.ABC):

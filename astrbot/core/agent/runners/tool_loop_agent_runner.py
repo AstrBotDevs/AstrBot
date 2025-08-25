@@ -272,7 +272,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             try:
                                 await self.agent_hooks.on_tool_end(
                                     self.run_context,
-                                    func_tool_name,
+                                    func_tool,
                                     func_tool_args,
                                     resp,
                                 )
@@ -291,7 +291,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 )
                         try:
                             await self.agent_hooks.on_tool_end(
-                                self.run_context, func_tool_name, func_tool_args, None
+                                self.run_context, func_tool, func_tool_args, None
                             )
                         except Exception as e:
                             logger.error(
@@ -304,7 +304,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                         try:
                             await self.agent_hooks.on_tool_end(
-                                self.run_context, func_tool_name, func_tool_args, None
+                                self.run_context, func_tool, func_tool_args, None
                             )
                         except Exception as e:
                             logger.error(

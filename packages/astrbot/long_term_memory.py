@@ -88,7 +88,9 @@ class LongTermMemory:
 
         if cfg["ar_whitelist"] and (
             event.unified_msg_origin not in cfg["ar_whitelist"]
-            and (event.get_group_id() and event.get_group_id() not in cfg["ar_whitelist"])
+            and (
+                event.get_group_id() and event.get_group_id() not in cfg["ar_whitelist"]
+            )
         ):
             return False
 

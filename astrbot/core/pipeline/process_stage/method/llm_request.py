@@ -210,6 +210,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
 
 class MainAgentHooks(BaseAgentRunHooks[AgentContextWrapper]):
+    async def on_tool_start(self, run_context, tool, tool_args):
+        # 执行 Tool 开始事件钩子
+        await call_event_hook(
+            run_context.event, EventType.OnToolStartEvent, tool, tool_args
+        )
+
+    async def on_tool_end(self, run_context, tool, tool_args, tool_result):
+        # 执行 Tool 完成事件钩子
+        await call_event_hook(
+            run_context.event, EventType.OnToolEndEvent, tool, tool_args, tool_result
+        )
+
     async def on_agent_done(self, run_context, llm_response):
         # 执行事件钩子
         await call_event_hook(
@@ -434,7 +446,9 @@ class LLMRequestSubStage(Stage):
             provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
             # 如果模型不支持工具使用，但请求中包含工具列表，则清空。
             if "tool_use" not in provider_cfg:
-                logger.debug(f"用户设置提供商 {provider} 不支持工具使用，清空工具列表。")
+                logger.debug(
+                    f"用户设置提供商 {provider} 不支持工具使用，清空工具列表。"
+                )
                 req.func_tool = None
         # 插件可用性设置
         if event.plugins_name is not None and req.func_tool:

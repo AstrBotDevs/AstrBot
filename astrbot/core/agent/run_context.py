@@ -14,4 +14,5 @@ class ContextWrapper(Generic[TContext]):
     context: TContext
     event: AstrMessageEvent
 
+
 NoContext = ContextWrapper[None]

@@ -376,9 +376,11 @@ def register_llm_tool(name: str = None, **kwargs):
             # print(f"Registering tool {llm_tool_name} for agent", registering_agent._agent.name)
             if registering_agent._agent.tools is None:
                 registering_agent._agent.tools = []
-            registering_agent._agent.tools.append(llm_tools.spec_to_func(
-                llm_tool_name, args, docstring.description.strip(), awaitable
-            ))
+            registering_agent._agent.tools.append(
+                llm_tools.spec_to_func(
+                    llm_tool_name, args, docstring.description.strip(), awaitable
+                )
+            )
 
         return awaitable
 
@@ -447,6 +449,55 @@ def register_after_message_sent(**kwargs):
         _ = get_handler_or_create(
             awaitable, EventType.OnAfterMessageSentEvent, **kwargs
         )
+        return awaitable
+
+    return decorator
+
+
+def register_on_tool_start(**kwargs):
+    """当 Tool 请求开始时的事件
+
+    Examples:
+    ```py
+    from astrbot.api.event import AstrMessageEvent
+    from astrbot.core.agent.tool import FunctionTool
+
+    @register_on_tool_start()
+    async def test(event: AstrMessageEvent, tool: FunctionTool, tool_args: dict) -> None:
+        # 在工具调用开始时执行的逻辑
+        logger.info(f"Tool {tool.name} started with args: {tool_args}")
+    ```
+
+    请务必接收三个参数：event, tool, tool_args
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnToolStartEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_tool_end(**kwargs):
+    """当 Tool 请求完成时的事件
+
+    Examples:
+    ```py
+    from astrbot.api.event import AstrMessageEvent
+    from astrbot.core.agent.tool import FunctionTool
+    import mcp.types
+
+    @register_on_tool_end()
+    async def test(event: AstrMessageEvent, tool: FunctionTool, tool_args: dict, tool_result: mcp.types.CallToolResult | None) -> None:
+        # 在工具调用完成时执行的逻辑
+        logger.info(f"Tool {tool.name} finished with result: {tool_result}")
+    ```
+
+    请务必接收四个参数：event, tool, tool_args, tool_result
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnToolEndEvent, **kwargs)
         return awaitable
 
     return decorator

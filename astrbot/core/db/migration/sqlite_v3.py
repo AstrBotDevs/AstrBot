@@ -4,6 +4,7 @@ from astrbot.core.db.po import Platform, Stats
 from typing import Tuple, List, Dict, Any
 from dataclasses import dataclass
 
+
 @dataclass
 class Conversation:
     """LLM 对话存储
@@ -76,7 +77,7 @@ PRAGMA encoding = 'UTF-8';
 """
 
 
-class SQLiteDatabase():
+class SQLiteDatabase:
     def __init__(self, db_path: str) -> None:
         super().__init__()
         self.db_path = db_path
