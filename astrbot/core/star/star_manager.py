@@ -829,7 +829,8 @@ class PluginManager:
                 
                 results["success"].append({
                     "name": plugin_name,
-                    "message": f"更新成功: {current_version} -> {online_version}"
+                    "from_version": current_version,
+                    "to_version": online_version
                 })
                 logger.info(f"插件 {plugin_name} 更新成功")
             except Exception as e:

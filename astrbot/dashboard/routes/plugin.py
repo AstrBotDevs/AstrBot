@@ -440,10 +440,18 @@ class PluginRoute(Route):
             failed_count = len(results["failed"])
             skipped_count = len(results["skipped"])
             
-            message = f"批量更新完成: 成功 {success_count} 个, 失败 {failed_count} 个, 跳过 {skipped_count} 个"
-            logger.info(message)
+            # 返回结构化消息
+            message_data = {
+                "success_count": success_count,
+                "failed_count": failed_count, 
+                "skipped_count": skipped_count
+            }
             
-            return Response().ok(results, message).__dict__
+            # 日志仍使用中文
+            log_message = f"批量更新完成: 成功 {success_count} 个, 失败 {failed_count} 个, 跳过 {skipped_count} 个"
+            logger.info(log_message)
+            
+            return Response().ok(results, message_data).__dict__
         except Exception as e:
             logger.error(f"/api/plugin/update-all: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__

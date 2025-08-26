@@ -7,8 +7,17 @@ import ProxySelector from '@/components/shared/ProxySelector.vue';
 import axios from 'axios';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import MarkdownIt from 'markdown-it';
 
 import { ref, computed, onMounted, reactive } from 'vue';
+
+// 配置markdown-it，安全设置
+const md = new MarkdownIt({
+    html: false,        // 禁用HTML标签，防XSS
+    breaks: true,       // 换行转<br>
+    linkify: true,      // 自动转链接
+    typographer: false  // 禁用智能引号
+});
 
 
 const commonStore = useCommonStore();
@@ -34,7 +43,8 @@ const loadingDialog = reactive({
   show: false,
   title: "",
   statusCode: 0, // 0: loading, 1: success, 2: error,
-  result: ""
+  result: "",
+  resultData: null // 新增：用于存储结构化数据
 });
 const showPluginInfoDialog = ref(false);
 const selectedPlugin = ref({});
@@ -152,11 +162,19 @@ const resetLoadingDialog = () => {
   loadingDialog.title = tm('dialogs.loading.title');
   loadingDialog.statusCode = 0;
   loadingDialog.result = "";
+  loadingDialog.resultData = null;
 };
 
-const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
+const onLoadingDialogResult = (statusCode, result, timeToClose = 5000) => {
   loadingDialog.statusCode = statusCode;
-  loadingDialog.result = result;
+  // 如果result是对象，存储为结构化数据；否则存储为字符串
+  if (typeof result === 'object' && result !== null) {
+    loadingDialog.resultData = result;
+    loadingDialog.result = "";
+  } else {
+    loadingDialog.result = result;
+    loadingDialog.resultData = null;
+  }
   if (timeToClose === -1) return;
   setTimeout(resetLoadingDialog, timeToClose);
 };
@@ -271,55 +289,25 @@ const updateAllPlugins = async () => {
       return;
     }
 
-    // 显示详细结果
+    // 显示详细结果 - 使用结构化数据
     const results = res.data.data;
-    let resultMessage = `<div style="text-align: left; line-height: 1.6;">`;
-    resultMessage += `<h3 style="margin-bottom: 16px; color: #2e7d32;">${res.data.message}</h3>`;
     
-    if (results.success.length > 0) {
-      resultMessage += `<div style="margin-bottom: 16px;">`;
-      resultMessage += `<h4 style="color: #2e7d32; margin-bottom: 8px; display: flex; align-items: center;">`;
-      resultMessage += `<span style="color: #4caf50; font-size: 18px; margin-right: 6px;">✅</span>`;
-      resultMessage += `成功更新 (${results.success.length})</h4>`;
-      resultMessage += `<div style="background: #e8f5e8; border-radius: 8px; padding: 12px; border-left: 4px solid #4caf50;">`;
-      results.success.forEach(item => {
-        resultMessage += `<div style="margin-bottom: 4px;">• <strong>${item.name}</strong>`;
-        if (item.message && item.message.includes('->')) {
-          resultMessage += ` <span style="color: #666;">${item.message}</span>`;
-        }
-        resultMessage += `</div>`;
-      });
-      resultMessage += `</div></div>`;
-    }
+    // 使用结构化消息格式
+    const { success_count, failed_count, skipped_count } = res.data.message;
+    const displayMessage = tm('messages.batchUpdateCompleted', {
+      success: success_count,
+      failed: failed_count, 
+      skipped: skipped_count
+    });
     
-    if (results.failed.length > 0) {
-      resultMessage += `<div style="margin-bottom: 16px;">`;
-      resultMessage += `<h4 style="color: #d32f2f; margin-bottom: 8px; display: flex; align-items: center;">`;
-      resultMessage += `<span style="color: #f44336; font-size: 18px; margin-right: 6px;">❌</span>`;
-      resultMessage += `更新失败 (${results.failed.length})</h4>`;
-      resultMessage += `<div style="background: #ffeaea; border-radius: 8px; padding: 12px; border-left: 4px solid #f44336;">`;
-      results.failed.forEach(item => {
-        resultMessage += `<div style="margin-bottom: 4px;">• <strong>${item.name}</strong>`;
-        resultMessage += `<br><span style="color: #666; font-size: 12px; margin-left: 16px;">${item.error}</span></div>`;
-      });
-      resultMessage += `</div></div>`;
-    }
+    const updateResults = {
+      message: displayMessage,
+      success: results.success || [],
+      failed: results.failed || [],
+      skipped: results.skipped || []
+    };
     
-    if (results.skipped.length > 0) {
-      resultMessage += `<div style="margin-bottom: 16px;">`;
-      resultMessage += `<h4 style="color: #f57c00; margin-bottom: 8px; display: flex; align-items: center;">`;
-      resultMessage += `<span style="color: #ff9800; font-size: 18px; margin-right: 6px;">⏭️</span>`;
-      resultMessage += `已跳过 (${results.skipped.length})</h4>`;
-      resultMessage += `<div style="background: #fff8e1; border-radius: 8px; padding: 12px; border-left: 4px solid #ff9800;">`;
-      results.skipped.forEach(item => {
-        resultMessage += `<div style="margin-bottom: 4px;">• <strong>${item.name}</strong>`;
-        resultMessage += `<br><span style="color: #666; font-size: 12px; margin-left: 16px;">${item.reason}</span></div>`;
-      });
-      resultMessage += `</div></div>`;
-    }
-    
-    resultMessage += `</div>`;
-    onLoadingDialogResult(1, resultMessage);
+    onLoadingDialogResult(1, updateResults);
     setTimeout(async () => {
       toast(tm('messages.refreshing'), "info", 5000);
       try {
@@ -332,7 +320,7 @@ const updateAllPlugins = async () => {
     }, 5000);
   } catch (err) {
     const errorMsg = err.response?.data?.message || err.message || String(err);
-    onLoadingDialogResult(2, `批量更新失败: ${errorMsg}`, -1);
+    onLoadingDialogResult(2, `${tm('messages.batchUpdateFailed')}: ${errorMsg}`, -1);
   }
 };
 
@@ -788,7 +776,7 @@ onMounted(async () => {
                   <v-icon>mdi-update</v-icon>
                   {{ `${tm('buttons.updateAll')} (${updatablePluginsCount})` }}
                   <v-tooltip activator="parent" location="top">
-                    {{ `${updatablePluginsCount} 个插件有更新可用` }}
+                    {{ `${updatablePluginsCount}${tm('messages.pluginsHaveUpdates')}` }}
                   </v-tooltip>
                 </v-btn>
 
@@ -1182,7 +1170,64 @@ onMounted(async () => {
           <v-icon class="mb-6" :color="loadingDialog.statusCode === 1 ? 'success' : 'error'"
             :icon="loadingDialog.statusCode === 1 ? 'mdi-check-circle-outline' : 'mdi-alert-circle-outline'"
             size="128"></v-icon>
-          <div v-if="loadingDialog.result.includes('<div')" v-html="loadingDialog.result" class="text-left"></div>
+          
+          <!-- 结构化数据渲染 -->
+          <div v-if="loadingDialog.resultData" class="text-left">
+            <!-- 主消息 -->
+            <h3 class="mb-4 text-success text-center">{{ loadingDialog.resultData.message }}</h3>
+            
+            <!-- 成功更新的插件 -->
+            <div v-if="loadingDialog.resultData.success && loadingDialog.resultData.success.length > 0" class="mb-4">
+              <v-card color="success" variant="tonal" class="mb-2">
+                <v-card-title class="d-flex align-center">
+                  <span class="mr-2">✅</span>
+                  {{ tm('messages.updateSuccessTitle') }} ({{ loadingDialog.resultData.success.length }})
+                </v-card-title>
+                <v-card-text>
+                  <div v-for="item in loadingDialog.resultData.success" :key="item.name" class="mb-2">
+                    • <strong>{{ item.name }}</strong>
+                    <span v-if="item.from_version && item.to_version" class="text-medium-emphasis ml-2">
+                      {{ tm('messages.updateSuccessWithVersion', { from: item.from_version, to: item.to_version }) }}
+                    </span>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </div>
+            
+            <!-- 更新失败的插件 -->
+            <div v-if="loadingDialog.resultData.failed && loadingDialog.resultData.failed.length > 0" class="mb-4">
+              <v-card color="error" variant="tonal" class="mb-2">
+                <v-card-title class="d-flex align-center">
+                  <span class="mr-2">❌</span>
+                  {{ tm('messages.updateFailedTitle') }} ({{ loadingDialog.resultData.failed.length }})
+                </v-card-title>
+                <v-card-text>
+                  <div v-for="item in loadingDialog.resultData.failed" :key="item.name" class="mb-2">
+                    • <strong>{{ item.name }}</strong>
+                    <div class="text-caption text-medium-emphasis ml-4">{{ item.error }}</div>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </div>
+            
+            <!-- 跳过的插件 -->
+            <div v-if="loadingDialog.resultData.skipped && loadingDialog.resultData.skipped.length > 0" class="mb-4">
+              <v-card color="warning" variant="tonal" class="mb-2">
+                <v-card-title class="d-flex align-center">
+                  <span class="mr-2">⏭️</span>
+                  {{ tm('messages.updateSkippedTitle') }} ({{ loadingDialog.resultData.skipped.length }})
+                </v-card-title>
+                <v-card-text>
+                  <div v-for="item in loadingDialog.resultData.skipped" :key="item.name" class="mb-2">
+                    • <strong>{{ item.name }}</strong>
+                    <div class="text-caption text-medium-emphasis ml-4">{{ item.reason }}</div>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </div>
+          </div>
+          
+          <!-- 字符串结果渲染 -->
           <div v-else class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
         </div>
 
