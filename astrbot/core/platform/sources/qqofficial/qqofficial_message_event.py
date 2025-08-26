@@ -118,7 +118,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
-                if record_file_path:                # group record msg
+                if record_file_path: # group record msg
                     media = await self.upload_group_and_c2c_record(
                         record_file_path, 3, group_openid=source.group_openid
                     )
@@ -134,7 +134,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
-                if record_file_path:                    # c2c record
+                if record_file_path: # c2c record
                     media = await self.upload_group_and_c2c_record(
                         record_file_path, 3, openid = source.author.user_openid
                     )
@@ -210,7 +210,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             # 读取本地文件
             async with aiofiles.open(file_source, 'rb') as f:
                 file_content = await f.read()
-                payload["file_data"] = base64.b64encode(file_content).decode('utf-8') # use base64 encode
+                # use base64 encode
+                payload["file_data"] = base64.b64encode(file_content).decode('utf-8')
         else:
             # 使用URL
             payload["url"] = file_source
@@ -283,9 +284,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 else:
                     image_base64 = file_to_base64(i.file)
                 image_base64 = image_base64.removeprefix("base64://")
-            elif isinstance(i, Record):                                             # new: record
+            elif isinstance(i, Record):
                 if i.file:
-                    record_wav_path = await i.convert_to_file_path()                      # wav路径
+                    record_wav_path = await i.convert_to_file_path() # wav 路径
                     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
                     record_tecent_silk_path = os.path.join(temp_dir, f"{uuid.uuid4()}.silk")
                     try:
