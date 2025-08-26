@@ -125,11 +125,18 @@ const filteredPlugins = computed(() => {
   });
 });
 
+// 计算是否有可更新的插件
+const hasUpdatablePlugins = computed(() => {
+  return filteredExtensions.value.some(plugin => plugin.has_update);
+});
+
+const updatablePluginsCount = computed(() => {
+  return filteredExtensions.value.filter(plugin => plugin.has_update).length;
+});
+
 const pinnedPlugins = computed(() => {
   return pluginMarketData.value.filter(plugin => plugin?.pinned);
 });
-
-// 方法
 const toggleShowReserved = () => {
   showReserved.value = !showReserved.value;
 };
@@ -240,6 +247,92 @@ const updateExtension = async (extension_name) => {
     }, 1000);
   } catch (err) {
     toast(err, "error");
+  }
+};
+
+const updateAllPlugins = async () => {
+  loadingDialog.title = tm('status.updatingAllPlugins');
+  loadingDialog.show = true;
+  try {
+    // 获取需要更新的插件列表
+    const pluginsToUpdate = filteredExtensions.value.filter(plugin => plugin.has_update).map(plugin => ({
+      name: plugin.name,
+      current_version: plugin.version,
+      online_version: plugin.online_version
+    }));
+
+    const res = await axios.post('/api/plugin/update-all', {
+      proxy: localStorage.getItem('selectedGitHubProxy') || "",
+      plugins_to_update: pluginsToUpdate
+    });
+
+    if (res.data.status === "error") {
+      onLoadingDialogResult(2, res.data.message, -1);
+      return;
+    }
+
+    // 显示详细结果
+    const results = res.data.data;
+    let resultMessage = `<div style="text-align: left; line-height: 1.6;">`;
+    resultMessage += `<h3 style="margin-bottom: 16px; color: #2e7d32;">${res.data.message}</h3>`;
+    
+    if (results.success.length > 0) {
+      resultMessage += `<div style="margin-bottom: 16px;">`;
+      resultMessage += `<h4 style="color: #2e7d32; margin-bottom: 8px; display: flex; align-items: center;">`;
+      resultMessage += `<span style="color: #4caf50; font-size: 18px; margin-right: 6px;">✅</span>`;
+      resultMessage += `成功更新 (${results.success.length})</h4>`;
+      resultMessage += `<div style="background: #e8f5e8; border-radius: 8px; padding: 12px; border-left: 4px solid #4caf50;">`;
+      results.success.forEach(item => {
+        resultMessage += `<div style="margin-bottom: 4px;">• <strong>${item.name}</strong>`;
+        if (item.message && item.message.includes('->')) {
+          resultMessage += ` <span style="color: #666;">${item.message}</span>`;
+        }
+        resultMessage += `</div>`;
+      });
+      resultMessage += `</div></div>`;
+    }
+    
+    if (results.failed.length > 0) {
+      resultMessage += `<div style="margin-bottom: 16px;">`;
+      resultMessage += `<h4 style="color: #d32f2f; margin-bottom: 8px; display: flex; align-items: center;">`;
+      resultMessage += `<span style="color: #f44336; font-size: 18px; margin-right: 6px;">❌</span>`;
+      resultMessage += `更新失败 (${results.failed.length})</h4>`;
+      resultMessage += `<div style="background: #ffeaea; border-radius: 8px; padding: 12px; border-left: 4px solid #f44336;">`;
+      results.failed.forEach(item => {
+        resultMessage += `<div style="margin-bottom: 4px;">• <strong>${item.name}</strong>`;
+        resultMessage += `<br><span style="color: #666; font-size: 12px; margin-left: 16px;">${item.error}</span></div>`;
+      });
+      resultMessage += `</div></div>`;
+    }
+    
+    if (results.skipped.length > 0) {
+      resultMessage += `<div style="margin-bottom: 16px;">`;
+      resultMessage += `<h4 style="color: #f57c00; margin-bottom: 8px; display: flex; align-items: center;">`;
+      resultMessage += `<span style="color: #ff9800; font-size: 18px; margin-right: 6px;">⏭️</span>`;
+      resultMessage += `已跳过 (${results.skipped.length})</h4>`;
+      resultMessage += `<div style="background: #fff8e1; border-radius: 8px; padding: 12px; border-left: 4px solid #ff9800;">`;
+      results.skipped.forEach(item => {
+        resultMessage += `<div style="margin-bottom: 4px;">• <strong>${item.name}</strong>`;
+        resultMessage += `<br><span style="color: #666; font-size: 12px; margin-left: 16px;">${item.reason}</span></div>`;
+      });
+      resultMessage += `</div></div>`;
+    }
+    
+    resultMessage += `</div>`;
+    onLoadingDialogResult(1, resultMessage);
+    setTimeout(async () => {
+      toast(tm('messages.refreshing'), "info", 5000);
+      try {
+        await getExtensions();
+        toast(tm('messages.refreshSuccess'), "success");
+      } catch (error) {
+        const errorMsg = error.response?.data?.message || error.message || String(error);
+        toast(`${tm('messages.refreshFailed')}: ${errorMsg}`, "error");
+      }
+    }, 5000);
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || String(err);
+    onLoadingDialogResult(2, `批量更新失败: ${errorMsg}`, -1);
   }
 };
 
@@ -654,9 +747,9 @@ onMounted(async () => {
             </v-row>
           </div>
 
-
+          <v-window v-model="activeTab">
           <!-- 已安装插件标签页内容 -->
-          <v-tab-item v-show="activeTab === 'installed'">
+          <v-window-item value="installed">
             <v-row class="mb-4">
               <v-col cols="12" class="d-flex align-center flex-wrap ga-2">
                 <v-btn-group variant="outlined" density="comfortable" color="primary">
@@ -683,6 +776,20 @@ onMounted(async () => {
                 <v-btn class="ml-2" color="primary" variant="tonal" @click="dialog = true">
                   <v-icon>mdi-plus</v-icon>
                   {{ tm('buttons.install') }}
+                </v-btn>
+
+                <v-btn 
+                  v-show="hasUpdatablePlugins"
+                  class="ml-2" 
+                  color="warning" 
+                  variant="tonal" 
+                  @click="updateAllPlugins"
+                >
+                  <v-icon>mdi-update</v-icon>
+                  {{ `${tm('buttons.updateAll')} (${updatablePluginsCount})` }}
+                  <v-tooltip activator="parent" location="top">
+                    {{ `${updatablePluginsCount} 个插件有更新可用` }}
+                  </v-tooltip>
                 </v-btn>
 
                 <v-col cols="12" sm="auto" class="ml-auto">
@@ -846,10 +953,10 @@ onMounted(async () => {
                 </v-row>
               </div>
             </v-fade-transition>
-          </v-tab-item>
+          </v-window-item>
 
           <!-- 插件市场标签页内容 -->
-          <v-tab-item v-show="activeTab === 'market'">
+          <v-window-item value="market">
 
             <!-- <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small> -->
 
@@ -938,7 +1045,8 @@ onMounted(async () => {
                 </v-data-table>
               </v-col>
             </div>
-          </v-tab-item>
+          </v-window-item>
+          </v-window>
 
           <v-row v-if="loading_">
             <v-col cols="12" class="d-flex justify-center">
@@ -1074,7 +1182,8 @@ onMounted(async () => {
           <v-icon class="mb-6" :color="loadingDialog.statusCode === 1 ? 'success' : 'error'"
             :icon="loadingDialog.statusCode === 1 ? 'mdi-check-circle-outline' : 'mdi-alert-circle-outline'"
             size="128"></v-icon>
-          <div class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
+          <div v-if="loadingDialog.result.includes('<div')" v-html="loadingDialog.result" class="text-left"></div>
+          <div v-else class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
         </div>
 
         <div style="margin-top: 32px;">

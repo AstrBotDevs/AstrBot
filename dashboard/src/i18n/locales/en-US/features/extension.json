@@ -18,6 +18,7 @@
     "hideSystemPlugins": "Hide System Extensions",
     "platformConfig": "Platform Command Config",
     "install": "Install",
+    "updateAll": "Update All Extensions",
     "uninstall": "Uninstall",
     "update": "Update",
     "reload": "Reload",
@@ -40,6 +41,7 @@
     "disabled": "Disabled",
     "system": "System",
     "loading": "Loading...",
+    "updatingAllPlugins": "Updating all extensions...",
     "installed": "Installed",
     "unknown": "Unknown"
   },

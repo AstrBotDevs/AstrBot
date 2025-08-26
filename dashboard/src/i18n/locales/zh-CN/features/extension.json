@@ -18,6 +18,7 @@
     "hideSystemPlugins": "隐藏系统插件",
     "platformConfig": "平台命令配置",
     "install": "安装",
+    "updateAll": "升级所有插件",
     "uninstall": "卸载",
     "update": "更新",
     "reload": "重载",
@@ -40,6 +41,7 @@
     "disabled": "禁用",
     "system": "系统",
     "loading": "加载中...",
+    "updatingAllPlugins": "正在批量升级插件...",
     "installed": "已安装",
     "unknown": "未知"
   },

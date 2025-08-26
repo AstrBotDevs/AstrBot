@@ -34,6 +34,7 @@ class PluginRoute(Route):
             "/plugin/install": ("POST", self.install_plugin),
             "/plugin/install-upload": ("POST", self.install_plugin_upload),
             "/plugin/update": ("POST", self.update_plugin),
+            "/plugin/update-all": ("POST", self.update_all_plugins),
             "/plugin/uninstall": ("POST", self.uninstall_plugin),
             "/plugin/market_list": ("GET", self.get_online_plugins),
             "/plugin/off": ("POST", self.off_plugin),
@@ -416,6 +417,35 @@ class PluginRoute(Route):
             return Response().ok(None, "更新成功。").__dict__
         except Exception as e:
             logger.error(f"/api/plugin/update: {traceback.format_exc()}")
+            return Response().error(str(e)).__dict__
+
+    async def update_all_plugins(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        post_data = await request.json
+        proxy: str = post_data.get("proxy", None)
+        plugins_to_update = post_data.get("plugins_to_update", [])
+        
+        try:
+            logger.info(f"开始批量更新指定插件，数量: {len(plugins_to_update)}")
+            results = await self.plugin_manager.update_plugins_by_list(plugins_to_update, proxy)
+            
+            # 构建响应消息
+            success_count = len(results["success"])
+            failed_count = len(results["failed"])
+            skipped_count = len(results["skipped"])
+            
+            message = f"批量更新完成: 成功 {success_count} 个, 失败 {failed_count} 个, 跳过 {skipped_count} 个"
+            logger.info(message)
+            
+            return Response().ok(results, message).__dict__
+        except Exception as e:
+            logger.error(f"/api/plugin/update-all: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
     async def off_plugin(self):

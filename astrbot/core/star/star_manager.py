@@ -760,6 +760,88 @@ class PluginManager:
         await self.updator.update(plugin, proxy=proxy)
         await self.reload(plugin_name)
 
+    async def update_plugins_by_list(self, plugins_to_update: list, proxy=""):
+        """根据前端传递的插件列表进行批量更新
+        
+        Args:
+            plugins_to_update (list): 需要更新的插件列表，每个元素包含:
+                - name: 插件名称
+                - current_version: 当前版本
+                - online_version: 在线版本
+            proxy (str): 代理设置
+        
+        Returns:
+            dict: 更新结果统计
+        """
+        results = {
+            "success": [],
+            "failed": [],
+            "skipped": [],
+            "total_count": len(plugins_to_update)
+        }
+        
+        if not plugins_to_update:
+            logger.info("没有需要更新的插件")
+            return results
+        
+        for plugin_info in plugins_to_update:
+            plugin_name = plugin_info.get("name")
+            current_version = plugin_info.get("current_version", "unknown")
+            online_version = plugin_info.get("online_version", "unknown")
+            
+            if not plugin_name:
+                results["skipped"].append({
+                    "name": "unknown",
+                    "reason": "插件名称为空"
+                })
+                continue
+            
+            # 获取插件对象
+            plugin = self.context.get_registered_star(plugin_name)
+            if not plugin:
+                results["failed"].append({
+                    "name": plugin_name,
+                    "error": "插件不存在"
+                })
+                continue
+            
+            if plugin.reserved:
+                results["skipped"].append({
+                    "name": plugin_name,
+                    "reason": "系统保留插件，无法更新"
+                })
+                continue
+            
+            if not plugin.repo:
+                results["skipped"].append({
+                    "name": plugin_name,
+                    "reason": "缺少仓库信息，无法更新"
+                })
+                continue
+            
+            try:
+                logger.info(f"正在更新插件 {plugin_name}: {current_version} -> {online_version}")
+                
+                await self.updator.update(plugin, proxy=proxy)
+                
+                # 重载插件
+                await self.reload(plugin_name)
+                
+                results["success"].append({
+                    "name": plugin_name,
+                    "message": f"更新成功: {current_version} -> {online_version}"
+                })
+                logger.info(f"插件 {plugin_name} 更新成功")
+            except Exception as e:
+                error_msg = str(e)
+                results["failed"].append({
+                    "name": plugin_name,
+                    "error": error_msg
+                })
+                logger.error(f"插件 {plugin_name} 更新失败: {error_msg}")
+        
+        return results
+
     async def turn_off_plugin(self, plugin_name: str):
         """
         禁用一个插件。
