@@ -3,15 +3,23 @@ import botpy.message
 import botpy.types
 import botpy.types.message
 import asyncio
+import base64
+import aiofiles
 from astrbot.core.utils.io import file_to_base64, download_image_by_url
+from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.api.message_components import Plain, Image
+from astrbot.api.message_components import Plain, Image, Record
 from botpy import Client
 from botpy.http import Route
 from astrbot.api import logger
+from botpy.types.message import Media
 from botpy.types import message
+from typing import Optional
 import random
+import uuid
+import os
 
 
 class QQOfficialMessageEvent(AstrMessageEvent):
@@ -36,6 +44,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         stream_payload = {"state": 1, "id": None, "index": 0, "reset": False}
         last_edit_time = 0  # 上次编辑消息的时间
         throttle_interval = 1  # 编辑消息的间隔时间 (秒)
+        ret = None
         try:
             async for chain in generator:
                 source = self.message_obj.raw_message
@@ -85,9 +94,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             plain_text,
             image_base64,
             image_path,
+            record_file_path
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
 
-        if not plain_text and not image_base64 and not image_path:
+        if not plain_text and not image_base64 and not image_path and not record_file_path:
             return
 
         payload = {
@@ -98,11 +108,19 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if not isinstance(source, (botpy.message.Message, botpy.message.DirectMessage)):
             payload["msg_seq"] = random.randint(1, 10000)
 
+        ret = None
+
         match type(source):
             case botpy.message.GroupMessage:
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(
                         image_base64, 1, group_openid=source.group_openid
+                    )
+                    payload["media"] = media
+                    payload["msg_type"] = 7
+                if record_file_path: # group record msg
+                    media = await self.upload_group_and_c2c_record(
+                        record_file_path, 3, group_openid=source.group_openid
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
@@ -113,6 +131,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(
                         image_base64, 1, openid=source.author.user_openid
+                    )
+                    payload["media"] = media
+                    payload["msg_type"] = 7
+                if record_file_path: # c2c record
+                    media = await self.upload_group_and_c2c_record(
+                        record_file_path, 3, openid = source.author.user_openid
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
@@ -165,6 +189,59 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             )
             return await self.bot.api._http.request(route, json=payload)
 
+    async def upload_group_and_c2c_record(
+        self, 
+        file_source: str, 
+        file_type: int, 
+        srv_send_msg: bool = False,
+        **kwargs
+    ) -> Optional[Media]:
+        """
+        上传媒体文件
+        """
+        # 构建基础payload
+        payload = {
+            "file_type": file_type,
+            "srv_send_msg": srv_send_msg
+        }
+        
+        # 处理文件数据
+        if os.path.exists(file_source):
+            # 读取本地文件
+            async with aiofiles.open(file_source, 'rb') as f:
+                file_content = await f.read()
+                # use base64 encode
+                payload["file_data"] = base64.b64encode(file_content).decode('utf-8')
+        else:
+            # 使用URL
+            payload["url"] = file_source
+        
+        # 添加接收者信息和确定路由
+        if "openid" in kwargs:
+            payload["openid"] = kwargs["openid"]
+            route = Route("POST", "/v2/users/{openid}/files", openid=kwargs["openid"])
+        elif "group_openid" in kwargs:
+            payload["group_openid"] =kwargs["group_openid"]
+            route = Route("POST", "/v2/groups/{group_openid}/files", group_openid=kwargs["group_openid"])
+        else:
+            return None
+        
+        try:
+            # 使用底层HTTP请求
+            result = await self.bot.api._http.request(route, json=payload)
+            
+            if result:
+                return Media(
+                    file_uuid=result.get("file_uuid"),
+                    file_info=result.get("file_info"),
+                    ttl=result.get("ttl", 0),
+                    file_id=result.get("id", "")
+                )
+        except Exception as e:
+            logger.error(f"上传请求错误: {e}")
+        
+        return None
+    
     async def post_c2c_message(
         self,
         openid: str,
@@ -191,6 +268,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         plain_text = ""
         image_base64 = None  # only one img supported
         image_file_path = None
+        record_file_path = None
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
@@ -206,6 +284,21 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 else:
                     image_base64 = file_to_base64(i.file)
                 image_base64 = image_base64.removeprefix("base64://")
+            elif isinstance(i, Record):
+                if i.file:
+                    record_wav_path = await i.convert_to_file_path() # wav 路径
+                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                    record_tecent_silk_path = os.path.join(temp_dir, f"{uuid.uuid4()}.silk")
+                    try:
+                        duration = await wav_to_tencent_silk(record_wav_path, record_tecent_silk_path)
+                        if duration > 0:
+                            record_file_path = record_tecent_silk_path
+                        else:
+                            record_file_path = None                                 
+                            logger.error("转换音频格式时出错：音频时长不大于0")
+                    except Exception as e:
+                        logger.error(f"处理语音时出错: {e}")
+                        record_file_path = None                                     
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
-        return plain_text, image_base64, image_file_path
+        return plain_text, image_base64, image_file_path, record_file_path
