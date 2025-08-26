@@ -7,9 +7,7 @@ import ProxySelector from '@/components/shared/ProxySelector.vue';
 import axios from 'axios';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-
 import { ref, computed, onMounted, reactive } from 'vue';
-
 
 const commonStore = useCommonStore();
 const { t } = useI18n();
@@ -34,7 +32,8 @@ const loadingDialog = reactive({
   show: false,
   title: "",
   statusCode: 0, // 0: loading, 1: success, 2: error,
-  result: ""
+  result: "",
+  resultData: null // 新增：用于存储结构化数据
 });
 const showPluginInfoDialog = ref(false);
 const selectedPlugin = ref({});
@@ -125,11 +124,18 @@ const filteredPlugins = computed(() => {
   });
 });
 
+// 计算是否有可更新的插件
+const hasUpdatablePlugins = computed(() => {
+  return filteredExtensions.value.some(plugin => plugin.has_update);
+});
+
+const updatablePluginsCount = computed(() => {
+  return filteredExtensions.value.filter(plugin => plugin.has_update).length;
+});
+
 const pinnedPlugins = computed(() => {
   return pluginMarketData.value.filter(plugin => plugin?.pinned);
 });
-
-// 方法
 const toggleShowReserved = () => {
   showReserved.value = !showReserved.value;
 };
@@ -145,11 +151,19 @@ const resetLoadingDialog = () => {
   loadingDialog.title = tm('dialogs.loading.title');
   loadingDialog.statusCode = 0;
   loadingDialog.result = "";
+  loadingDialog.resultData = null;
 };
 
-const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
+const onLoadingDialogResult = (statusCode, result, timeToClose = 5000) => {
   loadingDialog.statusCode = statusCode;
-  loadingDialog.result = result;
+  // 如果result是对象，存储为结构化数据；否则存储为字符串
+  if (typeof result === 'object' && result !== null) {
+    loadingDialog.resultData = result;
+    loadingDialog.result = "";
+  } else {
+    loadingDialog.result = result;
+    loadingDialog.resultData = null;
+  }
   if (timeToClose === -1) return;
   setTimeout(resetLoadingDialog, timeToClose);
 };
@@ -240,6 +254,62 @@ const updateExtension = async (extension_name) => {
     }, 1000);
   } catch (err) {
     toast(err, "error");
+  }
+};
+
+const updateAllPlugins = async () => {
+  loadingDialog.title = tm('status.updatingAllPlugins');
+  loadingDialog.show = true;
+  try {
+    // 获取需要更新的插件列表
+    const pluginsToUpdate = filteredExtensions.value.filter(plugin => plugin.has_update).map(plugin => ({
+      name: plugin.name,
+      current_version: plugin.version,
+      online_version: plugin.online_version
+    }));
+
+    const res = await axios.post('/api/plugin/update', {
+      proxy: localStorage.getItem('selectedGitHubProxy') || "",
+      plugins_to_update: pluginsToUpdate
+    });
+
+    if (res.data.status === "error") {
+      onLoadingDialogResult(2, res.data.message, -1);
+      return;
+    }
+
+    // 显示详细结果 - 使用结构化数据
+    const results = res.data.data;
+    
+    // 使用结构化消息格式
+    const { success_count, failed_count, skipped_count } = res.data.message;
+    const displayMessage = tm('messages.batchUpdateCompleted', {
+      success: success_count,
+      failed: failed_count, 
+      skipped: skipped_count
+    });
+    
+    const updateResults = {
+      message: displayMessage,
+      success: results.success || [],
+      failed: results.failed || [],
+      skipped: results.skipped || []
+    };
+    
+    onLoadingDialogResult(1, updateResults);
+    setTimeout(async () => {
+      toast(tm('messages.refreshing'), "info", 5000);
+      try {
+        await getExtensions();
+        toast(tm('messages.refreshSuccess'), "success");
+      } catch (error) {
+        const errorMsg = error.response?.data?.message || error.message || String(error);
+        toast(`${tm('messages.refreshFailed')}: ${errorMsg}`, "error");
+      }
+    }, 5000);
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || String(err);
+    onLoadingDialogResult(2, `${tm('messages.batchUpdateFailed')}: ${errorMsg}`, -1);
   }
 };
 
@@ -654,9 +724,9 @@ onMounted(async () => {
             </v-row>
           </div>
 
-
+          <v-window v-model="activeTab">
           <!-- 已安装插件标签页内容 -->
-          <v-tab-item v-show="activeTab === 'installed'">
+          <v-window-item value="installed">
             <v-row class="mb-4">
               <v-col cols="12" class="d-flex align-center flex-wrap ga-2">
                 <v-btn-group variant="outlined" density="comfortable" color="primary">
@@ -683,6 +753,20 @@ onMounted(async () => {
                 <v-btn class="ml-2" color="primary" variant="tonal" @click="dialog = true">
                   <v-icon>mdi-plus</v-icon>
                   {{ tm('buttons.install') }}
+                </v-btn>
+
+                <v-btn 
+                  v-show="hasUpdatablePlugins"
+                  class="ml-2" 
+                  color="warning" 
+                  variant="tonal" 
+                  @click="updateAllPlugins"
+                >
+                  <v-icon>mdi-update</v-icon>
+                  {{ `${tm('buttons.updateAll')} (${updatablePluginsCount})` }}
+                  <v-tooltip activator="parent" location="top">
+                    {{ `${updatablePluginsCount}${tm('messages.pluginsHaveUpdates')}` }}
+                  </v-tooltip>
                 </v-btn>
 
                 <v-col cols="12" sm="auto" class="ml-auto">
@@ -846,10 +930,10 @@ onMounted(async () => {
                 </v-row>
               </div>
             </v-fade-transition>
-          </v-tab-item>
+          </v-window-item>
 
           <!-- 插件市场标签页内容 -->
-          <v-tab-item v-show="activeTab === 'market'">
+          <v-window-item value="market">
 
             <!-- <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small> -->
 
@@ -938,7 +1022,8 @@ onMounted(async () => {
                 </v-data-table>
               </v-col>
             </div>
-          </v-tab-item>
+          </v-window-item>
+          </v-window>
 
           <v-row v-if="loading_">
             <v-col cols="12" class="d-flex justify-center">
@@ -1074,7 +1159,65 @@ onMounted(async () => {
           <v-icon class="mb-6" :color="loadingDialog.statusCode === 1 ? 'success' : 'error'"
             :icon="loadingDialog.statusCode === 1 ? 'mdi-check-circle-outline' : 'mdi-alert-circle-outline'"
             size="128"></v-icon>
-          <div class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
+          
+          <!-- 结构化数据渲染 -->
+          <div v-if="loadingDialog.resultData" class="text-left">
+            <!-- 主消息 -->
+            <h3 class="mb-4 text-success text-center">{{ loadingDialog.resultData.message }}</h3>
+            
+            <!-- 成功更新的插件 -->
+            <div v-if="loadingDialog.resultData.success && loadingDialog.resultData.success.length > 0" class="mb-4">
+              <v-card color="success" variant="tonal" class="mb-2">
+                <v-card-title class="d-flex align-center">
+                  <span class="mr-2">✅</span>
+                  {{ tm('messages.updateSuccessTitle') }} ({{ loadingDialog.resultData.success.length }})
+                </v-card-title>
+                <v-card-text>
+                  <div v-for="item in loadingDialog.resultData.success" :key="item.name" class="mb-2">
+                    • <strong>{{ item.name }}</strong>
+                    <span v-if="item.from_version && item.to_version" class="text-medium-emphasis ml-2">
+                      {{ tm('messages.updateSuccessWithVersion', { from: item.from_version, to: item.to_version }) }}
+                    </span>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </div>
+            
+            <!-- 更新失败的插件 -->
+            <div v-if="loadingDialog.resultData.failed && loadingDialog.resultData.failed.length > 0" class="mb-4">
+              <v-card color="error" variant="tonal" class="mb-2">
+                <v-card-title class="d-flex align-center">
+                  <span class="mr-2">❌</span>
+                  {{ tm('messages.updateFailedTitle') }} ({{ loadingDialog.resultData.failed.length }})
+                </v-card-title>
+                <v-card-text>
+                  <div v-for="item in loadingDialog.resultData.failed" :key="item.name" class="mb-2">
+                    • <strong>{{ item.name }}</strong>
+                    <div class="text-caption text-medium-emphasis ml-4">{{ item.error }}</div>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </div>
+            
+            <!-- 跳过的插件 -->
+            <div v-if="loadingDialog.resultData.skipped && loadingDialog.resultData.skipped.length > 0" class="mb-4">
+              <v-card color="warning" variant="tonal" class="mb-2">
+                <v-card-title class="d-flex align-center">
+                  <span class="mr-2">⏭️</span>
+                  {{ tm('messages.updateSkippedTitle') }} ({{ loadingDialog.resultData.skipped.length }})
+                </v-card-title>
+                <v-card-text>
+                  <div v-for="item in loadingDialog.resultData.skipped" :key="item.name" class="mb-2">
+                    • <strong>{{ item.name }}</strong>
+                    <div class="text-caption text-medium-emphasis ml-4">{{ item.reason }}</div>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </div>
+          </div>
+          
+          <!-- 字符串结果渲染 -->
+          <div v-else class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
         </div>
 
         <div style="margin-top: 32px;">
