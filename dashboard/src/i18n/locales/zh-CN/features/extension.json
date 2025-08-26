@@ -16,7 +16,6 @@
   "buttons": {
     "showSystemPlugins": "显示系统插件",
     "hideSystemPlugins": "隐藏系统插件",
-    "platformConfig": "平台命令配置",
     "install": "安装",
     "uninstall": "卸载",
     "update": "更新",
@@ -88,18 +87,6 @@
       "title": "错误信息",
       "checkConsole": "详情请检查控制台"
     },
-    "platformConfig": {
-      "title": "平台命令可用性配置",
-      "description": "设置每个插件在不同平台上的可用性，勾选表示启用",
-      "noAdapters": "未找到平台适配器",
-      "noAdaptersDesc": "请先在 平台管理 中添加并配置平台适配器，然后再设置插件的平台可用性",
-      "goPlatforms": "前往平台管理",
-      "selectAll": "全选",
-      "selectAllNormal": "全选普通插件",
-      "selectAllSystem": "全选系统插件",
-      "selectNone": "全不选",
-      "toggleAll": "反选"
-    },
     "config": {
       "title": "插件配置",
       "noConfig": "这个插件没有配置"
@@ -137,8 +124,6 @@
     "installing": "正在从文件安装插件",
     "installingFromUrl": "正在从链接安装插件...",
     "installFailed": "安装插件失败:",
-    "getPlatformConfigFailed": "获取平台插件配置失败:",
-    "savePlatformConfigFailed": "保存平台插件配置失败:",
     "getMarketDataFailed": "获取插件市场数据失败:",
     "hasUpdate": "有新版本:",
     "confirmDelete": "确定要删除插件吗？",
