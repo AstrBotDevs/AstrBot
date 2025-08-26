@@ -7,18 +7,7 @@ import ProxySelector from '@/components/shared/ProxySelector.vue';
 import axios from 'axios';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import MarkdownIt from 'markdown-it';
-
 import { ref, computed, onMounted, reactive } from 'vue';
-
-// 配置markdown-it，安全设置
-const md = new MarkdownIt({
-    html: false,        // 禁用HTML标签，防XSS
-    breaks: true,       // 换行转<br>
-    linkify: true,      // 自动转链接
-    typographer: false  // 禁用智能引号
-});
-
 
 const commonStore = useCommonStore();
 const { t } = useI18n();
@@ -279,7 +268,7 @@ const updateAllPlugins = async () => {
       online_version: plugin.online_version
     }));
 
-    const res = await axios.post('/api/plugin/update-all', {
+    const res = await axios.post('/api/plugin/update', {
       proxy: localStorage.getItem('selectedGitHubProxy') || "",
       plugins_to_update: pluginsToUpdate
     });
