@@ -103,6 +103,7 @@ DEFAULT_CONFIG = {
     "t2i_endpoint": "",
     "t2i_use_file_service": False,
     "http_proxy": "",
+    "no_proxy": ["localhost", "127.0.0.1", "::1"],
     "dashboard": {
         "enable": True,
         "username": "astrbot",
@@ -1915,6 +1916,12 @@ CONFIG_METADATA_2 = {
                 "description": "HTTP 代理",
                 "type": "string",
                 "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`",
+            },
+            "no_proxy": {
+                "description": "直连地址列表",
+                "type": "list",
+                "items": {"type": "string"},
+                "hint": "在此处添加不希望通过代理访问的地址，例如内部服务地址。回车添加，可添加多个，如未设置代理请忽略此配置",
             },
             "timezone": {
                 "description": "时区",
