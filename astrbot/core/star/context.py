@@ -2,7 +2,12 @@ from asyncio import Queue
 from typing import List, Union
 
 from astrbot.core import sp
-from astrbot.core.provider.provider import Provider, TTSProvider, STTProvider, EmbeddingProvider
+from astrbot.core.provider.provider import (
+    Provider,
+    TTSProvider,
+    STTProvider,
+    EmbeddingProvider,
+)
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config.astrbot_config import AstrBotConfig

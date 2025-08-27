@@ -7,6 +7,7 @@ import asyncio
 import tempfile
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.ffmpeg_helper import get_ffmpeg_path
 
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
@@ -72,8 +73,11 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
     except Exception as e:
         logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
 
+        # Get the ffmpeg executable path
+        ffmpeg_cmd = get_ffmpeg_path()
+
         p = await asyncio.create_subprocess_exec(
-            "ffmpeg",
+            ffmpeg_cmd,
             "-y",
             "-i",
             input_path,

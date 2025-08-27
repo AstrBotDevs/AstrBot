@@ -7,6 +7,7 @@ from .star import star_map
 
 T = TypeVar("T", bound="StarHandlerMetadata")
 
+
 class StarHandlerRegistry(Generic[T]):
     def __init__(self):
         self.star_handlers_map: Dict[str, StarHandlerMetadata] = {}
@@ -49,7 +50,8 @@ class StarHandlerRegistry(Generic[T]):
         self, module_name: str
     ) -> List[StarHandlerMetadata]:
         return [
-            handler for handler in self._handlers
+            handler
+            for handler in self._handlers
             if handler.handler_module_path == module_name
         ]
 
@@ -66,6 +68,7 @@ class StarHandlerRegistry(Generic[T]):
 
     def __len__(self):
         return len(self._handlers)
+
 
 star_handlers_registry = StarHandlerRegistry()
 

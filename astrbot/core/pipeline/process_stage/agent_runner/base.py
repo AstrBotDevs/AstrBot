@@ -8,10 +8,11 @@ from enum import Enum, auto
 
 class AgentState(Enum):
     """Agent 状态枚举"""
-    IDLE = auto()          # 初始状态
-    RUNNING = auto()       # 运行中
-    DONE = auto()          # 完成
-    ERROR = auto()         # 错误状态
+
+    IDLE = auto()  # 初始状态
+    RUNNING = auto()  # 运行中
+    DONE = auto()  # 完成
+    ERROR = auto()  # 错误状态
 
 
 class AgentResponseData(T.TypedDict):
