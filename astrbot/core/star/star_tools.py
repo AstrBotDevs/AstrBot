@@ -182,7 +182,9 @@ class StarTools:
 
             plugin_name = metadata.name
 
-        data_dir = Path(os.path.join(get_astrbot_data_path(), "plugin_data", plugin_name))
+        data_dir = Path(
+            os.path.join(get_astrbot_data_path(), "plugin_data", plugin_name)
+        )
 
         try:
             data_dir.mkdir(parents=True, exist_ok=True)
