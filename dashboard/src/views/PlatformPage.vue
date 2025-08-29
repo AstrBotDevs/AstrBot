@@ -151,8 +151,6 @@
       {{ save_message }}
     </v-snackbar>
 
-    <WaitingForRestart ref="wfr"></WaitingForRestart>
-
     <!-- ID冲突确认对话框 -->
     <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
       <v-card>
@@ -359,7 +357,6 @@ export default {
           this.loading = false;
           this.showPlatformCfg = false;
           this.getConfig();
-          this.$refs.wfr.check();
           this.showSuccess(res.data.message || this.messages.updateSuccess);
         }).catch((err) => {
           this.loading = false;
@@ -413,7 +410,6 @@ export default {
       if (confirm(`${this.messages.deleteConfirm} ${platform.id}?`)) {
         axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
           this.getConfig();
-          this.$refs.wfr.check();
           this.showSuccess(res.data.message || this.messages.deleteSuccess);
         }).catch((err) => {
           this.showError(err.response?.data?.message || err.message);
@@ -429,7 +425,6 @@ export default {
         config: platform
       }).then((res) => {
         this.getConfig();
-        this.$refs.wfr.check();
         this.showSuccess(res.data.message || this.messages.statusUpdateSuccess);
       }).catch((err) => {
         platform.enable = !platform.enable; // 发生错误时回滚状态

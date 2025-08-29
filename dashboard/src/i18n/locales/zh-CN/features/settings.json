@@ -13,6 +13,11 @@
       "title": "重启",
       "subtitle": "重启 AstrBot",
       "button": "重启"
+    },
+    "migration": {
+      "title": "数据迁移到 v4.0.0 格式",
+      "subtitle": "如果您遇到数据兼容性问题，可以手动启动数据库迁移助手",
+      "button": "启动迁移助手"
     }
   }
 } 

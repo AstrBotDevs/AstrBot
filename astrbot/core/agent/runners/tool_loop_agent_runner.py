@@ -1,10 +1,12 @@
 import sys
 import traceback
 import typing as T
-from .base import BaseAgentRunner, AgentResponse, AgentResponseData, AgentState
-from ...context import PipelineContext
+from .base import BaseAgentRunner, AgentResponse, AgentState
+from ..hooks import BaseAgentRunHooks
+from ..tool_executor import BaseFunctionToolExecutor
+from ..run_context import ContextWrapper, TContext
+from ..response import AgentResponseData
 from astrbot.core.provider.provider import Provider
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
@@ -21,8 +23,8 @@ from mcp.types import (
     EmbeddedResource,
     TextResourceContents,
     BlobResourceContents,
+    CallToolResult,
 )
-from astrbot.core.star.star_handler import EventType
 from astrbot import logger
 
 if sys.version_info >= (3, 12):
@@ -31,28 +33,25 @@ else:
     from typing_extensions import override
 
 
-# TODO:
-# 1. 处理平台不兼容的处理器
-
-
-class ToolLoopAgent(BaseAgentRunner):
-    def __init__(
-        self, provider: Provider, event: AstrMessageEvent, pipeline_ctx: PipelineContext
-    ) -> None:
-        self.provider = provider
-        self.req = None
-        self.event = event
-        self.pipeline_ctx = pipeline_ctx
-        self._state = AgentState.IDLE
-        self.final_llm_resp = None
-        self.streaming = False
-
+class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     @override
-    async def reset(self, req: ProviderRequest, streaming: bool) -> None:
-        self.req = req
-        self.streaming = streaming
+    async def reset(
+        self,
+        provider: Provider,
+        request: ProviderRequest,
+        run_context: ContextWrapper[TContext],
+        tool_executor: BaseFunctionToolExecutor[TContext],
+        agent_hooks: BaseAgentRunHooks[TContext],
+        **kwargs: T.Any,
+    ) -> None:
+        self.req = request
+        self.streaming = kwargs.get("streaming", False)
+        self.provider = provider
         self.final_llm_resp = None
         self._state = AgentState.IDLE
+        self.tool_executor = tool_executor
+        self.agent_hooks = agent_hooks
+        self.run_context = run_context
 
     def _transition_state(self, new_state: AgentState) -> None:
         """转换 Agent 状态"""
@@ -77,6 +76,12 @@ class ToolLoopAgent(BaseAgentRunner):
         """
         if not self.req:
             raise ValueError("Request is not set. Please call reset() first.")
+
+        if self._state == AgentState.IDLE:
+            try:
+                await self.agent_hooks.on_agent_begin(self.run_context)
+            except Exception as e:
+                logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
 
         # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
@@ -124,12 +129,10 @@ class ToolLoopAgent(BaseAgentRunner):
             # 如果没有工具调用，转换到完成状态
             self.final_llm_resp = llm_resp
             self._transition_state(AgentState.DONE)
-
-            # 执行事件钩子
-            if await self.pipeline_ctx.call_event_hook(
-                self.event, EventType.OnLLMResponseEvent, llm_resp
-            ):
-                return
+            try:
+                await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+            except Exception as e:
+                logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 
         # 返回 LLM 结果
         if llm_resp.result_chain:
@@ -193,50 +196,33 @@ class ToolLoopAgent(BaseAgentRunner):
                 if not req.func_tool:
                     return
                 func_tool = req.func_tool.get_func(func_tool_name)
-                if func_tool.origin == "mcp":
-                    logger.info(
-                        f"从 MCP 服务 {func_tool.mcp_server_name} 调用工具函数：{func_tool.name}，参数：{func_tool_args}"
+                logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
+
+                try:
+                    await self.agent_hooks.on_tool_start(
+                        self.run_context, func_tool, func_tool_args
                     )
-                    client = req.func_tool.mcp_client_dict[func_tool.mcp_server_name]
-                    res = await client.session.call_tool(func_tool.name, func_tool_args)
-                    if not res:
-                        continue
-                    if isinstance(res.content[0], TextContent):
-                        tool_call_result_blocks.append(
-                            ToolCallMessageSegment(
-                                role="tool",
-                                tool_call_id=func_tool_id,
-                                content=res.content[0].text,
-                            )
-                        )
-                        yield MessageChain().message(res.content[0].text)
-                    elif isinstance(res.content[0], ImageContent):
-                        tool_call_result_blocks.append(
-                            ToolCallMessageSegment(
-                                role="tool",
-                                tool_call_id=func_tool_id,
-                                content="返回了图片(已直接发送给用户)",
-                            )
-                        )
-                        yield MessageChain(type="tool_direct_result").base64_image(
-                            res.content[0].data
-                        )
-                    elif isinstance(res.content[0], EmbeddedResource):
-                        resource = res.content[0].resource
-                        if isinstance(resource, TextResourceContents):
+                except Exception as e:
+                    logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
+
+                executor = self.tool_executor.execute(
+                    tool=func_tool,
+                    run_context=self.run_context,
+                    **func_tool_args,
+                )
+                async for resp in executor:
+                    if isinstance(resp, CallToolResult):
+                        res = resp
+                        if isinstance(res.content[0], TextContent):
                             tool_call_result_blocks.append(
                                 ToolCallMessageSegment(
                                     role="tool",
                                     tool_call_id=func_tool_id,
-                                    content=resource.text,
+                                    content=res.content[0].text,
                                 )
                             )
-                            yield MessageChain().message(resource.text)
-                        elif (
-                            isinstance(resource, BlobResourceContents)
-                            and resource.mimeType
-                            and resource.mimeType.startswith("image/")
-                        ):
+                            yield MessageChain().message(res.content[0].text)
+                        elif isinstance(res.content[0], ImageContent):
                             tool_call_result_blocks.append(
                                 ToolCallMessageSegment(
                                     role="tool",
@@ -247,43 +233,85 @@ class ToolLoopAgent(BaseAgentRunner):
                             yield MessageChain(type="tool_direct_result").base64_image(
                                 res.content[0].data
                             )
-                        else:
-                            tool_call_result_blocks.append(
-                                ToolCallMessageSegment(
-                                    role="tool",
-                                    tool_call_id=func_tool_id,
-                                    content="返回的数据类型不受支持",
-                                )
-                            )
-                            yield MessageChain().message("返回的数据类型不受支持。")
-                else:
-                    logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
-                    # 尝试调用工具函数
-                    wrapper = self.pipeline_ctx.call_handler(
-                        self.event, func_tool.handler, **func_tool_args
-                    )
-                    async for resp in wrapper:
-                        if resp is not None:
-                            # Tool 返回结果
-                            tool_call_result_blocks.append(
-                                ToolCallMessageSegment(
-                                    role="tool",
-                                    tool_call_id=func_tool_id,
-                                    content=resp,
-                                )
-                            )
-                            yield MessageChain().message(resp)
-                        else:
-                            # Tool 直接请求发送消息给用户
-                            # 这里我们将直接结束 Agent Loop。
-                            self._transition_state(AgentState.DONE)
-                            if res := self.event.get_result():
-                                if res.chain:
-                                    yield MessageChain(
-                                        chain=res.chain, type="tool_direct_result"
+                        elif isinstance(res.content[0], EmbeddedResource):
+                            resource = res.content[0].resource
+                            if isinstance(resource, TextResourceContents):
+                                tool_call_result_blocks.append(
+                                    ToolCallMessageSegment(
+                                        role="tool",
+                                        tool_call_id=func_tool_id,
+                                        content=resource.text,
                                     )
+                                )
+                                yield MessageChain().message(resource.text)
+                            elif (
+                                isinstance(resource, BlobResourceContents)
+                                and resource.mimeType
+                                and resource.mimeType.startswith("image/")
+                            ):
+                                tool_call_result_blocks.append(
+                                    ToolCallMessageSegment(
+                                        role="tool",
+                                        tool_call_id=func_tool_id,
+                                        content="返回了图片(已直接发送给用户)",
+                                    )
+                                )
+                                yield MessageChain(
+                                    type="tool_direct_result"
+                                ).base64_image(res.content[0].data)
+                            else:
+                                tool_call_result_blocks.append(
+                                    ToolCallMessageSegment(
+                                        role="tool",
+                                        tool_call_id=func_tool_id,
+                                        content="返回的数据类型不受支持",
+                                    )
+                                )
+                                yield MessageChain().message("返回的数据类型不受支持。")
 
-                self.event.clear_result()
+                            try:
+                                await self.agent_hooks.on_tool_end(
+                                    self.run_context,
+                                    func_tool_name,
+                                    func_tool_args,
+                                    resp,
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error in on_tool_end hook: {e}", exc_info=True
+                                )
+                    elif resp is None:
+                        # Tool 直接请求发送消息给用户
+                        # 这里我们将直接结束 Agent Loop。
+                        self._transition_state(AgentState.DONE)
+                        if res := self.run_context.event.get_result():
+                            if res.chain:
+                                yield MessageChain(
+                                    chain=res.chain, type="tool_direct_result"
+                                )
+                        try:
+                            await self.agent_hooks.on_tool_end(
+                                self.run_context, func_tool_name, func_tool_args, None
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Error in on_tool_end hook: {e}", exc_info=True
+                            )
+                    else:
+                        logger.warning(
+                            f"Tool 返回了不支持的类型: {type(resp)}，将忽略。"
+                        )
+
+                        try:
+                            await self.agent_hooks.on_tool_end(
+                                self.run_context, func_tool_name, func_tool_args, None
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Error in on_tool_end hook: {e}", exc_info=True
+                            )
+
+                self.run_context.event.clear_result()
             except Exception as e:
                 logger.warning(traceback.format_exc())
                 tool_call_result_blocks.append(
