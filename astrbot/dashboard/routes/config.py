@@ -16,9 +16,10 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
-from astrbot.core import logger
+from astrbot.core import logger, html_renderer
 from astrbot.core.provider import Provider
 import asyncio
+from astrbot.core.utils.t2i.network_strategy import CUSTOM_T2I_TEMPLATE_PATH
 
 
 def try_cast(value: str, type_: str):
@@ -184,8 +185,55 @@ class ConfigRoute(Route):
             "/config/provider/check_one": ("GET", self.check_one_provider_status),
             "/config/provider/list": ("GET", self.get_provider_config_list),
             "/config/provider/model_list": ("GET", self.get_provider_model_list),
+            "/config/astrbot/t2i-template/get": ("GET", self.get_t2i_template),
+            "/config/astrbot/t2i-template/save": ("POST", self.post_t2i_template),
+            "/config/astrbot/t2i-template/delete": ("DELETE", self.delete_t2i_template),
         }
         self.register_routes()
+
+    async def get_t2i_template(self):
+        """获取 T2I 模板"""
+        try:
+            template = await html_renderer.network_strategy.get_template()
+            has_custom_template = os.path.exists(CUSTOM_T2I_TEMPLATE_PATH)
+            return (
+                Response()
+                .ok({"template": template, "has_custom_template": has_custom_template})
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取模板失败: {str(e)}").__dict__
+
+    async def post_t2i_template(self):
+        """保存 T2I 模板"""
+        try:
+            post_data = await request.json
+            if not post_data or "template" not in post_data:
+                return Response().error("缺少模板内容").__dict__
+
+            template_content = post_data["template"]
+
+            # 保存自定义模板到文件
+            with open(CUSTOM_T2I_TEMPLATE_PATH, "w", encoding="utf-8") as f:
+                f.write(template_content)
+
+            return Response().ok(message="模板保存成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"保存模板失败: {str(e)}").__dict__
+
+    async def delete_t2i_template(self):
+        """删除自定义 T2I 模板，恢复默认模板"""
+        try:
+            if os.path.exists(CUSTOM_T2I_TEMPLATE_PATH):
+                os.remove(CUSTOM_T2I_TEMPLATE_PATH)
+                return Response().ok(message="已恢复默认模板").__dict__
+            else:
+                return Response().ok(message="未找到自定义模板文件").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"删除模板失败: {str(e)}").__dict__
 
     async def get_abconf_list(self):
         """获取所有 AstrBot 配置文件的列表"""

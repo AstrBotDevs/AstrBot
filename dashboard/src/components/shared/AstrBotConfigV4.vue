@@ -6,6 +6,7 @@ import ProviderSelector from './ProviderSelector.vue'
 import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
+import T2ITemplateEditor from './T2ITemplateEditor.vue'
 import { useI18n } from '@/i18n/composables'
 
 
@@ -245,6 +246,9 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 <PluginSetSelector 
                   v-model="createSelectorModel(itemKey).value"
                 />
+              </div>
+              <div v-else-if="itemMeta?._special === 't2i_template'">
+                <T2ITemplateEditor />
               </div>
             </v-col>
           </v-row>
