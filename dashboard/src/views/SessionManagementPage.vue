@@ -480,7 +480,7 @@
 
     <!-- 会话命名编辑对话框 -->
     <v-dialog v-model="nameEditDialog" max-width="500" min-height="60%">
-      <v-card v-if="selectedSessionForName" rounded="12">
+      <v-card v-if="selectedSessionForName">
         <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
           <v-icon color="white" class="me-2">mdi-rename-box</v-icon>
           <span>{{ tm('nameEditor.title') }}</span>
@@ -490,8 +490,9 @@
           </v-btn>
         </v-card-title>
 
-        <v-card-text class="pa-4">
-          <v-text-field
+        <v-card-text>
+          <div style="padding-left: 16px; padding-right: 16px;">
+            <v-text-field
             v-model="newSessionName"
             :label="tm('nameEditor.customName')"
             :placeholder="tm('nameEditor.placeholder')"
@@ -518,6 +519,7 @@
           >
             {{ tm('nameEditor.hint') }}
           </v-alert>
+          </div>
         </v-card-text>
 
         <v-card-actions class="px-4 pb-4">
