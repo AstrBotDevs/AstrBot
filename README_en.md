@@ -71,7 +71,8 @@ See docs: [Source Code Deployment](https://astrbot.app/deploy/astrbot/cli.html)
 | [WeChat Work](https://github.com/Soulter/astrbot_plugin_wecom) | ✔      | Private chats       | Text, Images, Voice |
 | Feishu                                                         | ✔      | Group chats         | Text, Images        |
 | WeChat Open Platform                                           | 🚧      | Planned             | -                   |
-| Discord                                                        | 🚧      | Planned             | -                   |
+| Discord                                                        | ✔      | Social chats        | Text                |
+| Misskey                                                        | ✔      | Social chats        | Text                |
 | WhatsApp                                                       | 🚧      | Planned             | -                   |
 | Xiaomi Speakers                                                | 🚧      | Planned             | -                   |
 
