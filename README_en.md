@@ -70,6 +70,7 @@ See docs: [Source Code Deployment](https://astrbot.app/deploy/astrbot/cli.html)
 | [Telegram](https://github.com/Soulter/astrbot_plugin_telegram) | ✔      | Private/Group chats | Text, Images        |
 | [WeChat Work](https://github.com/Soulter/astrbot_plugin_wecom) | ✔      | Private chats       | Text, Images, Voice |
 | Feishu                                                         | ✔      | Group chats         | Text, Images        |
+| Matrix (Element, etc.)                                         | ✔      | Private/Group chats | Text, Images, Files |
 | WeChat Open Platform                                           | 🚧      | Planned             | -                   |
 | Discord                                                        | 🚧      | Planned             | -                   |
 | WhatsApp                                                       | 🚧      | Planned             | -                   |
