@@ -66,7 +66,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
         return chunks
 
     @classmethod
-    async def send_with_client(cls, client: ExtBot, message: MessageChain, user_name: str):
+    async def send_with_client(
+        cls, client: ExtBot, message: MessageChain, user_name: str
+    ):
         image_path = None
 
         has_reply = False
@@ -148,7 +150,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             "chat_id": user_name,
         }
         if message_thread_id:
-            payload["reply_to_message_id"] = message_thread_id
+            payload["message_thread_id"] = message_thread_id
 
         delta = ""
         current_content = ""
