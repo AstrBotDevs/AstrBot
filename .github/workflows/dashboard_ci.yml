@@ -39,7 +39,8 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ env.COMMIT_SHA }}
-          repo: AstrBotDevs/astrbot-release-harbour
+          owner: AstrBotDevs
+          repo: astrbot-release-harbour
           body: "Automated release from commit ${{ env.COMMIT_SHA }}"
           token: ${{ secrets.ASTRBOT_HARBOUR_TOKEN }}
           artifacts: "dashboard/dist.zip"
