@@ -2261,12 +2261,21 @@ CONFIG_METADATA_3_SYSTEM = {
                         "options": ["remote", "local"],
                     },
                     "t2i_endpoint": {
-                        "description": "文本转图像服务接口",
+                        "description": "文本转图像服务 API 地址",
                         "type": "string",
                         "hint": "为空时使用 AstrBot API 服务",
                         "condition": {
                             "t2i_strategy": "remote",
                         },
+                    },
+                    "t2i_template": {
+                        "description": "文本转图像自定义模版",
+                        "type": "bool",
+                        "hint": "启用后可自定义 HTML 模板用于文转图渲染。",
+                        "condition": {
+                            "t2i_strategy": "remote",
+                        },
+                        "_special": "t2i_template"
                     },
                     "log_level": {
                         "description": "控制台日志级别",
