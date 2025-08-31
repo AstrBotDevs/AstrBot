@@ -36,7 +36,7 @@ let dashboardHasNewVersion = ref(false);
 let dashboardCurrentVersion = ref('');
 let version = ref('');
 let releases = ref([]);
-let devCommits = ref([]);
+let devCommits = ref<{ sha: string; date: string; message: string }[]>([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
 
