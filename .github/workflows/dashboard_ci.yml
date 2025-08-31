@@ -38,9 +38,9 @@ jobs:
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ env.COMMIT_SHA }}
+          tag: release-${{ github.sha }}
           owner: AstrBotDevs
           repo: astrbot-release-harbour
-          body: "Automated release from commit ${{ env.COMMIT_SHA }}"
+          body: "Automated release from commit ${{ github.sha }}"
           token: ${{ secrets.ASTRBOT_HARBOUR_TOKEN }}
           artifacts: "dashboard/dist.zip"
