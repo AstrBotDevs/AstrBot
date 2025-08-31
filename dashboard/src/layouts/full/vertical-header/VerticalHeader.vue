@@ -342,8 +342,7 @@ commonStore.getStartTime();
             </div>
 
             <div class="mb-4 mt-4">
-              <small>{{ t('core.header.updateDialog.tip') }} <a
-                  href="https://github.com/Soulter/AstrBot/releases">{{ t('core.header.updateDialog.tipLink') }}</a>
+              <small>{{ t('core.header.updateDialog.tip') }}
                 {{ t('core.header.updateDialog.tipContinue') }}</small>
             </div>
 
@@ -383,7 +382,7 @@ commonStore.getStartTime();
                   </div>
                 </v-alert>
 
-                <v-data-table :headers="releasesHeader" :items="releases" item-key="name">
+                <v-data-table :headers="releasesHeader" :items="releases" item-key="name" :items-per-page="5">
                   <template v-slot:item.tag_name="{ item }: { item: { tag_name: string } }">
                     <div class="d-flex align-center">
                       <span>{{ item.tag_name }}</span>
