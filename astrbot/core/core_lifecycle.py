@@ -55,14 +55,18 @@ class AstrBotCoreLifecycle:
             os.environ["https_proxy"] = proxy_config
             os.environ["http_proxy"] = proxy_config
             logger.debug(f"Using proxy: {proxy_config}")
+            # 设置 no_proxy
+            no_proxy_list = self.astrbot_config.get("no_proxy", [])
+            os.environ["no_proxy"] = ",".join(no_proxy_list)
         else:
             # 清空代理环境变量
             if "https_proxy" in os.environ:
                 del os.environ["https_proxy"]
             if "http_proxy" in os.environ:
                 del os.environ["http_proxy"]
+            if "no_proxy" in os.environ:
+                del os.environ["no_proxy"]
             logger.debug("HTTP proxy cleared")
-        os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
 
     async def initialize(self):
         """

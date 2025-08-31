@@ -1,4 +1,4 @@
-<p align="center">
+<img width="430" height="31" alt="image" src="https://github.com/user-attachments/assets/474c822c-fab7-41be-8c23-6dae252823ed" /><p align="center">
  
 ![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
 
@@ -25,7 +25,7 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
 </div>
 
-AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用的插件系统和完善的大语言模型（LLM）接入功能的聊天机器人及开发框架。
+AstrBot 是一个开源的一站式 Agentic 聊天机器人平台及开发框架。
 
 ## ✨ 主要功能
 

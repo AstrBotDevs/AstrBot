@@ -65,7 +65,7 @@ class UpdateRoute(Route):
                         "version": f"v{VERSION}",
                         "has_new_version": ret is not None,
                         "dashboard_version": dv,
-                        "dashboard_has_new_version": dv != f"v{VERSION}",
+                        "dashboard_has_new_version": dv and dv != f"v{VERSION}",
                     },
                 ).__dict__
         except Exception as e:
@@ -99,11 +99,12 @@ class UpdateRoute(Route):
                 latest=latest, version=version, proxy=proxy
             )
 
-            if latest:
-                try:
-                    await download_dashboard()
-                except Exception as e:
-                    logger.error(f"下载管理面板文件失败: {e}。")
+            try:
+                await download_dashboard(
+                    latest=latest, version=version, proxy=proxy
+                )
+            except Exception as e:
+                logger.error(f"下载管理面板文件失败: {e}。")
 
             # pip 更新依赖
             logger.info("更新依赖中...")

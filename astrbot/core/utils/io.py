@@ -8,6 +8,7 @@ import base64
 import zipfile
 import uuid
 import psutil
+import logging
 
 import certifi
 
@@ -15,6 +16,8 @@ from typing import Union
 
 from PIL import Image
 from .astrbot_path import get_astrbot_data_path
+
+logger = logging.getLogger("astrbot")
 
 
 def on_error(func, path, exc_info):
@@ -212,19 +215,50 @@ async def get_dashboard_version():
     return None
 
 
-async def download_dashboard(path: str = None, extract_path: str = "data"):
+async def download_dashboard(
+    path: str | None = None,
+    extract_path: str = "data",
+    latest: bool = True,
+    version: str | None = None,
+    proxy: str | None = None,
+):
     """下载管理面板文件"""
     if path is None:
         path = os.path.join(get_astrbot_data_path(), "dashboard.zip")
 
-    dashboard_release_url = "https://astrbot-registry.soulter.top/download/astrbot-dashboard/latest/dist.zip"
-    try:
-        await download_file(dashboard_release_url, path, show_progress=True)
-    except BaseException as _:
-        dashboard_release_url = (
-            "https://github.com/Soulter/AstrBot/releases/latest/download/dist.zip"
+    if latest or len(str(version)) != 40:
+        logger.info("准备下载最新发行版本的 AstrBot WebUI")
+        ver_name = "latest" if latest else version
+        dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
+        try:
+            await download_file(dashboard_release_url, path, show_progress=True)
+        except BaseException as _:
+            if latest:
+                dashboard_release_url = "https://github.com/Soulter/AstrBot/releases/latest/download/dist.zip"
+            else:
+                dashboard_release_url = f"https://github.com/Soulter/AstrBot/releases/download/{version}/dist.zip"
+            if proxy:
+                dashboard_release_url = f"{proxy}/{dashboard_release_url}"
+            await download_file(dashboard_release_url, path, show_progress=True)
+    else:
+        logger.info(f"准备下载指定版本的 AstrBot WebUI: {version}")
+
+        url = (
+            "https://api.github.com/repos/AstrBotDevs/astrbot-release-harbour/releases"
         )
-        await download_file(dashboard_release_url, path, show_progress=True)
-    print("解压管理面板文件中...")
+        if proxy:
+            url = f"{proxy}/{url}"
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    releases = await resp.json()
+                    for release in releases:
+                        if version in release["tag_name"]:
+                            download_url = release["assets"][0]["browser_download_url"]
+                            await download_file(download_url, path, show_progress=True)
+                else:
+                    logger.warning(f"未找到指定的版本的 Dashboard 构建文件: {version}")
+                    return
+
     with zipfile.ZipFile(path, "r") as z:
         z.extractall(extract_path)

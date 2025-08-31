@@ -181,14 +181,13 @@ class RepoZipUpdator:
         """
         os.makedirs(target_dir, exist_ok=True)
         update_dir = ""
-        logger.info(f"解压文件: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = z.namelist()[0]
             z.extractall(target_dir)
+        logger.debug(f"解压文件完成: {zip_path}")
 
         files = os.listdir(os.path.join(target_dir, update_dir))
         for f in files:
-            logger.info(f"移动更新文件/目录: {f}")
             if os.path.isdir(os.path.join(target_dir, update_dir, f)):
                 if os.path.exists(os.path.join(target_dir, f)):
                     shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
@@ -198,13 +197,13 @@ class RepoZipUpdator:
             shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
 
         try:
-            logger.info(
+            logger.debug(
                 f"删除临时更新文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}"
             )
             shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
             os.remove(zip_path)
         except BaseException:
-            logger.warn(
+            logger.warning(
                 f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}"
             )
 
