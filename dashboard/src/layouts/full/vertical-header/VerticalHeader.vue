@@ -189,23 +189,46 @@ function getReleases() {
 }
 
 function getDevCommits() {
-  fetch('https://api.github.com/repos/Soulter/AstrBot/commits', {
-    headers: {
-      'Host': 'api.github.com',
-      'Referer': 'https://api.github.com'
-    }
-  })
+  let proxy = localStorage.getItem('selectedGitHubProxy') || '';
+  const originalUrl = "https://api.github.com/repos/Soulter/AstrBot/commits";
+  let commits_url = originalUrl;
+  if (proxy !== '') {
+    proxy = proxy.endsWith('/') ? proxy : proxy + '/';
+    commits_url = proxy + originalUrl;
+  }
+
+  function fetchCommits(url: string, onError?: () => void) {
+    fetch(url, {
+      headers: {
+        'Host': 'api.github.com',
+        'Referer': 'https://api.github.com'
+      }
+    })
       .then(response => response.json())
       .then(data => {
-        devCommits.value = data.map((commit: any) => ({
-          sha: commit.sha,
-          date: new Date(commit.commit.author.date).toLocaleString(),
-          message: commit.commit.message
-        }));
+        devCommits.value = Array.isArray(data)
+          ? data.map((commit: any) => ({
+              sha: commit.sha,
+              date: new Date(commit.commit.author.date).toLocaleString(),
+              message: commit.commit.message
+            }))
+          : [];
       })
       .catch(err => {
-        console.log(err);
+        if (onError) {
+          onError();
+        } else {
+          console.log('获取开发版提交信息失败:', err);
+        }
       });
+  }
+
+  fetchCommits(commits_url, () => {
+    if (proxy !== '' && commits_url !== originalUrl) {
+      console.log('使用代理请求失败，尝试直接请求');
+      fetchCommits(originalUrl);
+    }
+  });
 }
 
 function switchVersion(version: string) {
