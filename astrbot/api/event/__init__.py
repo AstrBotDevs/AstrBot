@@ -15,6 +15,8 @@ from astrbot.core.message.message_event_result import (
     ResultContentType,
 )
 
+from astrbot.core.platform.astr_message_event import MessageSesion as MessageSession
+
 
 __all__ = [
     "MessageEventResult",
@@ -22,5 +24,6 @@ __all__ = [
     "CommandResult",
     "EventResultType",
     "AstrMessageEvent",
+    "MessageSession",
     "ResultContentType",
 ]

@@ -27,6 +27,11 @@ from .platform_metadata import PlatformMetadata
 
 @dataclass
 class MessageSesion:
+    """
+    消息会话
+    用于统一标识一个消息会话
+    """
+
     platform_name: str
     message_type: MessageType
     session_id: str
