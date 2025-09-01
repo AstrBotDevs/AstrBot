@@ -42,6 +42,9 @@ from astrbot.core.star.filter.platform_adapter_type import (
 from astrbot.core.star.filter.permission import PermissionTypeFilter, PermissionType
 from astrbot.core.star.filter.custom_filter import CustomFilter
 
+# 注册平台适配器
+from astrbot.core.provider.register import register_provider_adapter
+
 __all__ = [
     "register",
     "command",
@@ -64,4 +67,5 @@ __all__ = [
     "PermissionTypeFilter",
     "PermissionType",
     "CustomFilter",
+    "register_provider_adapter",
 ]

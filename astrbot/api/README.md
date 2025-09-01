@@ -20,4 +20,6 @@ astrbot.api.provider: 包括了所有大模型供应商相关的导入
 astrbot.api.star: 包括了所有插件相关的导入
 astrbot.api.star.register: 包括了所有插件注册 Handler 相关的导入
 
+astrbot.api.tool: 包括了所有大模型工具, agent 相关的导入
+
 astrbot.api.util: 包括了所有的实用工具的导入
