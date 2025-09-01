@@ -1,0 +1,90 @@
+{
+  "logoTitle": "AstrBot 仪表盘",
+  "version": {
+    "hasNewVersion": "AstrBot 有新版本！",
+    "dashboardHasNewVersion": "WebUI 有新版本！"
+  },
+  "buttons": {
+    "update": "更新",
+    "account": "账户",
+    "theme": {
+      "light": "浅色模式",
+      "dark": "深色模式"
+    }
+  },
+  "updateDialog": {
+    "title": "更新 AstrBot",
+    "currentVersion": "当前版本",
+    "status": {
+      "checking": "正在检查更新...",
+      "switching": "正在切换版本...",
+      "updating": "正在更新..."
+    },
+    "tabs": {
+      "release": "😊 正式版",
+      "dev": "🧐 开发版(master 分支)"
+    },
+    "updateToLatest": "更新到最新版本",
+    "preRelease": "预发布",
+    "preReleaseWarning": {
+      "title": "预发布版本提醒",
+      "description": "标有预发布标签的版本可能存在未知问题或 Bug，不建议在生产环境使用。如发现问题，请提交至 ",
+      "issueLink": "GitHub Issues"
+    },
+    "tip": "💡 TIP: ",
+    "tipContinue": "默认在切换版本时会下载对应版本的 WebUI 文件。WebUI 代码位于项目的 dashboard 目录，您可使用 npm 自行构建。",
+    "dockerTip": "`更新到最新版本` 按钮会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker 部署，也可以重新拉取镜像或者使用",
+    "dockerTipLink": "watchtower",
+    "dockerTipContinue": "来自动监控拉取。",
+    "table": {
+      "tag": "标签",
+      "publishDate": "发布时间",
+      "content": "内容",
+      "sourceUrl": "源码地址",
+      "actions": "操作",
+      "sha": "SHA",
+      "date": "日期",
+      "message": "信息",
+      "view": "查看",
+      "switch": "切换"
+    },
+    "manualInput": {
+      "title": "手动输入版本号或 Commit SHA",
+      "placeholder": "输入版本号或 master 分支下的 commit hash。",
+      "hint": "如 v3.3.16 (不带 SHA) 或 42e5ec5d80b93b6bfe8b566754d45ffac4c3fe0b",
+      "linkText": "查看 master 分支提交记录（点击右边的 copy 即可复制）",
+      "confirm": "确定切换"
+    },
+    "dashboardUpdate": {
+      "title": "单独更新管理面板到最新版本",
+      "currentVersion": "当前版本",
+      "hasNewVersion": "有新版本！",
+      "isLatest": "已经是最新版本了。",
+      "downloadAndUpdate": "下载并更新"
+    }
+  },
+  "accountDialog": {
+    "title": "修改账户",
+    "securityWarning": "安全提醒: 请修改默认密码以确保账户安全",
+    "form": {
+      "currentPassword": "当前密码",
+      "newPassword": "新密码",
+      "newUsername": "新用户名 (可选)",
+      "passwordHint": "密码长度至少 8 位",
+      "usernameHint": "留空表示不修改用户名",
+      "defaultCredentials": "默认用户名和密码均为 astrbot"
+    },
+    "validation": {
+      "passwordRequired": "请输入密码",
+      "passwordMinLength": "密码长度至少 8 位",
+      "usernameMinLength": "用户名长度至少3位"
+    },
+    "actions": {
+      "save": "保存修改",
+      "cancel": "取消"
+    },
+    "messages": {
+      "updateFailed": "修改失败，请重试"
+    }
+  }
+} 

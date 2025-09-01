@@ -88,7 +88,10 @@ class ConversationManager:
         return self.session_conversations.get(unified_msg_origin, None)
 
     async def get_conversation(
-        self, unified_msg_origin: str, conversation_id: str
+        self,
+        unified_msg_origin: str,
+        conversation_id: str,
+        create_if_not_exists: bool = False,
     ) -> Conversation:
         """获取会话的对话
 
@@ -98,6 +101,13 @@ class ConversationManager:
         Returns:
             conversation (Conversation): 对话对象
         """
+        conv = self.db.get_conversation_by_user_id(unified_msg_origin, conversation_id)
+        if not conv and create_if_not_exists:
+            # 如果对话不存在且需要创建，则新建一个对话
+            conversation_id = await self.new_conversation(unified_msg_origin)
+            return self.db.get_conversation_by_user_id(
+                unified_msg_origin, conversation_id
+            )
         return self.db.get_conversation_by_user_id(unified_msg_origin, conversation_id)
 
     async def get_conversations(self, unified_msg_origin: str) -> List[Conversation]:

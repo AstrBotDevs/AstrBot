@@ -1,4 +1,3 @@
-import os
 import aiohttp
 import datetime
 import builtins
@@ -10,11 +9,12 @@ import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api import sp
 from astrbot.api.provider import ProviderRequest
+from astrbot.core import DEMO_MODE
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_manager import PluginManager
@@ -25,6 +25,7 @@ from astrbot.core.config.default import VERSION
 from .long_term_memory import LongTermMemory
 from astrbot.core import logger
 from astrbot.api.message_components import Plain, Image, Reply
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from typing import Union
 from enum import Enum
 
@@ -54,12 +55,6 @@ class RstScene(Enum):
         return cls.PRIVATE
 
 
-@star.register(
-    name="astrbot",
-    desc="AstrBot 基础指令结合 + 拓展功能",
-    author="Soulter",
-    version="4.0.0",
-)
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
@@ -139,6 +134,7 @@ class Main(star.Star):
 {notice}"""
 
         event.set_result(MessageEventResult().message(msg).use_t2i(False))
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("llm")
     async def llm(self, event: AstrMessageEvent):
@@ -231,6 +227,9 @@ class Main(star.Star):
     @plugin.command("off")
     async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = None):
         """禁用插件"""
+        if DEMO_MODE:
+            event.set_result(MessageEventResult().message("演示模式下无法禁用插件。"))
+            return
         if not plugin_name:
             event.set_result(
                 MessageEventResult().message("/plugin off <插件名> 禁用插件。")
@@ -243,6 +242,9 @@ class Main(star.Star):
     @plugin.command("on")
     async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = None):
         """启用插件"""
+        if DEMO_MODE:
+            event.set_result(MessageEventResult().message("演示模式下无法启用插件。"))
+            return
         if not plugin_name:
             event.set_result(
                 MessageEventResult().message("/plugin on <插件名> 启用插件。")
@@ -255,6 +257,9 @@ class Main(star.Star):
     @plugin.command("get")
     async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = None):
         """安装插件"""
+        if DEMO_MODE:
+            event.set_result(MessageEventResult().message("演示模式下无法安装插件。"))
+            return
         if not plugin_repo:
             event.set_result(
                 MessageEventResult().message("/plugin get <插件仓库地址> 安装插件")
@@ -329,16 +334,18 @@ class Main(star.Star):
 
     @filter.command("tts")
     async def tts(self, event: AstrMessageEvent):
-        """开关文本转语音"""
-        config = self.context.get_config()
-        if config["provider_tts_settings"]["enable"]:
-            config["provider_tts_settings"]["enable"] = False
-            config.save_config()
-            event.set_result(MessageEventResult().message("已关闭文本转语音。"))
-            return
-        config["provider_tts_settings"]["enable"] = True
-        config.save_config()
-        event.set_result(MessageEventResult().message("已开启文本转语音。"))
+        """开关文本转语音（会话级别）"""
+        session_id = event.unified_msg_origin
+        current_status = SessionServiceManager.is_tts_enabled_for_session(session_id)
+
+        # 切换状态
+        new_status = not current_status
+        SessionServiceManager.set_tts_status_for_session(session_id, new_status)
+
+        status_text = "已开启" if new_status else "已关闭"
+        event.set_result(
+            MessageEventResult().message(f"{status_text}当前会话的文本转语音。")
+        )
 
     @filter.command("sid")
     async def sid(self, event: AstrMessageEvent):
@@ -413,20 +420,21 @@ UID: {user_id} 此 ID 可用于设置管理员。
             event.set_result(MessageEventResult().message("删除白名单成功。"))
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
-    
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")
     async def provider(
         self, event: AstrMessageEvent, idx: Union[str, int] = None, idx2: int = None
     ):
         """查看或者切换 LLM Provider"""
+        umo = event.unified_msg_origin
 
         if idx is None:
             ret = "## 载入的 LLM 提供商\n"
             for idx, llm in enumerate(self.context.get_all_providers()):
                 id_ = llm.meta().id
                 ret += f"{idx + 1}. {id_} ({llm.meta().model})"
-                provider_using = self.context.get_using_provider()
+                provider_using = self.context.get_using_provider(umo=umo)
                 if provider_using and provider_using.meta().id == id_:
                     ret += " (当前使用)"
                 ret += "\n"
@@ -437,7 +445,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 for idx, tts in enumerate(tts_providers):
                     id_ = tts.meta().id
                     ret += f"{idx + 1}. {id_}"
-                    tts_using = self.context.get_using_tts_provider()
+                    tts_using = self.context.get_using_tts_provider(umo=umo)
                     if tts_using and tts_using.meta().id == id_:
                         ret += " (当前使用)"
                     ret += "\n"
@@ -448,7 +456,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 for idx, stt in enumerate(stt_providers):
                     id_ = stt.meta().id
                     ret += f"{idx + 1}. {id_}"
-                    stt_using = self.context.get_using_stt_provider()
+                    stt_using = self.context.get_using_stt_provider(umo=umo)
                     if stt_using and stt_using.meta().id == id_:
                         ret += " (当前使用)"
                     ret += "\n"
@@ -461,46 +469,50 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 ret += "\n使用 /provider stt <切换> STT 提供商。"
 
             event.set_result(MessageEventResult().message(ret))
-        else:
-            if idx == "tts":
-                if idx2 is None:
-                    event.set_result(MessageEventResult().message("请输入序号。"))
-                    return
-                else:
-                    if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
-                        event.set_result(MessageEventResult().message("无效的序号。"))
-                    provider = self.context.get_all_tts_providers()[idx2 - 1]
-                    id_ = provider.meta().id
-                    self.context.provider_manager.curr_tts_provider_inst = provider
-                    sp.put("curr_provider_tts", id_)
-                    event.set_result(
-                        MessageEventResult().message(f"成功切换到 {id_}。")
-                    )
-            elif idx == "stt":
-                if idx2 is None:
-                    event.set_result(MessageEventResult().message("请输入序号。"))
-                    return
-                else:
-                    if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
-                        event.set_result(MessageEventResult().message("无效的序号。"))
-                    provider = self.context.get_all_stt_providers()[idx2 - 1]
-                    id_ = provider.meta().id
-                    self.context.provider_manager.curr_stt_provider_inst = provider
-                    sp.put("curr_provider_stt", id_)
-                    event.set_result(
-                        MessageEventResult().message(f"成功切换到 {id_}。")
-                    )
-            elif isinstance(idx, int):
-                if idx > len(self.context.get_all_providers()) or idx < 1:
-                    event.set_result(MessageEventResult().message("无效的序号。"))
-
-                provider = self.context.get_all_providers()[idx - 1]
-                id_ = provider.meta().id
-                self.context.provider_manager.curr_provider_inst = provider
-                sp.put("curr_provider", id_)
-                event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+        elif idx == "tts":
+            if idx2 is None:
+                event.set_result(MessageEventResult().message("请输入序号。"))
+                return
             else:
-                event.set_result(MessageEventResult().message("无效的参数。"))
+                if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
+                    event.set_result(MessageEventResult().message("无效的序号。"))
+                provider = self.context.get_all_tts_providers()[idx2 - 1]
+                id_ = provider.meta().id
+                await self.context.provider_manager.set_provider(
+                    provider_id=id_,
+                    provider_type=ProviderType.TEXT_TO_SPEECH,
+                    umo=umo,
+                )
+                event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+        elif idx == "stt":
+            if idx2 is None:
+                event.set_result(MessageEventResult().message("请输入序号。"))
+                return
+            else:
+                if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
+                    event.set_result(MessageEventResult().message("无效的序号。"))
+                provider = self.context.get_all_stt_providers()[idx2 - 1]
+                id_ = provider.meta().id
+                await self.context.provider_manager.set_provider(
+                    provider_id=id_,
+                    provider_type=ProviderType.SPEECH_TO_TEXT,
+                    umo=umo,
+                )
+                event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+        elif isinstance(idx, int):
+            if idx > len(self.context.get_all_providers()) or idx < 1:
+                event.set_result(MessageEventResult().message("无效的序号。"))
+
+            provider = self.context.get_all_providers()[idx - 1]
+            id_ = provider.meta().id
+            await self.context.provider_manager.set_provider(
+                provider_id=id_,
+                provider_type=ProviderType.CHAT_COMPLETION,
+                umo=umo,
+            )
+            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+        else:
+            event.set_result(MessageEventResult().message("无效的参数。"))
 
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent):
@@ -533,13 +545,13 @@ UID: {user_id} 此 ID 可用于设置管理员。
             )
             return
 
-        if not self.context.get_using_provider():
+        if not self.context.get_using_provider(message.unified_msg_origin):
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。")
             )
             return
 
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
@@ -572,14 +584,15 @@ UID: {user_id} 此 ID 可用于设置管理员。
             ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
 
         message.set_result(MessageEventResult().message(ret))
-    
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(
         self, message: AstrMessageEvent, idx_or_name: Union[int, str] = None
     ):
         """查看或者切换模型"""
-        if not self.context.get_using_provider():
+        prov = self.context.get_using_provider(message.unified_msg_origin)
+        if not prov:
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。")
             )
@@ -590,7 +603,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         if idx_or_name is None:
             models = []
             try:
-                models = await self.context.get_using_provider().get_models()
+                models = await prov.get_models()
             except BaseException as e:
                 err_msg = api_key_pattern.sub("key=***", str(e))
                 message.set_result(
@@ -605,7 +618,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 ret += f"\n{i}. {model}"
                 i += 1
 
-            curr_model = self.context.get_using_provider().get_model() or "无"
+            curr_model = prov.get_model() or "无"
             ret += f"\n当前模型: [{curr_model}]"
 
             ret += "\nTips: 使用 /model <模型名/编号>，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
@@ -614,7 +627,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             if isinstance(idx_or_name, int):
                 models = []
                 try:
-                    models = await self.context.get_using_provider().get_models()
+                    models = await prov.get_models()
                 except BaseException as e:
                     message.set_result(
                         MessageEventResult().message("获取模型列表失败: " + str(e))
@@ -625,49 +638,38 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 else:
                     try:
                         new_model = models[idx_or_name - 1]
-                        self.context.get_using_provider().set_model(new_model)
+                        prov.set_model(new_model)
                     except BaseException as e:
                         message.set_result(
                             MessageEventResult().message("切换模型未知错误: " + str(e))
                         )
                     message.set_result(MessageEventResult().message("切换模型成功。"))
             else:
-                self.context.get_using_provider().set_model(idx_or_name)
+                prov.set_model(idx_or_name)
                 message.set_result(
-                    MessageEventResult().message(
-                        f"切换模型到 {self.context.get_using_provider().get_model()}。"
-                    )
+                    MessageEventResult().message(f"切换模型到 {prov.get_model()}。")
                 )
 
     @filter.command("history")
     async def his(self, message: AstrMessageEvent, page: int = 1):
         """查看对话记录"""
-        if not self.context.get_using_provider():
+        if not self.context.get_using_provider(message.unified_msg_origin):
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。")
             )
             return
 
         size_per_page = 6
-        session_curr_cid = (
-            await self.context.conversation_manager.get_curr_conversation_id(
-                message.unified_msg_origin
-            )
-        )
+
+        conv_mgr = self.context.conversation_manager
+        umo = message.unified_msg_origin
+        session_curr_cid = await conv_mgr.get_curr_conversation_id(umo)
 
         if not session_curr_cid:
-            message.set_result(
-                MessageEventResult().message(
-                    "当前未处于对话状态，请 /switch 序号 切换或者 /new 创建。"
-                )
-            )
-            return
+            session_curr_cid = await conv_mgr.new_conversation(umo)
 
-        (
-            contexts,
-            total_pages,
-        ) = await self.context.conversation_manager.get_human_readable_context(
-            message.unified_msg_origin, session_curr_cid, page, size_per_page
+        contexts, total_pages = await conv_mgr.get_human_readable_context(
+            umo, session_curr_cid, page, size_per_page
         )
 
         history = ""
@@ -676,12 +678,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 context = context[:150] + "..."
             history += f"{context}\n"
 
-        ret = f"""当前对话历史记录：
-{history}
-第 {page} 页 | 共 {total_pages} 页
-
-*输入 /history 2 跳转到第 2 页
-"""
+        ret = (
+            f"当前对话历史记录："
+            f"{history if history else '无历史记录'}\n\n"
+            f"第 {page} 页 | 共 {total_pages} 页\n"
+            f"*输入 /history 2 跳转到第 2 页"
+        )
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
 
@@ -689,7 +691,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def convs(self, message: AstrMessageEvent, page: int = 1):
         """查看对话列表"""
 
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             """原有的Dify处理逻辑保持不变"""
             ret = "Dify 对话列表:\n"
@@ -779,7 +781,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         """
         创建新对话
         """
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
@@ -807,7 +809,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("groupnew")
     async def groupnew_conv(self, message: AstrMessageEvent, sid: str):
         """创建新群聊对话"""
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
@@ -844,7 +846,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             )
             return
 
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
             data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
@@ -898,7 +900,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("rename")
     async def rename_conv(self, message: AstrMessageEvent, new_name: str):
         """重命名对话"""
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
 
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
@@ -930,7 +932,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             )
             return
 
-        provider = self.context.get_using_provider()
+        provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             assert isinstance(provider, ProviderDify)
             dify_cid = provider.conversation_ids.pop(message.unified_msg_origin, None)
@@ -971,32 +973,33 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("key")
     async def key(self, message: AstrMessageEvent, index: int = None):
-        if not self.context.get_using_provider():
+        prov = self.context.get_using_provider(message.unified_msg_origin)
+        if not prov:
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。")
             )
             return
 
         if index is None:
-            keys_data = self.context.get_using_provider().get_keys()
-            curr_key = self.context.get_using_provider().get_current_key()
+            keys_data = prov.get_keys()
+            curr_key = prov.get_current_key()
             ret = "Key:"
             for i, k in enumerate(keys_data):
                 ret += f"\n{i + 1}. {k[:8]}"
 
             ret += f"\n当前 Key: {curr_key[:8]}"
-            ret += "\n当前模型: " + self.context.get_using_provider().get_model()
+            ret += "\n当前模型: " + prov.get_model()
             ret += "\n使用 /key <idx> 切换 Key。"
 
             message.set_result(MessageEventResult().message(ret).use_t2i(False))
         else:
-            keys_data = self.context.get_using_provider().get_keys()
+            keys_data = prov.get_keys()
             if index > len(keys_data) or index < 1:
                 message.set_result(MessageEventResult().message("Key 序号错误。"))
             else:
                 try:
                     new_key = keys_data[index - 1]
-                    self.context.get_using_provider().set_key(new_key)
+                    prov.set_key(new_key)
                 except BaseException as e:
                     message.set_result(
                         MessageEventResult().message("切换 Key 未知错误: " + str(e))
@@ -1015,14 +1018,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
         curr_cid_title = "无"
         if cid:
             conversation = await self.context.conversation_manager.get_conversation(
-                message.unified_msg_origin, cid
+                unified_msg_origin=message.unified_msg_origin,
+                conversation_id=cid,
+                create_if_not_exists=True,
             )
-            if not conversation:
-                message.set_result(
-                    MessageEventResult().message(
-                        "请先进入一个对话。可以使用 /new 创建。"
-                    )
-                )
             if not conversation.persona_id and not conversation.persona_id == "[%None]":
                 curr_persona_name = (
                     self.context.provider_manager.selected_default_persona["name"]
@@ -1152,24 +1151,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
             sp.put("session_variables", session_vars)
             yield event.plain_result(f"会话 {uid} 变量 {key} 移除成功。")
 
-    @filter.command("gewe_logout")
-    async def gewe_logout(self, event: AstrMessageEvent):
-        platforms = self.context.platform_manager.platform_insts
-        for platform in platforms:
-            if platform.meta().name == "gewechat":
-                yield event.plain_result("正在登出 gewechat")
-                await platform.logout()
-                yield event.plain_result("已登出 gewechat，请重启 AstrBot")
-                return
-
-    @filter.command("gewe_code")
-    async def gewe_code(self, event: AstrMessageEvent, code: str):
-        """保存 gewechat 验证码"""
-        code_path = os.path.join(get_astrbot_data_path(), "temp", "gewe_code")
-        with open(code_path, "w", encoding="utf-8") as f:
-            f.write(code)
-        yield event.plain_result("验证码已保存。")
-
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         """群聊记忆增强"""
@@ -1195,7 +1176,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
             if need_active:
                 """主动回复"""
-                provider = self.context.get_using_provider()
+                provider = self.context.get_using_provider(event.unified_msg_origin)
                 if not provider:
                     logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
                     return
@@ -1240,6 +1221,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 except BaseException as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
+
+    @filter.on_decorating_result()
+    async def decorate_result(self, event: AstrMessageEvent):
+        logger.debug("Decorating result for event: %s", event)
 
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
@@ -1300,12 +1285,36 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 ) and not req.contexts:
                     req.contexts[:0] = begin_dialogs
 
-        if quote and quote.message_str:
+        if quote:
+            sender_info = ""
             if quote.sender_nickname:
                 sender_info = f"(Sent by {quote.sender_nickname})"
-            else:
-                sender_info = ""
-            req.system_prompt += f"\nUser is quoting the message{sender_info}: {quote.message_str}, please consider the context."
+            message_str = quote.message_str or "[Empty Text]"
+            req.system_prompt += (
+                f"\nUser is quoting a message{sender_info}.\n"
+                f"Here are the information of the quoted message: Text Content: {message_str}.\n"
+            )
+            image_seg = None
+            if quote.chain:
+                for comp in quote.chain:
+                    if isinstance(comp, Image):
+                        image_seg = comp
+                        break
+            if image_seg:
+                try:
+                    if prov := self.context.get_using_provider(
+                        event.unified_msg_origin
+                    ):
+                        llm_resp = await prov.text_chat(
+                            prompt="Please describe the image content.",
+                            image_urls=[await image_seg.convert_to_file_path()],
+                        )
+                        if llm_resp.completion_text:
+                            req.system_prompt += (
+                                f"Image Caption: {llm_resp.completion_text}\n"
+                            )
+                except BaseException as e:
+                    logger.error(f"处理引用图片失败: {e}")
 
         if self.ltm:
             try:

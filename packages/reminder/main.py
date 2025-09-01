@@ -11,9 +11,6 @@ from astrbot.api import llm_tool, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
-@star.register(
-    name="astrbot-reminder", desc="使用 LLM 待办提醒", author="Soulter", version="0.0.1"
-)
 class Main(star.Star):
     """使用 LLM 待办提醒。只需对 LLM 说想要提醒的事情和时间即可。比如：`之后每天这个时候都提醒我做多邻国`"""
 
@@ -112,7 +109,7 @@ class Main(star.Star):
         Args:
             text(string): Must Required. The content of the reminder.
             datetime_str(string): Required when user's reminder is a single reminder. The datetime string of the reminder, Must format with %Y-%m-%d %H:%M
-            cron_expression(string): Required when user's reminder is a repeated reminder. The cron expression of the reminder.
+            cron_expression(string): Required when user's reminder is a repeated reminder. The cron expression of the reminder. Monday is 0 and Sunday is 6.
             human_readable_cron(string): Optional. The human readable cron expression of the reminder.
         """
         if event.get_platform_name() == "qq_official":

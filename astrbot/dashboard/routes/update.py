@@ -48,7 +48,7 @@ class UpdateRoute(Route):
                         "version": f"v{VERSION}",
                         "has_new_version": ret is not None,
                         "dashboard_version": dv,
-                        "dashboard_has_new_version": dv != f"v{VERSION}",
+                        "dashboard_has_new_version": dv and dv != f"v{VERSION}",
                     },
                 ).__dict__
         except Exception as e:
@@ -82,16 +82,17 @@ class UpdateRoute(Route):
                 latest=latest, version=version, proxy=proxy
             )
 
-            if latest:
-                try:
-                    await download_dashboard()
-                except Exception as e:
-                    logger.error(f"下载管理面板文件失败: {e}。")
+            try:
+                await download_dashboard(
+                    latest=latest, version=version, proxy=proxy
+                )
+            except Exception as e:
+                logger.error(f"下载管理面板文件失败: {e}。")
 
             # pip 更新依赖
             logger.info("更新依赖中...")
             try:
-                pip_installer.install(requirements_path="requirements.txt")
+                await pip_installer.install(requirements_path="requirements.txt")
             except Exception as e:
                 logger.error(f"更新依赖失败: {e}")
 
@@ -140,7 +141,7 @@ class UpdateRoute(Route):
         if not package:
             return Response().error("缺少参数 package 或不合法。").__dict__
         try:
-            pip_installer.install(package, mirror=mirror)
+            await pip_installer.install(package, mirror=mirror)
             return Response().ok(None, "安装成功。").__dict__
         except Exception as e:
             logger.error(f"/api/update_pip: {traceback.format_exc()}")

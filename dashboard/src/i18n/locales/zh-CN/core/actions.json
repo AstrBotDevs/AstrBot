@@ -1,0 +1,22 @@
+{
+  "create": "创建",
+  "read": "读取",
+  "update": "更新",
+  "delete": "删除",
+  "search": "搜索",
+  "filter": "筛选",
+  "sort": "排序",
+  "export": "导出",
+  "import": "导入",
+  "backup": "备份",
+  "restore": "恢复",
+  "copy": "复制",
+  "paste": "粘贴",
+  "cut": "剪切",
+  "undo": "撤销",
+  "redo": "重做",
+  "refresh": "刷新",
+  "submit": "提交",
+  "reset": "重置",
+  "clear": "清空"
+} 

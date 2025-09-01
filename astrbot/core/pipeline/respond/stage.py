@@ -13,6 +13,7 @@ from astrbot.core.message.message_event_result import BaseMessageComponent
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.path_util import path_Mapping
+from astrbot.core.utils.session_lock import session_lock_manager
 
 
 @register_stage
@@ -32,6 +33,7 @@ class RespondStage(Stage):
         Comp.Node: lambda comp: bool(comp.content),  # 转发节点
         Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
         Comp.File: lambda comp: bool(comp.file_ or comp.url),
+        Comp.WechatEmoji: lambda comp: comp.md5 is not None,  # 微信表情
     }
 
     async def initialize(self, ctx: PipelineContext):
@@ -127,9 +129,7 @@ class RespondStage(Stage):
                 "streaming_segmented", False
             )
             logger.info(f"应用流式输出({event.get_platform_name()})")
-            await event._pre_send()
             await event.send_streaming(result.async_stream, use_fallback)
-            await event._post_send()
             return
         elif len(result.chain) > 0:
             # 检查路径映射
@@ -140,14 +140,10 @@ class RespondStage(Stage):
                         component.file = path_Mapping(mappings, component.file)
                         event.get_result().chain[idx] = component
 
-            await event._pre_send()
-
             # 检查消息链是否为空
             try:
                 if await self._is_empty_message_chain(result.chain):
                     logger.info("消息为空，跳过发送阶段")
-                    event.clear_result()
-                    event.stop_event()
                     return
             except Exception as e:
                 logger.warning(f"空内容检查异常: {e}")
@@ -157,9 +153,14 @@ class RespondStage(Stage):
                 c for c in result.chain if not isinstance(c, Comp.Record)
             ]
 
-            if self.enable_seg and (
-                (self.only_llm_result and result.is_llm_result())
-                or not self.only_llm_result
+            if (
+                self.enable_seg
+                and (
+                    (self.only_llm_result and result.is_llm_result())
+                    or not self.only_llm_result
+                )
+                and event.get_platform_name()
+                not in ["qq_official", "weixin_official_account", "dingtalk"]
             ):
                 decorated_comps = []
                 if self.reply_with_mention:
@@ -175,24 +176,26 @@ class RespondStage(Stage):
                             result.chain.remove(comp)
                             break
 
-                for rcomp in record_comps:
-                    i = await self._calc_comp_interval(rcomp)
-                    await asyncio.sleep(i)
-                    try:
-                        await event.send(MessageChain([rcomp]))
-                    except Exception as e:
-                        logger.error(f"发送消息失败: {e} chain: {result.chain}")
-                        break
-
-                # 分段回复
-                for comp in non_record_comps:
-                    i = await self._calc_comp_interval(comp)
-                    await asyncio.sleep(i)
-                    try:
-                        await event.send(MessageChain([*decorated_comps, comp]))
-                    except Exception as e:
-                        logger.error(f"发送消息失败: {e} chain: {result.chain}")
-                        break
+                # leverage lock to guarentee the order of message sending among different events
+                async with session_lock_manager.acquire_lock(event.unified_msg_origin):
+                    for rcomp in record_comps:
+                        i = await self._calc_comp_interval(rcomp)
+                        await asyncio.sleep(i)
+                        try:
+                            await event.send(MessageChain([rcomp]))
+                        except Exception as e:
+                            logger.error(f"发送消息失败: {e} chain: {result.chain}")
+                            break
+                    # 分段回复
+                    for comp in non_record_comps:
+                        i = await self._calc_comp_interval(comp)
+                        await asyncio.sleep(i)
+                        try:
+                            await event.send(MessageChain([*decorated_comps, comp]))
+                            decorated_comps = []  # 清空已发送的装饰组件
+                        except Exception as e:
+                            logger.error(f"发送消息失败: {e} chain: {result.chain}")
+                            break
             else:
                 for rcomp in record_comps:
                     try:
@@ -206,7 +209,6 @@ class RespondStage(Stage):
                     logger.error(traceback.format_exc())
                     logger.error(f"发送消息失败: {e} chain: {result.chain}")
 
-            await event._post_send()
             logger.info(
                 f"AstrBot -> {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}"
             )

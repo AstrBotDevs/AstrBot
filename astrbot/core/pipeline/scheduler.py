@@ -73,7 +73,7 @@ class PipelineScheduler:
         await self._process_stages(event)
 
         # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
-        if not event._has_send_oper and event.get_platform_name() == "webchat":
+        if event.get_platform_name() == "webchat":
             await event.send(None)
 
         logger.debug("pipeline 执行完毕。")

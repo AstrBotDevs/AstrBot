@@ -1,8 +1,9 @@
 import jwt
 import datetime
+import asyncio
 from .route import Route, Response, RouteContext
 from quart import request
-from astrbot.core import WEBUI_SK, DEMO_MODE
+from astrbot.core import DEMO_MODE
 from astrbot import logger
 
 
@@ -41,6 +42,7 @@ class AuthRoute(Route):
                 .__dict__
             )
         else:
+            await asyncio.sleep(3)
             return Response().error("用户名或密码错误").__dict__
 
     async def edit_account(self):
@@ -76,7 +78,10 @@ class AuthRoute(Route):
     def generate_jwt(self, username):
         payload = {
             "username": username,
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(days=30),
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7),
         }
-        token = jwt.encode(payload, WEBUI_SK, algorithm="HS256")
+        jwt_token = self.config["dashboard"].get("jwt_secret", None)
+        if not jwt_token:
+            raise ValueError("JWT secret is not set in the cmd_config.")
+        token = jwt.encode(payload, jwt_token, algorithm="HS256")
         return token

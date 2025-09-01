@@ -3,49 +3,39 @@
     <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px;">
 
         <v-list lines="two">
-            <v-list-subheader>网络</v-list-subheader>
+            <v-list-subheader>{{ tm('network.title') }}</v-list-subheader>
 
-            <v-list-item subtitle="设置下载插件或者更新 AstrBot 时所用的 GitHub 加速地址。这在中国大陆的网络环境有效。可以自定义，输入结果实时生效。所有地址均不保证稳定性，如果在更新插件/项目时出现报错，请首先检查加速地址是否能正常使用。" title="GitHub 加速地址">
-
-                <v-combobox variant="outlined" style="width: 100%; margin-top: 16px;" v-model="selectedGitHubProxy" :items="githubProxies"
-                    label="选择 GitHub 加速地址">
-                </v-combobox>
+            <v-list-item>
+                <ProxySelector></ProxySelector>
             </v-list-item>
 
-            <v-list-subheader>系统</v-list-subheader>
+            <v-list-subheader>{{ tm('system.title') }}</v-list-subheader>
 
-            <v-list-item subtitle="重启 AstrBot" title="重启">
-                <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">重启</v-btn>
+            <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
+                <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button') }}</v-btn>
             </v-list-item>
-
-            
-
-
         </v-list>
 
     </div>
 
     <WaitingForRestart ref="wfr"></WaitingForRestart>
 
-
 </template>
 
 <script>
 import axios from 'axios';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
+import ProxySelector from '@/components/shared/ProxySelector.vue';
+import { useModuleI18n } from '@/i18n/composables';
 
 export default {
     components: {
         WaitingForRestart,
+        ProxySelector,
     },
-    data() {
-        return {
-            githubProxies: [
-                "https://gh.llkk.cc",
-                "https://gitproxy.click",
-            ],
-            selectedGitHubProxy: "",
-        }
+    setup() {
+        const { tm } = useModuleI18n('features/settings');
+        return { tm };
     },
     methods: {
         restartAstrBot() {
@@ -54,16 +44,5 @@ export default {
             })
         }
     },
-    mounted() {
-        this.selectedGitHubProxy = localStorage.getItem('selectedGitHubProxy') || "";
-    },
-    watch: {
-        selectedGitHubProxy: function (newVal, oldVal) {
-            if (!newVal) {
-                newVal = ""
-            }
-            localStorage.setItem('selectedGitHubProxy', newVal);
-        }
-    }
 }
 </script>

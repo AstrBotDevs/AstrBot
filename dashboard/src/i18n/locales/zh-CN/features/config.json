@@ -1,0 +1,62 @@
+{
+  "title": "配置文件",
+  "subtitle": "管理系统配置和设置",
+  "editor": {
+    "visual": "可视化编辑",
+    "code": "代码编辑",
+    "revertCode": "回到更改前的代码",
+    "applyConfig": "应用此配置",
+    "applyTip": "`应用此配置` 将配置暂存并应用到可视化。如要保存，需再点击右下角保存按钮。"
+  },
+  "actions": {
+    "save": "保存配置",
+    "delete": "删除这项",
+    "add": "添加",
+    "reset": "重置为默认",
+    "export": "导出配置",
+    "import": "导入配置",
+    "validate": "验证配置"
+  },
+  "help": {
+    "documentation": "官方文档",
+    "support": "加群询问",
+    "helpText": "不了解配置？请见 {documentation} 或 {support}。",
+    "helpPrefix": "不了解配置？请见",
+    "helpMiddle": "或",
+    "helpSuffix": "。"
+  },
+  "messages": {
+    "configApplied": "配置成功应用。如要保存，需再点击右下角保存按钮。",
+    "configApplyError": "配置未应用，Json 格式错误。",
+    "saveSuccess": "配置保存成功",
+    "saveError": "配置保存失败",
+    "loadError": "配置加载失败"
+  },
+  "sections": {
+    "general": "常规设置",
+    "advanced": "高级设置",
+    "security": "安全设置",
+    "appearance": "外观设置",
+    "notification": "通知设置"
+  },
+  "general": {
+    "botName": "机器人名称",
+    "language": "界面语言",
+    "timezone": "时区",
+    "autoSave": "自动保存",
+    "debugMode": "调试模式"
+  },
+  "advanced": {
+    "logLevel": "日志级别",
+    "maxConnections": "最大连接数",
+    "timeout": "超时时间",
+    "retryAttempts": "重试次数",
+    "cacheSize": "缓存大小"
+  },
+  "security": {
+    "apiKey": "API密钥",
+    "allowedHosts": "允许的主机",
+    "rateLimit": "频率限制",
+    "encryption": "加密设置"
+  }
+} 

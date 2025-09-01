@@ -1,0 +1,22 @@
+{
+  "loading": "Loading",
+  "success": "Success",
+  "error": "Error",
+  "warning": "Warning",
+  "info": "Info",
+  "pending": "Pending",
+  "processing": "Processing",
+  "completed": "Completed",
+  "failed": "Failed",
+  "cancelled": "Cancelled",
+  "timeout": "Timeout",
+  "connecting": "Connecting",
+  "connected": "Connected",
+  "disconnected": "Disconnected",
+  "online": "Online",
+  "offline": "Offline",
+  "active": "Active",
+  "inactive": "Inactive",
+  "ready": "Ready",
+  "busy": "Busy"
+} 

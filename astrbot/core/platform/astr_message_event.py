@@ -232,7 +232,7 @@ class AstrMessageEvent(abc.ABC):
     ):
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
-        Fallback仅支持 aiocqhttp, gewechat。
+        Fallback仅支持 aiocqhttp。
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
@@ -240,10 +240,10 @@ class AstrMessageEvent(abc.ABC):
         self._has_send_oper = True
 
     async def _pre_send(self):
-        """调度器会在执行 send() 前调用该方法"""
+        """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
 
     async def _post_send(self):
-        """调度器会在执行 send() 后调用该方法"""
+        """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 
     def set_result(self, result: Union[MessageEventResult, str]):
         """设置消息事件的结果。
@@ -424,7 +424,6 @@ class AstrMessageEvent(abc.ABC):
 
         适配情况:
 
-        - gewechat
         - aiocqhttp(OneBotv11)
         """
         ...

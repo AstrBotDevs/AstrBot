@@ -1,0 +1,23 @@
+{
+  "operation": {
+    "saved": "Save Successful",
+    "created": "Create Successful",
+    "updated": "Update Successful",
+    "deleted": "Delete Successful",
+    "uploaded": "Upload Successful",
+    "downloaded": "Download Successful",
+    "imported": "Import Successful",
+    "exported": "Export Successful",
+    "copied": "Copy Successful",
+    "sent": "Send Successful"
+  },
+  "connection": {
+    "connected": "Connection Successful",
+    "authenticated": "Login Successful",
+    "synchronized": "Synchronization Successful"
+  },
+  "validation": {
+    "valid": "Validation Passed",
+    "completed": "Operation Completed"
+  }
+} 

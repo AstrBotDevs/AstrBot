@@ -20,14 +20,14 @@ const PurpleTheme: ThemeTypes = {
     lightsuccess: '#b9f6ca',
     lighterror: '#f9d8d8',
     lightwarning: '#fff8e1',
-    primaryText: '#000000dd',
+    primaryText: '#1b1c1d',
     secondaryText: '#000000aa',
     darkprimary: '#1565c0',
     darksecondary: '#4527a0',
     borderLight: '#d0d0d0',
     border: '#d0d0d0',
     inputBorder: '#787878',
-    containerBg: '#eef2f6',
+    containerBg: '#f9fafcf4',
     surface: '#fff',
     'on-surface-variant': '#fff',
     facebook: '#4267b2',
@@ -36,10 +36,13 @@ const PurpleTheme: ThemeTypes = {
     gray100: '#fafafacc',
     primary200: '#90caf9',
     secondary200: '#b39ddb',
-    background: '#f9fafcf4',
+    background: '#ffffff',
     overlay: '#ffffffaa',
-    codeBg: '#f5f0ff',
-    code: '#673ab7'
+    codeBg: '#ececec',
+    preBg: 'rgb(249, 249, 249)',
+    code: 'rgb(13, 13, 13)',
+    chatMessageBubble: '#e7ebf4',
+    mcpCardBg: '#f7f2f9',
   }
 };
 

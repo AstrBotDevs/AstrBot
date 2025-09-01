@@ -1,9 +1,10 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, computed } from 'vue';
 import axios from 'axios';
-import { marked } from 'marked';
+import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
+import { useI18n } from '@/i18n/composables';
 
 const props = defineProps({
   show: {
@@ -21,6 +22,9 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:show']);
+
+// 国际化
+const { t } = useI18n();
 
 const content = ref(null);
 const error = ref(null);
@@ -54,10 +58,10 @@ async function fetchReadme() {
     if (res.data.status === 'ok') {
       content.value = res.data.data.content;
     } else {
-      error.value = res.data.message || '获取README失败';
+      error.value = res.data.message || t('core.common.readme.errors.fetchFailed');
     }
   } catch (err) {
-    error.value = err.message || '获取README时发生错误';
+    error.value = err.message || t('core.common.readme.errors.fetchError');
   } finally {
     loading.value = false;
   }
@@ -70,43 +74,52 @@ function openRepoInNewTab() {
   }
 }
 
+// 配置markdown-it，启用代码高亮
+const md = new MarkdownIt({
+  html: true,        // 启用HTML标签
+  breaks: true,       // 换行转<br>
+  linkify: true,      // 自动转链接
+  typographer: false, // 禁用智能引号
+  highlight: function(code, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(code, { language: lang }).value;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return hljs.highlightAuto(code).value;
+  }
+});
+
 // 渲染Markdown内容
 function renderMarkdown(content) {
   if (!content) return '';
-  
-  // 配置marked使用highlight.js进行语法高亮
-  marked.setOptions({
-    highlight: function(code, lang) {
-      if (lang && hljs.getLanguage(lang)) {
-        try {
-          return hljs.highlight(code, { language: lang }).value;
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      return hljs.highlightAuto(code).value;
-    },
-    gfm: true, // GitHub Flavored Markdown
-    breaks: true, // Convert \n to <br>
-    headerIds: true, // Add id attributes to headers
-    mangle: false // Don't mangle email addresses
-  });
-  
-  return marked(content);
+  return md.render(content);
 }
 
 // 刷新README内容
 function refreshReadme() {
   fetchReadme();
 }
+
+// 计算属性处理双向绑定
+const _show = computed({
+  get() {
+    return props.show;
+  },
+  set(value) {
+    emit('update:show', value);
+  }
+});
 </script>
 
 <template>
   <v-dialog v-model="_show" width="800" persistent>
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
-        <span class="text-h5">插件说明文档</span>
-        <v-btn icon @click="$emit('update:show', false)">
+        <span class="text-h5">{{ t('core.common.readme.title') }}</span>
+        <v-btn icon @click="$emit('update:show', false)" variant="text">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -119,21 +132,21 @@ function refreshReadme() {
             prepend-icon="mdi-github"
             @click="openRepoInNewTab()" 
           >
-            在GitHub中查看仓库
+            {{ t('core.common.readme.buttons.viewOnGithub') }}
           </v-btn>
           <v-btn
             color="secondary"
             prepend-icon="mdi-refresh"
             @click="refreshReadme()"
           >
-            刷新文档
+            {{ t('core.common.readme.buttons.refresh') }}
           </v-btn>
         </div>
         
         <!-- 加载中 -->
         <div v-if="loading" class="d-flex flex-column align-center justify-center" style="height: 100%;">
           <v-progress-circular indeterminate color="primary" size="64" class="mb-4"></v-progress-circular>
-          <p class="text-body-1 text-center">正在加载README文档...</p>
+          <p class="text-body-1 text-center">{{ t('core.common.readme.loading') }}</p>
         </div>
         
         <!-- 内容显示 -->
@@ -148,14 +161,14 @@ function refreshReadme() {
         <!-- 无内容提示 -->
         <div v-else class="d-flex flex-column align-center justify-center" style="height: 100%;">
           <v-icon size="64" color="warning" class="mb-4">mdi-file-question-outline</v-icon>
-          <p class="text-body-1 text-center mb-4">该插件未提供文档链接或GitHub仓库地址。<br>请查看插件市场或联系插件作者获取更多信息。</p>
+          <p class="text-body-1 text-center mb-4">{{ t('core.common.readme.empty.title') }}<br>{{ t('core.common.readme.empty.subtitle') }}</p>
         </div>
       </v-card-text>
       <v-divider></v-divider>
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="primary" variant="tonal" @click="$emit('update:show', false)">
-          关闭
+          {{ t('core.common.close') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -164,124 +177,124 @@ function refreshReadme() {
 
 <style>
 .markdown-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  line-height: 1.6;
-  padding: 8px 0;
-  color: #24292e;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    padding: 8px 0;
+    color: var(--v-theme-secondaryText);
 }
 
-.markdown-body h1, 
-.markdown-body h2, 
-.markdown-body h3, 
-.markdown-body h4, 
-.markdown-body h5, 
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
 .markdown-body h6 {
-  margin-top: 24px;
-  margin-bottom: 16px;
-  font-weight: 600;
-  line-height: 1.25;
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    line-height: 1.25;
 }
 
 .markdown-body h1 {
-  font-size: 2em;
-  border-bottom: 1px solid #eaecef;
-  padding-bottom: 0.3em;
+    font-size: 2em;
+    border-bottom: 1px solid var(--v-theme-border);
+    padding-bottom: 0.3em;
 }
 
 .markdown-body h2 {
-  font-size: 1.5em;
-  border-bottom: 1px solid #eaecef;
-  padding-bottom: 0.3em;
+    font-size: 1.5em;
+    border-bottom: 1px solid var(--v-theme-border);
+    padding-bottom: 0.3em;
 }
 
 .markdown-body p {
-  margin-top: 0;
-  margin-bottom: 16px;
+    margin-top: 0;
+    margin-bottom: 16px;
 }
 
 .markdown-body code {
-  padding: 0.2em 0.4em;
-  margin: 0;
-  background-color: rgba(27, 31, 35, 0.05);
-  border-radius: 3px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 85%;
+    padding: 0.2em 0.4em;
+    margin: 0;
+    background-color: var(--v-theme-codeBg);
+    border-radius: 3px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 85%;
 }
 
 .markdown-body pre {
-  padding: 16px;
-  overflow: auto;
-  font-size: 85%;
-  line-height: 1.45;
-  background-color: #f6f8fa;
-  border-radius: 3px;
-  margin-bottom: 16px;
+    padding: 16px;
+    overflow: auto;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: var(--v-theme-containerBg);
+    border-radius: 3px;
+    margin-bottom: 16px;
 }
 
 .markdown-body pre code {
-  background-color: transparent;
-  padding: 0;
+    background-color: transparent;
+    padding: 0;
 }
 
 .markdown-body ul,
 .markdown-body ol {
-  padding-left: 2em;
-  margin-bottom: 16px;
+    padding-left: 2em;
+    margin-bottom: 16px;
 }
 
 .markdown-body img {
-  max-width: 100%;
-  margin: 8px 0;
-  box-sizing: border-box;
-  background-color: #fff;
-  border-radius: 3px;
+    max-width: 100%;
+    margin: 8px 0;
+    box-sizing: border-box;
+    background-color: var(--v-theme-background);
+    border-radius: 3px;
 }
 
 .markdown-body blockquote {
-  padding: 0 1em;
-  color: #6a737d;
-  border-left: 0.25em solid #dfe2e5;
-  margin-bottom: 16px;
+    padding: 0 1em;
+    color: var(--v-theme-secondaryText);
+    border-left: 0.25em solid var(--v-theme-border);
+    margin-bottom: 16px;
 }
 
 .markdown-body a {
-  color: #0366d6;
-  text-decoration: none;
+    color: var(--v-theme-primary);
+    text-decoration: none;
 }
 
 .markdown-body a:hover {
-  text-decoration: underline;
+    text-decoration: underline;
 }
 
 .markdown-body table {
-  border-spacing: 0;
-  border-collapse: collapse;
-  width: 100%;
-  overflow: auto;
-  margin-bottom: 16px;
+    border-spacing: 0;
+    border-collapse: collapse;
+    width: 100%;
+    overflow: auto;
+    margin-bottom: 16px;
 }
 
 .markdown-body table th,
 .markdown-body table td {
-  padding: 6px 13px;
-  border: 1px solid #dfe2e5;
+    padding: 6px 13px;
+    border: 1px solid var(--v-theme-background);
 }
 
 .markdown-body table tr {
-  background-color: #fff;
-  border-top: 1px solid #c6cbd1;
+    background-color: var(--v-theme-surface);
+    border-top: 1px solid var(--v-theme-border);
 }
 
 .markdown-body table tr:nth-child(2n) {
-  background-color: #f6f8fa;
+    background-color: var(--v-theme-background);
 }
 
 .markdown-body hr {
-  height: 0.25em;
-  padding: 0;
-  margin: 24px 0;
-  background-color: #e1e4e8;
-  border: 0;
+    height: 0.25em;
+    padding: 0;
+    margin: 24px 0;
+    background-color: var(--v-theme-containerBg);
+    border: 0;
 }
 </style>
 

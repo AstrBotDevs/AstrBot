@@ -1,6 +1,6 @@
-<p align="center">
-
-![yjtp](https://github.com/user-attachments/assets/dcc74009-c57e-4b66-9ae3-0a81fc001255)
+<img width="430" height="31" alt="image" src="https://github.com/user-attachments/assets/474c822c-fab7-41be-8c23-6dae252823ed" /><p align="center">
+ 
+![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
 
 </p>
 
@@ -16,7 +16,7 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 <a  href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="QQ_community" src="https://img.shields.io/badge/QQ群-775869627-purple?style=for-the-badge&color=76bad9"></a>
 <a  href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
 [![wakatime](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e.svg?style=for-the-badge&color=76bad9)](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e)
-![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fstats&query=v&label=7%E6%97%A5%E6%B4%BB%E8%B7%83%E9%87%8F&cacheSeconds=3600&style=for-the-badge&color=3b618e)
+![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fstats&query=v&label=7日消息量&cacheSeconds=3600&style=for-the-badge&color=3b618e)
 ![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%E4%B8%AA&style=for-the-badge&label=%E6%8F%92%E4%BB%B6%E5%B8%82%E5%9C%BA&cacheSeconds=3600)
 
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_en.md">English</a> ｜
@@ -25,50 +25,51 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
 </div>
 
-AstrBot 是一个松耦合、异步、支持多消息平台部署、具有易用的插件系统和完善的大语言模型（LLM）接入功能的聊天机器人及开发框架。
-
-
-<!-- [![codecov](https://img.shields.io/codecov/c/github/soulter/astrbot?style=for-the-badge)](https://codecov.io/gh/Soulter/AstrBot)
- -->
-
-> [!NOTE]
-> 
-> 个人微信接入所依赖的开源项目 Gewechat 近期已停止维护，`v3.5.10` 已经支持接入 WeChatPadPro 替换 gewechat 方式。详见文档 [WeChatPadPro](https://astrbot.app/deploy/platform/wechat/wechatpadpro.html)
-
-## ✨ 近期更新
-
-1. AstrBot 现已支持接入 [MCP](https://modelcontextprotocol.io/) 服务器！
+AstrBot 是一个开源的一站式 Agentic 聊天机器人平台及开发框架。
 
 ## ✨ 主要功能
 
-> [!NOTE]
-> 🪧 我们正基于前沿科研成果，设计并实现适用于角色扮演和情感陪伴的长短期记忆模型及情绪控制模型，旨在提升对话的真实性与情感表达能力。敬请期待 `v3.6.0` 版本！
-
-1. **大语言模型对话**。支持各种大语言模型，包括 OpenAI API、Google Gemini、Llama、Deepseek、ChatGLM 等，支持接入本地部署的大模型，通过 Ollama、LLMTuner。具有多轮对话、人格情境、多模态能力，支持图片理解、语音转文字（Whisper）。
-2. **多消息平台接入**。支持接入 QQ（OneBot）、QQ 频道、微信（Gewechat）、飞书、Telegram。后续将支持钉钉、Discord、WhatsApp、小爱音响。支持速率限制、白名单、关键词过滤、百度内容审核。
-3. **Agent**。原生支持部分 Agent 能力，如代码执行器、自然语言待办、网页搜索。对接 [Dify 平台](https://dify.ai/)，便捷接入 Dify 智能助手、知识库和 Dify 工作流。
-4. **插件扩展**。深度优化的插件机制，支持[开发插件](https://astrbot.app/dev/plugin.html)扩展功能，极简开发。已支持安装多个插件。
-5. **可视化管理面板**。支持可视化修改配置、插件管理、日志查看等功能，降低配置难度。集成 WebChat，可在面板上与大模型对话。
-6. **高稳定性、高模块化**。基于事件总线和流水线的架构设计，高度模块化，低耦合。
-
-> [!TIP]
-> WebUI 在线体验 Demo: [https://demo.astrbot.app/](https://demo.astrbot.app/)
-> 
-> 用户名: `astrbot`, 密码: `astrbot`。
+1. **大模型对话**。支持接入多种大模型服务。支持多模态、工具调用、MCP、原生知识库、人设等功能。
+2. **多消息平台支持**。支持接入 QQ、企业微信、微信公众号、飞书、Telegram、钉钉、Discord、KOOK 等平台。支持速率限制、白名单、百度内容审核。
+3. **Agent**。完善适配的 Agentic 能力。支持多轮工具调用、内置沙盒代码执行器、网页搜索等功能。
+4. **插件扩展**。深度优化的插件机制，支持[开发插件](https://astrbot.app/dev/plugin.html)扩展功能，社区插件生态丰富。
+5. **WebUI**。可视化配置和管理机器人，功能齐全。
 
 ## ✨ 使用方式
 
 #### Docker 部署
 
+推荐使用 Docker / Docker Compose 方式部署 AstrBot。
+
 请参阅官方文档 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) 。
+
+#### 宝塔面板部署
+
+AstrBot 与宝塔面板合作，已上架至宝塔面板。
+
+请参阅官方文档 [宝塔面板部署](https://astrbot.app/deploy/astrbot/btpanel.html) 。
+
+#### 1Panel 部署
+
+AstrBot 已由 1Panel 官方上架至 1Panel 面板。
+
+请参阅官方文档 [1Panel 部署](https://astrbot.app/deploy/astrbot/1panel.html) 。
+
+#### 在 雨云 上部署
+
+AstrBot 已由雨云官方上架至云应用平台，可一键部署。
+
+[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
+
+#### 在 Replit 上部署
+
+社区贡献的部署方式。
+
+[![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
 
 #### Windows 一键安装器部署
 
 请参阅官方文档 [使用 Windows 一键安装器部署 AstrBot](https://astrbot.app/deploy/astrbot/windows.html) 。
-
-#### 宝塔面板部署
-
-请参阅官方文档 [宝塔面板部署](https://astrbot.app/deploy/astrbot/btpanel.html) 。
 
 #### CasaOS 部署
 
@@ -93,42 +94,33 @@ git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
 uv run main.py
 ```
 
-或者，直接通过 uvx 安装 AstrBot：
-
-```bash
-mkdir astrbot && cd astrbot
-uvx astrbot init
-# uvx astrbot run
-```
-
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
-
-#### Replit 部署
-
-[![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
 
 ## ⚡ 消息平台支持情况
 
-| 平台    | 支持性 | 详情 | 消息类型 |
-| -------- | ------- | ------- | ------ |
-| QQ(官方机器人接口) | ✔    | 私聊、群聊，QQ 频道私聊、群聊 | 文字、图片 |
-| QQ(OneBot)      | ✔    | 私聊、群聊 | 文字、图片、语音 |
-| 微信个人号    | ✔    | 微信个人号私聊、群聊 | 文字、图片、语音 |
-| Telegram   | ✔    | 私聊、群聊 | 文字、图片 |
-| 企业微信    | ✔    | 私聊 | 文字、图片、语音 |
-| 微信客服    | ✔    | 私聊 | 文字、图片 |
-| 飞书   | ✔    | 私聊、群聊 | 文字、图片 |
-| 钉钉   | ✔    | 私聊、群聊 | 文字、图片 |
-| 微信对话开放平台 | 🚧    | 计划内 | - |
-| Discord   | 🚧    | 计划内 | - |
-| WhatsApp   | 🚧    | 计划内 | - |
-| 小爱音响   | 🚧    | 计划内 | - |
+| 平台    | 支持性 |
+| -------- | ------- |
+| QQ(官方机器人接口) | ✔    |
+| QQ(OneBot)      | ✔    |
+| Telegram   | ✔    |
+| 企业微信    | ✔    |
+| 微信客服    | ✔    |
+| 微信公众号    | ✔    |
+| 飞书   | ✔    |
+| 钉钉   | ✔    |
+| Slack   | ✔    |
+| Discord   | ✔    |
+| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
+| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
+| 微信对话开放平台 | 🚧    |
+| WhatsApp   | 🚧    |
+| 小爱音响   | 🚧    |
 
 ## ⚡ 提供商支持情况
 
 | 名称    | 支持性 | 类型 | 备注 |
 | -------- | ------- | ------- | ------- |
-| OpenAI API | ✔    | 文本生成 | 也支持 DeepSeek、Google Gemini、GLM、Kimi、xAI 等兼容 OpenAI API 的服务 |
+| OpenAI API | ✔    | 文本生成 | 也支持 DeepSeek、Gemini、Kimi、xAI 等兼容 OpenAI API 的服务 |
 | Claude API | ✔    | 文本生成 |  |
 | Google Gemini API | ✔    | 文本生成 |  |
 | Dify | ✔    | LLMOps |  |
@@ -136,6 +128,8 @@ uvx astrbot init
 | Ollama | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
 | LM Studio | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
 | LLMTuner | ✔    | 模型加载器 | 本地加载 lora 等微调模型 |
+| [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | ✔    | 模型 API 及算力服务平台 |  |
+| [302.AI](https://share.302.ai/rr1M3l) | ✔    | 模型 API 服务平台 |  |
 | 硅基流动 | ✔    | 模型 API 服务平台 |  |
 | PPIO 派欧云 | ✔    | 模型 API 服务平台 |  |
 | OneAPI | ✔    | LLM 分发系统 |  |
@@ -143,6 +137,7 @@ uvx astrbot init
 | SenseVoice | ✔    | 语音转文本 | 本地部署 |
 | OpenAI TTS API | ✔    | 文本转语音 |  |
 | GSVI | ✔    | 文本转语音 | GPT-Sovits-Inference |
+| GPT-SoVITs | ✔    | 文本转语音 | GPT-Sovits-Inference |
 | FishAudio | ✔    | 文本转语音 | GPT-Sovits 作者参与的项目 |
 | Edge TTS | ✔    | 文本转语音 | Edge 浏览器的免费 TTS |
 | 阿里云百炼 TTS | ✔    | 文本转语音 |  |
@@ -171,7 +166,6 @@ pre-commit install
 
 - Star 这个项目！
 - 在[爱发电](https://afdian.com/a/soulter)支持我！
-- 在[微信](https://drive.soulter.top/f/pYfA/d903f4fa49a496fda3f16d2be9e023b5.png)支持我~
 
 ## ✨ Demo
 
@@ -211,7 +205,7 @@ _✨ WebUI ✨_
 
 此外，本项目的诞生离不开以下开源项目：
 
-- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ)
+- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 伟大的猫猫框架
 - [wechatpy/wechatpy](https://github.com/wechatpy/wechatpy)
 
 ## ⭐ Star History
@@ -225,11 +219,8 @@ _✨ WebUI ✨_
 
 </div>
 
-## Disclaimer
+![10k-star-banner-credit-by-kevin](https://github.com/user-attachments/assets/c97fc5fb-20b9-4bc8-9998-c20b930ab097)
 
-1. The project is protected under the `AGPL-v3` opensource license.
-2. The deployment of WeChat (personal account) utilizes [Gewechat](https://github.com/Devo919/Gewechat) service. AstrBot only guarantees connectivity with Gewechat and recommends using a WeChat account that is not frequently used. In the event of account risk control, the author of this project shall not bear any responsibility.
-3. Please ensure compliance with local laws and regulations when using this project.
 
 _私は、高性能ですから!_
 

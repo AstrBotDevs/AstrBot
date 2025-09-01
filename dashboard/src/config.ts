@@ -8,10 +8,10 @@ export type ConfigProps = {
 };
 
 function checkUITheme() {
+  /* 检查localStorage有无记忆的主题选项，如有则使用，否则使用默认值 */
   const theme = localStorage.getItem("uiTheme");
-  console.log('memorized theme: ', theme);
   if (!theme || !(['PurpleTheme', 'PurpleThemeDark'].includes(theme))) {
-    localStorage.setItem("uiTheme", "PurpleTheme");
+    localStorage.setItem("uiTheme", "PurpleTheme");   // todo: 这部分可以根据vuetify.ts的默认主题动态调整
     return 'PurpleTheme';
   } else return theme;
 }
