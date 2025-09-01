@@ -8,12 +8,12 @@ from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
 )
 
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
-    botClient as Client,
+    botClient,
     QQOfficialPlatformAdapter as QQOfficialAdapter,
 )
 
 __all__ = [
     "QQOfficialAdapter",
-    "Client",
+    "botClient",
     "QQOfficialMessageEvent",
 ]

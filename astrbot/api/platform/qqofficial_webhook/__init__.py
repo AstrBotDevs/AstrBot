@@ -4,7 +4,7 @@ astrbot.api.platform.qqofficial_webhook
 """
 
 from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_adapter import (
-    botClient as Client,
+    botClient,
     QQOfficialWebhookPlatformAdapter as QQOfficialWebhookAdapter,
 )
 
@@ -18,7 +18,7 @@ from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_server import (
 
 __all__ = [
     "QQOfficialWebhookAdapter",
-    "Client",
+    "botClient",
     "QQOfficialWebhook",
     "QQOfficialWebhookMessageEvent",
 ]
