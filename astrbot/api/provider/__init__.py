@@ -6,10 +6,9 @@ astrbot.api.provider
 from astrbot.core.provider import (
     Provider,
     STTProvider,
-    TTSProvider,
-    EmbeddingProvider,
     Personality,
 )
+from astrbot.core.provider.provider import TTSProvider, EmbeddingProvider
 from astrbot.core.provider.entities import (
     ProviderRequest,  # 供应商请求
     ProviderType,  # 供应商类型
@@ -34,7 +33,8 @@ from astrbot.core.provider.sources.dashscope_tts import (
     ProviderDashscopeTTSAPI,
 )  # Dashscope TTS
 from astrbot.core.provider.sources.dify_source import ProviderDify  # Dify
-from astrbot.core.provider.sources.edge_tts_source import ProviderEdgeTTS  # Edge TTS
+
+# from astrbot.core.provider.sources.edge_tts_source import ProviderEdgeTTS  # Edge TTS
 from astrbot.core.provider.sources.fishaudio_tts_api_source import (
     ProviderFishAudioTTSAPI,
     ServeTTSRequest,
@@ -65,18 +65,20 @@ from astrbot.core.provider.sources.openai_source import (
 from astrbot.core.provider.sources.openai_tts_api_source import (
     ProviderOpenAITTSAPI,
 )  # OpenAI TTS API (包括 Whisper 和 TTS)
-from astrbot.core.provider.sources.sensevoice_selfhosted_source import (
-    ProviderSenseVoiceSTTSelfHost,
-)  # SenseVoice 自托管 STT
+
+# from astrbot.core.provider.sources.sensevoice_selfhosted_source import (
+#     ProviderSenseVoiceSTTSelfHost,
+# )  # SenseVoice 自托管 STT
 from astrbot.core.provider.sources.volcengine_tts import (
     ProviderVolcengineTTS,
 )  # 火山引擎 TTS
 from astrbot.core.provider.sources.whisper_api_source import (
     ProviderOpenAIWhisperAPI,
 )  # OpenAI Whisper API
-from astrbot.core.provider.sources.whisper_selfhosted_source import (
-    ProviderOpenAIWhisperSelfHost,
-)  # OpenAI Whisper 自托管
+
+# from astrbot.core.provider.sources.whisper_selfhosted_source import (
+#     ProviderOpenAIWhisperSelfHost,
+# )  # OpenAI Whisper 自托管
 from astrbot.core.provider.sources.zhipu_source import (
     ProviderZhipu,
 )  # 智谱 (包括 ChatGLM 和 MOSS)
