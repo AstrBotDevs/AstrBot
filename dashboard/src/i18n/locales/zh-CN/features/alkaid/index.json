@@ -1,0 +1,44 @@
+{
+  "title": "Alkaid实验室",
+  "subtitle": "探索前沿AI功能",
+  "comingSoon": "前面的世界，以后再来探索吧！",
+  "page": {
+    "title": "The Alkaid Project.",
+    "subtitle": "AstrBot Alpha 项目",
+    "navigation": {
+      "knowledgeBase": "知识库",
+      "longTermMemory": "长期记忆层",
+      "other": "..."
+    }
+  },
+  "features": {
+    "knowledgeBase": "知识库",
+    "longTermMemory": "长期记忆",
+    "advancedChat": "高级对话",
+    "multiModal": "多模态交互"
+  },
+  "status": {
+    "experimental": "实验性",
+    "beta": "测试版",
+    "stable": "稳定版",
+    "deprecated": "已弃用"
+  },
+  "sigma": {
+    "subtitle": "AstrBot 实验性项目",
+    "visualization": "可视化",
+    "filterUserId": "筛选用户 ID",
+    "filter": "筛选",
+    "resetFilter": "重置筛选",
+    "refreshGraph": "刷新图形",
+    "nodeDetails": "节点详情",
+    "id": "ID",
+    "type": "类型",
+    "name": "名称",
+    "userId": "用户ID",
+    "timestamp": "时间戳",
+    "graphStats": "图形统计",
+    "nodeCount": "节点数",
+    "edgeCount": "边数",
+    "inDevelopment": "功能开发中"
+  }
+} 

@@ -50,7 +50,7 @@ class StarRequestSubStage(Stage):
                 logger.debug(
                     f"plugin -> {star_map.get(handler.handler_module_path).name} - {handler.handler_name}"
                 )
-                wrapper = self._call_handler(self.ctx, event, handler.handler, **params)
+                wrapper = self.ctx.call_handler(event, handler.handler, **params)
                 async for ret in wrapper:
                     yield ret
                 event.clear_result()  # 清除上一个 handler 的结果

@@ -1,6 +1,35 @@
 <script setup>
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import ListConfigItem from './ListConfigItem.vue'
+import { useI18n } from '@/i18n/composables'
+
+const props = defineProps({
+  metadata: {
+    type: Object,
+    required: true
+  },
+  iterable: {
+    type: Object,
+    required: true
+  },
+  metadataKey: {
+    type: String,
+    required: true
+  },
+  isEditing: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const { t } = useI18n()
+
+const filteredIterable = computed(() => {
+  if (!props.iterable) return {}
+  const { hint, ...rest } = props.iterable
+  return rest
+})
 
 const dialog = ref(false)
 const currentEditingKey = ref('')
@@ -35,7 +64,19 @@ function saveEditedContent() {
   <v-card-text class="px-0 py-1">
     <!-- Object Type Configuration -->
     <div v-if="metadata[metadataKey]?.type === 'object' || metadata[metadataKey]?.config_template" class="object-config">
-      <div v-for="(val, key, index) in iterable" :key="key" class="config-item">
+      <!-- Provider-level hint -->
+      <v-alert
+        v-if="iterable.hint && !isEditing"
+        type="info"
+        variant="tonal"
+        class="mb-4"
+        border="start"
+        density="compact"
+      >
+        {{ iterable.hint }}
+      </v-alert>
+
+      <div v-for="(val, key, index) in filteredIterable" :key="key" class="config-item">
         <!-- Nested Object -->
         <div v-if="metadata[metadataKey].items[key]?.type === 'object'" class="nested-object">
           <div v-if="metadata[metadataKey].items[key] && !metadata[metadataKey].items[key]?.invisible" class="nested-container">
@@ -107,7 +148,7 @@ function saveEditedContent() {
                     color="primary"
                     class="editor-fullscreen-btn"
                     @click="openEditorDialog(key, iterable, metadata[metadataKey].items[key]?.editor_theme, metadata[metadataKey].items[key]?.editor_language)"
-                    title="全屏编辑"
+                    :title="t('core.common.editor.fullscreen')"
                   >
                     <v-icon>mdi-fullscreen</v-icon>
                   </v-btn>
@@ -288,10 +329,10 @@ function saveEditedContent() {
         <v-btn icon @click="dialog = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
-        <v-toolbar-title>编辑内容 - {{ currentEditingKey }}</v-toolbar-title>
+        <v-toolbar-title>{{ t('core.common.editor.editingTitle') }} - {{ currentEditingKey }}</v-toolbar-title>
         <v-spacer></v-spacer>
         <v-toolbar-items>
-          <v-btn variant="text" @click="saveEditedContent">保存</v-btn>
+          <v-btn variant="text" @click="saveEditedContent">{{ t('core.common.save') }}</v-btn>
         </v-toolbar-items>
       </v-toolbar>
       <v-card-text class="pa-0">
@@ -307,30 +348,7 @@ function saveEditedContent() {
   </v-dialog>
 </template>
 
-<script>
-import ListConfigItem from './ListConfigItem.vue';
 
-export default {
-  name: 'AstrBotConfig',
-  components: {
-    ListConfigItem
-  },
-  props: {
-    metadata: {
-      type: Object,
-      required: true
-    },
-    iterable: {
-      type: Object,
-      required: true
-    },
-    metadataKey: {
-      type: String,
-      required: true
-    }
-  }
-}
-</script>
 
 <style scoped>
 .config-section {

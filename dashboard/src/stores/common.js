@@ -12,23 +12,25 @@ export const useCommonStore = defineStore({
     log_cache_max_len: 1000,
     startTime: -1,
 
-    tutorial_map: {
-      "qq_official_webhook": "https://astrbot.app/deploy/platform/qqofficial/webhook.html",
-      "qq_official": "https://astrbot.app/deploy/platform/qqofficial/websockets.html",
-      "aiocqhttp": "https://astrbot.app/deploy/platform/aiocqhttp/napcat.html",
-      "wecom": "https://astrbot.app/deploy/platform/wecom.html",
-      "gewechat": "https://astrbot.app/deploy/platform/wechat/gewechat.html",
-      "lark": "https://astrbot.app/deploy/platform/lark.html",
-      "telegram": "https://astrbot.app/deploy/platform/telegram.html",
-      "dingtalk": "https://astrbot.app/deploy/platform/dingtalk.html",
-      "wechatpadpro": "https://astrbot.app/deploy/platform/wechat/wechatpadpro.html",
-      "weixin_official_account": "https://astrbot.app/deploy/platform/weixin-official-account.html",
-    },
-
     pluginMarketData: [],
   }),
   actions: {
-    createEventSource() {
+    async createEventSource() {
+
+      const fetchLogHistory = async () => {
+        try {
+          const res = await axios.get('/api/log-history');
+          if (res.data.data.logs) {
+            this.log_cache.push(...res.data.data.logs);
+          } else {
+            this.log_cache = [];
+          }
+        } catch (err) {
+          console.error('Failed to fetch log history:', err);
+        }
+      };
+      await fetchLogHistory();
+
       if (this.eventSource) {
         return
       }
@@ -53,7 +55,24 @@ export const useCommonStore = defineStore({
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
 
+        let incompleteLine = ""; // 用于存储不完整的行
+
+        const handleIncompleteLine = (line) => {
+          incompleteLine += line;
+          // if can parse as JSON, return it
+          try {
+            const data_json = JSON.parse(incompleteLine);
+            incompleteLine = ""; // 清空不完整行
+            return data_json;
+          } catch (e) {
+            return null;
+          }
+        }
+
         const processStream = ({ done, value }) => {
+          // get bytes length
+          const bytesLength = value ? value.byteLength : 0;
+          console.log(`Received ${bytesLength} bytes from live log`);
           if (done) {
             console.log('SSE stream closed');
             setTimeout(() => {
@@ -66,6 +85,9 @@ export const useCommonStore = defineStore({
           const text = decoder.decode(value);
           const lines = text.split('\n\n');
           lines.forEach(line => {
+            if (!line.trim()) {
+              return;
+            }
             if (line.startsWith('data:')) {
               const data = line.substring(5).trim();
               // {"type":"log","data":"[2021-08-01 00:00:00] INFO: Hello, world!"}
@@ -73,17 +95,25 @@ export const useCommonStore = defineStore({
               try {
                 data_json = JSON.parse(data);
               } catch (e) {
-                console.error('Invalid JSON:', data);
-                data_json = {
-                  type: 'log',
-                  data: data,
-                  level: 'INFO',
-                  time: new Date().toISOString(),
+                console.warn('Invalid JSON:', data);
+                // 尝试处理不完整的行
+                const parsedData = handleIncompleteLine(data);
+                if (parsedData) {
+                  data_json = parsedData;
+                } else {
+                  return; // 如果无法解析，跳过当前行
                 }
               }
               if (data_json.type === 'log') {
-                // let log = data_json.data
                 this.log_cache.push(data_json);
+                if (this.log_cache.length > this.log_cache_max_len) {
+                  this.log_cache.shift();
+                }
+              }
+            } else {
+              const parsedData = handleIncompleteLine(line);
+              if (parsedData && parsedData.type === 'log') {
+                this.log_cache.push(parsedData);
                 if (this.log_cache.length > this.log_cache_max_len) {
                   this.log_cache.shift();
                 }
@@ -124,15 +154,16 @@ export const useCommonStore = defineStore({
         this.startTime = res.data.data.start_time
       })
     },
-    getTutorialLink(platform) {
-      return this.tutorial_map[platform]
-    },
     async getPluginCollections(force = false) {
       // 获取插件市场数据
       if (!force && this.pluginMarketData.length > 0) {
         return Promise.resolve(this.pluginMarketData);
       }
-      return axios.get('/api/plugin/market_list')
+      
+      // 如果是强制刷新，添加 force_refresh 参数
+      const url = force ? '/api/plugin/market_list?force_refresh=true' : '/api/plugin/market_list';
+      
+      return axios.get(url)
         .then((res) => {
           let data = []
           for (let key in res.data.data) {
@@ -155,7 +186,6 @@ export const useCommonStore = defineStore({
           return data;
         })
         .catch((err) => {
-          this.toast("获取插件市场数据失败: " + err, "error");
           return Promise.reject(err);
         });
     },

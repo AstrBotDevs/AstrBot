@@ -13,7 +13,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Dashboard Build
         run: |
@@ -23,6 +23,36 @@ jobs:
           echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
           echo ${{ github.ref_name }} > dist/assets/version
           zip -r dist.zip dist
+      
+      - name: Upload to Cloudflare R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: "astrbot"
+          R2_OBJECT_NAME: "astrbot-webui-latest.zip"
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          echo "Installing rclone..."
+          curl https://rclone.org/install.sh | sudo bash
+
+          echo "Configuring rclone remote..."
+          mkdir -p ~/.config/rclone
+          cat <<EOF > ~/.config/rclone/rclone.conf
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = $R2_ACCESS_KEY_ID
+          secret_access_key = $R2_SECRET_ACCESS_KEY
+          endpoint = https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+          EOF
+
+          echo "Uploading dist.zip to R2 bucket: $R2_BUCKET_NAME/$R2_OBJECT_NAME"
+          mv dashboard/dist.zip dashboard/$R2_OBJECT_NAME
+          rclone copy dashboard/$R2_OBJECT_NAME r2:$R2_BUCKET_NAME --progress
+          mv dashboard/$R2_OBJECT_NAME dashboard/astrbot-webui-${VERSION_TAG}.zip
+          rclone copy dashboard/astrbot-webui-${VERSION_TAG}.zip r2:$R2_BUCKET_NAME --progress
+          mv dashboard/astrbot-webui-${VERSION_TAG}.zip dashboard/dist.zip
 
       - name: Fetch Changelog
         run: |
@@ -40,10 +70,10 @@ jobs:
     needs: build-and-publish-to-github-release
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 

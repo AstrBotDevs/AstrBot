@@ -43,6 +43,7 @@ class AstrBotConfig(dict):
             """不存在时载入默认配置"""
             with open(config_path, "w", encoding="utf-8-sig") as f:
                 json.dump(default_config, f, indent=4, ensure_ascii=False)
+                object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
 
         with open(config_path, "r", encoding="utf-8-sig") as f:
             conf_str = f.read()
@@ -82,23 +83,61 @@ class AstrBotConfig(dict):
         return conf
 
     def check_config_integrity(self, refer_conf: Dict, conf: Dict, path=""):
-        """检查配置完整性，如果有新的配置项则返回 True"""
+        """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
         has_new = False
+
+        # 创建一个新的有序字典以保持参考配置的顺序
+        new_conf = {}
+
+        # 先按照参考配置的顺序添加配置项
         for key, value in refer_conf.items():
             if key not in conf:
-                # logger.info(f"检查到配置项 {path + "." + key if path else key} 不存在，已插入默认值 {value}")
+                # 配置项不存在，插入默认值
                 path_ = path + "." + key if path else key
                 logger.info(f"检查到配置项 {path_} 不存在，已插入默认值 {value}")
-                conf[key] = value
+                new_conf[key] = value
                 has_new = True
             else:
                 if conf[key] is None:
-                    conf[key] = value
+                    # 配置项为 None，使用默认值
+                    new_conf[key] = value
                     has_new = True
                 elif isinstance(value, dict):
-                    has_new |= self.check_config_integrity(
-                        value, conf[key], path + "." + key if path else key
-                    )
+                    # 递归检查子配置项
+                    if not isinstance(conf[key], dict):
+                        # 类型不匹配，使用默认值
+                        new_conf[key] = value
+                        has_new = True
+                    else:
+                        # 递归检查并同步顺序
+                        child_has_new = self.check_config_integrity(
+                            value, conf[key], path + "." + key if path else key
+                        )
+                        new_conf[key] = conf[key]
+                        has_new |= child_has_new
+                else:
+                    # 直接使用现有配置
+                    new_conf[key] = conf[key]
+
+        # 检查是否存在参考配置中没有的配置项
+        for key in list(conf.keys()):
+            if key not in refer_conf:
+                path_ = path + "." + key if path else key
+                logger.info(f"检查到配置项 {path_} 不存在，将从当前配置中删除")
+                has_new = True
+
+        # 顺序不一致也算作变更
+        if list(conf.keys()) != list(new_conf.keys()):
+            if path:
+                logger.info(f"检查到配置项 {path} 的子项顺序不一致，已重新排序")
+            else:
+                logger.info("检查到配置项顺序不一致，已重新排序")
+            has_new = True
+
+        # 更新原始配置
+        conf.clear()
+        conf.update(new_conf)
+
         return has_new
 
     def save_config(self, replace_config: Dict = None):

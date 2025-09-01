@@ -1,12 +1,14 @@
-import traceback
 import asyncio
-from astrbot.core.config.astrbot_config import AstrBotConfig
-from .provider import Provider, STTProvider, TTSProvider, Personality
-from .entities import ProviderType
+import traceback
 from typing import List
-from astrbot.core.db import BaseDatabase
-from .register import provider_cls_map, llm_tools
+
 from astrbot.core import logger, sp
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.db import BaseDatabase
+
+from .entities import ProviderType
+from .provider import Personality, Provider, STTProvider, TTSProvider, EmbeddingProvider
+from .register import llm_tools, provider_cls_map
 
 
 class ProviderManager:
@@ -17,13 +19,6 @@ class ProviderManager:
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
         self.persona_configs: list = config.get("persona", [])
         self.astrbot_config = config
-
-        self.selected_provider_id = sp.get("curr_provider")
-        self.selected_stt_provider_id = self.provider_stt_settings.get("provider_id")
-        self.selected_tts_provider_id = self.provider_settings.get("provider_id")
-        # self.provider_enabled = self.provider_settings.get("enable", False)
-        # self.stt_enabled = self.provider_stt_settings.get("enable", False)
-        # self.tts_enabled = self.provider_tts_settings.get("enable", False)
 
         # 人格情景管理
         # 目前没有拆成独立的模块
@@ -98,17 +93,18 @@ class ProviderManager:
         """加载的 Speech To Text Provider 的实例"""
         self.tts_provider_insts: List[TTSProvider] = []
         """加载的 Text To Speech Provider 的实例"""
-        self.inst_map = {}
+        self.embedding_provider_insts: List[EmbeddingProvider] = []
+        """加载的 Embedding Provider 的实例"""
+        self.inst_map: dict[str, Provider] = {}
         """Provider 实例映射. key: provider_id, value: Provider 实例"""
         self.llm_tools = llm_tools
-        self.default_provider_inst: Provider = None
-        """默认的 Provider 实例。第 0 个或者用户以前指定的 Provider 实例"""
-        self.curr_provider_inst: Provider = None
-        """当前使用的 Provider 实例"""
-        self.curr_stt_provider_inst: STTProvider = None
-        """当前使用的 Speech To Text Provider 实例"""
-        self.curr_tts_provider_inst: TTSProvider = None
-        """当前使用的 Text To Speech Provider 实例"""
+
+        self.curr_provider_inst: Provider | None = None
+        """默认的 Provider 实例"""
+        self.curr_stt_provider_inst: STTProvider | None = None
+        """默认的 Speech To Text Provider 实例"""
+        self.curr_tts_provider_inst: TTSProvider | None = None
+        """默认的 Text To Speech Provider 实例"""
         self.db_helper = db_helper
 
         # kdb(experimental)
@@ -117,19 +113,63 @@ class ProviderManager:
         if kdb_cfg and len(kdb_cfg):
             self.curr_kdb_name = list(kdb_cfg.keys())[0]
 
+    async def set_provider(
+        self, provider_id: str, provider_type: ProviderType, umo: str = None
+    ):
+        """设置提供商。
+
+        Args:
+            provider_id (str): 提供商 ID。
+            provider_type (ProviderType): 提供商类型。
+            umo (str, optional): 用户会话 ID，用于提供商会话隔离。当用户启用了提供商会话隔离时此参数才生效。
+        """
+        if provider_id not in self.inst_map:
+            raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
+        if umo and self.provider_settings["separate_provider"]:
+            perf = sp.get("session_provider_perf", {})
+            session_perf = perf.get(umo, {})
+            session_perf[provider_type.value] = provider_id
+            perf[umo] = session_perf
+            sp.put("session_provider_perf", perf)
+            return
+        # 不启用提供商会话隔离模式的情况
+        self.curr_provider_inst = self.inst_map[provider_id]
+        if provider_type == ProviderType.TEXT_TO_SPEECH:
+            sp.put("curr_provider_tts", provider_id)
+        elif provider_type == ProviderType.SPEECH_TO_TEXT:
+            sp.put("curr_provider_stt", provider_id)
+        elif provider_type == ProviderType.CHAT_COMPLETION:
+            sp.put("curr_provider", provider_id)
+
     async def initialize(self):
+        # 逐个初始化提供商
         for provider_config in self.providers_config:
             await self.load_provider(provider_config)
 
-        self.default_provider_inst = self.inst_map.get(self.selected_provider_id)
-        if not self.default_provider_inst and self.provider_insts:
-            self.default_provider_inst = self.provider_insts[0]
+        # 设置默认提供商
+        selected_provider_id = sp.get(
+            "curr_provider", self.provider_settings.get("default_provider_id")
+        )
+        selected_stt_provider_id = sp.get(
+            "curr_provider_stt", self.provider_stt_settings.get("provider_id")
+        )
+        selected_tts_provider_id = sp.get(
+            "curr_provider_tts", self.provider_tts_settings.get("provider_id")
+        )
+        self.curr_provider_inst = self.inst_map.get(selected_provider_id)
+        if not self.curr_provider_inst and self.provider_insts:
+            self.curr_provider_inst = self.provider_insts[0]
+
+        self.curr_stt_provider_inst = self.inst_map.get(selected_stt_provider_id)
+        if not self.curr_stt_provider_inst and self.stt_provider_insts:
+            self.curr_stt_provider_inst = self.stt_provider_insts[0]
+
+        self.curr_tts_provider_inst = self.inst_map.get(selected_tts_provider_id)
+        if not self.curr_tts_provider_inst and self.tts_provider_insts:
+            self.curr_tts_provider_inst = self.tts_provider_insts[0]
 
         # 初始化 MCP Client 连接
-        asyncio.create_task(
-            self.llm_tools.mcp_service_selector(), name="mcp-service-handler"
-        )
-        self.llm_tools.mcp_service_queue.put_nowait({"type": "init"})
+        asyncio.create_task(self.llm_tools.init_mcp_clients(), name="init_mcp_clients")
 
     async def load_provider(self, provider_config: dict):
         if not provider_config["enable"]:
@@ -151,11 +191,6 @@ class ProviderManager:
                 case "anthropic_chat_completion":
                     from .sources.anthropic_source import (
                         ProviderAnthropic as ProviderAnthropic,
-                    )
-                case "llm_tuner":
-                    logger.info("加载 LLM Tuner 工具 ...")
-                    from .sources.llmtuner_source import (
-                        LLMTunerModelLoader as LLMTunerModelLoader,
                     )
                 case "dify":
                     from .sources.dify_source import ProviderDify as ProviderDify
@@ -187,6 +222,10 @@ class ProviderManager:
                     from .sources.edge_tts_source import (
                         ProviderEdgeTTS as ProviderEdgeTTS,
                     )
+                case "gsv_tts_selfhost":
+                    from .sources.gsv_selfhosted_source import (
+                        ProviderGSVTTS as ProviderGSVTTS,
+                    )
                 case "gsvi_tts_api":
                     from .sources.gsvi_tts_source import (
                         ProviderGSVITTS as ProviderGSVITTS,
@@ -210,6 +249,18 @@ class ProviderManager:
                 case "volcengine_tts":
                     from .sources.volcengine_tts import (
                         ProviderVolcengineTTS as ProviderVolcengineTTS,
+                    )
+                case "gemini_tts":
+                    from .sources.gemini_tts_source import (
+                        ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
+                    )
+                case "openai_embedding":
+                    from .sources.openai_embedding_source import (
+                        OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
+                    )
+                case "gemini_embedding":
+                    from .sources.gemini_embedding_source import (
+                        GeminiEmbeddingProvider as GeminiEmbeddingProvider,
                     )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
@@ -242,7 +293,10 @@ class ProviderManager:
                     await inst.initialize()
 
                 self.stt_provider_insts.append(inst)
-                if self.selected_stt_provider_id == provider_config["id"]:
+                if (
+                    self.provider_stt_settings.get("provider_id")
+                    == provider_config["id"]
+                ):
                     self.curr_stt_provider_inst = inst
                     logger.info(
                         f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。"
@@ -260,7 +314,7 @@ class ProviderManager:
                     await inst.initialize()
 
                 self.tts_provider_insts.append(inst)
-                if self.selected_tts_provider_id == provider_config["id"]:
+                if self.provider_settings.get("provider_id") == provider_config["id"]:
                     self.curr_tts_provider_inst = inst
                     logger.info(
                         f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。"
@@ -273,8 +327,6 @@ class ProviderManager:
                 inst = provider_metadata.cls_type(
                     provider_config,
                     self.provider_settings,
-                    self.db_helper,
-                    self.provider_settings.get("persistant_history", True),
                     self.selected_default_persona,
                 )
 
@@ -282,13 +334,24 @@ class ProviderManager:
                     await inst.initialize()
 
                 self.provider_insts.append(inst)
-                if self.selected_provider_id == provider_config["id"]:
+                if (
+                    self.provider_settings.get("default_provider_id")
+                    == provider_config["id"]
+                ):
                     self.curr_provider_inst = inst
                     logger.info(
                         f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。"
                     )
                 if not self.curr_provider_inst:
                     self.curr_provider_inst = inst
+
+            elif provider_metadata.provider_type == ProviderType.EMBEDDING:
+                inst = provider_metadata.cls_type(
+                    provider_config, self.provider_settings
+                )
+                if getattr(inst, "initialize", None):
+                    await inst.initialize()
+                self.embedding_provider_insts.append(inst)
 
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:
@@ -312,7 +375,6 @@ class ProviderManager:
             self.curr_provider_inst = None
         elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
             self.curr_provider_inst = self.provider_insts[0]
-            self.selected_provider_id = self.curr_provider_inst.meta().id
             logger.info(
                 f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。"
             )
@@ -321,7 +383,6 @@ class ProviderManager:
             self.curr_stt_provider_inst = None
         elif self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
-            self.selected_stt_provider_id = self.curr_stt_provider_inst.meta().id
             logger.info(
                 f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。"
             )
@@ -330,7 +391,6 @@ class ProviderManager:
             self.curr_tts_provider_inst = None
         elif self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
-            self.selected_tts_provider_id = self.curr_tts_provider_inst.meta().id
             logger.info(
                 f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。"
             )
@@ -359,7 +419,7 @@ class ProviderManager:
                 self.curr_tts_provider_inst = None
 
             if getattr(self.inst_map[provider_id], "terminate", None):
-                await self.inst_map[provider_id].terminate()
+                await self.inst_map[provider_id].terminate()  # type: ignore
 
             logger.info(
                 f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})"
@@ -369,6 +429,8 @@ class ProviderManager:
     async def terminate(self):
         for provider_inst in self.provider_insts:
             if hasattr(provider_inst, "terminate"):
-                await provider_inst.terminate()
-        # 清理 MCP Client 连接
-        await self.llm_tools.mcp_service_queue.put({"type": "terminate"})
+                await provider_inst.terminate()  # type: ignore
+        try:
+            await self.llm_tools.disable_mcp_server()
+        except Exception:
+            logger.error("Error while disabling MCP servers", exc_info=True)

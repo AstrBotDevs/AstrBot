@@ -46,10 +46,24 @@ class AstrBotCoreLifecycle:
         self.astrbot_config = astrbot_config  # 初始化配置
         self.db = db  # 初始化数据库
 
-        # 根据环境变量设置代理
-        os.environ["https_proxy"] = self.astrbot_config["http_proxy"]
-        os.environ["http_proxy"] = self.astrbot_config["http_proxy"]
-        os.environ["no_proxy"] = "localhost"
+        # 设置代理
+        proxy_config = self.astrbot_config.get("http_proxy", "")
+        if proxy_config != "":
+            os.environ["https_proxy"] = proxy_config
+            os.environ["http_proxy"] = proxy_config
+            logger.debug(f"Using proxy: {proxy_config}")
+            # 设置 no_proxy
+            no_proxy_list = self.astrbot_config.get("no_proxy", [])
+            os.environ["no_proxy"] = ",".join(no_proxy_list)
+        else:
+            # 清空代理环境变量
+            if "https_proxy" in os.environ:
+                del os.environ["https_proxy"]
+            if "http_proxy" in os.environ:
+                del os.environ["http_proxy"]
+            if "no_proxy" in os.environ:
+                del os.environ["no_proxy"]
+            logger.debug("HTTP proxy cleared")
 
     async def initialize(self):
         """

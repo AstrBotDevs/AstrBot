@@ -1,4 +1,3 @@
-from astrbot.core.db import BaseDatabase
 from astrbot import logger
 from astrbot.core.provider.func_tool_manager import FuncCall
 from typing import List
@@ -13,15 +12,11 @@ class ProviderZhipu(ProviderOpenAIOfficial):
         self,
         provider_config: dict,
         provider_settings: dict,
-        db_helper: BaseDatabase,
-        persistant_history=True,
         default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            db_helper,
-            persistant_history,
             default_persona,
         )
 
@@ -31,17 +26,20 @@ class ProviderZhipu(ProviderOpenAIOfficial):
         session_id: str = None,
         image_urls: List[str] = None,
         func_tool: FuncCall = None,
-        contexts=[],
+        contexts=None,
         system_prompt=None,
+        model=None,
         **kwargs,
     ) -> LLMResponse:
+        if contexts is None:
+            contexts = []
         new_record = await self.assemble_context(prompt, image_urls)
         context_query = []
 
         context_query = [*contexts, new_record]
 
         model_cfgs: dict = self.provider_config.get("model_config", {})
-        model = self.get_model()
+        model = model or self.get_model()
         # glm-4v-flash 只支持一张图片
         if model.lower() == "glm-4v-flash" and image_urls and len(context_query) > 1:
             logger.debug("glm-4v-flash 只支持一张图片，将只保留最后一张图片")

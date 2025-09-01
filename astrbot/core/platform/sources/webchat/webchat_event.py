@@ -5,8 +5,8 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain, Image, Record
 from astrbot.core.utils.io import download_image_by_url
-from astrbot.core import web_chat_back_queue
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from .webchat_queue_mgr import webchat_queue_mgr
 
 imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
 
@@ -18,13 +18,18 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _send(message: MessageChain, session_id: str, streaming: bool = False):
+        cid = session_id.split("!")[-1]
+        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
         if not message:
             await web_chat_back_queue.put(
-                {"type": "end", "data": "", "streaming": False}
+                {
+                    "type": "end",
+                    "data": "",
+                    "streaming": False,
+                }  # end means this request is finished
             )
             return ""
 
-        cid = session_id.split("!")[-1]
         data = ""
         for comp in message.chain:
             if isinstance(comp, Plain):
@@ -35,6 +40,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "cid": cid,
                         "data": data,
                         "streaming": streaming,
+                        "chain_type": message.type,
                     }
                 )
             elif isinstance(comp, Image):
@@ -97,29 +103,35 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain):
         await WebChatMessageEvent._send(message, session_id=self.session_id)
-        await web_chat_back_queue.put(
-            {
-                "type": "end",
-                "data": "",
-                "streaming": False,
-                "cid": self.session_id.split("!")[-1],
-            }
-        )
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         final_data = ""
+        cid = self.session_id.split("!")[-1]
+        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
         async for chain in generator:
+            if chain.type == "break" and final_data:
+                # 分割符
+                await web_chat_back_queue.put(
+                    {
+                        "type": "break",  # break means a segment end
+                        "data": final_data,
+                        "streaming": True,
+                        "cid": cid,
+                    }
+                )
+                final_data = ""
+                continue
             final_data += await WebChatMessageEvent._send(
                 chain, session_id=self.session_id, streaming=True
             )
 
         await web_chat_back_queue.put(
             {
-                "type": "end",
+                "type": "complete",  # complete means we return the final result
                 "data": final_data,
                 "streaming": True,
-                "cid": self.session_id.split("!")[-1],
+                "cid": cid,
             }
         )
         await super().send_streaming(generator, use_fallback)

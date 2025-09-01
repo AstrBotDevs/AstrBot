@@ -1,0 +1,91 @@
+{
+  "logoTitle": "AstrBot Dashboard",
+  "version": {
+    "hasNewVersion": "AstrBot has a new version!",
+    "dashboardHasNewVersion": "WebUI has a new version!"
+  },
+  "buttons": {
+    "update": "Update",
+    "account": "Account",
+    "theme": {
+      "light": "Light Mode",
+      "dark": "Dark Mode"
+    }
+  },
+  "updateDialog": {
+    "title": "Update AstrBot",
+    "currentVersion": "Current Version",
+    "status": {
+      "checking": "Checking for updates...",
+      "switching": "Switching version...",
+      "updating": "Updating..."
+    },
+    "tabs": {
+      "release": "😊 Release",
+      "dev": "🧐 Development (master branch)"
+    },
+    "updateToLatest": "Update to Latest Version",
+    "preRelease": "Pre-release",
+    "preReleaseWarning": {
+      "title": "Pre-release Version Notice",
+      "description": "Versions marked as pre-release may contain unknown issues or bugs and are not recommended for production use. If you encounter any problems, please visit ",
+      "issueLink": "GitHub Issues"
+    },
+    "tip": "💡 TIP:",
+    "tipLink": "",
+    "tipContinue": "By default, the corresponding version of the WebUI files will be downloaded when switching versions. The WebUI code is located in the dashboard directory of the project, and you can use npm to build it yourself.",
+    "dockerTip": "The `Update to Latest Version` button will try to update both the bot main program and the dashboard. If you are using Docker deployment, you can also re-pull the image or use",
+    "dockerTipLink": "watchtower",
+    "dockerTipContinue": "to automatically monitor and pull.",
+    "table": {
+      "tag": "Tag",
+      "publishDate": "Publish Date",
+      "content": "Content",
+      "sourceUrl": "Source URL",
+      "actions": "Actions",
+      "sha": "SHA",
+      "date": "Date",
+      "message": "Message",
+      "view": "View",
+      "switch": "Switch"
+    },
+    "manualInput": {
+      "title": "Manual Input Version or Commit SHA",
+      "placeholder": "Enter version number or commit hash from master branch.",
+      "hint": "e.g. v3.3.16 (without SHA) or 42e5ec5d80b93b6bfe8b566754d45ffac4c3fe0b",
+      "linkText": "View master branch commit history (click copy on the right to copy)",
+      "confirm": "Confirm Switch"
+    },
+    "dashboardUpdate": {
+      "title": "Update Dashboard to Latest Version Only",
+      "currentVersion": "Current Version",
+      "hasNewVersion": "New version available!",
+      "isLatest": "Already the latest version.",
+      "downloadAndUpdate": "Download and Update"
+    }
+  },
+  "accountDialog": {
+    "title": "Modify Account",
+    "securityWarning": "Security Reminder: Please change the default password to ensure account security",
+    "form": {
+      "currentPassword": "Current Password",
+      "newPassword": "New Password",
+      "newUsername": "New Username (Optional)",
+      "passwordHint": "Password must be at least 8 characters",
+      "usernameHint": "Leave blank to keep current username",
+      "defaultCredentials": "Default username and password are both astrbot"
+    },
+    "validation": {
+      "passwordRequired": "Please enter password",
+      "passwordMinLength": "Password must be at least 8 characters",
+      "usernameMinLength": "Username must be at least 3 characters"
+    },
+    "actions": {
+      "save": "Save Changes",
+      "cancel": "Cancel"
+    },
+    "messages": {
+      "updateFailed": "Update failed, please try again"
+    }
+  }
+} 

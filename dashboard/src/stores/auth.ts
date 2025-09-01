@@ -32,7 +32,7 @@ export const useAuthStore = defineStore({
     },
     logout() {
       this.username = '';
-      localStorage.removeItem('username');
+      localStorage.removeItem('user');
       localStorage.removeItem('token');
       router.push('/auth/login');
     },

@@ -83,19 +83,18 @@ class AiocqhttpAdapter(Platform):
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
     ):
-        ret = await AiocqhttpMessageEvent._parse_onebot_json(message_chain)
-        match session.message_type.value:
-            case MessageType.GROUP_MESSAGE.value:
-                if "_" in session.session_id:
-                    # 独立会话
-                    _, group_id = session.session_id.split("_")
-                    await self.bot.send_group_msg(group_id=group_id, message=ret)
-                else:
-                    await self.bot.send_group_msg(
-                        group_id=session.session_id, message=ret
-                    )
-            case MessageType.FRIEND_MESSAGE.value:
-                await self.bot.send_private_msg(user_id=session.session_id, message=ret)
+        is_group = session.message_type == MessageType.GROUP_MESSAGE
+        if is_group:
+            session_id = session.session_id.split("_")[-1]
+        else:
+            session_id = session.session_id
+        await AiocqhttpMessageEvent.send_message(
+            bot=self.bot,
+            message_chain=message_chain,
+            event=None,  # 这里不需要 event，因为是通过 session 发送的
+            is_group=is_group,
+            session_id=session_id,
+        )
         await super().send_by_session(session, message_chain)
 
     async def convert_message(self, event: Event) -> AstrBotMessage:
@@ -168,9 +167,7 @@ class AiocqhttpAdapter(Platform):
 
         if "sub_type" in event:
             if event["sub_type"] == "poke" and "target_id" in event:
-                abm.message.append(
-                    Poke(qq=str(event["target_id"]), type="poke")
-                )  # noqa: F405
+                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))  # noqa: F405
 
         return abm
 
@@ -221,6 +218,9 @@ class AiocqhttpAdapter(Platform):
             a = None
             if t == "text":
                 current_text = "".join(m["data"]["text"] for m in m_group).strip()
+                if not current_text:
+                    # 如果文本段为空，则跳过
+                    continue
                 message_str += current_text
                 a = ComponentTypes[t](text=current_text)  # noqa: F405
                 abm.message.append(a)
@@ -270,8 +270,16 @@ class AiocqhttpAdapter(Platform):
                                 action="get_msg",
                                 message_id=int(m["data"]["id"]),
                             )
+                            # 添加必要的 post_type 字段，防止 Event.from_payload 报错
+                            reply_event_data["post_type"] = "message"
+                            new_event = Event.from_payload(reply_event_data)
+                            if not new_event:
+                                logger.error(
+                                    f"无法从回复消息数据构造 Event 对象: {reply_event_data}"
+                                )
+                                continue
                             abm_reply = await self._convert_handle_message_event(
-                                Event.from_payload(reply_event_data), get_reply=False
+                                new_event, get_reply=False
                             )
 
                             reply_seg = Reply(
@@ -304,7 +312,9 @@ class AiocqhttpAdapter(Platform):
                             user_id=int(m["data"]["qq"]),
                         )
                         if at_info:
-                            nickname = at_info.get("nick", "")
+                            nickname = at_info.get("nick", "") or at_info.get(
+                                "nickname", ""
+                            )
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
 
                             abm.message.append(
@@ -319,7 +329,7 @@ class AiocqhttpAdapter(Platform):
                                 first_at_self_processed = True
                             else:
                                 # 非第一个@机器人或@其他用户，添加到message_str
-                                message_str += f" @{nickname} "
+                                message_str += f" @{nickname}({m['data']['qq']}) "
                         else:
                             abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
                     except ActionFailed as e:

@@ -145,6 +145,8 @@ class Plain(BaseMessageComponent):
     def toDict(self):
         return {"type": "text", "data": {"text": self.text.strip()}}
 
+    async def to_dict(self):
+        return {"type": "text", "data": {"text": self.text}}
 
 class Face(BaseMessageComponent):
     """
@@ -702,6 +704,10 @@ class Node(BaseMessageComponent):
                         "data": {"file": f"base64://{bs64}"},
                     }
                 )
+            elif isinstance(comp, Plain):
+                # For Plain segments, we need to handle the plain differently
+                d = await comp.to_dict()
+                data_content.append(d)
             elif isinstance(comp, File):
                 # For File segments, we need to handle the file differently
                 d = await comp.to_dict()

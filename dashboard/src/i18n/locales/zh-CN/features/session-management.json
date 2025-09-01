@@ -1,0 +1,87 @@
+{
+  "title": "会话管理",
+  "subtitle": "管理活跃会话和配置",
+  "buttons": {
+    "refresh": "刷新",
+    "edit": "编辑",
+    "apply": "应用批量设置",
+    "editName": "编辑会话名称",
+    "save": "保存",
+    "cancel": "取消"
+  },
+  "sessions": {
+    "activeSessions": "活跃会话",
+    "sessionCount": "个会话",
+    "noActiveSessions": "暂无活跃会话",
+    "noActiveSessionsDesc": "当有用户与机器人交互时，会话将会显示在这里"
+  },
+  "search": {
+    "placeholder": "搜索会话...",
+    "platformFilter": "平台筛选"
+  },
+  "table": {
+    "headers": {
+      "sessionStatus": "会话状态",
+      "sessionInfo": "会话信息",
+      "persona": "人格",
+      "chatProvider": "Chat Provider",
+      "sttProvider": "STT Provider",
+      "ttsProvider": "TTS Provider",
+      "llmStatus": "LLM启停",
+      "ttsStatus": "TTS启停",
+      "pluginManagement": "插件管理"
+    }
+  },
+  "status": {
+    "enabled": "已启用",
+    "disabled": "已禁用"
+  },
+  "persona": {
+    "none": "无人格"
+  },
+  "batchOperations": {
+    "title": "批量操作",
+    "setPersona": "批量设置人格",
+    "setChatProvider": "批量设置 Chat Provider",
+    "setSttProvider": "批量设置 STT Provider",
+    "setTtsProvider": "批量设置 TTS Provider",
+    "setLlmStatus": "批量设置 LLM 状态",
+    "setTtsStatus": "批量设置 TTS 状态",
+    "noSttProvider": "暂无可用 STT Provider",
+    "noTtsProvider": "暂无可用 TTS Provider"
+  },
+  "pluginManagement": {
+    "title": "插件管理",
+    "noPlugins": "暂无可用插件",
+    "noPluginsDesc": "目前没有激活的插件",
+    "loading": "加载插件列表中...",
+    "author": "作者"
+  },
+  "nameEditor": {
+    "title": "编辑会话名称",
+    "customName": "自定义名称",
+    "placeholder": "输入自定义会话名称（留空则使用原始名称）",
+    "originalName": "原始名称",
+    "fullSessionId": "完整会话ID",
+    "hint": "自定义名称帮助您轻松识别会话。当设置了自定义名称时，会显示一个小感叹号标识（！），鼠标悬停时会显示实际的UMO。"
+  },
+  "messages": {
+    "refreshSuccess": "会话列表已刷新",
+    "personaUpdateSuccess": "人格更新成功",
+    "personaUpdateError": "人格更新失败",
+    "providerUpdateSuccess": "Provider 更新成功",
+    "providerUpdateError": "Provider 更新失败",
+    "sessionStatusSuccess": "会话 {status}",
+    "llmStatusSuccess": "LLM {status}",
+    "ttsStatusSuccess": "TTS {status}",
+    "statusUpdateError": "状态更新失败",
+    "loadSessionsError": "加载会话列表失败",
+    "batchUpdateSuccess": "成功批量更新 {count} 项设置",
+    "batchUpdatePartial": "批量更新完成，{success} 项成功，{error} 项失败",
+    "loadPluginsError": "加载插件列表失败",
+    "pluginStatusSuccess": "插件 {name} {status}",
+    "pluginStatusError": "插件状态更新失败",
+    "nameUpdateSuccess": "会话名称更新成功",
+    "nameUpdateError": "会话名称更新失败"
+  }
+}

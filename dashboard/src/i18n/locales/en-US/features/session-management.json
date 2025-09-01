@@ -1,0 +1,87 @@
+{
+  "title": "Session Management",
+  "subtitle": "Manage active sessions and configurations",
+  "buttons": {
+    "refresh": "Refresh",
+    "edit": "Edit",
+    "apply": "Apply Batch Settings",
+    "editName": "Edit Session Name",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "sessions": {
+    "activeSessions": "Active Sessions",
+    "sessionCount": "sessions",
+    "noActiveSessions": "No active sessions",
+    "noActiveSessionsDesc": "Sessions will appear here when users interact with the bot"
+  },
+  "search": {
+    "placeholder": "Search sessions...",
+    "platformFilter": "Platform Filter"
+  },
+  "table": {
+    "headers": {
+      "sessionStatus": "Session Status",
+      "sessionInfo": "Session Info",
+      "persona": "Persona",
+      "chatProvider": "Chat Provider",
+      "sttProvider": "STT Provider",
+      "ttsProvider": "TTS Provider",
+      "llmStatus": "LLM Status",
+      "ttsStatus": "TTS Status",
+      "pluginManagement": "Plugin Management"
+    }
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "persona": {
+    "none": "No Persona"
+  },
+  "batchOperations": {
+    "title": "Batch Operations",
+    "setPersona": "Batch Set Persona",
+    "setChatProvider": "Batch Set Chat Provider",
+    "setSttProvider": "Batch Set STT Provider",
+    "setTtsProvider": "Batch Set TTS Provider",
+    "setLlmStatus": "Batch Set LLM Status",
+    "setTtsStatus": "Batch Set TTS Status",
+    "noSttProvider": "No STT Provider Available",
+    "noTtsProvider": "No TTS Provider Available"
+  },
+  "pluginManagement": {
+    "title": "Plugin Management",
+    "noPlugins": "No available plugins",
+    "noPluginsDesc": "Currently no active plugins",
+    "loading": "Loading plugin list...",
+    "author": "Author"
+  },
+  "nameEditor": {
+    "title": "Edit Session Name",
+    "customName": "Custom Name",
+    "placeholder": "Enter custom session name (leave empty to use original name)",
+    "originalName": "Original Name",
+    "fullSessionId": "Full Session ID",
+    "hint": "Custom names help you easily identify sessions. The small information icon (!) will show the actual UMO when hovering."
+  },
+  "messages": {
+    "refreshSuccess": "Session list refreshed",
+    "personaUpdateSuccess": "Persona updated successfully",
+    "personaUpdateError": "Failed to update persona",
+    "providerUpdateSuccess": "Provider updated successfully",
+    "providerUpdateError": "Failed to update provider",
+    "sessionStatusSuccess": "Session {status}",
+    "llmStatusSuccess": "LLM {status}",
+    "ttsStatusSuccess": "TTS {status}",
+    "statusUpdateError": "Failed to update status",
+    "loadSessionsError": "Failed to load session list",
+    "batchUpdateSuccess": "Successfully batch updated {count} settings",
+    "batchUpdatePartial": "Batch update completed, {success} successful, {error} failed",
+    "loadPluginsError": "Failed to load plugin list",
+    "pluginStatusSuccess": "Plugin {name} {status}",
+    "pluginStatusError": "Failed to update plugin status",
+    "nameUpdateSuccess": "Session name updated successfully",
+    "nameUpdateError": "Failed to update session name"
+  }
+}

@@ -19,7 +19,7 @@ const MainRoutes = {
     {
       name: 'ExtensionMarketplace',
       path: '/extension-marketplace',
-      component: () => import('@/views/ExtensionMarketplace.vue')
+      component: () => import('@/views/ExtensionPage.vue')
     },
     {
       name: 'Platforms',
@@ -52,6 +52,11 @@ const MainRoutes = {
       component: () => import('@/views/ConversationPage.vue')
     },
     {
+      name: 'SessionManagement',
+      path: '/session-management',
+      component: () => import('@/views/SessionManagementPage.vue')
+    },
+    {
       name: 'Console',
       path: '/console',
       component: () => import('@/views/ConsolePage.vue')
@@ -81,7 +86,15 @@ const MainRoutes = {
     {
       name: 'Chat',
       path: '/chat',
-      component: () => import('@/views/ChatPage.vue')
+      component: () => import('@/views/ChatPage.vue'),
+      children: [
+        {
+          path: ':conversationId',
+          name: 'ChatDetail',
+          component: () => import('@/views/ChatPage.vue'),
+          props: true
+        }
+      ]
     },
     {
       name: 'Settings',

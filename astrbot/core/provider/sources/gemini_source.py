@@ -12,10 +12,9 @@ from google.genai.errors import APIError
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
-from astrbot.api.provider import Personality, Provider
-from astrbot.core.db import BaseDatabase
+from astrbot.api.provider import Provider
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
+from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.func_tool_manager import FuncCall
 from astrbot.core.utils.io import download_image_by_url
 
@@ -52,17 +51,13 @@ class ProviderGoogleGenAI(Provider):
 
     def __init__(
         self,
-        provider_config: dict,
-        provider_settings: dict,
-        db_helper: BaseDatabase,
-        persistant_history=True,
-        default_persona: Personality = None,
+        provider_config,
+        provider_settings,
+        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            persistant_history,
-            db_helper,
             default_persona,
         )
         self.api_keys: list = provider_config.get("key", [])
@@ -141,24 +136,66 @@ class ProviderGoogleGenAI(Provider):
             logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
             modalities = ["Text"]
 
-        tool_list = None
+        tool_list = []
+        model_name = self.get_model()
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
+        url_context = self.provider_config.get("gm_url_context", False)
 
-        if native_coderunner:
-            tool_list = [types.Tool(code_execution=types.ToolCodeExecution())]
-            if native_search:
-                logger.warning("已启用代码执行工具，搜索工具将被忽略")
-            if tools:
-                logger.warning("已启用代码执行工具，函数工具将被忽略")
-        elif native_search:
-            tool_list = [types.Tool(google_search=types.GoogleSearch())]
-            if tools:
-                logger.warning("已启用搜索工具，函数工具将被忽略")
+        if "gemini-2.5" in model_name:
+            if native_coderunner:
+                tool_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
+                if native_search:
+                    logger.warning("代码执行工具与搜索工具互斥，已忽略搜索工具")
+                if url_context:
+                    logger.warning(
+                        "代码执行工具与URL上下文工具互斥，已忽略URL上下文工具"
+                    )
+            else:
+                if native_search:
+                    tool_list.append(types.Tool(google_search=types.GoogleSearch()))
+
+                if url_context:
+                    if hasattr(types, "UrlContext"):
+                        tool_list.append(types.Tool(url_context=types.UrlContext()))
+                    else:
+                        logger.warning(
+                            "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包"
+                        )
+
+        elif "gemini-2.0-lite" in model_name:
+            if native_coderunner or native_search or url_context:
+                logger.warning(
+                    "gemini-2.0-lite 不支持代码执行、搜索工具和URL上下文，将忽略这些设置"
+                )
+            tool_list = None
+
+        else:
+            if native_coderunner:
+                tool_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
+                if native_search:
+                    logger.warning("代码执行工具与搜索工具互斥，已忽略搜索工具")
+            elif native_search:
+                tool_list.append(types.Tool(google_search=types.GoogleSearch()))
+
+            if url_context and not native_coderunner:
+                if hasattr(types, "UrlContext"):
+                    tool_list.append(types.Tool(url_context=types.UrlContext()))
+                else:
+                    logger.warning(
+                        "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包"
+                    )
+
+        if not tool_list:
+            tool_list = None
+
+        if tools and tool_list:
+            logger.warning("已启用原生工具，函数工具将被忽略")
         elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
             tool_list = [
                 types.Tool(function_declarations=func_desc["function_declarations"])
             ]
+
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=temperature,
@@ -394,6 +431,7 @@ class ProviderGoogleGenAI(Provider):
                 continue
 
         llm_response = LLMResponse("assistant")
+        llm_response.raw_completion = result
         llm_response.result_chain = self._process_content_parts(result, llm_response)
         return llm_response
 
@@ -433,6 +471,10 @@ class ProviderGoogleGenAI(Provider):
                     raise
                 continue
 
+        # Accumulate the complete response text for the final response
+        accumulated_text = ""
+        final_response = None
+
         async for chunk in result:
             llm_response = LLMResponse("assistant", is_chunk=True)
 
@@ -440,36 +482,53 @@ class ProviderGoogleGenAI(Provider):
                 part.function_call for part in chunk.candidates[0].content.parts
             ):
                 llm_response = LLMResponse("assistant", is_chunk=False)
+                llm_response.raw_completion = chunk
                 llm_response.result_chain = self._process_content_parts(
                     chunk, llm_response
                 )
                 yield llm_response
-                break
+                return
 
             if chunk.text:
+                accumulated_text += chunk.text
                 llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
                 yield llm_response
 
             if chunk.candidates[0].finish_reason:
-                llm_response = LLMResponse("assistant", is_chunk=False)
-                if not chunk.candidates[0].content.parts:
-                    llm_response.result_chain = MessageChain(chain=[Comp.Plain(" ")])
-                else:
-                    llm_response.result_chain = self._process_content_parts(
-                        chunk, llm_response
+                # Process the final chunk for potential tool calls or other content
+                if chunk.candidates[0].content.parts:
+                    final_response = LLMResponse("assistant", is_chunk=False)
+                    final_response.raw_completion = chunk
+                    final_response.result_chain = self._process_content_parts(
+                        chunk, final_response
                     )
-                yield llm_response
                 break
+
+        # Yield final complete response with accumulated text
+        if not final_response:
+            final_response = LLMResponse("assistant", is_chunk=False)
+
+        # Set the complete accumulated text in the final response
+        if accumulated_text:
+            final_response.result_chain = MessageChain(
+                chain=[Comp.Plain(accumulated_text)]
+            )
+        elif not final_response.result_chain:
+            # If no text was accumulated and no final response was set, provide empty space
+            final_response.result_chain = MessageChain(chain=[Comp.Plain(" ")])
+
+        yield final_response
 
     async def text_chat(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: list[str] = None,
-        func_tool: FuncCall = None,
-        contexts: list = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
+        tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -485,10 +544,14 @@ class ProviderGoogleGenAI(Provider):
 
         # tool calls result
         if tool_calls_result:
-            context_query.extend(tool_calls_result.to_openai_messages())
+            if not isinstance(tool_calls_result, list):
+                context_query.extend(tool_calls_result.to_openai_messages())
+            else:
+                for tcr in tool_calls_result:
+                    context_query.extend(tcr.to_openai_messages())
 
         model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = self.get_model()
+        model_config["model"] = model or self.get_model()
 
         payloads = {"messages": context_query, **model_config}
 
@@ -505,13 +568,14 @@ class ProviderGoogleGenAI(Provider):
 
     async def text_chat_stream(
         self,
-        prompt: str,
-        session_id: str = None,
-        image_urls: list[str] = None,
-        func_tool: FuncCall = None,
-        contexts: str = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult = None,
+        prompt,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
+        tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
@@ -527,10 +591,14 @@ class ProviderGoogleGenAI(Provider):
 
         # tool calls result
         if tool_calls_result:
-            context_query.extend(tool_calls_result.to_openai_messages())
+            if not isinstance(tool_calls_result, list):
+                context_query.extend(tool_calls_result.to_openai_messages())
+            else:
+                for tcr in tool_calls_result:
+                    context_query.extend(tcr.to_openai_messages())
 
         model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = self.get_model()
+        model_config["model"] = model or self.get_model()
 
         payloads = {"messages": context_query, **model_config}
 
@@ -590,7 +658,10 @@ class ProviderGoogleGenAI(Provider):
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
                 user_content["content"].append(
-                    {"type": "image_url", "image_url": {"url": image_data}}
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_data},
+                    }
                 )
             return user_content
         else:

@@ -1,14 +1,19 @@
 import typing
 import traceback
+import os
 from .route import Route, Response, RouteContext
+from astrbot.core.provider.entities import ProviderType
 from quart import request
 from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
+from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core import logger
+from astrbot.core.provider import Provider
+import asyncio
 
 
 def try_cast(value: str, type_: str):
@@ -153,6 +158,7 @@ class ConfigRoute(Route):
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
+        self.config: AstrBotConfig = core_lifecycle.astrbot_config
         self.routes = {
             "/config/get": ("GET", self.get_configs),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
@@ -164,8 +170,167 @@ class ConfigRoute(Route):
             "/config/provider/update": ("POST", self.post_update_provider),
             "/config/provider/delete": ("POST", self.post_delete_provider),
             "/config/llmtools": ("GET", self.get_llm_tools),
+            "/config/provider/check_one": ("GET", self.check_one_provider_status),
+            "/config/provider/list": ("GET", self.get_provider_config_list),
+            "/config/provider/model_list": ("GET", self.get_provider_model_list),
+            "/config/provider/get_session_seperate": (
+                "GET",
+                lambda: Response()
+                .ok({"enable": self.config["provider_settings"]["separate_provider"]})
+                .__dict__,
+            ),
+            "/config/provider/set_session_seperate": (
+                "POST",
+                self.post_session_seperate,
+            ),
         }
         self.register_routes()
+
+    async def _test_single_provider(self, provider):
+        """辅助函数：测试单个 provider 的可用性"""
+        meta = provider.meta()
+        provider_name = provider.provider_config.get("id", "Unknown Provider")
+        provider_capability_type = meta.provider_type
+
+        status_info = {
+            "id": getattr(meta, "id", "Unknown ID"),
+            "model": getattr(meta, "model", "Unknown Model"),
+            "type": provider_capability_type.value,
+            "name": provider_name,
+            "status": "unavailable",  # 默认为不可用
+            "error": None,
+        }
+        logger.debug(
+            f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})"
+        )
+
+        if provider_capability_type == ProviderType.CHAT_COMPLETION:
+            try:
+                logger.debug(f"Sending 'Ping' to provider: {status_info['name']}")
+                response = await asyncio.wait_for(
+                    provider.text_chat(prompt="REPLY `PONG` ONLY"), timeout=45.0
+                )
+                logger.debug(f"Received response from {status_info['name']}: {response}")
+                if response is not None:
+                    status_info["status"] = "available"
+                    response_text_snippet = ""
+                    if hasattr(response, "completion_text") and response.completion_text:
+                        response_text_snippet = (
+                            response.completion_text[:70] + "..."
+                            if len(response.completion_text) > 70
+                            else response.completion_text
+                        )
+                    elif hasattr(response, "result_chain") and response.result_chain:
+                        try:
+                            response_text_snippet = (
+                                response.result_chain.get_plain_text()[:70] + "..."
+                                if len(response.result_chain.get_plain_text()) > 70
+                                else response.result_chain.get_plain_text()
+                            )
+                        except Exception as _:
+                            pass
+                    logger.info(
+                        f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{response_text_snippet}'"
+                    )
+                else:
+                    status_info["error"] = "Test call returned None, but expected an LLMResponse object."
+                    logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None.")
+
+            except asyncio.TimeoutError:
+                status_info["error"] = "Connection timed out after 45 seconds during test call."
+                logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) timed out.")
+            except Exception as e:
+                error_message = str(e)
+                status_info["error"] = error_message
+                logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}")
+                logger.debug(f"Traceback for {status_info['name']}:\n{traceback.format_exc()}")
+
+        elif provider_capability_type == ProviderType.EMBEDDING:
+            try:
+                # For embedding, we can call the get_embedding method with a short prompt.
+                embedding_result = await provider.get_embedding("health_check")
+                if isinstance(embedding_result, list) and (not embedding_result or isinstance(embedding_result[0], float)):
+                    status_info["status"] = "available"
+                else:
+                    status_info["status"] = "unavailable"
+                    status_info["error"] = f"Embedding test failed: unexpected result type {type(embedding_result)}"
+            except Exception as e:
+                logger.error(f"Error testing embedding provider {provider_name}: {e}", exc_info=True)
+                status_info["status"] = "unavailable"
+                status_info["error"] = f"Embedding test failed: {str(e)}"
+
+        elif provider_capability_type == ProviderType.TEXT_TO_SPEECH:
+            try:
+                # For TTS, we can call the get_audio method with a short prompt.
+                audio_result = await provider.get_audio("你好")
+                if isinstance(audio_result, str) and audio_result:
+                    status_info["status"] = "available"
+                else:
+                    status_info["status"] = "unavailable"
+                    status_info["error"] = f"TTS test failed: unexpected result type {type(audio_result)}"
+            except Exception as e:
+                logger.error(f"Error testing TTS provider {provider_name}: {e}", exc_info=True)
+                status_info["status"] = "unavailable"
+                status_info["error"] = f"TTS test failed: {str(e)}"
+        elif provider_capability_type == ProviderType.SPEECH_TO_TEXT:
+            try:
+                logger.debug(f"Sending health check audio to provider: {status_info['name']}")
+                sample_audio_path = os.path.join(get_astrbot_path(), "samples", "stt_health_check.wav")
+                if not os.path.exists(sample_audio_path):
+                    status_info["status"] = "unavailable"
+                    status_info["error"] = "STT test failed: sample audio file not found."
+                    logger.warning(f"STT test for {status_info['name']} failed: sample audio file not found at {sample_audio_path}")
+                else:
+                    text_result = await provider.get_text(sample_audio_path)
+                    if isinstance(text_result, str) and text_result:
+                        status_info["status"] = "available"
+                        snippet = text_result[:70] + "..." if len(text_result) > 70 else text_result
+                        logger.info(f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{snippet}'")
+                    else:
+                        status_info["status"] = "unavailable"
+                        status_info["error"] = f"STT test failed: unexpected result type {type(text_result)}"
+                        logger.warning(f"STT test for {status_info['name']} failed: unexpected result type {type(text_result)}")
+            except Exception as e:
+                logger.error(f"Error testing STT provider {provider_name}: {e}", exc_info=True)
+                status_info["status"] = "unavailable"
+                status_info["error"] = f"STT test failed: {str(e)}"
+        else:
+            logger.debug(f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}")
+            status_info["status"] = "available"
+            status_info["error"] = "This provider type is not tested and is assumed to be available."
+
+        return status_info
+
+    def _error_response(self, message: str, status_code: int = 500, log_fn=logger.error):
+        log_fn(message)
+        # 记录更详细的traceback信息，但只在是严重错误时
+        if status_code == 500:
+            log_fn(traceback.format_exc())
+        return Response().error(message).__dict__
+
+    async def check_one_provider_status(self):
+        """API: check a single LLM Provider's status by id"""
+        provider_id = request.args.get("id")
+        if not provider_id:
+            return self._error_response("Missing provider_id parameter", 400, logger.warning)
+
+        logger.info(f"API call: /config/provider/check_one id={provider_id}")
+        try:
+            prov_mgr = self.core_lifecycle.provider_manager
+            target = prov_mgr.inst_map.get(provider_id)
+
+            if not target:
+                logger.warning(f"Provider with id '{provider_id}' not found in provider_manager.")
+                return Response().error(f"Provider with id '{provider_id}' not found").__dict__
+
+            result = await self._test_single_provider(target)
+            return Response().ok(result).__dict__
+
+        except Exception as e:
+            return self._error_response(
+                f"Critical error checking provider {provider_id}: {e}",
+                500
+            )
 
     async def get_configs(self):
         # plugin_name 为空时返回 AstrBot 配置
@@ -174,6 +339,54 @@ class ConfigRoute(Route):
         if not plugin_name:
             return Response().ok(await self._get_astrbot_config()).__dict__
         return Response().ok(await self._get_plugin_config(plugin_name)).__dict__
+
+    async def post_session_seperate(self):
+        """设置提供商会话隔离"""
+        post_config = await request.json
+        enable = post_config.get("enable", None)
+        if enable is None:
+            return Response().error("缺少参数 enable").__dict__
+
+        astrbot_config = self.core_lifecycle.astrbot_config
+        astrbot_config["provider_settings"]["separate_provider"] = enable
+        try:
+            astrbot_config.save_config()
+        except Exception as e:
+            return Response().error(str(e)).__dict__
+        return Response().ok(None, "设置成功~").__dict__
+
+    async def get_provider_config_list(self):
+        provider_type = request.args.get("provider_type", None)
+        if not provider_type:
+            return Response().error("缺少参数 provider_type").__dict__
+        provider_list = []
+        astrbot_config = self.core_lifecycle.astrbot_config
+        for provider in astrbot_config["provider"]:
+            if provider.get("provider_type", None) == provider_type:
+                provider_list.append(provider)
+        return Response().ok(provider_list).__dict__
+
+    async def get_provider_model_list(self):
+        """获取指定提供商的模型列表"""
+        provider_id = request.args.get("provider_id", None)
+        if not provider_id:
+            return Response().error("缺少参数 provider_id").__dict__
+
+        prov_mgr = self.core_lifecycle.provider_manager
+        provider: Provider | None = prov_mgr.inst_map.get(provider_id, None)
+        if not provider:
+            return Response().error(f"未找到 ID 为 {provider_id} 的提供商").__dict__
+
+        try:
+            models = await provider.get_models()
+            ret = {
+                "models": models,
+                "provider_id": provider_id,
+            }
+            return Response().ok(ret).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
 
     async def post_astrbot_configs(self):
         post_configs = await request.json

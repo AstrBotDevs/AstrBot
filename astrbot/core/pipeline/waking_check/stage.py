@@ -1,13 +1,16 @@
-from ..stage import Stage, register_stage
-from ..context import PipelineContext
+from typing import AsyncGenerator, Union
+
 from astrbot import logger
-from typing import Union, AsyncGenerator
+from astrbot.core.message.components import At, AtAll, Reply
+from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
-from astrbot.core.message.components import At
-from astrbot.core.star.star_handler import star_handlers_registry, EventType
-from astrbot.core.star.star import star_map
 from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
+from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+from ..context import PipelineContext
+from ..stage import Stage, register_stage
 
 
 @register_stage
@@ -38,6 +41,9 @@ class WakingCheckStage(Stage):
         # 是否忽略机器人自己发送的消息
         self.ignore_bot_self_message = self.ctx.astrbot_config["platform_settings"].get(
             "ignore_bot_self_message", False
+        )
+        self.ignore_at_all = self.ctx.astrbot_config["platform_settings"].get(
+            "ignore_at_all", False
         )
 
     async def process(
@@ -77,11 +83,18 @@ class WakingCheckStage(Stage):
                 event.message_str = event.message_str[len(wake_prefix) :].strip()
                 break
         if not is_wake:
-            # 检查是否有 at 消息
+            # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
             for message in messages:
-                if isinstance(message, At) and (
-                    str(message.qq) == str(event.get_self_id())
-                    or str(message.qq) == "all"
+                if (
+                    (
+                        isinstance(message, At)
+                        and (str(message.qq) == str(event.get_self_id()))
+                    )
+                    or (isinstance(message, AtAll) and not self.ignore_at_all)
+                    or (
+                        isinstance(message, Reply)
+                        and str(message.sender_id) == str(event.get_self_id())
+                    )
                 ):
                     is_wake = True
                     event.is_wake = True
@@ -125,7 +138,6 @@ class WakingCheckStage(Stage):
                             f"插件 {star_map[handler.handler_module_path].name}: {e}"
                         )
                     )
-                    await event._post_send()
                     event.stop_event()
                     passed = False
                     break
@@ -140,7 +152,6 @@ class WakingCheckStage(Stage):
                                 f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。"
                             )
                         )
-                        await event._post_send()
                     logger.info(
                         f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。"
                     )
@@ -156,7 +167,12 @@ class WakingCheckStage(Stage):
                         "parsed_params"
                     )
 
-            event.clear_extra()
+            event._extras.pop("parsed_params", None)
+
+        # 根据会话配置过滤插件处理器
+        activated_handlers = SessionPluginManager.filter_handlers_by_session(
+            event, activated_handlers
+        )
 
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)

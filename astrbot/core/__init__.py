@@ -13,7 +13,6 @@ from .utils.astrbot_path import get_astrbot_data_path
 # 初始化数据存储文件夹
 os.makedirs(get_astrbot_data_path(), exist_ok=True)
 
-WEBUI_SK = "Advanced_System_for_Text_Response_and_Bot_Operations_Tool"
 DEMO_MODE = os.getenv("DEMO_MODE", False)
 
 astrbot_config = AstrBotConfig()
@@ -29,6 +28,3 @@ pip_installer = PipInstaller(
     astrbot_config.get("pip_install_arg", ""),
     astrbot_config.get("pypi_index_url", None),
 )
-web_chat_queue = asyncio.Queue(maxsize=32)
-web_chat_back_queue = asyncio.Queue(maxsize=32)
-

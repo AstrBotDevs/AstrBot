@@ -1,10 +1,9 @@
 import astrbot.core.message.components as Comp
 import os
 from typing import List
-from .. import Provider, Personality
+from .. import Provider
 from ..entities import LLMResponse
 from ..func_tool_manager import FuncCall
-from astrbot.core.db import BaseDatabase
 from ..register import register_provider_adapter
 from astrbot.core.utils.dify_api_client import DifyAPIClient
 from astrbot.core.utils.io import download_image_by_url, download_file
@@ -17,17 +16,13 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 class ProviderDify(Provider):
     def __init__(
         self,
-        provider_config: dict,
-        provider_settings: dict,
-        db_helper: BaseDatabase,
-        persistant_history=False,
-        default_persona: Personality = None,
+        provider_config,
+        provider_settings,
+        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            persistant_history,
-            db_helper,
             default_persona,
         )
         self.api_key = provider_config.get("dify_api_key", "")
@@ -61,13 +56,18 @@ class ProviderDify(Provider):
         self,
         prompt: str,
         session_id: str = None,
-        image_urls: List[str] = [],
+        image_urls: List[str] = None,
         func_tool: FuncCall = None,
         contexts: List = None,
         system_prompt: str = None,
+        tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> LLMResponse:
+        if image_urls is None:
+            image_urls = []
         result = ""
+        session_id = session_id or kwargs.get("user") or "unknown"  # 1734
         conversation_id = self.conversation_ids.get(session_id, "")
 
         files_payload = []
@@ -100,6 +100,7 @@ class ProviderDify(Provider):
         session_vars = sp.get("session_variables", {})
         session_var = session_vars.get(session_id, {})
         payload_vars.update(session_var)
+        payload_vars["system_prompt"] = system_prompt
 
         try:
             match self.api_type:
@@ -199,6 +200,7 @@ class ProviderDify(Provider):
         contexts=...,
         system_prompt=None,
         tool_calls_result=None,
+        model=None,
         **kwargs,
     ):
         # raise NotImplementedError("This method is not implemented yet.")
