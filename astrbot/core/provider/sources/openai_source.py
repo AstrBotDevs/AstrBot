@@ -222,6 +222,9 @@ class ProviderOpenAIOfficial(Provider):
             logger.error(f"API 返回的 completion 无法解析：{completion}。")
             raise Exception(f"API 返回的 completion 无法解析：{completion}。")
 
+        if llm_response.completion_text == "":
+            logger.debug("API 可能返回了空消息。")
+
         llm_response.raw_completion = completion
 
         return llm_response
