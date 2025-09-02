@@ -383,8 +383,7 @@ export default {
             messageType: 'success',
             personaIdRules: [
                 v => !!v || this.tm('validation.required'),
-                v => (v && v.length >= 2) || this.tm('validation.minLength', { min: 2 }),
-                v => /^[a-zA-Z0-9_-]+$/.test(v) || this.tm('validation.alphanumeric')
+                v => (v && v.length >= 0) || this.tm('validation.minLength', { min: 2 }),
             ],
             systemPromptRules: [
                 v => !!v || this.tm('validation.required'),
