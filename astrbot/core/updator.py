@@ -56,9 +56,7 @@ class AstrBotUpdator(RepoZipUpdator):
         try:
             if "astrbot" in os.path.basename(sys.argv[0]):  # 兼容cli
                 if os.name == "nt":
-                    args = [
-                        f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]
-                    ]
+                    args = [f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]]
                 else:
                     args = sys.argv[1:]
                 os.execl(sys.executable, py, "-m", "astrbot.cli.__main__", *args)

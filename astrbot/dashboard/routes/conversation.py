@@ -23,6 +23,7 @@ class ConversationRoute(Route):
             ),
             "/conversation/update": ("POST", self.upd_conv),
             "/conversation/delete": ("POST", self.del_conv),
+            "/conversation/bulk_delete": ("POST", self.bulk_del_conv),
             "/conversation/update_history": (
                 "POST",
                 self.update_history,
@@ -174,6 +175,61 @@ class ConversationRoute(Route):
         except Exception as e:
             logger.error(f"删除对话失败: {str(e)}\n{traceback.format_exc()}")
             return Response().error(f"删除对话失败: {str(e)}").__dict__
+
+    async def bulk_del_conv(self):
+        """批量删除对话"""
+        try:
+            data = await request.get_json()
+            conversations = data.get("conversations", [])
+
+            if not conversations or not isinstance(conversations, list):
+                return Response().error("缺少必要参数: conversations 列表").__dict__
+
+            success_count = 0
+            error_count = 0
+            errors = []
+
+            for conv in conversations:
+                user_id = conv.get("user_id")
+                cid = conv.get("cid")
+
+                if not user_id or not cid:
+                    error_count += 1
+                    errors.append(f"对话 {cid or 'unknown'}: 缺少必要参数")
+                    continue
+
+                try:
+                    await self.core_lifecycle.conversation_manager.delete_conversation(
+                        unified_msg_origin=user_id, conversation_id=cid
+                    )
+                    success_count += 1
+                except Exception as e:
+                    error_count += 1
+                    errors.append(f"对话 {cid}: {str(e)}")
+                    logger.error(f"删除对话 {cid} 失败: {str(e)}")
+
+            message = f"批量删除完成：成功 {success_count} 个，失败 {error_count} 个"
+            if errors:
+                message += f"。错误详情：{'; '.join(errors[:3])}"  # 只显示前3个错误
+                if len(errors) > 3:
+                    message += f" 等 {len(errors)} 个错误"
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "message": message,
+                        "success_count": success_count,
+                        "error_count": error_count,
+                        "errors": errors,
+                    }
+                )
+                .__dict__
+            )
+
+        except Exception as e:
+            logger.error(f"批量删除对话失败: {str(e)}\n{traceback.format_exc()}")
+            return Response().error(f"批量删除对话失败: {str(e)}").__dict__
 
     async def update_history(self):
         """更新对话历史内容"""
