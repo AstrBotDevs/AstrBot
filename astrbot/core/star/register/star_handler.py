@@ -15,6 +15,11 @@ from ..filter.regex import RegexFilter
 from typing import Awaitable
 from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.agent.agent import Agent
+from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.astr_agent_context import AstrAgentContext
 
 
 def get_handler_full_name(awaitable: Awaitable) -> str:
@@ -306,7 +311,7 @@ def register_on_llm_response(**kwargs):
     return decorator
 
 
-def register_llm_tool(name: str = None):
+def register_llm_tool(name: str = None, **kwargs):
     """为函数调用（function-calling / tools-use）添加工具。
 
     请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会尝试解析该函数注释）
@@ -340,6 +345,9 @@ def register_llm_tool(name: str = None):
     """
 
     name_ = name
+    registering_agent = None
+    if kwargs.get("registering_agent"):
+        registering_agent = kwargs["registering_agent"]
 
     def decorator(awaitable: Awaitable):
         llm_tool_name = name_ if name_ else awaitable.__name__
@@ -357,11 +365,65 @@ def register_llm_tool(name: str = None):
                     "description": arg.description,
                 }
             )
-        md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)
-        llm_tools.add_func(
-            llm_tool_name, args, docstring.description.strip(), md.handler
-        )
+        # print(llm_tool_name, registering_agent)
+        if not registering_agent:
+            md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)
+            llm_tools.add_func(
+                llm_tool_name, args, docstring.description.strip(), md.handler
+            )
+        else:
+            assert isinstance(registering_agent, RegisteringAgent)
+            # print(f"Registering tool {llm_tool_name} for agent", registering_agent._agent.name)
+            if registering_agent._agent.tools is None:
+                registering_agent._agent.tools = []
+            registering_agent._agent.tools.append(llm_tools.spec_to_func(
+                llm_tool_name, args, docstring.description.strip(), awaitable
+            ))
+
         return awaitable
+
+    return decorator
+
+
+class RegisteringAgent:
+    """用于 Agent 注册"""
+
+    def llm_tool(self, *args, **kwargs):
+        kwargs["registering_agent"] = self
+        return register_llm_tool(*args, **kwargs)
+
+    def __init__(self, agent: Agent[AstrAgentContext]):
+        self._agent = agent
+
+
+def register_agent(
+    name: str,
+    instruction: str,
+    tools: list[str | FunctionTool] = None,
+    run_hooks: BaseAgentRunHooks[AstrAgentContext] = None,
+):
+    """注册一个 Agent
+
+    Args:
+        name: Agent 的名称
+        instruction: Agent 的指令
+        tools: Agent 使用的工具列表
+        run_hooks: Agent 运行时的钩子函数
+    """
+    tools_ = tools or []
+
+    def decorator(awaitable: Awaitable):
+        AstrAgent = Agent[AstrAgentContext]
+        agent = AstrAgent(
+            name=name,
+            instructions=instruction,
+            tools=tools_,
+            run_hooks=run_hooks or BaseAgentRunHooks[AstrAgentContext](),
+        )
+        handoff_tool = HandoffTool(agent=agent)
+        handoff_tool.handler=awaitable
+        llm_tools.func_list.append(handoff_tool)
+        return RegisteringAgent(agent)
 
     return decorator
 

@@ -1,0 +1,67 @@
+{
+  "page": {
+    "description": "Manage and configure chat bot personality settings"
+  },
+  "buttons": {
+    "create": "Create Persona",
+    "createFirst": "Create First Persona",
+    "edit": "Edit",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "save": "Save",
+    "addDialogPair": "Add Dialog Pair"
+  },
+  "labels": {
+    "presetDialogs": "Preset Dialogs ({count} pairs)",
+    "createdAt": "Created At",
+    "updatedAt": "Updated At"
+  },
+  "form": {
+    "personaId": "Persona ID",
+    "systemPrompt": "System Prompt",
+    "presetDialogs": "Preset Dialogs",
+    "presetDialogsHelp": "Add some preset dialogs to help the bot better understand the role settings. The number of dialogs must be even (users and assistants take turns).",
+    "userMessage": "User Message",
+    "assistantMessage": "Assistant Message",
+    "tools": "Tool Selection",
+    "toolsHelp": "Select available tools for this persona. Tools allow the bot to perform specific functions such as searching, calculating, getting information, etc.",
+    "toolsSelection": "Tool Selection Actions",
+    "selectAllTools": "Select All Tools",
+    "clearAllTools": "Clear Selection",
+    "allSelected": "All Selected",
+    "mcpServersQuickSelect": "MCP Servers Quick Select",
+    "searchTools": "Search Tools",
+    "selectedTools": "Selected Tools",
+    "noToolsAvailable": "No tools available",
+    "noToolsFound": "No matching tools found",
+    "loadingTools": "Loading tools...",
+    "allToolsAvailable": "Use all available tools",
+    "noToolsSelected": "No tools selected"
+  },
+  "dialog": {
+    "create": {
+      "title": "Create New Persona"
+    },
+    "edit": {
+      "title": "Edit Persona"
+    }
+  },
+  "empty": {
+    "title": "No Persona Configured",
+    "description": "Create your first persona to start using personalized chatbots"
+  },
+  "validation": {
+    "required": "This field is required",
+    "minLength": "Minimum {min} characters required",
+    "alphanumeric": "Only letters, numbers, underscores and hyphens are allowed",
+    "dialogRequired": "{type} cannot be empty"
+  },
+  "messages": {
+    "loadError": "Failed to load persona list",
+    "saveSuccess": "Saved successfully",
+    "saveError": "Save failed",
+    "deleteConfirm": "Are you sure you want to delete persona \"{id}\"? This action cannot be undone.",
+    "deleteSuccess": "Deleted successfully",
+    "deleteError": "Delete failed"
+  }
+}

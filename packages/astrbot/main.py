@@ -26,6 +26,7 @@ from .long_term_memory import LongTermMemory
 from astrbot.core import logger
 from astrbot.api.message_components import Plain, Image, Reply
 from astrbot.core.star.session_llm_manager import SessionServiceManager
+from astrbot.core.provider.func_tool_manager import ToolSet
 from typing import Union
 from enum import Enum
 
@@ -59,9 +60,6 @@ class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
         cfg = context.get_config()
-        self.prompt_prefix = cfg["provider_settings"]["prompt_prefix"]
-        self.identifier = cfg["provider_settings"]["identifier"]
-        self.enable_datetime = cfg["provider_settings"]["datetime_system_prompt"]
         self.timezone = cfg.get("timezone")
         if not self.timezone:
             # 系统默认时区
@@ -69,18 +67,10 @@ class Main(star.Star):
         else:
             logger.info(f"Timezone set to: {self.timezone}")
         self.ltm = None
-        if (
-            self.context.get_config()["provider_ltm_settings"]["group_icl_enable"]
-            or self.context.get_config()["provider_ltm_settings"]["active_reply"][
-                "enable"
-            ]
-        ):
-            try:
-                self.ltm = LongTermMemory(
-                    self.context.get_config()["provider_ltm_settings"], self.context
-                )
-            except BaseException as e:
-                logger.error(f"聊天增强 err: {e}")
+        try:
+            self.ltm = LongTermMemory(self.context.astrbot_config_mgr, self.context)
+        except BaseException as e:
+            logger.error(f"聊天增强 err: {e}")
 
     async def _query_astrbot_notice(self):
         try:
@@ -91,6 +81,12 @@ class Main(star.Star):
                     return (await resp.json())["notice"]
         except BaseException:
             return ""
+
+    def ltm_enabled(self, event: AstrMessageEvent):
+        ltmse = self.context.get_config(umo=event.unified_msg_origin)[
+            "provider_ltm_settings"
+        ]
+        return ltmse["group_icl_enable"] or ltmse["active_reply"]["enable"]
 
     @filter.command("help")
     async def help(self, event: AstrMessageEvent):
@@ -128,7 +124,6 @@ class Main(star.Star):
 /reset: 重置 LLM 会话
 /history: 当前对话的对话记录
 /persona: 人格情景(op)
-/tool ls: 函数工具
 /key: API Key(op)
 /websearch: 网页搜索
 {notice}"""
@@ -139,7 +134,7 @@ class Main(star.Star):
     @filter.command("llm")
     async def llm(self, event: AstrMessageEvent):
         """开启/关闭 LLM"""
-        cfg = self.context.get_config()
+        cfg = self.context.get_config(umo=event.unified_msg_origin)
         enable = cfg["provider_settings"]["enable"]
         if enable:
             cfg["provider_settings"]["enable"] = False
@@ -157,50 +152,30 @@ class Main(star.Star):
     @tool.command("ls")
     async def tool_ls(self, event: AstrMessageEvent):
         """查看函数工具列表"""
-        tm = self.context.get_llm_tool_manager()
-        msg = "函数工具：\n"
-        for tool in tm.func_list:
-            active = " (启用)" if tool.active else "(停用)"
-            msg += f"- {tool.name}: {tool.description} {active}\n"
-
-        msg += "\n使用 /tool on/off <工具名> 激活或者停用函数工具。/tool off_all 停用所有函数工具。"
-        event.set_result(MessageEventResult().message(msg).use_t2i(False))
+        event.set_result(
+            MessageEventResult().message("tool 指令在 AstrBot v4.0.0 已经被移除。")
+        )
 
     @tool.command("on")
     async def tool_on(self, event: AstrMessageEvent, tool_name: str):
         """启用一个函数工具"""
-        if self.context.activate_llm_tool(tool_name):
-            event.set_result(
-                MessageEventResult().message(f"激活工具 {tool_name} 成功。")
-            )
-        else:
-            event.set_result(
-                MessageEventResult().message(
-                    f"激活工具 {tool_name} 失败，未找到此工具。"
-                )
-            )
+        event.set_result(
+            MessageEventResult().message("tool 指令在 AstrBot v4.0.0 已经被移除。")
+        )
 
     @tool.command("off")
     async def tool_off(self, event: AstrMessageEvent, tool_name: str):
         """停用一个函数工具"""
-        if self.context.deactivate_llm_tool(tool_name):
-            event.set_result(
-                MessageEventResult().message(f"停用工具 {tool_name} 成功。")
-            )
-        else:
-            event.set_result(
-                MessageEventResult().message(
-                    f"停用工具 {tool_name} 失败，未找到此工具。"
-                )
-            )
+        event.set_result(
+            MessageEventResult().message("tool 指令在 AstrBot v4.0.0 已经被移除。")
+        )
 
     @tool.command("off_all")
     async def tool_all_off(self, event: AstrMessageEvent):
         """停用所有函数工具"""
-        tm = self.context.get_llm_tool_manager()
-        for tool in tm.func_list:
-            self.context.deactivate_llm_tool(tool.name)
-        event.set_result(MessageEventResult().message("停用所有工具成功。"))
+        event.set_result(
+            MessageEventResult().message("tool 指令在 AstrBot v4.0.0 已经被移除。")
+        )
 
     @filter.command_group("plugin")
     def plugin(self):
@@ -322,7 +297,7 @@ class Main(star.Star):
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent):
         """开关文本转图片"""
-        config = self.context.get_config()
+        config = self.context.get_config(umo=event.unified_msg_origin)
         if config["t2i"]:
             config["t2i"] = False
             config.save_config()
@@ -404,8 +379,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。"
                 )
             )
-        self.context.get_config()["platform_settings"]["id_whitelist"].append(str(sid))
-        self.context.get_config().save_config()
+        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        cfg["platform_settings"]["id_whitelist"].append(str(sid))
+        cfg.save_config()
         event.set_result(MessageEventResult().message("添加白名单成功。"))
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -413,10 +389,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def dwl(self, event: AstrMessageEvent, sid: str):
         """删除白名单。dwl <sid>"""
         try:
-            self.context.get_config()["platform_settings"]["id_whitelist"].remove(
-                str(sid)
-            )
-            self.context.get_config().save_config()
+            cfg = self.context.get_config(umo=event.unified_msg_origin)
+            cfg["platform_settings"]["id_whitelist"].remove(str(sid))
+            cfg.save_config()
             event.set_result(MessageEventResult().message("删除白名单成功。"))
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
@@ -528,7 +503,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         scene = RstScene.get_scene(is_group, is_unique_session)
 
-        alter_cmd_cfg = sp.get("alter_cmd", {})
+        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {})
         plugin_config = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_config.get("reset", {})
 
@@ -579,7 +554,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         )
 
         ret = "清除会话 LLM 聊天历史成功。"
-        if self.ltm:
+        if self.ltm and self.ltm_enabled(message):
             cnt = await self.ltm.remove_session(event=message)
             ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
 
@@ -666,7 +641,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
         session_curr_cid = await conv_mgr.get_curr_conversation_id(umo)
 
         if not session_curr_cid:
-            session_curr_cid = await conv_mgr.new_conversation(umo)
+            session_curr_cid = await conv_mgr.new_conversation(
+                umo, message.get_platform_id()
+            )
 
         contexts, total_pages = await conv_mgr.get_human_readable_context(
             umo, session_curr_cid, page, size_per_page
@@ -732,11 +709,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
         """生成所有对话的标题字典"""
         _titles = {}
         for conv in conversations_all:
-            persona_id = conv.persona_id
-            if not persona_id or persona_id == "[%None]":
-                persona_id = self.context.provider_manager.selected_default_persona[
-                    "name"
-                ]
             title = conv.title if conv.title else "新对话"
             _titles[conv.cid] = title
 
@@ -744,9 +716,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
         for conv in conversations_paged:
             persona_id = conv.persona_id
             if not persona_id or persona_id == "[%None]":
-                persona_id = self.context.provider_manager.selected_default_persona[
-                    "name"
-                ]
+                persona = await self.context.persona_manager.get_default_persona_v3(
+                    umo=message.unified_msg_origin
+                )
+                persona_id = persona["name"]
             title = _titles.get(conv.cid, "新对话")
             ret += f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
             global_index += 1
@@ -791,11 +764,11 @@ UID: {user_id} 此 ID 可用于设置管理员。
             return
 
         cid = await self.context.conversation_manager.new_conversation(
-            message.unified_msg_origin
+            message.unified_msg_origin, message.get_platform_id()
         )
 
         # 长期记忆
-        if self.ltm:
+        if self.ltm and self.ltm_enabled(message):
             try:
                 await self.ltm.remove_session(event=message)
             except Exception as e:
@@ -820,12 +793,14 @@ UID: {user_id} 此 ID 可用于设置管理员。
         if sid:
             session = str(
                 MessageSesion(
-                    platform_name=message.platform_meta.name,
+                    platform_name=message.platform_meta.id,
                     message_type=MessageType("GroupMessage"),
                     session_id=sid,
                 )
             )
-            cid = await self.context.conversation_manager.new_conversation(session)
+            cid = await self.context.conversation_manager.new_conversation(
+                session, message.get_platform_id()
+            )
             message.set_result(
                 MessageEventResult().message(
                     f"群聊 {session} 已切换到新对话: 新对话({cid[:4]})。"
@@ -1010,22 +985,22 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("persona")
     async def persona(self, message: AstrMessageEvent):
         l = message.message_str.split(" ")  # noqa: E741
+        umo = message.unified_msg_origin
 
         curr_persona_name = "无"
-        cid = await self.context.conversation_manager.get_curr_conversation_id(
-            message.unified_msg_origin
+        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
+        default_persona = await self.context.persona_manager.get_default_persona_v3(
+            umo=umo
         )
         curr_cid_title = "无"
         if cid:
             conversation = await self.context.conversation_manager.get_conversation(
-                unified_msg_origin=message.unified_msg_origin,
+                unified_msg_origin=umo,
                 conversation_id=cid,
                 create_if_not_exists=True,
             )
             if not conversation.persona_id and not conversation.persona_id == "[%None]":
-                curr_persona_name = (
-                    self.context.provider_manager.selected_default_persona["name"]
-                )
+                curr_persona_name = default_persona["name"]
             else:
                 curr_persona_name = conversation.persona_id
 
@@ -1043,7 +1018,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
 - 人格情景详细信息: `/persona view 人格`
 - 取消人格: `/persona unset`
 
-默认人格情景: {self.context.provider_manager.selected_default_persona["name"]}
+默认人格情景: {default_persona["name"]}
 当前对话 {curr_cid_title} 的人格情景: {curr_persona_name}
 
 配置人格情景请前往管理面板-配置页
@@ -1126,29 +1101,22 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str):
         # session_id = event.get_session_id()
         uid = event.unified_msg_origin
-        session_vars = sp.get("session_variables", {})
-
-        session_var = session_vars.get(uid, {})
+        session_var = await sp.session_get(uid, "session_variables", {})
         session_var[key] = value
-
-        session_vars[uid] = session_var
-
-        sp.put("session_variables", session_vars)
+        await sp.session_put(uid, "session_variables", session_var)
 
         yield event.plain_result(f"会话 {uid} 变量 {key} 存储成功。使用 /unset 移除。")
 
     @filter.command("unset")
     async def unset_variable(self, event: AstrMessageEvent, key: str):
         uid = event.unified_msg_origin
-        session_vars = sp.get("session_variables", {})
-
-        session_var = session_vars.get(uid, {})
+        session_var = await sp.session_get(umo="uid", key="session_variables", default={})
 
         if key not in session_var:
             yield event.plain_result("没有那个变量名。格式 /unset 变量名。")
         else:
             del session_var[key]
-            sp.put("session_variables", session_vars)
+            await sp.session_put(uid, "session_variables", session_var)
             yield event.plain_result(f"会话 {uid} 变量 {key} 移除成功。")
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
@@ -1161,7 +1129,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 has_image_or_plain = True
                 break
 
-        if self.ltm and has_image_or_plain:
+        if self.ltm_enabled(event) and self.ltm and has_image_or_plain:
             need_active = await self.ltm.need_active_reply(event)
 
             group_icl_enable = self.context.get_config()["provider_ltm_settings"][
@@ -1229,8 +1197,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
-        if self.prompt_prefix:
-            req.prompt = self.prompt_prefix + req.prompt
+        cfg = self.context.get_config(umo=event.unified_msg_origin)["provider_settings"]
+        if prefix := cfg.get("prompt_prefix"):
+            req.prompt = prefix + req.prompt
 
         # 解析引用内容
         quote = None
@@ -1239,14 +1208,14 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 quote = comp
                 break
 
-        if self.identifier:
+        if cfg.get("identifier"):
             user_id = event.message_obj.sender.user_id
             user_nickname = event.message_obj.sender.nickname
             user_info = f"\n[User ID: {user_id}, Nickname: {user_nickname}]\n"
             req.prompt = user_info + req.prompt
 
         # 启用附加时间戳
-        if self.enable_datetime:
+        if cfg.get("datetime_system_prompt"):
             current_time = None
             if self.timezone:
                 # 启用时区
@@ -1262,28 +1231,59 @@ UID: {user_id} 此 ID 可用于设置管理员。
             req.system_prompt += f"\nCurrent datetime: {current_time}\n"
 
         if req.conversation:
+            # persona inject
             persona_id = req.conversation.persona_id
             if not persona_id and persona_id != "[%None]":  # [%None] 为用户取消人格
-                persona_id = self.context.provider_manager.selected_default_persona[
+                persona_id = self.context.persona_manager.selected_default_persona_v3[
                     "name"
                 ]
             persona = next(
                 builtins.filter(
                     lambda persona: persona["name"] == persona_id,
-                    self.context.provider_manager.personas,
+                    self.context.persona_manager.personas_v3,
                 ),
                 None,
             )
             if persona:
                 if prompt := persona["prompt"]:
                     req.system_prompt += prompt
-                if mood_dialogs := persona["_mood_imitation_dialogs_processed"]:
-                    req.system_prompt += "\nHere are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n"
-                    req.system_prompt += mood_dialogs
-                if (
-                    begin_dialogs := persona["_begin_dialogs_processed"]
-                ) and not req.contexts:
+                if begin_dialogs := persona["_begin_dialogs_processed"]:
                     req.contexts[:0] = begin_dialogs
+
+            # tools select
+            tmgr = self.context.get_llm_tool_manager()
+            if (persona and persona.get("tools") is None) or not persona:
+                # select all
+                toolset = tmgr.get_full_tool_set()
+            else:
+                toolset = ToolSet()
+                for tool_name in persona["tools"]:
+                    tool = tmgr.get_func(tool_name)
+                    if tool:
+                        toolset.add_tool(tool)
+            req.func_tool = toolset
+            logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
+
+            # image caption
+            img_cap_prov_id = cfg.get("default_image_caption_provider_id")
+            if img_cap_prov_id and req.image_urls:
+                img_cap_prompt = cfg.get(
+                    "image_caption_prompt", "Please describe the image."
+                )
+                try:
+                    if prov := self.context.get_provider_by_id(img_cap_prov_id):
+                        logger.debug(
+                            f"Processing image caption with provider: {img_cap_prov_id}"
+                        )
+                        llm_resp = await prov.text_chat(
+                            prompt=img_cap_prompt,
+                            image_urls=req.image_urls,
+                        )
+                        if llm_resp.completion_text:
+                            req.prompt = f"(Image Caption: {llm_resp.completion_text})\n\n{req.prompt}"
+                        req.image_urls = []
+                except Exception as e:
+                    logger.error(f"处理图片描述失败: {e}")
 
         if quote:
             sender_info = ""
@@ -1316,7 +1316,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
 
-        if self.ltm:
+        if self.ltm and self.ltm_enabled(event):
             try:
                 await self.ltm.on_req_llm(event, req)
             except BaseException as e:
@@ -1325,10 +1325,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.after_message_sent()
     async def after_llm_req(self, event: AstrMessageEvent):
         """在 LLM 请求后记录对话"""
-        if self.ltm:
+        if self.ltm and self.ltm_enabled(event):
             try:
                 await self.ltm.after_req_llm(event)
-            except BaseException as e:
+            except Exception as e:
                 logger.error(f"ltm: {e}")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -1349,7 +1349,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         #    对reset权限进行特殊处理
         # ============================
         if cmd_name == "reset" and cmd_type == "config":
-            alter_cmd_cfg = sp.get("alter_cmd", {})
+            alter_cmd_cfg = await sp.global_get("alter_cmd", {})
             plugin_ = alter_cmd_cfg.get("astrbot", {})
             reset_cfg = plugin_.get("reset", {})
 
@@ -1384,7 +1384,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             scene = RstScene.from_index(scene_num)
             scene_key = scene.key
 
-            self.update_reset_permission(scene_key, perm_type)
+            await self.update_reset_permission(scene_key, perm_type)
 
             yield event.plain_result(
                 f"已将 reset 命令在{scene.name}场景下的权限设为{perm_type}"
@@ -1415,14 +1415,14 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         found_plugin = star_map[found_command.handler_module_path]
 
-        alter_cmd_cfg = sp.get("alter_cmd", {})
+        alter_cmd_cfg = await sp.global_get("alter_cmd", {})
         plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
         cfg = plugin_.get(found_command.handler_name, {})
         cfg["permission"] = cmd_type
         plugin_[found_command.handler_name] = cfg
         alter_cmd_cfg[found_plugin.name] = plugin_
 
-        sp.put("alter_cmd", alter_cmd_cfg)
+        await sp.global_put("alter_cmd", alter_cmd_cfg)
 
         # 注入权限过滤器
         found_permission_filter = False
@@ -1446,17 +1446,17 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         yield event.plain_result(f"已将 {cmd_name} 设置为 {cmd_type} 指令")
 
-    def update_reset_permission(self, scene_key: str, perm_type: str):
+    async def update_reset_permission(self, scene_key: str, perm_type: str):
         """更新reset命令在特定场景下的权限设置
 
         Args:
             scene_key (str): 场景编号，1-3
             perm_type (str): 权限类型，admin或member
         """
-        alter_cmd_cfg = sp.get("alter_cmd", {})
+        alter_cmd_cfg = await sp.global_get("alter_cmd", {})
         plugin_cfg = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_cfg.get("reset", {})
         reset_cfg[scene_key] = perm_type
         plugin_cfg["reset"] = reset_cfg
         alter_cmd_cfg["astrbot"] = plugin_cfg
-        sp.put("alter_cmd", alter_cmd_cfg)
+        await sp.global_put("alter_cmd", alter_cmd_cfg)

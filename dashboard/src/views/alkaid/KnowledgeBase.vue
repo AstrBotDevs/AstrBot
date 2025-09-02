@@ -12,7 +12,9 @@
                     :loading="installing">
                     {{ tm('notInstalled.install') }}
                 </v-btn>
-                <ConsoleDisplayer v-show="installing" style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%" :show-level-btns="false"></ConsoleDisplayer>
+                <ConsoleDisplayer v-show="installing"
+                    style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%"
+                    :show-level-btns="false"></ConsoleDisplayer>
             </div>
             <div v-else-if="kbCollections.length == 0" class="d-flex align-center justify-center flex-column"
                 style="flex-grow: 1; width: 100%; height: 100%;">
@@ -34,6 +36,14 @@
                     @click="$router.push('/extension?open_config=astrbot_plugin_knowledge_base')">
                     {{ tm('list.config') }}
                 </v-btn>
+                <v-btn class="mb-4 ml-4" prepend-icon="mdi-update" variant="tonal" color="warning"
+                    @click="checkPluginUpdate" :loading="checkingUpdate">
+                    {{ tm('list.checkUpdate') }}
+                </v-btn>
+                <v-btn v-if="pluginHasUpdate" class="mb-4 ml-4" prepend-icon="mdi-download" variant="tonal"
+                    color="primary" @click="updatePlugin" :loading="updatingPlugin">
+                    {{ tm('list.updatePlugin', { version: pluginLatestVersion }) }}
+                </v-btn>
 
                 <div class="kb-grid">
                     <div v-for="(kb, index) in kbCollections" :key="index" class="kb-card"
@@ -52,9 +62,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
-                <div style="padding: 16px; text-align: center;">
-                    <small style="color: #a3a3a3">{{ tm('list.tips') }}</small>
                 </div>
 
             </div>
@@ -75,13 +82,21 @@
                     <v-form @submit.prevent="submitCreateForm">
 
 
-                        <v-text-field variant="outlined" v-model="newKB.name" :label="tm('createDialog.nameLabel')" required></v-text-field>
+                        <v-text-field variant="outlined" v-model="newKB.name" :label="tm('createDialog.nameLabel')"
+                            required></v-text-field>
 
-                        <v-textarea v-model="newKB.description" :label="tm('createDialog.descriptionLabel')" variant="outlined" :placeholder="tm('createDialog.descriptionPlaceholder')"
+                        <v-textarea v-model="newKB.description" :label="tm('createDialog.descriptionLabel')"
+                            variant="outlined" :placeholder="tm('createDialog.descriptionPlaceholder')"
                             rows="3"></v-textarea>
 
                         <v-select v-model="newKB.embedding_provider_id" :items="embeddingProviderConfigs"
-                            :item-props="embeddingModelProps" :label="tm('createDialog.embeddingModelLabel')" variant="outlined" class="mt-2">
+                            :item-props="embeddingModelProps" :label="tm('createDialog.embeddingModelLabel')"
+                            variant="outlined" density="comfortable">
+                        </v-select>
+
+                        <v-select v-model="newKB.rerank_provider_id" :items="rerankProviderConfigs"
+                            :item-props="rerankModelProps" :label="tm('createDialog.rerankModelLabel')"
+                            variant="outlined" density="comfortable">
                         </v-select>
 
                         <small>{{ tm('createDialog.tips') }}</small>
@@ -89,8 +104,10 @@
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer></v-spacer>
-                    <v-btn color="error" variant="text" @click="showCreateDialog = false">{{ tm('createDialog.cancel') }}</v-btn>
-                    <v-btn color="primary" variant="text" @click="submitCreateForm">{{ tm('createDialog.create') }}</v-btn>
+                    <v-btn color="error" variant="text" @click="showCreateDialog = false">{{ tm('createDialog.cancel')
+                    }}</v-btn>
+                    <v-btn color="primary" variant="text" @click="submitCreateForm">{{ tm('createDialog.create')
+                    }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -114,7 +131,8 @@
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer></v-spacer>
-                    <v-btn color="primary" variant="text" @click="showEmojiPicker = false">{{ tm('emojiPicker.close') }}</v-btn>
+                    <v-btn color="primary" variant="text" @click="showEmojiPicker = false">{{ tm('emojiPicker.close')
+                    }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -134,89 +152,194 @@
                 <div v-if="currentKB._embedding_provider_config" class="px-6 py-2">
                     <v-chip class="mr-2" color="primary" variant="tonal" size="small" rounded="sm">
                         <v-icon start size="small">mdi-database</v-icon>
-                        {{ tm('contentDialog.embeddingModel') }}: {{ currentKB._embedding_provider_config.embedding_model }}
+                        {{ tm('contentDialog.embeddingModel') }}: {{
+                            currentKB._embedding_provider_config.embedding_model }}
                     </v-chip>
-                    <v-chip color="secondary" variant="tonal" size="small" rounded="sm">
-                        <v-icon start size="small">mdi-vector-point</v-icon>
-                        {{ tm('contentDialog.vectorDimension') }}: {{ currentKB._embedding_provider_config.embedding_dimensions }}
+
+                    <v-chip v-if="currentKB.rerank_provider_id" color="tertiary" variant="tonal" size="small"
+                        rounded="sm">
+                        <v-icon start size="small">mdi-sort-variant</v-icon>
+                        重排序模型: {{ rerankProviderConfigs.
+                            find(provider => provider.id === currentKB.rerank_provider_id)?.rerank_model || '未设置' }}
                     </v-chip>
-                    <small style="margin-left: 8px;">💡 使用方式: 在聊天页中输入 “/kb use {{ currentKB.collection_name }}”</small>
+                    <small style="margin-left: 8px;">💡 使用方式: 在聊天页中输入 "/kb use {{ currentKB.collection_name }}"</small>
                 </div>
 
                 <v-card-text>
                     <v-tabs v-model="activeTab">
-                        <v-tab value="upload">{{ tm('contentDialog.tabs.upload') }}</v-tab>
+                        <v-tab value="import">导入数据</v-tab>
                         <v-tab value="search">{{ tm('contentDialog.tabs.search') }}</v-tab>
                     </v-tabs>
 
                     <v-window v-model="activeTab" class="mt-4">
-                        <!-- 上传文件标签页 -->
-                        <v-window-item value="upload">
-                            <div class="upload-container pa-4">
-                                <div class="text-center mb-4">
-                                    <h3>{{ tm('upload.title') }}</h3>
-                                    <p class="text-subtitle-1">{{ tm('upload.subtitle') }}</p>
+                        <!-- 导入数据标签页 -->
+                        <v-window-item value="import">
+                            <div class="import-container pa-4">
+                                <div class="mb-8">
+                                    <h2>导入数据</h2>
+                                    <p class="text-subtitle-1">选择数据源并导入内容到知识库</p>
                                 </div>
 
-                                <div class="upload-zone" @dragover.prevent @drop.prevent="onFileDrop"
-                                    @click="triggerFileInput">
-                                    <input type="file" ref="fileInput" style="display: none" @change="onFileSelected" />
-                                    <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
-                                    <p class="mt-2">{{ tm('upload.dropzone') }}</p>
-                                </div>
+                                <!-- 数据源选择下拉列表 -->
+                                <v-select v-model="dataSource" :items="dataSourceOptions" :label="'数据源选择'"
+                                    variant="outlined" item-title="title" item-value="value"
+                                    prepend-inner-icon="mdi-database"></v-select>
 
-                                <!-- 优化后的分片长度和重叠长度设置 -->
-                                <v-card class="mt-4 chunk-settings-card" variant="outlined" color="grey-lighten-4">
-                                    <v-card-title class="pa-4 pb-0 d-flex align-center">
-                                        <v-icon color="primary" class="mr-2">mdi-puzzle-outline</v-icon>
-                                        <span class="text-subtitle-1 font-weight-bold">{{ tm('upload.chunkSettings.title') }}</span>
-                                        <v-tooltip location="top">
-                                            <template v-slot:activator="{ props }">
-                                                <v-icon v-bind="props" class="ml-2" size="small" color="grey">
-                                                    mdi-information-outline
-                                                </v-icon>
-                                            </template>
-                                            <span>
-                                                {{ tm('upload.chunkSettings.tooltip') }}
-                                            </span>
-                                        </v-tooltip>
-                                    </v-card-title>
-                                    <v-card-text class="pa-4 pt-2">
-                                        <div class="d-flex flex-wrap" style="gap: 8px">
-                                            <v-text-field v-model="chunkSize" :label="tm('upload.chunkSettings.chunkSizeLabel')" type="number"
-                                                :hint="tm('upload.chunkSettings.chunkSizeHint')" persistent-hint variant="outlined"
-                                                density="comfortable" class="flex-grow-1 chunk-field"
-                                                prepend-inner-icon="mdi-text-box-outline" min="50"></v-text-field>
-
-                                            <v-text-field v-model="overlap" :label="tm('upload.chunkSettings.overlapLabel')" type="number"
-                                                :hint="tm('upload.chunkSettings.overlapHint')" persistent-hint variant="outlined"
-                                                density="comfortable" class="flex-grow-1 chunk-field"
-                                                prepend-inner-icon="mdi-vector-intersection" min="0"></v-text-field>
-                                        </div>
-                                    </v-card-text>
-                                </v-card>
-
-                                <div class="selected-files mt-4" v-if="selectedFile">
-                                    <div type="info" variant="tonal" class="d-flex align-center">
-                                        <div>
-                                            <v-icon class="me-2">{{ getFileIcon(selectedFile.name) }}</v-icon>
-                                            <span style="font-weight: 1000;">{{ selectedFile.name }}</span>
-                                        </div>
-                                        <v-btn size="small" color="error" variant="text" @click="selectedFile = null">
-                                            <v-icon>mdi-close</v-icon>
-                                        </v-btn>
+                                <!-- 从文件导入 -->
+                                <div v-if="dataSource === 'file'" class="mt-4">
+                                    <div class="upload-zone" @dragover.prevent @drop.prevent="onFileDrop"
+                                        @click="triggerFileInput">
+                                        <input type="file" ref="fileInput" style="display: none"
+                                            @change="onFileSelected" />
+                                        <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+                                        <p class="mt-2">{{ tm('upload.dropzone') }}</p>
                                     </div>
 
-                                    <div class="text-center mt-4">
-                                        <v-btn color="primary" variant="elevated" :loading="uploading"
-                                            :disabled="!selectedFile" @click="uploadFile">
-                                            {{ tm('upload.upload') }}
-                                        </v-btn>
+                                    <!-- 分片长度和重叠长度设置 -->
+                                    <v-card class="mt-4 chunk-settings-card" variant="outlined" color="grey-lighten-4">
+                                        <v-card-title class="pa-4 pb-0 d-flex align-center">
+                                            <v-icon color="primary" class="mr-2">mdi-puzzle-outline</v-icon>
+                                            <span class="text-subtitle-1 font-weight-bold">{{
+                                                tm('upload.chunkSettings.title') }}</span>
+                                            <v-tooltip location="top">
+                                                <template v-slot:activator="{ props }">
+                                                    <v-icon v-bind="props" class="ml-2" size="small" color="grey">
+                                                        mdi-information-outline
+                                                    </v-icon>
+                                                </template>
+                                                <span>
+                                                    {{ tm('upload.chunkSettings.tooltip') }}
+                                                </span>
+                                            </v-tooltip>
+                                        </v-card-title>
+                                        <v-card-text class="pa-4 pt-2">
+                                            <div class="d-flex flex-wrap" style="gap: 8px">
+                                                <v-text-field v-model="chunkSize"
+                                                    :label="tm('upload.chunkSettings.chunkSizeLabel')" type="number"
+                                                    :hint="tm('upload.chunkSettings.chunkSizeHint')" persistent-hint
+                                                    variant="outlined" density="comfortable"
+                                                    class="flex-grow-1 chunk-field"
+                                                    prepend-inner-icon="mdi-text-box-outline" min="50"></v-text-field>
+
+                                                <v-text-field v-model="overlap"
+                                                    :label="tm('upload.chunkSettings.overlapLabel')" type="number"
+                                                    :hint="tm('upload.chunkSettings.overlapHint')" persistent-hint
+                                                    variant="outlined" density="comfortable"
+                                                    class="flex-grow-1 chunk-field"
+                                                    prepend-inner-icon="mdi-vector-intersection" min="0"></v-text-field>
+                                            </div>
+                                        </v-card-text>
+                                    </v-card>
+
+                                    <div class="selected-files mt-4" v-if="selectedFile">
+                                        <div type="info" variant="tonal" class="d-flex align-center">
+                                            <div>
+                                                <v-icon class="me-2">{{ getFileIcon(selectedFile.name) }}</v-icon>
+                                                <span style="font-weight: 1000;">{{ selectedFile.name }}</span>
+                                            </div>
+                                            <v-btn size="small" color="error" variant="text"
+                                                @click="selectedFile = null">
+                                                <v-icon>mdi-close</v-icon>
+                                            </v-btn>
+                                        </div>
+
+                                        <div class="text-center mt-4">
+                                            <v-btn color="primary" variant="elevated" :loading="uploading"
+                                                :disabled="!selectedFile" @click="uploadFile">
+                                                {{ tm('upload.upload') }}
+                                            </v-btn>
+                                        </div>
+                                    </div>
+
+                                    <div class="upload-progress mt-4" v-if="uploading">
+                                        <v-progress-linear indeterminate color="primary"></v-progress-linear>
                                     </div>
                                 </div>
 
-                                <div class="upload-progress mt-4" v-if="uploading">
-                                    <v-progress-linear indeterminate color="primary"></v-progress-linear>
+                                <!-- 从URL导入 -->
+                                <div v-if="dataSource === 'url'" class="from-url-container">
+                                    <v-alert type="info" variant="tonal" class="mb-4" border>
+                                        {{ tm('importFromUrl.preRequisite') }}
+                                    </v-alert>
+                                    <v-text-field v-model="importUrl" :label="tm('importFromUrl.urlLabel')"
+                                        :placeholder="tm('importFromUrl.urlPlaceholder')" variant="outlined"
+                                        class="mb-4" hide-details></v-text-field>
+
+                                    <v-card class="mb-4" variant="outlined" color="grey-lighten-4">
+                                        <v-card-title class="pa-4 pb-0 d-flex align-center">
+                                            <v-icon color="primary" class="mr-2">mdi-cog-outline</v-icon>
+                                            <span class="text-subtitle-1 font-weight-bold">{{
+                                                tm('importFromUrl.optionsTitle') }}</span>
+                                            <v-tooltip location="top">
+                                                <template v-slot:activator="{ props }">
+                                                    <v-icon v-bind="props" class="ml-2" size="small"
+                                                        color="grey">mdi-information-outline</v-icon>
+                                                </template>
+                                                <span>{{ tm('importFromUrl.tooltip') }}</span>
+                                            </v-tooltip>
+                                        </v-card-title>
+                                        <v-card-text class="pa-4 pt-2">
+                                            <v-row>
+                                                <v-col cols="12" md="6">
+                                                    <v-switch hide-details v-model="importOptions.use_llm_repair"
+                                                        :label="tm('importFromUrl.useLlmRepairLabel')" color="primary"
+                                                        inset></v-switch>
+                                                </v-col>
+                                                <v-col cols="12" md="6">
+                                                    <v-switch v-model="importOptions.use_clustering_summary"
+                                                        hide-details
+                                                        :label="tm('importFromUrl.useClusteringSummaryLabel')"
+                                                        color="primary" inset></v-switch>
+                                                </v-col>
+                                                <v-row class="pa-4">
+                                                    <!-- Optional Repair Selector -->
+                                                    <v-col v-if="importOptions.use_llm_repair"
+                                                        :md="optionalSelectorColWidth" cols="12">
+                                                        <v-select v-model="importOptions.repair_llm_provider_id"
+                                                            :items="llmProviderConfigs" item-value="id"
+                                                            :item-props="llmModelProps"
+                                                            :label="tm('importFromUrl.repairLlmProviderIdLabel')"
+                                                            variant="outlined" clearable hide-details></v-select>
+                                                    </v-col>
+
+                                                    <!-- Optional Summary Selector -->
+                                                    <v-col v-if="importOptions.use_clustering_summary"
+                                                        :md="optionalSelectorColWidth" cols="12">
+                                                        <v-select v-model="importOptions.summarize_llm_provider_id"
+                                                            :items="llmProviderConfigs" item-value="id"
+                                                            :item-props="llmModelProps"
+                                                            :label="tm('importFromUrl.summarizeLlmProviderIdLabel')"
+                                                            variant="outlined" clearable hide-details></v-select>
+                                                    </v-col>
+
+                                                    <v-col cols="12" md="6">
+                                                        <v-select v-model="importOptions.embedding_provider_id"
+                                                            :items="embeddingProviderConfigs" item-value="id"
+                                                            :item-props="embeddingModelProps"
+                                                            :label="tm('importFromUrl.embeddingProviderIdLabel')"
+                                                            variant="outlined" clearable hide-details></v-select>
+                                                    </v-col>
+                                                    <v-col cols="12" md="3">
+                                                        <v-text-field v-model="importOptions.chunk_size"
+                                                            :label="tm('importFromUrl.chunkSizeLabel')" type="number"
+                                                            variant="outlined" clearable hide-details></v-text-field>
+                                                    </v-col>
+                                                    <v-col cols="12" md="3">
+                                                        <v-text-field v-model="importOptions.chunk_overlap"
+                                                            :label="tm('importFromUrl.chunkOverlapLabel')" type="number"
+                                                            variant="outlined" clearable hide-details></v-text-field>
+                                                    </v-col>
+                                                </v-row>
+                                            </v-row>
+                                        </v-card-text>
+                                    </v-card>
+
+                                    <div class="text-center">
+                                        <v-btn color="primary" variant="elevated" :loading="importing"
+                                            :disabled="!importUrl" @click="startImportFromUrl">
+                                            {{ tm('importFromUrl.startImport') }}
+                                        </v-btn>
+                                    </div>
                                 </div>
                             </div>
                         </v-window-item>
@@ -225,12 +348,13 @@
                         <v-window-item value="search">
                             <div class="search-container pa-4">
                                 <v-form @submit.prevent="searchKnowledgeBase" class="d-flex align-center">
-                                    <v-text-field v-model="searchQuery" :label="tm('search.queryLabel')" append-icon="mdi-magnify"
-                                        variant="outlined" class="flex-grow-1 me-2" @click:append="searchKnowledgeBase"
-                                        @keyup.enter="searchKnowledgeBase" :placeholder="tm('search.queryPlaceholder')"
-                                        hide-details></v-text-field>
+                                    <v-text-field v-model="searchQuery" :label="tm('search.queryLabel')"
+                                        append-icon="mdi-magnify" variant="outlined" class="flex-grow-1 me-2"
+                                        @click:append="searchKnowledgeBase" @keyup.enter="searchKnowledgeBase"
+                                        :placeholder="tm('search.queryPlaceholder')" hide-details></v-text-field>
 
-                                    <v-select v-model="topK" :items="[3, 5, 10, 20]" :label="tm('search.resultCountLabel')" variant="outlined"
+                                    <v-select v-model="topK" :items="[3, 5, 10, 20]"
+                                        :label="tm('search.resultCountLabel')" variant="outlined"
                                         style="max-width: 120px;" hide-details></v-select>
                                 </v-form>
 
@@ -253,7 +377,8 @@
                                                     <v-spacer></v-spacer>
                                                     <v-chip v-if="result.score" size="small" color="primary"
                                                         variant="tonal">
-                                                        {{ tm('search.relevance') }}: {{ Math.round(result.score * 100) }}%
+                                                        {{ tm('search.relevance') }}: {{ Math.round(result.score * 100)
+                                                        }}%
                                                     </v-chip>
                                                 </div>
                                                 <div class="search-content">{{ result.content }}</div>
@@ -284,8 +409,11 @@
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer></v-spacer>
-                    <v-btn color="grey-darken-1" variant="text" @click="showDeleteDialog = false">{{ tm('deleteDialog.cancel') }}</v-btn>
-                    <v-btn color="error" variant="text" @click="deleteKnowledgeBase" :loading="deleting">{{ tm('deleteDialog.delete') }}</v-btn>
+                    <v-btn color="grey-darken-1" variant="text" @click="showDeleteDialog = false">{{
+                        tm('deleteDialog.cancel')
+                    }}</v-btn>
+                    <v-btn color="error" variant="text" @click="deleteKnowledgeBase" :loading="deleting">{{
+                        tm('deleteDialog.delete') }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -322,7 +450,8 @@ export default {
                 name: '',
                 emoji: '🙂',
                 description: '',
-                embedding_provider_id: ''
+                embedding_provider_id: null,
+                rerank_provider_id: null,
             },
             snackbar: {
                 show: false,
@@ -360,7 +489,12 @@ export default {
                 collection_name: '',
                 emoji: ''
             },
-            activeTab: 'upload',
+            activeTab: 'import',
+            dataSource: 'file',
+            dataSourceOptions: [
+                { title: '从文件', value: 'file', icon: 'mdi-file-upload' },
+                { title: '从URL', value: 'url', icon: 'mdi-web' }
+            ],
             selectedFile: null,
             chunkSize: null,
             overlap: null,
@@ -375,20 +509,92 @@ export default {
                 collection_name: ''
             },
             deleting: false,
-            embeddingProviderConfigs: []
+            embeddingProviderConfigs: [],
+            rerankProviderConfigs: [],
+            llmProviderConfigs: [],
+            // URL导入相关数据
+            importUrl: '',
+            importOptions: {
+                use_llm_repair: true,
+                use_clustering_summary: false,
+                repair_llm_provider_id: null,
+                summarize_llm_provider_id: null,
+                embedding_provider_id: null,
+                chunk_size: 300,
+                chunk_overlap: 50,
+            },
+            importing: false,
+            pollingInterval: null,
+            // 插件更新相关
+            checkingUpdate: false,
+            updatingPlugin: false,
+            pluginHasUpdate: false,
+            pluginCurrentVersion: '',
+            pluginLatestVersion: '',
+        }
+    },
+    computed: {
+        optionalSelectorColWidth() {
+            const repairOn = this.importOptions.use_llm_repair;
+            const summaryOn = this.importOptions.use_clustering_summary;
+            if (repairOn && summaryOn) {
+                return 6; // Both on, each takes half
+            }
+            return 12; // Only one is on, it takes full width
+        }
+    },
+    watch: {
+        llmProviderConfigs: {
+            handler(newVal) {
+                if (newVal && newVal.length > 0) {
+                    if (!this.importOptions.repair_llm_provider_id) {
+                        this.importOptions.repair_llm_provider_id = newVal[0].id;
+                    }
+                    if (!this.importOptions.summarize_llm_provider_id) {
+                        this.importOptions.summarize_llm_provider_id = newVal[0].id;
+                    }
+                }
+            },
+            immediate: true,
+            deep: true
+        },
+        embeddingProviderConfigs: {
+            handler(newVal) {
+                if (newVal && newVal.length > 0) {
+                    if (!this.importOptions.embedding_provider_id) {
+                        this.importOptions.embedding_provider_id = newVal[0].id;
+                    }
+                }
+            },
+            immediate: true,
+            deep: true
         }
     },
     mounted() {
         this.checkPlugin();
-        this.getEmbeddingProviderList();
+        this.getProviderList();
     },
     methods: {
+        llmModelProps(providerConfig) {
+            return {
+                title: providerConfig.llm_model || providerConfig.id,
+                subtitle: `Provider ID: ${providerConfig.id}`,
+            }
+        },
         embeddingModelProps(providerConfig) {
             return {
                 title: providerConfig.embedding_model,
-                subtitle: this.tm('createDialog.providerInfo', { 
-                    id: providerConfig.id, 
-                    dimensions: providerConfig.embedding_dimensions 
+                subtitle: this.tm('createDialog.providerInfo', {
+                    id: providerConfig.id,
+                    dimensions: providerConfig.embedding_dimensions
+                }),
+            }
+        },
+        rerankModelProps(providerConfig) {
+            return {
+                title: providerConfig.rerank_model,
+                subtitle: this.tm('createDialog.rerankProviderInfo', {
+                    id: providerConfig.id,
                 }),
             }
         },
@@ -400,7 +606,10 @@ export default {
                     }
                     if (response.data.data.length > 0) {
                         this.installed = true;
+                        this.pluginCurrentVersion = response.data.data[0].version || '未知';
                         this.getKBCollections();
+                        // 自动检查更新
+                        this.checkPluginUpdate();
                     } else {
                         this.installed = false;
                     }
@@ -409,6 +618,70 @@ export default {
                     console.error('Error checking plugin:', error);
                     this.showSnackbar(this.tm('messages.checkPluginFailed'), 'error');
                 })
+        },
+
+        async checkPluginUpdate() {
+            this.checkingUpdate = true;
+            this.pluginHasUpdate = false;
+            try {
+                // 获取在线插件数据
+                const onlineResponse = await axios.get('/api/plugin/market_list');
+                if (onlineResponse.data.status === 'ok') {
+                    const knowledgeBasePlugin = onlineResponse.data.data['astrbot_plugin_knowledge_base'];
+                    if (knowledgeBasePlugin) {
+                        this.pluginLatestVersion = knowledgeBasePlugin.version || '未知';
+
+                        // 比较版本
+                        if (this.pluginCurrentVersion && this.pluginLatestVersion &&
+                            this.pluginCurrentVersion !== '未知' && this.pluginLatestVersion !== '未知') {
+                            this.pluginHasUpdate = this.pluginCurrentVersion != this.pluginLatestVersion
+                        }
+
+                        if (this.pluginHasUpdate) {
+                            this.showSnackbar(this.tm('messages.updateAvailable', {
+                                current: this.pluginCurrentVersion,
+                                latest: this.pluginLatestVersion
+                            }), 'info');
+                        } else {
+                            this.showSnackbar(this.tm('messages.pluginUpToDate'), 'success');
+                        }
+                    } else {
+                        this.showSnackbar(this.tm('messages.pluginNotFoundInMarket'), 'warning');
+                    }
+                } else {
+                    this.showSnackbar(this.tm('messages.checkUpdateFailed'), 'error');
+                }
+            } catch (error) {
+                console.error('Error checking plugin update:', error);
+                this.showSnackbar(this.tm('messages.checkUpdateFailed'), 'error');
+            } finally {
+                this.checkingUpdate = false;
+            }
+        },
+
+        async updatePlugin() {
+            this.updatingPlugin = true;
+            try {
+                const response = await axios.post('/api/plugin/update', {
+                    name: 'astrbot_plugin_knowledge_base',
+                    proxy: localStorage.getItem('selectedGitHubProxy') || ""
+                });
+
+                if (response.data.status === 'ok') {
+                    this.showSnackbar(this.tm('messages.updateSuccess'), 'success');
+                    this.pluginHasUpdate = false;
+                    this.pluginCurrentVersion = this.pluginLatestVersion;
+                    // 刷新插件信息
+                    this.checkPlugin();
+                } else {
+                    this.showSnackbar(response.data.message || this.tm('messages.updateFailed'), 'error');
+                }
+            } catch (error) {
+                console.error('Error updating plugin:', error);
+                this.showSnackbar(this.tm('messages.updatePluginFailed'), 'error');
+            } finally {
+                this.updatingPlugin = false;
+            }
         },
 
         installPlugin() {
@@ -448,11 +721,15 @@ export default {
             if (typeof this.newKB.embedding_provider_id === 'object') {
                 this.newKB.embedding_provider_id = this.newKB.embedding_provider_id.id || '';
             }
+            if (typeof this.newKB.rerank_provider_id === 'object') {
+                this.newKB.rerank_provider_id = this.newKB.rerank_provider_id.id || '';
+            }
             axios.post('/api/plug/alkaid/kb/create_collection', {
                 collection_name: name,
                 emoji: emoji,
                 description: description,
-                embedding_provider_id: this.newKB.embedding_provider_id || ''
+                embedding_provider_id: this.newKB.embedding_provider_id || '',
+                rerank_provider_id: this.newKB.rerank_provider_id || ''
             })
                 .then(response => {
                     if (response.data.status === 'ok') {
@@ -500,7 +777,8 @@ export default {
         },
 
         resetContentDialog() {
-            this.activeTab = 'upload';
+            this.activeTab = 'import';
+            this.dataSource = 'file';
             this.selectedFile = null;
             this.searchQuery = '';
             this.searchResults = [];
@@ -508,6 +786,13 @@ export default {
             // 重置分片长度和重叠长度参数
             this.chunkSize = null;
             this.overlap = null;
+            // 重置URL导入相关数据
+            this.importUrl = '';
+            this.importing = false;
+            if (this.pollingInterval) {
+                clearInterval(this.pollingInterval);
+                this.pollingInterval = null;
+            }
         },
 
         triggerFileInput() {
@@ -681,15 +966,17 @@ export default {
                 });
         },
 
-        getEmbeddingProviderList() {
+        getProviderList() {
             axios.get('/api/config/provider/list', {
                 params: {
-                    provider_type: 'embedding'
+                    provider_type: 'embedding,rerank,chat_completion'
                 }
             })
                 .then(response => {
                     if (response.data.status === 'ok') {
-                        this.embeddingProviderConfigs = response.data.data || [];
+                        this.embeddingProviderConfigs = response.data.data.filter(provider => provider.provider_type === 'embedding');
+                        this.rerankProviderConfigs = response.data.data.filter(provider => provider.provider_type === 'rerank');
+                        this.llmProviderConfigs = response.data.data.filter(provider => provider.provider_type === 'chat_completion');
                     } else {
                         this.showSnackbar(response.data.message || this.tm('messages.getEmbeddingModelListFailed'), 'error');
                         return [];
@@ -704,8 +991,159 @@ export default {
 
         openUrl(url) {
             window.open(url, '_blank');
+        },
+
+        // URL导入相关方法
+        async startImportFromUrl() {
+            if (!this.importUrl) {
+                this.showSnackbar('Please enter a URL', 'warning');
+                return;
+            }
+
+            this.importing = true;
+
+            try {
+                const payload = {
+                    url: this.importUrl,
+                    ...Object.fromEntries(Object.entries(this.importOptions).filter(([_, v]) => v !== '' && v !== null && v !== undefined))
+                };
+
+                console.log('Starting URL import with payload:', JSON.stringify(payload, null, 2));
+                const addTaskResponse = await axios.post('/api/plug/url_2_kb/add', payload);
+
+                if (!addTaskResponse.data.task_id) {
+                    throw new Error(addTaskResponse.data.message || 'Failed to start import task: No task_id received.');
+                }
+
+                const taskId = addTaskResponse.data.task_id;
+                this.pollTaskStatus(taskId);
+
+            } catch (error) {
+                const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred.';
+                this.showSnackbar(`Error: ${errorMessage}`, 'error');
+                this.importing = false;
+            }
+        },
+
+        pollTaskStatus(taskId) {
+            this.pollingInterval = setInterval(async () => {
+                try {
+                    const statusResponse = await axios.post(`/api/plug/url_2_kb/status`, { task_id: taskId });
+
+                    const taskData = statusResponse.data;
+                    const taskStatus = taskData.status;
+
+                    if (taskStatus === 'completed') {
+                        clearInterval(this.pollingInterval);
+                        this.pollingInterval = null;
+                        this.showSnackbar(this.tm('importFromUrl.uploadingChunks'), 'info');
+                        this.handleImportResult(taskData);
+                    } else if (taskStatus === 'failed') {
+                        clearInterval(this.pollingInterval);
+                        this.pollingInterval = null;
+                        const failureReason = taskData.result || 'Unknown reason.';
+                        this.showSnackbar(`${this.tm('importFromUrl.importFailed')}: ${failureReason}`, 'error');
+                        this.importing = false;
+                    }
+                } catch (error) {
+                    clearInterval(this.pollingInterval);
+                    this.pollingInterval = null;
+                    const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred during polling.';
+                    this.showSnackbar(`Polling Error: ${errorMessage}`, 'error');
+                    this.importing = false;
+                }
+            }, 3000);
+        },
+
+        async handleImportResult(data) {
+            const chunks = [];
+            const result = data.result;
+
+            // 1. Handle overall summary
+            if (result.overall_summary) {
+                chunks.push({ content: result.overall_summary, filename: 'overall_summary.txt' });
+            }
+
+            // 2. Handle topic summaries
+            if (result.topics && result.topics.length > 0) {
+                result.topics.forEach(topic => {
+                    if (topic.topic_summary) {
+                        chunks.push({ content: topic.topic_summary, filename: `topic_${topic.topic_id}_summary.txt` });
+                    }
+                });
+            }
+
+            // 3. Handle noise points
+            if (result.noise_points && result.noise_points.length > 0) {
+                result.noise_points.forEach((point, index) => {
+                    const content = typeof point === 'object' && point.text ? point.text : point;
+                    chunks.push({ content: content, filename: `noise_${index + 1}.txt` });
+                });
+            }
+
+            if (chunks.length === 0) {
+                this.showSnackbar('URL processed, but no text chunks were extracted.', 'info');
+                this.importing = false;
+                return;
+            }
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (let i = 0; i < chunks.length; i++) {
+                const chunk = chunks[i];
+                try {
+                    await this.uploadChunkAsFile(chunk.content, chunk.filename);
+                    successCount++;
+                } catch (error) {
+                    failCount++;
+                }
+            }
+
+            if (failCount === 0) {
+                this.showSnackbar(this.tm('importFromUrl.allChunksUploaded'), 'success');
+            } else if (successCount > 0) {
+                this.showSnackbar('Import partially complete. See console for details.', 'warning');
+            } else {
+                this.showSnackbar('Import failed. No chunks were uploaded.', 'error');
+            }
+
+            this.importing = false;
+            this.getKBCollections();
+        },
+
+        async uploadChunkAsFile(content, filename) {
+            const blob = new Blob([content], { type: 'text/plain' });
+            const file = new File([blob], filename, { type: 'text/plain' });
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('collection_name', this.currentKB.collection_name);
+
+            if (this.importOptions.chunk_size && this.importOptions.chunk_size > 0) {
+                formData.append('chunk_size', this.importOptions.chunk_size);
+            }
+            if (this.importOptions.chunk_overlap && this.importOptions.chunk_overlap >= 0) {
+                formData.append('chunk_overlap', this.importOptions.chunk_overlap);
+            }
+
+            const response = await axios.post('/api/plug/alkaid/kb/collection/add_file', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+
+            if (response.data.status !== 'ok') {
+                throw new Error(response.data.message || 'Chunk upload failed');
+            }
+            return response.data;
+        },
+    },
+    beforeUnmount() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
         }
-    }
+    },
 }
 </script>
 
@@ -897,5 +1335,14 @@ export default {
 
 .chunk-field:focus-within :deep(.v-field__prepend-inner) {
     opacity: 1;
+}
+
+.import-container,
+.from-url-container {
+    min-height: 400px;
+}
+
+.data-source-select :deep(.v-field__prepend-inner) {
+    padding-right: 12px;
 }
 </style>

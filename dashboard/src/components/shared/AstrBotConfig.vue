@@ -2,6 +2,9 @@
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ListConfigItem from './ListConfigItem.vue'
+import ProviderSelector from './ProviderSelector.vue'
+import PersonaSelector from './PersonaSelector.vue'
+import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import { useI18n } from '@/i18n/composables'
 
 const props = defineProps({
@@ -48,6 +51,47 @@ function openEditorDialog(key, value, theme, language) {
 function saveEditedContent() {
   dialog.value = false
 }
+
+function getValueBySelector(obj, selector) {
+  const keys = selector.split('.')
+  let current = obj
+  for (const key of keys) {
+    if (current && typeof current === 'object' && key in current) {
+      current = current[key]
+    } else {
+      return undefined
+    }
+  }
+  return current
+}
+
+function shouldShowItem(itemMeta, itemKey) {
+  if (!itemMeta?.condition) {
+    return true
+  }
+  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
+    const actualValue = getValueBySelector(props.iterable, conditionKey)
+    if (actualValue !== expectedValue) {
+      return false
+    }
+  }
+  return true
+}
+
+function hasVisibleItemsAfter(items, currentIndex) {
+  const itemEntries = Object.entries(items)
+  
+  // 检查当前索引之后是否还有可见的配置项
+  for (let i = currentIndex + 1; i < itemEntries.length; i++) {
+    const [itemKey, itemValue] = itemEntries[i]
+    const itemMeta = props.metadata[props.metadataKey].items[itemKey]
+    if (!itemMeta?.invisible && shouldShowItem(itemMeta, itemKey)) {
+      return true
+    }
+  }
+  
+  return false
+}
 </script>
 
 <template>
@@ -79,7 +123,7 @@ function saveEditedContent() {
       <div v-for="(val, key, index) in filteredIterable" :key="key" class="config-item">
         <!-- Nested Object -->
         <div v-if="metadata[metadataKey].items[key]?.type === 'object'" class="nested-object">
-          <div v-if="metadata[metadataKey].items[key] && !metadata[metadataKey].items[key]?.invisible" class="nested-container">
+          <div v-if="metadata[metadataKey].items[key] && !metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="nested-container">
             <v-expand-transition>
               <AstrBotConfig :metadata="metadata[metadataKey].items" :iterable="iterable[key]" :metadataKey="key">
               </AstrBotConfig>
@@ -89,7 +133,7 @@ function saveEditedContent() {
         
         <!-- Regular Property -->
         <template v-else>
-          <v-row v-if="!metadata[metadataKey].items[key]?.invisible" class="config-row">
+          <v-row v-if="!metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="config-row">
             <v-col cols="12" sm="6" class="property-info">
               <v-list-item density="compact">
                 <v-list-item-title class="property-name">
@@ -120,9 +164,64 @@ function saveEditedContent() {
 
             <v-col cols="12" sm="5" class="config-input">
               <div v-if="metadata[metadataKey].items[key]" class="w-100">
+                <!-- Special handling for specific metadata types -->
+                <div v-if="metadata[metadataKey].items[key]?._special === 'select_provider'">
+                  <ProviderSelector 
+                    v-model="iterable[key]"
+                    :provider-type="'chat_completion'"
+                  />
+                </div>
+                <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_provider_stt'">
+                  <ProviderSelector 
+                    v-model="iterable[key]"
+                    :provider-type="'speech_to_text'"
+                  />
+                </div>
+                <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_provider_tts'">
+                  <ProviderSelector 
+                    v-model="iterable[key]"
+                    :provider-type="'text_to_speech'"
+                  />
+                </div>
+                <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_persona'">
+                  <PersonaSelector 
+                    v-model="iterable[key]"
+                  />
+                </div>
+                <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_knowledgebase'">
+                  <KnowledgeBaseSelector 
+                    v-model="iterable[key]"
+                  />
+                </div>
+                <!-- List item with options-->
+                <div v-else-if="metadata[metadataKey].items[key]?.type === 'list' && metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible && metadata[metadataKey].items[key]?.render_type === 'checkbox'" 
+                  class="d-flex flex-wrap gap-20">
+                  <v-checkbox
+                    v-for="(option, index) in metadata[metadataKey].items[key]?.options"
+                    v-model="iterable[key]"
+                    :label="metadata[metadataKey].items[key]?.labels ? metadata[metadataKey].items[key].labels[index] : option"
+                    :value="option"
+                    class="mr-2"
+                    color="primary"
+                    hide-details
+                  ></v-checkbox>
+                </div>
+                <!-- List item with options-->
+                <v-combobox
+                  v-else-if="metadata[metadataKey].items[key]?.type === 'list' && metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible"
+                  v-model="iterable[key]"
+                  :items="metadata[metadataKey].items[key]?.options"
+                  :disabled="metadata[metadataKey].items[key]?.readonly"
+                  density="compact"
+                  variant="outlined"
+                  class="config-field"
+                  hide-details
+                  chips
+                  multiple
+                ></v-combobox>
                 <!-- Select input -->
                 <v-select
-                  v-if="metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible"
+                  v-else-if="metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible"
                   v-model="iterable[key]"
                   :items="metadata[metadataKey].items[key]?.options"
                   :disabled="metadata[metadataKey].items[key]?.readonly"
@@ -198,7 +297,7 @@ function saveEditedContent() {
                 <!-- List item -->
                 <ListConfigItem
                   v-else-if="metadata[metadataKey].items[key]?.type === 'list' && !metadata[metadataKey].items[key]?.invisible"
-                  :value="iterable[key]"
+                  v-model="iterable[key]"
                   class="config-field"
                 />
               </div>
@@ -218,7 +317,7 @@ function saveEditedContent() {
           </v-row>
 
           <v-divider 
-            v-if="index !== Object.keys(iterable).length - 1 && !metadata[metadataKey].items[key]?.invisible"
+            v-if="hasVisibleItemsAfter(filteredIterable, index) && !metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)"
             class="config-divider"
           ></v-divider>
         </template>
@@ -309,9 +408,9 @@ function saveEditedContent() {
             ></v-switch>
             
             <!-- List item -->
-            <ListConfigItem
+            <ListConfigItem 
               v-else-if="metadata[metadataKey]?.type === 'list' && !metadata[metadataKey]?.invisible"
-              :value="iterable[metadataKey]"
+              v-model="iterable[metadataKey]"
               class="config-field"
             />
           </div>

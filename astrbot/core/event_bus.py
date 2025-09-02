@@ -16,30 +16,32 @@ from asyncio import Queue
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core import logger
 from .platform import AstrMessageEvent
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 
 class EventBus:
-    """事件总线: 用于处理事件的分发和处理
+    """用于处理事件的分发和处理"""
 
-    维护一个异步队列, 来接受各种消息事件
-    """
-
-    def __init__(self, event_queue: Queue, pipeline_scheduler: PipelineScheduler):
+    def __init__(
+        self,
+        event_queue: Queue,
+        pipeline_scheduler_mapping: dict[str, PipelineScheduler],
+        astrbot_config_mgr: AstrBotConfigManager = None,
+    ):
         self.event_queue = event_queue  # 事件队列
-        self.pipeline_scheduler = pipeline_scheduler  # 管道调度器
+        # abconf uuid -> scheduler
+        self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
+        self.astrbot_config_mgr = astrbot_config_mgr
 
     async def dispatch(self):
-        """无限循环的调度函数, 从事件队列中获取新的事件, 打印日志并创建一个新的异步任务来执行管道调度器的处理逻辑"""
         while True:
-            event: AstrMessageEvent = (
-                await self.event_queue.get()
-            )  # 从事件队列中获取新的事件
-            self._print_event(event)  # 打印日志
-            asyncio.create_task(
-                self.pipeline_scheduler.execute(event)
-            )  # 创建新的异步任务来执行管道调度器的处理逻辑
+            event: AstrMessageEvent = await self.event_queue.get()
+            conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
+            self._print_event(event, conf_info["name"])
+            scheduler = self.pipeline_scheduler_mapping.get(conf_info["id"])
+            asyncio.create_task(scheduler.execute(event))
 
-    def _print_event(self, event: AstrMessageEvent):
+    def _print_event(self, event: AstrMessageEvent, conf_name: str):
         """用于记录事件信息
 
         Args:
@@ -48,10 +50,10 @@ class EventBus:
         # 如果有发送者名称: [平台名] 发送者名称/发送者ID: 消息概要
         if event.get_sender_name():
             logger.info(
-                f"[{event.get_platform_name()}] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}"
+                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}"
             )
         # 没有发送者名称: [平台名] 发送者ID: 消息概要
         else:
             logger.info(
-                f"[{event.get_platform_name()}] {event.get_sender_id()}: {event.get_message_outline()}"
+                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}"
             )
