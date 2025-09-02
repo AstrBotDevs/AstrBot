@@ -22,6 +22,24 @@
         <v-progress-linear v-if="loading" indeterminate color="primary"></v-progress-linear>
         
         <v-list v-if="!loading && providerList.length > 0" density="compact">
+          <!-- 不选择选项 -->
+          <v-list-item
+            key="none"
+            value=""
+            @click="selectProvider({ id: '' })"
+            :active="selectedProvider === ''"
+            rounded="md"
+            class="ma-1">
+            <v-list-item-title>不选择</v-list-item-title>
+            <v-list-item-subtitle>清除当前选择</v-list-item-subtitle>
+            
+            <template v-slot:append>
+              <v-icon v-if="selectedProvider === ''" color="primary">mdi-check-circle</v-icon>
+            </template>
+          </v-list-item>
+          
+          <v-divider class="ma-1"></v-divider>
+          
           <v-list-item
             v-for="provider in providerList"
             :key="provider.id"
@@ -55,8 +73,7 @@
         <v-btn variant="text" @click="cancelSelection">取消</v-btn>
         <v-btn 
           color="primary" 
-          @click="confirmSelection"
-          :disabled="!selectedProvider">
+          @click="confirmSelection">
           确认选择
         </v-btn>
       </v-card-actions>
