@@ -25,14 +25,18 @@ class LongTermMemory:
     def cfg(self, event: AstrMessageEvent):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         try:
-            max_cnt = int(cfg["group_message_max_cnt"])
+            max_cnt = int(cfg["provider_ltm_settings"]["group_message_max_cnt"])
         except BaseException as e:
             logger.error(e)
             max_cnt = 300
-        image_caption = True if cfg["image_caption_provider_id"] else False
-        image_caption_prompt = cfg["image_caption_prompt"]
-        image_caption_provider_id = cfg["image_caption_provider_id"]
-        active_reply = cfg["active_reply"]
+        image_caption = (
+            True
+            if cfg["provider_settings"]["default_image_caption_provider_id"]
+            else False
+        )
+        image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
+        image_caption_provider_id = cfg["provider_settings"]["default_image_caption_provider_id"]
+        active_reply = cfg["provider_ltm_settings"]["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]
         ar_possibility = active_reply["possibility_reply"]
@@ -88,7 +92,9 @@ class LongTermMemory:
 
         if cfg["ar_whitelist"] and (
             event.unified_msg_origin not in cfg["ar_whitelist"]
-            and (event.get_group_id() and event.get_group_id() not in cfg["ar_whitelist"])
+            and (
+                event.get_group_id() and event.get_group_id() not in cfg["ar_whitelist"]
+            )
         ):
             return False
 
