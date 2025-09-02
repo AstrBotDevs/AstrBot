@@ -29,7 +29,7 @@ class LongTermMemory:
         except BaseException as e:
             logger.error(e)
             max_cnt = 300
-        image_caption = cfg["image_caption"]
+        image_caption = True if cfg["image_caption_provider_id"] else False
         image_caption_prompt = cfg["image_caption_prompt"]
         image_caption_provider_id = cfg["image_caption_provider_id"]
         active_reply = cfg["active_reply"]
@@ -112,7 +112,6 @@ class LongTermMemory:
                 if isinstance(comp, Plain):
                     final_message += f" {comp.text}"
                 elif isinstance(comp, Image):
-                    cfg = self.cfg(event)
                     if cfg["image_caption"]:
                         try:
                             caption = await self.get_image_caption(
