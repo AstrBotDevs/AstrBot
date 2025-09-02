@@ -9,7 +9,6 @@ import asyncio
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.platform.astr_message_event import MessageSession
 
 
 class ChatRoute(Route):
@@ -30,15 +29,28 @@ class ChatRoute(Route):
             "/chat/get_file": ("GET", self.get_file),
             "/chat/post_image": ("POST", self.post_image),
             "/chat/post_file": ("POST", self.post_file),
+            "/chat/status": ("GET", self.status),
         }
+        self.db = db
         self.core_lifecycle = core_lifecycle
         self.register_routes()
         self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.imgs_dir, exist_ok=True)
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
-        self.conv_mgr = core_lifecycle.conversation_manager
-        self.platform_history_mgr = core_lifecycle.platform_message_history_manager
+
+    async def status(self):
+        has_llm_enabled = (
+            self.core_lifecycle.provider_manager.curr_provider_inst is not None
+        )
+        has_stt_enabled = (
+            self.core_lifecycle.provider_manager.curr_stt_provider_inst is not None
+        )
+        return (
+            Response()
+            .ok(data={"llm_enabled": has_llm_enabled, "stt_enabled": has_stt_enabled})
+            .__dict__
+        )
 
     async def get_file(self):
         filename = request.args.get("filename")
@@ -119,23 +131,24 @@ class ChatRoute(Route):
         if not conversation_id:
             return Response().error("conversation_id is empty").__dict__
 
-        # append user message
-        webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
-
         # Get conversation-specific queues
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(webchat_conv_id)
+        back_queue = webchat_queue_mgr.get_or_create_back_queue(conversation_id)
 
+        # append user message
+        conversation = self.db.get_conversation_by_user_id(username, conversation_id)
+        try:
+            history = json.loads(conversation.history)
+        except BaseException as e:
+            logger.error(f"Failed to parse conversation history: {e}")
+            history = []
         new_his = {"type": "user", "message": message}
         if image_url:
             new_his["image_url"] = image_url
         if audio_url:
             new_his["audio_url"] = audio_url
-        await self.platform_history_mgr.insert(
-            platform_id="webchat",
-            user_id=webchat_conv_id,
-            content=new_his,
-            sender_id=username,
-            sender_name=username,
+        history.append(new_his)
+        self.db.update_conversation(
+            username, conversation_id, history=json.dumps(history)
         )
 
         async def stream():
@@ -151,6 +164,7 @@ class ChatRoute(Route):
 
                     result_text = result["data"]
                     type = result.get("type")
+                    cid = result.get("cid")
                     streaming = result.get("streaming", False)
                     yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
                     await asyncio.sleep(0.05)
@@ -159,13 +173,17 @@ class ChatRoute(Route):
                         break
                     elif (streaming and type == "complete") or not streaming:
                         # append bot message
-                        new_his = {"type": "bot", "message": result_text}
-                        await self.platform_history_mgr.insert(
-                            platform_id="webchat",
-                            user_id=webchat_conv_id,
-                            content=new_his,
-                            sender_id="bot",
-                            sender_name="bot",
+                        conversation = self.db.get_conversation_by_user_id(
+                            username, cid
+                        )
+                        try:
+                            history = json.loads(conversation.history)
+                        except BaseException as e:
+                            logger.error(f"Failed to parse conversation history: {e}")
+                            history = []
+                        history.append({"type": "bot", "message": result_text})
+                        self.db.update_conversation(
+                            username, cid, history=json.dumps(history)
                         )
 
             except BaseException as _:
@@ -173,11 +191,11 @@ class ChatRoute(Route):
                 return
 
         # Put message to conversation-specific queue
-        chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)
+        chat_queue = webchat_queue_mgr.get_or_create_queue(conversation_id)
         await chat_queue.put(
             (
                 username,
-                webchat_conv_id,
+                conversation_id,
                 {
                     "message": message,
                     "image_url": image_url,  # list
@@ -199,51 +217,25 @@ class ChatRoute(Route):
         )
         return response
 
-    async def _get_webchat_conv_id_from_conv_id(self, conversation_id: str) -> str:
-        """从对话 ID 中提取 WebChat 会话 ID
-
-        NOTE: 关于这里为什么要单独做一个 WebChat 的 Conversation ID 出来，这个是为了向前兼容。
-        """
-        conversation = await self.conv_mgr.get_conversation(
-            unified_msg_origin="webchat", conversation_id=conversation_id
-        )
-        if not conversation:
-            raise ValueError(f"Conversation with ID {conversation_id} not found.")
-        conv_user_id = conversation.user_id
-        webchat_session_id = MessageSession.from_str(conv_user_id).session_id
-        if "!" not in webchat_session_id:
-            raise ValueError(f"Invalid conv user ID: {conv_user_id}")
-        return webchat_session_id.split("!")[-1]
-
     async def delete_conversation(self):
+        username = g.get("username", "guest")
         conversation_id = request.args.get("conversation_id")
         if not conversation_id:
             return Response().error("Missing key: conversation_id").__dict__
-        username = g.get("username", "guest")
 
         # Clean up queues when deleting conversation
         webchat_queue_mgr.remove_queues(conversation_id)
-        webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
-        await self.conv_mgr.delete_conversation(
-            unified_msg_origin=f"webchat:FriendMessage:webchat!{username}!{webchat_conv_id}",
-            conversation_id=conversation_id,
-        )
-        await self.platform_history_mgr.delete(
-            platform_id="webchat", user_id=webchat_conv_id, offset_sec=99999999
-        )
+        self.db.delete_conversation(username, conversation_id)
         return Response().ok().__dict__
 
     async def new_conversation(self):
         username = g.get("username", "guest")
-        webchat_conv_id = str(uuid.uuid4())
-        conv_id = await self.conv_mgr.new_conversation(
-            unified_msg_origin=f"webchat:FriendMessage:webchat!{username}!{webchat_conv_id}",
-            platform_id="webchat",
-            content=[],
-        )
-        return Response().ok(data={"conversation_id": conv_id}).__dict__
+        conversation_id = str(uuid.uuid4())
+        self.db.new_conversation(username, conversation_id)
+        return Response().ok(data={"conversation_id": conversation_id}).__dict__
 
     async def rename_conversation(self):
+        username = g.get("username", "guest")
         post_data = await request.json
         if "conversation_id" not in post_data or "title" not in post_data:
             return Response().error("Missing key: conversation_id or title").__dict__
@@ -251,42 +243,20 @@ class ChatRoute(Route):
         conversation_id = post_data["conversation_id"]
         title = post_data["title"]
 
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin="webchat",  # fake
-            conversation_id=conversation_id,
-            title=title,
-        )
+        self.db.update_conversation_title(username, conversation_id, title=title)
         return Response().ok(message="重命名成功！").__dict__
 
     async def get_conversations(self):
-        conversations = await self.conv_mgr.get_conversations(platform_id="webchat")
-        # remove content
-        conversations_ = []
-        for conv in conversations:
-            conv.history = None
-            conversations_.append(conv)
-        return Response().ok(data=conversations_).__dict__
+        username = g.get("username", "guest")
+        conversations = self.db.get_conversations(username)
+        return Response().ok(data=conversations).__dict__
 
     async def get_conversation(self):
+        username = g.get("username", "guest")
         conversation_id = request.args.get("conversation_id")
         if not conversation_id:
             return Response().error("Missing key: conversation_id").__dict__
 
-        webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
+        conversation = self.db.get_conversation_by_user_id(username, conversation_id)
 
-        # Get platform message history
-        history_ls = await self.platform_history_mgr.get(
-            platform_id="webchat", user_id=webchat_conv_id, page=1, page_size=1000
-        )
-
-        history_res = [history.model_dump() for history in history_ls]
-
-        return (
-            Response()
-            .ok(
-                data={
-                    "history": history_res,
-                }
-            )
-            .__dict__
-        )
+        return Response().ok(data=conversation).__dict__

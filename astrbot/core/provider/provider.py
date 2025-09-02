@@ -1,16 +1,21 @@
 import abc
 from typing import List
-from typing import AsyncGenerator
-from astrbot.core.agent.tool import ToolSet
-from astrbot.core.provider.entities import (
-    LLMResponse,
-    ToolCallsResult,
-    ProviderType,
-    RerankResult,
-)
+from typing import TypedDict, AsyncGenerator
+from astrbot.core.provider.func_tool_manager import FuncCall
+from astrbot.core.provider.entities import LLMResponse, ToolCallsResult, ProviderType
 from astrbot.core.provider.register import provider_cls_map
-from astrbot.core.db.po import Personality
 from dataclasses import dataclass
+
+
+class Personality(TypedDict):
+    prompt: str = ""
+    name: str = ""
+    begin_dialogs: List[str] = []
+    mood_imitation_dialogs: List[str] = []
+
+    # cache
+    _begin_dialogs_processed: List[dict] = []
+    _mood_imitation_dialogs_processed: str = ""
 
 
 @dataclass
@@ -85,7 +90,7 @@ class Provider(AbstractProvider):
         prompt: str,
         session_id: str = None,
         image_urls: list[str] = None,
-        func_tool: ToolSet = None,
+        func_tool: FuncCall = None,
         contexts: list = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
@@ -114,7 +119,7 @@ class Provider(AbstractProvider):
         prompt: str,
         session_id: str = None,
         image_urls: list[str] = None,
-        func_tool: ToolSet = None,
+        func_tool: FuncCall = None,
         contexts: list = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
@@ -200,18 +205,4 @@ class EmbeddingProvider(AbstractProvider):
     @abc.abstractmethod
     def get_dim(self) -> int:
         """获取向量的维度"""
-        ...
-
-
-class RerankProvider(AbstractProvider):
-    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
-        super().__init__(provider_config)
-        self.provider_config = provider_config
-        self.provider_settings = provider_settings
-
-    @abc.abstractmethod
-    async def rerank(
-        self, query: str, documents: list[str], top_n: int | None = None
-    ) -> list[RerankResult]:
-        """获取查询和文档的重排序分数"""
         ...

@@ -17,8 +17,7 @@
       "add": "Add Server",
       "useTemplateStdio": "Stdio Template",
       "useTemplateStreamableHttp": "Streamable HTTP Template",
-      "useTemplateSse": "SSE Template",
-      "sync": "Sync MCP Servers"
+      "useTemplateSse": "SSE Template"
     },
     "empty": "No MCP servers available, click Add Server to add one",
     "status": {
@@ -78,8 +77,7 @@
       "buttons": {
         "cancel": "Cancel",
         "save": "Save",
-        "testConnection": "Test Connection",
-        "sync": "Sync"
+        "testConnection": "Test Connection"
       }
     },
     "serverDetail": {
@@ -109,9 +107,6 @@
       "failed": "Import configuration failed: {error}"
     },
     "configParseError": "Configuration parse error: {error}",
-    "noAvailableConfig": "No available configuration",
-    "toggleToolSuccess": "Tool status toggled successfully!",
-    "toggleToolError": "Failed to toggle tool status: {error}",
-    "testError": "Test connection failed: {error}"
+    "noAvailableConfig": "No available configuration"
   }
 } 

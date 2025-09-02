@@ -3,10 +3,9 @@ import asyncio
 import re
 import hashlib
 import uuid
-
+from dataclasses import dataclass
 from typing import List, Union, Optional, AsyncGenerator
 
-from astrbot import logger
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
     Plain,
@@ -24,7 +23,21 @@ from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
 from .astrbot_message import AstrBotMessage, Group
 from .platform_metadata import PlatformMetadata
-from .message_session import MessageSession, MessageSesion # noqa
+
+
+@dataclass
+class MessageSesion:
+    platform_name: str
+    message_type: MessageType
+    session_id: str
+
+    def __str__(self):
+        return f"{self.platform_name}:{self.message_type.value}:{self.session_id}"
+
+    @staticmethod
+    def from_str(session_str: str):
+        platform_name, message_type, session_id = session_str.split(":")
+        return MessageSesion(platform_name, MessageType(message_type), session_id)
 
 
 class AstrMessageEvent(abc.ABC):
@@ -51,7 +64,7 @@ class AstrMessageEvent(abc.ABC):
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras = {}
         self.session = MessageSesion(
-            platform_name=platform_meta.id,
+            platform_name=platform_meta.name,
             message_type=message_obj.type,
             session_id=session_id,
         )
@@ -65,23 +78,13 @@ class AstrMessageEvent(abc.ABC):
         self.call_llm = False
         """是否在此消息事件中禁止默认的 LLM 请求"""
 
-        self.plugins_name: list[str] | None = None
-        """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
-
         # back_compability
         self.platform = platform_meta
 
     def get_platform_name(self):
-        """获取这个事件所属的平台的类型（如 aiocqhttp, slack, discord 等）。
-
-        NOTE: 用户可能会同时运行多个相同类型的平台适配器。"""
         return self.platform_meta.name
 
     def get_platform_id(self):
-        """获取这个事件所属的平台的 ID。
-
-        NOTE: 用户可能会同时运行多个相同类型的平台适配器，但能确定的是 ID 是唯一的。
-        """
         return self.platform_meta.id
 
     def get_message_str(self) -> str:
@@ -185,7 +188,6 @@ class AstrMessageEvent(abc.ABC):
         """
         清除额外的信息。
         """
-        logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
         self._extras.clear()
 
     def is_private_chat(self) -> bool:

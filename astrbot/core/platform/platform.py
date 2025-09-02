@@ -5,7 +5,7 @@ from asyncio import Queue
 from .platform_metadata import PlatformMetadata
 from .astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageChain
-from .message_session import MessageSesion
+from .astr_message_event import MessageSesion
 from astrbot.core.utils.metrics import Metric
 
 

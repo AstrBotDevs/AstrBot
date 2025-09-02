@@ -13,11 +13,6 @@
       "title": "Restart",
       "subtitle": "Restart AstrBot",
       "button": "Restart"
-    },
-    "migration": {
-      "title": "Data Migration to v4.0.0",
-      "subtitle": "If you encounter data compatibility issues, you can manually start the database migration assistant",
-      "button": "Start Migration Assistant"
     }
   }
 } 
