@@ -3,89 +3,32 @@ import traceback
 from typing import List
 
 from astrbot.core import logger, sp
-from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 
 from .entities import ProviderType
-from .provider import Personality, Provider, STTProvider, TTSProvider, EmbeddingProvider
+from .provider import Provider, STTProvider, TTSProvider, EmbeddingProvider
 from .register import llm_tools, provider_cls_map
+from ..persona_mgr import PersonaManager
 
 
 class ProviderManager:
-    def __init__(self, config: AstrBotConfig, db_helper: BaseDatabase):
+    def __init__(
+        self,
+        acm: AstrBotConfigManager,
+        db_helper: BaseDatabase,
+        persona_mgr: PersonaManager,
+    ):
+        self.persona_mgr = persona_mgr
+        self.acm = acm
+        config = acm.confs["default"]
         self.providers_config: List = config["provider"]
         self.provider_settings: dict = config["provider_settings"]
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
-        self.persona_configs: list = config.get("persona", [])
-        self.astrbot_config = config
 
-        # 人格情景管理
-        # 目前没有拆成独立的模块
-        self.default_persona_name = self.provider_settings.get(
-            "default_personality", "default"
-        )
-        self.personas: List[Personality] = []
-        self.selected_default_persona = None
-        for persona in self.persona_configs:
-            begin_dialogs = persona.get("begin_dialogs", [])
-            mood_imitation_dialogs = persona.get("mood_imitation_dialogs", [])
-            bd_processed = []
-            mid_processed = ""
-            if begin_dialogs:
-                if len(begin_dialogs) % 2 != 0:
-                    logger.error(
-                        f"{persona['name']} 人格情景预设对话格式不对，条数应该为偶数。"
-                    )
-                    begin_dialogs = []
-                user_turn = True
-                for dialog in begin_dialogs:
-                    bd_processed.append(
-                        {
-                            "role": "user" if user_turn else "assistant",
-                            "content": dialog,
-                            "_no_save": None,  # 不持久化到 db
-                        }
-                    )
-                    user_turn = not user_turn
-            if mood_imitation_dialogs:
-                if len(mood_imitation_dialogs) % 2 != 0:
-                    logger.error(
-                        f"{persona['name']} 对话风格对话格式不对，条数应该为偶数。"
-                    )
-                    mood_imitation_dialogs = []
-                user_turn = True
-                for dialog in mood_imitation_dialogs:
-                    role = "A" if user_turn else "B"
-                    mid_processed += f"{role}: {dialog}\n"
-                    if not user_turn:
-                        mid_processed += "\n"
-                    user_turn = not user_turn
-
-            try:
-                persona = Personality(
-                    **persona,
-                    _begin_dialogs_processed=bd_processed,
-                    _mood_imitation_dialogs_processed=mid_processed,
-                )
-                if persona["name"] == self.default_persona_name:
-                    self.selected_default_persona = persona
-                self.personas.append(persona)
-            except Exception as e:
-                logger.error(f"解析 Persona 配置失败：{e}")
-
-        if not self.selected_default_persona and len(self.personas) > 0:
-            # 默认选择第一个
-            self.selected_default_persona = self.personas[0]
-
-        if not self.selected_default_persona:
-            self.selected_default_persona = Personality(
-                prompt="You are a helpful and friendly assistant.",
-                name="default",
-                _begin_dialogs_processed=[],
-                _mood_imitation_dialogs_processed="",
-            )
-            self.personas.append(self.selected_default_persona)
+        # 人格相关属性，v4.0.0 版本后被废弃，推荐使用 PersonaManager
+        self.default_persona_name = persona_mgr.default_persona
 
         self.provider_insts: List[Provider] = []
         """加载的 Provider 的实例"""
@@ -100,46 +43,111 @@ class ProviderManager:
         self.llm_tools = llm_tools
 
         self.curr_provider_inst: Provider | None = None
-        """默认的 Provider 实例"""
+        """默认的 Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.curr_stt_provider_inst: STTProvider | None = None
-        """默认的 Speech To Text Provider 实例"""
+        """默认的 Speech To Text Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.curr_tts_provider_inst: TTSProvider | None = None
-        """默认的 Text To Speech Provider 实例"""
+        """默认的 Text To Speech Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.db_helper = db_helper
 
-        # kdb(experimental)
-        self.curr_kdb_name = ""
-        kdb_cfg = config.get("knowledge_db", {})
-        if kdb_cfg and len(kdb_cfg):
-            self.curr_kdb_name = list(kdb_cfg.keys())[0]
+    @property
+    def persona_configs(self) -> list:
+        """动态获取最新的 persona 配置"""
+        return self.persona_mgr.persona_v3_config
+
+    @property
+    def personas(self) -> list:
+        """动态获取最新的 personas 列表"""
+        return self.persona_mgr.personas_v3
+
+    @property
+    def selected_default_persona(self):
+        """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
+        return self.persona_mgr.selected_default_persona_v3
 
     async def set_provider(
-        self, provider_id: str, provider_type: ProviderType, umo: str = None
+        self, provider_id: str, provider_type: ProviderType, umo: str | None = None
     ):
         """设置提供商。
 
         Args:
             provider_id (str): 提供商 ID。
             provider_type (ProviderType): 提供商类型。
-            umo (str, optional): 用户会话 ID，用于提供商会话隔离。当用户启用了提供商会话隔离时此参数才生效。
+            umo (str, optional): 用户会话 ID，用于提供商会话隔离。
+
+        Version 4.0.0: 这个版本下已经默认隔离提供商
         """
         if provider_id not in self.inst_map:
             raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
-        if umo and self.provider_settings["separate_provider"]:
-            perf = sp.get("session_provider_perf", {})
-            session_perf = perf.get(umo, {})
-            session_perf[provider_type.value] = provider_id
-            perf[umo] = session_perf
-            sp.put("session_provider_perf", perf)
+        if umo:
+            await sp.session_put(
+                umo,
+                f"provider_perf_{provider_type.value}",
+                provider_id,
+            )
             return
         # 不启用提供商会话隔离模式的情况
         self.curr_provider_inst = self.inst_map[provider_id]
         if provider_type == ProviderType.TEXT_TO_SPEECH:
-            sp.put("curr_provider_tts", provider_id)
+            sp.put("curr_provider_tts", provider_id, scope="global", scope_id="global")
         elif provider_type == ProviderType.SPEECH_TO_TEXT:
-            sp.put("curr_provider_stt", provider_id)
+            sp.put("curr_provider_stt", provider_id, scope="global", scope_id="global")
         elif provider_type == ProviderType.CHAT_COMPLETION:
-            sp.put("curr_provider", provider_id)
+            sp.put("curr_provider", provider_id, scope="global", scope_id="global")
+
+    async def get_provider_by_id(self, provider_id: str) -> Provider | None:
+        """根据提供商 ID 获取提供商实例"""
+        return self.inst_map.get(provider_id)
+
+    def get_using_provider(self, provider_type: ProviderType, umo=None):
+        """获取正在使用的提供商实例。
+
+        Args:
+            provider_type (ProviderType): 提供商类型。
+            umo (str, optional): 用户会话 ID，用于提供商会话隔离。
+
+        Returns:
+            Provider: 正在使用的提供商实例。
+        """
+        provider = None
+        if umo:
+            provider_id = sp.get(
+                f"provider_perf_{provider_type.value}",
+                None,
+                scope="umo",
+                scope_id=umo,
+            )
+            if provider_id:
+                provider = self.inst_map.get(provider_id)
+        if not provider:
+            # default setting
+            config = self.acm.get_conf(umo)
+            if provider_type == ProviderType.CHAT_COMPLETION:
+                provider_id = config["provider_settings"].get("default_provider_id")
+                provider = self.inst_map.get(provider_id)
+                if not provider:
+                    provider = self.provider_insts[0] if self.provider_insts else None
+            elif provider_type == ProviderType.SPEECH_TO_TEXT:
+                provider_id = config["provider_stt_settings"].get("provider_id")
+                if not provider_id:
+                    return None
+                provider = self.inst_map.get(provider_id)
+                if not provider:
+                    provider = (
+                        self.stt_provider_insts[0] if self.stt_provider_insts else None
+                    )
+            elif provider_type == ProviderType.TEXT_TO_SPEECH:
+                provider_id = config["provider_tts_settings"].get("provider_id")
+                if not provider_id:
+                    return None
+                provider = self.inst_map.get(provider_id)
+                if not provider:
+                    provider = (
+                        self.tts_provider_insts[0] if self.tts_provider_insts else None
+                    )
+            else:
+                raise ValueError(f"Unknown provider type: {provider_type}")
+        return provider
 
     async def initialize(self):
         # 逐个初始化提供商
@@ -148,13 +156,22 @@ class ProviderManager:
 
         # 设置默认提供商
         selected_provider_id = sp.get(
-            "curr_provider", self.provider_settings.get("default_provider_id")
+            "curr_provider",
+            self.provider_settings.get("default_provider_id"),
+            scope="global",
+            scope_id="global",
         )
         selected_stt_provider_id = sp.get(
-            "curr_provider_stt", self.provider_stt_settings.get("provider_id")
+            "curr_provider_stt",
+            self.provider_stt_settings.get("provider_id"),
+            scope="global",
+            scope_id="global",
         )
         selected_tts_provider_id = sp.get(
-            "curr_provider_tts", self.provider_tts_settings.get("provider_id")
+            "curr_provider_tts",
+            self.provider_tts_settings.get("provider_id"),
+            scope="global",
+            scope_id="global",
         )
         self.curr_provider_inst = self.inst_map.get(selected_provider_id)
         if not self.curr_provider_inst and self.provider_insts:
@@ -262,6 +279,10 @@ class ProviderManager:
                     from .sources.gemini_embedding_source import (
                         GeminiEmbeddingProvider as GeminiEmbeddingProvider,
                     )
+                case "vllm_rerank":
+                    from .sources.vllm_rerank_source import (
+                        VLLMRerankProvider as VLLMRerankProvider,
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。"
@@ -345,7 +366,7 @@ class ProviderManager:
                 if not self.curr_provider_inst:
                     self.curr_provider_inst = inst
 
-            elif provider_metadata.provider_type == ProviderType.EMBEDDING:
+            elif provider_metadata.provider_type in [ProviderType.EMBEDDING, ProviderType.RERANK]:
                 inst = provider_metadata.cls_type(
                     provider_config, self.provider_settings
                 )

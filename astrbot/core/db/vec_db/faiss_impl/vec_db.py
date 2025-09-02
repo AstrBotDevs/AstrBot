@@ -5,6 +5,7 @@ from .document_storage import DocumentStorage
 from .embedding_storage import EmbeddingStorage
 from ..base import Result, BaseVecDB
 from astrbot.core.provider.provider import EmbeddingProvider
+from astrbot.core.provider.provider import RerankProvider
 
 
 class FaissVecDB(BaseVecDB):
@@ -17,6 +18,7 @@ class FaissVecDB(BaseVecDB):
         doc_store_path: str,
         index_store_path: str,
         embedding_provider: EmbeddingProvider,
+        rerank_provider: RerankProvider | None = None,
     ):
         self.doc_store_path = doc_store_path
         self.index_store_path = index_store_path
@@ -26,11 +28,14 @@ class FaissVecDB(BaseVecDB):
             embedding_provider.get_dim(), index_store_path
         )
         self.embedding_provider = embedding_provider
+        self.rerank_provider = rerank_provider
 
     async def initialize(self):
         await self.document_storage.initialize()
 
-    async def insert(self, content: str, metadata: dict = None, id: str = None) -> int:
+    async def insert(
+        self, content: str, metadata: dict | None = None, id: str | None = None
+    ) -> int:
         """
         插入一条文本和其对应向量，自动生成 ID 并保持一致性。
         """
@@ -53,7 +58,12 @@ class FaissVecDB(BaseVecDB):
             return int_id
 
     async def retrieve(
-        self, query: str, k: int = 5, fetch_k: int = 20, metadata_filters: dict = None
+        self,
+        query: str,
+        k: int = 5,
+        fetch_k: int = 20,
+        rerank: bool = False,
+        metadata_filters: dict | None = None,
     ) -> list[Result]:
         """
         搜索最相似的文档。
@@ -62,6 +72,7 @@ class FaissVecDB(BaseVecDB):
             query (str): 查询文本
             k (int): 返回的最相似文档的数量
             fetch_k (int): 在根据 metadata 过滤前从 FAISS 中获取的数量
+            rerank (bool): 是否使用重排序。这需要在实例化时提供 rerank_provider, 如果未提供并且 rerank 为 True, 不会抛出异常。
             metadata_filters (dict): 元数据过滤器
 
         Returns:
@@ -72,7 +83,6 @@ class FaissVecDB(BaseVecDB):
             vector=np.array([embedding]).astype("float32"),
             k=fetch_k if metadata_filters else k,
         )
-        # TODO: rerank
         if len(indices[0]) == 0 or indices[0][0] == -1:
             return []
         # normalize scores
@@ -83,7 +93,7 @@ class FaissVecDB(BaseVecDB):
         )
         if not fetched_docs:
             return []
-        result_docs = []
+        result_docs: list[Result] = []
 
         idx_pos = {fetch_doc["id"]: idx for idx, fetch_doc in enumerate(fetched_docs)}
         for i, indice_idx in enumerate(indices[0]):
@@ -93,7 +103,20 @@ class FaissVecDB(BaseVecDB):
             fetch_doc = fetched_docs[pos]
             score = scores[0][i]
             result_docs.append(Result(similarity=float(score), data=fetch_doc))
-        return result_docs[:k]
+
+        top_k_results = result_docs[:k]
+
+        if rerank and self.rerank_provider:
+            documents = [doc.data["text"] for doc in top_k_results]
+            reranked_results = await self.rerank_provider.rerank(query, documents)
+            reranked_results = sorted(
+                reranked_results, key=lambda x: x.relevance_score, reverse=True
+            )
+            top_k_results = [
+                top_k_results[reranked_result.index] for reranked_result in reranked_results
+            ]
+
+        return top_k_results
 
     async def delete(self, doc_id: int):
         """

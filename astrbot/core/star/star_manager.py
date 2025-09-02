@@ -22,6 +22,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_path,
 )
 from astrbot.core.utils.io import remove_dir
+from astrbot.core.agent.handoff import HandoffTool, FunctionTool
 
 from . import StarMetadata
 from .context import Context
@@ -336,29 +337,7 @@ class PluginManager:
 
             result = await self.load(specified_module_path)
 
-            # 更新所有插件的平台兼容性
-            await self.update_all_platform_compatibility()
-
             return result
-
-    async def update_all_platform_compatibility(self):
-        """更新所有插件的平台兼容性设置"""
-        # 获取最新的平台插件启用配置
-        plugin_enable_config = self.config.get("platform_settings", {}).get(
-            "plugin_enable", {}
-        )
-        logger.debug(
-            f"更新所有插件的平台兼容性设置，平台数量: {len(plugin_enable_config)}"
-        )
-
-        # 遍历所有插件，更新平台兼容性
-        for plugin in self.context.get_all_stars():
-            plugin.update_platform_compatibility(plugin_enable_config)
-            logger.debug(
-                f"插件 {plugin.name} 支持的平台: {list(plugin.supported_platforms.keys())}"
-            )
-
-        return True
 
     async def load(self, specified_module_path=None, specified_dir_name=None):
         """载入插件。
@@ -373,10 +352,9 @@ class PluginManager:
                 - success (bool): 是否全部加载成功
                 - error_message (str|None): 错误信息，成功时为 None
         """
-        inactivated_plugins: list = sp.get("inactivated_plugins", [])
-        inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
-
-        alter_cmd = sp.get("alter_cmd", {})
+        inactivated_plugins = await sp.global_get("inactivated_plugins", [])
+        inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
+        alter_cmd = await sp.global_get("alter_cmd", {})
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -480,12 +458,6 @@ class PluginManager:
                     metadata.root_dir_name = root_dir_name
                     metadata.reserved = reserved
 
-                    # 更新插件的平台兼容性
-                    plugin_enable_config = self.config.get("platform_settings", {}).get(
-                        "plugin_enable", {}
-                    )
-                    metadata.update_platform_compatibility(plugin_enable_config)
-
                     assert metadata.module_path is not None, (
                         f"插件 {metadata.name} 的模块路径为空。"
                     )
@@ -503,17 +475,27 @@ class PluginManager:
                         )
                     # 绑定 llm_tool handler
                     for func_tool in llm_tools.func_list:
-                        if (
-                            func_tool.handler
-                            and func_tool.handler.__module__ == metadata.module_path
-                        ):
-                            func_tool.handler_module_path = metadata.module_path
-                            func_tool.handler = functools.partial(
-                                func_tool.handler,
-                                metadata.star_cls,  # type: ignore
-                            )
-                        if func_tool.name in inactivated_llm_tools:
-                            func_tool.active = False
+                        if isinstance(func_tool, HandoffTool):
+                            need_apply = []
+                            sub_tools = func_tool.agent.tools
+                            for sub_tool in sub_tools:
+                                if isinstance(sub_tool, FunctionTool):
+                                    need_apply.append(sub_tool)
+                        else:
+                            need_apply = [func_tool]
+
+                        for ft in need_apply:
+                            if (
+                                ft.handler
+                                and ft.handler.__module__ == metadata.module_path
+                            ):
+                                ft.handler_module_path = metadata.module_path
+                                ft.handler = functools.partial(
+                                    ft.handler,
+                                    metadata.star_cls,  # type: ignore
+                                )
+                            if ft.name in inactivated_llm_tools:
+                                ft.active = False
 
                 else:
                     # v3.4.0 以前的方式注册插件
@@ -776,12 +758,12 @@ class PluginManager:
             await self._terminate_plugin(plugin)
 
             # 加入到 shared_preferences 中
-            inactivated_plugins: list = sp.get("inactivated_plugins", [])
+            inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
             if plugin.module_path not in inactivated_plugins:
                 inactivated_plugins.append(plugin.module_path)
 
             inactivated_llm_tools: list = list(
-                set(sp.get("inactivated_llm_tools", []))
+                set(await sp.global_get("inactivated_llm_tools", []))
             )  # 后向兼容
 
             # 禁用插件启用的 llm_tool
@@ -791,8 +773,8 @@ class PluginManager:
                     if func_tool.name not in inactivated_llm_tools:
                         inactivated_llm_tools.append(func_tool.name)
 
-            sp.put("inactivated_plugins", inactivated_plugins)
-            sp.put("inactivated_llm_tools", inactivated_llm_tools)
+            await sp.global_put("inactivated_plugins", inactivated_plugins)
+            await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
 
             plugin.activated = False
 
@@ -818,11 +800,11 @@ class PluginManager:
 
     async def turn_on_plugin(self, plugin_name: str):
         plugin = self.context.get_registered_star(plugin_name)
-        inactivated_plugins: list = sp.get("inactivated_plugins", [])
-        inactivated_llm_tools: list = sp.get("inactivated_llm_tools", [])
+        inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
+        inactivated_llm_tools: list = await sp.global_get("inactivated_llm_tools", [])
         if plugin.module_path in inactivated_plugins:
             inactivated_plugins.remove(plugin.module_path)
-        sp.put("inactivated_plugins", inactivated_plugins)
+        await sp.global_put("inactivated_plugins", inactivated_plugins)
 
         # 启用插件启用的 llm_tool
         for func_tool in llm_tools.func_list:
@@ -832,7 +814,7 @@ class PluginManager:
             ):
                 inactivated_llm_tools.remove(func_tool.name)
                 func_tool.active = True
-        sp.put("inactivated_llm_tools", inactivated_llm_tools)
+        await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
 
         await self.reload(plugin_name)
 

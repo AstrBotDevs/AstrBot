@@ -10,10 +10,8 @@ class HtmlRenderer:
         self.network_strategy = NetworkRenderStrategy(endpoint_url)
         self.local_strategy = LocalRenderStrategy()
 
-    def set_network_endpoint(self, endpoint_url: str):
-        """设置 t2i 的网络端点。"""
-        logger.info("文本转图像服务接口: " + endpoint_url)
-        self.network_strategy.set_endpoint(endpoint_url)
+    async def initialize(self):
+        await self.network_strategy.initialize()
 
     async def render_custom_template(
         self,

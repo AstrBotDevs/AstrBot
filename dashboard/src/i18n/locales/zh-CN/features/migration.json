@@ -1,0 +1,16 @@
+{
+  "dialog": {
+    "title": "数据迁移助手",
+    "warning": "👋 欢迎升级到 v4.0.0。我们在新版本对数据格式进行了优化，检测到需要进行数据库迁移。",
+    "loading": "正在加载平台列表...",
+    "loadError": "加载平台列表失败，请重试",
+    "noPlatforms": "未找到可用的平台配置",
+    "retry": "重试",
+    "startMigration": "开始迁移",
+    "migrating": "正在迁移中...",
+    "migratingSubtitle": "请耐心等待，迁移过程中请勿关闭此窗口",
+    "migrationError": "迁移失败",
+    "success": "迁移成功完成！",
+    "completed": "迁移已完成"
+  }
+}

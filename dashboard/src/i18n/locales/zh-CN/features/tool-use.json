@@ -17,7 +17,8 @@
       "add": "新增服务器",
       "useTemplateStdio": "Stdio 模板",
       "useTemplateStreamableHttp": "Streamable HTTP 模板",
-      "useTemplateSse": "SSE 模板"
+      "useTemplateSse": "SSE 模板",
+      "sync": "同步服务器"
     },
     "empty": "暂无 MCP 服务器，点击 新增服务器 添加",
     "status": {
@@ -77,7 +78,8 @@
       "buttons": {
         "cancel": "取消",
         "save": "保存",
-        "testConnection": "测试连接"
+        "testConnection": "测试连接",
+        "sync": "同步"
       }
     },
     "serverDetail": {
@@ -89,7 +91,43 @@
         "importConfig": "导入配置"
       }
     },
-    "confirmDelete": "确定要删除服务器 {name} 吗?"
+    "confirmDelete": "确定要删除服务器 {name} 吗?",
+    "syncProvider": {
+      "title": "同步 MCP 服务器",
+      "subtitle": "从提供商同步 MCP 服务器配置到本地",
+      "steps": {
+        "selectProvider": "步骤 1: 选择提供商",
+        "configureAuth": "步骤 2: 配置认证",
+        "syncServers": "步骤 3: 同步服务器"
+      },
+      "providers": {
+        "modelscope": "ModelScope",
+        "description": "ModelScope 是一个开源的模型社区，提供各种机器学习和AI服务的MCP服务器"
+      },
+      "fields": {
+        "provider": "选择提供商",
+        "accessToken": "访问令牌",
+        "tokenRequired": "访问令牌是必填项",
+        "tokenHint": "请输入您的 ModelScope 访问令牌"
+      },
+      "buttons": {
+        "cancel": "取消",
+        "previous": "上一步",
+        "next": "下一步",
+        "sync": "开始同步",
+        "getToken": "获取令牌"
+      },
+      "status": {
+        "selectProvider": "请选择一个 MCP 服务器提供商",
+        "enterToken": "请输入访问令牌以继续",
+        "readyToSync": "准备同步服务器配置"
+      },
+      "messages": {
+        "syncSuccess": "MCP 服务器同步成功!",
+        "syncError": "同步失败: {error}",
+        "tokenHelp": "如何获取 ModelScope 访问令牌？点击右侧按钮查看说明"
+      }
+    }
   },
   "messages": {
     "getServersError": "获取 MCP 服务器列表失败: {error}",
@@ -107,6 +145,9 @@
       "failed": "导入配置失败: {error}"
     },
     "configParseError": "配置解析错误: {error}",
-    "noAvailableConfig": "无可用配置"
+    "noAvailableConfig": "无可用配置",
+    "toggleToolSuccess": "工具状态切换成功!",
+    "toggleToolError": "工具状态切换失败: {error}",
+    "testError": "测试连接失败: {error}"
   }
-} 
+}

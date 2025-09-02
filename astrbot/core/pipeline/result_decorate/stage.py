@@ -64,9 +64,10 @@ class ResultDecorateStage(Stage):
         ]
         self.content_safe_check_stage = None
         if self.content_safe_check_reply:
-            for stage in registered_stages:
-                if stage.__class__.__name__ == "ContentSafetyCheckStage":
-                    self.content_safe_check_stage = stage
+            for stage_cls in registered_stages:
+                if stage_cls.__name__ == "ContentSafetyCheckStage":
+                    self.content_safe_check_stage = stage_cls()
+                    await self.content_safe_check_stage.initialize(ctx)
 
     async def process(
         self, event: AstrMessageEvent
@@ -98,7 +99,7 @@ class ResultDecorateStage(Stage):
 
         # 发送消息前事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnDecoratingResultEvent, platform_id=event.get_platform_id()
+            EventType.OnDecoratingResultEvent, plugins_name=event.plugins_name
         )
         for handler in handlers:
             try:
