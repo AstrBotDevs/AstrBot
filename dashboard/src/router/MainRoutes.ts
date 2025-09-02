@@ -57,41 +57,31 @@ const MainRoutes = {
       component: () => import('@/views/SessionManagementPage.vue')
     },
     {
-      name: 'Persona',
-      path: '/persona',
-      component: () => import('@/views/PersonaPage.vue')
-    },
-    {
       name: 'Console',
       path: '/console',
       component: () => import('@/views/ConsolePage.vue')
     },
-    // {
-    //   name: 'Alkaid',
-    //   path: '/alkaid',
-    //   component: () => import('@/views/AlkaidPage.vue'),
-    //   children: [
-    //     {
-    //       path: 'knowledge-base',
-    //       name: 'KnowledgeBase',
-    //       component: () => import('@/views/alkaid/KnowledgeBase.vue')
-    //     },
-    //     {
-    //       path: 'long-term-memory',
-    //       name: 'LongTermMemory',
-    //       component: () => import('@/views/alkaid/LongTermMemory.vue')
-    //     },
-    //     {
-    //       path: 'other',
-    //       name: 'OtherFeatures',
-    //       component: () => import('@/views/alkaid/Other.vue')
-    //     }
-    //   ]
-    // },
     {
-      name: 'KnowledgeBase',
-      path: '/alkaid/knowledge-base',
-      component: () => import('@/views/alkaid/KnowledgeBase.vue')
+      name: 'Alkaid',
+      path: '/alkaid',
+      component: () => import('@/views/AlkaidPage.vue'),
+      children: [
+        {
+          path: 'knowledge-base',
+          name: 'KnowledgeBase',
+          component: () => import('@/views/alkaid/KnowledgeBase.vue')
+        },
+        {
+          path: 'long-term-memory',
+          name: 'LongTermMemory',
+          component: () => import('@/views/alkaid/LongTermMemory.vue')
+        },
+        {
+          path: 'other',
+          name: 'OtherFeatures',
+          component: () => import('@/views/alkaid/Other.vue')
+        }
+      ]
     },
     {
       name: 'Chat',

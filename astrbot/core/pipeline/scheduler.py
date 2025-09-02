@@ -11,17 +11,16 @@ class PipelineScheduler:
 
     def __init__(self, context: PipelineContext):
         registered_stages.sort(
-            key=lambda x: STAGES_ORDER.index(x.__name__)
+            key=lambda x: STAGES_ORDER.index(x.__class__.__name__)
         )  # 按照顺序排序
         self.ctx = context  # 上下文对象
-        self.stages = []  # 存储阶段实例
 
     async def initialize(self):
         """初始化管道调度器时, 初始化所有阶段"""
-        for stage_cls in registered_stages:
-            stage_instance = stage_cls()  # 创建实例
-            await stage_instance.initialize(self.ctx)
-            self.stages.append(stage_instance)
+        for stage in registered_stages:
+            # logger.debug(f"初始化阶段 {stage.__class__ .__name__}")
+
+            await stage.initialize(self.ctx)
 
     async def _process_stages(self, event: AstrMessageEvent, from_stage=0):
         """依次执行各个阶段
@@ -30,9 +29,9 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
             from_stage (int): 从第几个阶段开始执行, 默认从0开始
         """
-        for i in range(from_stage, len(self.stages)):
-            stage = self.stages[i]  # 获取当前要执行的阶段
-            # logger.debug(f"执行阶段 {stage.__class__.__name__}")
+        for i in range(from_stage, len(registered_stages)):
+            stage = registered_stages[i]  # 获取当前要执行的阶段
+            # logger.debug(f"执行阶段 {stage.__class__ .__name__}")
             coroutine = stage.process(
                 event
             )  # 调用阶段的process方法, 返回协程或者异步生成器

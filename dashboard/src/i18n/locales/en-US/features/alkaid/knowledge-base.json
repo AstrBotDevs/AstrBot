@@ -1,6 +1,21 @@
 {
   "title": "Knowledge Base",
   "subtitle": "Manage and query knowledge base content",
+  "upload": {
+    "title": "Upload Documents",
+    "selectFiles": "Select Files",
+    "supportedFormats": "Supported Formats",
+    "dragDrop": "Drag files here",
+    "processing": "Processing...",
+    "success": "Upload Successful",
+    "error": "Upload Failed"
+  },
+  "search": {
+    "placeholder": "Search knowledge base...",
+    "results": "Search Results",
+    "noResults": "No relevant content found",
+    "searching": "Searching..."
+  },
   "documents": {
     "title": "Document List",
     "name": "Document Name",
@@ -27,8 +42,6 @@
     "title": "Knowledge Base List",
     "create": "Create Knowledge Base",
     "config": "Configure",
-    "checkUpdate": "Check Plugin Update",
-    "updatePlugin": "Update Plugin to {version}",
     "knowledgeCount": "knowledge items",
     "tips": "Tips: Learn how to use through /kb command in chat page!"
   },
@@ -38,9 +51,7 @@
     "descriptionLabel": "Description",
     "descriptionPlaceholder": "Brief description of the knowledge base...",
     "embeddingModelLabel": "Embedding Model",
-    "rerankModelLabel": "Rerank Model",
     "providerInfo": "Provider ID: {id} | Embedding Model Dimensions: {dimensions}",
-    "rerankProviderInfo": "Provider ID: {id}",
     "tips": "Tips: Once you choose an embedding model for a knowledge base, please do not modify the provider's model or vector dimension information, otherwise it will seriously affect the recall rate of the knowledge base or even cause errors.",
     "cancel": "Cancel",
     "create": "Create"
@@ -64,8 +75,7 @@
     "usage": "Usage: Enter \"/kb use {name}\" in the chat page",
     "tabs": {
       "upload": "Upload Files",
-      "search": "Search Content",
-      "fromURL": "From URL"
+      "search": "Search Content"
     }
   },
   "upload": {
@@ -121,34 +131,6 @@
     "knowledgeBaseDeleted": "Knowledge base deleted successfully",
     "deleteFailed": "Deletion failed",
     "deleteKnowledgeBaseFailed": "Failed to delete knowledge base",
-    "getEmbeddingModelListFailed": "Failed to get embedding model list",
-    "updateAvailable": "New version available: {current} -> {latest}",
-    "pluginUpToDate": "Plugin is up to date",
-    "pluginNotFoundInMarket": "Plugin not found in market",
-    "checkUpdateFailed": "Failed to check for updates",
-    "updateSuccess": "Plugin updated successfully",
-    "updateFailed": "Update failed",
-    "updatePluginFailed": "Failed to update plugin"
-  },
-  "importFromUrl": {
-    "title": "Import from URL",
-    "urlLabel": "Web Page URL",
-    "urlPlaceholder": "Enter the URL of the web page to extract knowledge from",
-    "optionsTitle": "Import Options",
-    "tooltip": "These options control how text is extracted and processed from the URL content.\nLeave blank to use the plugin's default settings.\nEnabling LLM text repair and summary may take a long time.",
-    "useLlmRepairLabel": "Enable LLM Text Repair",
-    "useClusteringSummaryLabel": "Enable Clustering Summary",
-    "repairLlmProviderIdLabel": "Text Repair Model",
-    "summarizeLlmProviderIdLabel": "Summarize Model",
-    "embeddingProviderIdLabel": "Embedding Model",
-    "chunkSizeLabel": "Chunk Size",
-    "chunkOverlapLabel": "Chunk Overlap",
-    "startImport": "Start Import",
-    "importing": "Importing...",
-    "importSuccess": "Import Successful",
-    "importFailed": "Import Failed",
-    "uploadingChunks": "Content extracted successfully, uploading chunks...",
-    "preRequisite": "Hint: Please go to the plugin market to install astrbot_plugin_url_2_knowledge_base and follow the instructions in the plugin documentation to complete the playwright installation before using this feature.",
-    "allChunksUploaded": "All chunks uploaded successfully"
+    "getEmbeddingModelListFailed": "Failed to get embedding model list"
   }
-}
+} 

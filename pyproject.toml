@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.0.0-beta.1"
+version = "3.5.26"
 description = "易上手的多平台 LLM 聊天机器人及开发框架"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -18,7 +18,6 @@ dependencies = [
     "cryptography>=44.0.3",
     "dashscope>=1.23.2",
     "defusedxml>=0.7.1",
-    "deprecated>=1.2.18",
     "dingtalk-stream>=0.22.1",
     "docstring-parser>=0.16",
     "faiss-cpu>=1.10.0",
@@ -43,8 +42,6 @@ dependencies = [
     "readability-lxml>=0.8.4.1",
     "silk-python>=0.2.6",
     "slack-sdk>=3.35.0",
-    "sqlalchemy[asyncio]>=2.0.41",
-    "sqlmodel>=0.0.24",
     "telegramify-markdown>=0.5.1",
     "watchfiles>=1.0.5",
     "websockets>=15.0.1",

@@ -4,22 +4,16 @@ import os
 from .route import Route, Response, RouteContext
 from astrbot.core.provider.entities import ProviderType
 from quart import request
-from astrbot.core.config.default import (
-    CONFIG_METADATA_2,
-    DEFAULT_VALUE_MAP,
-    CONFIG_METADATA_3,
-    CONFIG_METADATA_3_SYSTEM,
-)
+from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
-from astrbot.core import logger, html_renderer
+from astrbot.core import logger
 from astrbot.core.provider import Provider
 import asyncio
-from astrbot.core.utils.t2i.network_strategy import CUSTOM_T2I_TEMPLATE_PATH
 
 
 def try_cast(value: str, type_: str):
@@ -165,165 +159,32 @@ class ConfigRoute(Route):
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
-        self.acm = core_lifecycle.astrbot_config_mgr
         self.routes = {
-            "/config/abconf/new": ("POST", self.create_abconf),
-            "/config/abconf": ("GET", self.get_abconf),
-            "/config/abconfs": ("GET", self.get_abconf_list),
-            "/config/abconf/delete": ("POST", self.delete_abconf),
-            "/config/abconf/update": ("POST", self.update_abconf),
             "/config/get": ("GET", self.get_configs),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
             "/config/plugin/update": ("POST", self.post_plugin_configs),
             "/config/platform/new": ("POST", self.post_new_platform),
             "/config/platform/update": ("POST", self.post_update_platform),
             "/config/platform/delete": ("POST", self.post_delete_platform),
-            "/config/platform/list": ("GET", self.get_platform_list),
             "/config/provider/new": ("POST", self.post_new_provider),
             "/config/provider/update": ("POST", self.post_update_provider),
             "/config/provider/delete": ("POST", self.post_delete_provider),
+            "/config/llmtools": ("GET", self.get_llm_tools),
             "/config/provider/check_one": ("GET", self.check_one_provider_status),
             "/config/provider/list": ("GET", self.get_provider_config_list),
             "/config/provider/model_list": ("GET", self.get_provider_model_list),
-            "/config/astrbot/t2i-template/get": ("GET", self.get_t2i_template),
-            "/config/astrbot/t2i-template/save": ("POST", self.post_t2i_template),
-            "/config/astrbot/t2i-template/delete": ("DELETE", self.delete_t2i_template),
+            "/config/provider/get_session_seperate": (
+                "GET",
+                lambda: Response()
+                .ok({"enable": self.config["provider_settings"]["separate_provider"]})
+                .__dict__,
+            ),
+            "/config/provider/set_session_seperate": (
+                "POST",
+                self.post_session_seperate,
+            ),
         }
         self.register_routes()
-
-    async def get_t2i_template(self):
-        """获取 T2I 模板"""
-        try:
-            template = await html_renderer.network_strategy.get_template()
-            has_custom_template = os.path.exists(CUSTOM_T2I_TEMPLATE_PATH)
-            return (
-                Response()
-                .ok({"template": template, "has_custom_template": has_custom_template})
-                .__dict__
-            )
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"获取模板失败: {str(e)}").__dict__
-
-    async def post_t2i_template(self):
-        """保存 T2I 模板"""
-        try:
-            post_data = await request.json
-            if not post_data or "template" not in post_data:
-                return Response().error("缺少模板内容").__dict__
-
-            template_content = post_data["template"]
-
-            # 保存自定义模板到文件
-            with open(CUSTOM_T2I_TEMPLATE_PATH, "w", encoding="utf-8") as f:
-                f.write(template_content)
-
-            return Response().ok(message="模板保存成功").__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"保存模板失败: {str(e)}").__dict__
-
-    async def delete_t2i_template(self):
-        """删除自定义 T2I 模板，恢复默认模板"""
-        try:
-            if os.path.exists(CUSTOM_T2I_TEMPLATE_PATH):
-                os.remove(CUSTOM_T2I_TEMPLATE_PATH)
-                return Response().ok(message="已恢复默认模板").__dict__
-            else:
-                return Response().ok(message="未找到自定义模板文件").__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"删除模板失败: {str(e)}").__dict__
-
-    async def get_abconf_list(self):
-        """获取所有 AstrBot 配置文件的列表"""
-        abconf_list = self.acm.get_conf_list()
-        return Response().ok({"info_list": abconf_list}).__dict__
-
-    async def create_abconf(self):
-        """创建新的 AstrBot 配置文件"""
-        post_data = await request.json
-        if not post_data:
-            return Response().error("缺少配置数据").__dict__
-        umo_parts = post_data["umo_parts"]
-        name = post_data.get("name", None)
-
-        try:
-            conf_id = self.acm.create_conf(umo_parts=umo_parts, name=name)
-            return Response().ok(message="创建成功", data={"conf_id": conf_id}).__dict__
-        except ValueError as e:
-            return Response().error(str(e)).__dict__
-
-    async def get_abconf(self):
-        """获取指定 AstrBot 配置文件"""
-        abconf_id = request.args.get("id")
-        system_config = request.args.get("system_config", "0").lower() == "1"
-        if not abconf_id and not system_config:
-            return Response().error("缺少配置文件 ID").__dict__
-
-        try:
-            if system_config:
-                abconf = self.acm.confs["default"]
-                return (
-                    Response()
-                    .ok({"config": abconf, "metadata": CONFIG_METADATA_3_SYSTEM})
-                    .__dict__
-                )
-            abconf = self.acm.confs[abconf_id]
-            return (
-                Response()
-                .ok({"config": abconf, "metadata": CONFIG_METADATA_3})
-                .__dict__
-            )
-        except ValueError as e:
-            return Response().error(str(e)).__dict__
-
-    async def delete_abconf(self):
-        """删除指定 AstrBot 配置文件"""
-        post_data = await request.json
-        if not post_data:
-            return Response().error("缺少配置数据").__dict__
-
-        conf_id = post_data.get("id")
-        if not conf_id:
-            return Response().error("缺少配置文件 ID").__dict__
-
-        try:
-            success = self.acm.delete_conf(conf_id)
-            if success:
-                return Response().ok(message="删除成功").__dict__
-            else:
-                return Response().error("删除失败").__dict__
-        except ValueError as e:
-            return Response().error(str(e)).__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"删除配置文件失败: {str(e)}").__dict__
-
-    async def update_abconf(self):
-        """更新指定 AstrBot 配置文件信息"""
-        post_data = await request.json
-        if not post_data:
-            return Response().error("缺少配置数据").__dict__
-
-        conf_id = post_data.get("id")
-        if not conf_id:
-            return Response().error("缺少配置文件 ID").__dict__
-
-        name = post_data.get("name")
-        umo_parts = post_data.get("umo_parts")
-
-        try:
-            success = self.acm.update_conf_info(conf_id, name=name, umo_parts=umo_parts)
-            if success:
-                return Response().ok(message="更新成功").__dict__
-            else:
-                return Response().error("更新失败").__dict__
-        except ValueError as e:
-            return Response().error(str(e)).__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"更新配置文件失败: {str(e)}").__dict__
 
     async def _test_single_provider(self, provider):
         """辅助函数：测试单个 provider 的可用性"""
@@ -349,16 +210,11 @@ class ConfigRoute(Route):
                 response = await asyncio.wait_for(
                     provider.text_chat(prompt="REPLY `PONG` ONLY"), timeout=45.0
                 )
-                logger.debug(
-                    f"Received response from {status_info['name']}: {response}"
-                )
+                logger.debug(f"Received response from {status_info['name']}: {response}")
                 if response is not None:
                     status_info["status"] = "available"
                     response_text_snippet = ""
-                    if (
-                        hasattr(response, "completion_text")
-                        and response.completion_text
-                    ):
+                    if hasattr(response, "completion_text") and response.completion_text:
                         response_text_snippet = (
                             response.completion_text[:70] + "..."
                             if len(response.completion_text) > 70
@@ -377,48 +233,29 @@ class ConfigRoute(Route):
                         f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{response_text_snippet}'"
                     )
                 else:
-                    status_info["error"] = (
-                        "Test call returned None, but expected an LLMResponse object."
-                    )
-                    logger.warning(
-                        f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None."
-                    )
+                    status_info["error"] = "Test call returned None, but expected an LLMResponse object."
+                    logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None.")
 
             except asyncio.TimeoutError:
-                status_info["error"] = (
-                    "Connection timed out after 45 seconds during test call."
-                )
-                logger.warning(
-                    f"Provider {status_info['name']} (ID: {status_info['id']}) timed out."
-                )
+                status_info["error"] = "Connection timed out after 45 seconds during test call."
+                logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) timed out.")
             except Exception as e:
                 error_message = str(e)
                 status_info["error"] = error_message
-                logger.warning(
-                    f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}"
-                )
-                logger.debug(
-                    f"Traceback for {status_info['name']}:\n{traceback.format_exc()}"
-                )
+                logger.warning(f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}")
+                logger.debug(f"Traceback for {status_info['name']}:\n{traceback.format_exc()}")
 
         elif provider_capability_type == ProviderType.EMBEDDING:
             try:
                 # For embedding, we can call the get_embedding method with a short prompt.
                 embedding_result = await provider.get_embedding("health_check")
-                if isinstance(embedding_result, list) and (
-                    not embedding_result or isinstance(embedding_result[0], float)
-                ):
+                if isinstance(embedding_result, list) and (not embedding_result or isinstance(embedding_result[0], float)):
                     status_info["status"] = "available"
                 else:
                     status_info["status"] = "unavailable"
-                    status_info["error"] = (
-                        f"Embedding test failed: unexpected result type {type(embedding_result)}"
-                    )
+                    status_info["error"] = f"Embedding test failed: unexpected result type {type(embedding_result)}"
             except Exception as e:
-                logger.error(
-                    f"Error testing embedding provider {provider_name}: {e}",
-                    exc_info=True,
-                )
+                logger.error(f"Error testing embedding provider {provider_name}: {e}", exc_info=True)
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"Embedding test failed: {str(e)}"
 
@@ -430,71 +267,41 @@ class ConfigRoute(Route):
                     status_info["status"] = "available"
                 else:
                     status_info["status"] = "unavailable"
-                    status_info["error"] = (
-                        f"TTS test failed: unexpected result type {type(audio_result)}"
-                    )
+                    status_info["error"] = f"TTS test failed: unexpected result type {type(audio_result)}"
             except Exception as e:
-                logger.error(
-                    f"Error testing TTS provider {provider_name}: {e}", exc_info=True
-                )
+                logger.error(f"Error testing TTS provider {provider_name}: {e}", exc_info=True)
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"TTS test failed: {str(e)}"
         elif provider_capability_type == ProviderType.SPEECH_TO_TEXT:
             try:
-                logger.debug(
-                    f"Sending health check audio to provider: {status_info['name']}"
-                )
-                sample_audio_path = os.path.join(
-                    get_astrbot_path(), "samples", "stt_health_check.wav"
-                )
+                logger.debug(f"Sending health check audio to provider: {status_info['name']}")
+                sample_audio_path = os.path.join(get_astrbot_path(), "samples", "stt_health_check.wav")
                 if not os.path.exists(sample_audio_path):
                     status_info["status"] = "unavailable"
-                    status_info["error"] = (
-                        "STT test failed: sample audio file not found."
-                    )
-                    logger.warning(
-                        f"STT test for {status_info['name']} failed: sample audio file not found at {sample_audio_path}"
-                    )
+                    status_info["error"] = "STT test failed: sample audio file not found."
+                    logger.warning(f"STT test for {status_info['name']} failed: sample audio file not found at {sample_audio_path}")
                 else:
                     text_result = await provider.get_text(sample_audio_path)
                     if isinstance(text_result, str) and text_result:
                         status_info["status"] = "available"
-                        snippet = (
-                            text_result[:70] + "..."
-                            if len(text_result) > 70
-                            else text_result
-                        )
-                        logger.info(
-                            f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{snippet}'"
-                        )
+                        snippet = text_result[:70] + "..." if len(text_result) > 70 else text_result
+                        logger.info(f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{snippet}'")
                     else:
                         status_info["status"] = "unavailable"
-                        status_info["error"] = (
-                            f"STT test failed: unexpected result type {type(text_result)}"
-                        )
-                        logger.warning(
-                            f"STT test for {status_info['name']} failed: unexpected result type {type(text_result)}"
-                        )
+                        status_info["error"] = f"STT test failed: unexpected result type {type(text_result)}"
+                        logger.warning(f"STT test for {status_info['name']} failed: unexpected result type {type(text_result)}")
             except Exception as e:
-                logger.error(
-                    f"Error testing STT provider {provider_name}: {e}", exc_info=True
-                )
+                logger.error(f"Error testing STT provider {provider_name}: {e}", exc_info=True)
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"STT test failed: {str(e)}"
         else:
-            logger.debug(
-                f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}"
-            )
+            logger.debug(f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}")
             status_info["status"] = "available"
-            status_info["error"] = (
-                "This provider type is not tested and is assumed to be available."
-            )
+            status_info["error"] = "This provider type is not tested and is assumed to be available."
 
         return status_info
 
-    def _error_response(
-        self, message: str, status_code: int = 500, log_fn=logger.error
-    ):
+    def _error_response(self, message: str, status_code: int = 500, log_fn=logger.error):
         log_fn(message)
         # 记录更详细的traceback信息，但只在是严重错误时
         if status_code == 500:
@@ -505,9 +312,7 @@ class ConfigRoute(Route):
         """API: check a single LLM Provider's status by id"""
         provider_id = request.args.get("id")
         if not provider_id:
-            return self._error_response(
-                "Missing provider_id parameter", 400, logger.warning
-            )
+            return self._error_response("Missing provider_id parameter", 400, logger.warning)
 
         logger.info(f"API call: /config/provider/check_one id={provider_id}")
         try:
@@ -515,21 +320,16 @@ class ConfigRoute(Route):
             target = prov_mgr.inst_map.get(provider_id)
 
             if not target:
-                logger.warning(
-                    f"Provider with id '{provider_id}' not found in provider_manager."
-                )
-                return (
-                    Response()
-                    .error(f"Provider with id '{provider_id}' not found")
-                    .__dict__
-                )
+                logger.warning(f"Provider with id '{provider_id}' not found in provider_manager.")
+                return Response().error(f"Provider with id '{provider_id}' not found").__dict__
 
             result = await self._test_single_provider(target)
             return Response().ok(result).__dict__
 
         except Exception as e:
             return self._error_response(
-                f"Critical error checking provider {provider_id}: {e}", 500
+                f"Critical error checking provider {provider_id}: {e}",
+                500
             )
 
     async def get_configs(self):
@@ -540,15 +340,29 @@ class ConfigRoute(Route):
             return Response().ok(await self._get_astrbot_config()).__dict__
         return Response().ok(await self._get_plugin_config(plugin_name)).__dict__
 
+    async def post_session_seperate(self):
+        """设置提供商会话隔离"""
+        post_config = await request.json
+        enable = post_config.get("enable", None)
+        if enable is None:
+            return Response().error("缺少参数 enable").__dict__
+
+        astrbot_config = self.core_lifecycle.astrbot_config
+        astrbot_config["provider_settings"]["separate_provider"] = enable
+        try:
+            astrbot_config.save_config()
+        except Exception as e:
+            return Response().error(str(e)).__dict__
+        return Response().ok(None, "设置成功~").__dict__
+
     async def get_provider_config_list(self):
         provider_type = request.args.get("provider_type", None)
         if not provider_type:
             return Response().error("缺少参数 provider_type").__dict__
-        provider_type_ls = provider_type.split(",")
         provider_list = []
         astrbot_config = self.core_lifecycle.astrbot_config
         for provider in astrbot_config["provider"]:
-            if provider.get("provider_type", None) in provider_type_ls:
+            if provider.get("provider_type", None) == provider_type:
                 provider_list.append(provider)
         return Response().ok(provider_list).__dict__
 
@@ -574,21 +388,11 @@ class ConfigRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
-    async def get_platform_list(self):
-        """获取所有平台的列表"""
-        platform_list = []
-        for platform in self.config["platform"]:
-            platform_list.append(platform)
-        return Response().ok({"platforms": platform_list}).__dict__
-
     async def post_astrbot_configs(self):
-        data = await request.json
-        config = data.get("config", None)
-        conf_id = data.get("conf_id", None)
+        post_configs = await request.json
         try:
-            await self._save_astrbot_configs(config, conf_id)
-            await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
-            return Response().ok(None, "保存成功~").__dict__
+            await self._save_astrbot_configs(post_configs)
+            return Response().ok(None, "保存成功~ 机器人正在重载配置。").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
@@ -705,6 +509,12 @@ class ConfigRoute(Route):
             return Response().error(str(e)).__dict__
         return Response().ok(None, "删除成功，已经实时生效~").__dict__
 
+    async def get_llm_tools(self):
+        """获取函数调用工具。包含了本地加载的以及 MCP 服务的工具"""
+        tool_mgr = self.core_lifecycle.provider_manager.llm_tools
+        tools = tool_mgr.get_func_desc_openai_style()
+        return Response().ok(tools).__dict__
+
     async def _get_astrbot_config(self):
         config = self.config
 
@@ -747,12 +557,10 @@ class ConfigRoute(Route):
 
         return ret
 
-    async def _save_astrbot_configs(self, post_configs: dict, conf_id: str = None):
+    async def _save_astrbot_configs(self, post_configs: dict):
         try:
-            if conf_id not in self.acm.confs:
-                raise ValueError(f"配置文件 {conf_id} 不存在")
-            astrbot_config = self.acm.confs[conf_id]
-            save_config(post_configs, astrbot_config, is_core=True)
+            save_config(post_configs, self.config, is_core=True)
+            await self.core_lifecycle.restart()
         except Exception as e:
             raise e
 

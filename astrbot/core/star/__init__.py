@@ -34,7 +34,7 @@ class Star(CommandParserMixin):
 
     @staticmethod
     async def html_render(
-        tmpl: str, data: dict, return_url=True, options: dict | None = None
+        tmpl: str, data: dict, return_url=True, options: dict = None
     ) -> str:
         """渲染 HTML"""
         return await html_renderer.render_custom_template(

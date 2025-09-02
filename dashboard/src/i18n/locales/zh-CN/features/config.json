@@ -30,11 +30,7 @@
     "configApplyError": "配置未应用，Json 格式错误。",
     "saveSuccess": "配置保存成功",
     "saveError": "配置保存失败",
-    "loadError": "配置加载失败",
-    "deleteSuccess": "删除成功",
-    "deleteError": "删除失败",
-    "updateSuccess": "更新成功",
-    "updateError": "更新失败"
+    "loadError": "配置加载失败"
   },
   "sections": {
     "general": "常规设置",

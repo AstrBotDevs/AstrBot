@@ -60,9 +60,6 @@ class AstrBotDashboard:
         self.session_management_route = SessionManagementRoute(
             self.context, db, core_lifecycle
         )
-        self.persona_route = PersonaRoute(
-            self.context, db, core_lifecycle
-        )
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",

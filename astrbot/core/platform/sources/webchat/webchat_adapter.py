@@ -77,7 +77,7 @@ class WebChatAdapter(Platform):
         os.makedirs(self.imgs_dir, exist_ok=True)
 
         self.metadata = PlatformMetadata(
-            name="webchat", description="webchat", id="webchat"
+            name="webchat", description="webchat", id=self.config.get("id", "")
         )
 
     async def send_by_session(

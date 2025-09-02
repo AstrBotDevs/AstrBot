@@ -1,4 +1,5 @@
 import os
+import asyncio
 from .log import LogManager, LogBroker  # noqa
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -20,7 +21,7 @@ html_renderer = HtmlRenderer(t2i_base_url)
 logger = LogManager.GetLogger(log_name="astrbot")
 db_helper = SQLiteDatabase(DB_PATH)
 # 简单的偏好设置存储, 这里后续应该存储到数据库中, 一些部分可以存储到配置中
-sp = SharedPreferences(db_helper=db_helper)
+sp = SharedPreferences()
 # 文件令牌服务
 file_token_service = FileTokenService()
 pip_installer = PipInstaller(

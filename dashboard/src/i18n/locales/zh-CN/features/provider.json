@@ -11,8 +11,7 @@
       "chatCompletion": "基本对话",
       "speechToText": "语音转文字",
       "textToSpeech": "文字转语音",
-      "embedding": "嵌入(Embedding)",
-      "rerank": "重排序(Rerank)"
+      "embedding": "Embedding"
     },
     "empty": {
       "all": "暂无服务提供商，点击 新增服务提供商 添加",
@@ -20,7 +19,6 @@
     },
     "description": {
       "openai": "也支持所有兼容 OpenAI API 的模型提供商。",
-      "vllm_rerank": "也支持 Jina AI, Cohere, PPIO 等提供商。",
       "default": ""
     }
   },
@@ -46,8 +44,7 @@
         "basic": "基本",
         "speechToText": "语音转文字",
         "textToSpeech": "文字转语音",
-        "embedding": "嵌入(Embedding)",
-        "rerank": "重排序(Rerank)"
+        "embedding": "Embedding"
       },
       "noTemplates": "暂无{type}类型的提供商模板"
     },

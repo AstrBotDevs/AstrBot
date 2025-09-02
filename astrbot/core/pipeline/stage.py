@@ -1,15 +1,15 @@
 from __future__ import annotations
 import abc
-from typing import List, AsyncGenerator, Union, Type
+from typing import List, AsyncGenerator, Union
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from .context import PipelineContext
 
-registered_stages: List[Type[Stage]] = []  # 维护了所有已注册的 Stage 实现类类型
+registered_stages: List[Stage] = []  # 维护了所有已注册的 Stage 实现类
 
 
 def register_stage(cls):
     """一个简单的装饰器，用于注册 pipeline 包下的 Stage 实现类"""
-    registered_stages.append(cls)
+    registered_stages.append(cls())
     return cls
 
 

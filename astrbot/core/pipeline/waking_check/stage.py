@@ -112,17 +112,8 @@ class WakingCheckStage(Stage):
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
 
-        # 将 plugins_name 设置到 event 中
-        enabled_plugins_name = self.ctx.astrbot_config.get("plugin_set", ["*"])
-        if enabled_plugins_name == ["*"]:
-            # 如果是 *，则表示所有插件都启用
-            event.plugins_name = None
-        else:
-            event.plugins_name = enabled_plugins_name
-        logger.debug(f"enabled_plugins_name: {enabled_plugins_name}")
-
         for handler in star_handlers_registry.get_handlers_by_event_type(
-            EventType.AdapterMessageEvent, plugins_name=event.plugins_name
+            EventType.AdapterMessageEvent
         ):
             # filter 需满足 AND 逻辑关系
             passed = True

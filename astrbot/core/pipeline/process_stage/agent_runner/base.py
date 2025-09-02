@@ -1,33 +1,32 @@
 import abc
 import typing as T
-from enum import Enum, auto
-from ..run_context import ContextWrapper, TContext
-from ..response import AgentResponse
-from ..hooks import BaseAgentRunHooks
-from ..tool_executor import BaseFunctionToolExecutor
-from astrbot.core.provider import Provider
+from dataclasses import dataclass
 from astrbot.core.provider.entities import LLMResponse
+from ....message.message_event_result import MessageChain
+from enum import Enum, auto
 
 
 class AgentState(Enum):
-    """Defines the state of the agent."""
+    """Agent 状态枚举"""
+    IDLE = auto()          # 初始状态
+    RUNNING = auto()       # 运行中
+    DONE = auto()          # 完成
+    ERROR = auto()         # 错误状态
 
-    IDLE = auto()  # Initial state
-    RUNNING = auto()  # Currently processing
-    DONE = auto()  # Completed
-    ERROR = auto()  # Error state
+
+class AgentResponseData(T.TypedDict):
+    chain: MessageChain
 
 
-class BaseAgentRunner(T.Generic[TContext]):
+@dataclass
+class AgentResponse:
+    type: str
+    data: AgentResponseData
+
+
+class BaseAgentRunner:
     @abc.abstractmethod
-    async def reset(
-        self,
-        provider: Provider,
-        run_context: ContextWrapper[TContext],
-        tool_executor: BaseFunctionToolExecutor[TContext],
-        agent_hooks: BaseAgentRunHooks[TContext],
-        **kwargs: T.Any,
-    ) -> None:
+    async def reset(self) -> None:
         """
         Reset the agent to its initial state.
         This method should be called before starting a new run.
