@@ -11,6 +11,8 @@
     "migratingSubtitle": "请耐心等待，迁移过程中请勿关闭此窗口",
     "migrationError": "迁移失败",
     "success": "迁移成功完成！",
-    "completed": "迁移已完成"
+    "completed": "迁移已完成",
+    "restartRecommended": "建议重启应用程序以使所有更改生效。",
+    "restartNow": "立即重启"
   }
 }

@@ -12,7 +12,13 @@
                 <div v-if="migrationCompleted" class="text-center py-8">
                     <v-icon size="64" color="success" class="mb-4">mdi-check-circle</v-icon>
                     <h3 class="mb-4">{{ t('features.migration.dialog.completed') }}</h3>
-                    {{ migrationResult?.message || t('features.migration.dialog.success') }}
+                    <p class="mb-4">{{ migrationResult?.message || t('features.migration.dialog.success') }}</p>
+                    <v-alert type="info" variant="tonal" class="mb-4">
+                        <template v-slot:prepend>
+                            <v-icon>mdi-information</v-icon>
+                        </template>
+                        {{ t('features.migration.dialog.restartRecommended') }}
+                    </v-alert>
                 </div>
 
                 <div v-else-if="migrating" class="migration-in-progress">
@@ -80,8 +86,11 @@
             <v-card-actions class="px-6 py-4">
                 <v-spacer></v-spacer>
                 <template v-if="migrationCompleted">
-                    <v-btn color="primary" variant="elevated" @click="handleClose">
-                        {{ t('core.common.confirm') }}
+                    <v-btn color="grey" variant="text" @click="handleClose">
+                        {{ t('core.common.close') }}
+                    </v-btn>
+                    <v-btn color="primary" variant="elevated" @click="restartAstrBot">
+                        {{ t('features.migration.dialog.restartNow') }}
                     </v-btn>
                 </template>
                 <template v-else>
@@ -96,6 +105,8 @@
             </v-card-actions>
         </v-card>
     </v-dialog>
+    
+    <WaitingForRestart ref="wfr"></WaitingForRestart>
 </template>
 
 <script setup>
@@ -103,6 +114,7 @@ import { ref, computed, watch } from 'vue'
 import axios from 'axios'
 import { useI18n } from '@/i18n/composables'
 import ConsoleDisplayer from './ConsoleDisplayer.vue'
+import WaitingForRestart from './WaitingForRestart.vue'
 
 const { t } = useI18n()
 
@@ -114,6 +126,7 @@ const migrationCompleted = ref(false)
 const migrationResult = ref(null)
 const platforms = ref([])
 const selectedPlatforms = ref({})
+const wfr = ref(null)
 
 let resolvePromise = null
 
@@ -242,6 +255,15 @@ const handleClose = () => {
 const getPlatformLabel = (platform) => {
     const name = platform.name || platform.id || 'Unknown'
     return `${name}`
+}
+
+// 重启 AstrBot
+const restartAstrBot = () => {
+    axios.post('/api/stat/restart-core').then(() => {
+        if (wfr.value) {
+            wfr.value.check();
+        }
+    })
 }
 
 // 打开对话框的方法

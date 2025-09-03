@@ -11,6 +11,8 @@
     "migratingSubtitle": "Please wait patiently, do not close this window during migration",
     "migrationError": "Migration failed",
     "success": "Migration completed successfully!",
-    "completed": "Migration Completed"
+    "completed": "Migration Completed",
+    "restartRecommended": "It is recommended to restart the application for all changes to take effect.",
+    "restartNow": "Restart Now"
   }
 }
