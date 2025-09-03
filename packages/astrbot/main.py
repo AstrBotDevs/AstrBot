@@ -1110,7 +1110,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("unset")
     async def unset_variable(self, event: AstrMessageEvent, key: str):
         uid = event.unified_msg_origin
-        session_var = await sp.session_get(umo="uid", key="session_variables", default={})
+        session_var = await sp.session_get(
+            umo="uid", key="session_variables", default={}
+        )
 
         if key not in session_var:
             yield event.plain_result("没有那个变量名。格式 /unset 变量名。")
@@ -1176,9 +1178,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                             )
                             return
 
-                    prompt = self.ltm.ar_prompt
-                    if not prompt:
-                        prompt = event.message_str
+                    prompt = event.message_str
 
                     yield event.request_llm(
                         prompt=prompt,
