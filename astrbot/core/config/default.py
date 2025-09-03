@@ -1913,7 +1913,7 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                     },
                     "provider_settings.identifier": {
-                        "description": "用户感知",
+                        "description": "用户识别",
                         "type": "bool",
                     },
                     "provider_settings.datetime_system_prompt": {
@@ -2288,7 +2288,7 @@ CONFIG_METADATA_3_SYSTEM = {
                         "condition": {
                             "t2i_strategy": "remote",
                         },
-                        "_special": "t2i_template"
+                        "_special": "t2i_template",
                     },
                     "log_level": {
                         "description": "控制台日志级别",
