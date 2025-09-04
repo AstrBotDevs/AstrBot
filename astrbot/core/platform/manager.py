@@ -10,6 +10,7 @@ from .sources.webchat.webchat_adapter import WebChatAdapter
 
 
 class PlatformManager:
+
     def __init__(self, config: AstrBotConfig, event_queue: Queue):
         self.platform_insts: List[Platform] = []
         """加载的 Platform 的实例"""
@@ -35,8 +36,8 @@ class PlatformManager:
         webchat_inst = WebChatAdapter({}, self.settings, self.event_queue)
         self.platform_insts.append(webchat_inst)
         asyncio.create_task(
-            self._task_wrapper(asyncio.create_task(webchat_inst.run(), name="webchat"))
-        )
+            self._task_wrapper(
+                asyncio.create_task(webchat_inst.run(), name="webchat")))
 
     async def load_platform(self, platform_config: dict):
         """实例化一个平台"""
@@ -85,6 +86,8 @@ class PlatformManager:
                     )
                 case "slack":
                     from .sources.slack.slack_adapter import SlackAdapter  # noqa: F401
+                case "satori":
+                    from .sources.satori.satori_adapter import SatoriPlatformAdapter  # noqa: F401
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->控制台->安装Pip库 中安装依赖库。"
@@ -98,7 +101,8 @@ class PlatformManager:
             )
             return
         cls_type = platform_cls_map[platform_config["type"]]
-        inst: Platform = cls_type(platform_config, self.settings, self.event_queue)
+        inst: Platform = cls_type(platform_config, self.settings,
+                                  self.event_queue)
         self._inst_map[platform_config["id"]] = {
             "inst": inst,
             "client_id": inst.client_self_id,
@@ -109,10 +113,9 @@ class PlatformManager:
             self._task_wrapper(
                 asyncio.create_task(
                     inst.run(),
-                    name=f"platform_{platform_config['type']}_{platform_config['id']}",
-                )
-            )
-        )
+                    name=
+                    f"platform_{platform_config['type']}_{platform_config['id']}",
+                )))
 
     async def _task_wrapper(self, task: asyncio.Task):
         try:
@@ -146,12 +149,8 @@ class PlatformManager:
             inst = info["inst"]
             try:
                 self.platform_insts.remove(
-                    next(
-                        inst
-                        for inst in self.platform_insts
-                        if inst.client_self_id == client_id
-                    )
-                )
+                    next(inst for inst in self.platform_insts
+                         if inst.client_self_id == client_id))
             except Exception:
                 logger.warning(f"可能未完全移除 {platform_id} 平台适配器")
 
