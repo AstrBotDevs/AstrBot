@@ -9,6 +9,7 @@ import {useAuthStore} from '@/stores/auth';
 import {useCommonStore} from '@/stores/common';
 import MarkdownIt from 'markdown-it';
 import { useI18n } from '@/i18n/composables';
+import { router } from '@/router';
 
 // 配置markdown-it，默认安全设置
 const md = new MarkdownIt({
@@ -307,7 +308,7 @@ commonStore.getStartTime();
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <div class="logo-container" :class="{'mobile-logo': $vuetify.display.xs}">
+    <div class="logo-container" :class="{'mobile-logo': $vuetify.display.xs}" @click="$router.push('/about')">
       <span class="logo-text">Astr<span class="logo-text-light">Bot</span></span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
@@ -672,6 +673,7 @@ commonStore.getStartTime();
   display: flex; 
   align-items: center; 
   gap: 8px;
+  cursor: pointer;
 }
 
 .mobile-logo {

@@ -58,9 +58,10 @@ class Metric:
             pass
         try:
             if "adapter_name" in kwargs:
-                db_helper.insert_platform_metrics({kwargs["adapter_name"]: 1})
-            if "llm_name" in kwargs:
-                db_helper.insert_llm_metrics({kwargs["llm_name"]: 1})
+                await db_helper.insert_platform_stats(
+                    platform_id=kwargs["adapter_name"],
+                    platform_type=kwargs.get("adapter_type", "unknown"),
+                )
         except Exception as e:
             logger.error(f"保存指标到数据库失败: {e}")
             pass

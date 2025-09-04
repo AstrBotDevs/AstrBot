@@ -7,6 +7,7 @@ from astrbot.core import logger, pip_installer
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.config.default import VERSION
 from astrbot.core import DEMO_MODE
+from astrbot.core.db.migration.helper import do_migration_v4, check_migration_needed_v4
 
 
 class UpdateRoute(Route):
@@ -23,10 +24,26 @@ class UpdateRoute(Route):
             "/update/do": ("POST", self.update_project),
             "/update/dashboard": ("POST", self.update_dashboard),
             "/update/pip-install": ("POST", self.install_pip_package),
+            "/update/migration": ("POST", self.do_migration),
         }
         self.astrbot_updator = astrbot_updator
         self.core_lifecycle = core_lifecycle
         self.register_routes()
+
+    async def do_migration(self):
+        need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
+        if not need_migration:
+            return Response().ok(None, "不需要进行迁移。").__dict__
+        try:
+            data = await request.json
+            pim = data.get("platform_id_map", {})
+            await do_migration_v4(
+                self.core_lifecycle.db, pim, self.core_lifecycle.astrbot_config
+            )
+            return Response().ok(None, "迁移成功。").__dict__
+        except Exception as e:
+            logger.error(f"迁移失败: {traceback.format_exc()}")
+            return Response().error(f"迁移失败: {str(e)}").__dict__
 
     async def check_update(self):
         type_ = request.args.get("type", None)

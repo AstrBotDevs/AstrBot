@@ -98,6 +98,7 @@ from astrbot.core.star.register import (
     register_on_decorating_result as on_decorating_result,  # 注册触发器: 装饰结果时
     register_after_message_sent as after_message_sent,  # 注册触发器: 消息发送后
     register_llm_tool as llm_tool,  # 注册 LLM 工具
+    register_agent as agent, # 注册 agent
 )
 
 # 监听器所用到的过滤器和类型
@@ -111,6 +112,10 @@ from astrbot.core.star.filter.platform_adapter_type import (
 )
 from astrbot.core.star.filter.permission import PermissionTypeFilter, PermissionType
 from astrbot.core.star.filter.custom_filter import CustomFilter
+
+# agent
+from astrbot.core.agent.tool import ToolSet, FunctionTool
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 
 __all__ = [
     "AstrBotConfig",
@@ -189,4 +194,8 @@ __all__ = [
     "PermissionTypeFilter",
     "PermissionType",
     "CustomFilter",
+    "agent",
+    "ToolSet",
+    "FunctionTool",
+    "BaseFunctionToolExecutor",
 ]

@@ -2,8 +2,6 @@
 会话服务管理器 - 负责管理每个会话的LLM、TTS等服务的启停状态
 """
 
-from typing import Dict
-
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
@@ -26,8 +24,9 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
         """
         # 获取会话服务配置
-        session_config = sp.get("session_service_config", {}) or {}
-        session_services = session_config.get(session_id, {})
+        session_services = sp.get(
+            "session_service_config", {}, scope="umo", scope_id=session_id
+        )
 
         # 如果配置了该会话的LLM状态，返回该状态
         llm_enabled = session_services.get("llm_enabled")
@@ -45,16 +44,13 @@ class SessionServiceManager:
             session_id: 会话ID (unified_msg_origin)
             enabled: True表示启用，False表示禁用
         """
-        # 获取当前配置
-        session_config = sp.get("session_service_config", {}) or {}
-        if session_id not in session_config:
-            session_config[session_id] = {}
-
-        # 设置LLM状态
-        session_config[session_id]["llm_enabled"] = enabled
-
-        # 保存配置
-        sp.put("session_service_config", session_config)
+        session_config = (
+            sp.get("session_service_config", {}, scope="umo", scope_id=session_id) or {}
+        )
+        session_config["llm_enabled"] = enabled
+        sp.put(
+            "session_service_config", session_config, scope="umo", scope_id=session_id
+        )
 
         logger.info(
             f"会话 {session_id} 的LLM状态已更新为: {'启用' if enabled else '禁用'}"
@@ -88,8 +84,9 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
         """
         # 获取会话服务配置
-        session_config = sp.get("session_service_config", {}) or {}
-        session_services = session_config.get(session_id, {})
+        session_services = sp.get(
+            "session_service_config", {}, scope="umo", scope_id=session_id
+        )
 
         # 如果配置了该会话的TTS状态，返回该状态
         tts_enabled = session_services.get("tts_enabled")
@@ -107,16 +104,13 @@ class SessionServiceManager:
             session_id: 会话ID (unified_msg_origin)
             enabled: True表示启用，False表示禁用
         """
-        # 获取当前配置
-        session_config = sp.get("session_service_config", {}) or {}
-        if session_id not in session_config:
-            session_config[session_id] = {}
-
-        # 设置TTS状态
-        session_config[session_id]["tts_enabled"] = enabled
-
-        # 保存配置
-        sp.put("session_service_config", session_config)
+        session_config = (
+            sp.get("session_service_config", {}, scope="umo", scope_id=session_id) or {}
+        )
+        session_config["tts_enabled"] = enabled
+        sp.put(
+            "session_service_config", session_config, scope="umo", scope_id=session_id
+        )
 
         logger.info(
             f"会话 {session_id} 的TTS状态已更新为: {'启用' if enabled else '禁用'}"
@@ -150,8 +144,9 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
         """
         # 获取会话服务配置
-        session_config = sp.get("session_service_config", {}) or {}
-        session_services = session_config.get(session_id, {})
+        session_services = sp.get(
+            "session_service_config", {}, scope="umo", scope_id=session_id
+        )
 
         # 如果配置了该会话的整体状态，返回该状态
         session_enabled = session_services.get("session_enabled")
@@ -169,16 +164,13 @@ class SessionServiceManager:
             session_id: 会话ID (unified_msg_origin)
             enabled: True表示启用，False表示禁用
         """
-        # 获取当前配置
-        session_config = sp.get("session_service_config", {}) or {}
-        if session_id not in session_config:
-            session_config[session_id] = {}
-
-        # 设置会话整体状态
-        session_config[session_id]["session_enabled"] = enabled
-
-        # 保存配置
-        sp.put("session_service_config", session_config)
+        session_config = (
+            sp.get("session_service_config", {}, scope="umo", scope_id=session_id) or {}
+        )
+        session_config["session_enabled"] = enabled
+        sp.put(
+            "session_service_config", session_config, scope="umo", scope_id=session_id
+        )
 
         logger.info(
             f"会话 {session_id} 的整体状态已更新为: {'启用' if enabled else '禁用'}"
@@ -202,7 +194,7 @@ class SessionServiceManager:
     # =============================================================================
 
     @staticmethod
-    def get_session_custom_name(session_id: str) -> str:
+    def get_session_custom_name(session_id: str) -> str | None:
         """获取会话的自定义名称
 
         Args:
@@ -211,8 +203,9 @@ class SessionServiceManager:
         Returns:
             str: 自定义名称，如果没有设置则返回None
         """
-        session_config = sp.get("session_service_config", {}) or {}
-        session_services = session_config.get(session_id, {})
+        session_services = sp.get(
+            "session_service_config", {}, scope="umo", scope_id=session_id
+        )
         return session_services.get("custom_name")
 
     @staticmethod
@@ -223,20 +216,17 @@ class SessionServiceManager:
             session_id: 会话ID (unified_msg_origin)
             custom_name: 自定义名称，可以为空字符串来清除名称
         """
-        # 获取当前配置
-        session_config = sp.get("session_service_config", {}) or {}
-        if session_id not in session_config:
-            session_config[session_id] = {}
-
-        # 设置自定义名称
+        session_config = (
+            sp.get("session_service_config", {}, scope="umo", scope_id=session_id) or {}
+        )
         if custom_name and custom_name.strip():
-            session_config[session_id]["custom_name"] = custom_name.strip()
+            session_config["custom_name"] = custom_name.strip()
         else:
             # 如果传入空名称，则删除自定义名称
-            session_config[session_id].pop("custom_name", None)
-
-        # 保存配置
-        sp.put("session_service_config", session_config)
+            session_config.pop("custom_name", None)
+        sp.put(
+            "session_service_config", session_config, scope="umo", scope_id=session_id
+        )
 
         logger.info(
             f"会话 {session_id} 的自定义名称已更新为: {custom_name.strip() if custom_name and custom_name.strip() else '已清除'}"
@@ -258,36 +248,3 @@ class SessionServiceManager:
 
         # 如果没有自定义名称，返回session_id的最后一段
         return session_id.split(":")[2] if session_id.count(":") >= 2 else session_id
-
-    # =============================================================================
-    # 通用配置方法
-    # =============================================================================
-
-    @staticmethod
-    def get_session_service_config(session_id: str) -> Dict[str, bool]:
-        """获取指定会话的服务配置
-
-        Args:
-            session_id: 会话ID (unified_msg_origin)
-
-        Returns:
-            Dict[str, bool]: 包含session_enabled、llm_enabled、tts_enabled的字典
-        """
-        session_config = sp.get("session_service_config", {}) or {}
-        return session_config.get(
-            session_id,
-            {
-                "session_enabled": True,  # 默认启用
-                "llm_enabled": True,  # 默认启用
-                "tts_enabled": True,  # 默认启用
-            },
-        )
-
-    @staticmethod
-    def get_all_session_configs() -> Dict[str, Dict[str, bool]]:
-        """获取所有会话的服务配置
-
-        Returns:
-            Dict[str, Dict[str, bool]]: 所有会话的服务配置
-        """
-        return sp.get("session_service_config", {}) or {}

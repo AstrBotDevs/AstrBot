@@ -15,20 +15,23 @@ import time
 import threading
 import os
 from .event_bus import EventBus
-from . import astrbot_config
+from . import astrbot_config, html_renderer
 from asyncio import Queue
 from typing import List
 from astrbot.core.pipeline.scheduler import PipelineScheduler, PipelineContext
 from astrbot.core.star import PluginManager
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.star.context import Context
+from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core import LogBroker
 from astrbot.core.db import BaseDatabase
 from astrbot.core.updator import AstrBotUpdator
-from astrbot.core import logger
+from astrbot.core import logger, sp
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
+from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star_handler import star_map
 
@@ -77,17 +80,35 @@ class AstrBotCoreLifecycle:
         else:
             logger.setLevel(self.astrbot_config["log_level"])  # 设置日志级别
 
+        await self.db.initialize()
+
+        await html_renderer.initialize()
+
+        # 初始化 AstrBot 配置管理器
+        self.astrbot_config_mgr = AstrBotConfigManager(
+            default_config=self.astrbot_config, sp=sp
+        )
+
         # 初始化事件队列
         self.event_queue = Queue()
 
+        # 初始化人格管理器
+        self.persona_mgr = PersonaManager(self.db, self.astrbot_config_mgr)
+        await self.persona_mgr.initialize()
+
         # 初始化供应商管理器
-        self.provider_manager = ProviderManager(self.astrbot_config, self.db)
+        self.provider_manager = ProviderManager(
+            self.astrbot_config_mgr, self.db, self.persona_mgr
+        )
 
         # 初始化平台管理器
         self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
 
         # 初始化对话管理器
         self.conversation_manager = ConversationManager(self.db)
+
+        # 初始化平台消息历史管理器
+        self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
 
         # 初始化提供给插件的上下文
         self.star_context = Context(
@@ -97,6 +118,9 @@ class AstrBotCoreLifecycle:
             self.provider_manager,
             self.platform_manager,
             self.conversation_manager,
+            self.platform_message_history_manager,
+            self.persona_mgr,
+            self.astrbot_config_mgr,
         )
 
         # 初始化插件管理器
@@ -109,16 +133,16 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.initialize()
 
         # 初始化消息事件流水线调度器
-        self.pipeline_scheduler = PipelineScheduler(
-            PipelineContext(self.astrbot_config, self.plugin_manager)
-        )
-        await self.pipeline_scheduler.initialize()
+
+        self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
         # 初始化更新器
         self.astrbot_updator = AstrBotUpdator()
 
         # 初始化事件总线
-        self.event_bus = EventBus(self.event_queue, self.pipeline_scheduler)
+        self.event_bus = EventBus(
+            self.event_queue, self.pipeline_scheduler_mapping, self.astrbot_config_mgr
+        )
 
         # 记录启动时间
         self.start_time = int(time.time())
@@ -235,6 +259,39 @@ class AstrBotCoreLifecycle:
         platform_insts = self.platform_manager.get_insts()
         for platform_inst in platform_insts:
             tasks.append(
-                asyncio.create_task(platform_inst.run(), name=platform_inst.meta().name)
+                asyncio.create_task(
+                    platform_inst.run(),
+                    name=f"{platform_inst.meta().id}({platform_inst.meta().name})",
+                )
             )
         return tasks
+
+    async def load_pipeline_scheduler(self) -> dict[str, PipelineScheduler]:
+        """加载消息事件流水线调度器
+
+        Returns:
+            dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
+        """
+        mapping = {}
+        for conf_id, ab_config in self.astrbot_config_mgr.confs.items():
+            scheduler = PipelineScheduler(
+                PipelineContext(ab_config, self.plugin_manager, conf_id)
+            )
+            await scheduler.initialize()
+            mapping[conf_id] = scheduler
+        return mapping
+
+    async def reload_pipeline_scheduler(self, conf_id: str):
+        """重新加载消息事件流水线调度器
+
+        Returns:
+            dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
+        """
+        ab_config = self.astrbot_config_mgr.confs.get(conf_id)
+        if not ab_config:
+            raise ValueError(f"配置文件 {conf_id} 不存在")
+        scheduler = PipelineScheduler(
+            PipelineContext(ab_config, self.plugin_manager, conf_id)
+        )
+        await scheduler.initialize()
+        self.pipeline_scheduler_mapping[conf_id] = scheduler
