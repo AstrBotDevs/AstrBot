@@ -77,7 +77,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         elif isinstance(event, Event):  # 最后兜底
             await bot.send(event=event, message=messages)
         else:
-            raise ValueError("无法发送消息：缺少有效的数字 session_id 和 event")
+            raise ValueError(f"无法发送消息：缺少有效的数字 session_id({session_id}) 或 event({event})")
 
     @classmethod
     async def send_message(
