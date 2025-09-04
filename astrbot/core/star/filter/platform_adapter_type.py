@@ -19,19 +19,21 @@ class PlatformAdapterType(enum.Flag):
     VOCECHAT = enum.auto()
     WEIXIN_OFFICIAL_ACCOUNT = enum.auto()
     SATORI = enum.auto()
-    ALL = (AIOCQHTTP
-           | QQOFFICIAL
-           | TELEGRAM
-           | WECOM
-           | LARK
-           | WECHATPADPRO
-           | DINGTALK
-           | DISCORD
-           | SLACK
-           | KOOK
-           | VOCECHAT
-           | WEIXIN_OFFICIAL_ACCOUNT
-           | SATORI)
+    ALL = (
+        AIOCQHTTP
+        | QQOFFICIAL
+        | TELEGRAM
+        | WECOM
+        | LARK
+        | WECHATPADPRO
+        | DINGTALK
+        | DISCORD
+        | SLACK
+        | KOOK
+        | VOCECHAT
+        | WEIXIN_OFFICIAL_ACCOUNT
+        | SATORI
+    )
 
 
 ADAPTER_NAME_2_TYPE = {
@@ -52,9 +54,7 @@ ADAPTER_NAME_2_TYPE = {
 
 
 class PlatformAdapterTypeFilter(HandlerFilter):
-
-    def __init__(self, platform_adapter_type_or_str: Union[PlatformAdapterType,
-                                                           str]):
+    def __init__(self, platform_adapter_type_or_str: Union[PlatformAdapterType, str]):
         self.type_or_str = platform_adapter_type_or_str
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
