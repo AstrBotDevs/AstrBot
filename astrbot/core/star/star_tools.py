@@ -84,7 +84,7 @@ class StarTools:
             type (str): 消息类型, 可选: PrivateMessage, GroupMessage
             id (str): 目标ID, 例如QQ号, 群号等
             message_chain (MessageChain): 消息链
-            platform (str): 可选的平台名称，默认为空，默认平台(aiocqhttp), 目前只支持 aiocqhttp
+            platform (str): 可选的平台名称，默认平台(aiocqhttp), 目前只支持 aiocqhttp
         """
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
@@ -97,6 +97,8 @@ class StarTools:
                 is_group=(type == "GroupMessage"),
                 session_id=id,
             )
+        else:
+            raise ValueError(f"不支持的平台: {platform}")
 
     @classmethod
     async def create_message(
@@ -107,7 +109,7 @@ class StarTools:
         sender: MessageMember,
         message: List[BaseMessageComponent],
         message_str: str,
-        message_id: str = uuid.uuid4().hex,
+        message_id: str = "",
         raw_message: object = None,
         group_id: str = ""
     ) -> AstrBotMessage:
@@ -133,6 +135,8 @@ class StarTools:
         abm.type = type
         abm.self_id = self_id
         abm.session_id = session_id
+        if message_id == "":
+            message_id = uuid.uuid4().hex
         abm.message_id = message_id
         abm.sender = sender
         abm.message = message
@@ -152,7 +156,7 @@ class StarTools:
 
         Args:
             abm (AstrBotMessage): 要提交的消息对象, 请先使用 create_message 创建
-            platform (str): 可选的平台名称，默认为空，默认平台(aiocqhttp), 目前只支持 aiocqhttp
+            platform (str): 可选的平台名称，默认平台(aiocqhttp), 目前只支持 aiocqhttp
             is_wake (bool): 是否标记为唤醒事件, 默认为 True, 只有唤醒事件才会被 llm 响应
         """
         platforms = cls._context.platform_manager.get_insts()
@@ -169,6 +173,8 @@ class StarTools:
             )
             event.is_wake = is_wake
             adapter.commit_event(event)
+        else:
+            raise ValueError(f"不支持的平台: {platform}")
 
     @classmethod
     def activate_llm_tool(cls, name: str) -> bool:
