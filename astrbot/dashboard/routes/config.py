@@ -18,6 +18,7 @@ from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core import logger, html_renderer
 from astrbot.core.provider import Provider
+from astrbot.core.provider.provider import RerankProvider
 import asyncio
 from astrbot.core.utils.t2i.network_strategy import CUSTOM_T2I_TEMPLATE_PATH
 
@@ -481,6 +482,19 @@ class ConfigRoute(Route):
                 )
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"STT test failed: {str(e)}"
+        elif provider_capability_type == ProviderType.RERANK:
+            try:
+                assert isinstance(provider, RerankProvider)
+                await provider.rerank("Apple", documents=["apple", "banana"])
+                status_info["status"] = "available"
+            except Exception as e:
+                logger.error(
+                    f"Error testing rerank provider {provider_name}: {e}",
+                    exc_info=True,
+                )
+                status_info["status"] = "unavailable"
+                status_info["error"] = f"Rerank test failed: {str(e)}"
+
         else:
             logger.debug(
                 f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}"
