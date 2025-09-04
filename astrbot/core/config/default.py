@@ -250,7 +250,7 @@ CONFIG_METADATA_2 = {
                         "id": "satori",
                         "type": "satori",
                         "enable": False,
-                        "satori_base_url": "http://localhost:5140/satori/v1",
+                        "satori_api_base_url": "http://localhost:5140/satori/v1",
                         "satori_endpoint":
                         "ws://127.0.0.1:5140/satori/v1/events",
                         "satori_token": "",
