@@ -2321,6 +2321,11 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "string",
                         "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`",
                     },
+                    "no_proxy": {
+                        "description": "直连地址列表",
+                        "type": "list",
+                        "items": {"type": "string"},
+                    },
                 },
             }
         },
