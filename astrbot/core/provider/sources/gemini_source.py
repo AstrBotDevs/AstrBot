@@ -369,8 +369,8 @@ class ProviderGoogleGenAI(Provider):
                 chain.append(Comp.Plain(part.text))
             elif (
                 part.function_call
-                and part.function_call.name
-                and part.function_call.args
+                and part.function_call.name is not None
+                and part.function_call.args is not None
             ):
                 llm_response.role = "tool"
                 llm_response.tools_call_name.append(part.function_call.name)
