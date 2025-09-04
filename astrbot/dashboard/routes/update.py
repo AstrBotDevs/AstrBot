@@ -82,10 +82,11 @@ class UpdateRoute(Route):
                 latest=latest, version=version, proxy=proxy
             )
 
-            try:
-                await download_dashboard(latest=latest, version=version, proxy=proxy)
-            except Exception as e:
-                logger.error(f"下载管理面板文件失败: {e}。")
+            # 更新 WebUI 操作放在启动时，以下载指定版本的 WebUI 构建文件
+            # try:
+            #     await download_dashboard(latest=latest, version=version, proxy=proxy)
+            # except Exception as e:
+            #     logger.error(f"下载管理面板文件失败: {e}。")
 
             # pip 更新依赖
             logger.info("更新依赖中...")
