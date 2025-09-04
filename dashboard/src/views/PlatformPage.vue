@@ -10,8 +10,7 @@
             {{ tm('subtitle') }}
           </p>
         </div>
-        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddPlatformDialog = true"
-          rounded="xl" size="x-large">
+        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddPlatformDialog = true" rounded="xl" size="x-large">
           {{ tm('addAdapter') }}
         </v-btn>
       </v-row>
@@ -26,9 +25,14 @@
 
         <v-row v-else>
           <v-col v-for="(platform, index) in config_data.platform || []" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card :item="platform" title-field="id" enabled-field="enable"
-              :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
-              @delete="deletePlatform" @edit="editPlatform">
+            <item-card 
+              :item="platform" 
+              title-field="id" 
+              enabled-field="enable"
+              :bglogo="getPlatformIcon(platform.type || platform.id)"
+              @toggle-enabled="platformStatusChange"
+              @delete="deletePlatform" 
+              @edit="editPlatform">
             </item-card>
           </v-col>
         </v-row>
@@ -81,8 +85,7 @@
                     </v-card-text>
                   </div>
                   <div class="platform-card-logo">
-                    <img :src="getPlatformIcon(template.type)" v-if="getPlatformIcon(template.type)"
-                      class="platform-logo-img">
+                    <img :src="getPlatformIcon(template.type)" v-if="getPlatformIcon(template.type)" class="platform-logo-img">
                     <div v-else class="platform-logo-fallback">
                       {{ name[0].toUpperCase() }}
                     </div>
@@ -161,7 +164,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">{{ tm('dialog.idConflict.confirm')
-            }}</v-btn>
+          }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -296,6 +299,7 @@ export default {
         "slack": "https://astrbot.app/deploy/platform/slack.html",
         "kook": "https://astrbot.app/deploy/platform/kook.html",
         "vocechat": "https://astrbot.app/deploy/platform/vocechat.html",
+        // "satori": "https://astrbot.app/deploy/platform/satori.html", // TODO
       }
       return tutorial_map[platform_type] || "https://docs.astrbot.app";
     },
