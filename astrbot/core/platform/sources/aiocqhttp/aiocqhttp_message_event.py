@@ -69,7 +69,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
     ):
         # session_id 必须是纯数字字符串
         session_id = int(session_id) if session_id.isdigit() else None
-    
+
         if is_group and isinstance(session_id, int):
             await bot.send_group_msg(group_id=session_id, message=messages)
         elif not is_group and isinstance(session_id, int):
@@ -77,7 +77,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         elif isinstance(event, Event):  # 最后兜底
             await bot.send(event=event, message=messages)
         else:
-            raise ValueError(f"无法发送消息：缺少有效的数字 session_id({session_id}) 或 event({event})")
+            raise ValueError(
+                f"无法发送消息：缺少有效的数字 session_id({session_id}) 或 event({event})"
+            )
 
     @classmethod
     async def send_message(
@@ -88,7 +90,15 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         is_group: bool = False,
         session_id: str = None,
     ):
-        """发送消息"""
+        """发送消息至 QQ 协议端（aiocqhttp）。
+
+        Args:
+            bot (CQHttp): aiocqhttp 机器人实例
+            message_chain (MessageChain): 要发送的消息链
+            event (Event | None, optional): aiocqhttp 事件对象.
+            is_group (bool, optional): 是否为群消息.
+            session_id (str | None, optional): 会话 ID（群号或 QQ 号
+        """
 
         # 转发消息、文件消息不能和普通消息混在一起发送
         send_one_by_one = any(
@@ -135,7 +145,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         await self.send_message(
             bot=self.bot,
             message_chain=message,
-            event=event, # 不强制要求一定是 Event
+            event=event,  # 不强制要求一定是 Event
             is_group=is_group,
             session_id=session_id,
         )
