@@ -36,13 +36,21 @@ class AstrBotConfigManager:
         self.confs: dict[str, AstrBotConfig] = {}
         """uuid / "default" -> AstrBotConfig"""
         self.confs["default"] = default_config
+        self.abconf_data = None
         self._load_all_configs()
+
+    def _get_abconf_data(self) -> dict:
+        """获取所有的 abconf 数据"""
+        if self.abconf_data is None:
+            self.abconf_data = self.sp.get(
+                "abconf_mapping", {}, scope="global", scope_id="global"
+            )
+        return self.abconf_data
 
     def _load_all_configs(self):
         """Load all configurations from the shared preferences."""
-        abconf_data = self.sp.get(
-            "abconf_mapping", {}, scope="global", scope_id="global"
-        )
+        abconf_data = self._get_abconf_data()
+        self.abconf_data = abconf_data
         for uuid_, meta in abconf_data.items():
             filename = meta["path"]
             conf_path = os.path.join(get_astrbot_config_path(), filename)
@@ -72,9 +80,7 @@ class AstrBotConfigManager:
             ConfInfo: 包含配置文件的 uuid, 路径和名称等信息, 是一个 dict 类型
         """
         # uuid -> { "umop": list, "path": str, "name": str }
-        abconf_data = self.sp.get(
-            "abconf_mapping", {}, scope="global", scope_id="global"
-        )
+        abconf_data = self._get_abconf_data()
         if isinstance(umo, MessageSession):
             umo = str(umo)
         else:
@@ -115,6 +121,7 @@ class AstrBotConfigManager:
             "name": random_word,
         }
         self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
+        self.abconf_data = abconf_data
 
     def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
         """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
@@ -147,9 +154,7 @@ class AstrBotConfigManager:
         """获取所有配置文件的元数据列表"""
         conf_list = []
         conf_list.append(DEFAULT_CONFIG_CONF_INFO)
-        abconf_mapping = self.sp.get(
-            "abconf_mapping", {}, scope="global", scope_id="global"
-        )
+        abconf_mapping = self._get_abconf_data()
         for uuid_, meta in abconf_mapping.items():
             conf_list.append(ConfInfo(**meta, id=uuid_))
         return conf_list
@@ -218,6 +223,7 @@ class AstrBotConfigManager:
         # 从映射中移除
         del abconf_data[conf_id]
         self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
+        self.abconf_data = abconf_data
 
         logger.info(f"成功删除配置文件 {conf_id}")
         return True
@@ -263,6 +269,7 @@ class AstrBotConfigManager:
 
         # 保存更新
         self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
+        self.abconf_data = abconf_data
         logger.info(f"成功更新配置文件 {conf_id} 的信息")
         return True
 
