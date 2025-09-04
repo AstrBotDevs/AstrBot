@@ -40,7 +40,7 @@ class UpdateRoute(Route):
                     .__dict__
                 )
             else:
-                ret = await self.astrbot_updator.check_update(None, None)
+                ret = await self.astrbot_updator.check_update(None, None, False)
                 return Response(
                     status="success",
                     message=str(ret) if ret is not None else "已经是最新版本了。",
@@ -82,11 +82,10 @@ class UpdateRoute(Route):
                 latest=latest, version=version, proxy=proxy
             )
 
-            # 更新 WebUI 操作放在启动时，以下载指定版本的 WebUI 构建文件
-            # try:
-            #     await download_dashboard(latest=latest, version=version, proxy=proxy)
-            # except Exception as e:
-            #     logger.error(f"下载管理面板文件失败: {e}。")
+            try:
+                await download_dashboard(latest=latest, version=version, proxy=proxy)
+            except Exception as e:
+                logger.error(f"下载管理面板文件失败: {e}。")
 
             # pip 更新依赖
             logger.info("更新依赖中...")

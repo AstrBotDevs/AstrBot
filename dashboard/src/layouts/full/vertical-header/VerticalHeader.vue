@@ -377,10 +377,6 @@ commonStore.getStartTime();
 
               <!-- 发行版 -->
               <v-tabs-window-item key="0" v-show="tab == 0">
-                <v-btn class="mt-4 mb-4" @click="switchVersion('latest')" color="primary" style="border-radius: 10px;"
-                       :disabled="!hasNewVersion">
-                  {{ t('core.header.updateDialog.updateToLatest') }}
-                </v-btn>
                 <div class="mb-4">
                   <small>{{ t('core.header.updateDialog.dockerTip') }} <a
                         href="https://containrrr.dev/watchtower/usage-overview/">{{ t('core.header.updateDialog.dockerTipLink') }}</a> {{ t('core.header.updateDialog.dockerTipContinue') }}</small>

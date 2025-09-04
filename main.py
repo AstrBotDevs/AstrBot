@@ -44,12 +44,12 @@ async def check_dashboard_files():
     if v is not None:
         # has file
         if v == f"v{VERSION}":
-            logger.info("管理面板文件已是最新。")
-            return
+            logger.info("WebUI 版本已是最新。")
         else:
             logger.warning(
-                f"检测到管理面板有更新，准备更新至指定版本 {VERSION} (当前 WebUI 版本: {v})"
+                f"检测到 WebUI 版本 ({v}) 与当前 AstrBot 版本 (v{VERSION}) 不符。"
             )
+        return
 
     logger.info(
         "开始下载管理面板文件...高峰期（晚上）可能导致较慢的速度。如多次下载失败，请前往 https://github.com/Soulter/AstrBot/releases/latest 下载 dist.zip，并将其中的 dist 文件夹解压至 data 目录下。"
