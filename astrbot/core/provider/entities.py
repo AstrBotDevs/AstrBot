@@ -4,9 +4,11 @@ import json
 from astrbot.core.utils.io import download_image_by_url
 from astrbot import logger
 from dataclasses import dataclass, field
-from typing import List, Dict, Type
+from typing import List, Dict, Type, Any
 from astrbot.core.agent.tool import ToolSet
 from openai.types.chat.chat_completion import ChatCompletion
+from google.genai.types import GenerateContentResponse
+from anthropic.types import Message
 from openai.types.chat.chat_completion_message_tool_call import (
     ChatCompletionMessageToolCall,
 )
@@ -30,11 +32,11 @@ class ProviderMetaData:
     desc: str = ""
     """提供商适配器描述."""
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
-    cls_type: Type = None
+    cls_type: Type | None = None
 
-    default_config_tmpl: dict = None
+    default_config_tmpl: dict | None = None
     """平台的默认配置模板"""
-    provider_display_name: str = None
+    provider_display_name: str | None = None
     """显示在 WebUI 配置页中的提供商名称，如空则是 type"""
 
 
@@ -58,7 +60,7 @@ class ToolCallMessageSegment:
 class AssistantMessageSegment:
     """OpenAI 格式的上下文中 role 为 assistant 的消息段。参考: https://platform.openai.com/docs/guides/function-calling"""
 
-    content: str = None
+    content: str | None = None
     tool_calls: List[ChatCompletionMessageToolCall | Dict] = field(default_factory=list)
     role: str = "assistant"
 
@@ -205,17 +207,17 @@ class ProviderRequest:
 class LLMResponse:
     role: str
     """角色, assistant, tool, err"""
-    result_chain: MessageChain = None
+    result_chain: MessageChain | None = None
     """返回的消息链"""
-    tools_call_args: List[Dict[str, any]] = field(default_factory=list)
+    tools_call_args: List[Dict[str, Any]] = field(default_factory=list)
     """工具调用参数"""
     tools_call_name: List[str] = field(default_factory=list)
     """工具调用名称"""
     tools_call_ids: List[str] = field(default_factory=list)
     """工具调用 ID"""
 
-    raw_completion: ChatCompletion = None
-    _new_record: Dict[str, any] = None
+    raw_completion: ChatCompletion | GenerateContentResponse | Message | None = None
+    _new_record: Dict[str, Any] | None = None
 
     _completion_text: str = ""
 
@@ -226,12 +228,12 @@ class LLMResponse:
         self,
         role: str,
         completion_text: str = "",
-        result_chain: MessageChain = None,
-        tools_call_args: List[Dict[str, any]] = None,
-        tools_call_name: List[str] = None,
-        tools_call_ids: List[str] = None,
-        raw_completion: ChatCompletion = None,
-        _new_record: Dict[str, any] = None,
+        result_chain: MessageChain | None = None,
+        tools_call_args: List[Dict[str, Any]] | None = None,
+        tools_call_name: List[str] | None = None,
+        tools_call_ids: List[str] | None = None,
+        raw_completion: ChatCompletion | None = None,
+        _new_record: Dict[str, Any] | None = None,
         is_chunk: bool = False,
     ):
         """初始化 LLMResponse
