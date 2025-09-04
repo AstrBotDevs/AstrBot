@@ -34,7 +34,7 @@
     "tip": "💡 TIP:",
     "tipLink": "",
     "tipContinue": "By default, the corresponding version of the WebUI files will be downloaded when switching versions. The WebUI code is located in the dashboard directory of the project, and you can use npm to build it yourself.",
-    "dockerTip": "The `Update to Latest Version` button will try to update both the bot main program and the dashboard. If you are using Docker deployment, you can also re-pull the image or use",
+    "dockerTip": "When switching versions, it will try to update both the bot main program and the dashboard. If you are using Docker deployment, you can also re-pull the image or use",
     "dockerTipLink": "watchtower",
     "dockerTipContinue": "to automatically monitor and pull.",
     "table": {

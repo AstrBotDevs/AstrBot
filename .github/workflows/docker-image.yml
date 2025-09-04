@@ -43,6 +43,17 @@ jobs:
             echo "Version $version is a stable release, will push latest tag"
           fi
 
+      - name: Build Dashboard
+        run: |
+          cd dashboard
+          npm install
+          npm run build
+          mkdir -p dist/assets
+          echo $(git rev-parse HEAD) > dist/assets/version
+          cd ..
+          mkdir -p data
+          cp -r dashboard/dist data/
+
       - name: Set QEMU
         uses: docker/setup-qemu-action@v3
 

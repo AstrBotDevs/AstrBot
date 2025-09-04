@@ -1094,7 +1094,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     @filter.command("dashboard_update")
     async def update_dashboard(self, event: AstrMessageEvent):
         yield event.plain_result("正在尝试更新管理面板...")
-        await download_dashboard()
+        await download_dashboard(version=f"v{VERSION}", latest=False)
         yield event.plain_result("管理面板更新完成。")
 
     @filter.command("set")
