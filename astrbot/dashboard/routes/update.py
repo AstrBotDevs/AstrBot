@@ -83,9 +83,7 @@ class UpdateRoute(Route):
             )
 
             try:
-                await download_dashboard(
-                    latest=latest, version=version, proxy=proxy
-                )
+                await download_dashboard(latest=latest, version=version, proxy=proxy)
             except Exception as e:
                 logger.error(f"下载管理面板文件失败: {e}。")
 
@@ -116,7 +114,7 @@ class UpdateRoute(Route):
     async def update_dashboard(self):
         try:
             try:
-                await download_dashboard()
+                await download_dashboard(version=f"v{VERSION}", latest=False)
             except Exception as e:
                 logger.error(f"下载管理面板文件失败: {e}。")
                 return Response().error(f"下载管理面板文件失败: {e}").__dict__

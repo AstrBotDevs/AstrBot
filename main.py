@@ -56,7 +56,7 @@ async def check_dashboard_files():
     )
 
     try:
-        await download_dashboard()
+        await download_dashboard(version=f"v{VERSION}", latest=False)
     except Exception as e:
         logger.critical(f"下载管理面板文件失败: {e}。")
         return
