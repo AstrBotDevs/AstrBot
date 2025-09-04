@@ -1,13 +1,10 @@
 import asyncio
 import json
 import time
-import uuid
 import websockets
-from typing import Optional, Dict, Any
+from typing import Optional
 from aiohttp import ClientSession, ClientTimeout
 from websockets.client import WebSocketClientProtocol
-
-import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
@@ -19,7 +16,6 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
-
 
 @register_platform_adapter("satori",
                            "Satori 协议适配器",

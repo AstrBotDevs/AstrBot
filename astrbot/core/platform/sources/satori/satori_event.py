@@ -1,5 +1,4 @@
 from typing import TYPE_CHECKING
-
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
@@ -7,7 +6,6 @@ from astrbot.api.message_components import Plain, Image, At, File, Record
 
 if TYPE_CHECKING:
     from .satori_adapter import SatoriPlatformAdapter
-
 
 class SatoriPlatformEvent(AstrMessageEvent):
 
