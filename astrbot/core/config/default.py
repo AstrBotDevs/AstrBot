@@ -866,6 +866,9 @@ CONFIG_METADATA_2 = {
                         "provider_type": "text_to_speech",
                         "enable": False,
                         "edge-tts-voice": "zh-CN-XiaoxiaoNeural",
+                        "rate": "+0%",
+                        "volume": "+0%",
+                        "pitch": "+0Hz",
                         "timeout": 20,
                     },
                     "GSV TTS(本地加载)": {

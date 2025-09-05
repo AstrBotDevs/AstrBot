@@ -463,11 +463,11 @@ class Main(star.Star):
                         yield event.image_result(image_path)
                     elif match.group(1) == "FILE":
                         file_path = os.path.join(workplace_path, match.group(2))
-                        logger.debug(f"Sending file: {file_path}")
-                        file_s3_url = await self.file_upload(file_path)
-                        logger.info(f"文件上传到 AstrBot 云节点: {file_s3_url}")
+                        # logger.debug(f"Sending file: {file_path}")
+                        # file_s3_url = await self.file_upload(file_path)
+                        # logger.info(f"文件上传到 AstrBot 云节点: {file_s3_url}")
                         file_name = os.path.basename(file_path)
-                        chain = [File(name=file_name, file=file_s3_url)]
+                        chain = [File(name=file_name, file=file_path)]
                         yield event.set_result(MessageEventResult(chain=chain))
 
                 elif "Traceback (most recent call last)" in log or "[Error]: " in log:
