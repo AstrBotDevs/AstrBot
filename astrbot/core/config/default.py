@@ -1929,7 +1929,7 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
-                        "type": "bool",
+                        "type": "int",
                     },
                     "provider_settings.streaming_response": {
                         "description": "流式回复",
