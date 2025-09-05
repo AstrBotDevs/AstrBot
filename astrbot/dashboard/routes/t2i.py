@@ -1,21 +1,27 @@
 # astrbot/dashboard/routes/t2i.py
 
+import traceback
 from dataclasses import asdict
 from quart import Quart, jsonify, request
 
 from astrbot.core import logger
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.utils.t2i.template_manager import TemplateManager
 from .route import Response
 
 class T2iRoute:
-    def __init__(self, app: Quart, db, core_lifecycle):
+    def __init__(self, app: Quart, db, core_lifecycle: AstrBotCoreLifecycle):
         self.app = app
+        self.core_lifecycle = core_lifecycle
+        self.config = core_lifecycle.astrbot_config
         self.manager = TemplateManager()
         # 使用列表保证路由注册顺序，避免 /<name> 路由优先匹配 /reset_default
         self.routes = [
             ("/api/t2i/templates", ("GET", self.list_templates)),
+            ("/api/t2i/templates/active", ("GET", self.get_active_template)),
             ("/api/t2i/templates/create", ("POST", self.create_template)),
             ("/api/t2i/templates/reset_default", ("POST", self.reset_default_template)),
+            ("/api/t2i/templates/set_active", ("POST", self.set_active_template)),
             # 动态路由应该在静态路由之后注册
             ("/api/t2i/templates/<name>", [
                 ("GET", self.get_template),
@@ -48,6 +54,17 @@ class T2iRoute:
             templates = self.manager.list_templates()
             return jsonify(asdict(Response().ok(data=templates)))
         except Exception as e:
+            response = jsonify(asdict(Response().error(str(e))))
+            response.status_code = 500
+            return response
+
+    async def get_active_template(self):
+        """获取当前激活的T2I模板"""
+        try:
+            active_template = self.config.get("t2i_active_template", "base")
+            return jsonify(asdict(Response().ok(data={"active_template": active_template})))
+        except Exception as e:
+            logger.error("Error in get_active_template", exc_info=True)
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 500
             return response
@@ -137,20 +154,59 @@ class T2iRoute:
             response.status_code = 500
             return response
 
+    async def set_active_template(self):
+        """设置当前活动的T2I模板"""
+        try:
+            data = await request.json
+            name = data.get("name")
+            if not name:
+                response = jsonify(asdict(Response().error("模板名称(name)不能为空。")))
+                response.status_code = 400
+                return response
+
+            # 验证模板文件是否存在
+            self.manager.get_template(name)
+
+            # 更新配置
+            config = self.config
+            config["t2i_active_template"] = name
+            config.save_config(config)
+            
+            # 热重载以应用更改
+            await self.core_lifecycle.reload_pipeline_scheduler("default")
+            
+            return jsonify(asdict(Response().ok(message=f"模板 '{name}' 已成功应用。")))
+
+        except FileNotFoundError:
+            response = jsonify(asdict(Response().error(f"模板 '{name}' 不存在，无法应用。")))
+            response.status_code = 404
+            return response
+        except Exception as e:
+            logger.error("Error in set_active_template", exc_info=True)
+            response = jsonify(asdict(Response().error(str(e))))
+            response.status_code = 500
+            return response
+
     async def reset_default_template(self):
         """重置默认的'base'模板"""
-        logger.info("-> Entering 'reset_default_template' handler for /api/t2i/templates/reset_default")
         try:
             self.manager.reset_default_template()
-            logger.info("<- 'reset_default_template' successful.")
-            return jsonify(asdict(Response().ok(message="Default template has been reset.")))
+
+            # 更新配置，将激活模板也重置为'base'
+            config = self.config
+            config["t2i_active_template"] = "base"
+            config.save_config(config)
+
+            # 热重载以应用更改
+            await self.core_lifecycle.reload_pipeline_scheduler("default")
+            
+            return jsonify(asdict(Response().ok(message="Default template has been reset and activated.")))
         except FileNotFoundError as e:
-            logger.error(f"<- 'reset_default_template' failed: Backup file not found. Details: {e}")
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 404
             return response
         except Exception as e:
-            logger.error("<- 'reset_default_template' failed with unexpected error.", exc_info=True)
+            logger.error("Error in reset_default_template", exc_info=True)
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 500
             return response

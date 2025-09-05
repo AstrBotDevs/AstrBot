@@ -1,6 +1,7 @@
 import typing
 import traceback
 import os
+import copy
 from .route import Route, Response, RouteContext
 from astrbot.core.provider.entities import ProviderType
 from quart import request
@@ -141,21 +142,27 @@ def validate_config(
 
 def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False):
     """验证并保存配置"""
+    # 深拷贝一份用于验证，避免直接修改原始的 post_config 对象，
+    # 因为在某些调用场景下，post_config 和 config 可能是同一个对象的引用。
+    config_to_validate = copy.deepcopy(post_config)
+
     errors = None
     try:
         if is_core:
-            errors, post_config = validate_config(
-                post_config, CONFIG_METADATA_2, is_core
+            errors, validated_config = validate_config(
+                config_to_validate, CONFIG_METADATA_2, is_core
             )
         else:
-            errors, post_config = validate_config(post_config, config.schema, is_core)
+            errors, validated_config = validate_config(config_to_validate, config.schema, is_core)
     except BaseException as e:
         logger.error(traceback.format_exc())
         logger.warning(f"验证配置时出现异常: {e}")
         raise ValueError(f"验证配置时出现异常: {e}")
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
-    config.save_config(post_config)
+    
+    # 验证通过后，使用验证和类型转换过的配置数据进行保存
+    config.save_config(validated_config)
 
 
 class ConfigRoute(Route):
@@ -718,6 +725,11 @@ class ConfigRoute(Route):
             if conf_id not in self.acm.confs:
                 raise ValueError(f"配置文件 {conf_id} 不存在")
             astrbot_config = self.acm.confs[conf_id]
+            
+            # 保留服务端的 t2i_active_template 值
+            if "t2i_active_template" in astrbot_config:
+                post_configs["t2i_active_template"] = astrbot_config["t2i_active_template"]
+            
             save_config(post_configs, astrbot_config, is_core=True)
         except Exception as e:
             raise e

@@ -27,12 +27,14 @@ class Star(CommandParserMixin):
             star_map[cls.__module__].star_cls_type = cls
             star_map[cls.__module__].module_path = cls.__module__
 
-    @staticmethod
-    async def text_to_image(text: str, return_url=True) -> str:
+    async def text_to_image(self, text: str, return_url=True) -> str:
         """将文本转换为图片"""
-        return await html_renderer.render_t2i(text, return_url=return_url)
+        return await html_renderer.render_t2i(
+            text,
+            return_url=return_url,
+            template_name=self.context.astrbot_config.get("t2i_active_template"),
+        )
 
-    @staticmethod
     async def html_render(
         tmpl: str, data: dict, return_url=True, options: dict | None = None
     ) -> str:

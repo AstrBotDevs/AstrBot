@@ -36,6 +36,7 @@ class ResultDecorateStage(Stage):
             self.t2i_word_threshold = 150
         self.t2i_strategy = ctx.astrbot_config["t2i_strategy"]
         self.t2i_use_network = self.t2i_strategy == "remote"
+        self.t2i_active_template = ctx.astrbot_config["t2i_active_template"]
 
         self.forward_threshold = ctx.astrbot_config["platform_settings"][
             "forward_threshold"
@@ -247,7 +248,10 @@ class ResultDecorateStage(Stage):
                     render_start = time.time()
                     try:
                         url = await html_renderer.render_t2i(
-                            plain_str, return_url=True, use_network=self.t2i_use_network
+                            plain_str,
+                            return_url=True,
+                            use_network=self.t2i_use_network,
+                            template_name=self.t2i_active_template,
                         )
                     except BaseException:
                         logger.error("文本转图片失败，使用文本发送。")

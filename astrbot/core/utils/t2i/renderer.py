@@ -34,7 +34,11 @@ class HtmlRenderer:
         )
 
     async def render_t2i(
-        self, text: str, use_network: bool = True, return_url: bool = False, template_name: str = "base"
+        self,
+        text: str,
+        use_network: bool = True,
+        return_url: bool = False,
+        template_name: str = None,
     ):
         """使用默认文转图模板。"""
         if use_network:
