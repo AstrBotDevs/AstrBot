@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.0.0-beta.4"
+version = "4.0.0-beta.5"
 description = "易上手的多平台 LLM 聊天机器人及开发框架"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,7 +21,7 @@ dependencies = [
     "deprecated>=1.2.18",
     "dingtalk-stream>=0.22.1",
     "docstring-parser>=0.16",
-    "faiss-cpu>=1.10.0",
+    "faiss-cpu==1.10.0",
     "filelock>=3.18.0",
     "google-genai>=1.14.0",
     "googlesearch-python>=1.3.0",
