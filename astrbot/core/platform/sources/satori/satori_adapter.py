@@ -144,7 +144,10 @@ class SatoriPlatformAdapter(Platform):
             self.heartbeat_task = asyncio.create_task(self.heartbeat_loop())
 
             async for message in websocket:
-                await self.handle_message(message)  # type: ignore
+                try:
+                    await self.handle_message(message)  # type: ignore
+                except Exception as e:
+                    logger.error(f"Satori 处理消息异常: {e}")
 
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(f"Satori WebSocket 连接关闭: {e}")
@@ -353,11 +356,10 @@ class SatoriPlatformAdapter(Platform):
             wrapped_content = f"<root>{content}</root>"
             root = ET.fromstring(wrapped_content)
             await self._parse_xml_node(root, elements)
+        except ET.ParseError as e:
+            raise ValueError(f"解析 Satori 元素时发生解析错误: {e}")
         except Exception as e:
-            logger.error(f"解析 Satori 元素时发生异常: {e}")
-            # 降级到纯文本处理
-            if content.strip():
-                elements.append(Plain(text=content))
+            raise e
 
         # 如果没有解析到任何元素，将整个内容当作纯文本
         if not elements and content.strip():
