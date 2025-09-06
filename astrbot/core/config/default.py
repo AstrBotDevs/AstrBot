@@ -103,6 +103,7 @@ DEFAULT_CONFIG = {
     "t2i_strategy": "remote",
     "t2i_endpoint": "",
     "t2i_use_file_service": False,
+    "t2i_active_template": "base",
     "http_proxy": "",
     "no_proxy": ["localhost", "127.0.0.1", "::1"],
     "dashboard": {
@@ -2333,6 +2334,12 @@ CONFIG_METADATA_3_SYSTEM = {
                             "t2i_strategy": "remote",
                         },
                         "_special": "t2i_template",
+                    },
+                    "t2i_active_template": {
+                        "description": "当前应用的文转图渲染模板",
+                        "type": "string",
+                        "hint": "此处的值由文转图模板管理页面进行维护。",
+                        "invisible": True,
                     },
                     "log_level": {
                         "description": "控制台日志级别",
