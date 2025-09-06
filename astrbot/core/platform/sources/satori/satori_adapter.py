@@ -24,18 +24,6 @@ from xml.etree import ElementTree as ET
 @register_platform_adapter(
     "satori",
     "Satori 协议适配器",
-    default_config_tmpl={
-        "id": "satori",
-        "type": "satori",
-        "enable": False,
-        "satori_api_base_url": "http://localhost:5140/satori/v1",
-        "satori_token": "",
-        "satori_endpoint": "ws://127.0.0.1:5140/satori/v1/events",
-        "satori_auto_reconnect": True,
-        "satori_heartbeat_interval": 10,
-        "satori_reconnect_delay": 5,
-    },
-    adapter_display_name="Satori 协议",
 )
 class SatoriPlatformAdapter(Platform):
     def __init__(
