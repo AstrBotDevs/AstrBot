@@ -23,7 +23,7 @@
             label="输入新模板名称"
             density="compact"
             hide-details
-            variant="solo"
+            variant="outlined"
             class="flex-grow-1"
             autofocus
             :rules="[v => !!v || '名称不能为空']"
@@ -37,7 +37,7 @@
             label="选择模板"
             density="compact"
             hide-details
-            variant="solo"
+            variant="outlined"
             class="flex-grow-1"
             :loading="loading"
           >
