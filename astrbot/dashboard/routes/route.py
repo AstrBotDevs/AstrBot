@@ -17,12 +17,10 @@ class Route:
 
     def register_routes(self):
         route_name = self.__class__.__name__
-        logger.info(f"Registering {route_name}...")
 
         def _add_rule(path, method, func):
             # 统一添加 /api 前缀
             full_path = f"/api{path}"
-            logger.info(f"  - Registering: {method} {full_path}")
             self.app.add_url_rule(full_path, view_func=func, methods=[method])
 
         # 兼容字典和列表两种格式
@@ -37,7 +35,6 @@ class Route:
                 method, func = definition
                 _add_rule(route, method, func)
                 
-        logger.info(f"{route_name} registered.")
 
 
 @dataclass
