@@ -2,28 +2,29 @@
 
 import traceback
 from dataclasses import asdict
-from quart import Quart, jsonify, request
+from quart import jsonify, request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.utils.t2i.template_manager import TemplateManager
-from .route import Response
+from .route import Response, Route, RouteContext
 
-class T2iRoute:
-    def __init__(self, app: Quart, db, core_lifecycle: AstrBotCoreLifecycle):
-        self.app = app
+
+class T2iRoute(Route):
+    def __init__(self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle):
+        super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.manager = TemplateManager()
         # 使用列表保证路由注册顺序，避免 /<name> 路由优先匹配 /reset_default
         self.routes = [
-            ("/api/t2i/templates", ("GET", self.list_templates)),
-            ("/api/t2i/templates/active", ("GET", self.get_active_template)),
-            ("/api/t2i/templates/create", ("POST", self.create_template)),
-            ("/api/t2i/templates/reset_default", ("POST", self.reset_default_template)),
-            ("/api/t2i/templates/set_active", ("POST", self.set_active_template)),
+            ("/t2i/templates", ("GET", self.list_templates)),
+            ("/t2i/templates/active", ("GET", self.get_active_template)),
+            ("/t2i/templates/create", ("POST", self.create_template)),
+            ("/t2i/templates/reset_default", ("POST", self.reset_default_template)),
+            ("/t2i/templates/set_active", ("POST", self.set_active_template)),
             # 动态路由应该在静态路由之后注册
-            ("/api/t2i/templates/<name>", [
+            ("/t2i/templates/<name>", [
                 ("GET", self.get_template),
                 ("PUT", self.update_template),
                 ("DELETE", self.delete_template),
@@ -32,21 +33,8 @@ class T2iRoute:
         
         # 应用启动时，确保备份存在
         self.manager.backup_default_template_if_not_exist()
-
-    def register_routes(self):
-        logger.info("Registering T2i routes...")
-        for path, methods in self.routes:
-            if isinstance(methods, tuple):
-                # 单一方法
-                method, handler = methods
-                logger.info(f"  - Registering: {method} {path}")
-                self.app.add_url_rule(path, view_func=handler, methods=[method])
-            elif isinstance(methods, list):
-                # 多方法
-                for method, handler in methods:
-                    logger.info(f"  - Registering: {method} {path}")
-                    self.app.add_url_rule(path, view_func=handler, methods=[method])
-        logger.info("T2i routes registered.")
+        
+        self.register_routes()
 
     async def list_templates(self):
         """获取所有T2I模板列表"""

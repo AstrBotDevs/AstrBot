@@ -64,8 +64,7 @@ class AstrBotDashboard:
         self.persona_route = PersonaRoute(
             self.context, db, core_lifecycle
         )
-        self.t2i_route = T2iRoute(self.app, db, core_lifecycle)
-        self.t2i_route.register_routes()
+        self.t2i_route = T2iRoute(self.context, core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
