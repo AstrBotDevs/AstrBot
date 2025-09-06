@@ -7,8 +7,8 @@ from astrbot.api.message_components import Plain, Image, At, File, Record
 if TYPE_CHECKING:
     from .satori_adapter import SatoriPlatformAdapter
 
-class SatoriPlatformEvent(AstrMessageEvent):
 
+class SatoriPlatformEvent(AstrMessageEvent):
     def __init__(
         self,
         message_str: str,
@@ -21,22 +21,30 @@ class SatoriPlatformEvent(AstrMessageEvent):
         self.adapter = adapter
         self.platform = None
         self.user_id = None
-        if hasattr(message_obj, 'raw_message') and message_obj.raw_message:
-            login = message_obj.raw_message.get('login', {})
-            self.platform = login.get('platform')
-            user = login.get('user', {})
-            self.user_id = user.get('id') if user else None
+        if (
+            hasattr(message_obj, "raw_message")
+            and message_obj.raw_message
+            and isinstance(message_obj.raw_message, dict)
+        ):
+            login = message_obj.raw_message.get("login", {})
+            self.platform = login.get("platform")
+            user = login.get("user", {})
+            self.user_id = user.get("id") if user else None
 
     @classmethod
-    async def send_with_adapter(cls, adapter: "SatoriPlatformAdapter",
-                                message: MessageChain, session_id: str):
+    async def send_with_adapter(
+        cls, adapter: "SatoriPlatformAdapter", message: MessageChain, session_id: str
+    ):
         try:
             content_parts = []
 
             for component in message.chain:
                 if isinstance(component, Plain):
-                    text = component.text.replace("&", "&amp;").replace(
-                        "<", "&lt;").replace(">", "&gt;")
+                    text = (
+                        component.text.replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                    )
                     content_parts.append(text)
 
                 elif isinstance(component, At):
@@ -77,14 +85,15 @@ class SatoriPlatformEvent(AstrMessageEvent):
             platform = None
             user_id = None
 
-            if hasattr(adapter, 'logins') and adapter.logins:
+            if hasattr(adapter, "logins") and adapter.logins:
                 current_login = adapter.logins[0]
                 platform = current_login.get("platform", "")
                 user = current_login.get("user", {})
                 user_id = user.get("id", "") if user else ""
 
-            result = await adapter.send_http_request("POST", "/message.create",
-                                                     data, platform, user_id)
+            result = await adapter.send_http_request(
+                "POST", "/message.create", data, platform, user_id
+            )
             if result:
                 return result
             else:
@@ -95,11 +104,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
             return None
 
     async def send(self, message: MessageChain):
-        platform = getattr(self, 'platform', None)
-        user_id = getattr(self, 'user_id', None)
+        platform = getattr(self, "platform", None)
+        user_id = getattr(self, "user_id", None)
 
         if not platform or not user_id:
-            if hasattr(self.adapter, 'logins') and self.adapter.logins:
+            if hasattr(self.adapter, "logins") and self.adapter.logins:
                 current_login = self.adapter.logins[0]
                 platform = current_login.get("platform", "")
                 user = current_login.get("user", {})
@@ -110,8 +119,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             for component in message.chain:
                 if isinstance(component, Plain):
-                    text = component.text.replace("&", "&amp;").replace(
-                        "<", "&lt;").replace(">", "&gt;")
+                    text = (
+                        component.text.replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                    )
                     content_parts.append(text)
 
                 elif isinstance(component, At):
@@ -150,17 +162,14 @@ class SatoriPlatformEvent(AstrMessageEvent):
             data = {"channel_id": channel_id, "content": content}
 
             result = await self.adapter.send_http_request(
-                "POST", "/message.create", data, platform, user_id)
+                "POST", "/message.create", data, platform, user_id
+            )
             if not result:
                 logger.error("Satori 消息发送失败")
         except Exception as e:
             logger.error(f"Satori 消息发送异常: {e}")
 
         await super().send(message)
-        try:
-            return result
-        except:
-            return None
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         try:
@@ -182,20 +191,19 @@ class SatoriPlatformEvent(AstrMessageEvent):
                         elif isinstance(component, Image):
                             if content_parts:
                                 content = "".join(content_parts)
-                                temp_chain = MessageChain(
-                                    [Plain(text=content)])
+                                temp_chain = MessageChain([Plain(text=content)])
                                 await self.send(temp_chain)
                                 content_parts = []
                             try:
-                                image_base64 = await component.convert_to_base64(
-                                )
+                                image_base64 = await component.convert_to_base64()
                                 if image_base64:
-                                    img_chain = MessageChain([
-                                        Plain(
-                                            text=
-                                            f'<img src="data:image/jpeg;base64,{image_base64}"/>'
-                                        )
-                                    ])
+                                    img_chain = MessageChain(
+                                        [
+                                            Plain(
+                                                text=f'<img src="data:image/jpeg;base64,{image_base64}"/>'
+                                            )
+                                        ]
+                                    )
                                     await self.send(img_chain)
                             except Exception as e:
                                 logger.error(f"图片转换为base64失败: {e}")

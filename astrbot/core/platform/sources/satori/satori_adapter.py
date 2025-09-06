@@ -2,9 +2,10 @@ import asyncio
 import json
 import time
 import websockets
+from websockets.asyncio.client import connect
 from typing import Optional
 from aiohttp import ClientSession, ClientTimeout
-from websockets.client import WebSocketClientProtocol
+from websockets.asyncio.client import ClientConnection
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
@@ -15,43 +16,45 @@ from astrbot.api.platform import (
     PlatformMetadata,
     register_platform_adapter,
 )
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.astr_message_event import MessageSession
 
-@register_platform_adapter("satori",
-                           "Satori 协议适配器",
-                           default_config_tmpl={
-                               "id": "satori",
-                               "type": "satori",
-                               "enable": False,
-                               "satori_api_base_url":
-                               "http://localhost:5140/satori/v1",
-                               "satori_token": "",
-                               "satori_endpoint":
-                               "ws://127.0.0.1:5140/satori/v1/events",
-                               "satori_auto_reconnect": True,
-                               "satori_heartbeat_interval": 10,
-                               "satori_reconnect_delay": 5
-                           },
-                           adapter_display_name="Satori 协议")
+
+@register_platform_adapter(
+    "satori",
+    "Satori 协议适配器",
+    default_config_tmpl={
+        "id": "satori",
+        "type": "satori",
+        "enable": False,
+        "satori_api_base_url": "http://localhost:5140/satori/v1",
+        "satori_token": "",
+        "satori_endpoint": "ws://127.0.0.1:5140/satori/v1/events",
+        "satori_auto_reconnect": True,
+        "satori_heartbeat_interval": 10,
+        "satori_reconnect_delay": 5,
+    },
+    adapter_display_name="Satori 协议",
+)
 class SatoriPlatformAdapter(Platform):
-
-    def __init__(self, platform_config: dict, platform_settings: dict,
-                 event_queue: asyncio.Queue) -> None:
+    def __init__(
+        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+    ) -> None:
         super().__init__(event_queue)
         self.config = platform_config
         self.settings = platform_settings
 
-        self.api_base_url = self.config.get("satori_api_base_url",
-                                            "http://localhost:5140/satori/v1")
+        self.api_base_url = self.config.get(
+            "satori_api_base_url", "http://localhost:5140/satori/v1"
+        )
         self.token = self.config.get("satori_token", "")
         self.endpoint = self.config.get(
-            "satori_endpoint", "ws://127.0.0.1:5140/satori/v1/events")
+            "satori_endpoint", "ws://127.0.0.1:5140/satori/v1/events"
+        )
         self.auto_reconnect = self.config.get("satori_auto_reconnect", True)
-        self.heartbeat_interval = self.config.get("satori_heartbeat_interval",
-                                                  10)
+        self.heartbeat_interval = self.config.get("satori_heartbeat_interval", 10)
         self.reconnect_delay = self.config.get("satori_reconnect_delay", 5)
 
-        self.ws: Optional[WebSocketClientProtocol] = None
+        self.ws: Optional[ClientConnection] = None
         self.session: Optional[ClientSession] = None
         self.sequence = 0
         self.logins = []
@@ -59,11 +62,14 @@ class SatoriPlatformAdapter(Platform):
         self.heartbeat_task: Optional[asyncio.Task] = None
         self.ready_received = False
 
-    async def send_by_session(self, session: MessageSesion,
-                              message_chain: MessageChain):
+    async def send_by_session(
+        self, session: MessageSession, message_chain: MessageChain
+    ):
         from .satori_event import SatoriPlatformEvent
-        await SatoriPlatformEvent.send_with_adapter(self, message_chain,
-                                                    session.session_id)
+
+        await SatoriPlatformEvent.send_with_adapter(
+            self, message_chain, session.session_id
+        )
         await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
@@ -74,9 +80,9 @@ class SatoriPlatformAdapter(Platform):
         if not ws:
             return True
         try:
-            if hasattr(ws, 'closed'):
+            if hasattr(ws, "closed"):
                 return ws.closed
-            elif hasattr(ws, 'close_code'):
+            elif hasattr(ws, "close_code"):
                 return ws.close_code is not None
             else:
                 return False
@@ -111,7 +117,7 @@ class SatoriPlatformAdapter(Platform):
             if not self.auto_reconnect:
                 break
 
-            delay = min(self.reconnect_delay * (2**(retry_count - 1)), 60)
+            delay = min(self.reconnect_delay * (2 ** (retry_count - 1)), 60)
             await asyncio.sleep(delay)
 
         if self.session:
@@ -121,14 +127,12 @@ class SatoriPlatformAdapter(Platform):
         logger.info(f"Satori 适配器正在连接到 WebSocket: {self.endpoint}")
         logger.info(f"Satori 适配器 HTTP API 地址: {self.api_base_url}")
 
-        if not self.endpoint.startswith(('ws://', 'wss://')):
+        if not self.endpoint.startswith(("ws://", "wss://")):
             logger.error(f"无效的WebSocket URL: {self.endpoint}")
-            raise ValueError(
-                f"WebSocket URL必须以ws://或wss://开头: {self.endpoint}")
+            raise ValueError(f"WebSocket URL必须以ws://或wss://开头: {self.endpoint}")
 
         try:
-            websocket = await websockets.connect(self.endpoint,
-                                                 additional_headers={})
+            websocket = await connect(self.endpoint, additional_headers={})
             self.ws = websocket
 
             await asyncio.sleep(0.1)
@@ -138,11 +142,8 @@ class SatoriPlatformAdapter(Platform):
             self.heartbeat_task = asyncio.create_task(self.heartbeat_loop())
 
             async for message in websocket:
-                await self.handle_message(message)
+                await self.handle_message(message) # type: ignore
 
-        except websockets.exceptions.ConnectionClosed as e:
-            logger.warning(f"Satori WebSocket 连接关闭: {e}")
-            raise
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(f"Satori WebSocket 连接关闭: {e}")
             raise
@@ -160,7 +161,7 @@ class SatoriPlatformAdapter(Platform):
                 try:
                     await self.ws.close()
                 except Exception as e:
-                    pass
+                    logger.error(f"Satori WebSocket 关闭异常: {e}")
 
     async def send_identify(self):
         if not self.ws:
@@ -173,7 +174,7 @@ class SatoriPlatformAdapter(Platform):
             "op": 3,  # IDENTIFY
             "body": {
                 "token": str(self.token) if self.token else "",  # 字符串
-            }
+            },
         }
 
         # 只有在有序列号时才添加sn字段
@@ -199,13 +200,14 @@ class SatoriPlatformAdapter(Platform):
                     try:
                         ping_payload = {
                             "op": 1,  # PING
-                            "body": {}
+                            "body": {},
                         }
-                        await self.ws.send(
-                            json.dumps(ping_payload, ensure_ascii=False))
+                        await self.ws.send(json.dumps(ping_payload, ensure_ascii=False))
                     except websockets.exceptions.ConnectionClosed as e:
+                        logger.error(f"Satori WebSocket 连接关闭: {e}")
                         break
                     except Exception as e:
+                        logger.error(f"Satori WebSocket 发送心跳失败: {e}")
                         break
                 else:
                     break
@@ -232,7 +234,7 @@ class SatoriPlatformAdapter(Platform):
                         user_id = user.get("id", "")
                         user_name = user.get("name", "")
                         logger.info(
-                            f"Satori 连接成功 - Bot {i+1}: platform={platform}, user_id={user_id}, user_name={user_name}"
+                            f"Satori 连接成功 - Bot {i + 1}: platform={platform}, user_id={user_id}, user_name={user_name}"
                         )
 
                 if "sn" in body:
@@ -274,7 +276,8 @@ class SatoriPlatformAdapter(Platform):
                     return
 
                 abm = await self.convert_satori_message(
-                    message, user, channel, guild, login, timestamp)
+                    message, user, channel, guild, login, timestamp
+                )
                 if abm:
                     await self.handle_msg(abm)
 
@@ -282,13 +285,14 @@ class SatoriPlatformAdapter(Platform):
             logger.error(f"处理事件失败: {e}")
 
     async def convert_satori_message(
-            self,
-            message: dict,
-            user: dict,
-            channel: dict,
-            guild: Optional[dict],
-            login: dict,
-            timestamp: Optional[int] = None) -> Optional[AstrBotMessage]:
+        self,
+        message: dict,
+        user: dict,
+        channel: dict,
+        guild: Optional[dict],
+        login: dict,
+        timestamp: Optional[int] = None,
+    ) -> Optional[AstrBotMessage]:
         try:
             abm = AstrBotMessage()
             abm.message_id = message.get("id", "")
@@ -298,7 +302,7 @@ class SatoriPlatformAdapter(Platform):
                 "user": user,
                 "channel": channel,
                 "guild": guild,
-                "login": login
+                "login": login,
             }
 
             if guild and guild.get("id"):
@@ -309,9 +313,10 @@ class SatoriPlatformAdapter(Platform):
                 abm.type = MessageType.FRIEND_MESSAGE
                 abm.session_id = channel.get("id", "")
 
-            abm.sender = MessageMember(user_id=user.get("id", ""),
-                                       nickname=user.get(
-                                           "nick", user.get("name", "")))
+            abm.sender = MessageMember(
+                user_id=user.get("id", ""),
+                nickname=user.get("nick", user.get("name", "")),
+            )
 
             abm.self_id = login.get("user", {}).get("id", "")
 
@@ -341,8 +346,7 @@ class SatoriPlatformAdapter(Platform):
             return elements
 
         # XML标签解析 // 简易版）
-        tag_pattern = re.compile(r'<(\w+)([^>]*?)(?:/>|>(.*?)</\1>)',
-                                 re.DOTALL)
+        tag_pattern = re.compile(r"<(\w+)([^>]*?)(?:/>|>(.*?)</\1>)", re.DOTALL)
         last_end = 0
 
         for match in tag_pattern.finditer(content):
@@ -416,12 +420,14 @@ class SatoriPlatformAdapter(Platform):
         )
         self.commit_event(message_event)
 
-    async def send_http_request(self,
-                                method: str,
-                                path: str,
-                                data: dict = None,
-                                platform: str = None,
-                                user_id: str = None) -> dict:
+    async def send_http_request(
+        self,
+        method: str,
+        path: str,
+        data: dict | None = None,
+        platform: str | None = None,
+        user_id: str | None = None,
+    ) -> dict:
         if not self.session:
             raise Exception("HTTP session 未初始化")
 
@@ -441,17 +447,16 @@ class SatoriPlatformAdapter(Platform):
             user = current_login.get("user", {})
             headers["satori-user-id"] = user.get("id", "") if user else ""
 
-        if not path.startswith('/'):
-            path = '/' + path
+        if not path.startswith("/"):
+            path = "/" + path
 
         # 使用新的API地址配置
         url = f"{self.api_base_url.rstrip('/')}{path}"
 
         try:
-            async with self.session.request(method,
-                                            url,
-                                            json=data,
-                                            headers=headers) as response:
+            async with self.session.request(
+                method, url, json=data, headers=headers
+            ) as response:
                 if response.status == 200:
                     result = await response.json()
                     return result
@@ -471,12 +476,7 @@ class SatoriPlatformAdapter(Platform):
             try:
                 await self.ws.close()
             except Exception as e:
-                pass
+                logger.error(f"Satori WebSocket 关闭异常: {e}")
 
         if self.session:
             await self.session.close()
-
-    async def _wait_for_ready(self):
-        """等待 READY 信令的辅助方法"""
-        while not self.ready_received:
-            await asyncio.sleep(0.1)  # 短暂等待
