@@ -26,8 +26,12 @@ from .astrbot_message import AstrBotMessage, Group
 from .platform_metadata import PlatformMetadata
 from .message_session import MessageSession, MessageSesion # noqa
 
-
 class AstrMessageEvent(abc.ABC):
+    """
+    AstrBot 事件, AstrBot 运行的核心, AstrBot 所有操作的运行都是事件驱动的
+    AstrBot 将不同消息平台的消息, 统一转换为了一个 AstrBot 事件, 以此统一了不同平台的逻辑
+    """
+
     def __init__(
         self,
         message_str: str,

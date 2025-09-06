@@ -38,11 +38,13 @@ from astrbot.core.utils.io import download_file, download_image_by_url, file_to_
 
 
 class ComponentType(Enum):
+    # 常用消息组件
     Plain = "Plain"  # 纯文本消息
     Face = "Face"  # QQ表情
     Record = "Record"  # 语音
     Video = "Video"  # 视频
     At = "At"  # At
+    AtAll = "AtAll"  # At 全体成员
     Node = "Node"  # 转发消息的一个节点
     Nodes = "Nodes"  # 转发消息的多个节点
     Poke = "Poke"  # QQ 戳一戳
@@ -51,25 +53,39 @@ class ComponentType(Enum):
     Forward = "Forward"  # 转发消息
     File = "File"  # 文件
 
-    RPS = "RPS"  # TODO
-    Dice = "Dice"  # TODO
-    Shake = "Shake"  # TODO
-    Anonymous = "Anonymous"  # TODO
-    Share = "Share"
-    Contact = "Contact"  # TODO
-    Location = "Location"  # TODO
-    Music = "Music"
-    RedBag = "RedBag"
-    Xml = "Xml"
-    Json = "Json"
-    CardImage = "CardImage"
-    TTS = "TTS"
-    Unknown = "Unknown"
+    # 特定平台消息组件
 
+    ## QQ
+    Dice = "Dice"  # 骰子
+    Contact = "Contact"  # 推荐好友/群
+    RPS = "RPS"  # 猜拳魔法表情
+    Music = "Music"  # 音乐分享
+    Json = "Json"  # Json 消息
+
+    ## 微信
     WechatEmoji = "WechatEmoji"  # Wechat 下的 emoji 表情包
+
+    # 仅接收
+    Share = "Share"  # 链接分享	仅接受
+    Shake = "Shake"  # 私聊窗口抖动 仅接收
+
+    # 其他消息组件
+    TTS = "TTS"  # TTS
+    Unknown = "Unknown"  # 未知类型
+
+    # 不支持或已废弃
+    Xml = "Xml"  # Xml 消息 已废弃 不会支持
+    CardImage = "CardImage"  # 卡片图片 无协议端支持 不会支持
+    Anonymous = "Anonymous"  # 匿名 已废弃 不会支持
+    RedBag = "RedBag"  # 红包 法律原因 不会支持
+    Location = "Location"  # 位置 仅手机端协议支持 不会支持
 
 
 class BaseMessageComponent(BaseModel):
+    """
+    消息组件基类, 任何自定义消息组件都应当继承此类
+    """
+
     type: ComponentType
 
     def toString(self):
@@ -108,6 +124,10 @@ class BaseMessageComponent(BaseModel):
 
 
 class Plain(BaseMessageComponent):
+    """
+    纯文本消息
+    """
+
     type: ComponentType = "Plain"
     text: str
     convert: T.Optional[bool] = True  # 若为 False 则直接发送未转换 CQ 码的消息
@@ -129,6 +149,10 @@ class Plain(BaseMessageComponent):
         return {"type": "text", "data": {"text": self.text}}
 
 class Face(BaseMessageComponent):
+    """
+    QQ表情, 仅 QQ
+    """
+
     type: ComponentType = "Face"
     id: int
 
@@ -137,6 +161,10 @@ class Face(BaseMessageComponent):
 
 
 class Record(BaseMessageComponent):
+    """
+    语音
+    """
+
     type: ComponentType = "Record"
     file: T.Optional[str] = ""
     magic: T.Optional[bool] = False
@@ -236,6 +264,10 @@ class Record(BaseMessageComponent):
 
 
 class Video(BaseMessageComponent):
+    """
+    视频
+    """
+
     type: ComponentType = "Video"
     file: str
     cover: T.Optional[str] = ""
@@ -322,6 +354,10 @@ class Video(BaseMessageComponent):
 
 
 class At(BaseMessageComponent):
+    """
+    At 即 @
+    """
+
     type: ComponentType = "At"
     qq: T.Union[int, str]  # 此处str为all时代表所有人
     name: T.Optional[str] = ""
@@ -337,34 +373,54 @@ class At(BaseMessageComponent):
 
 
 class AtAll(At):
+    """
+    At 全体成员 即 @全体成员
+    """
+
     qq: str = "all"
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
-class RPS(BaseMessageComponent):  # TODO
+class RPS(BaseMessageComponent):
+    """
+    猜拳魔法表情, 仅 QQ
+    """
+
     type: ComponentType = "RPS"
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
-class Dice(BaseMessageComponent):  # TODO
+class Dice(BaseMessageComponent):
+    """
+    骰子, 仅 QQ
+    """
+
     type: ComponentType = "Dice"
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
-class Shake(BaseMessageComponent):  # TODO
+class Shake(BaseMessageComponent):
+    """
+    私聊窗口抖动, 仅 QQ, 仅接收
+    """
+
     type: ComponentType = "Shake"
 
     def __init__(self, **_):
         super().__init__(**_)
 
 
-class Anonymous(BaseMessageComponent):  # TODO
+class Anonymous(BaseMessageComponent):
+    """
+    ⚠️ 标记为已废弃, 已经没有协议端支持, 请勿使用
+    """
+
     type: ComponentType = "Anonymous"
     ignore: T.Optional[bool] = False
 
@@ -373,6 +429,10 @@ class Anonymous(BaseMessageComponent):  # TODO
 
 
 class Share(BaseMessageComponent):
+    """
+    链接分享, 仅接收, 仅 QQ
+    """
+
     type: ComponentType = "Share"
     url: str
     title: str
@@ -383,7 +443,11 @@ class Share(BaseMessageComponent):
         super().__init__(**_)
 
 
-class Contact(BaseMessageComponent):  # TODO
+class Contact(BaseMessageComponent):
+    """
+    推荐好友/群, 仅 QQ
+    """
+
     type: ComponentType = "Contact"
     _type: str  # type 字段冲突
     id: T.Optional[int] = 0
@@ -392,7 +456,11 @@ class Contact(BaseMessageComponent):  # TODO
         super().__init__(**_)
 
 
-class Location(BaseMessageComponent):  # TODO
+class Location(BaseMessageComponent):
+    """
+    ⚠️ 标记为已废弃, 已经没有协议端支持, 请勿使用
+    """
+
     type: ComponentType = "Location"
     lat: float
     lon: float
@@ -404,6 +472,10 @@ class Location(BaseMessageComponent):  # TODO
 
 
 class Music(BaseMessageComponent):
+    """
+    音乐分享, 仅 QQ
+    """
+
     type: ComponentType = "Music"
     _type: str
     id: T.Optional[int] = 0
@@ -421,6 +493,10 @@ class Music(BaseMessageComponent):
 
 
 class Image(BaseMessageComponent):
+    """
+    图片
+    """
+
     type: ComponentType = "Image"
     file: T.Optional[str] = ""
     _type: T.Optional[str] = ""
@@ -532,6 +608,10 @@ class Image(BaseMessageComponent):
 
 
 class Reply(BaseMessageComponent):
+    """
+    回复, 回复某条消息
+    """
+
     type: ComponentType = "Reply"
     id: T.Union[str, int]
     """所引用的消息 ID"""
@@ -558,6 +638,10 @@ class Reply(BaseMessageComponent):
 
 
 class RedBag(BaseMessageComponent):
+    """
+    ⚠️ 标记为已废弃, 已经没有协议端支持, 请勿使用
+    """
+
     type: ComponentType = "RedBag"
     title: str
 
@@ -566,6 +650,10 @@ class RedBag(BaseMessageComponent):
 
 
 class Poke(BaseMessageComponent):
+    """
+    QQ 戳一戳
+    """
+
     type: str = ""
     id: T.Optional[int] = 0
     qq: T.Optional[int] = 0
@@ -576,6 +664,10 @@ class Poke(BaseMessageComponent):
 
 
 class Forward(BaseMessageComponent):
+    """
+    转发消息
+    """
+
     type: ComponentType = "Forward"
     id: str
 
@@ -638,6 +730,10 @@ class Node(BaseMessageComponent):
 
 
 class Nodes(BaseMessageComponent):
+    """
+    转发消息的多个节点
+    """
+
     type: ComponentType = "Nodes"
     nodes: T.List[Node]
 
@@ -664,6 +760,10 @@ class Nodes(BaseMessageComponent):
 
 
 class Xml(BaseMessageComponent):
+    """
+    ⚠️ 标记为已废弃, 已经没有协议端支持, 请勿使用
+    """
+
     type: ComponentType = "Xml"
     data: str
     resid: T.Optional[int] = 0
@@ -673,6 +773,10 @@ class Xml(BaseMessageComponent):
 
 
 class Json(BaseMessageComponent):
+    """
+    Json 消息
+    """
+
     type: ComponentType = "Json"
     data: T.Union[str, dict]
     resid: T.Optional[int] = 0
@@ -684,6 +788,10 @@ class Json(BaseMessageComponent):
 
 
 class CardImage(BaseMessageComponent):
+    """
+    ⚠️ 标记为已废弃, 已经没有协议端支持, 请勿使用
+    """
+
     type: ComponentType = "CardImage"
     file: str
     cache: T.Optional[bool] = True
@@ -703,6 +811,10 @@ class CardImage(BaseMessageComponent):
 
 
 class TTS(BaseMessageComponent):
+    """
+    TTS
+    """
+
     type: ComponentType = "TTS"
     text: str
 
@@ -711,6 +823,10 @@ class TTS(BaseMessageComponent):
 
 
 class Unknown(BaseMessageComponent):
+    """
+    未知类型
+    """
+
     type: ComponentType = "Unknown"
     text: str
 
@@ -853,6 +969,10 @@ class File(BaseMessageComponent):
 
 
 class WechatEmoji(BaseMessageComponent):
+    """
+    微信 emoji 表情包
+    """
+
     type: ComponentType = "WechatEmoji"
     md5: T.Optional[str] = ""
     md5_len: T.Optional[int] = 0
@@ -862,6 +982,7 @@ class WechatEmoji(BaseMessageComponent):
         super().__init__(**_)
 
 
+# 匹配消息用字典
 ComponentTypes = {
     "plain": Plain,
     "text": Plain,

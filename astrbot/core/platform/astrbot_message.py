@@ -7,6 +7,10 @@ from .message_type import MessageType
 
 @dataclass
 class MessageMember:
+    """
+    消息成员, 描述一个人, 例如一个群成员
+    """
+
     user_id: str  # 发送者id
     nickname: str = None
 
@@ -20,6 +24,10 @@ class MessageMember:
 
 @dataclass
 class Group:
+    """
+    一个群聊
+    """
+
     group_id: str
     """群号"""
     group_name: str = None
