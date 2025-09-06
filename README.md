@@ -6,8 +6,6 @@
 
 <div align="center">
 
-_✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
-
 <a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot?style=for-the-badge&color=76bad9)](https://github.com/Soulter/AstrBot/releases/latest)
@@ -27,7 +25,7 @@ _✨ 易上手的多平台 LLM 聊天机器人及开发框架 ✨_
 
 AstrBot 是一个开源的一站式 Agentic 聊天机器人平台及开发框架。
 
-## ✨ 主要功能
+## 主要功能
 
 1. **大模型对话**。支持接入多种大模型服务。支持多模态、工具调用、MCP、原生知识库、人设等功能。
 2. **多消息平台支持**。支持接入 QQ、企业微信、微信公众号、飞书、Telegram、钉钉、Discord、KOOK 等平台。支持速率限制、白名单、百度内容审核。
@@ -35,7 +33,7 @@ AstrBot 是一个开源的一站式 Agentic 聊天机器人平台及开发框架
 4. **插件扩展**。深度优化的插件机制，支持[开发插件](https://astrbot.app/dev/plugin.html)扩展功能，社区插件生态丰富。
 5. **WebUI**。可视化配置和管理机器人，功能齐全。
 
-## ✨ 使用方式
+## 部署方式
 
 #### Docker 部署
 
@@ -79,9 +77,7 @@ AstrBot 已由雨云官方上架至云应用平台，可一键部署。
 
 #### 手动部署
 
-> 推荐使用 `uv`。
-
-首先，安装 uv：
+首先安装 uv：
 
 ```bash
 pip install uv
@@ -132,22 +128,18 @@ uv run main.py
 | Discord   | ✔    |
 | [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
-| 微信对话开放平台 | 🚧    |
-| WhatsApp   | 🚧    |
-| 小爱音响   | 🚧    |
 
 ## ⚡ 提供商支持情况
 
 | 名称    | 支持性 | 类型 | 备注 |
 | -------- | ------- | ------- | ------- |
-| OpenAI API | ✔    | 文本生成 | 也支持 DeepSeek、Gemini、Kimi、xAI 等兼容 OpenAI API 的服务 |
-| Claude API | ✔    | 文本生成 |  |
-| Google Gemini API | ✔    | 文本生成 |  |
+| OpenAI | ✔    | 文本生成 | 支持任何兼容 OpenAI API 的服务 |
+| Anthropic | ✔    | 文本生成 |  |
+| Google Gemini | ✔    | 文本生成 |  |
 | Dify | ✔    | LLMOps |  |
 | 阿里云百炼应用 | ✔    | LLMOps |  |
 | Ollama | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
 | LM Studio | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
-| LLMTuner | ✔    | 模型加载器 | 本地加载 lora 等微调模型 |
 | [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | ✔    | 模型 API 及算力服务平台 |  |
 | [302.AI](https://share.302.ai/rr1M3l) | ✔    | 模型 API 服务平台 |  |
 | 硅基流动 | ✔    | 模型 API 服务平台 |  |
@@ -162,7 +154,6 @@ uv run main.py
 | Edge TTS | ✔    | 文本转语音 | Edge 浏览器的免费 TTS |
 | 阿里云百炼 TTS | ✔    | 文本转语音 |  |
 | Azure TTS | ✔    | 文本转语音 | Microsoft Azure TTS |
-
 
 ## ❤️ 贡献
 
@@ -181,38 +172,6 @@ git clone https://github.com/Soulter/AstrBot
 pip install pre-commit
 pre-commit install
 ```
-
-## 🌟 支持
-
-- Star 这个项目！
-- 在[爱发电](https://afdian.com/a/soulter)支持我！
-
-## ✨ Demo
-
-<details><summary>👉 点击展开多张 Demo 截图 👈</summary>
-
-<div align='center'>
-
-<img src="https://github.com/user-attachments/assets/4ee688d9-467d-45c8-99d6-368f9a8a92d8" width="600">
-
-_✨基于 Docker 的沙箱化代码执行器（Beta 测试）✨_
-
-<img src="https://github.com/user-attachments/assets/0378f407-6079-4f64-ae4c-e97ab20611d2" height=500>
-
-_✨ 多模态、网页搜索、长文本转图片（可配置） ✨_
-
-<img src="https://github.com/user-attachments/assets/e137a9e1-340a-4bf2-bb2b-771132780735" height=150>
-<img src="https://github.com/user-attachments/assets/480f5e82-cf6a-4955-a869-0d73137aa6e1" height=150>
-
-_✨ 插件系统——部分插件展示 ✨_
-
-<img src="https://github.com/user-attachments/assets/0cdbf564-2f59-4da5-b524-ce0e7ef3d978" width=600>
-
-_✨ WebUI ✨_
-
-</div>
-
-</details>
 
 
 ## ❤️ Special Thanks
@@ -239,7 +198,8 @@ _✨ WebUI ✨_
 
 </div>
 
-![10k-star-banner-credit-by-kevin](https://github.com/user-attachments/assets/c97fc5fb-20b9-4bc8-9998-c20b930ab097)
+
+</details>
 
 
 _私は、高性能ですから!_
