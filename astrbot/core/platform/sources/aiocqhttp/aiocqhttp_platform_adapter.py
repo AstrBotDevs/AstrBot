@@ -308,13 +308,20 @@ class AiocqhttpAdapter(Platform):
                             continue
 
                         at_info = await self.bot.call_action(
-                            action="get_stranger_info",
+                            action="get_group_member_info",
+                            group_id=event.group_id,
                             user_id=int(m["data"]["qq"]),
+                            no_cache=False,
                         )
                         if at_info:
-                            nickname = at_info.get("nick", "") or at_info.get(
-                                "nickname", ""
-                            )
+                            nickname = at_info.get("card", "")
+                            if nickname == "":
+                                at_info = await self.bot.call_action(
+                                    action="get_stranger_info",
+                                    user_id=int(m["data"]["qq"]),
+                                    no_cache=False,
+                                )
+                                nickname = at_info.get("nick", "") or at_info.get("nickname", "")
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
 
                             abm.message.append(
