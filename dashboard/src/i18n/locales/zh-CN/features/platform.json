@@ -29,6 +29,11 @@
       "title": "ID 冲突警告",
       "message": "检测到 ID \"{id}\" 重复。请使用一个新的 ID。",
       "confirm": "好的"
+    },
+    "securityWarning": {
+      "title": "安全提醒",
+      "aiocqhttpTokenMissing": "为了增强连接安全性，强烈建议您设置 ws_reverse_token。未设置 Token 可能导致安全风险。",
+      "learnMore": "了解更多"
     }
   },
   "messages": {
