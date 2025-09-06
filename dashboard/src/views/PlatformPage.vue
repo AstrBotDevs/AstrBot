@@ -279,6 +279,8 @@ export default {
         return new URL('@/assets/images/platform_logos/kook.png', import.meta.url).href
       } else if (name === 'vocechat') {
         return new URL('@/assets/images/platform_logos/vocechat.png', import.meta.url).href
+      } else if (name === 'satori' || name === 'Satori') {
+        return new URL('@/assets/images/platform_logos/satori.png', import.meta.url).href
       }
     },
 
@@ -297,6 +299,7 @@ export default {
         "slack": "https://astrbot.app/deploy/platform/slack.html",
         "kook": "https://astrbot.app/deploy/platform/kook.html",
         "vocechat": "https://astrbot.app/deploy/platform/vocechat.html",
+        // "satori": "https://astrbot.app/deploy/platform/satori.html", // TODO
       }
       return tutorial_map[platform_type] || "https://docs.astrbot.app";
     },

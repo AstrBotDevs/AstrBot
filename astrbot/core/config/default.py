@@ -246,8 +246,49 @@ CONFIG_METADATA_2 = {
                         "slack_webhook_port": 6197,
                         "slack_webhook_path": "/astrbot-slack-webhook/callback",
                     },
+                    "Satori": {
+                        "id": "satori",
+                        "type": "satori",
+                        "enable": False,
+                        "satori_api_base_url": "http://localhost:5140/satori/v1",
+                        "satori_endpoint": "ws://127.0.0.1:5140/satori/v1/events",
+                        "satori_token": "",
+                        "satori_auto_reconnect": True,
+                        "satori_heartbeat_interval": 10,
+                        "satori_reconnect_delay": 5,
+                    },
                 },
                 "items": {
+                    "satori_api_base_url": {
+                        "description": "Satori API Base URL",
+                        "type": "string",
+                        "hint": "The base URL for the Satori API.",
+                    },
+                    "satori_endpoint": {
+                        "description": "Satori WebSocket Endpoint",
+                        "type": "string",
+                        "hint": "The WebSocket endpoint for Satori events.",
+                    },
+                    "satori_token": {
+                        "description": "Satori Token",
+                        "type": "string",
+                        "hint": "The token used for authenticating with the Satori API.",
+                    },
+                    "satori_auto_reconnect": {
+                        "description": "Enable Auto Reconnect",
+                        "type": "bool",
+                        "hint": "Whether to automatically reconnect the WebSocket on disconnection.",
+                    },
+                    "satori_heartbeat_interval": {
+                        "description": "Satori Heartbeat Interval",
+                        "type": "int",
+                        "hint": "The interval (in seconds) for sending heartbeat messages.",
+                    },
+                    "satori_reconnect_delay": {
+                        "description": "Satori Reconnect Delay",
+                        "type": "int",
+                        "hint": "The delay (in seconds) before attempting to reconnect.",
+                    },
                     "slack_connection_mode": {
                         "description": "Slack Connection Mode",
                         "type": "string",

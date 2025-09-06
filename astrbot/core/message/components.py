@@ -165,6 +165,10 @@ class Record(BaseMessageComponent):
             return Record(file=url, **_)
         raise Exception("not a valid url")
 
+    @staticmethod
+    def fromBase64(bs64_data: str, **_):
+        return Record(file=f"base64://{bs64_data}", **_)
+
     async def convert_to_file_path(self) -> str:
         """将这个语音统一转换为本地文件路径。这个方法避免了手动判断语音数据类型，直接返回语音数据的本地路径（如果是网络 URL, 则会自动进行下载）。
 
