@@ -96,6 +96,26 @@ uv run main.py
 
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
+## 🌍 社区
+
+### QQ 群组
+
+- 1 群：322154837
+- 3 群：630166526
+- 5 群：822130018
+- 6 群：753075035
+- 开发者群：753075035
+- 开发者群（备份）：295657329
+
+### Telegram 群组
+
+<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
+
+### Discord 群组
+
+<a href="https://discord.gg/hAVk6tgV36"><img alt="Discord_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
+
+
 ## ⚡ 消息平台支持情况
 
 | 平台    | 支持性 |
