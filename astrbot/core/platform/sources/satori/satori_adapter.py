@@ -17,6 +17,8 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.api.message_components import Plain, Image, At, File, Record
+from xml.etree import ElementTree as ET
 
 
 @register_platform_adapter(
@@ -142,7 +144,7 @@ class SatoriPlatformAdapter(Platform):
             self.heartbeat_task = asyncio.create_task(self.heartbeat_loop())
 
             async for message in websocket:
-                await self.handle_message(message) # type: ignore
+                await self.handle_message(message)  # type: ignore
 
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(f"Satori WebSocket 连接关闭: {e}")
@@ -296,7 +298,6 @@ class SatoriPlatformAdapter(Platform):
         try:
             abm = AstrBotMessage()
             abm.message_id = message.get("id", "")
-            abm.message_str = message.get("content", "")
             abm.raw_message = {
                 "message": message,
                 "user": user,
@@ -323,6 +324,12 @@ class SatoriPlatformAdapter(Platform):
             content = message.get("content", "")
             abm.message = await self.parse_satori_elements(content)
 
+            # parse message_str
+            abm.message_str = ""
+            for comp in abm.message:
+                if isinstance(comp, Plain):
+                    abm.message_str += comp.text
+
             # 优先使用Satori事件中的时间戳
             if timestamp is not None:
                 abm.timestamp = timestamp
@@ -336,47 +343,52 @@ class SatoriPlatformAdapter(Platform):
             return None
 
     async def parse_satori_elements(self, content: str) -> list:
-        """解析Satori消息元素"""
-        import re
-        from astrbot.api.message_components import Plain, Image, At, File, Record
-
+        """解析 Satori 消息元素"""
         elements = []
 
         if not content:
             return elements
 
-        # XML标签解析 // 简易版）
-        tag_pattern = re.compile(r"<(\w+)([^>]*?)(?:/>|>(.*?)</\1>)", re.DOTALL)
-        last_end = 0
+        try:
+            wrapped_content = f"<root>{content}</root>"
+            root = ET.fromstring(wrapped_content)
+            await self._parse_xml_node(root, elements)
+        except Exception as e:
+            logger.error(f"解析 Satori 元素时发生异常: {e}")
+            # 降级到纯文本处理
+            if content.strip():
+                elements.append(Plain(text=content))
 
-        for match in tag_pattern.finditer(content):
-            start, end = match.span()
+        # 如果没有解析到任何元素，将整个内容当作纯文本
+        if not elements and content.strip():
+            elements.append(Plain(text=content))
 
-            # 添加标签前的文本
-            if start > last_end:
-                text = content[last_end:start]
-                if text.strip():
-                    elements.append(Plain(text=text))
+        return elements
 
-            tag_name = match.group(1)
-            attributes_str = match.group(2)
-            tag_content = match.group(3)
+    async def _parse_xml_node(self, node: ET.Element, elements: list) -> None:
+        """递归解析 XML 节点"""
+        if node.text and node.text.strip():
+            elements.append(Plain(text=node.text))
 
-            # 解析属性
-            attrs = {}
-            if attributes_str:
-                attr_pattern = re.compile(r'(\w+)=["\']([^"\']*)["\'\']')
-                for attr_match in attr_pattern.finditer(attributes_str):
-                    attrs[attr_match.group(1)] = attr_match.group(2)
+        for child in node:
+            tag_name = child.tag.lower()
+            attrs = child.attrib
 
             if tag_name == "at":
                 user_id = attrs.get("id") or attrs.get("name", "")
                 elements.append(At(qq=user_id, name=user_id))
 
-            elif tag_name == "img" or tag_name == "image":
+            elif tag_name in ("img", "image"):
                 src = attrs.get("src", "")
-                if src:
-                    elements.append(Image(file=src, url=src))
+                if not src:
+                    continue
+                if src.startswith("data:image/"):
+                    src = src.split(",")[1]
+                    elements.append(Image.fromBase64(src))
+                elif src.startswith("http"):
+                    elements.append(Image.fromURL(src))
+                else:
+                    logger.error(f"未知的图片 src 格式: {str(src)[:16]}")
 
             elif tag_name == "file":
                 src = attrs.get("src", "")
@@ -384,29 +396,27 @@ class SatoriPlatformAdapter(Platform):
                 if src:
                     elements.append(File(file=src, name=name))
 
-            elif tag_name == "audio" or tag_name == "record":
+            elif tag_name in ("audio", "record"):
                 src = attrs.get("src", "")
-                if src:
-                    elements.append(Record(file=src, url=src))
+                if not src:
+                    continue
+                if src.startswith("data:audio/"):
+                    src = src.split(",")[1]
+                    elements.append(Record.fromBase64(src))
+                elif src.startswith("http"):
+                    elements.append(Record.fromURL(src))
+                else:
+                    logger.error(f"未知的音频 src 格式: {str(src)[:16]}")
 
             else:
-                # 未知标签，当作文本处理
-                if tag_content:
-                    elements.append(Plain(text=tag_content))
+                # 未知标签，递归处理其内容
+                if child.text and child.text.strip():
+                    elements.append(Plain(text=child.text))
+                await self._parse_xml_node(child, elements)
 
-            last_end = end
-
-        # 添加最后的文本
-        if last_end < len(content):
-            text = content[last_end:]
-            if text.strip():
-                elements.append(Plain(text=text))
-
-        # 如果没有解析到任何元素，将整个内容当作纯文本
-        if not elements and content.strip():
-            elements.append(Plain(text=content))
-
-        return elements
+            # 处理标签后的文本
+            if child.tail and child.tail.strip():
+                elements.append(Plain(text=child.tail))
 
     async def handle_msg(self, message: AstrBotMessage):
         from .satori_event import SatoriPlatformEvent
