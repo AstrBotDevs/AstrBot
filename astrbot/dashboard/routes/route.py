@@ -16,15 +16,15 @@ class Route:
         self.config = context.config
 
     def register_routes(self):
-        route_name = self.__class__.__name__
-
         def _add_rule(path, method, func):
             # 统一添加 /api 前缀
             full_path = f"/api{path}"
             self.app.add_url_rule(full_path, view_func=func, methods=[method])
 
         # 兼容字典和列表两种格式
-        routes_to_register = self.routes.items() if isinstance(self.routes, dict) else self.routes
+        routes_to_register = (
+            self.routes.items() if isinstance(self.routes, dict) else self.routes
+        )
 
         for route, definition in routes_to_register:
             # 兼容一个路由多个方法
@@ -34,7 +34,6 @@ class Route:
             else:
                 method, func = definition
                 _add_rule(route, method, func)
-                
 
 
 @dataclass

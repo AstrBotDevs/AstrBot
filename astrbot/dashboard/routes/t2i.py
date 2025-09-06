@@ -1,6 +1,5 @@
 # astrbot/dashboard/routes/t2i.py
 
-import traceback
 from dataclasses import asdict
 from quart import jsonify, request
 
@@ -24,16 +23,19 @@ class T2iRoute(Route):
             ("/t2i/templates/reset_default", ("POST", self.reset_default_template)),
             ("/t2i/templates/set_active", ("POST", self.set_active_template)),
             # 动态路由应该在静态路由之后注册
-            ("/t2i/templates/<name>", [
-                ("GET", self.get_template),
-                ("PUT", self.update_template),
-                ("DELETE", self.delete_template),
-            ]),
+            (
+                "/t2i/templates/<name>",
+                [
+                    ("GET", self.get_template),
+                    ("PUT", self.update_template),
+                    ("DELETE", self.delete_template),
+                ],
+            ),
         ]
-        
+
         # 应用启动时，确保备份存在
         self.manager.backup_default_template_if_not_exist()
-        
+
         self.register_routes()
 
     async def list_templates(self):
@@ -50,7 +52,9 @@ class T2iRoute(Route):
         """获取当前激活的T2I模板"""
         try:
             active_template = self.config.get("t2i_active_template", "base")
-            return jsonify(asdict(Response().ok(data={"active_template": active_template})))
+            return jsonify(
+                asdict(Response().ok(data={"active_template": active_template}))
+            )
         except Exception as e:
             logger.error("Error in get_active_template", exc_info=True)
             response = jsonify(asdict(Response().error(str(e))))
@@ -61,7 +65,9 @@ class T2iRoute(Route):
         """获取指定名称的T2I模板内容"""
         try:
             content = self.manager.get_template(name)
-            return jsonify(asdict(Response().ok(data={"name": name, "content": content})))
+            return jsonify(
+                asdict(Response().ok(data={"name": name, "content": content}))
+            )
         except FileNotFoundError:
             response = jsonify(asdict(Response().error("Template not found")))
             response.status_code = 404
@@ -78,16 +84,26 @@ class T2iRoute(Route):
             name = data.get("name")
             content = data.get("content")
             if not name or not content:
-                response = jsonify(asdict(Response().error("Name and content are required.")))
+                response = jsonify(
+                    asdict(Response().error("Name and content are required."))
+                )
                 response.status_code = 400
                 return response
-            
+
             self.manager.create_template(name, content)
-            response = jsonify(asdict(Response().ok(data={"name": name}, message="Template created successfully.")))
+            response = jsonify(
+                asdict(
+                    Response().ok(
+                        data={"name": name}, message="Template created successfully."
+                    )
+                )
+            )
             response.status_code = 201
             return response
         except FileExistsError:
-            response = jsonify(asdict(Response().error("Template with this name already exists.")))
+            response = jsonify(
+                asdict(Response().error("Template with this name already exists."))
+            )
             response.status_code = 409
             return response
         except ValueError as e:
@@ -110,7 +126,13 @@ class T2iRoute(Route):
                 return response
 
             self.manager.update_template(name, content)
-            return jsonify(asdict(Response().ok(data={"name": name}, message="Template updated successfully.")))
+            return jsonify(
+                asdict(
+                    Response().ok(
+                        data={"name": name}, message="Template updated successfully."
+                    )
+                )
+            )
         except FileNotFoundError:
             response = jsonify(asdict(Response().error("Template not found.")))
             response.status_code = 404
@@ -128,7 +150,9 @@ class T2iRoute(Route):
         """删除一个T2I模板"""
         try:
             self.manager.delete_template(name)
-            return jsonify(asdict(Response().ok(message="Template deleted successfully.")))
+            return jsonify(
+                asdict(Response().ok(message="Template deleted successfully."))
+            )
         except FileNotFoundError:
             response = jsonify(asdict(Response().error("Template not found.")))
             response.status_code = 404
@@ -159,14 +183,16 @@ class T2iRoute(Route):
             config = self.config
             config["t2i_active_template"] = name
             config.save_config(config)
-            
+
             # 热重载以应用更改
             await self.core_lifecycle.reload_pipeline_scheduler("default")
-            
+
             return jsonify(asdict(Response().ok(message=f"模板 '{name}' 已成功应用。")))
 
         except FileNotFoundError:
-            response = jsonify(asdict(Response().error(f"模板 '{name}' 不存在，无法应用。")))
+            response = jsonify(
+                asdict(Response().error(f"模板 '{name}' 不存在，无法应用。"))
+            )
             response.status_code = 404
             return response
         except Exception as e:
@@ -187,8 +213,14 @@ class T2iRoute(Route):
 
             # 热重载以应用更改
             await self.core_lifecycle.reload_pipeline_scheduler("default")
-            
-            return jsonify(asdict(Response().ok(message="Default template has been reset and activated.")))
+
+            return jsonify(
+                asdict(
+                    Response().ok(
+                        message="Default template has been reset and activated."
+                    )
+                )
+            )
         except FileNotFoundError as e:
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 404

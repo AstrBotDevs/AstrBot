@@ -1,6 +1,5 @@
 import aiohttp
 import asyncio
-import os
 import ssl
 import certifi
 import logging
@@ -22,7 +21,7 @@ class NetworkRenderStrategy(RenderStrategy):
             self.BASE_RENDER_URL = ASTRBOT_T2I_DEFAULT_ENDPOINT
         else:
             self.BASE_RENDER_URL = self._clean_url(base_url)
-        
+
         self.endpoints = [self.BASE_RENDER_URL]
         self.template_manager = TemplateManager()
 
@@ -114,10 +113,14 @@ class NetworkRenderStrategy(RenderStrategy):
         logger.error(f"All endpoints failed: {last_exception}")
         raise RuntimeError(f"All endpoints failed: {last_exception}")
 
-    async def render(self, text: str, return_url: bool = False, template_name: str = "base") -> str:
+    async def render(
+        self, text: str, return_url: bool = False, template_name: str | None = "base"
+    ) -> str:
         """
         返回图像的文件路径
         """
+        if not template_name:
+            template_name = "base"
         tmpl_str = await self.get_template(name=template_name)
         text = text.replace("`", "\\`")
         return await self.render_custom_template(

@@ -61,9 +61,7 @@ class AstrBotDashboard:
         self.session_management_route = SessionManagementRoute(
             self.context, db, core_lifecycle
         )
-        self.persona_route = PersonaRoute(
-            self.context, db, core_lifecycle
-        )
+        self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
 
         self.app.add_url_rule(

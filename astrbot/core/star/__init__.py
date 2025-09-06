@@ -32,11 +32,11 @@ class Star(CommandParserMixin):
         return await html_renderer.render_t2i(
             text,
             return_url=return_url,
-            template_name=self.context.astrbot_config.get("t2i_active_template"),
+            template_name=self.context._config.get("t2i_active_template"),
         )
 
     async def html_render(
-        tmpl: str, data: dict, return_url=True, options: dict | None = None
+        self, tmpl: str, data: dict, return_url=True, options: dict | None = None
     ) -> str:
         """渲染 HTML"""
         return await html_renderer.render_custom_template(

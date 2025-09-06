@@ -17,7 +17,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
-from astrbot.core import logger, html_renderer
+from astrbot.core import logger
 from astrbot.core.provider import Provider
 from astrbot.core.provider.provider import RerankProvider
 import asyncio
@@ -720,11 +720,13 @@ class ConfigRoute(Route):
             if conf_id not in self.acm.confs:
                 raise ValueError(f"配置文件 {conf_id} 不存在")
             astrbot_config = self.acm.confs[conf_id]
-            
+
             # 保留服务端的 t2i_active_template 值
             if "t2i_active_template" in astrbot_config:
-                post_configs["t2i_active_template"] = astrbot_config["t2i_active_template"]
-            
+                post_configs["t2i_active_template"] = astrbot_config[
+                    "t2i_active_template"
+                ]
+
             save_config(post_configs, astrbot_config, is_core=True)
         except Exception as e:
             raise e

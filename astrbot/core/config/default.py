@@ -2295,7 +2295,7 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "当前应用的文转图渲染模板",
                         "type": "string",
                         "hint": "此处的值由文转图模板管理页面进行维护。",
-                        "invisible": True
+                        "invisible": True,
                     },
                     "log_level": {
                         "description": "控制台日志级别",
