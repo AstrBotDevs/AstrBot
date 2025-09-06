@@ -1,4 +1,3 @@
-import time
 import asyncio
 import logging
 import uuid
@@ -13,13 +12,13 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.api.event import MessageChain
-from .aiocqhttp_message_event import *  # noqa: F403
-from astrbot.api.message_components import *  # noqa: F403
 from astrbot.api import logger
+from astrbot.core.message.components import At, ComponentTypes, File, Poke, Reply
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
-from aiocqhttp.exceptions import ActionFailed
+
+BLOCKED_USER_IDS: list[str] = ["2854196310"]  # QQ 管家
 
 
 @register_platform_adapter(
@@ -40,7 +39,7 @@ class AiocqhttpAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="aiocqhttp",
             description="适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
-            id=self.config.get("id"),
+            id=self.config.get("id", "aiocqhttp_default"),
         )
 
         self.bot = CQHttp(
@@ -97,14 +96,13 @@ class AiocqhttpAdapter(Platform):
         )
         await super().send_by_session(session, message_chain)
 
-    async def convert_message(self, event: Event) -> AstrBotMessage:
+    async def convert_message(self, event: Event) -> AstrBotMessage | None:
         logger.debug(f"[aiocqhttp] RawMessage {event}")
 
         if event["post_type"] == "message":
             abm = await self._convert_handle_message_event(event)
-            if abm.sender.user_id == "2854196310":
-                # 屏蔽 QQ 管家的消息
-                return
+            if str(abm.sender.user_id) in BLOCKED_USER_IDS:
+                return None
         elif event["post_type"] == "notice":
             abm = await self._convert_handle_notice_event(event)
         elif event["post_type"] == "request":
@@ -116,7 +114,11 @@ class AiocqhttpAdapter(Platform):
         """OneBot V11 请求类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        abm.sender = MessageMember(user_id=str(event.user_id), nickname=event.user_id)
+        abm.sender = MessageMember(
+            str((event.sender or {}).get("user_id", "")),
+            str((event.sender or {}).get("nickname", "")),
+        )
+
         abm.type = MessageType.OTHER_MESSAGE
         if "group_id" in event and event["group_id"]:
             abm.type = MessageType.GROUP_MESSAGE
@@ -133,7 +135,6 @@ class AiocqhttpAdapter(Platform):
             )
         abm.message_str = ""
         abm.message = []
-        abm.timestamp = int(time.time())
         abm.message_id = uuid.uuid4().hex
         abm.raw_message = event
         return abm
@@ -142,7 +143,11 @@ class AiocqhttpAdapter(Platform):
         """OneBot V11 通知类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        abm.sender = MessageMember(user_id=str(event.user_id), nickname=event.user_id)
+        abm.sender = MessageMember(
+            str((event.sender or {}).get("user_id", "")),
+            str((event.sender or {}).get("nickname", "")),
+        )
+
         abm.type = MessageType.OTHER_MESSAGE
         if "group_id" in event and event["group_id"]:
             abm.group_id = str(event.group_id)
@@ -162,7 +167,6 @@ class AiocqhttpAdapter(Platform):
         abm.message_str = ""
         abm.message = []
         abm.raw_message = event
-        abm.timestamp = int(time.time())
         abm.message_id = uuid.uuid4().hex
 
         if "sub_type" in event:
@@ -182,8 +186,10 @@ class AiocqhttpAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            str(event.sender["user_id"]), event.sender["nickname"]
+            str((event.sender or {}).get("user_id", "")),
+            str((event.sender or {}).get("nickname", "")),
         )
+
         if event["message_type"] == "group":
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
@@ -200,75 +206,64 @@ class AiocqhttpAdapter(Platform):
                 else abm.sender.user_id
             )
 
+        abm.raw_message = event
         abm.message_id = str(event.message_id)
+        abm.message_str = ""
         abm.message = []
 
-        message_str = ""
+        first_at_self_processed = False  # 标记是否处理过第一个@自己
+
         if not isinstance(event.message, list):
-            err = f"aiocqhttp: 无法识别的消息类型: {str(event.message)}，此条消息将被忽略。如果您在使用 go-cqhttp，请将其配置文件中的 message.post-format 更改为 array。"
-            logger.critical(err)
-            try:
-                self.bot.send(event, err)
-            except BaseException as e:
-                logger.error(f"回复消息失败: {e}")
-            return
+            err = f"aiocqhttp: 无法识别的消息类型: {event.message!r}，此条消息将被忽略。如果您在使用 go-cqhttp，请将其配置文件中的 message.post-format 更改为 array。"
+            logger.error(err)
+            raise TypeError(err)
 
         # 按消息段类型类型适配
         for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):
-            a = None
-            if t == "text":
-                current_text = "".join(m["data"]["text"] for m in m_group).strip()
-                if not current_text:
-                    # 如果文本段为空，则跳过
-                    continue
-                message_str += current_text
-                a = ComponentTypes[t](text=current_text)  # noqa: F405
-                abm.message.append(a)
+            for m in m_group:
+                data = m["data"]
+                match t:
+                    case "text":
+                        if current_text := data.get("text", ""):
+                            abm.message_str += current_text
+                            abm.message.append(ComponentTypes[t](text=current_text))
 
-            elif t == "file":
-                for m in m_group:
-                    if m["data"].get("url") and m["data"].get("url").startswith("http"):
-                        # Lagrange
-                        logger.info("guessing lagrange")
-                        file_name = m["data"].get("file_name", "file")
-                        abm.message.append(File(name=file_name, url=m["data"]["url"]))
-                    else:
+                    case "file":
                         try:
+                            if url := data.get("url"):
+                                if url.startswith("http"):  # Lagrange
+                                    file_name = data.get("file_name", "file")
+                                    abm.message.append(File(name=file_name, url=url))
+                                    continue
                             # Napcat
                             ret = None
                             if abm.type == MessageType.GROUP_MESSAGE:
                                 ret = await self.bot.call_action(
                                     action="get_group_file_url",
-                                    file_id=event.message[0]["data"]["file_id"],
+                                    file_id=data["file_id"],
                                     group_id=event.group_id,
                                 )
                             elif abm.type == MessageType.FRIEND_MESSAGE:
                                 ret = await self.bot.call_action(
                                     action="get_private_file_url",
-                                    file_id=event.message[0]["data"]["file_id"],
+                                    file_id=data["file_id"],
                                 )
                             if ret and "url" in ret:
-                                file_url = ret["url"]  # https
-                                a = File(name="", url=file_url)
-                                abm.message.append(a)
+                                abm.message.append(File(name="", url=ret["url"]))
                             else:
                                 logger.error(f"获取文件失败: {ret}")
 
-                        except ActionFailed as e:
-                            logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
-                        except BaseException as e:
+                        except Exception as e:
                             logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
 
-            elif t == "reply":
-                for m in m_group:
-                    if not get_reply:
-                        a = ComponentTypes[t](**m["data"])  # noqa: F405
-                        abm.message.append(a)
-                    else:
+                    case "reply":
+                        if not get_reply:
+                            abm.message.append(ComponentTypes[t](**m["data"]))
+                            continue
                         try:
                             reply_event_data = await self.bot.call_action(
                                 action="get_msg",
-                                message_id=int(m["data"]["id"]),
+                                message_id=int(data["id"]),
                             )
                             # 添加必要的 post_type 字段，防止 Event.from_payload 报错
                             reply_event_data["post_type"] = "message"
@@ -296,54 +291,42 @@ class AiocqhttpAdapter(Platform):
                             abm.message.append(reply_seg)
                         except BaseException as e:
                             logger.error(f"获取引用消息失败: {e}。")
-                            a = ComponentTypes[t](**m["data"])  # noqa: F405
-                            abm.message.append(a)
-            elif t == "at":
-                first_at_self_processed = False
+                            abm.message.append(ComponentTypes[t](**data))
 
-                for m in m_group:
-                    try:
-                        if m["data"]["qq"] == "all":
-                            abm.message.append(At(qq="all", name="全体成员"))
-                            continue
-
-                        at_info = await self.bot.call_action(
-                            action="get_stranger_info",
-                            user_id=int(m["data"]["qq"]),
-                        )
-                        if at_info:
-                            nickname = at_info.get("nick", "") or at_info.get(
-                                "nickname", ""
+                    case "at":
+                        try:
+                            if data["qq"] == "all":
+                                abm.message.append(At(qq="all", name="全体成员"))
+                                continue
+                            payload = {"user_id": data["qq"]}
+                            action = (
+                                "get_group_member_info"
+                                if abm.group_id
+                                else "get_stranger_info"
                             )
-                            is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
-
-                            abm.message.append(
-                                At(
-                                    qq=m["data"]["qq"],
-                                    name=nickname,
-                                )
+                            if abm.group_id:
+                                payload["group_id"] = abm.group_id
+                            at_info = await self.bot.call_action(action, **payload)
+                            nickname = (
+                                at_info.get("card", "") or at_info.get("nick", "") or at_info.get("nickname", "")
+                                if at_info
+                                else ""
                             )
-
+                            abm.message.append(At(qq=data["qq"], name=nickname))
+                            is_at_self = str(data["qq"]) in {abm.self_id, "all"}
                             if is_at_self and not first_at_self_processed:
                                 # 第一个@是机器人，不添加到message_str
                                 first_at_self_processed = True
                             else:
                                 # 非第一个@机器人或@其他用户，添加到message_str
-                                message_str += f" @{nickname}({m['data']['qq']}) "
-                        else:
-                            abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
-                    except ActionFailed as e:
-                        logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
-                    except BaseException as e:
-                        logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
-            else:
-                for m in m_group:
-                    a = ComponentTypes[t](**m["data"])  # noqa: F405
-                    abm.message.append(a)
+                                abm.message_str += f" @{nickname}({data['qq']}) "
+                        except BaseException as e:
+                            logger.error(
+                                f"获取 @ 用户信息失败: {e}，此消息段将被忽略。"
+                            )
 
-        abm.timestamp = int(time.time())
-        abm.message_str = message_str
-        abm.raw_message = event
+                    case _:
+                        abm.message.append(ComponentTypes[t](**data))
 
         return abm
 
