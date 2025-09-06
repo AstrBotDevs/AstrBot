@@ -168,6 +168,28 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- 安全警告对话框 -->
+    <v-dialog v-model="showOneBotEmptyTokenWarnDialog" max-width="600" persistent>
+      <v-card>
+        <v-card-title>
+          {{ tm('dialog.securityWarning.title') }}
+        </v-card-title>
+        <v-card-text class="py-4">
+          <p>{{ tm('dialog.securityWarning.aiocqhttpTokenMissing') }}</p>
+          <span><a href="https://docs.astrbot.app/deploy/platform/aiocqhttp/napcat.html#%E9%99%84%E5%BD%95-%E5%A2%9E%E5%BC%BA%E8%BF%9E%E6%8E%A5%E5%AE%89%E5%85%A8%E6%80%A7" target="_blank">{{ tm('dialog.securityWarning.learnMore') }}</a></span>
+        </v-card-text>
+        <v-card-actions class="px-4 pb-4">
+          <v-spacer></v-spacer>
+          <v-btn color="error" @click="handleOneBotEmptyTokenWarningDismiss(true)">
+            无视警告并继续创建
+          </v-btn>
+          <v-btn color="primary" @click="handleOneBotEmptyTokenWarningDismiss(false)">
+            重新修改
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -234,16 +256,26 @@ export default {
       conflictId: '',
       idConflictResolve: null,
 
+      // OneBot Empty Token Warning #2639
+      showOneBotEmptyTokenWarnDialog: false,
+      oneBotEmptyTokenWarningResolve: null,
+
       store: useCommonStore()
     }
   },
 
   watch: {
     showIdConflictDialog(newValue) {
-      // 当对话框关闭时，如果 Promise 还在等待，则拒绝它以防止内存泄漏
       if (!newValue && this.idConflictResolve) {
         this.idConflictResolve(false);
         this.idConflictResolve = null;
+      }
+    },
+
+    showOneBotEmptyTokenWarnDialog(newValue) {
+      if (!newValue && this.oneBotEmptyTokenWarningResolve) {
+        this.oneBotEmptyTokenWarningResolve(true);
+        this.oneBotEmptyTokenWarningResolve = null;
       }
     }
   },
@@ -353,22 +385,37 @@ export default {
     newPlatform() {
       this.loading = true;
       if (this.updatingMode) {
-        axios.post('/api/config/platform/update', {
-          id: this.newSelectedPlatformName,
-          config: this.newSelectedPlatformConfig
-        }).then((res) => {
-          this.loading = false;
-          this.showPlatformCfg = false;
-          this.getConfig();
-          this.showSuccess(res.data.message || this.messages.updateSuccess);
-        }).catch((err) => {
-          this.loading = false;
-          this.showError(err.response?.data?.message || err.message);
-        });
-        this.updatingMode = false;
+        if (this.newSelectedPlatformConfig.type === 'aiocqhttp') {
+          const token = this.newSelectedPlatformConfig.ws_reverse_token;
+          if (!token || token.trim() === '') {
+            this.showOneBotEmptyTokenWarning().then((continueWithWarning) => {
+              if (continueWithWarning) {
+                this.updatePlatform();
+              }
+            });
+            return;
+          }
+        }
+        this.updatePlatform();
       } else {
         this.savePlatform();
       }
+    },
+
+    updatePlatform() {
+      axios.post('/api/config/platform/update', {
+        id: this.newSelectedPlatformName,
+        config: this.newSelectedPlatformConfig
+      }).then((res) => {
+        this.loading = false;
+        this.showPlatformCfg = false;
+        this.getConfig();
+        this.showSuccess(res.data.message || this.messages.updateSuccess);
+      }).catch((err) => {
+        this.loading = false;
+        this.showError(err.response?.data?.message || err.message);
+      });
+      this.updatingMode = false;
     },
 
     async savePlatform() {
@@ -379,6 +426,17 @@ export default {
         if (!confirmed) {
           this.loading = false;
           return; // 如果用户取消，则中止保存
+        }
+      }
+
+      // 检查 aiocqhttp 适配器的安全设置
+      if (this.newSelectedPlatformConfig.type === 'aiocqhttp') {
+        const token = this.newSelectedPlatformConfig.ws_reverse_token;
+        if (!token || token.trim() === '') {
+          const continueWithWarning = await this.showOneBotEmptyTokenWarning();
+          if (!continueWithWarning) {
+            return;
+          }
         }
       }
 
@@ -407,6 +465,25 @@ export default {
         this.idConflictResolve(confirmed);
       }
       this.showIdConflictDialog = false;
+    },
+
+    showOneBotEmptyTokenWarning() {
+      this.showOneBotEmptyTokenWarnDialog = true;
+      return new Promise((resolve) => {
+        this.oneBotEmptyTokenWarningResolve = resolve;
+      });
+    },
+
+    handleOneBotEmptyTokenWarningDismiss(continueWithWarning) {
+      this.showOneBotEmptyTokenWarnDialog = false;
+      if (this.oneBotEmptyTokenWarningResolve) {
+        this.oneBotEmptyTokenWarningResolve(continueWithWarning);
+        this.oneBotEmptyTokenWarningResolve = null;
+      }
+      
+      if (!continueWithWarning) {
+        this.loading = false;
+      }
     },
 
     deletePlatform(platform) {
