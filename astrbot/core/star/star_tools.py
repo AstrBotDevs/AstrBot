@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Union, Awaitable, List, Optional, ClassVar
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.api.platform import MessageMember, AstrBotMessage
+from astrbot.api.platform import MessageMember, AstrBotMessage, MessageType
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
@@ -71,6 +71,8 @@ class StarTools:
         Note:
             qq_official(QQ官方API平台)不支持此方法
         """
+        if cls._context is None:
+            raise ValueError("StarTools not initialized")
         return await cls._context.send_message(session, message_chain)
 
     @classmethod
@@ -86,12 +88,14 @@ class StarTools:
             message_chain (MessageChain): 消息链
             platform (str): 可选的平台名称，默认平台(aiocqhttp), 目前只支持 aiocqhttp
         """
+        if cls._context is None:
+            raise ValueError("StarTools not initialized")
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
             adapter = next((p for p in platforms if isinstance(p, AiocqhttpAdapter)), None)
             if adapter is None:
                 raise ValueError("未找到适配器: AiocqhttpAdapter")
-            AiocqhttpMessageEvent.send_message(
+            await AiocqhttpMessageEvent.send_message(
                 bot=adapter.bot,
                 message_chain=message_chain,
                 is_group=(type == "GroupMessage"),
@@ -132,7 +136,7 @@ class StarTools:
             AstrBotMessage: 创建的消息对象
         """
         abm = AstrBotMessage()
-        abm.type = type
+        abm.type = MessageType(type)
         abm.self_id = self_id
         abm.session_id = session_id
         if message_id == "":
@@ -159,6 +163,8 @@ class StarTools:
             platform (str): 可选的平台名称，默认平台(aiocqhttp), 目前只支持 aiocqhttp
             is_wake (bool): 是否标记为唤醒事件, 默认为 True, 只有唤醒事件才会被 llm 响应
         """
+        if cls._context is None:
+            raise ValueError("StarTools not initialized")
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
             adapter = next((p for p in platforms if isinstance(p, AiocqhttpAdapter)), None)
@@ -185,6 +191,8 @@ class StarTools:
         Args:
             name (str): 工具名称
         """
+        if cls._context is None:
+            raise ValueError("StarTools not initialized")
         return cls._context.activate_llm_tool(name)
 
     @classmethod
@@ -195,6 +203,8 @@ class StarTools:
         Args:
             name (str): 工具名称
         """
+        if cls._context is None:
+            raise ValueError("StarTools not initialized")
         return cls._context.deactivate_llm_tool(name)
 
     @classmethod
@@ -210,6 +220,8 @@ class StarTools:
             desc (str): 工具描述
             func_obj (Awaitable): 函数对象，必须是异步函数
         """
+        if cls._context is None:
+            raise ValueError("StarTools not initialized")
         cls._context.register_llm_tool(name, func_args, desc, func_obj)
 
     @classmethod
@@ -221,6 +233,8 @@ class StarTools:
         Args:
             name (str): 工具名称
         """
+        if cls._context is None:
+            raise ValueError("StarTools not initialized")
         cls._context.unregister_llm_tool(name)
 
     @classmethod
@@ -244,8 +258,11 @@ class StarTools:
                 - 创建目录失败（权限不足或其他IO错误）
         """
         if not plugin_name:
-            frame = inspect.currentframe().f_back
-            module = inspect.getmodule(frame)
+            frame = inspect.currentframe()
+            module = None
+            if frame:
+                frame = frame.f_back
+                module = inspect.getmodule(frame)
 
             if not module:
                 raise RuntimeError("无法获取调用者模块信息")
@@ -256,6 +273,9 @@ class StarTools:
                 raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
 
             plugin_name = metadata.name
+
+        if not plugin_name:
+            raise ValueError("无法获取插件名称")
 
         data_dir = Path(os.path.join(get_astrbot_data_path(), "plugin_data", plugin_name))
 
