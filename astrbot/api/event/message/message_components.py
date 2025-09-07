@@ -1,7 +1,6 @@
 """
-astrbot.api.message_components
+astrbot.api.event.message.message_components
 该模块提供一个事件中的消息的构成组件, 一个事件拥有一个消息链, 消息链是一个列表, 其中的元素就是这些消息组件
-⚠️ 标记为已弃用, 不会更新, 请使用 astrbot.api.event.message.message_components 导入
 """
 
 from astrbot.core.message.components import (

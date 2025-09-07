@@ -1,9 +1,10 @@
 import os
 import uuid
 import base64
-from astrbot.api import logger
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Plain, Image, Record
+from astrbot import logger
+from astrbot.core.platform import AstrMessageEvent
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.message.components import Plain, Image, Record
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from .webchat_queue_mgr import webchat_queue_mgr
