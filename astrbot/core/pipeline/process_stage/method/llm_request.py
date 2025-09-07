@@ -299,7 +299,9 @@ class LLMRequestSubStage(Stage):
             self.max_context_length - 1,
         )
         self.streaming_response: bool = settings["streaming_response"]
-        self.max_step: int = settings.get("max_agent_step", 10)
+        self.max_step: int = settings.get("max_agent_step", 30)
+        if isinstance(self.max_step, bool):  # workaround: #2622
+            self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
 
         for bwp in self.bot_wake_prefixs:
@@ -434,7 +436,9 @@ class LLMRequestSubStage(Stage):
             provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
             # 如果模型不支持工具使用，但请求中包含工具列表，则清空。
             if "tool_use" not in provider_cfg:
-                logger.debug(f"用户设置提供商 {provider} 不支持工具使用，清空工具列表。")
+                logger.debug(
+                    f"用户设置提供商 {provider} 不支持工具使用，清空工具列表。"
+                )
                 req.func_tool = None
         # 插件可用性设置
         if event.plugins_name is not None and req.func_tool:

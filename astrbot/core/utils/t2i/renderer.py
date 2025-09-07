@@ -34,12 +34,18 @@ class HtmlRenderer:
         )
 
     async def render_t2i(
-        self, text: str, use_network: bool = True, return_url: bool = False
+        self,
+        text: str,
+        use_network: bool = True,
+        return_url: bool = False,
+        template_name: str | None = None,
     ):
         """使用默认文转图模板。"""
         if use_network:
             try:
-                return await self.network_strategy.render(text, return_url=return_url)
+                return await self.network_strategy.render(
+                    text, return_url=return_url, template_name=template_name
+                )
             except BaseException as e:
                 logger.error(
                     f"Failed to render image via AstrBot API: {e}. Falling back to local rendering."

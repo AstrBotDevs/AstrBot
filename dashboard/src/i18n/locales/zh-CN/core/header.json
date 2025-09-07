@@ -33,7 +33,7 @@
     },
     "tip": "💡 TIP: ",
     "tipContinue": "默认在切换版本时会下载对应版本的 WebUI 文件。WebUI 代码位于项目的 dashboard 目录，您可使用 npm 自行构建。",
-    "dockerTip": "`更新到最新版本` 按钮会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker 部署，也可以重新拉取镜像或者使用",
+    "dockerTip": "切换版本时，会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker 部署，也可以重新拉取镜像或者使用",
     "dockerTipLink": "watchtower",
     "dockerTipContinue": "来自动监控拉取。",
     "table": {

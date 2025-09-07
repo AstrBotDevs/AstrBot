@@ -107,16 +107,38 @@ class RepoZipUpdator:
         """Semver 版本比较"""
         return VersionComparator.compare_version(v1, v2)
 
-    async def check_update(self, url: str, current_version: str) -> ReleaseInfo | None:
+    async def check_update(
+        self, url: str, current_version: str, consider_prerelease: bool = True
+    ) -> ReleaseInfo | None:
         update_data = await self.fetch_release_info(url)
-        tag_name = update_data[0]["tag_name"]
+
+        sel_release_data = None
+        if consider_prerelease:
+            tag_name = update_data[0]["tag_name"]
+            sel_release_data = update_data[0]
+        else:
+            for data in update_data:
+                # 跳过带有 alpha、beta 等预发布标签的版本
+                if re.search(
+                    r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
+                    data["tag_name"],
+                    re.IGNORECASE,
+                ):
+                    continue
+                tag_name = data["tag_name"]
+                sel_release_data = data
+                break
+
+        if not sel_release_data or not tag_name:
+            logger.error("未找到合适的发布版本")
+            return None
 
         if self.compare_version(current_version, tag_name) >= 0:
             return None
         return ReleaseInfo(
             version=tag_name,
-            published_at=update_data[0]["published_at"],
-            body=update_data[0]["body"],
+            published_at=sel_release_data["published_at"],
+            body=f"{tag_name}\n\n{sel_release_data['body']}",
         )
 
     async def download_from_repo_url(self, target_path: str, repo_url: str, proxy=""):

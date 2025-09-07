@@ -56,9 +56,7 @@ class AstrBotUpdator(RepoZipUpdator):
         try:
             if "astrbot" in os.path.basename(sys.argv[0]):  # 兼容cli
                 if os.name == "nt":
-                    args = [
-                        f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]
-                    ]
+                    args = [f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]]
                 else:
                     args = sys.argv[1:]
                 os.execl(sys.executable, py, "-m", "astrbot.cli.__main__", *args)
@@ -68,9 +66,13 @@ class AstrBotUpdator(RepoZipUpdator):
             logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
             raise e
 
-    async def check_update(self, url: str, current_version: str) -> ReleaseInfo:
+    async def check_update(
+        self, url: str, current_version: str, consider_prerelease: bool = True
+    ) -> ReleaseInfo:
         """检查更新"""
-        return await super().check_update(self.ASTRBOT_RELEASE_API, VERSION)
+        return await super().check_update(
+            self.ASTRBOT_RELEASE_API, VERSION, consider_prerelease
+        )
 
     async def get_releases(self) -> list:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)

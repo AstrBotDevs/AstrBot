@@ -481,7 +481,7 @@ export default {
       if (!this.fetched) return;
 
       const postData = {
-        config: this.config_data
+        config: JSON.parse(JSON.stringify(this.config_data)),
       };
 
       if (this.isSystemConfig) {

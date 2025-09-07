@@ -1,6 +1,5 @@
 import aiohttp
 import asyncio
-import os
 import ssl
 import certifi
 import logging
@@ -8,10 +7,9 @@ import random
 from . import RenderStrategy
 from astrbot.core.config import VERSION
 from astrbot.core.utils.io import download_image_by_url
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.t2i.template_manager import TemplateManager
 
 ASTRBOT_T2I_DEFAULT_ENDPOINT = "https://t2i.soulter.top/text2img"
-CUSTOM_T2I_TEMPLATE_PATH = os.path.join(get_astrbot_data_path(), "t2i_template.html")
 
 logger = logging.getLogger("astrbot")
 
@@ -23,26 +21,17 @@ class NetworkRenderStrategy(RenderStrategy):
             self.BASE_RENDER_URL = ASTRBOT_T2I_DEFAULT_ENDPOINT
         else:
             self.BASE_RENDER_URL = self._clean_url(base_url)
-        self.TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template", "base.html")
-        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
-            self.DEFAULT_TEMPLATE = f.read()
 
         self.endpoints = [self.BASE_RENDER_URL]
+        self.template_manager = TemplateManager()
 
     async def initialize(self):
         if self.BASE_RENDER_URL == ASTRBOT_T2I_DEFAULT_ENDPOINT:
             asyncio.create_task(self.get_official_endpoints())
 
-    async def get_template(self) -> str:
-        """获取文转图 HTML 模板
-
-        Returns:
-            str: 文转图 HTML 模板字符串
-        """
-        if os.path.exists(CUSTOM_T2I_TEMPLATE_PATH):
-            with open(CUSTOM_T2I_TEMPLATE_PATH, "r", encoding="utf-8") as f:
-                return f.read()
-        return self.DEFAULT_TEMPLATE
+    async def get_template(self, name: str = "base") -> str:
+        """通过名称获取文转图 HTML 模板"""
+        return self.template_manager.get_template(name)
 
     async def get_official_endpoints(self):
         """获取官方的 t2i 端点列表。"""
@@ -124,11 +113,15 @@ class NetworkRenderStrategy(RenderStrategy):
         logger.error(f"All endpoints failed: {last_exception}")
         raise RuntimeError(f"All endpoints failed: {last_exception}")
 
-    async def render(self, text: str, return_url: bool = False) -> str:
+    async def render(
+        self, text: str, return_url: bool = False, template_name: str | None = "base"
+    ) -> str:
         """
         返回图像的文件路径
         """
-        tmpl_str = await self.get_template()
+        if not template_name:
+            template_name = "base"
+        tmpl_str = await self.get_template(name=template_name)
         text = text.replace("`", "\\`")
         return await self.render_custom_template(
             tmpl_str, {"text": text, "version": f"v{VERSION}"}, return_url

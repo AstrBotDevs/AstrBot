@@ -227,7 +227,7 @@ async def download_dashboard(
         path = os.path.join(get_astrbot_data_path(), "dashboard.zip")
 
     if latest or len(str(version)) != 40:
-        logger.info("准备下载最新发行版本的 AstrBot WebUI")
+        logger.info(f"准备下载 {version} 发行版本的 AstrBot WebUI 文件")
         ver_name = "latest" if latest else version
         dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
         try:
