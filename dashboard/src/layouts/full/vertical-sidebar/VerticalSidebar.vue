@@ -12,13 +12,11 @@ const sidebarMenu = shallowRef(sidebarItems);
 
 const showIframe = ref(false);
 
-// 侧边栏宽度控制
 const sidebarWidth = ref(260);
 const minSidebarWidth = 200;
 const maxSidebarWidth = 300;
 const isResizing = ref(false);
 
-// 默认桌面端 iframe 样式
 const iframeStyle = ref({
   position: 'fixed',
   bottom: '16px',
@@ -35,14 +33,13 @@ const iframeStyle = ref({
   boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
 });
 
-// 如果为移动端，则采用百分比尺寸，并设置初始位置
 if (window.innerWidth < 768) {
   iframeStyle.value = {
     position: 'fixed',
     top: '10%',
     left: '0%',
     width: '100%',
-    height: '50%',
+    height: '80%',
     minWidth: '300px',
     minHeight: '200px',
     background: 'white',
@@ -52,7 +49,6 @@ if (window.innerWidth < 768) {
     borderRadius: '12px',
     boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
   };
-  // 移动端默认关闭侧边栏
   customizer.Sidebar_drawer = false;
 }
 
@@ -80,12 +76,10 @@ function openIframeLink(url) {
   }
 }
 
-// 拖拽相关变量与函数
 let offsetX = 0;
 let offsetY = 0;
 let isDragging = false;
 
-// 辅助函数：限制数值在一定范围内
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -97,7 +91,6 @@ function startDrag(clientX, clientY) {
   offsetX = clientX - rect.left;
   offsetY = clientY - rect.top;
   document.body.style.userSelect = 'none';
-  // 绑定全局鼠标和触摸事件
   document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('mouseup', onMouseUp);
   document.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -215,7 +208,6 @@ function startSidebarResize(event) {
       </div>
     </div>
     
-    <!-- 拖拽调整宽度的控制条 -->
     <div 
       v-if="!customizer.mini_sidebar && customizer.Sidebar_drawer"
       class="sidebar-resize-handle"
@@ -230,14 +222,13 @@ function startSidebarResize(event) {
     id="draggable-iframe"
     :style="iframeStyle"
   >
-    <!-- 拖拽头部：支持鼠标和触摸 -->
+
     <div :style="dragHeaderStyle" @mousedown="onMouseDown" @touchstart="onTouchStart">
       <div style="display: flex; align-items: center;">
         <v-icon icon="mdi-cursor-move" />
         <span style="margin-left: 8px;">{{ t('core.navigation.drag') }}</span>
       </div>
       <div style="display: flex; gap: 8px;">
-        <!-- 跳转按钮 -->
         <v-btn
           icon
           @click.stop="openIframeLink('https://astrbot.app')"
@@ -246,7 +237,6 @@ function startSidebarResize(event) {
         >
           <v-icon icon="mdi-open-in-new" />
         </v-btn>
-        <!-- 关闭按钮 -->
         <v-btn
           icon
           @click.stop="toggleIframe"
@@ -257,7 +247,6 @@ function startSidebarResize(event) {
         </v-btn>
       </div>
     </div>
-    <!-- iframe 区域 -->
     <iframe
       src="https://astrbot.app"
       style="width: 100%; height: calc(100% - 56px); border: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;"

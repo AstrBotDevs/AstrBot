@@ -1,8 +1,17 @@
 <script setup>
 import { useI18n } from '@/i18n/composables';
+import { useCustomizerStore } from '@/stores/customizer';
+import { computed } from 'vue';
 
 const props = defineProps({ item: Object, level: Number });
 const { t } = useI18n();
+const customizer = useCustomizerStore();
+
+const itemStyle = computed(() => {
+  const lvl = props.level ?? 0;
+  const indent = customizer.mini_sidebar ? '0px' : `${lvl * 24}px`;
+  return { '--indent-padding': indent };
+});
 </script>
 
 <template>
@@ -14,6 +23,7 @@ const { t } = useI18n();
         class="mb-1"
         color="secondary"
         :prepend-icon="item.icon"
+        :style="{ '--indent-padding': '0px' }"
       >
         <v-list-item-title style="font-size: 14px; font-weight: 500; line-height: 1.2; word-break: break-word;">
           {{ t(item.title) }}
@@ -21,6 +31,7 @@ const { t } = useI18n();
       </v-list-item>
     </template>
     
+    <!-- children -->
     <template v-for="(child, index) in item.children" :key="index">
       <NavItem :item="child" :level="(level || 0) + 1" />
     </template>
@@ -35,7 +46,7 @@ const { t } = useI18n();
     color="secondary"
     :disabled="item.disabled"
     :target="item.type === 'external' ? '_blank' : ''"
-    :style="level > 0 ? { paddingLeft: '32px' } : {}"
+    :style="itemStyle"
   >
     <template v-slot:prepend>
       <v-icon v-if="item.icon" :size="item.iconSize" class="hide-menu" :icon="item.icon"></v-icon>
