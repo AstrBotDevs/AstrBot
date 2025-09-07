@@ -159,7 +159,7 @@ function endDrag() {
     rail-width="80"
     app
     class="leftSidebar"
-    width="220"
+    width="260"
     :rail="customizer.mini_sidebar"
   >
     <div class="sidebar-container">
