@@ -7,7 +7,6 @@ from astrbot.core.config import AstrBotConfig
 from .custom_filter import CustomFilter
 from ..star_handler import StarHandlerMetadata
 
-
 class GreedyStr(str):
     """标记指令完成其他参数接收后的所有剩余文本。"""
 
@@ -153,10 +152,17 @@ class CommandFilter(HandlerFilter):
                     _full = f"{parent_command_name} {candidate}"
                 else:
                     _full = candidate
-                if message_str.startswith(f"{_full} ") or message_str == _full:
-                    message_str = message_str[len(_full) :].strip()
+                if message_str == _full:
+                    # 完全等于命令名 → 没参数
+                    message_str = ""
                     ok = True
                     break
+                elif message_str.startswith(_full):
+                    # 命令名后面无论是空格还是直接连参数都可以
+                    message_str = message_str[len(_full):].lstrip()
+                    ok = True
+                    break
+
         if not ok:
             return False
 
