@@ -42,6 +42,7 @@ __all__ = [
     "custom_filter",
     "PermissionType",
     "on_astrbot_loaded",
+    "on_platform_loaded",
     "on_llm_request",
     "llm_tool",
     "on_decorating_result",
