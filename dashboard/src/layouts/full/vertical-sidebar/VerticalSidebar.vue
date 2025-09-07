@@ -12,6 +12,12 @@ const sidebarMenu = shallowRef(sidebarItems);
 
 const showIframe = ref(false);
 
+// 侧边栏宽度控制
+const sidebarWidth = ref(260);
+const minSidebarWidth = 200;
+const maxSidebarWidth = 300;
+const isResizing = ref(false);
+
 // 默认桌面端 iframe 样式
 const iframeStyle = ref({
   position: 'fixed',
@@ -149,6 +155,34 @@ function endDrag() {
   document.removeEventListener('touchend', onTouchEnd);
 }
 
+function startSidebarResize(event) {
+  isResizing.value = true;
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'ew-resize';
+  
+  const startX = event.clientX;
+  const startWidth = sidebarWidth.value;
+  
+  function onMouseMoveResize(event) {
+    if (!isResizing.value) return;
+    
+    const deltaX = event.clientX - startX;
+    const newWidth = Math.max(minSidebarWidth, Math.min(maxSidebarWidth, startWidth + deltaX));
+    sidebarWidth.value = newWidth;
+  }
+  
+  function onMouseUpResize() {
+    isResizing.value = false;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    document.removeEventListener('mousemove', onMouseMoveResize);
+    document.removeEventListener('mouseup', onMouseUpResize);
+  }
+  
+  document.addEventListener('mousemove', onMouseMoveResize);
+  document.addEventListener('mouseup', onMouseUpResize);
+}
+
 </script>
 
 <template>
@@ -159,7 +193,7 @@ function endDrag() {
     rail-width="80"
     app
     class="leftSidebar"
-    width="260"
+    :width="sidebarWidth"
     :rail="customizer.mini_sidebar"
   >
     <div class="sidebar-container">
@@ -179,6 +213,15 @@ function endDrag() {
           {{ t('core.navigation.github') }}
         </v-btn>
       </div>
+    </div>
+    
+    <!-- 拖拽调整宽度的控制条 -->
+    <div 
+      v-if="!customizer.mini_sidebar && customizer.Sidebar_drawer"
+      class="sidebar-resize-handle"
+      @mousedown="startSidebarResize"
+      :class="{ 'resizing': isResizing }"
+    >
     </div>
   </v-navigation-drawer>
   
@@ -221,3 +264,47 @@ function endDrag() {
     ></iframe>
   </div>
 </template>
+
+<style scoped>
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  background: transparent;
+  cursor: ew-resize;
+  user-select: none;
+  z-index: 1000;
+  transition: background-color 0.2s ease;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.resizing {
+  background: rgba(var(--v-theme-primary), 0.3);
+}
+
+.sidebar-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 30px;
+  background: rgba(var(--v-theme-on-surface), 0.3);
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.sidebar-resize-handle:hover::before,
+.sidebar-resize-handle.resizing::before {
+  opacity: 1;
+}
+
+/* 确保侧边栏容器支持相对定位 */
+.leftSidebar .v-navigation-drawer__content {
+  position: relative;
+}
+</style>
