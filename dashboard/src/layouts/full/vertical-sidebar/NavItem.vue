@@ -15,7 +15,7 @@ const itemStyle = computed(() => {
 </script>
 
 <template>
-  <v-list-group v-if="item.children" :value="item.title">
+  <v-list-group v-if="item.children" :value="item.title" :class="{ 'group-bordered': customizer.mini_sidebar }">
     <template v-slot:activator="{ props }">
       <v-list-item
         v-bind="props"
@@ -68,3 +68,12 @@ const itemStyle = computed(() => {
     </template>
   </v-list-item>
 </template>
+
+<style scoped>
+/* 在折叠(mini)状态下，分组展开时给整个分组（母项+子项）加边框以便区分 */
+.group-bordered.v-list-group--open {
+  border: 2px solid rgba(var(--v-theme-borderLight), 0.35);
+  border-radius: 8px;
+  background: rgba(var(--v-theme-borderLight), 0.04);
+}
+</style>
