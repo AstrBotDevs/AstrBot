@@ -34,19 +34,26 @@ class StarHandlerRegistry(Generic[T]):
     ) -> List[StarHandlerMetadata]:
         handlers = []
         for handler in self._handlers:
+            # 过滤事件类型
             if handler.event_type != event_type:
                 continue
+            # 过滤启用状态
             if only_activated:
                 plugin = star_map.get(handler.handler_module_path)
                 if not (plugin and plugin.activated):
                     continue
+            # 过滤插件白名单
             if plugins_name is not None and plugins_name != ["*"]:
                 plugin = star_map.get(handler.handler_module_path)
                 if not plugin:
                     continue
                 if (
                     plugin.name not in plugins_name
-                    and event_type != EventType.OnAstrBotLoadedEvent
+                    and event_type
+                    not in (
+                        EventType.OnAstrBotLoadedEvent,
+                        EventType.OnPlatformLoadedEvent,
+                    )
                     and not plugin.reserved
                 ):
                     continue
@@ -90,6 +97,7 @@ class EventType(enum.Enum):
     """
 
     OnAstrBotLoadedEvent = enum.auto()  # AstrBot 加载完成
+    OnPlatformLoadedEvent = enum.auto()  # 平台加载完成
 
     AdapterMessageEvent = enum.auto()  # 收到适配器发来的消息
     OnLLMRequestEvent = enum.auto()  # 收到 LLM 请求（可以是用户也可以是插件）

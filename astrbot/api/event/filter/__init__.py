@@ -7,6 +7,7 @@ from astrbot.core.star.register import (
     register_permission_type as permission_type,
     register_custom_filter as custom_filter,
     register_on_astrbot_loaded as on_astrbot_loaded,
+    register_on_platform_loaded as on_platform_loaded,
     register_on_llm_request as on_llm_request,
     register_on_llm_response as on_llm_response,
     register_llm_tool as llm_tool,
