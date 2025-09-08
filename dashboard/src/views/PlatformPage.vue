@@ -331,7 +331,7 @@ export default {
         "slack": "https://astrbot.app/deploy/platform/slack.html",
         "kook": "https://astrbot.app/deploy/platform/kook.html",
         "vocechat": "https://astrbot.app/deploy/platform/vocechat.html",
-        "satori": "https://astrbot.app/deploy/platform/satori.html", // TODO
+        "satori": "https://astrbot.app/deploy/platform/satori/llonebot.html",
       }
       return tutorial_map[platform_type] || "https://docs.astrbot.app";
     },
