@@ -133,7 +133,7 @@ class PlatformManager:
                     f"hook(on_platform_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
                 )
                 await handler.handler()
-            except BaseException:
+            except Exception:
                 logger.error(traceback.format_exc())
 
     async def _task_wrapper(self, task: asyncio.Task):
