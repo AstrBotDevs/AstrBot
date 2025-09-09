@@ -514,11 +514,7 @@ class SatoriPlatformAdapter(Platform):
                 else:
                     logger.error(f"未知的音频 src 格式: {str(src)[:16]}")
 
-            elif tag_name == "quote":
-                # quote标签已经被特殊处理，这里不需要再解析其内容
-                pass
-
-            else:
+            elif tag_name != "quote":
                 # 未知标签，递归处理其内容
                 if child.text and child.text.strip():
                     elements.append(Plain(text=child.text))
