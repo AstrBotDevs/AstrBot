@@ -40,6 +40,11 @@ def check_env():
 async def check_dashboard_files():
     """下载管理面板文件"""
 
+    dashboard_dist_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard", "dist"))
+    if os.path.exists(dashboard_dist_path):
+        logger.info("检测到本地构建的 dashboard/dist 目录，将直接使用该目录作为前端面板")
+        return
+     
     v = await get_dashboard_version()
     if v is not None:
         # has file
