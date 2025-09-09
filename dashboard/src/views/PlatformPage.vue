@@ -318,20 +318,20 @@ export default {
 
     getTutorialLink(platform_type) {
       let tutorial_map = {
-        "qq_official_webhook": "https://astrbot.app/deploy/platform/qqofficial/webhook.html",
-        "qq_official": "https://astrbot.app/deploy/platform/qqofficial/websockets.html",
-        "aiocqhttp": "https://astrbot.app/deploy/platform/aiocqhttp/napcat.html",
-        "wecom": "https://astrbot.app/deploy/platform/wecom.html",
-        "lark": "https://astrbot.app/deploy/platform/lark.html",
-        "telegram": "https://astrbot.app/deploy/platform/telegram.html",
-        "dingtalk": "https://astrbot.app/deploy/platform/dingtalk.html",
-        "wechatpadpro": "https://astrbot.app/deploy/platform/wechat/wechatpadpro.html",
-        "weixin_official_account": "https://astrbot.app/deploy/platform/weixin-official-account.html",
-        "discord": "https://astrbot.app/deploy/platform/discord.html",
-        "slack": "https://astrbot.app/deploy/platform/slack.html",
-        "kook": "https://astrbot.app/deploy/platform/kook.html",
-        "vocechat": "https://astrbot.app/deploy/platform/vocechat.html",
-        "satori": "https://astrbot.app/deploy/platform/satori.html", // TODO
+        "qq_official_webhook": "https://docs.astrbot.app/deploy/platform/qqofficial/webhook.html",
+        "qq_official": "https://docs.astrbot.app/deploy/platform/qqofficial/websockets.html",
+        "aiocqhttp": "https://docs.astrbot.app/deploy/platform/aiocqhttp/napcat.html",
+        "wecom": "https://docs.astrbot.app/deploy/platform/wecom.html",
+        "lark": "https://docs.astrbot.app/deploy/platform/lark.html",
+        "telegram": "https://docs.astrbot.app/deploy/platform/telegram.html",
+        "dingtalk": "https://docs.astrbot.app/deploy/platform/dingtalk.html",
+        "wechatpadpro": "https://docs.astrbot.app/deploy/platform/wechat/wechatpadpro.html",
+        "weixin_official_account": "https://docs.astrbot.app/deploy/platform/weixin-official-account.html",
+        "discord": "https://docs.astrbot.app/deploy/platform/discord.html",
+        "slack": "https://docs.astrbot.app/deploy/platform/slack.html",
+        "kook": "https://docs.astrbot.app/deploy/platform/kook.html",
+        "vocechat": "https://docs.astrbot.app/deploy/platform/vocechat.html",
+        "satori": "https://docs.astrbot.app/deploy/platform/satori/llonebot.html",
       }
       return tutorial_map[platform_type] || "https://docs.astrbot.app";
     },
