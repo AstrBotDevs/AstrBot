@@ -3,7 +3,7 @@ import json
 import time
 import websockets
 from websockets.asyncio.client import connect
-from typing import Optional, List
+from typing import Optional
 from aiohttp import ClientSession, ClientTimeout
 from websockets.asyncio.client import ClientConnection
 from astrbot.api import logger
@@ -17,7 +17,7 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
-from astrbot.api.message_components import Plain, Image, At, File, Record, BaseMessageComponent, Reply
+from astrbot.api.message_components import Plain, Image, At, File, Record
 from xml.etree import ElementTree as ET
 
 
@@ -38,17 +38,11 @@ class SatoriPlatformAdapter(Platform):
         )
         self.token = self.config.get("satori_token", "")
         self.endpoint = self.config.get(
-            "satori_endpoint", "ws://localhost:5140/satori/v1/events"
+            "satori_endpoint", "ws://127.0.0.1:5140/satori/v1/events"
         )
         self.auto_reconnect = self.config.get("satori_auto_reconnect", True)
         self.heartbeat_interval = self.config.get("satori_heartbeat_interval", 10)
         self.reconnect_delay = self.config.get("satori_reconnect_delay", 5)
-
-        self.metadata = PlatformMetadata(
-            name="satori",
-            description="Satori 通用协议适配器",
-            id=self.config.get("id"),
-        )
 
         self.ws: Optional[ClientConnection] = None
         self.session: Optional[ClientSession] = None
@@ -69,7 +63,7 @@ class SatoriPlatformAdapter(Platform):
         await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
-        return self.metadata
+        return PlatformMetadata(name="satori", description="Satori 通用协议适配器")
 
     def _is_websocket_closed(self, ws) -> bool:
         """检查WebSocket连接是否已关闭"""
@@ -318,58 +312,14 @@ class SatoriPlatformAdapter(Platform):
 
             abm.self_id = login.get("user", {}).get("id", "")
 
-            # 消息链
-            abm.message = []
-
             content = message.get("content", "")
-            
-            quote = message.get("quote")
-            content_for_parsing = content  # 副本
-            
-            # 提取<quote>标签
-            if "<quote" in content:
-                import re
-                quote_match = re.search(r'<quote\s+id="([^"]*)"[^>]*>(.*?)</quote>', content, re.DOTALL)
-                if quote_match:
-                    quote_id = quote_match.group(1)
-                    quote_content = quote_match.group(2)
-                    quote = {
-                        "id": quote_id,
-                        "content": quote_content
-                    }
-                    # 移除<quote>标签部分
-                    content_for_parsing = re.sub(r'<quote\s+id="[^"]*"[^>]*>.*?</quote>', '', content, flags=re.DOTALL)
+            abm.message = await self.parse_satori_elements(content)
 
-            if quote:
-                # 引用消息
-                quote_abm = await self._convert_quote_message(quote)
-                if quote_abm:
-                    sender_id = quote_abm.sender.user_id
-                    if isinstance(sender_id, str) and sender_id.isdigit():
-                        sender_id = int(sender_id)
-                    elif not isinstance(sender_id, int):
-                        sender_id = 0  # 默认值
-                    
-                    reply_component = Reply(
-                        id=quote_abm.message_id,
-                        chain=quote_abm.message,
-                        sender_id=quote_abm.sender.user_id,
-                        sender_nickname=quote_abm.sender.nickname,
-                        time=quote_abm.timestamp,
-                        message_str=quote_abm.message_str,
-                        text=quote_abm.message_str,
-                        qq=sender_id, 
-                    )
-                    abm.message.append(reply_component)
-
-            # 解析消息内容
-            content_elements = await self.parse_satori_elements(content_for_parsing)
-            abm.message.extend(content_elements)
-
-            abm.message_str = self._build_message_str(abm.message)
+            # parse message_str
+            abm.message_str = ""
             for comp in abm.message:
-                if isinstance(comp, Reply):
-                    abm.message_str += f"[引用消息(内容: {comp.message_str})] "
+                if isinstance(comp, Plain):
+                    abm.message_str += comp.text
 
             # 优先使用Satori事件中的时间戳
             if timestamp is not None:
@@ -383,59 +333,6 @@ class SatoriPlatformAdapter(Platform):
             logger.error(f"转换 Satori 消息失败: {e}")
             return None
 
-    def _build_message_str(self, components: List[BaseMessageComponent]) -> str:
-        """构建消息文本表示"""
-        message_str = ""
-        for comp in components:
-            if isinstance(comp, Plain):
-                message_str += comp.text
-            elif isinstance(comp, Image):
-                message_str += "[图片]"
-            elif isinstance(comp, Record):
-                message_str += "[语音]"
-            elif isinstance(comp, File):
-                message_str += "[文件]"
-            elif isinstance(comp, At):
-                message_str += f"@{comp.name}"
-        return message_str
-
-    async def _convert_quote_message(self, quote: dict) -> Optional[AstrBotMessage]:
-        """转换引用消息"""
-        try:
-            quote_abm = AstrBotMessage()
-            quote_abm.message_id = quote.get("id", "")
-            
-            # 解析引用消息的发送者
-            quote_author = quote.get("author", {})
-            if quote_author:
-                quote_abm.sender = MessageMember(
-                    user_id=quote_author.get("id", ""),
-                    nickname=quote_author.get("nick", quote_author.get("name", "")),
-                )
-            else:
-                # 如果没有作者信息，使用默认值
-                quote_abm.sender = MessageMember(
-                    user_id=quote.get("user_id", ""),
-                    nickname="内容",
-                )
-            
-            # 解析引用消息内容
-            quote_content = quote.get("content", "")
-            quote_abm.message = await self.parse_satori_elements(quote_content)
-            
-            quote_abm.message_str = self._build_message_str(quote_abm.message)
-            
-            quote_abm.timestamp = int(quote.get("timestamp", time.time()))
-            
-            # 如果没有任何内容，使用默认文本
-            if not quote_abm.message_str.strip():
-                quote_abm.message_str = "[引用消息]"
-            
-            return quote_abm
-        except Exception as e:
-            logger.error(f"转换引用消息失败: {e}")
-            return None
-
     async def parse_satori_elements(self, content: str) -> list:
         """解析 Satori 消息元素"""
         elements = []
@@ -444,32 +341,12 @@ class SatoriPlatformAdapter(Platform):
             return elements
 
         try:
-            # 处理命名空间前缀问题
-            processed_content = content
-            if ':' in content and not content.startswith('<root'):
-                # 收集所有命名空间前缀并添加声明
-                import re
-                prefixes = set(re.findall(r'</?([a-zA-Z0-9]+):[a-zA-Z0-9]+', content))
-                
-                # 构建命名空间声明
-                ns_declarations = ' '.join([f'xmlns:{prefix}="http://temp.uri/{prefix}"' for prefix in prefixes])
-                
-                # 包装内容
-                processed_content = f"<root {ns_declarations}>{content}</root>"
-            elif not content.startswith('<root'):
-                processed_content = f"<root>{content}</root>"
-            else:
-                processed_content = content
-            
-            root = ET.fromstring(processed_content)
+            wrapped_content = f"<root>{content}</root>"
+            root = ET.fromstring(wrapped_content)
             await self._parse_xml_node(root, elements)
         except ET.ParseError as e:
-            logger.error(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
-            # 如果解析失败，将整个内容当作纯文本
-            if content.strip():
-                elements.append(Plain(text=content))
+            raise ValueError(f"解析 Satori 元素时发生解析错误: {e}")
         except Exception as e:
-            logger.error(f"解析 Satori 元素时发生未知错误: {e}")
             raise e
 
         # 如果没有解析到任何元素，将整个内容当作纯文本
@@ -484,14 +361,9 @@ class SatoriPlatformAdapter(Platform):
             elements.append(Plain(text=node.text))
 
         for child in node:
-            # 获取标签名，去除命名空间前缀
-            tag_name = child.tag
-            if '}' in tag_name:
-                tag_name = tag_name.split('}')[1]
-            tag_name = tag_name.lower()
-            
+            tag_name = child.tag.lower()
             attrs = child.attrib
-            
+
             if tag_name == "at":
                 user_id = attrs.get("id") or attrs.get("name", "")
                 elements.append(At(qq=user_id, name=user_id))
@@ -500,48 +372,31 @@ class SatoriPlatformAdapter(Platform):
                 src = attrs.get("src", "")
                 if not src:
                     continue
-                elements.append(Image(file=src))
+                if src.startswith("data:image/"):
+                    src = src.split(",")[1]
+                    elements.append(Image.fromBase64(src))
+                elif src.startswith("http"):
+                    elements.append(Image.fromURL(src))
+                else:
+                    logger.error(f"未知的图片 src 格式: {str(src)[:16]}")
 
             elif tag_name == "file":
                 src = attrs.get("src", "")
                 name = attrs.get("name", "文件")
                 if src:
-                    elements.append(File(name=name, file=src))
+                    elements.append(File(file=src, name=name))
 
             elif tag_name in ("audio", "record"):
                 src = attrs.get("src", "")
                 if not src:
                     continue
-                elements.append(Record(file=src))
-
-            elif tag_name == "quote":
-                # quote标签已经被特殊处理
-                pass
-
-            elif tag_name == "face":
-                face_id = attrs.get("id", "")
-                face_name = attrs.get("name", "")
-                face_platform = attrs.get("platform", "")
-                face_type = attrs.get("type", "")
-                
-                if face_name:
-                    elements.append(Plain(text=f"[表情:{face_name}]"))
-                elif face_id and face_type:
-                    elements.append(Plain(text=f"[表情ID:{face_id},类型:{face_type}]"))
-                elif face_id:
-                    elements.append(Plain(text=f"[表情ID:{face_id}]"))
+                if src.startswith("data:audio/"):
+                    src = src.split(",")[1]
+                    elements.append(Record.fromBase64(src))
+                elif src.startswith("http"):
+                    elements.append(Record.fromURL(src))
                 else:
-                    elements.append(Plain(text="[表情]"))
-
-            elif tag_name == "ark":
-                # 作为纯文本添加到消息链中
-                data = attrs.get("data", "")
-                if data:
-                    import html
-                    decoded_data = html.unescape(data)
-                    elements.append(Plain(text=f"[ARK卡片数据: {decoded_data}]"))
-                else:
-                    elements.append(Plain(text="[ARK卡片]"))
+                    logger.error(f"未知的音频 src 格式: {str(src)[:16]}")
 
             else:
                 # 未知标签，递归处理其内容
