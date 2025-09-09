@@ -38,7 +38,7 @@ class SatoriPlatformAdapter(Platform):
         )
         self.token = self.config.get("satori_token", "")
         self.endpoint = self.config.get(
-            "satori_endpoint", "ws://127.0.0.1:5140/satori/v1/events"
+            "satori_endpoint", "ws://localhost:5140/satori/v1/events"
         )
         self.auto_reconnect = self.config.get("satori_auto_reconnect", True)
         self.heartbeat_interval = self.config.get("satori_heartbeat_interval", 10)
