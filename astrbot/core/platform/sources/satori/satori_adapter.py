@@ -312,8 +312,54 @@ class SatoriPlatformAdapter(Platform):
 
             abm.self_id = login.get("user", {}).get("id", "")
 
+            # 消息链
+            abm.message = []
+
             content = message.get("content", "")
-            abm.message = await self.parse_satori_elements(content)
+            
+            quote = message.get("quote")
+            content_for_parsing = content  # 副本
+            
+            if not quote and "<quote" in content:
+                # 如果quote字段不存在，但内容中有<quote>标签，则尝试从中提取引用信息
+                import re
+                quote_match = re.search(r'<quote\s+id="([^"]+)">([^<]*)</quote>', content)
+                if quote_match:
+                    quote_id = quote_match.group(1)
+                    quote_content = quote_match.group(2)
+                    quote = {
+                        "id": quote_id,
+                        "content": quote_content
+                    }
+                    content_for_parsing = re.sub(r'<quote\s+id="[^"]+">[^<]*</quote>', '', content, 1)
+
+            if quote:
+                # 引用消息
+                quote_abm = await self._convert_quote_message(quote)
+                if quote_abm:
+                    from astrbot.api.message_components import Reply
+                    # 确保qq参数是整数类型
+                    sender_id = quote_abm.sender.user_id
+                    if isinstance(sender_id, str) and sender_id.isdigit():
+                        sender_id = int(sender_id)
+                    elif not isinstance(sender_id, int):
+                        sender_id = 0  # 默认值
+                    
+                    reply_component = Reply(
+                        id=quote_abm.message_id,
+                        chain=quote_abm.message,
+                        sender_id=quote_abm.sender.user_id,
+                        sender_nickname=quote_abm.sender.nickname,
+                        time=quote_abm.timestamp,
+                        message_str=quote_abm.message_str,
+                        text=quote_abm.message_str,
+                        qq=sender_id, 
+                    )
+                    abm.message.append(reply_component)
+
+            # 解析消息内容
+            content_elements = await self.parse_satori_elements(content_for_parsing)
+            abm.message.extend(content_elements)
 
             # parse message_str
             abm.message_str = ""
@@ -333,6 +379,43 @@ class SatoriPlatformAdapter(Platform):
             logger.error(f"转换 Satori 消息失败: {e}")
             return None
 
+    async def _convert_quote_message(self, quote: dict) -> Optional[AstrBotMessage]:
+        """转换引用消息"""
+        try:
+            quote_abm = AstrBotMessage()
+            quote_abm.message_id = quote.get("id", "")
+            
+            # 解析引用消息的发送者
+            quote_author = quote.get("author", {})
+            if quote_author:
+                quote_abm.sender = MessageMember(
+                    user_id=quote_author.get("id", ""),
+                    nickname=quote_author.get("nick", quote_author.get("name", "")),
+                )
+            else:
+                # 如果没有作者信息，使用默认值
+                quote_abm.sender = MessageMember(
+                    user_id=quote.get("user_id", ""),
+                    nickname="内容",
+                )
+            
+            # 解析引用消息内容
+            quote_content = quote.get("content", "")
+            quote_abm.message = await self.parse_satori_elements(quote_content)
+            
+            # 构建引用消息的文本表示
+            quote_abm.message_str = ""
+            for comp in quote_abm.message:
+                if isinstance(comp, Plain):
+                    quote_abm.message_str += comp.text
+                    
+            quote_abm.timestamp = int(quote.get("timestamp", time.time()))
+            
+            return quote_abm
+        except Exception as e:
+            logger.error(f"转换引用消息失败: {e}")
+            return None
+
     async def parse_satori_elements(self, content: str) -> list:
         """解析 Satori 消息元素"""
         elements = []
@@ -341,11 +424,23 @@ class SatoriPlatformAdapter(Platform):
             return elements
 
         try:
-            wrapped_content = f"<root>{content}</root>"
-            root = ET.fromstring(wrapped_content)
+            # 处理命名空间前缀问题
+            processed_content = content
+            if 'xmlns:' in content or ':' in content.split('>')[0]:
+                # 如果存在命名空间，添加默认命名空间声明
+                if not content.startswith('<root'):
+                    processed_content = f"<root xmlns:satori='http://satori.org'>{content}</root>"
+                else:
+                    processed_content = content
+            else:
+                processed_content = f"<root>{content}</root>"
+                
+            root = ET.fromstring(processed_content)
             await self._parse_xml_node(root, elements)
         except ET.ParseError as e:
-            raise ValueError(f"解析 Satori 元素时发生解析错误: {e}")
+            # 如果解析失败，将整个内容当作纯文本
+            if content.strip():
+                elements.append(Plain(text=content))
         except Exception as e:
             raise e
 
@@ -397,6 +492,10 @@ class SatoriPlatformAdapter(Platform):
                     elements.append(Record.fromURL(src))
                 else:
                     logger.error(f"未知的音频 src 格式: {str(src)[:16]}")
+
+            elif tag_name == "quote":
+                # quote标签已经被特殊处理，这里不需要再解析其内容
+                pass
 
             else:
                 # 未知标签，递归处理其内容
