@@ -44,6 +44,12 @@ class SatoriPlatformAdapter(Platform):
         self.heartbeat_interval = self.config.get("satori_heartbeat_interval", 10)
         self.reconnect_delay = self.config.get("satori_reconnect_delay", 5)
 
+        self.metadata = PlatformMetadata(
+            name="satori",
+            description="Satori 通用协议适配器",
+            id=self.config.get("id"),
+        )
+
         self.ws: Optional[ClientConnection] = None
         self.session: Optional[ClientSession] = None
         self.sequence = 0
@@ -63,7 +69,7 @@ class SatoriPlatformAdapter(Platform):
         await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
-        return PlatformMetadata(name="satori", description="Satori 通用协议适配器")
+        return self.metadata
 
     def _is_websocket_closed(self, ws) -> bool:
         """检查WebSocket连接是否已关闭"""
