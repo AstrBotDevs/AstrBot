@@ -267,6 +267,18 @@ def register_on_astrbot_loaded(**kwargs):
     return decorator
 
 
+def register_on_platform_loaded(**kwargs):
+    """
+    当平台加载完成时
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnPlatformLoadedEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
 def register_on_llm_request(**kwargs):
     """当有 LLM 请求时的事件
 
@@ -376,9 +388,11 @@ def register_llm_tool(name: str = None, **kwargs):
             # print(f"Registering tool {llm_tool_name} for agent", registering_agent._agent.name)
             if registering_agent._agent.tools is None:
                 registering_agent._agent.tools = []
-            registering_agent._agent.tools.append(llm_tools.spec_to_func(
-                llm_tool_name, args, docstring.description.strip(), awaitable
-            ))
+            registering_agent._agent.tools.append(
+                llm_tools.spec_to_func(
+                    llm_tool_name, args, docstring.description.strip(), awaitable
+                )
+            )
 
         return awaitable
 
@@ -421,7 +435,7 @@ def register_agent(
             run_hooks=run_hooks or BaseAgentRunHooks[AstrAgentContext](),
         )
         handoff_tool = HandoffTool(agent=agent)
-        handoff_tool.handler=awaitable
+        handoff_tool.handler = awaitable
         llm_tools.func_list.append(handoff_tool)
         return RegisteringAgent(agent)
 
