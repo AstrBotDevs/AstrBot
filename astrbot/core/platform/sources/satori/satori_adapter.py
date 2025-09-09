@@ -345,7 +345,6 @@ class SatoriPlatformAdapter(Platform):
                 quote_abm = await self._convert_quote_message(quote)
                 if quote_abm:
                     from astrbot.api.message_components import Reply
-                    # 确保qq参数是整数类型
                     sender_id = quote_abm.sender.user_id
                     if isinstance(sender_id, str) and sender_id.isdigit():
                         sender_id = int(sender_id)
