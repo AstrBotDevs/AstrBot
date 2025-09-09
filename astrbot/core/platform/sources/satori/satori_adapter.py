@@ -446,22 +446,30 @@ class SatoriPlatformAdapter(Platform):
         try:
             # 处理命名空间前缀问题
             processed_content = content
-            if 'xmlns:' in content or ':' in content.split('>')[0]:
-                # 如果存在命名空间，添加默认命名空间声明
-                if not content.startswith('<root'):
-                    processed_content = f"<root xmlns:satori='http://satori.org'>{content}</root>"
-                else:
-                    processed_content = content
-            else:
-                processed_content = f"<root>{content}</root>"
+            if ':' in content and not content.startswith('<root'):
+                # 收集所有命名空间前缀并添加声明
+                import re
+                prefixes = set(re.findall(r'</?([a-zA-Z0-9]+):[a-zA-Z0-9]+', content))
                 
+                # 构建命名空间声明
+                ns_declarations = ' '.join([f'xmlns:{prefix}="http://temp.uri/{prefix}"' for prefix in prefixes])
+                
+                # 包装内容
+                processed_content = f"<root {ns_declarations}>{content}</root>"
+            elif not content.startswith('<root'):
+                processed_content = f"<root>{content}</root>"
+            else:
+                processed_content = content
+            
             root = ET.fromstring(processed_content)
             await self._parse_xml_node(root, elements)
         except ET.ParseError as e:
+            logger.error(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
             # 如果解析失败，将整个内容当作纯文本
             if content.strip():
                 elements.append(Plain(text=content))
         except Exception as e:
+            logger.error(f"解析 Satori 元素时发生未知错误: {e}")
             raise e
 
         # 如果没有解析到任何元素，将整个内容当作纯文本
@@ -476,9 +484,14 @@ class SatoriPlatformAdapter(Platform):
             elements.append(Plain(text=node.text))
 
         for child in node:
-            tag_name = child.tag.lower()
+            # 获取标签名，去除命名空间前缀
+            tag_name = child.tag
+            if '}' in tag_name:
+                tag_name = tag_name.split('}')[1]
+            tag_name = tag_name.lower()
+            
             attrs = child.attrib
-
+            
             if tag_name == "at":
                 user_id = attrs.get("id") or attrs.get("name", "")
                 elements.append(At(qq=user_id, name=user_id))
@@ -487,35 +500,48 @@ class SatoriPlatformAdapter(Platform):
                 src = attrs.get("src", "")
                 if not src:
                     continue
-                if src.startswith("data:image/"):
-                    src = src.split(",")[1]
-                    elements.append(Image.fromBase64(src))
-                elif src.startswith("http"):
-                    elements.append(Image.fromURL(src))
-                else:
-                    logger.error(f"未知的图片 src 格式: {str(src)[:16]}")
+                elements.append(Image(file=src))
 
             elif tag_name == "file":
                 src = attrs.get("src", "")
                 name = attrs.get("name", "文件")
                 if src:
-                    elements.append(File(file=src, name=name))
+                    elements.append(File(name=name, file=src))
 
             elif tag_name in ("audio", "record"):
                 src = attrs.get("src", "")
                 if not src:
                     continue
-                if src.startswith("data:audio/"):
-                    src = src.split(",")[1]
-                    elements.append(Record.fromBase64(src))
-                elif src.startswith("http"):
-                    elements.append(Record.fromURL(src))
-                else:
-                    logger.error(f"未知的音频 src 格式: {str(src)[:16]}")
+                elements.append(Record(file=src))
 
             elif tag_name == "quote":
-                # quote标签已经被特殊处理，这里不需要再解析其内容
+                # quote标签已经被特殊处理
                 pass
+
+            elif tag_name == "face":
+                face_id = attrs.get("id", "")
+                face_name = attrs.get("name", "")
+                face_platform = attrs.get("platform", "")
+                face_type = attrs.get("type", "")
+                
+                if face_name:
+                    elements.append(Plain(text=f"[表情:{face_name}]"))
+                elif face_id and face_type:
+                    elements.append(Plain(text=f"[表情ID:{face_id},类型:{face_type}]"))
+                elif face_id:
+                    elements.append(Plain(text=f"[表情ID:{face_id}]"))
+                else:
+                    elements.append(Plain(text="[表情]"))
+
+            elif tag_name == "ark":
+                # 作为纯文本添加到消息链中
+                data = attrs.get("data", "")
+                if data:
+                    import html
+                    decoded_data = html.unescape(data)
+                    elements.append(Plain(text=f"[ARK卡片数据: {decoded_data}]"))
+                else:
+                    elements.append(Plain(text="[ARK卡片]"))
 
             else:
                 # 未知标签，递归处理其内容
