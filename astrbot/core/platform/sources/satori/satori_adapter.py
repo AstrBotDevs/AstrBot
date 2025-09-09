@@ -367,20 +367,9 @@ class SatoriPlatformAdapter(Platform):
             content_elements = await self.parse_satori_elements(content_for_parsing)
             abm.message.extend(content_elements)
 
-            # parse message_str
-            abm.message_str = ""
+            abm.message_str = self._build_message_str(abm.message)
             for comp in abm.message:
-                if isinstance(comp, Plain):
-                    abm.message_str += comp.text
-                elif isinstance(comp, Image):
-                    abm.message_str += "[图片]"
-                elif isinstance(comp, Record):
-                    abm.message_str += "[语音]"
-                elif isinstance(comp, File):
-                    abm.message_str += "[文件]"
-                elif isinstance(comp, At):
-                    abm.message_str += f"@{comp.name}"
-                elif isinstance(comp, Reply):
+                if isinstance(comp, Reply):
                     abm.message_str += f"[引用消息(内容: {comp.message_str})] "
 
             # 优先使用Satori事件中的时间戳
@@ -394,6 +383,22 @@ class SatoriPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"转换 Satori 消息失败: {e}")
             return None
+
+    def _build_message_str(self, components: List[BaseMessageComponent]) -> str:
+        """构建消息文本表示"""
+        message_str = ""
+        for comp in components:
+            if isinstance(comp, Plain):
+                message_str += comp.text
+            elif isinstance(comp, Image):
+                message_str += "[图片]"
+            elif isinstance(comp, Record):
+                message_str += "[语音]"
+            elif isinstance(comp, File):
+                message_str += "[文件]"
+            elif isinstance(comp, At):
+                message_str += f"@{comp.name}"
+        return message_str
 
     async def _convert_quote_message(self, quote: dict) -> Optional[AstrBotMessage]:
         """转换引用消息"""
@@ -419,20 +424,8 @@ class SatoriPlatformAdapter(Platform):
             quote_content = quote.get("content", "")
             quote_abm.message = await self.parse_satori_elements(quote_content)
             
-            # 构建引用消息的文本表示
-            quote_abm.message_str = ""
-            for comp in quote_abm.message:
-                if isinstance(comp, Plain):
-                    quote_abm.message_str += comp.text
-                elif isinstance(comp, Image):
-                    quote_abm.message_str += "[图片]"
-                elif isinstance(comp, Record):
-                    quote_abm.message_str += "[语音]"
-                elif isinstance(comp, File):
-                    quote_abm.message_str += "[文件]"
-                elif isinstance(comp, At):
-                    quote_abm.message_str += f"@{comp.name}"
-                    
+            quote_abm.message_str = self._build_message_str(quote_abm.message)
+            
             quote_abm.timestamp = int(quote.get("timestamp", time.time()))
             
             # 如果没有任何内容，使用默认文本
