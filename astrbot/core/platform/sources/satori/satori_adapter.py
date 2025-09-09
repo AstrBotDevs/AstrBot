@@ -3,7 +3,7 @@ import json
 import time
 import websockets
 from websockets.asyncio.client import connect
-from typing import Optional
+from typing import Optional, List
 from aiohttp import ClientSession, ClientTimeout
 from websockets.asyncio.client import ClientConnection
 from astrbot.api import logger
@@ -17,7 +17,7 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
-from astrbot.api.message_components import Plain, Image, At, File, Record
+from astrbot.api.message_components import Plain, Image, At, File, Record, BaseMessageComponent, Reply
 from xml.etree import ElementTree as ET
 
 
@@ -344,7 +344,6 @@ class SatoriPlatformAdapter(Platform):
                 # 引用消息
                 quote_abm = await self._convert_quote_message(quote)
                 if quote_abm:
-                    from astrbot.api.message_components import Reply
                     sender_id = quote_abm.sender.user_id
                     if isinstance(sender_id, str) and sender_id.isdigit():
                         sender_id = int(sender_id)
@@ -514,7 +513,11 @@ class SatoriPlatformAdapter(Platform):
                 else:
                     logger.error(f"未知的音频 src 格式: {str(src)[:16]}")
 
-            elif tag_name != "quote":
+            elif tag_name == "quote":
+                # quote标签已经被特殊处理，这里不需要再解析其内容
+                pass
+
+            else:
                 # 未知标签，递归处理其内容
                 if child.text and child.text.strip():
                     elements.append(Plain(text=child.text))
