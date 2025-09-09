@@ -2,7 +2,7 @@
 本地 Agent 模式的 AstrBot 插件调用 Stage
 """
 
-from ...context import PipelineContext
+from ...context import PipelineContext, call_handler
 from ..stage import Stage
 from typing import Dict, Any, List, AsyncGenerator, Union
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -33,16 +33,6 @@ class StarRequestSubStage(Stage):
             handlers_parsed_params = {}
 
         for handler in activated_handlers:
-            # 检查处理器是否在当前平台兼容
-            if (
-                hasattr(handler, "platform_compatible")
-                and handler.platform_compatible is False
-            ):
-                logger.debug(
-                    f"处理器 {handler.handler_name} 在当前平台不兼容，跳过执行"
-                )
-                continue
-
             params = handlers_parsed_params.get(handler.handler_full_name, {})
             try:
                 if handler.handler_module_path not in star_map:
@@ -50,7 +40,7 @@ class StarRequestSubStage(Stage):
                 logger.debug(
                     f"plugin -> {star_map.get(handler.handler_module_path).name} - {handler.handler_name}"
                 )
-                wrapper = self.ctx.call_handler(event, handler.handler, **params)
+                wrapper = call_handler(event, handler.handler, **params)
                 async for ret in wrapper:
                     yield ret
                 event.clear_result()  # 清除上一个 handler 的结果

@@ -25,6 +25,8 @@ jobs:
           echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
           mkdir -p dashboard/dist/assets
           echo $COMMIT_SHA > dashboard/dist/assets/version
+          cd dashboard
+          zip -r dist.zip dist
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
@@ -33,3 +35,13 @@ jobs:
           path: |
             dashboard/dist
             !dist/**/*.md
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: release-${{ github.sha }}
+          owner: AstrBotDevs
+          repo: astrbot-release-harbour
+          body: "Automated release from commit ${{ github.sha }}"
+          token: ${{ secrets.ASTRBOT_HARBOUR_TOKEN }}
+          artifacts: "dashboard/dist.zip"

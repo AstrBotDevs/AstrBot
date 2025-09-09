@@ -39,7 +39,7 @@
                         v-if="!sidebarCollapsed">
                         <v-card v-if="conversations.length > 0" flat style="background-color: transparent;">
                             <v-list density="compact" nav class="conversation-list"
-                                style="background-color: transparent;" @update:selected="getConversationMessages">
+                                style="background-color: transparent;" v-model:selected="selectedConversations" @update:selected="getConversationMessages">
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                     rounded="lg" class="conversation-item" active-color="secondary">
                                     <v-list-item-title v-if="!sidebarCollapsed" class="conversation-title">{{ item.title
@@ -147,24 +147,24 @@
                         <div v-else class="message-list">
                             <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
                                 <!-- 用户消息 -->
-                                <div v-if="msg.type == 'user'" class="user-message">
+                                <div v-if="msg.content.type == 'user'" class="user-message">
                                     <div class="message-bubble user-bubble"
-                                        :class="{ 'has-audio': msg.audio_url }"
+                                        :class="{ 'has-audio': msg.content.audio_url }"
                                         :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
-                                        <pre style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ msg.message }}</pre>
+                                        <pre style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ msg.content.message }}</pre>
 
                                         <!-- 图片附件 -->
-                                        <div class="image-attachments" v-if="msg.image_url && msg.image_url.length > 0">
-                                            <div v-for="(img, index) in msg.image_url" :key="index"
+                                        <div class="image-attachments" v-if="msg.content.image_url && msg.content.image_url.length > 0">
+                                            <div v-for="(img, index) in msg.content.image_url" :key="index"
                                                 class="image-attachment">
                                                 <img :src="img" class="attached-image" @click="openImagePreview(img)" />
                                             </div>
                                         </div>
 
                                         <!-- 音频附件 -->
-                                        <div class="audio-attachment" v-if="msg.audio_url && msg.audio_url.length > 0">
+                                        <div class="audio-attachment" v-if="msg.content.audio_url && msg.content.audio_url.length > 0">
                                             <audio controls class="audio-player">
-                                                <source :src="msg.audio_url" type="audio/wav">
+                                                <source :src="msg.content.audio_url" type="audio/wav">
                                                 {{ t('messages.errors.browser.audioNotSupported') }}
                                             </audio>
                                         </div>
@@ -179,22 +179,22 @@
                                     <div class="bot-message-content">
                                         <div class="message-bubble bot-bubble">
                                             <!-- Text -->
-                                            <div v-if="msg.message && msg.message.trim()" 
-                                                 v-html="md.render(msg.message)" 
+                                            <div v-if="msg.content.message && msg.content.message.trim()" 
+                                                 v-html="md.render(msg.content.message)" 
                                                  class="markdown-content"></div>
                                             
                                             <!-- Image -->
-                                            <div class="embedded-images" v-if="msg.embedded_images && msg.embedded_images.length > 0">
-                                                <div v-for="(img, imgIndex) in msg.embedded_images" :key="imgIndex"
+                                            <div class="embedded-images" v-if="msg.content.embedded_images && msg.content.embedded_images.length > 0">
+                                                <div v-for="(img, imgIndex) in msg.content.embedded_images" :key="imgIndex"
                                                      class="embedded-image">
                                                     <img :src="img" class="bot-embedded-image" @click="openImagePreview(img)" />
                                                 </div>
                                             </div>
                                             
                                             <!-- Audio -->
-                                            <div class="embedded-audio" v-if="msg.embedded_audio">
+                                            <div class="embedded-audio" v-if="msg.content.embedded_audio">
                                                 <audio controls class="audio-player">
-                                                    <source :src="msg.embedded_audio" type="audio/wav">
+                                                    <source :src="msg.content.embedded_audio" type="audio/wav">
                                                     {{ t('messages.errors.browser.audioNotSupported') }}
                                                 </audio>
                                             </div>
@@ -203,7 +203,7 @@
                                             <v-btn :icon="getCopyIcon(index)" size="small" variant="text"
                                                 class="copy-message-btn"
                                                 :class="{ 'copy-success': isCopySuccess(index) }"
-                                                @click="copyBotMessage(msg.message, index)"
+                                                @click="copyBotMessage(msg.content.message, index)"
                                                 :title="t('core.common.copy')" />
                                         </div>
                                     </div>
@@ -351,6 +351,7 @@ export default {
             prompt: '',
             messages: [],
             conversations: [],
+            selectedConversations: [], // 用于控制左侧列表的选中状态
             currCid: '',
             stagedImagesName: [], // 用于存储图片**文件名**的数组
             stagedImagesUrl: [], // 用于存储图片的blob URL数组
@@ -362,9 +363,6 @@ export default {
             audioChunks: [],
             stagedAudioUrl: "",
             mediaRecorder: null,
-
-            status: {},
-            statusText: '',
 
             eventSource: null,
             eventSourceReader: null,
@@ -448,8 +446,17 @@ export default {
                 if (this.pendingCid && newConversations.length > 0) {
                     const conversation = newConversations.find(c => c.cid === this.pendingCid);
                     if (conversation) {
+                        // 先设置选中状态，然后加载对话消息
+                        this.selectedConversations = [this.pendingCid];
                         this.getConversationMessages([this.pendingCid]);
                         this.pendingCid = null;
+                    }
+                } else {
+                    // 如果没有URL参数指定的对话，且当前没有选中对话，则默认打开第一个对话
+                    if (!this.currCid && newConversations.length > 0) {
+                        const firstConversation = newConversations[0];
+                        this.selectedConversations = [firstConversation.cid];
+                        this.getConversationMessages([firstConversation.cid]);
                     }
                 }
             }
@@ -460,7 +467,6 @@ export default {
         // Theme is now handled globally by the customizer store.
         // 设置输入框标签
         this.inputFieldLabel = this.tm('input.chatPrompt');
-        this.checkStatus();
         this.getConversations();
         let inputField = document.getElementById('input-field');
         inputField.addEventListener('paste', this.handlePaste);
@@ -476,12 +482,6 @@ export default {
 
         // 添加keyup事件监听
         document.addEventListener('keyup', this.handleInputKeyUp);
-
-        // 从 localStorage 获取侧边栏折叠状态
-        const savedCollapseState = localStorage.getItem('sidebarCollapsed');
-        if (savedCollapseState !== null) {
-            this.sidebarCollapsed = JSON.parse(savedCollapseState);
-        }
     },
 
     beforeUnmount() {
@@ -621,15 +621,6 @@ export default {
             });
         },
 
-        checkStatus() {
-            axios.get('/api/chat/status').then(response => {
-                console.log(response.data);
-                this.status = response.data.data;
-            }).catch(err => {
-                console.error(err);
-            });
-        },
-
         async startRecording() {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             this.mediaRecorder = new MediaRecorder(stream);
@@ -742,6 +733,13 @@ export default {
                         this.getConversationMessages([this.pendingCid]);
                         this.pendingCid = null;
                     }
+                } else {
+                    // 如果没有URL参数指定的对话，且当前没有选中对话，则默认打开第一个对话
+                    if (!this.currCid && this.conversations.length > 0) {
+                        const firstConversation = this.conversations[0];
+                        this.selectedConversations = [firstConversation.cid];
+                        this.getConversationMessages([firstConversation.cid]);
+                    }
                 }
             }).catch(err => {
                 if (err.response.status === 401) {
@@ -761,40 +759,44 @@ export default {
                 } else {
                     this.$router.push(`/chat/${cid[0]}`);
                 }
+                return
             }
 
             axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
                 this.currCid = cid[0];
-                let message = JSON.parse(response.data.data.history);
-                for (let i = 0; i < message.length; i++) {
-                    if (message[i].message.startsWith('[IMAGE]')) {
-                        let img = message[i].message.replace('[IMAGE]', '');
+                // Update the selected conversation in the sidebar
+                this.selectedConversations = [cid[0]];
+                let history = response.data.data.history;
+                for (let i = 0; i < history.length; i++) {
+                    let content = history[i].content;
+                    if (content.message.startsWith('[IMAGE]')) {
+                        let img = content.message.replace('[IMAGE]', '');
                         const imageUrl = await this.getMediaFile(img);
-                        if (!message[i].embedded_images) {
-                            message[i].embedded_images = [];
+                        if (!content.embedded_images) {
+                            content.embedded_images = [];
                         }
-                        message[i].embedded_images.push(imageUrl);
-                        message[i].message = ''; // 清空message，避免显示标记文本
+                        content.embedded_images.push(imageUrl);
+                        content.message = ''; // 清空message，避免显示标记文本
                     }
                     
-                    if (message[i].message.startsWith('[RECORD]')) {
-                        let audio = message[i].message.replace('[RECORD]', '');
+                    if (content.message.startsWith('[RECORD]')) {
+                        let audio = content.message.replace('[RECORD]', '');
                         const audioUrl = await this.getMediaFile(audio);
-                        message[i].embedded_audio = audioUrl;
-                        message[i].message = ''; // 清空message，避免显示标记文本
+                        content.embedded_audio = audioUrl;
+                        content.message = ''; // 清空message，避免显示标记文本
                     }
                     
-                    if (message[i].image_url && message[i].image_url.length > 0) {
-                        for (let j = 0; j < message[i].image_url.length; j++) {
-                            message[i].image_url[j] = await this.getMediaFile(message[i].image_url[j]);
+                    if (content.image_url && content.image_url.length > 0) {
+                        for (let j = 0; j < content.image_url.length; j++) {
+                            content.image_url[j] = await this.getMediaFile(content.image_url[j]);
                         }
                     }
                     
-                    if (message[i].audio_url) {
-                        message[i].audio_url = await this.getMediaFile(message[i].audio_url);
+                    if (content.audio_url) {
+                        content.audio_url = await this.getMediaFile(content.audio_url);
                     }
                 }
-                this.messages = message;
+                this.messages = history;
                 this.initCodeCopyButtons();
                 this.initImageClickEvents();
             }).catch(err => {
@@ -821,6 +823,7 @@ export default {
 
         newC() {
             this.currCid = '';
+            this.selectedConversations = []; // 清除选中状态
             this.messages = [];
             if (this.$route.path.startsWith('/chatbox')) {
                 this.$router.push('/chatbox');
@@ -849,6 +852,7 @@ export default {
             axios.get('/api/chat/delete_conversation?conversation_id=' + cid).then(response => {
                 this.getConversations();
                 this.currCid = '';
+                this.selectedConversations = []; // 清除选中状态
                 this.messages = [];
             }).catch(err => {
                 console.error(err);
@@ -913,7 +917,9 @@ export default {
                 }
             }
 
-            this.messages.push(userMessage);
+            this.messages.push({
+                "content": userMessage,
+            });
             this.scrollToBottom();
 
             this.loadingChat = true
@@ -995,7 +1001,9 @@ export default {
                                     message: '',
                                     embedded_images: [imageUrl]
                                 }
-                                this.messages.push(bot_resp);
+                                this.messages.push({
+                                    "content": bot_resp
+                                });
                             } else if (chunk_json.type === 'record') {
                                 let audio = chunk_json.data.replace('[RECORD]', '');
                                 const audioUrl = await this.getMediaFile(audio);
@@ -1004,14 +1012,18 @@ export default {
                                     message: '',
                                     embedded_audio: audioUrl
                                 }
-                                this.messages.push(bot_resp);
+                                this.messages.push({
+                                    "content": bot_resp
+                                });
                             } else if (chunk_json.type === 'plain') {
                                 if (!in_streaming) {
                                     message_obj = {
                                         type: 'bot',
                                         message: this.ref(chunk_json.data),
                                     }
-                                    this.messages.push(message_obj);
+                                    this.messages.push({
+                                        "content": message_obj
+                                    });
                                     in_streaming = true;
                                 } else {
                                     message_obj.message.value += chunk_json.data;
@@ -1127,7 +1139,7 @@ export default {
         // 复制bot消息到剪贴板
         copyBotMessage(message, messageIndex) {
             // 获取对应的消息对象
-            const msgObj = this.messages[messageIndex];
+            const msgObj = this.messages[messageIndex].content;
             let textToCopy = '';
             
             // 如果有文本消息，添加到复制内容中

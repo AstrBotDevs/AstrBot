@@ -9,6 +9,7 @@ import {useAuthStore} from '@/stores/auth';
 import {useCommonStore} from '@/stores/common';
 import MarkdownIt from 'markdown-it';
 import { useI18n } from '@/i18n/composables';
+import { router } from '@/router';
 
 // 配置markdown-it，默认安全设置
 const md = new MarkdownIt({
@@ -36,7 +37,7 @@ let dashboardHasNewVersion = ref(false);
 let dashboardCurrentVersion = ref('');
 let version = ref('');
 let releases = ref([]);
-let devCommits = ref([]);
+let devCommits = ref<{ sha: string; date: string; message: string }[]>([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
 
@@ -189,23 +190,46 @@ function getReleases() {
 }
 
 function getDevCommits() {
-  fetch('https://api.github.com/repos/Soulter/AstrBot/commits', {
-    headers: {
-      'Host': 'api.github.com',
-      'Referer': 'https://api.github.com'
-    }
-  })
+  let proxy = localStorage.getItem('selectedGitHubProxy') || '';
+  const originalUrl = "https://api.github.com/repos/Soulter/AstrBot/commits";
+  let commits_url = originalUrl;
+  if (proxy !== '') {
+    proxy = proxy.endsWith('/') ? proxy : proxy + '/';
+    commits_url = proxy + originalUrl;
+  }
+
+  function fetchCommits(url: string, onError?: () => void) {
+    fetch(url, {
+      headers: {
+        'Host': 'api.github.com',
+        'Referer': 'https://api.github.com'
+      }
+    })
       .then(response => response.json())
       .then(data => {
-        devCommits.value = data.map((commit: any) => ({
-          sha: commit.sha,
-          date: new Date(commit.commit.author.date).toLocaleString(),
-          message: commit.commit.message
-        }));
+        devCommits.value = Array.isArray(data)
+          ? data.map((commit: any) => ({
+              sha: commit.sha,
+              date: new Date(commit.commit.author.date).toLocaleString(),
+              message: commit.commit.message
+            }))
+          : [];
       })
       .catch(err => {
-        console.log(err);
+        if (onError) {
+          onError();
+        } else {
+          console.log('获取开发版提交信息失败:', err);
+        }
       });
+  }
+
+  fetchCommits(commits_url, () => {
+    if (proxy !== '' && commits_url !== originalUrl) {
+      console.log('使用代理请求失败，尝试直接请求');
+      fetchCommits(originalUrl);
+    }
+  });
 }
 
 function switchVersion(version: string) {
@@ -284,7 +308,7 @@ commonStore.getStartTime();
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <div class="logo-container" :class="{'mobile-logo': $vuetify.display.xs}">
+    <div class="logo-container" :class="{'mobile-logo': $vuetify.display.xs}" @click="$router.push('/about')">
       <span class="logo-text">Astr<span class="logo-text-light">Bot</span></span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
@@ -342,8 +366,7 @@ commonStore.getStartTime();
             </div>
 
             <div class="mb-4 mt-4">
-              <small>{{ t('core.header.updateDialog.tip') }} <a
-                  href="https://github.com/Soulter/AstrBot/releases">{{ t('core.header.updateDialog.tipLink') }}</a>
+              <small>{{ t('core.header.updateDialog.tip') }}
                 {{ t('core.header.updateDialog.tipContinue') }}</small>
             </div>
 
@@ -355,10 +378,6 @@ commonStore.getStartTime();
 
               <!-- 发行版 -->
               <v-tabs-window-item key="0" v-show="tab == 0">
-                <v-btn class="mt-4 mb-4" @click="switchVersion('latest')" color="primary" style="border-radius: 10px;"
-                       :disabled="!hasNewVersion">
-                  {{ t('core.header.updateDialog.updateToLatest') }}
-                </v-btn>
                 <div class="mb-4">
                   <small>{{ t('core.header.updateDialog.dockerTip') }} <a
                         href="https://containrrr.dev/watchtower/usage-overview/">{{ t('core.header.updateDialog.dockerTipLink') }}</a> {{ t('core.header.updateDialog.dockerTipContinue') }}</small>
@@ -383,7 +402,7 @@ commonStore.getStartTime();
                   </div>
                 </v-alert>
 
-                <v-data-table :headers="releasesHeader" :items="releases" item-key="name">
+                <v-data-table :headers="releasesHeader" :items="releases" item-key="name" :items-per-page="5">
                   <template v-slot:item.tag_name="{ item }: { item: { tag_name: string } }">
                     <div class="d-flex align-center">
                       <span>{{ item.tag_name }}</span>
@@ -650,6 +669,7 @@ commonStore.getStartTime();
   display: flex; 
   align-items: center; 
   gap: 8px;
+  cursor: pointer;
 }
 
 .mobile-logo {

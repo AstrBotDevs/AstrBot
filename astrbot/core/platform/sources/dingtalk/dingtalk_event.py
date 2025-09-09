@@ -26,7 +26,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
                 await asyncio.get_event_loop().run_in_executor(
                     None,
                     client.reply_markdown,
-                    "AstrBot",
+                    segment.text,
                     segment.text,
                     self.message_obj.raw_message,
                 )

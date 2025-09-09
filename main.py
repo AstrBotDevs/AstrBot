@@ -44,10 +44,10 @@ async def check_dashboard_files():
     if v is not None:
         # has file
         if v == f"v{VERSION}":
-            logger.info("管理面板文件已是最新。")
+            logger.info("WebUI 版本已是最新。")
         else:
             logger.warning(
-                "检测到管理面板有更新。可以使用 /dashboard_update 命令更新。"
+                f"检测到 WebUI 版本 ({v}) 与当前 AstrBot 版本 (v{VERSION}) 不符。"
             )
         return
 
@@ -56,7 +56,7 @@ async def check_dashboard_files():
     )
 
     try:
-        await download_dashboard()
+        await download_dashboard(version=f"v{VERSION}", latest=False)
     except Exception as e:
         logger.critical(f"下载管理面板文件失败: {e}。")
         return

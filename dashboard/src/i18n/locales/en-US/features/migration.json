@@ -1,0 +1,18 @@
+{
+  "dialog": {
+    "title": "Database Migration Assistant",
+    "warning": "A database migration is required.",
+    "loading": "Loading platform list...",
+    "loadError": "Failed to load platform list, please retry",
+    "noPlatforms": "No available platform configurations found",
+    "retry": "Retry",
+    "startMigration": "Start Migration",
+    "migrating": "Migrating...",
+    "migratingSubtitle": "Please wait patiently, do not close this window during migration",
+    "migrationError": "Migration failed",
+    "success": "Migration completed successfully!",
+    "completed": "Migration Completed",
+    "restartRecommended": "It is recommended to restart the application for all changes to take effect.",
+    "restartNow": "Restart Now"
+  }
+}

@@ -37,7 +37,10 @@ async def check_dashboard(astrbot_root: Path) -> None:
                 ):
                     click.echo("正在安装管理面板...")
                     await download_dashboard(
-                        path="data/dashboard.zip", extract_path=str(astrbot_root)
+                        path="data/dashboard.zip",
+                        extract_path=str(astrbot_root),
+                        version=f"v{VERSION}",
+                        latest=False,
                     )
                     click.echo("管理面板安装完成")
 
@@ -50,7 +53,10 @@ async def check_dashboard(astrbot_root: Path) -> None:
                         version = dashboard_version.split("v")[1]
                         click.echo(f"管理面板版本: {version}")
                         await download_dashboard(
-                            path="data/dashboard.zip", extract_path=str(astrbot_root)
+                            path="data/dashboard.zip",
+                            extract_path=str(astrbot_root),
+                            version=f"v{VERSION}",
+                            latest=False,
                         )
                     except Exception as e:
                         click.echo(f"下载管理面板失败: {e}")
@@ -59,7 +65,10 @@ async def check_dashboard(astrbot_root: Path) -> None:
         click.echo("初始化管理面板目录...")
         try:
             await download_dashboard(
-                path=str(astrbot_root / "dashboard.zip"), extract_path=str(astrbot_root)
+                path=str(astrbot_root / "dashboard.zip"),
+                extract_path=str(astrbot_root),
+                version=f"v{VERSION}",
+                latest=False,
             )
             click.echo("管理面板初始化完成")
         except Exception as e:

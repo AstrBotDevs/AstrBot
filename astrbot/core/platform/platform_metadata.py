@@ -4,7 +4,7 @@ from dataclasses import dataclass
 @dataclass
 class PlatformMetadata:
     name: str
-    """平台的名称"""
+    """平台的名称，即平台的类型，如 aiocqhttp, discord, slack"""
     description: str
     """平台的描述"""
     id: str = None

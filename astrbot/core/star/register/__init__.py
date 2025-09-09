@@ -8,9 +8,11 @@ from .star_handler import (
     register_permission_type,
     register_custom_filter,
     register_on_astrbot_loaded,
+    register_on_platform_loaded,
     register_on_llm_request,
     register_on_llm_response,
     register_llm_tool,
+    register_agent,
     register_on_decorating_result,
     register_after_message_sent,
 )
@@ -25,9 +27,11 @@ __all__ = [
     "register_permission_type",
     "register_custom_filter",
     "register_on_astrbot_loaded",
+    "register_on_platform_loaded",
     "register_on_llm_request",
     "register_on_llm_response",
     "register_llm_tool",
+    "register_agent",
     "register_on_decorating_result",
     "register_after_message_sent",
 ]

@@ -7,6 +7,7 @@ from astrbot.core import logger, pip_installer
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.config.default import VERSION
 from astrbot.core import DEMO_MODE
+from astrbot.core.db.migration.helper import do_migration_v4, check_migration_needed_v4
 
 
 class UpdateRoute(Route):
@@ -23,10 +24,26 @@ class UpdateRoute(Route):
             "/update/do": ("POST", self.update_project),
             "/update/dashboard": ("POST", self.update_dashboard),
             "/update/pip-install": ("POST", self.install_pip_package),
+            "/update/migration": ("POST", self.do_migration),
         }
         self.astrbot_updator = astrbot_updator
         self.core_lifecycle = core_lifecycle
         self.register_routes()
+
+    async def do_migration(self):
+        need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
+        if not need_migration:
+            return Response().ok(None, "不需要进行迁移。").__dict__
+        try:
+            data = await request.json
+            pim = data.get("platform_id_map", {})
+            await do_migration_v4(
+                self.core_lifecycle.db, pim, self.core_lifecycle.astrbot_config
+            )
+            return Response().ok(None, "迁移成功。").__dict__
+        except Exception as e:
+            logger.error(f"迁移失败: {traceback.format_exc()}")
+            return Response().error(f"迁移失败: {str(e)}").__dict__
 
     async def check_update(self):
         type_ = request.args.get("type", None)
@@ -40,7 +57,7 @@ class UpdateRoute(Route):
                     .__dict__
                 )
             else:
-                ret = await self.astrbot_updator.check_update(None, None)
+                ret = await self.astrbot_updator.check_update(None, None, False)
                 return Response(
                     status="success",
                     message=str(ret) if ret is not None else "已经是最新版本了。",
@@ -48,7 +65,7 @@ class UpdateRoute(Route):
                         "version": f"v{VERSION}",
                         "has_new_version": ret is not None,
                         "dashboard_version": dv,
-                        "dashboard_has_new_version": dv != f"v{VERSION}",
+                        "dashboard_has_new_version": dv and dv != f"v{VERSION}",
                     },
                 ).__dict__
         except Exception as e:
@@ -82,11 +99,10 @@ class UpdateRoute(Route):
                 latest=latest, version=version, proxy=proxy
             )
 
-            if latest:
-                try:
-                    await download_dashboard()
-                except Exception as e:
-                    logger.error(f"下载管理面板文件失败: {e}。")
+            try:
+                await download_dashboard(latest=latest, version=version, proxy=proxy)
+            except Exception as e:
+                logger.error(f"下载管理面板文件失败: {e}。")
 
             # pip 更新依赖
             logger.info("更新依赖中...")
@@ -115,7 +131,7 @@ class UpdateRoute(Route):
     async def update_dashboard(self):
         try:
             try:
-                await download_dashboard()
+                await download_dashboard(version=f"v{VERSION}", latest=False)
             except Exception as e:
                 logger.error(f"下载管理面板文件失败: {e}。")
                 return Response().error(f"下载管理面板文件失败: {e}").__dict__
