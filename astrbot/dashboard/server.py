@@ -32,7 +32,13 @@ class AstrBotDashboard:
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
-        self.data_path = os.path.abspath(os.path.join(get_astrbot_data_path(), "dist"))
+
+        local_dashboard_dist = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../dashboard/dist"))
+        if os.path.exists(local_dashboard_dist):
+            self.data_path = local_dashboard_dist
+        else:
+            self.data_path = os.path.abspath(os.path.join(get_astrbot_data_path(), "dist"))
+            
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         APP = self.app  # noqa
         self.app.config["MAX_CONTENT_LENGTH"] = (
