@@ -326,10 +326,10 @@ class SatoriPlatformAdapter(Platform):
             quote = message.get("quote")
             content_for_parsing = content  # 副本
             
-            if not quote and "<quote" in content:
-                # 如果quote字段不存在，但内容中有<quote>标签，则尝试从中提取引用信息
+            # 提取<quote>标签
+            if "<quote" in content:
                 import re
-                quote_match = re.search(r'<quote\s+id="([^"]+)">([^<]*)</quote>', content)
+                quote_match = re.search(r'<quote\s+id="([^"]*)"[^>]*>(.*?)</quote>', content, re.DOTALL)
                 if quote_match:
                     quote_id = quote_match.group(1)
                     quote_content = quote_match.group(2)
@@ -337,7 +337,8 @@ class SatoriPlatformAdapter(Platform):
                         "id": quote_id,
                         "content": quote_content
                     }
-                    content_for_parsing = re.sub(r'<quote\s+id="[^"]+">[^<]*</quote>', '', content, 1)
+                    # 移除<quote>标签部分
+                    content_for_parsing = re.sub(r'<quote\s+id="[^"]*"[^>]*>.*?</quote>', '', content, flags=re.DOTALL)
 
             if quote:
                 # 引用消息
@@ -372,6 +373,16 @@ class SatoriPlatformAdapter(Platform):
             for comp in abm.message:
                 if isinstance(comp, Plain):
                     abm.message_str += comp.text
+                elif isinstance(comp, Image):
+                    abm.message_str += "[图片]"
+                elif isinstance(comp, Record):
+                    abm.message_str += "[语音]"
+                elif isinstance(comp, File):
+                    abm.message_str += "[文件]"
+                elif isinstance(comp, At):
+                    abm.message_str += f"@{comp.name}"
+                elif isinstance(comp, Reply):
+                    abm.message_str += f"[引用消息(内容: {comp.message_str})] "
 
             # 优先使用Satori事件中的时间戳
             if timestamp is not None:
@@ -414,8 +425,20 @@ class SatoriPlatformAdapter(Platform):
             for comp in quote_abm.message:
                 if isinstance(comp, Plain):
                     quote_abm.message_str += comp.text
+                elif isinstance(comp, Image):
+                    quote_abm.message_str += "[图片]"
+                elif isinstance(comp, Record):
+                    quote_abm.message_str += "[语音]"
+                elif isinstance(comp, File):
+                    quote_abm.message_str += "[文件]"
+                elif isinstance(comp, At):
+                    quote_abm.message_str += f"@{comp.name}"
                     
             quote_abm.timestamp = int(quote.get("timestamp", time.time()))
+            
+            # 如果没有任何内容，使用默认文本
+            if not quote_abm.message_str.strip():
+                quote_abm.message_str = "[引用消息]"
             
             return quote_abm
         except Exception as e:
