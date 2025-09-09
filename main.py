@@ -42,8 +42,18 @@ async def check_dashboard_files():
 
     dashboard_dist_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard", "dist"))
     if os.path.exists(dashboard_dist_path):
-        logger.info("检测到本地构建的 dashboard/dist 目录，将直接使用该目录作为前端面板")
-        return
+        logger.info("检测到本地构建的 dashboard/dist 目录")
+        # 等待用户输入
+        while True:
+            user_input = input("是否使用本地构建的 dashboard/dist 目录？(Y/N): ").strip().lower()
+            if user_input in ['y', 'yes', 'a', '是', '']:
+                logger.info("将直接使用本地构建的 dashboard/dist 目录作为前端面板")
+                return
+            elif user_input in ['n', 'no', '否']:
+                logger.info("忽略本地构建的 dashboard/dist 目录，使用默认逻辑。如果你希望一直使用 data/dist 目录，请将 dashboard/dist 目录删除。")
+                break
+            else:
+                logger.info("请输入 Y(是) 或 N(否)")
      
     v = await get_dashboard_version()
     if v is not None:
