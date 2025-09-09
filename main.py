@@ -47,10 +47,10 @@ async def check_dashboard_files():
         while True:
             user_input = input("是否使用本地构建的 dashboard/dist 目录？(Y/N): ").strip().lower()
             if user_input in ['y', 'yes', 'a', '是', '']:
-                logger.info("将直接使用本地构建的 dashboard/dist 目录作为前端面板")
+                logger.info("将直接使用本地构建的 dashboard/dist 目录作为前端面板。如果你希望使用 data/dist 目录，请将 dashboard/dist 目录删除。")
                 return
             elif user_input in ['n', 'no', '否']:
-                logger.info("忽略本地构建的 dashboard/dist 目录，使用默认逻辑。如果你希望一直使用 data/dist 目录，请将 dashboard/dist 目录删除。")
+                logger.info("忽略本地构建的 dashboard/dist 目录，使用默认逻辑。如果你希望不再进行此交互，请将 dashboard/dist 目录删除，以使用 data/dist。")
                 break
             else:
                 logger.info("请输入 Y(是) 或 N(否)")
