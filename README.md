@@ -182,10 +182,18 @@ pre-commit install
   <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot" />
 </a>
 
-此外，本项目的诞生离不开以下开源项目：
+此外，本项目的诞生离不开以下开源项目的帮助：
 
 - [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 伟大的猫猫框架
-- [wechatpy/wechatpy](https://github.com/wechatpy/wechatpy)
+
+另外，一些同类型其他的活跃开源 Bot 项目：
+
+- [nonebot/nonebot2](https://github.com/nonebot/nonebot2) - 扩展性极强的 Bot 框架
+- [koishijs/koishi](https://github.com/koishijs/koishi) - 扩展性极强的 Bot 框架
+- [MaiM-with-u/MaiBot](https://github.com/MaiM-with-u/MaiBot) - 注重拟人功能的 ChatBot
+- [langbot-app/LangBot](https://github.com/langbot-app/LangBot) - 功能丰富的 Bot 平台
+- [LroMiose/nekro-agent](https://github.com/KroMiose/nekro-agent) - 注重 Agentic 的 ChatBot
+- [zhenxun-org/zhenxun_bot](https://github.com/zhenxun-org/zhenxun_bot) - 功能完善的 ChatBot
 
 ## ⭐ Star History
 
