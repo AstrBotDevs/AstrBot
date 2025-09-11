@@ -44,6 +44,7 @@ class StarTools:
     _context: ClassVar[Optional[Context]] = None
     _shared_data: ClassVar[Dict[str, Any]] = {}
     _data_listeners: ClassVar[Dict[str, List[Callable[[str, Any], Awaitable[None]]]]] = {}
+    _data_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
 
 
     @classmethod
@@ -262,27 +263,12 @@ class StarTools:
                 - 无法获取模块的元数据信息
                 - 创建目录失败（权限不足或其他IO错误）
         """
-        if not plugin_name:
-            frame = inspect.currentframe()
-            module = None
-            if frame:
-                frame = frame.f_back
-                module = inspect.getmodule(frame)
+        resolved_plugin_name = cls._get_caller_plugin_name(plugin_name)
 
-            if not module:
-                raise RuntimeError("无法获取调用者模块信息")
-
-            metadata = star_map.get(module.__name__, None)
-
-            if not metadata:
-                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
-
-            plugin_name = metadata.name
-
-        if not plugin_name:
+        if not resolved_plugin_name:
             raise ValueError("无法获取插件名称")
 
-        data_dir = Path(os.path.join(get_astrbot_data_path(), "plugin_data", plugin_name))
+        data_dir = Path(os.path.join(get_astrbot_data_path(), "plugin_data", resolved_plugin_name))
 
         try:
             data_dir.mkdir(parents=True, exist_ok=True)
@@ -293,8 +279,46 @@ class StarTools:
 
         return data_dir.resolve()
 
+        return data_dir.resolve()
+
     @classmethod
-    def set_shared_data(cls, key: str, value: Any, plugin_name: Optional[str] = None) -> None:
+    def _get_caller_plugin_name(cls, plugin_name: Optional[str]) -> str:
+        """
+        通过调用栈获取插件名称
+
+        Returns:
+            str: 插件名称
+
+        Raises:
+            RuntimeError: 当无法获取调用者模块信息或元数据信息时抛出
+        """
+        if plugin_name is not None:
+            return plugin_name
+
+        frame = inspect.currentframe()
+        try:
+            if frame:
+                frame = frame.f_back
+                if frame:
+                    frame = frame.f_back
+
+            if not frame:
+                raise RuntimeError("无法获取调用者帧信息")
+
+            module = inspect.getmodule(frame)
+            if not module:
+                raise RuntimeError("无法获取调用者模块信息")
+
+            metadata = star_map.get(module.__name__, None)
+            if not metadata:
+                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
+
+            return metadata.name
+        finally:
+            del frame
+
+    @classmethod
+    async def set_shared_data(cls, key: str, value: Any, plugin_name: Optional[str] = None) -> None:
         """
         设置插件间共享数据
 
@@ -314,28 +338,16 @@ class StarTools:
                 "status": "processing"
             })
         """
-        if not plugin_name:
-            frame = inspect.currentframe()
-            module = None
-            if frame:
-                frame = frame.f_back
-                module = inspect.getmodule(frame)
+        resolved_plugin_name = cls._get_caller_plugin_name(plugin_name)
+        full_key = f"{resolved_plugin_name}:{key}"
 
-            if not module:
-                raise RuntimeError("无法获取调用者模块信息")
+        async with cls._data_lock:
+            cls._shared_data[full_key] = value
 
-            metadata = star_map.get(module.__name__, None)
-            if not metadata:
-                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
-
-            plugin_name = metadata.name
-
-        full_key = f"{plugin_name}:{key}"
-        cls._shared_data[full_key] = value
-        asyncio.create_task(cls._notify_listeners(full_key, value))
+        await cls._notify_listeners(full_key, value)
 
     @classmethod
-    def get_shared_data(cls, key: str, plugin_name: Optional[str] = None, default: Any = None) -> Any:
+    async def get_shared_data(cls, key: str, plugin_name: Optional[str] = None, default: Any = None) -> Any:
         """
         获取插件间共享数据
 
@@ -354,27 +366,14 @@ class StarTools:
             # 获取当前插件的数据
             my_data = StarTools.get_shared_data("my_key")
         """
-        if not plugin_name:
-            frame = inspect.currentframe()
-            module = None
-            if frame:
-                frame = frame.f_back
-                module = inspect.getmodule(frame)
+        resolved_plugin_name = cls._get_caller_plugin_name(plugin_name)
+        full_key = f"{resolved_plugin_name}:{key}"
 
-            if not module:
-                raise RuntimeError("无法获取调用者模块信息")
-
-            metadata = star_map.get(module.__name__, None)
-            if not metadata:
-                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
-
-            plugin_name = metadata.name
-
-        full_key = f"{plugin_name}:{key}"
-        return cls._shared_data.get(full_key, default)
+        async with cls._data_lock:
+            return cls._shared_data.get(full_key, default)
 
     @classmethod
-    def remove_shared_data(cls, key: str, plugin_name: Optional[str] = None) -> bool:
+    async def remove_shared_data(cls, key: str, plugin_name: Optional[str] = None) -> bool:
         """
         删除插件间共享数据
 
@@ -385,35 +384,22 @@ class StarTools:
         Returns:
             bool: 是否成功删除（True表示数据存在并被删除，False表示数据不存在）
         """
-        if not plugin_name:
-            frame = inspect.currentframe()
-            module = None
-            if frame:
-                frame = frame.f_back
-                module = inspect.getmodule(frame)
+        resolved_plugin_name = cls._get_caller_plugin_name(plugin_name)
+        full_key = f"{resolved_plugin_name}:{key}"
 
-            if not module:
-                raise RuntimeError("无法获取调用者模块信息")
-
-            metadata = star_map.get(module.__name__, None)
-            if not metadata:
-                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
-
-            plugin_name = metadata.name
-
-        full_key = f"{plugin_name}:{key}"
-        if full_key in cls._shared_data:
-            del cls._shared_data[full_key]
-            return True
-        return False
+        async with cls._data_lock:
+            if full_key in cls._shared_data:
+                del cls._shared_data[full_key]
+                return True
+            return False
 
     @classmethod
-    def list_shared_data(cls, plugin_name: Optional[str] = None) -> Dict[str, Any]:
+    async def list_shared_data(cls, plugin_name: Optional[str] = None) -> Dict[str, Any]:
         """
         列出指定插件的所有共享数据
 
         Args:
-            plugin_name (Optional[str]): 插件名称，如果为None则返回所有数据
+            plugin_name (Optional[str]): 插件名称，如果为None则返回当前插件数据，如果为空字符串则返回所有数据
 
         Returns:
             Dict[str, Any]: 数据字典，键为原始键名（不包含插件前缀）
@@ -425,35 +411,21 @@ class StarTools:
             # 获取所有插件的数据
             all_data = StarTools.list_shared_data("")
         """
-        if plugin_name is None:
-            frame = inspect.currentframe()
-            module = None
-            if frame:
-                frame = frame.f_back
-                module = inspect.getmodule(frame)
+        async with cls._data_lock:
+            if plugin_name == "":
+                return dict(cls._shared_data)
 
-            if not module:
-                raise RuntimeError("无法获取调用者模块信息")
-
-            metadata = star_map.get(module.__name__, None)
-            if not metadata:
-                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
-
-            plugin_name = metadata.name
-
-        if plugin_name == "":
-            return dict(cls._shared_data)
-
-        prefix = f"{plugin_name}:"
-        result = {}
-        for full_key, value in cls._shared_data.items():
-            if full_key.startswith(prefix):
-                original_key = full_key[len(prefix):]
-                result[original_key] = value
-        return result
+            resolved_plugin_name = cls._get_caller_plugin_name(plugin_name)
+            prefix = f"{resolved_plugin_name}:"
+            result = {}
+            for full_key, value in cls._shared_data.items():
+                if full_key.startswith(prefix):
+                    original_key = full_key[len(prefix):]
+                    result[original_key] = value
+            return result
 
     @classmethod
-    def add_data_listener(
+    async def add_data_listener(
         cls,
         key: str,
         callback: Callable[[str, Any], Awaitable[None]],
@@ -470,33 +442,20 @@ class StarTools:
         Example:
             async def on_worker_status_change(key: str, value: Any):
                 if value:
-                    logger.INFO("哈哈我的工作完成啦!")
+                    logger.info("哈哈我的工作完成啦!")
 
             StarTools.add_data_listener("worker_status", on_worker_status_change, "other_plugin")
         """
-        if not plugin_name:
-            frame = inspect.currentframe()
-            module = None
-            if frame:
-                frame = frame.f_back
-                module = inspect.getmodule(frame)
+        resolved_plugin_name = cls._get_caller_plugin_name(plugin_name)
+        full_key = f"{resolved_plugin_name}:{key}"
 
-            if not module:
-                raise RuntimeError("无法获取调用者模块信息")
-
-            metadata = star_map.get(module.__name__, None)
-            if not metadata:
-                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
-
-            plugin_name = metadata.name
-
-        full_key = f"{plugin_name}:{key}"
-        if full_key not in cls._data_listeners:
-            cls._data_listeners[full_key] = []
-        cls._data_listeners[full_key].append(callback)
+        async with cls._data_lock:
+            if full_key not in cls._data_listeners:
+                cls._data_listeners[full_key] = []
+            cls._data_listeners[full_key].append(callback)
 
     @classmethod
-    def remove_data_listener(
+    async def remove_data_listener(
         cls,
         key: str,
         callback: Callable[[str, Any], Awaitable[None]],
@@ -513,29 +472,16 @@ class StarTools:
         Returns:
             bool: 是否成功移除
         """
-        if not plugin_name:
-            frame = inspect.currentframe()
-            module = None
-            if frame:
-                frame = frame.f_back
-                module = inspect.getmodule(frame)
+        resolved_plugin_name = cls._get_caller_plugin_name(plugin_name)
+        full_key = f"{resolved_plugin_name}:{key}"
 
-            if not module:
-                raise RuntimeError("无法获取调用者模块信息")
-
-            metadata = star_map.get(module.__name__, None)
-            if not metadata:
-                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
-
-            plugin_name = metadata.name
-
-        full_key = f"{plugin_name}:{key}"
-        if full_key in cls._data_listeners and callback in cls._data_listeners[full_key]:
-            cls._data_listeners[full_key].remove(callback)
-            if not cls._data_listeners[full_key]:
-                del cls._data_listeners[full_key]
-            return True
-        return False
+        async with cls._data_lock:
+            if full_key in cls._data_listeners and callback in cls._data_listeners[full_key]:
+                cls._data_listeners[full_key].remove(callback)
+                if not cls._data_listeners[full_key]:
+                    del cls._data_listeners[full_key]
+                return True
+            return False
 
     @classmethod
     async def _notify_listeners(cls, full_key: str, value: Any) -> None:
@@ -546,16 +492,22 @@ class StarTools:
             full_key (str): 完整的数据键名（包含插件前缀）
             value (Any): 新的数据值
         """
-        if full_key in cls._data_listeners:
+        listeners = []
+        async with cls._data_lock:
+            if full_key in cls._data_listeners:
+                listeners = cls._data_listeners[full_key].copy()
+
+        if listeners:
             tasks = []
-            for callback in cls._data_listeners[full_key]:
+            for callback in listeners:
                 try:
                     task = callback(full_key, value)
                     if asyncio.iscoroutine(task):
                         tasks.append(task)
                 except Exception as e:
-                    logger.Error(f"数据监听器错误:{full_key}: {e}")
+                    logger.error(f"数据监听器错误:{full_key}: {e}")
 
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
+
 
