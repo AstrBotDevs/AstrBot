@@ -1,4 +1,5 @@
 import aiohttp
+from astrbot import logger
 from ..provider import RerankProvider
 from ..register import register_provider_adapter
 from ..entities import ProviderType, RerankResult
@@ -43,6 +44,11 @@ class VLLMRerankProvider(RerankProvider):
         ) as response:
             response_data = await response.json()
             results = response_data.get("results", [])
+
+            if not results:
+                logger.warning(
+                    f"Rerank API 返回了空的列表数据。原始响应: {response_data}"
+                )
 
             return [
                 RerankResult(

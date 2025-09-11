@@ -718,10 +718,10 @@ export default {
 
         createCollection(name, emoji, description) {
             // 如果 this.newKB.embedding_provider_id 是 Object
-            if (typeof this.newKB.embedding_provider_id === 'object') {
+            if (this.newKB.embedding_provider_id && typeof this.newKB.embedding_provider_id === 'object') {
                 this.newKB.embedding_provider_id = this.newKB.embedding_provider_id.id || '';
             }
-            if (typeof this.newKB.rerank_provider_id === 'object') {
+            if (this.newKB.rerank_provider_id && typeof this.newKB.rerank_provider_id === 'object') {
                 this.newKB.rerank_provider_id = this.newKB.rerank_provider_id.id || '';
             }
             axios.post('/api/plug/alkaid/kb/create_collection', {
