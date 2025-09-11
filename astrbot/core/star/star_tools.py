@@ -279,8 +279,6 @@ class StarTools:
 
         return data_dir.resolve()
 
-        return data_dir.resolve()
-
     @classmethod
     def _get_caller_plugin_name(cls, plugin_name: Optional[str]) -> str:
         """
