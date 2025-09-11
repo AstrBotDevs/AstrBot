@@ -18,7 +18,7 @@ def register_platform_adapter(
     """用于注册平台适配器的带参装饰器。
 
     default_config_tmpl 指定了平台适配器的默认配置模板。用户填写好后将会作为 platform_config 传入你的 Platform 类的实现类。
-    logo_path 指定了平台适配器的 logo 文件路径，可以是相对于插件目录的路径或绝对路径。
+    logo_path 指定了平台适配器的 logo 文件路径，是相对于插件目录的路径。
     """
 
     def decorator(cls):

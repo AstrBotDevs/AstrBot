@@ -507,11 +507,7 @@ class ConfigRoute(Route):
             plugin_dir = os.path.dirname(module_file)
             
             # 解析logo文件路径
-            logo_file_path = (
-                platform.logo_path 
-                if os.path.isabs(platform.logo_path) 
-                else os.path.join(plugin_dir, platform.logo_path)
-            )
+            logo_file_path = os.path.join(plugin_dir, platform.logo_path)
             
             # 检查文件是否存在并注册令牌
             if os.path.exists(logo_file_path):

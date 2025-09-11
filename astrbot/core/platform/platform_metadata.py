@@ -15,4 +15,4 @@ class PlatformMetadata:
     adapter_display_name: str = None
     """显示在 WebUI 配置页中的平台名称，如空则是 name"""
     logo_path: str = None
-    """平台适配器的 logo 文件路径（相对于插件目录或绝对路径）"""
+    """平台适配器的 logo 文件路径（相对于插件目录）"""
