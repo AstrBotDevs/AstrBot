@@ -599,6 +599,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.openai.com/v1",
                         "timeout": 120,
                         "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                         "hint": "也兼容所有与 OpenAI API 兼容的服务。",
                     },
@@ -613,6 +614,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "",
                         "timeout": 120,
                         "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "xAI": {
@@ -625,6 +627,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.x.ai/v1",
                         "timeout": 120,
                         "model_config": {"model": "grok-2-latest", "temperature": 0.4},
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "Anthropic": {
@@ -654,6 +657,7 @@ CONFIG_METADATA_2 = {
                         "key": ["ollama"],  # ollama 的 key 默认是 ollama
                         "api_base": "http://localhost:11434/v1",
                         "model_config": {"model": "llama3.1-8b", "temperature": 0.4},
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "LM Studio": {
@@ -667,6 +671,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "llama-3.1-8b",
                         },
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "Gemini(OpenAI兼容)": {
@@ -682,6 +687,7 @@ CONFIG_METADATA_2 = {
                             "model": "gemini-1.5-flash",
                             "temperature": 0.4,
                         },
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "Gemini": {
@@ -722,6 +728,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
                         "model_config": {"model": "deepseek-chat", "temperature": 0.4},
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "302.AI": {
@@ -734,6 +741,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.302.ai/v1",
                         "timeout": 120,
                         "model_config": {"model": "gpt-4.1-mini", "temperature": 0.4},
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "硅基流动": {
@@ -749,6 +757,7 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek-ai/DeepSeek-V3",
                             "temperature": 0.4,
                         },
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "PPIO派欧云": {
@@ -764,6 +773,7 @@ CONFIG_METADATA_2 = {
                             "model": "deepseek/deepseek-r1",
                             "temperature": 0.4,
                         },
+                        "custom_extra_body": {},
                     },
                     "优云智算": {
                         "id": "compshare",
@@ -777,6 +787,7 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "moonshotai/Kimi-K2-Instruct",
                         },
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "Kimi": {
@@ -789,6 +800,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "api_base": "https://api.moonshot.cn/v1",
                         "model_config": {"model": "moonshot-v1-8k", "temperature": 0.4},
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "智谱 AI": {
@@ -847,6 +859,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "api_base": "https://api-inference.modelscope.cn/v1",
                         "model_config": {"model": "Qwen/Qwen3-32B", "temperature": 0.4},
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "FastGPT": {
@@ -858,6 +871,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.fastgpt.in/api/v1",
                         "timeout": 60,
+                        "custom_extra_body": {},
                     },
                     "Whisper(API)": {
                         "id": "whisper",
@@ -1101,6 +1115,12 @@ CONFIG_METADATA_2 = {
                         "labels": ["文本", "图像", "工具使用"],
                         "render_type": "checkbox",
                         "hint": "模型支持的模态。如所填写的模型不支持图像，请取消勾选图像。",
+                    },
+                    "custom_extra_body": {
+                        "description": "自定义请求体参数",
+                        "type": "dict",
+                        "items": {},
+                        "hint": "此处添加的键值对将被合并到发送给 API 的 extra_body 中。值可以是字符串、数字或布尔值。",
                     },
                     "provider": {
                         "type": "string",

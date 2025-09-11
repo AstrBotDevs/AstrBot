@@ -2,6 +2,7 @@
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ListConfigItem from './ListConfigItem.vue'
+import ObjectEditor from './ObjectEditor.vue'
 import ProviderSelector from './ProviderSelector.vue'
 import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
@@ -80,7 +81,7 @@ function shouldShowItem(itemMeta, itemKey) {
 
 function hasVisibleItemsAfter(items, currentIndex) {
   const itemEntries = Object.entries(items)
-  
+
   // 检查当前索引之后是否还有可见的配置项
   for (let i = currentIndex + 1; i < itemEntries.length; i++) {
     const [itemKey, itemValue] = itemEntries[i]
@@ -89,7 +90,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
       return true
     }
   }
-  
+
   return false
 }
 </script>
@@ -130,7 +131,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
             </v-expand-transition>
           </div>
         </div>
-        
+
         <!-- Regular Property -->
         <template v-else>
           <v-row v-if="!metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="config-row">
@@ -145,7 +146,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 </v-list-item-title>
 
                 <v-list-item-subtitle class="property-hint">
-                  <span v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint" 
+                  <span v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint"
                         class="important-hint">‼️</span>
                   {{ metadata[metadataKey].items[key]?.hint }}
                 </v-list-item-subtitle>
@@ -153,10 +154,10 @@ function hasVisibleItemsAfter(items, currentIndex) {
             </v-col>
 
             <v-col cols="12" sm="1" class="d-flex align-center type-indicator">
-              <v-chip v-if="!metadata[metadataKey].items[key]?.invisible" 
-                     color="primary" 
-                     label 
-                     size="x-small" 
+              <v-chip v-if="!metadata[metadataKey].items[key]?.invisible"
+                     color="primary"
+                     label
+                     size="x-small"
                      variant="flat">
                 {{ metadata[metadataKey].items[key]?.type || 'string' }}
               </v-chip>
@@ -166,35 +167,35 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <div v-if="metadata[metadataKey].items[key]" class="w-100">
                 <!-- Special handling for specific metadata types -->
                 <div v-if="metadata[metadataKey].items[key]?._special === 'select_provider'">
-                  <ProviderSelector 
+                  <ProviderSelector
                     v-model="iterable[key]"
                     :provider-type="'chat_completion'"
                   />
                 </div>
                 <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_provider_stt'">
-                  <ProviderSelector 
+                  <ProviderSelector
                     v-model="iterable[key]"
                     :provider-type="'speech_to_text'"
                   />
                 </div>
                 <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_provider_tts'">
-                  <ProviderSelector 
+                  <ProviderSelector
                     v-model="iterable[key]"
                     :provider-type="'text_to_speech'"
                   />
                 </div>
                 <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_persona'">
-                  <PersonaSelector 
+                  <PersonaSelector
                     v-model="iterable[key]"
                   />
                 </div>
                 <div v-else-if="metadata[metadataKey].items[key]?._special === 'select_knowledgebase'">
-                  <KnowledgeBaseSelector 
+                  <KnowledgeBaseSelector
                     v-model="iterable[key]"
                   />
                 </div>
                 <!-- List item with options-->
-                <div v-else-if="metadata[metadataKey].items[key]?.type === 'list' && metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible && metadata[metadataKey].items[key]?.render_type === 'checkbox'" 
+                <div v-else-if="metadata[metadataKey].items[key]?.type === 'list' && metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible && metadata[metadataKey].items[key]?.render_type === 'checkbox'"
                   class="d-flex flex-wrap gap-20">
                   <v-checkbox
                     v-for="(option, index) in metadata[metadataKey].items[key]?.options"
@@ -233,10 +234,10 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
                 <!-- Code Editor with Full Screen Option -->
                 <div v-else-if="metadata[metadataKey].items[key]?.editor_mode && !metadata[metadataKey].items[key]?.invisible" class="editor-container">
-                  <VueMonacoEditor 
-                    :theme="metadata[metadataKey].items[key]?.editor_theme || 'vs-light'" 
+                  <VueMonacoEditor
+                    :theme="metadata[metadataKey].items[key]?.editor_theme || 'vs-light'"
                     :language="metadata[metadataKey].items[key]?.editor_language || 'json'"
-                    style="min-height: 100px; flex-grow: 1; border: 1px solid rgba(0, 0, 0, 0.1);" 
+                    style="min-height: 100px; flex-grow: 1; border: 1px solid rgba(0, 0, 0, 0.1);"
                     v-model:value="iterable[key]"
                   >
                   </VueMonacoEditor>
@@ -252,7 +253,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
                     <v-icon>mdi-fullscreen</v-icon>
                   </v-btn>
                 </div>
-                
+
                 <!-- String input -->
                 <v-text-field
                   v-else-if="metadata[metadataKey].items[key]?.type === 'string' && !metadata[metadataKey].items[key]?.invisible"
@@ -262,7 +263,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   class="config-field"
                   hide-details
                 ></v-text-field>
-                
+
                 <!-- Numeric input -->
                 <v-text-field
                   v-else-if="(metadata[metadataKey].items[key]?.type === 'int' || metadata[metadataKey].items[key]?.type === 'float') && !metadata[metadataKey]?.invisible"
@@ -273,7 +274,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   type="number"
                   hide-details
                 ></v-text-field>
-                
+
                 <!-- Text area -->
                 <v-textarea
                   v-else-if="metadata[metadataKey].items[key]?.type === 'text' && !metadata[metadataKey].items[key]?.invisible"
@@ -283,7 +284,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   class="config-field"
                   hide-details
                 ></v-textarea>
-                
+
                 <!-- Boolean switch -->
                 <v-switch
                   v-else-if="metadata[metadataKey].items[key]?.type === 'bool' && !metadata[metadataKey].items[key]?.invisible"
@@ -293,20 +294,27 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   density="compact"
                   hide-details
                 ></v-switch>
-                
+
                 <!-- List item -->
                 <ListConfigItem
                   v-else-if="metadata[metadataKey].items[key]?.type === 'list' && !metadata[metadataKey].items[key]?.invisible"
                   v-model="iterable[key]"
                   class="config-field"
                 />
+
+                <!-- Dict item (key-value editor) -->
+                <ObjectEditor
+                  v-else-if="metadata[metadataKey].items[key]?.type === 'dict' && !metadata[metadataKey].items[key]?.invisible"
+                  v-model="iterable[key]"
+                  class="config-field"
+                />
               </div>
-              
+
               <!-- Fallback for unknown metadata -->
               <div v-else class="w-100">
-                <v-text-field 
-                  v-model="iterable[key]" 
-                  :label="key" 
+                <v-text-field
+                  v-model="iterable[key]"
+                  :label="key"
                   density="compact"
                   variant="outlined"
                   class="config-field"
@@ -316,14 +324,14 @@ function hasVisibleItemsAfter(items, currentIndex) {
             </v-col>
           </v-row>
 
-          <v-divider 
+          <v-divider
             v-if="hasVisibleItemsAfter(filteredIterable, index) && !metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)"
             class="config-divider"
           ></v-divider>
         </template>
       </div>
     </div>
-    
+
     <!-- Simple Value Configuration -->
     <div v-else class="simple-config">
       <v-row class="config-row">
@@ -342,9 +350,9 @@ function hasVisibleItemsAfter(items, currentIndex) {
         </v-col>
 
         <v-col cols="12" sm="1" class="d-flex align-center type-indicator">
-          <v-chip v-if="!metadata[metadataKey]?.invisible" 
-                 color="primary" 
-                 label 
+          <v-chip v-if="!metadata[metadataKey]?.invisible"
+                 color="primary"
+                 label
                  size="x-small"
                  variant="flat">
             {{ metadata[metadataKey]?.type }}
@@ -364,7 +372,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
               class="config-field"
               hide-details
             ></v-select>
-            
+
             <!-- String input -->
             <v-text-field
               v-else-if="metadata[metadataKey]?.type === 'string' && !metadata[metadataKey]?.invisible"
@@ -374,7 +382,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
               class="config-field"
               hide-details
             ></v-text-field>
-            
+
             <!-- Numeric input -->
             <v-text-field
               v-else-if="(metadata[metadataKey]?.type === 'int' || metadata[metadataKey]?.type === 'float') && !metadata[metadataKey]?.invisible"
@@ -385,7 +393,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
               type="number"
               hide-details
             ></v-text-field>
-            
+
             <!-- Text area -->
             <v-textarea
               v-else-if="metadata[metadataKey]?.type === 'text' && !metadata[metadataKey]?.invisible"
@@ -396,7 +404,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
               class="config-field"
               hide-details
             ></v-textarea>
-            
+
             <!-- Boolean switch -->
             <v-switch
               v-else-if="metadata[metadataKey]?.type === 'bool' && !metadata[metadataKey]?.invisible"
@@ -406,9 +414,9 @@ function hasVisibleItemsAfter(items, currentIndex) {
               density="compact"
               hide-details
             ></v-switch>
-            
+
             <!-- List item -->
-            <ListConfigItem 
+            <ListConfigItem
               v-else-if="metadata[metadataKey]?.type === 'list' && !metadata[metadataKey]?.invisible"
               v-model="iterable[metadataKey]"
               class="config-field"
@@ -435,9 +443,9 @@ function hasVisibleItemsAfter(items, currentIndex) {
         </v-toolbar-items>
       </v-toolbar>
       <v-card-text class="pa-0">
-        <VueMonacoEditor 
+        <VueMonacoEditor
           :theme="currentEditingTheme"
-          :language="currentEditingLanguage" 
+          :language="currentEditingLanguage"
           style="height: calc(100vh - 64px);"
           v-model:value="currentEditingKeyIterable[currentEditingKey]"
         >
@@ -567,11 +575,11 @@ function hasVisibleItemsAfter(items, currentIndex) {
   .nested-object {
     padding-left: 8px;
   }
-  
+
   .config-row {
     padding: 8px 0;
   }
-  
+
   .property-info, .type-indicator, .config-input {
     padding: 4px;
   }
