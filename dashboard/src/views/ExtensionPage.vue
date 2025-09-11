@@ -78,7 +78,7 @@ const pluginHeaders = computed(() => [
   { title: tm('table.headers.description'), key: 'desc', maxWidth: '250px' },
   { title: tm('table.headers.version'), key: 'version', width: '100px' },
   { title: tm('table.headers.author'), key: 'author', width: '100px' },
-  { title: tm('table.headers.status'), key: 'status', width: '80px' },
+  { title: tm('table.headers.status'), key: 'activated', width: '100px' },
   { title: tm('table.headers.actions'), key: 'actions', sortable: false, width: '220px' }
 ]);
 
@@ -660,7 +660,7 @@ onMounted(async () => {
                       <div class="text-body-2">{{ item.author }}</div>
                     </template>
 
-                    <template v-slot:item.status="{ item }">
+                    <template v-slot:item.activated="{ item }">
                       <v-chip :color="item.activated ? 'success' : 'error'" size="small" class="font-weight-medium"
                         :variant="item.activated ? 'flat' : 'outlined'">
                         {{ item.activated ? tm('status.enabled') : tm('status.disabled') }}
