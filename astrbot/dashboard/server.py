@@ -39,6 +39,26 @@ class AstrBotDashboard:
             128 * 1024 * 1024
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
         self.app.json.sort_keys = False
+        
+        # 静态资源缓存策略
+        @self.app.after_request
+        async def set_cache_headers(response):
+            try:
+                path = request.path or ""
+                content_type = (response.headers.get("Content-Type") or "").lower()
+                if (
+                    path == "/" or path.endswith(".html") or content_type.startswith("text/html")
+                ):
+                    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+                    response.headers["Pragma"] = "no-cache"
+                    response.headers["Expires"] = "0"
+                    response.headers["Surrogate-Control"] = "no-store"
+                elif path.startswith("/assets/"):
+                    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                return response
+            except Exception:
+                return response
+
         self.app.before_request(self.auth_middleware)
         # token 用于验证请求
         logging.getLogger(self.app.name).removeHandler(default_handler)
