@@ -29,13 +29,14 @@ class AstrBotDashboard:
         core_lifecycle: AstrBotCoreLifecycle,
         db: BaseDatabase,
         shutdown_event: asyncio.Event,
+        webui_dir: str = None
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
 
-        local_dashboard_dist = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../dashboard/dist"))
-        if os.path.exists(local_dashboard_dist):
-            self.data_path = local_dashboard_dist
+        # 参数指定webui目录
+        if webui_dir and os.path.exists(webui_dir):
+            self.data_path = os.path.abspath(webui_dir)
         else:
             self.data_path = os.path.abspath(os.path.join(get_astrbot_data_path(), "dist"))
             
