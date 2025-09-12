@@ -1255,15 +1255,15 @@ UID: {user_id} 此 ID 可用于设置管理员。
             if (persona and persona.get("tools") is None) or not persona:
                 # select all
                 toolset = tmgr.get_full_tool_set()
+                for tool in toolset:
+                    if not tool.active:
+                        toolset.remove_tool(tool.name)
             else:
                 toolset = ToolSet()
                 for tool_name in persona["tools"]:
                     tool = tmgr.get_func(tool_name)
-                    if tool:
+                    if tool and tool.active:
                         toolset.add_tool(tool)
-            for tool in toolset:
-                if not tool.active:
-                    toolset.remove_tool(tool.name)
             req.func_tool = toolset
             logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
 
