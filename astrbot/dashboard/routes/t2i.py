@@ -85,6 +85,7 @@ class T2iRoute(Route):
                 )
                 response.status_code = 400
                 return response
+            name = name.strip()
 
             self.manager.create_template(name, content)
             response = jsonify(
@@ -114,6 +115,7 @@ class T2iRoute(Route):
     async def update_template(self, name: str):
         """更新一个已存在的T2I模板"""
         try:
+            name = name.strip()
             data = await request.json
             content = data.get("content")
             if content is None:
@@ -130,14 +132,8 @@ class T2iRoute(Route):
                 message = f"模板 '{name}' 已更新并重新加载。"
             else:
                 message = f"模板 '{name}' 已更新。"
-            
-            return jsonify(
-                asdict(
-                    Response().ok(
-                        data={"name": name}, message=message
-                    )
-                )
-            )
+
+            return jsonify(asdict(Response().ok(data={"name": name}, message=message)))
         except ValueError as e:
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 400
@@ -150,6 +146,7 @@ class T2iRoute(Route):
     async def delete_template(self, name: str):
         """删除一个T2I模板"""
         try:
+            name = name.strip()
             self.manager.delete_template(name)
             return jsonify(
                 asdict(Response().ok(message="Template deleted successfully."))
