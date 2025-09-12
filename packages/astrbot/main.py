@@ -1261,6 +1261,9 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     tool = tmgr.get_func(tool_name)
                     if tool:
                         toolset.add_tool(tool)
+            for tool in toolset:
+                if not tool.active:
+                    toolset.remove_tool(tool.name)
             req.func_tool = toolset
             logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
 
