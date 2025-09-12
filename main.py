@@ -40,14 +40,15 @@ def check_env():
 
 async def check_dashboard_files(webui_dir: str = None):
     """下载管理面板文件"""
-    
     # 指定webui目录
     if webui_dir:
         if os.path.exists(webui_dir):
             logger.info(f"使用指定的 WebUI 目录: {webui_dir}")
             return webui_dir
         else:
-            logger.warning(f"指定的 WebUI 目录 {webui_dir} 不存在，将使用默认逻辑。")
+            logger.warning(
+                f"指定的 WebUI 目录 {webui_dir} 不存在，将使用默认逻辑。"
+            )
 
     data_dist_path = os.path.abspath(os.path.join("data", "dist"))
     if os.path.exists(data_dist_path):
