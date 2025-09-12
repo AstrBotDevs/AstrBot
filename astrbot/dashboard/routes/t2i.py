@@ -138,10 +138,6 @@ class T2iRoute(Route):
                     )
                 )
             )
-        except FileNotFoundError:
-            response = jsonify(asdict(Response().error("Template not found.")))
-            response.status_code = 404
-            return response
         except ValueError as e:
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 400
