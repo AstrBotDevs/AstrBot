@@ -157,7 +157,11 @@ class ChatRoute(Route):
 
                     if type == "end":
                         break
-                    elif (streaming and type == "complete") or not streaming:
+                    elif (
+                        (streaming and type == "complete")
+                        or not streaming
+                        or type == "break"
+                    ):
                         # append bot message
                         new_his = {"type": "bot", "message": result_text}
                         await self.platform_history_mgr.insert(
