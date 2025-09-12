@@ -29,7 +29,7 @@ class AstrBotDashboard:
         core_lifecycle: AstrBotCoreLifecycle,
         db: BaseDatabase,
         shutdown_event: asyncio.Event,
-        webui_dir: str = None
+        webui_dir: str | None = None,
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
@@ -38,8 +38,10 @@ class AstrBotDashboard:
         if webui_dir and os.path.exists(webui_dir):
             self.data_path = os.path.abspath(webui_dir)
         else:
-            self.data_path = os.path.abspath(os.path.join(get_astrbot_data_path(), "dist"))
-            
+            self.data_path = os.path.abspath(
+                os.path.join(get_astrbot_data_path(), "dist")
+            )
+
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         APP = self.app  # noqa
         self.app.config["MAX_CONTENT_LENGTH"] = (
