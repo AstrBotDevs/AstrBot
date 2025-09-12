@@ -27,6 +27,7 @@ class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
         self.tavily_key_index = 0
+        self.tavily_key_lock = asyncio.Lock()
 
         self.bing_search = Bing()
         self.sogo_search = Sogo()
@@ -95,18 +96,22 @@ class Main(star.Star):
 
         return results
 
+    async def _get_tavily_key(self, cfg: AstrBotConfig) -> str:
+        """并发安全的从列表中获取并轮换Tavily API密钥。"""
+        tavily_keys = cfg.get("provider_settings", {}).get("websearch_tavily_key", [])
+        if not tavily_keys:
+            raise ValueError("错误：Tavily API密钥未在AstrBot中配置。")
+
+        async with self.tavily_key_lock:
+            key = tavily_keys[self.tavily_key_index]
+            self.tavily_key_index = (self.tavily_key_index + 1) % len(tavily_keys)
+            return key
+
     async def _web_search_tavily(
         self, cfg: AstrBotConfig, payload: dict
     ) -> list[SearchResult]:
         """使用 Tavily 搜索引擎进行搜索"""
-        tavily_keys = cfg.get("provider_settings", {}).get("websearch_tavily_key", [])
-        if not tavily_keys:
-            raise ValueError("Error: Tavily API key is not configured in AstrBot.")
-        
-        # 循环逐个轮询使用配置中的key
-        tavily_key = tavily_keys[self.tavily_key_index]
-        self.tavily_key_index = (self.tavily_key_index + 1) % len(tavily_keys)
-
+        tavily_key = await self._get_tavily_key(cfg)
         url = "https://api.tavily.com/search"
         header = {
             "Authorization": f"Bearer {tavily_key}",
@@ -134,14 +139,7 @@ class Main(star.Star):
 
     async def _extract_tavily(self, cfg: AstrBotConfig, payload: dict) -> list[dict]:
         """使用 Tavily 提取网页内容"""
-        tavily_keys = cfg.get("provider_settings", {}).get("websearch_tavily_key", [])
-        if not tavily_keys:
-            raise ValueError("Error: Tavily API key is not configured in AstrBot.")
-
-        # 循环逐个轮询使用配置中的key
-        tavily_key = tavily_keys[self.tavily_key_index]
-        self.tavily_key_index = (self.tavily_key_index + 1) % len(tavily_keys)
-
+        tavily_key = await self._get_tavily_key(cfg)
         url = "https://api.tavily.com/extract"
         header = {
             "Authorization": f"Bearer {tavily_key}",
@@ -246,8 +244,7 @@ class Main(star.Star):
         logger.info(f"web_searcher - search_from_tavily: {query}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         websearch_link = cfg["provider_settings"].get("web_search_link", False)
-        tavily_keys = cfg.get("provider_settings", {}).get("websearch_tavily_key", [])
-        if not tavily_keys:
+        if not cfg.get("provider_settings", {}).get("websearch_tavily_key", []):
             raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
         # build payload
@@ -299,8 +296,7 @@ class Main(star.Star):
             extract_depth(string): Optional. The depth of the extraction, must be one of 'basic', 'advanced'. Default is "basic".
         """
         cfg = self.context.get_config(umo=event.unified_msg_origin)
-        tavily_keys = cfg.get("provider_settings", {}).get("websearch_tavily_key", [])
-        if not tavily_keys:
+        if not cfg.get("provider_settings", {}).get("websearch_tavily_key", []):
             raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
         if not url:
