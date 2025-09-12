@@ -11,7 +11,7 @@ class TemplateManager:
     采用“用户覆盖内置”策略：用户模板存储在 data 目录中，并优先于内置模板加载。
     所有创建、更新、删除操作仅影响用户目录，以确保更新框架时用户数据安全。
     """
-    
+
     CORE_TEMPLATES = ["base.html", "astrbot_powershell.html"]
 
     def __init__(self):
@@ -34,7 +34,7 @@ class TemplateManager:
     def _initialize_user_templates(self):
         """如果用户目录下缺少核心模板，则进行复制。"""
         self._copy_core_templates(overwrite=False)
-        
+
     def _get_user_template_path(self, name: str) -> str:
         """获取用户模板的完整路径，防止路径遍历漏洞。"""
         if ".." in name or "/" in name or "\\" in name:
@@ -58,7 +58,9 @@ class TemplateManager:
             for f in os.listdir(d)
             if f.endswith(".html")
         }
-        return [{"name": name, "is_default": name == "base"} for name in sorted(all_names)]
+        return [
+            {"name": name, "is_default": name == "base"} for name in sorted(all_names)
+        ]
 
     def get_template(self, name: str) -> str:
         """
@@ -72,7 +74,7 @@ class TemplateManager:
         builtin_path = os.path.join(self.builtin_template_dir, f"{name}.html")
         if os.path.exists(builtin_path):
             return self._read_file(builtin_path)
-        
+
         raise FileNotFoundError("模板不存在。")
 
     def create_template(self, name: str, content: str):
