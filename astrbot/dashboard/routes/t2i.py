@@ -32,8 +32,6 @@ class T2iRoute(Route):
                 ],
             ),
         ]
-
-        # 应用启动时，确保备份存在
         self.register_routes()
 
     async def list_templates(self):
