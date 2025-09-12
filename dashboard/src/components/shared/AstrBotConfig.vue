@@ -6,6 +6,7 @@ import ProviderSelector from './ProviderSelector.vue'
 import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import { useI18n } from '@/i18n/composables'
+import FileField from '@/components/config/fields/FileField.vue'
 
 const props = defineProps({
   metadata: {
@@ -230,6 +231,16 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   class="config-field"
                   hide-details
                 ></v-select>
+
+                <!-- File field -->
+                <div v-else-if="metadata[metadataKey].items[key]?.type === 'file' && !metadata[metadataKey].items[key]?.invisible">
+                  <FileField
+                    :plugin-name="metadataKey"
+                    :field-key="key"
+                    :schema="metadata[metadataKey].items[key]"
+                    v-model="iterable[key]"
+                  />
+                </div>
 
                 <!-- Code Editor with Full Screen Option -->
                 <div v-else-if="metadata[metadataKey].items[key]?.editor_mode && !metadata[metadataKey].items[key]?.invisible" class="editor-container">

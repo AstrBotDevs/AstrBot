@@ -8,6 +8,7 @@ import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
 import { useI18n } from '@/i18n/composables'
+import FileField from '@/components/config/fields/FileField.vue'
 
 
 const props = defineProps({
@@ -155,6 +156,16 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 <v-select v-if="itemMeta?.options" v-model="createSelectorModel(itemKey).value"
                   :items="itemMeta?.options" :disabled="itemMeta?.readonly" density="compact" variant="outlined"
                   class="config-field" hide-details></v-select>
+
+                <!-- File field for JSON selector -->
+                <div v-else-if="itemMeta?.type === 'file'">
+                  <FileField 
+                    :plugin-name="metadataKey"
+                    :field-key="itemKey"
+                    :schema="itemMeta"
+                    v-model="createSelectorModel(itemKey).value"
+                  />
+                </div>
 
                 <!-- Code Editor for JSON selector -->
                 <div v-else-if="itemMeta?.editor_mode" class="editor-container">

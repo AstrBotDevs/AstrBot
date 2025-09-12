@@ -2392,6 +2392,7 @@ DEFAULT_VALUE_MAP = {
     "bool": False,
     "string": "",
     "text": "",
+    "file": "",
     "list": [],
     "object": {},
 }
