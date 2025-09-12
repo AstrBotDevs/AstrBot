@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { listFiles, uploadFile, deleteFile, type FileItem } from '@/api/configFileField';
+import FilePickButton from '@/components/shared/FilePickButton.vue'
 
 const props = defineProps<{
   pluginName: string,
@@ -15,7 +16,6 @@ const files = ref<FileItem[]>([]);
 const loading = ref(false);
 const uploading = ref(false);
 const fileToUpload = ref<File | null>(null);
-const fileInputRef = ref<any>(null);
 
 const acceptAttr = computed(() => {
   const a = props.schema?.accept;
@@ -57,13 +57,6 @@ async function doUpload() {
     console.error(e);
   } finally {
     uploading.value = false;
-  }
-}
-
-function triggerPickAndUpload() {
-  // open file picker then auto upload on change
-  if (fileInputRef.value?.click) {
-    fileInputRef.value.click();
   }
 }
 
@@ -114,23 +107,25 @@ function copy(text: string) {
   navigator.clipboard?.writeText(text).catch(()=>{});
 }
 
-function onFileChange(e: Event) {
-  const input = e.target as HTMLInputElement | null;
-  const f = input?.files?.[0] || null;
-  if (f) {
-    fileToUpload.value = f as File;
-  }
-  if (input) input.value = '';
+function onPicked(val: any) {
+  const list: File[] = Array.isArray(val) ? val : (val ? [val as File] : []);
+  if (!list.length) return;
+  (async () => {
+    for (const f of list) {
+      fileToUpload.value = f;
+      await doUpload();
+    }
+  })();
 }
 </script>
 
 <template>
   <div class="filefield">
     <div class="current">
-      <small class="text-medium-emphasis">当前值</small>
+      <small class="text-medium-emphasis">当前�?/small>
       <div v-if="!multiple">
         <code v-if="(modelValue as any)">{{ modelValue }}</code>
-        <span v-else class="text-disabled">(空)</span>
+        <span v-else class="text-disabled">(�?</span>
         <div class="actions">
           <v-btn size="x-small" variant="tonal" @click="() => copy(String(modelValue||''))" :disabled="!modelValue">复制路径</v-btn>
           <v-btn size="x-small" variant="text" color="error" @click="() => emit('update:modelValue','')" :disabled="!modelValue">清空</v-btn>
@@ -140,19 +135,17 @@ function onFileChange(e: Event) {
         <div v-if="Array.isArray(modelValue) && (modelValue as any).length">
           <v-chip v-for="p in (modelValue as any)" :key="p" class="mr-1 mb-1" size="x-small" @click="copy(p)">{{ p }}</v-chip>
         </div>
-        <div v-else class="text-disabled">(空)</div>
+        <div v-else class="text-disabled">(�?</div>
       </div>
     </div>
 
     <div class="upload">
-      <!-- hidden file input controlled by button -->
-      <input type="file" :accept="acceptAttr" ref="fileInputRef" style="display:none" @change="onFileChange" />
-      <v-btn color="primary" :loading="uploading" @click="triggerPickAndUpload">上传文件</v-btn>
+      <FilePickButton :accept="acceptAttr" :multiple="multiple" :loading="uploading" button-text="选择文件" @picked="onPicked" />
     </div>
 
     <div class="list">
       <div class="d-flex align-center mb-2">
-        <small class="text-medium-emphasis">文件库</small>
+        <small class="text-medium-emphasis">文件�?/small>
         <v-spacer></v-spacer>
         <v-btn size="x-small" variant="text" @click="refresh" :loading="loading">刷新</v-btn>
       </div>
@@ -160,7 +153,7 @@ function onFileChange(e: Event) {
       <v-table v-else density="compact">
         <thead>
           <tr>
-            <th>文件名</th>
+            <th>文件�?/th>
             <th>大小</th>
             <th>更新时间</th>
             <th>操作</th>
