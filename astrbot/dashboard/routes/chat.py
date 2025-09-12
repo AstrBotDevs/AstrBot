@@ -197,6 +197,7 @@ class ChatRoute(Route):
                 "Connection": "keep-alive",
             },
         )
+        response.timeout = None  # fix SSE auto disconnect issue
         return response
 
     async def _get_webchat_conv_id_from_conv_id(self, conversation_id: str) -> str:
