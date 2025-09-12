@@ -58,14 +58,40 @@ def _gen_safe_filename(tmpl: str, original_name: str) -> str:
     ext = ext.lower()
     ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
     uid = uuid.uuid4().hex
-    # Restrict template placeholders to known ones
-    safe = (
-        tmpl.replace("{timestamp}", ts)
-        .replace("{uuid}", uid)
-        .replace("{ext}", ext)
-    )
-    # Remove path separators and illegal chars
-    safe = safe.replace("..", "_").replace("/", "_").replace("\\", "_")
+
+    def sanitize(text: str) -> str:
+        # keep letters/numbers/underscore/dash/dot and CJK letters
+        out = []
+        for ch in text:
+            if ch.isalnum() or ch in ("-", "_", ".", " "):
+                out.append(ch)
+        s = "".join(out).strip().replace(" ", "_")
+        # no path traversal or separators
+        s = s.replace("..", "_").replace("/", "_").replace("\\", "_")
+        return s or uid  # fallback to uid if empty
+
+    name_clean = sanitize(name)
+    original_clean = f"{name_clean}{ext}"
+
+    # Support direct original name keepers
+    if tmpl.strip().lower() in ("original", "{original}", "{filename}"):
+        safe = original_clean
+    else:
+        # Known placeholders: {timestamp} {uuid} {ext} {name} {original}
+        safe = (
+            tmpl.replace("{timestamp}", ts)
+            .replace("{uuid}", uid)
+            .replace("{ext}", ext)
+            .replace("{name}", name_clean)
+            .replace("{original}", original_clean)
+        )
+        safe = sanitize(safe)
+
+        # Ensure extension consistency when user forgot {ext}
+        if not safe.endswith(ext):
+            # keep as-is; schema's accept has already validated the ext
+            pass
+
     return safe
 
 
@@ -171,7 +197,8 @@ class PluginConfigFileFieldRoute(Route):
                     return Response().error(f"非法后缀: {ext}").__dict__
 
             # Read content (for size check and write)
-            content: bytes = await file.read()
+            # Quart's FileStorage.read() returns bytes (not awaitable)
+            content: bytes = file.read()
             max_mb = field_schema.get("max_size_mb")
             if isinstance(max_mb, (int, float)) and max_mb > 0:
                 if len(content) > max_mb * 1024 * 1024:
@@ -253,4 +280,3 @@ class PluginConfigFileFieldRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
-

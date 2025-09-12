@@ -113,6 +113,15 @@ function humanSize(n: number) {
 function copy(text: string) {
   navigator.clipboard?.writeText(text).catch(()=>{});
 }
+
+function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement | null;
+  const f = input?.files?.[0] || null;
+  if (f) {
+    fileToUpload.value = f as File;
+  }
+  if (input) input.value = '';
+}
 </script>
 
 <template>
@@ -137,7 +146,7 @@ function copy(text: string) {
 
     <div class="upload">
       <!-- hidden file input controlled by button -->
-      <input type="file" :accept="acceptAttr" ref="fileInputRef" style="display:none" @change="(e:any)=>{ const f=e?.target?.files?.[0]; if (f) fileToUpload.value = f; e.target.value=''; }" />
+      <input type="file" :accept="acceptAttr" ref="fileInputRef" style="display:none" @change="onFileChange" />
       <v-btn color="primary" :loading="uploading" @click="triggerPickAndUpload">上传文件</v-btn>
     </div>
 
