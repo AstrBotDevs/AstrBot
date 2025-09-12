@@ -185,7 +185,14 @@ function openDialog() {
 }
 
 function addKeyValuePair() {
-  if (newKey.value.trim() !== '') {
+  const key = newKey.value.trim()
+  if (key !== '') {
+    const isKeyExists = localKeyValuePairs.value.some(pair => pair.key === key)
+    if (isKeyExists) {
+      alert('键名已存在')
+      return
+    }
+
     let defaultValue
     switch (newValueType.value) {
       case 'number':
@@ -200,7 +207,7 @@ function addKeyValuePair() {
     }
 
     localKeyValuePairs.value.push({
-      key: newKey.value.trim(),
+      key: key,
       value: defaultValue,
       type: newValueType.value
     })
@@ -213,20 +220,18 @@ function removeKeyValuePair(index) {
 }
 
 function updateKey(index, newKey) {
+  const originalKey = localKeyValuePairs.value[index].key
   // 如果键名没有改变，则不执行任何操作
-  if (localKeyValuePairs.value[index].key === newKey) return
+  if (originalKey === newKey) return
 
   // 检查新键名是否已存在
   const isKeyExists = localKeyValuePairs.value.some((pair, i) => i !== index && pair.key === newKey)
   if (isKeyExists) {
-    // 如果键名已存在，添加一个后缀使其唯一
-    let uniqueKey = newKey
-    let counter = 1
-    while (localKeyValuePairs.value.some((pair, i) => i !== index && pair.key === uniqueKey)) {
-      uniqueKey = `${newKey}_${counter}`
-      counter++
-    }
-    newKey = uniqueKey
+    // 如果键名已存在，提示用户并恢复原值
+    alert('键名已存在')
+    // 将键名恢复为修改前的原始值
+    localKeyValuePairs.value[index].key = originalKey
+    return
   }
 
   // 更新本地副本
@@ -236,7 +241,28 @@ function updateKey(index, newKey) {
 function confirmDialog() {
   const updatedValue = {}
   for (const pair of localKeyValuePairs.value) {
-    updatedValue[pair.key] = pair.value
+    let convertedValue = pair.value
+    // 根据声明的类型进行转换
+    switch (pair.type) {
+      case 'number':
+        // 尝试转换为数字，如果失败则保持原值（或设为默认值0）
+        convertedValue = Number(pair.value)
+        // 可选：检查是否为有效数字，无效则设为0或报错
+        // if (isNaN(convertedValue)) convertedValue = 0;
+        break
+      case 'boolean':
+        // 布尔值通常由 v-switch 正确处理，但为保险起见可以显式转换
+        // 注意：在 JavaScript 中，只有严格的 false, 0, "", null, undefined, NaN 会被转换为 false
+        // 这里直接赋值 pair.value 应该是安全的，因为 v-model 绑定的就是布尔值
+        // convertedValue = Boolean(pair.value)
+        break
+      case 'string':
+      default:
+        // 默认转换为字符串
+        convertedValue = String(pair.value)
+        break
+    }
+    updatedValue[pair.key] = convertedValue
   }
   emit('update:modelValue', updatedValue)
   dialog.value = false
