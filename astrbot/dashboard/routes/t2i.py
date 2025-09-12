@@ -32,10 +32,6 @@ class T2iRoute(Route):
                 ],
             ),
         ]
-
-        # 应用启动时，确保备份存在
-        self.manager.backup_default_template_if_not_exist()
-
         self.register_routes()
 
     async def list_templates(self):
@@ -89,6 +85,7 @@ class T2iRoute(Route):
                 )
                 response.status_code = 400
                 return response
+            name = name.strip()
 
             self.manager.create_template(name, content)
             response = jsonify(
@@ -118,6 +115,7 @@ class T2iRoute(Route):
     async def update_template(self, name: str):
         """更新一个已存在的T2I模板"""
         try:
+            name = name.strip()
             data = await request.json
             content = data.get("content")
             if content is None:
@@ -126,17 +124,16 @@ class T2iRoute(Route):
                 return response
 
             self.manager.update_template(name, content)
-            return jsonify(
-                asdict(
-                    Response().ok(
-                        data={"name": name}, message="Template updated successfully."
-                    )
-                )
-            )
-        except FileNotFoundError:
-            response = jsonify(asdict(Response().error("Template not found.")))
-            response.status_code = 404
-            return response
+
+            # 检查更新的是否为当前激活的模板，如果是，则热重载
+            active_template = self.config.get("t2i_active_template", "base")
+            if name == active_template:
+                await self.core_lifecycle.reload_pipeline_scheduler("default")
+                message = f"模板 '{name}' 已更新并重新加载。"
+            else:
+                message = f"模板 '{name}' 已更新。"
+
+            return jsonify(asdict(Response().ok(data={"name": name}, message=message)))
         except ValueError as e:
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 400
@@ -149,6 +146,7 @@ class T2iRoute(Route):
     async def delete_template(self, name: str):
         """删除一个T2I模板"""
         try:
+            name = name.strip()
             self.manager.delete_template(name)
             return jsonify(
                 asdict(Response().ok(message="Template deleted successfully."))
