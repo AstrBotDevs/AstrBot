@@ -56,7 +56,7 @@ DEFAULT_CONFIG = {
         "wake_prefix": "",
         "web_search": False,
         "websearch_provider": "default",
-        "websearch_tavily_key": "",
+        "websearch_tavily_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -1938,7 +1938,9 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_settings.websearch_tavily_key": {
                         "description": "Tavily API Key",
-                        "type": "string",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。",
                         "condition": {
                             "provider_settings.websearch_provider": "tavily",
                         },
