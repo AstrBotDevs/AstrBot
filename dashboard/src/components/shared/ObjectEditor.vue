@@ -39,7 +39,7 @@
                   @blur="updateKey(index, pair.key)"
                 ></v-text-field>
               </v-col>
-              <v-col cols="7" class="pl-2">
+              <v-col cols="7" class="pl-2 d-flex align-center justify-end">
                 <v-text-field
                   v-if="pair.type === 'string'"
                   v-model="pair.value"
