@@ -8,6 +8,7 @@ AstrBot 启动器，负责初始化和启动核心组件和仪表板服务器。
 
 import asyncio
 import traceback
+import sys
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
@@ -22,6 +23,7 @@ class InitialLoader:
         self.db = db
         self.logger = logger
         self.log_broker = log_broker
+        self.webui_dir = None
 
     async def start(self):
         core_lifecycle = AstrBotCoreLifecycle(self.log_broker, self.db)
@@ -35,8 +37,10 @@ class InitialLoader:
 
         core_task = core_lifecycle.start()
 
+        webui_dir = self.webui_dir
+
         self.dashboard_server = AstrBotDashboard(
-            core_lifecycle, self.db, core_lifecycle.dashboard_shutdown_event
+            core_lifecycle, self.db, core_lifecycle.dashboard_shutdown_event, webui_dir
         )
         task = asyncio.gather(
             core_task, self.dashboard_server.run()
