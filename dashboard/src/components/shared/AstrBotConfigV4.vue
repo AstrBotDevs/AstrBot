@@ -2,6 +2,7 @@
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ListConfigItem from './ListConfigItem.vue'
+import ObjectEditor from './ObjectEditor.vue'
 import ProviderSelector from './ProviderSelector.vue'
 import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
@@ -102,7 +103,7 @@ function shouldShowItem(itemMeta, itemKey) {
 
 function hasVisibleItemsAfter(items, currentIndex) {
   const itemEntries = Object.entries(items)
-  
+
   // 检查当前索引之后是否还有可见的配置项
   for (let i = currentIndex + 1; i < itemEntries.length; i++) {
     const [itemKey, itemMeta] = itemEntries[i]
@@ -110,7 +111,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
       return true
     }
   }
-  
+
   return false
 }
 </script>
@@ -188,10 +189,17 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   color="primary" inset density="compact" hide-details style="display: flex; justify-content: end;"></v-switch>
 
                 <!-- List item for JSON selector -->
-                <ListConfigItem 
+                <ListConfigItem
                   v-else-if="itemMeta?.type === 'list'"
                   v-model="createSelectorModel(itemKey).value"
                   button-text="修改"
+                  class="config-field"
+                />
+
+                <!-- Object editor for JSON selector -->
+                <ObjectEditor
+                  v-else-if="itemMeta?.type === 'dict'"
+                  v-model="createSelectorModel(itemKey).value"
                   class="config-field"
                 />
 
@@ -202,48 +210,48 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
               <!-- Special handling for specific metadata types -->
               <div v-else-if="itemMeta?._special === 'select_provider'">
-                <ProviderSelector 
+                <ProviderSelector
                   v-model="createSelectorModel(itemKey).value"
                   :provider-type="'chat_completion'"
                 />
               </div>
               <div v-else-if="itemMeta?._special === 'select_provider_stt'">
-                <ProviderSelector 
+                <ProviderSelector
                   v-model="createSelectorModel(itemKey).value"
                   :provider-type="'speech_to_text'"
                 />
               </div>
               <div v-else-if="itemMeta?._special === 'select_provider_tts'">
-                <ProviderSelector 
+                <ProviderSelector
                   v-model="createSelectorModel(itemKey).value"
                   :provider-type="'text_to_speech'"
                 />
               </div>
               <div v-else-if="itemMeta?._special === 'provider_pool'">
-                <ProviderSelector 
+                <ProviderSelector
                   v-model="createSelectorModel(itemKey).value"
                   :provider-type="'chat_completion'"
                   button-text="选择提供商池..."
                 />
               </div>
               <div v-else-if="itemMeta?._special === 'select_persona'">
-                <PersonaSelector 
+                <PersonaSelector
                   v-model="createSelectorModel(itemKey).value"
                 />
               </div>
               <div v-else-if="itemMeta?._special === 'persona_pool'">
-                <PersonaSelector 
+                <PersonaSelector
                   v-model="createSelectorModel(itemKey).value"
                   button-text="选择人格池..."
                 />
               </div>
               <div v-else-if="itemMeta?._special === 'select_knowledgebase'">
-                <KnowledgeBaseSelector 
+                <KnowledgeBaseSelector
                   v-model="createSelectorModel(itemKey).value"
                 />
               </div>
               <div v-else-if="itemMeta?._special === 'select_plugin_set'">
-                <PluginSetSelector 
+                <PluginSetSelector
                   v-model="createSelectorModel(itemKey).value"
                 />
               </div>
@@ -261,12 +269,12 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   <small class="text-grey">已选择的插件：</small>
                 </div>
                 <div class="d-flex flex-wrap ga-2 mt-2">
-                  <v-chip 
-                    v-for="plugin in (createSelectorModel(itemKey).value || [])" 
-                    :key="plugin" 
-                    size="small" 
-                    label 
-                    color="primary" 
+                  <v-chip
+                    v-for="plugin in (createSelectorModel(itemKey).value || [])"
+                    :key="plugin"
+                    size="small"
+                    label
+                    color="primary"
                     variant="outlined"
                   >
                     {{ plugin === '*' ? '所有插件' : plugin }}

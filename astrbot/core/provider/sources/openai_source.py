@@ -99,12 +99,13 @@ class ProviderOpenAIOfficial(Provider):
         for key in to_del:
             del payloads[key]
 
-        model = payloads.get("model", "")
-        # 针对 qwen3 非 thinking 模型的特殊处理：非流式调用必须设置 enable_thinking=false
-        if "qwen3" in model.lower() and "thinking" not in model.lower():
-            extra_body["enable_thinking"] = False
+        # 读取并合并 custom_extra_body 配置
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if isinstance(custom_extra_body, dict):
+            extra_body.update(custom_extra_body)
+
         # 针对 deepseek 模型的特殊处理：deepseek-reasoner调用必须移除 tools ，否则将被切换至 deepseek-chat
-        elif model == "deepseek-reasoner" and "tools" in payloads:
+        if model == "deepseek-reasoner" and "tools" in payloads:
             del payloads["tools"]
 
         completion = await self.client.chat.completions.create(
@@ -137,6 +138,12 @@ class ProviderOpenAIOfficial(Provider):
 
         # 不在默认参数中的参数放在 extra_body 中
         extra_body = {}
+
+        # 读取并合并 custom_extra_body 配置
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if isinstance(custom_extra_body, dict):
+            extra_body.update(custom_extra_body)
+
         to_del = []
         for key in payloads.keys():
             if key not in self.default_params:
