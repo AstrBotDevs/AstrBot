@@ -1232,11 +1232,13 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         if req.conversation:
             # persona inject
-            persona_id = req.conversation.persona_id
+            persona_id = req.conversation.persona_id or cfg.get("default_personality")
             if not persona_id and persona_id != "[%None]":  # [%None] 为用户取消人格
-                persona_id = self.context.persona_manager.selected_default_persona_v3[
-                    "name"
-                ]
+                default_persona = (
+                    self.context.persona_manager.selected_default_persona_v3
+                )
+                if default_persona:
+                    persona_id = default_persona["name"]
             persona = next(
                 builtins.filter(
                     lambda persona: persona["name"] == persona_id,
