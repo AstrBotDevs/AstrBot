@@ -157,7 +157,11 @@ class ChatRoute(Route):
 
                     if type == "end":
                         break
-                    elif (streaming and type == "complete") or not streaming:
+                    elif (
+                        (streaming and type == "complete")
+                        or not streaming
+                        or type == "break"
+                    ):
                         # append bot message
                         new_his = {"type": "bot", "message": result_text}
                         await self.platform_history_mgr.insert(
@@ -197,6 +201,7 @@ class ChatRoute(Route):
                 "Connection": "keep-alive",
             },
         )
+        response.timeout = None  # fix SSE auto disconnect issue
         return response
 
     async def _get_webchat_conv_id_from_conv_id(self, conversation_id: str) -> str:
