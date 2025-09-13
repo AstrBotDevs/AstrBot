@@ -104,6 +104,8 @@ class ProviderOpenAIOfficial(Provider):
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
 
+        model = payloads.get("model", "").lower()
+
         # 针对 deepseek 模型的特殊处理：deepseek-reasoner调用必须移除 tools ，否则将被切换至 deepseek-chat
         if model == "deepseek-reasoner" and "tools" in payloads:
             del payloads["tools"]
