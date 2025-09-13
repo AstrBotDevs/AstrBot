@@ -115,6 +115,15 @@ DEFAULT_CONFIG = {
         "port": 6185,
     },
     "platform": [],
+    "platform_specific": {
+        # 平台特异配置：按平台分类，平台下按功能分组
+        "lark": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"]},
+        },
+        "telegram": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
+        }
+    },
     "wake_prefix": ["/"],
     "log_level": "INFO",
     "pip_install_arg": "",
@@ -2201,6 +2210,43 @@ CONFIG_METADATA_3 = {
                     "platform_settings.no_permission_reply": {
                         "description": "用户权限不足时是否回复",
                         "type": "bool",
+                    },
+                },
+            },
+        },
+    },
+    "platform_specific_group": {
+        "name": "平台特异配置",
+        "metadata": {
+            "lark": {
+                "description": "飞书",
+                "type": "object",
+                "items": {
+                    "platform_specific.lark.pre_ack_emoji.enable": {
+                        "description": "预回应表情",
+                        "type": "bool",
+                    },
+                    "platform_specific.lark.pre_ack_emoji.emojis": {
+                        "description": "表情列表（飞书表情枚举名）",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "参考：https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce",
+                    },
+                },
+            },
+            "telegram": {
+                "description": "Telegram",
+                "type": "object",
+                "items": {
+                    "platform_specific.telegram.pre_ack_emoji.enable": {
+                        "description": "预回应表情",
+                        "type": "bool",
+                    },
+                    "platform_specific.telegram.pre_ack_emoji.emojis": {
+                        "description": "表情列表（Unicode，可多选）",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "Telegram 仅支持固定反应集合: 👍,👎,❤,🔥,🥰,👏,😁,🤔,🤯,😱,🤬,😢,🎉,🤩,🤮,💩,🙏,👌,🕊,🤡,🥱,🥴,😍,🐳,❤️‍🔥,🌚,🌭,💯,🤣,⚡,🍌,🏆,💔,🤨,😐,🍓,🍾,💋,🖕,😈,😴,😭,🤓,👻,👨‍💻,👀,🎃,🙈,😇,😨,🤝,✍,🤗,🫡,🎅,🎄,☃,💅,🤪,🗿,🆒,💘,🙉,🦄,😘,💊,🙊,😎,👾,🤷‍♂️,🤷,🤷‍♀️,😡",
                     },
                 },
             },
