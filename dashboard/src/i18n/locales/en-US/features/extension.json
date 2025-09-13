@@ -17,6 +17,7 @@
     "showSystemPlugins": "Show System Extensions",
     "hideSystemPlugins": "Hide System Extensions",
     "install": "Install",
+    "updateAll": "Update All Extensions",
     "uninstall": "Uninstall",
     "update": "Update",
     "reload": "Reload",
@@ -39,6 +40,7 @@
     "disabled": "Disabled",
     "system": "System",
     "loading": "Loading...",
+    "updatingAllPlugins": "Updating all extensions...",
     "installed": "Installed",
     "unknown": "Unknown"
   },
@@ -129,7 +131,14 @@
     "confirmDelete": "Are you sure you want to delete this extension?",
     "fillUrlOrFile": "Please fill in extension URL or upload extension file",
     "dontFillBoth": "Please don't fill in both extension URL and upload file",
-    "supportedFormats": "Supports .zip extension files"
+    "supportedFormats": "Supports .zip extension files",
+    "updateSuccessTitle": "Successfully Updated",
+    "updateFailedTitle": "Update Failed",
+    "updateSkippedTitle": "Skipped",
+    "batchUpdateFailed": "Batch update failed",
+    "pluginsHaveUpdates": " extensions have updates available",
+    "batchUpdateCompleted": "Batch update completed: {success} succeeded, {failed} failed, {skipped} skipped",
+    "updateSuccessWithVersion": "Update successful: {from} -> {to}"
   },
   "upload": {
     "fromFile": "Install from File",

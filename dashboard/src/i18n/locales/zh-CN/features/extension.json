@@ -17,6 +17,7 @@
     "showSystemPlugins": "显示系统插件",
     "hideSystemPlugins": "隐藏系统插件",
     "install": "安装",
+    "updateAll": "升级所有插件",
     "uninstall": "卸载",
     "update": "更新",
     "reload": "重载",
@@ -39,6 +40,7 @@
     "disabled": "禁用",
     "system": "系统",
     "loading": "加载中...",
+    "updatingAllPlugins": "正在批量升级插件...",
     "installed": "已安装",
     "unknown": "未知"
   },
@@ -129,7 +131,14 @@
     "confirmDelete": "确定要删除插件吗？",
     "fillUrlOrFile": "请填写插件链接或上传插件文件",
     "dontFillBoth": "请不要同时填写插件链接和上传文件",
-    "supportedFormats": "支持 .zip 格式的插件文件"
+    "supportedFormats": "支持 .zip 格式的插件文件",
+    "updateSuccessTitle": "成功更新",
+    "updateFailedTitle": "更新失败",
+    "updateSkippedTitle": "已跳过",
+    "batchUpdateFailed": "批量更新失败",
+    "pluginsHaveUpdates": "个插件有更新可用",
+    "batchUpdateCompleted": "批量更新完成: 成功 {success} 个, 失败 {failed} 个, 跳过 {skipped} 个",
+    "updateSuccessWithVersion": "更新成功: {from} -> {to}"
   },
   "upload": {
     "fromFile": "从文件安装",
