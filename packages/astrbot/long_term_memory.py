@@ -35,7 +35,9 @@ class LongTermMemory:
             else False
         )
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
-        image_caption_provider_id = cfg["provider_settings"]["default_image_caption_provider_id"]
+        image_caption_provider_id = cfg["provider_settings"][
+            "default_image_caption_provider_id"
+        ]
         active_reply = cfg["provider_ltm_settings"]["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]

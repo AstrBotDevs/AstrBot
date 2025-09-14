@@ -297,6 +297,7 @@ class LLMResponse:
             )
         return ret
 
+
 @dataclass
 class RerankResult:
     index: int

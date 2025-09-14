@@ -41,7 +41,8 @@ class DiscordBotClient(discord.Bot):
                 await self.on_ready_once_callback()
             except Exception as e:
                 logger.error(
-                    f"[Discord] on_ready_once_callback 执行失败: {e}", exc_info=True)
+                    f"[Discord] on_ready_once_callback 执行失败: {e}", exc_info=True
+                )
 
     def _create_message_data(self, message: discord.Message) -> dict:
         """从 discord.Message 创建数据字典"""
@@ -89,7 +90,6 @@ class DiscordBotClient(discord.Bot):
         if self.on_message_received:
             message_data = self._create_message_data(message)
             await self.on_message_received(message_data)
-
 
     def _extract_interaction_content(self, interaction: discord.Interaction) -> str:
         """从交互中提取内容"""

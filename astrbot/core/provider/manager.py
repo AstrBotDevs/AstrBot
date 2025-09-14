@@ -366,7 +366,10 @@ class ProviderManager:
                 if not self.curr_provider_inst:
                     self.curr_provider_inst = inst
 
-            elif provider_metadata.provider_type in [ProviderType.EMBEDDING, ProviderType.RERANK]:
+            elif provider_metadata.provider_type in [
+                ProviderType.EMBEDDING,
+                ProviderType.RERANK,
+            ]:
                 inst = provider_metadata.cls_type(
                     provider_config, self.provider_settings
                 )

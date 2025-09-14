@@ -30,8 +30,13 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import AiocqhttpAdapter
+from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+    AiocqhttpMessageEvent,
+)
+from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
+    AiocqhttpAdapter,
+)
+
 
 class StarTools:
     """
@@ -77,7 +82,11 @@ class StarTools:
 
     @classmethod
     async def send_message_by_id(
-        cls, type: str, id: str, message_chain: MessageChain, platform: str = "aiocqhttp"
+        cls,
+        type: str,
+        id: str,
+        message_chain: MessageChain,
+        platform: str = "aiocqhttp",
     ):
         """
         根据 id(例如qq号, 群号等) 直接, 主动地发送消息
@@ -92,7 +101,9 @@ class StarTools:
             raise ValueError("StarTools not initialized")
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
-            adapter = next((p for p in platforms if isinstance(p, AiocqhttpAdapter)), None)
+            adapter = next(
+                (p for p in platforms if isinstance(p, AiocqhttpAdapter)), None
+            )
             if adapter is None:
                 raise ValueError("未找到适配器: AiocqhttpAdapter")
             await AiocqhttpMessageEvent.send_message(
@@ -115,7 +126,7 @@ class StarTools:
         message_str: str,
         message_id: str = "",
         raw_message: object = None,
-        group_id: str = ""
+        group_id: str = "",
     ) -> AstrBotMessage:
         """
         创建一个AstrBot消息对象
@@ -152,7 +163,6 @@ class StarTools:
     @classmethod
     async def create_event(
         cls, abm: AstrBotMessage, platform: str = "aiocqhttp", is_wake: bool = True
-
     ) -> None:
         """
         创建并提交事件到指定平台
@@ -167,7 +177,9 @@ class StarTools:
             raise ValueError("StarTools not initialized")
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
-            adapter = next((p for p in platforms if isinstance(p, AiocqhttpAdapter)), None)
+            adapter = next(
+                (p for p in platforms if isinstance(p, AiocqhttpAdapter)), None
+            )
             if adapter is None:
                 raise ValueError("未找到适配器: AiocqhttpAdapter")
             event = AiocqhttpMessageEvent(
@@ -277,7 +289,9 @@ class StarTools:
         if not plugin_name:
             raise ValueError("无法获取插件名称")
 
-        data_dir = Path(os.path.join(get_astrbot_data_path(), "plugin_data", plugin_name))
+        data_dir = Path(
+            os.path.join(get_astrbot_data_path(), "plugin_data", plugin_name)
+        )
 
         try:
             data_dir.mkdir(parents=True, exist_ok=True)

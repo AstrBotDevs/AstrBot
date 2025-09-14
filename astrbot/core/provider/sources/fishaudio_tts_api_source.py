@@ -98,7 +98,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
 
         # FishAudio的reference_id通常是32位十六进制字符串
         # 例如: 626bb6d3f3364c9cbc3aa6a67300a664
-        pattern = r'^[a-fA-F0-9]{32}$'
+        pattern = r"^[a-fA-F0-9]{32}$"
         return bool(re.match(pattern, reference_id.strip()))
 
     async def _generate_request(self, text: str) -> dict:

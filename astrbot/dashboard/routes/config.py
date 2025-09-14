@@ -1,7 +1,6 @@
 import typing
 import traceback
 import os
-import copy
 from .route import Route, Response, RouteContext
 from astrbot.core.provider.entities import ProviderType
 from quart import request

@@ -1,6 +1,5 @@
 import traceback
 
-import aiohttp
 from quart import request
 
 from astrbot.core import logger

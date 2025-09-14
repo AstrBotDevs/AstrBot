@@ -160,7 +160,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                         self.wexin_event_workers[msg.id] = future
                         await self.convert_message(msg, future)
                     # I love shield so much!
-                    result = await asyncio.wait_for(asyncio.shield(future), 60)  # wait for 60s
+                    result = await asyncio.wait_for(
+                        asyncio.shield(future), 60
+                    )  # wait for 60s
                     logger.debug(f"Got future result: {result}")
                     self.wexin_event_workers.pop(msg.id, None)
                     return result  # xml. see weixin_offacc_event.py

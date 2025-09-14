@@ -1,5 +1,6 @@
 import asyncio
 
+
 class WebChatQueueMgr:
     def __init__(self) -> None:
         self.queues = {}
@@ -29,5 +30,6 @@ class WebChatQueueMgr:
     def has_queue(self, conversation_id: str) -> bool:
         """Check if a queue exists for the given conversation ID"""
         return conversation_id in self.queues
+
 
 webchat_queue_mgr = WebChatQueueMgr()

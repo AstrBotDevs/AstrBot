@@ -124,15 +124,17 @@ def build_plug_list(plugins_dir: Path) -> list:
             if metadata and all(
                 k in metadata for k in ["name", "desc", "version", "author", "repo"]
             ):
-                result.append({
-                    "name": str(metadata.get("name", "")),
-                    "desc": str(metadata.get("desc", "")),
-                    "version": str(metadata.get("version", "")),
-                    "author": str(metadata.get("author", "")),
-                    "repo": str(metadata.get("repo", "")),
-                    "status": PluginStatus.INSTALLED,
-                    "local_path": str(plugin_dir),
-                })
+                result.append(
+                    {
+                        "name": str(metadata.get("name", "")),
+                        "desc": str(metadata.get("desc", "")),
+                        "version": str(metadata.get("version", "")),
+                        "author": str(metadata.get("author", "")),
+                        "repo": str(metadata.get("repo", "")),
+                        "status": PluginStatus.INSTALLED,
+                        "local_path": str(plugin_dir),
+                    }
+                )
 
     # 获取在线插件列表
     online_plugins = []
@@ -142,15 +144,17 @@ def build_plug_list(plugins_dir: Path) -> list:
             resp.raise_for_status()
             data = resp.json()
             for plugin_id, plugin_info in data.items():
-                online_plugins.append({
-                    "name": str(plugin_id),
-                    "desc": str(plugin_info.get("desc", "")),
-                    "version": str(plugin_info.get("version", "")),
-                    "author": str(plugin_info.get("author", "")),
-                    "repo": str(plugin_info.get("repo", "")),
-                    "status": PluginStatus.NOT_INSTALLED,
-                    "local_path": None,
-                })
+                online_plugins.append(
+                    {
+                        "name": str(plugin_id),
+                        "desc": str(plugin_info.get("desc", "")),
+                        "version": str(plugin_info.get("version", "")),
+                        "author": str(plugin_info.get("author", "")),
+                        "repo": str(plugin_info.get("repo", "")),
+                        "status": PluginStatus.NOT_INSTALLED,
+                        "local_path": None,
+                    }
+                )
     except Exception as e:
         click.echo(f"获取在线插件列表失败: {e}", err=True)
 

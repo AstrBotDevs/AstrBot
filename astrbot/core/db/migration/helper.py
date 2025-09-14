@@ -53,7 +53,7 @@ async def do_migration_v4(
     await migration_webchat_data(db_helper, platform_id_map)
 
     # 执行偏好设置迁移
-    await migration_preferences(db_helper,platform_id_map)
+    await migration_preferences(db_helper, platform_id_map)
 
     # 执行平台统计表迁移
     await migration_platform_table(db_helper, platform_id_map)

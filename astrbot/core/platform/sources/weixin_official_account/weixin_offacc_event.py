@@ -150,7 +150,6 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         return
                     logger.info(f"微信公众平台上传语音返回: {response}")
 
-
                     if active_send_mode:
                         self.client.message.send_voice(
                             message_obj.sender.user_id,

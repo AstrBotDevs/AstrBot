@@ -5,6 +5,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 _VT = TypeVar("_VT")
 
+
 class SharedPreferences:
     def __init__(self, path=None):
         if path is None:
@@ -41,5 +42,6 @@ class SharedPreferences:
     def clear(self):
         self._data.clear()
         self._save_preferences()
+
 
 sp = SharedPreferences()
