@@ -145,6 +145,20 @@ class WakingCheckStage(Stage):
                         return (len(full_command), matched_params)
                     except ValueError:
                         continue
+                elif message_str.startswith(full_command) and len(message_str) > len(
+                    full_command
+                ):
+                    # 前缀匹配 忘了加空格的情况
+                    param_str = message_str[len(full_command) :]
+                    # 将整个剩余部分作为一个参数
+                    params_list = [param_str] if param_str else []
+                    try:
+                        matched_params = command_filter.validate_and_convert_params(
+                            params_list, command_filter.handler_params
+                        )
+                        return (len(full_command), matched_params)
+                    except ValueError:
+                        continue
 
         return None
 
