@@ -1,7 +1,7 @@
 <!-- 如果有的话，请指定此 PR 旨在解决的 ISSUE 编号。 -->
 <!-- If applicable, please specify the ISSUE number this PR aims to resolve. -->
 
-解决了 / Fixes #XYZ
+fixes #XYZ
 
 ---
 
@@ -40,7 +40,7 @@
 <!--如果分支被合并，您的代码将服务于数万名用户！在提交前，请核查一下几点内容。-->
 <!--If merged, your code will serve tens of thousands of users! Please double-check the following items before submitting.-->
 
-- [ ] 😊 我的提交信息 (Commit Message) 符合良好的[规范](https://www.conventionalcommits.org/en/v1.0.0/#summary)。/ My Commit Message follows the [good conventions](https://www.conventionalcommits.org/en/v1.0.0/#summary).
+- [ ] 😊 如果 PR 中有新加入的功能，已经通过 Issue / 邮件等方式和作者讨论过。/ If there are new features added in the PR, I have discussed it with the authors through issues/emails, etc.
 - [ ] 👀 我的更改经过了良好的测试，**并已在上方提供了“验证步骤”和“运行截图”**。/ My changes have been well-tested, **and "Verification Steps" and "Screenshots" have been provided above**.
 - [ ] 🤓 我确保没有引入新依赖库，或者引入了新依赖库的同时将其添加到了 `requirements.txt` 和 `pyproject.toml` 文件相应位置。/ I have ensured that no new dependencies are introduced, OR if new dependencies are introduced, they have been added to the appropriate locations in `requirements.txt` and `pyproject.toml`.
 - [ ] 😮 我的更改没有引入恶意代码。/ My changes do not introduce malicious code.
