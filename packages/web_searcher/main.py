@@ -5,7 +5,7 @@ import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api.provider import ProviderRequest
-from astrbot.api import llm_tool, agent, logger, AstrBotConfig
+from astrbot.api import llm_tool, logger, AstrBotConfig
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from .engines import SearchResult
 from .engines.bing import Bing
