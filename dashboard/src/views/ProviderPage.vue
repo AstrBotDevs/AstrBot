@@ -712,6 +712,19 @@ export default {
 
       // 2. 为每个provider创建一个并发的测试请求
       const promises = this.config_data.provider.map(p => {
+        if (!p.enable) {
+          const index = this.providerStatuses.findIndex(s => s.id === p.id);
+          if (index !== -1) {
+            const disabledStatus = {
+              ...this.providerStatuses[index],
+              status: 'unavailable',
+              error: '该提供商未被用户启用'
+            };
+            this.providerStatuses.splice(index, 1, disabledStatus);
+          }
+          return Promise.resolve();
+        }
+
         return axios.get(`/api/config/provider/check_one?id=${p.id}`)
           .then(res => {
             if (res.data && res.data.status === 'ok') {
@@ -886,5 +899,10 @@ export default {
 
 .v-window {
   border-radius: 4px;
+}
+
+.status-card {
+  height: 120px;
+  overflow-y: auto;
 }
 </style>

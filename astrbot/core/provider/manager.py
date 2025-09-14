@@ -391,6 +391,7 @@ class ProviderManager:
 
         # 和配置文件保持同步
         config_ids = [provider["id"] for provider in self.providers_config]
+        logger.debug(f"providers in user's config: {config_ids}")
         for key in list(self.inst_map.keys()):
             if key not in config_ids:
                 await self.terminate_provider(key)
