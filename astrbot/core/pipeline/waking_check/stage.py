@@ -182,6 +182,9 @@ class WakingCheckStage(Stage):
                     if not filter_obj.filter(event, self.ctx.astrbot_config):
                         permission_not_pass = True
                         permission_filter_raise_error = filter_obj.raise_error
+                elif hasattr(filter_obj, "command_name"):
+                    # 不需要再检查 command filter
+                    continue
                 else:
                     if not filter_obj.filter(event, self.ctx.astrbot_config):
                         return "skip"
@@ -253,6 +256,9 @@ class WakingCheckStage(Stage):
                     conflict_info.append(
                         f"插件 '{plugin_name}' 的指令 '{original_command}'"
                     )
+                logger.warning(f"指令 '{command_name}' 存在冲突:")
+                for info in conflict_info:
+                    logger.warning(f"  - {info}")
 
     async def process(
         self, event: AstrMessageEvent
