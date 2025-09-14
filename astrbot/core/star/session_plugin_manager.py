@@ -84,7 +84,10 @@ class SessionPluginManager:
         session_config["disabled_plugins"] = disabled_plugins
         session_plugin_config[session_id] = session_config
         sp.put(
-            "session_plugin_config", session_plugin_config, scope="umo", scope_id=session_id
+            "session_plugin_config",
+            session_plugin_config,
+            scope="umo",
+            scope_id=session_id,
         )
 
         logger.info(

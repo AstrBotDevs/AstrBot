@@ -77,7 +77,7 @@ async def call_event_hook(
 
     Returns:
         bool: 如果事件被终止，返回 True
-    # """
+    #"""
     handlers = star_handlers_registry.get_handlers_by_event_type(
         hook_type, plugins_name=event.plugins_name
     )

@@ -35,7 +35,9 @@ class Main(star.Star):
         if provider_settings:
             tavily_key = provider_settings.get("websearch_tavily_key")
             if isinstance(tavily_key, str):
-                logger.info("检测到旧版 websearch_tavily_key (字符串格式)，自动迁移为列表格式并保存。")
+                logger.info(
+                    "检测到旧版 websearch_tavily_key (字符串格式)，自动迁移为列表格式并保存。"
+                )
                 if tavily_key:
                     provider_settings["websearch_tavily_key"] = [tavily_key]
                 else:
