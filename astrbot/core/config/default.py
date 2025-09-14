@@ -2130,41 +2130,41 @@ CONFIG_METADATA_3 = {
                 "description": "内容安全",
                 "type": "object",
                 "items": {
-                    "platform_settings.content_safety.also_use_in_response": {
+                    "content_safety.also_use_in_response": {
                         "description": "同时检查模型的响应内容",
                         "type": "bool",
                     },
-                    "platform_settings.content_safety.baidu_aip.enable": {
+                    "content_safety.baidu_aip.enable": {
                         "description": "使用百度内容安全审核",
                         "type": "bool",
                         "hint": "您需要手动安装 baidu-aip 库。",
                     },
-                    "platform_settings.content_safety.baidu_aip.app_id": {
+                    "content_safety.baidu_aip.app_id": {
                         "description": "App ID",
                         "type": "string",
                         "condition": {
-                            "platform_settings.content_safety.baidu_aip.enable": True,
+                            "content_safety.baidu_aip.enable": True,
                         },
                     },
-                    "platform_settings.content_safety.baidu_aip.api_key": {
+                    "content_safety.baidu_aip.api_key": {
                         "description": "API Key",
                         "type": "string",
                         "condition": {
-                            "platform_settings.content_safety.baidu_aip.enable": True,
+                            "content_safety.baidu_aip.enable": True,
                         },
                     },
-                    "platform_settings.content_safety.baidu_aip.secret_key": {
+                    "content_safety.baidu_aip.secret_key": {
                         "description": "Secret Key",
                         "type": "string",
                         "condition": {
-                            "platform_settings.content_safety.baidu_aip.enable": True,
+                            "content_safety.baidu_aip.enable": True,
                         },
                     },
-                    "platform_settings.content_safety.internal_keywords.enable": {
+                    "content_safety.internal_keywords.enable": {
                         "description": "关键词检查",
                         "type": "bool",
                     },
-                    "platform_settings.content_safety.internal_keywords.extra_keywords": {
+                    "content_safety.internal_keywords.extra_keywords": {
                         "description": "额外关键词",
                         "type": "list",
                         "items": {"type": "string"},
