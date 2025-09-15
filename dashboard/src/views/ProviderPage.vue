@@ -56,14 +56,16 @@
 
         <v-row v-else>
           <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card 
-              :item="provider" 
-              title-field="id" 
+            <item-card
+              :item="provider"
+              title-field="id"
               enabled-field="enable"
               @toggle-enabled="providerStatusChange"
               :bglogo="getProviderIcon(provider.provider)"
-              @delete="deleteProvider" 
-              @edit="configExistingProvider">
+              @delete="deleteProvider"
+              @edit="configExistingProvider"
+              @copy="copyProvider"
+              :show-copy-button="true">
               <template v-slot:details="{ item }">
               </template>
             </item-card>
@@ -95,7 +97,7 @@
               <v-alert v-if="providerStatuses.length === 0" type="info" variant="tonal">
                 {{ tm('availability.noData') }}
               </v-alert>
-              
+
               <v-container v-else class="pa-0">
                 <v-row>
                   <v-col v-for="status in providerStatuses" :key="status.id" cols="12" sm="6" md="4">
@@ -113,7 +115,7 @@
                         ></v-progress-circular>
 
                         <span class="font-weight-bold">{{ status.id }}</span>
-                        
+
                         <v-chip :color="getStatusColor(status.status)" size="small" class="ml-2">
                           {{ getStatusText(status.status) }}
                         </v-chip>
@@ -348,10 +350,10 @@ export default {
       save_message_success: "success",
 
       showConsole: false,
-      
+
       // 显示状态部分
       showStatus: false,
-      
+
       // 供应商状态相关
       providerStatuses: [],
       loadingStatus: false,
@@ -437,7 +439,7 @@ export default {
         }
       };
     },
-    
+
     // 根据选择的标签过滤提供商列表
     filteredProviders() {
       if (!this.config_data.provider || this.activeProviderTypeTab === 'all') {
@@ -449,7 +451,7 @@ export default {
         if (provider.provider_type) {
           return provider.provider_type === this.activeProviderTypeTab;
         }
-        
+
         // 否则使用映射关系
         const mappedType = this.oldVersionProviderTypeMapping[provider.type];
         return mappedType === this.activeProviderTypeTab;
@@ -657,6 +659,40 @@ export default {
       }
     },
 
+    async copyProvider(providerToCopy) {
+      console.log('copyProvider triggered for:', providerToCopy);
+      // 1. 创建深拷贝
+      const newProviderConfig = JSON.parse(JSON.stringify(providerToCopy));
+
+      // 2. 生成唯一的 ID
+      const generateUniqueId = (baseId) => {
+        let newId = `${baseId}_copy`;
+        let counter = 1;
+        const existingIds = this.config_data.provider.map(p => p.id);
+        while (existingIds.includes(newId)) {
+          newId = `${baseId}_copy_${counter}`;
+          counter++;
+        }
+        return newId;
+      };
+      newProviderConfig.id = generateUniqueId(providerToCopy.id);
+
+      // 3. 设置为禁用状态，等待用户手动开启
+      newProviderConfig.enable = false;
+
+      this.loading = true;
+      try {
+        // 4. 调用后端接口创建
+        const res = await axios.post('/api/config/provider/new', newProviderConfig);
+        this.showSuccess(res.data.message || `成功复制并创建了 ${newProviderConfig.id}`);
+        this.getConfig(); // 5. 刷新列表
+      } catch (err) {
+        this.showError(err.response?.data?.message || err.message);
+      } finally {
+        this.loading = false;
+      }
+    },
+
     deleteProvider(provider) {
       if (confirm(this.tm('messages.confirm.delete', { id: provider.id }))) {
         axios.post('/api/config/provider/delete', { id: provider.id }).then((res) => {
@@ -694,14 +730,14 @@ export default {
       this.save_message_success = "error";
       this.save_message_snack = true;
     },
-    
+
     // 获取供应商状态
     async fetchProviderStatus() {
       if (this.loadingStatus) return;
 
       this.loadingStatus = true;
       this.showStatus = true; // 自动展开状态部分
-      
+
       // 1. 立即初始化UI为pending状态
       this.providerStatuses = this.config_data.provider.map(p => ({
         id: p.id,

@@ -4,28 +4,28 @@
       <span class="text-h2 text-truncate" :title="getItemTitle()">{{ getItemTitle() }}</span>
       <v-tooltip location="top">
         <template v-slot:activator="{ props }">
-          <v-switch 
-            color="primary" 
-            hide-details 
-            density="compact" 
+          <v-switch
+            color="primary"
+            hide-details
+            density="compact"
             :model-value="getItemEnabled()"
             :loading="loading"
             :disabled="loading"
-            v-bind="props" 
+            v-bind="props"
             @update:model-value="toggleEnabled"
           ></v-switch>
         </template>
         <span>{{ getItemEnabled() ? t('core.common.itemCard.enabled') : t('core.common.itemCard.disabled') }}</span>
       </v-tooltip>
     </v-card-title>
-    
+
     <v-card-text>
       <slot name="item-details" :item="item"></slot>
     </v-card-text>
-    
+
     <v-card-actions style="margin: 8px;">
       <v-btn
-        variant="outlined" 
+        variant="outlined"
         color="error"
         rounded="xl"
         @click="$emit('delete', item)"
@@ -39,6 +39,15 @@
         @click="$emit('edit', item)"
       >
         {{ t('core.common.itemCard.edit') }}
+      </v-btn>
+      <v-btn
+        v-if="showCopyButton"
+        variant="tonal"
+        color="secondary"
+        rounded="xl"
+        @click="$emit('copy', item)"
+      >
+        {{ t('core.common.itemCard.copy') }}
       </v-btn>
       <v-spacer></v-spacer>
     </v-card-actions>
@@ -83,9 +92,13 @@ export default {
     loading: {
       type: Boolean,
       default: false
+    },
+    showCopyButton: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['toggle-enabled', 'delete', 'edit'],
+  emits: ['toggle-enabled', 'delete', 'edit', 'copy'],
   methods: {
     getItemTitle() {
       return this.item[this.titleField];
