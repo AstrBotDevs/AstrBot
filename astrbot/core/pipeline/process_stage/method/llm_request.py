@@ -3,6 +3,7 @@
 """
 
 import asyncio
+from collections import defaultdict
 import copy
 import json
 import traceback
@@ -286,6 +287,10 @@ async def run_agent(
         )
 
 
+# 用于将并行请求转化为队列的锁
+user_llm_locks = defaultdict(asyncio.Lock)
+
+
 class LLMRequestSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -339,6 +344,12 @@ class LLMRequestSubStage(Stage):
             conversation = await conv_mgr.get_conversation(umo, cid)
         return conversation
 
+    def _unlock(self, cid: str):
+        # 释放锁
+        if cid in user_llm_locks and user_llm_locks[cid].locked():
+            user_llm_locks[cid].release()
+            logger.info(f"用户(cid: {cid}) 的请求已完成，锁已释放。")
+
     async def process(
         self, event: AstrMessageEvent, _nested: bool = False
     ) -> Union[None, AsyncGenerator[None, None]]:
@@ -390,8 +401,21 @@ class LLMRequestSubStage(Stage):
         if not req.prompt and not req.image_urls:
             return
 
+        # 控制请求队列
+        if self.ctx.astrbot_config["platform_settings"]["request_queue"]:
+            cid = req.conversation.cid
+            lock = user_llm_locks[cid]
+            if lock.locked():
+                logger.info(f"用户(cid: {cid}) 的新请求正在等待上一次请求完成...")
+            await lock.acquire()
+            # 更新到最新的上下文
+            conversation = await self._get_session_conv(event)
+            req.conversation = conversation
+            req.contexts = json.loads(conversation.history)
+
         # 执行请求 LLM 前事件钩子。
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+            self._unlock(req.conversation.cid)
             return
 
         if isinstance(req.contexts, str):
@@ -504,6 +528,8 @@ class LLMRequestSubStage(Stage):
         # 异步处理 WebChat 特殊情况
         if event.get_platform_name() == "webchat":
             asyncio.create_task(self._handle_webchat(event, req, provider))
+
+        self._unlock(req.conversation.cid)
 
     async def _handle_webchat(
         self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider

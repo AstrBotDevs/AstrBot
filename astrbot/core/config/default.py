@@ -45,6 +45,7 @@ DEFAULT_CONFIG = {
         "friend_message_needs_wake_prefix": False,
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
+        "request_queue": False,
     },
     "provider": [],
     "provider_settings": {
@@ -467,6 +468,10 @@ CONFIG_METADATA_2 = {
                     "ignore_at_all": {
                         "type": "bool",
                         "hint": "启用后，机器人会忽略 @ 全体成员 的消息事件。",
+                    },
+                    "request_queue": {
+                        "type": "bool",
+                        "hint": "启用请求队列功能。当同一会话中同时收到多个请求时，会将这些请求排队依次处理，确保上下文连续性，避免并发处理导致的混乱。",
                     },
                     "segmented_reply": {
                         "type": "object",
@@ -1903,31 +1908,17 @@ CONFIG_METADATA_3 = {
                         "_special": "select_provider",
                         "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。",
                     },
-                    "provider_stt_settings.enable": {
-                        "description": "默认启用语音转文本",
-                        "type": "bool",
-                    },
                     "provider_stt_settings.provider_id": {
                         "description": "语音转文本模型",
                         "type": "string",
                         "hint": "留空代表不使用。",
                         "_special": "select_provider_stt",
-                        "condition": {
-                            "provider_stt_settings.enable": True,
-                        },
-                    },
-                    "provider_tts_settings.enable": {
-                        "description": "默认启用文本转语音",
-                        "type": "bool",
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "文本转语音模型",
                         "type": "string",
                         "hint": "留空代表不使用。",
                         "_special": "select_provider_tts",
-                        "condition": {
-                            "provider_tts_settings.enable": True,
-                        },
                     },
                     "provider_settings.image_caption_prompt": {
                         "description": "图片转述提示词",
@@ -2215,6 +2206,11 @@ CONFIG_METADATA_3 = {
                     "platform_settings.no_permission_reply": {
                         "description": "用户权限不足时是否回复",
                         "type": "bool",
+                    },
+                    "platform_settings.request_queue": {
+                        "description": "启用请求队列功能",
+                        "type": "bool",
+                        "hint": "当同一会话中同时收到多个请求时，会将这些请求排队依次处理，确保上下文连续性，避免并发处理导致的混乱。",
                     },
                 },
             },
