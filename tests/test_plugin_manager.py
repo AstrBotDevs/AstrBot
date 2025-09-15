@@ -1,5 +1,6 @@
 import pytest
 import os
+from unittest.mock import MagicMock
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.star.star import star_registry
@@ -14,7 +15,25 @@ config = AstrBotConfig()
 
 db = SQLiteDatabase("data/data_v3.db")
 
-star_context = Context(event_queue, config, db)
+# Create mock objects to satisfy the Context constructor
+provider_manager = MagicMock()
+platform_manager = MagicMock()
+conversation_manager = MagicMock()
+message_history_manager = MagicMock()
+persona_manager = MagicMock()
+astrbot_config_mgr = MagicMock()
+
+star_context = Context(
+    event_queue,
+    config,
+    db,
+    provider_manager,
+    platform_manager,
+    conversation_manager,
+    message_history_manager,
+    persona_manager,
+    astrbot_config_mgr,
+)
 
 
 @pytest.fixture
@@ -40,13 +59,14 @@ async def test_plugin_crud(plugin_manager_pm: PluginManager):
     """测试插件安装和重载"""
     os.makedirs("data/plugins", exist_ok=True)
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
-    plugin_path = await plugin_manager_pm.install_plugin(test_repo)
+    plugin_info = await plugin_manager_pm.install_plugin(test_repo)
+    plugin_path = os.path.join(plugin_manager_pm.plugin_store_path, "astrbot_plugin_essential")
     exists = False
     for md in star_registry:
         if md.name == "astrbot_plugin_essential":
             exists = True
             break
-    assert plugin_path is not None
+    assert plugin_info is not None
     assert os.path.exists(plugin_path)
     assert exists is True, "插件 astrbot_plugin_essential 未成功载入"
     # shutil.rmtree(plugin_path)
