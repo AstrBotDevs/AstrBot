@@ -6,7 +6,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.1.1"
+VERSION = "4.1.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -1903,17 +1903,31 @@ CONFIG_METADATA_3 = {
                         "_special": "select_provider",
                         "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。",
                     },
+                    "provider_stt_settings.enable": {
+                        "description": "默认启用语音转文本",
+                        "type": "bool",
+                    },
                     "provider_stt_settings.provider_id": {
                         "description": "语音转文本模型",
                         "type": "string",
                         "hint": "留空代表不使用。",
                         "_special": "select_provider_stt",
+                        "condition": {
+                            "provider_stt_settings.enable": True,
+                        },
+                    },
+                    "provider_tts_settings.enable": {
+                        "description": "默认启用文本转语音",
+                        "type": "bool",
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "文本转语音模型",
                         "type": "string",
                         "hint": "留空代表不使用。",
                         "_special": "select_provider_tts",
+                        "condition": {
+                            "provider_tts_settings.enable": True,
+                        },
                     },
                     "provider_settings.image_caption_prompt": {
                         "description": "图片转述提示词",
@@ -2130,41 +2144,41 @@ CONFIG_METADATA_3 = {
                 "description": "内容安全",
                 "type": "object",
                 "items": {
-                    "platform_settings.content_safety.also_use_in_response": {
+                    "content_safety.also_use_in_response": {
                         "description": "同时检查模型的响应内容",
                         "type": "bool",
                     },
-                    "platform_settings.content_safety.baidu_aip.enable": {
+                    "content_safety.baidu_aip.enable": {
                         "description": "使用百度内容安全审核",
                         "type": "bool",
                         "hint": "您需要手动安装 baidu-aip 库。",
                     },
-                    "platform_settings.content_safety.baidu_aip.app_id": {
+                    "content_safety.baidu_aip.app_id": {
                         "description": "App ID",
                         "type": "string",
                         "condition": {
-                            "platform_settings.content_safety.baidu_aip.enable": True,
+                            "content_safety.baidu_aip.enable": True,
                         },
                     },
-                    "platform_settings.content_safety.baidu_aip.api_key": {
+                    "content_safety.baidu_aip.api_key": {
                         "description": "API Key",
                         "type": "string",
                         "condition": {
-                            "platform_settings.content_safety.baidu_aip.enable": True,
+                            "content_safety.baidu_aip.enable": True,
                         },
                     },
-                    "platform_settings.content_safety.baidu_aip.secret_key": {
+                    "content_safety.baidu_aip.secret_key": {
                         "description": "Secret Key",
                         "type": "string",
                         "condition": {
-                            "platform_settings.content_safety.baidu_aip.enable": True,
+                            "content_safety.baidu_aip.enable": True,
                         },
                     },
-                    "platform_settings.content_safety.internal_keywords.enable": {
+                    "content_safety.internal_keywords.enable": {
                         "description": "关键词检查",
                         "type": "bool",
                     },
-                    "platform_settings.content_safety.internal_keywords.extra_keywords": {
+                    "content_safety.internal_keywords.extra_keywords": {
                         "description": "额外关键词",
                         "type": "list",
                         "items": {"type": "string"},

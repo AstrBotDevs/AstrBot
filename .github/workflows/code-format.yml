@@ -1,0 +1,34 @@
+name: Code Format Check
+
+on:
+  pull_request:
+    branches: [ master ]
+  push:
+    branches: [ master ]
+
+jobs:
+  format-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install UV
+      run: pip install uv
+      
+    - name: Install dependencies
+      run: uv sync
+      
+    - name: Check code formatting with ruff
+      run: |
+        uv run ruff format --check .
+        
+    - name: Check code style with ruff
+      run: |
+        uv run ruff check .
