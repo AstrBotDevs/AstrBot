@@ -167,7 +167,9 @@ class AiocqhttpAdapter(Platform):
 
         if "sub_type" in event:
             if event["sub_type"] == "poke" and "target_id" in event:
-                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))  # noqa: F405
+                abm.message.append(
+                    Poke(qq=str(event["target_id"]), type="poke")
+                )  # noqa: F405
 
         return abm
 
@@ -182,7 +184,8 @@ class AiocqhttpAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            str(event.sender["user_id"]), event.sender["nickname"]
+            str(event.sender["user_id"]),
+            event.sender.get("card") or event.sender.get("nickname", "N/A"),
         )
         if event["message_type"] == "group":
             abm.type = MessageType.GROUP_MESSAGE
