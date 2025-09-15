@@ -1215,14 +1215,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
             req.prompt = user_info + req.prompt
 
         if cfg.get("group_name_display") and event.message_obj.group_id:
-            group_name = ""
-            if hasattr(event.message_obj.raw_message, "group_name"):
-                group_name = str(event.message_obj.raw_message.group_name)
-            elif (
-                isinstance(event.message_obj.raw_message, dict)
-                and "group_name" in event.message_obj.raw_message
-            ):
-                group_name = str(event.message_obj.raw_message["group_name"])
+            group_name = event.message_obj.group.group_name
 
             if group_name:
                 req.system_prompt += f"\nGroup name: {group_name}\n"
