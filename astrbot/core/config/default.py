@@ -1903,17 +1903,31 @@ CONFIG_METADATA_3 = {
                         "_special": "select_provider",
                         "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。",
                     },
+                    "provider_stt_settings.enable": {
+                        "description": "默认启用语音转文本",
+                        "type": "bool",
+                    },
                     "provider_stt_settings.provider_id": {
                         "description": "语音转文本模型",
                         "type": "string",
                         "hint": "留空代表不使用。",
                         "_special": "select_provider_stt",
+                        "condition": {
+                            "provider_stt_settings.enable": True,
+                        },
+                    },
+                    "provider_tts_settings.enable": {
+                        "description": "默认启用文本转语音",
+                        "type": "bool",
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "文本转语音模型",
                         "type": "string",
                         "hint": "留空代表不使用。",
                         "_special": "select_provider_tts",
+                        "condition": {
+                            "provider_tts_settings.enable": True,
+                        },
                     },
                     "provider_settings.image_caption_prompt": {
                         "description": "图片转述提示词",
