@@ -3,10 +3,10 @@ from typing import Any, Optional
 
 try:
     import aiohttp
-except ImportError:
+except ImportError as e:
     raise ImportError(
         "aiohttp is required for Misskey API. Please install it with: pip install aiohttp"
-    )
+    ) from e
 
 try:
     from loguru import logger  # type: ignore
@@ -157,7 +157,7 @@ class MisskeyAPI:
                 return result
             except json.JSONDecodeError as e:
                 logger.error(f"响应不是有效的 JSON 格式: {e}")
-                raise APIConnectionError()
+                raise APIConnectionError() from e
         # 获取错误响应的详细内容
         try:
             error_text = await response.text()
@@ -183,7 +183,7 @@ class MisskeyAPI:
         url = f"{self.instance_url}/api/{endpoint}"
         payload = {"i": self.access_token}
         if data:
-            payload.update(data)
+            payload |= data
         try:
             async with self.session.post(url, json=payload) as response:
                 return await self._process_response(response, endpoint)
@@ -239,5 +239,7 @@ class MisskeyAPI:
         elif isinstance(result, dict) and "notifications" in result:
             return result["notifications"]
         else:
-            logger.warning(f"获取提及通知响应格式异常: {type(result)}")
+            logger.warning(
+                f"获取提及通知响应格式异常: {type(result)}, 响应内容: {result}"
+            )
             return []

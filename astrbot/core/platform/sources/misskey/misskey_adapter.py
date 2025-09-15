@@ -18,6 +18,57 @@ from .misskey_api import MisskeyAPI
 from .misskey_event import MisskeyPlatformEvent
 
 
+def _serialize_message_chain(chain):
+    """将消息链序列化为文本字符串"""
+    text_parts = []
+    has_at = False
+
+    for component in chain:
+        if isinstance(component, Comp.Plain):
+            text_parts.append(component.text)
+        elif isinstance(component, Comp.Image):
+            text_parts.append("[图片]")
+        elif isinstance(component, Comp.Node):
+            if component.content:
+                for node_comp in component.content:
+                    if isinstance(node_comp, Comp.Plain):
+                        text_parts.append(node_comp.text)
+                    elif isinstance(node_comp, Comp.Image):
+                        text_parts.append("[图片]")
+                    else:
+                        text_parts.append(str(node_comp))
+        elif isinstance(component, Comp.At):
+            has_at = True
+            text_parts.append(f"@{component.qq}")
+        else:
+            text_parts.append(str(component))
+
+    return "".join(text_parts), has_at
+
+
+def _resolve_visibility(user_id, user_cache, self_id):
+    """解析 Misskey 消息的可见性设置"""
+    visibility = "public"
+    visible_user_ids = None
+
+    if user_id:
+        user_info = user_cache.get(user_id)
+        if user_info:
+            original_visibility = user_info.get("visibility", "public")
+            if original_visibility == "specified":
+                visibility = "specified"
+                original_visible_users = user_info.get("visible_user_ids", [])
+                users_to_include = [user_id]
+                if self_id:
+                    users_to_include.append(self_id)
+                visible_user_ids = list(set(original_visible_users + users_to_include))
+                visible_user_ids = [uid for uid in visible_user_ids if uid]
+            else:
+                visibility = original_visibility
+
+    return visibility, visible_user_ids
+
+
 @register_platform_adapter("misskey", "Misskey 平台适配器")
 class MisskeyPlatformAdapter(Platform):
     def __init__(
@@ -71,6 +122,12 @@ class MisskeyPlatformAdapter(Platform):
             logger.error("[Misskey] API 客户端未初始化，无法开始轮询")
             return
 
+        # 指数退避参数
+        initial_backoff = 1  # 秒
+        max_backoff = 60  # 秒
+        backoff_multiplier = 2
+        current_backoff = initial_backoff
+
         is_first_poll = True
 
         try:
@@ -91,6 +148,9 @@ class MisskeyPlatformAdapter(Platform):
                     limit=20, since_id=self.last_notification_id
                 )
 
+                # 重置退避时间
+                current_backoff = initial_backoff
+
                 if notifications:
                     if is_first_poll:
                         logger.debug(f"[Misskey] 跳过 {len(notifications)} 条历史通知")
@@ -101,16 +161,19 @@ class MisskeyPlatformAdapter(Platform):
                         for notification in notifications:
                             await self._process_notification(notification)
                         self.last_notification_id = notifications[0].get("id")
-                else:
-                    if is_first_poll:
-                        is_first_poll = False
-                        logger.info("[Misskey] 开始监听新消息")
+                elif is_first_poll:
+                    is_first_poll = False
+                    logger.info("[Misskey] 开始监听新消息")
 
                 await asyncio.sleep(self.poll_interval)
 
             except Exception as e:
-                logger.error(f"[Misskey] 轮询错误: {e}")
-                await asyncio.sleep(5)
+                logger.warning(f"[Misskey] 获取通知失败: {e}")
+                logger.info(
+                    f"[Misskey] 轮询将在 {current_backoff} 秒后重试（指数退避）"
+                )
+                await asyncio.sleep(current_backoff)
+                current_backoff = min(current_backoff * backoff_multiplier, max_backoff)
 
     async def _process_notification(self, notification: Dict[str, Any]):
         notification_type = notification.get("type")
@@ -178,29 +241,9 @@ class MisskeyPlatformAdapter(Platform):
             elif session_id:
                 user_id = session_id
 
-            text = ""
-            has_at_user = False
+            text, has_at_user = _serialize_message_chain(message_chain.chain)
 
-            for component in message_chain.chain:
-                if isinstance(component, Comp.Plain):
-                    text += component.text
-                elif isinstance(component, Comp.Image):
-                    text += "[图片]"
-                elif isinstance(component, Comp.Node):
-                    if component.content:
-                        for node_comp in component.content:
-                            if isinstance(node_comp, Comp.Plain):
-                                text += node_comp.text
-                            elif isinstance(node_comp, Comp.Image):
-                                text += "[图片]"
-                            else:
-                                text += str(node_comp)
-                elif isinstance(component, Comp.At):
-                    has_at_user = True
-                    text += f"@{component.qq}"
-                else:
-                    text += str(component)
-
+            # 如果没有@用户并且是回复消息，添加@用户
             if not has_at_user and original_message_id and user_id:
                 user_info = self._user_cache.get(user_id)
                 if user_info:
@@ -218,24 +261,11 @@ class MisskeyPlatformAdapter(Platform):
             if len(text) > self.max_message_length:
                 text = text[: self.max_message_length] + "..."
 
-            visibility = "public"
-            visible_user_ids = None
-            if user_id:
-                user_info = self._user_cache.get(user_id)
-                if user_info:
-                    original_visibility = user_info.get("visibility", "public")
-                    if original_visibility == "specified":
-                        visibility = "specified"
-                        original_visible_users = user_info.get("visible_user_ids", [])
-                        users_to_include = [user_id]
-                        if self.client_self_id:
-                            users_to_include.append(self.client_self_id)
-                        visible_user_ids = list(
-                            set(original_visible_users + users_to_include)
-                        )
-                        visible_user_ids = [uid for uid in visible_user_ids if uid]
-                    else:
-                        visibility = original_visibility
+            visibility, visible_user_ids = _resolve_visibility(
+                user_id=user_id,
+                user_cache=self._user_cache,
+                self_id=self.client_self_id,
+            )
 
             # 发送消息
             if original_message_id:

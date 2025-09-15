@@ -2,7 +2,27 @@ from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import PlatformMetadata, AstrBotMessage
 from astrbot.api.message_components import Plain
-from astrbot.core.message.components import Node
+
+
+def _serialize_message_chain_simple(chain):
+    """简单的消息链序列化"""
+    content = ""
+    has_at = False
+
+    for item in chain:
+        if isinstance(item, Plain):
+            content += item.text
+        elif hasattr(item, "content") and item.content:
+            for sub_item in item.content:
+                content += getattr(sub_item, "text", "")
+        else:
+            text = getattr(item, "text", "")
+            if text:
+                content += text
+                if "@" in text:
+                    has_at = True
+
+    return content, has_at
 
 
 class MisskeyPlatformEvent(AstrMessageEvent):
@@ -18,15 +38,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
         self.client = client
 
     async def send(self, message: MessageChain):
-        content = ""
-        for item in message.chain:
-            if isinstance(item, Plain):
-                content += item.text
-            elif isinstance(item, Node) and item.content:
-                for sub_item in item.content:
-                    content += getattr(sub_item, "text", "")
-            else:
-                content += getattr(item, "text", "")
+        content, has_at = _serialize_message_chain_simple(message.chain)
 
         if not content:
             logger.debug("[MisskeyEvent] 内容为空，跳过发送")
@@ -36,15 +48,17 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             original_message_id = getattr(self.message_obj, "message_id", None)
 
             raw_message = getattr(self.message_obj, "raw_message", {})
-            if raw_message:
+            if raw_message and not has_at:
                 user_data = raw_message.get("user", {})
                 username = user_data.get("username", "")
                 if username and not content.startswith(f"@{username}"):
                     content = f"@{username} {content}"
 
             if original_message_id and hasattr(self.client, "create_note"):
+                # 简化的可见性处理
                 visibility = "public"
                 visible_user_ids = None
+
                 if raw_message:
                     original_visibility = raw_message.get("visibility", "public")
                     if original_visibility == "specified":
