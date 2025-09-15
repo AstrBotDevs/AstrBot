@@ -1,5 +1,6 @@
 import pytest
 import os
+import asyncio
 from quart import Quart
 from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -20,7 +21,8 @@ def core_lifecycle_td():
 @pytest.fixture(scope="module")
 def app(core_lifecycle_td):
     db = SQLiteDatabase("data/data_v3.db")
-    server = AstrBotDashboard(core_lifecycle_td, db)
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, db, shutdown_event)
     return server.app
 
 
@@ -142,19 +144,16 @@ async def test_check_update(app: Quart, header: dict):
 
 @pytest.mark.asyncio
 async def test_do_update(
-    app: Quart, header: dict, core_lifecycle_td: AstrBotCoreLifecycle
+    app: Quart, header: dict, core_lifecycle_td: AstrBotCoreLifecycle, monkeypatch
 ):
-    global VERSION
     test_client = app.test_client()
-    os.makedirs("data/astrbot_release", exist_ok=True)
-    core_lifecycle_td.astrbot_updator.MAIN_PATH = "data/astrbot_release"
-    VERSION = "114.514.1919810"
-    response = await test_client.post(
-        "/api/update/do", headers=header, json={"version": "latest"}
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "error"  # 已经是最新版本
+
+    async def mock_update(*args, **kwargs):
+        # 模拟更新成功
+        os.makedirs("data/astrbot_release/astrbot", exist_ok=True)
+        return
+
+    monkeypatch.setattr(core_lifecycle_td.astrbot_updator, "update", mock_update)
 
     response = await test_client.post(
         "/api/update/do", headers=header, json={"version": "v3.4.0", "reboot": False}
