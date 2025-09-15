@@ -235,7 +235,7 @@ CONFIG_METADATA_2 = {
                         "discord_guild_id_for_debug": "",
                         "discord_activity_name": "",
                     },
-                    "Misskey": {
+                    "misskey": {
                         "id": "misskey",
                         "type": "misskey",
                         "enable": False,
