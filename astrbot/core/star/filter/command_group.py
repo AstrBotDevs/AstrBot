@@ -113,8 +113,7 @@ class CommandGroupFilter(HandlerFilter):
                 + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
             )
             raise ValueError(
-                f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n"
-                + tree
+                f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n" + tree
             )
 
         # complete_command_names = [name + " " for name in complete_command_names]

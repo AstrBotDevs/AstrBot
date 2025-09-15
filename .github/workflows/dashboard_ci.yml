@@ -37,6 +37,7 @@ jobs:
             !dist/**/*.md
 
       - name: Create GitHub Release
+        if: github.event_name == 'push'
         uses: ncipollo/release-action@v1
         with:
           tag: release-${{ github.sha }}

@@ -366,7 +366,10 @@ class ProviderManager:
                 if not self.curr_provider_inst:
                     self.curr_provider_inst = inst
 
-            elif provider_metadata.provider_type in [ProviderType.EMBEDDING, ProviderType.RERANK]:
+            elif provider_metadata.provider_type in [
+                ProviderType.EMBEDDING,
+                ProviderType.RERANK,
+            ]:
                 inst = provider_metadata.cls_type(
                     provider_config, self.provider_settings
                 )
@@ -388,6 +391,7 @@ class ProviderManager:
 
         # 和配置文件保持同步
         config_ids = [provider["id"] for provider in self.providers_config]
+        logger.debug(f"providers in user's config: {config_ids}")
         for key in list(self.inst_map.keys()):
             if key not in config_ids:
                 await self.terminate_provider(key)

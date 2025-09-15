@@ -308,7 +308,9 @@ class SlackAdapter(Platform):
                     base64_content = base64.b64encode(content).decode("utf-8")
                     return base64_content
                 else:
-                    logger.error(f"Failed to download slack file: {resp.status} {await resp.text()}")
+                    logger.error(
+                        f"Failed to download slack file: {resp.status} {await resp.text()}"
+                    )
                     raise Exception(f"下载文件失败: {resp.status}")
 
     async def run(self) -> Awaitable[Any]:
