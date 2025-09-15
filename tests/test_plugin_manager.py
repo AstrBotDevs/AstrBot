@@ -55,49 +55,80 @@ async def test_plugin_manager_reload(plugin_manager_pm: PluginManager):
 
 
 @pytest.mark.asyncio
-async def test_plugin_crud(plugin_manager_pm: PluginManager):
-    """测试插件安装和重载"""
+async def test_install_plugin(plugin_manager_pm: PluginManager):
+    """Tests successful plugin installation."""
     os.makedirs("data/plugins", exist_ok=True)
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
     plugin_info = await plugin_manager_pm.install_plugin(test_repo)
-    plugin_path = os.path.join(plugin_manager_pm.plugin_store_path, "astrbot_plugin_essential")
-    exists = False
-    for md in star_registry:
-        if md.name == "astrbot_plugin_essential":
-            exists = True
-            break
+    plugin_path = os.path.join(
+        plugin_manager_pm.plugin_store_path, "astrbot_plugin_essential"
+    )
+
     assert plugin_info is not None
     assert os.path.exists(plugin_path)
-    assert exists is True, "插件 astrbot_plugin_essential 未成功载入"
-    # shutil.rmtree(plugin_path)
+    assert any(
+        md.name == "astrbot_plugin_essential" for md in star_registry
+    ), "插件 astrbot_plugin_essential 未成功载入"
 
-    # install plugin which is not exists
+    # Cleanup after test
+    await plugin_manager_pm.uninstall_plugin("astrbot_plugin_essential")
+
+
+@pytest.mark.asyncio
+async def test_install_nonexistent_plugin(plugin_manager_pm: PluginManager):
+    """Tests that installing a non-existent plugin raises an exception."""
     with pytest.raises(Exception):
-        plugin_path = await plugin_manager_pm.install_plugin(test_repo + "haha")
+        await plugin_manager_pm.install_plugin(
+            "https://github.com/Soulter/non_existent_repo"
+        )
 
-    # update
+
+@pytest.mark.asyncio
+async def test_update_plugin(plugin_manager_pm: PluginManager):
+    """Tests updating an existing plugin."""
+    # First, install the plugin
+    test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
+    await plugin_manager_pm.install_plugin(test_repo)
+
+    # Then, update it
     await plugin_manager_pm.update_plugin("astrbot_plugin_essential")
 
-    with pytest.raises(Exception):
-        await plugin_manager_pm.update_plugin("astrbot_plugin_essentialhaha")
-
-    # uninstall
+    # Cleanup after test
     await plugin_manager_pm.uninstall_plugin("astrbot_plugin_essential")
-    assert not os.path.exists(plugin_path)
-    exists = False
-    for md in star_registry:
-        if md.name == "astrbot_plugin_essential":
-            exists = True
-            break
-    assert exists is False, "插件 astrbot_plugin_essential 未成功卸载"
-    exists = False
-    for md in star_handlers_registry:
-        if "astrbot_plugin_essential" in md.handler_module_path:
-            exists = True
-            break
-    assert exists is False, "插件 astrbot_plugin_essential 未成功卸载"
 
+
+@pytest.mark.asyncio
+async def test_update_nonexistent_plugin(plugin_manager_pm: PluginManager):
+    """Tests that updating a non-existent plugin raises an exception."""
     with pytest.raises(Exception):
-        await plugin_manager_pm.uninstall_plugin("astrbot_plugin_essentialhaha")
+        await plugin_manager_pm.update_plugin("non_existent_plugin")
 
-    # TODO: file installation
+
+@pytest.mark.asyncio
+async def test_uninstall_plugin(plugin_manager_pm: PluginManager):
+    """Tests successful plugin uninstallation."""
+    # First, install the plugin
+    test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
+    await plugin_manager_pm.install_plugin(test_repo)
+    plugin_path = os.path.join(
+        plugin_manager_pm.plugin_store_path, "astrbot_plugin_essential"
+    )
+
+    # Then, uninstall it
+    await plugin_manager_pm.uninstall_plugin("astrbot_plugin_essential")
+
+    assert not os.path.exists(plugin_path)
+    assert not any(
+        md.name == "astrbot_plugin_essential" for md in star_registry
+    ), "插件 astrbot_plugin_essential 未成功卸载"
+    assert not any(
+        "astrbot_plugin_essential" in md.handler_module_path
+        for md in star_handlers_registry
+    ), "插件 astrbot_plugin_essential handler 未成功卸载"
+
+
+@pytest.mark.asyncio
+async def test_uninstall_nonexistent_plugin(plugin_manager_pm: PluginManager):
+    """Tests that uninstalling a non-existent plugin raises an exception."""
+    with pytest.raises(Exception):
+        await plugin_manager_pm.uninstall_plugin("non_existent_plugin")
