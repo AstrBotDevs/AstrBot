@@ -235,6 +235,13 @@ CONFIG_METADATA_2 = {
                         "discord_guild_id_for_debug": "",
                         "discord_activity_name": "",
                     },
+                    "Misskey": {
+                        "id": "misskey",
+                        "type": "misskey",
+                        "enable": False,
+                        "misskey_instance_url": "https://misskey.example",
+                        "misskey_token": "",
+                    },
                     "Slack": {
                         "id": "slack",
                         "type": "slack",
@@ -335,6 +342,16 @@ CONFIG_METADATA_2 = {
                         "description": "Bot Token",
                         "type": "string",
                         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
+                    },
+                    "misskey_instance_url": {
+                        "description": "Misskey 实例 URL",
+                        "type": "string",
+                        "hint": "例如 https://misskey.example，填写你的 Misskey 实例地址",
+                    },
+                    "misskey_token": {
+                        "description": "Misskey Access Token",
+                        "type": "string",
+                        "hint": "用于 API 鉴权的 i（access token）",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",
