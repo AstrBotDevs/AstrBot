@@ -38,8 +38,10 @@ class MisskeyPlatformAdapter(Platform):
         self.poll_interval = self.config.get("poll_interval", 5.0)
         self.max_message_length = self.config.get("max_message_length", 3000)
 
-        self.default_visibility = self.config.get("default_visibility", "public")
-        self.local_only = self.config.get("local_only", False)
+        self.default_visibility = self.config.get(
+            "misskey_default_visibility", "public"
+        )
+        self.local_only = self.config.get("misskey_local_only", False)
 
         self.api: Optional[MisskeyAPI] = None
         self._running = False
@@ -54,8 +56,8 @@ class MisskeyPlatformAdapter(Platform):
             "misskey_token": "",
             "poll_interval": 5.0,
             "max_message_length": 3000,
-            "default_visibility": "public",
-            "local_only": False,
+            "misskey_default_visibility": "public",
+            "misskey_local_only": False,
         }
         default_config.update(self.config)
 
