@@ -346,12 +346,12 @@ CONFIG_METADATA_2 = {
                     "misskey_instance_url": {
                         "description": "Misskey 实例 URL",
                         "type": "string",
-                        "hint": "例如 https://misskey.example，填写你的 Misskey 实例地址",
+                        "hint": "例如 https://misskey.example，填写 Bot 账号所在的 Misskey 实例地址",
                     },
                     "misskey_token": {
                         "description": "Misskey Access Token",
                         "type": "string",
-                        "hint": "用于 API 鉴权的 i（access token）",
+                        "hint": "连接服务设置生成的 API 鉴权访问令牌（Access token）",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",
