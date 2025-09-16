@@ -52,10 +52,11 @@ class CommandFilter(HandlerFilter):
                 # 忽略前两个参数，即 self 和 event
                 idx += 1
                 continue
-            if v.default == inspect.Parameter.empty:
-                self.handler_params[k] = v.annotation
-            else:
+            # 优先类型注解 其次默认值
+            if v.annotation == inspect.Parameter.empty:
                 self.handler_params[k] = v.default
+            else:
+                self.handler_params[k] = v.annotation
 
     def get_handler_md(self) -> StarHandlerMetadata:
         return self.handler_md
