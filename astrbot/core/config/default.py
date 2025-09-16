@@ -60,6 +60,7 @@ DEFAULT_CONFIG = {
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
+        "group_name_display": False,
         "datetime_system_prompt": True,
         "default_personality": "default",
         "persona_pool": ["*"],
@@ -1724,6 +1725,9 @@ CONFIG_METADATA_2 = {
                     "identifier": {
                         "type": "bool",
                     },
+                    "group_name_display": {
+                        "type": "bool",
+                    },
                     "datetime_system_prompt": {
                         "type": "bool",
                     },
@@ -1996,6 +2000,11 @@ CONFIG_METADATA_3 = {
                     "provider_settings.identifier": {
                         "description": "用户识别",
                         "type": "bool",
+                    },
+                    "provider_settings.group_name_display": {
+                        "description": "显示群名称",
+                        "type": "bool",
+                        "hint": "启用后，在支持的平台(aiocqhttp)上会在 prompt 中包含群名称信息。",
                     },
                     "provider_settings.datetime_system_prompt": {
                         "description": "现实世界时间感知",
