@@ -104,9 +104,7 @@ class MisskeyAPI:
         if response.status == HTTP_OK:
             try:
                 result = await response.json()
-                # 减少轮询接口的重复日志输出
                 if endpoint == "i/notifications":
-                    # 只在有新通知时才输出日志
                     notifications_data = (
                         result
                         if isinstance(result, list)
@@ -118,9 +116,7 @@ class MisskeyAPI:
                         logger.debug(
                             f"Misskey API 获取到 {len(notifications_data)} 条新通知"
                         )
-                    # 空结果不输出日志，避免频繁的轮询日志
                 else:
-                    # 其他接口正常输出成功日志
                     logger.debug(f"Misskey API 请求成功: {endpoint}")
                 return result
             except json.JSONDecodeError as e:
@@ -165,8 +161,13 @@ class MisskeyAPI:
         visibility: str = "public",
         reply_id: Optional[str] = None,
         visible_user_ids: Optional[List[str]] = None,
+        local_only: bool = False,
     ) -> Dict[str, Any]:
-        data: Dict[str, Any] = {"text": text, "visibility": visibility}
+        data: Dict[str, Any] = {
+            "text": text,
+            "visibility": visibility,
+            "localOnly": local_only,
+        }
         if reply_id:
             data["replyId"] = reply_id
         if visible_user_ids and visibility == "specified":

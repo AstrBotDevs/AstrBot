@@ -242,6 +242,8 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "misskey_instance_url": "https://misskey.example",
                         "misskey_token": "",
+                        "default_visibility": "public",
+                        "local_only": False,
                     },
                     "Slack": {
                         "id": "slack",
@@ -353,6 +355,17 @@ CONFIG_METADATA_2 = {
                         "description": "Misskey Access Token",
                         "type": "string",
                         "hint": "连接服务设置生成的 API 鉴权访问令牌（Access token）",
+                    },
+                    "default_visibility": {
+                        "description": "默认帖子可见性",
+                        "type": "string",
+                        "options": ["public", "home", "followers"],
+                        "hint": "机器人发帖时的默认可见性设置。public：公开，home：主页时间线，followers：仅关注者。",
+                    },
+                    "local_only": {
+                        "description": "仅限本站（不参与联合）",
+                        "type": "bool",
+                        "hint": "启用后，机器人发出的帖子将仅在本实例可见，不会联合到其他实例",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",

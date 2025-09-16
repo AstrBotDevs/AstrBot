@@ -42,16 +42,21 @@ def serialize_message_chain(chain: List[Any]) -> Tuple[str, bool]:
 
 
 def resolve_message_visibility(
-    user_id: Optional[str], user_cache: Dict[str, Any], self_id: Optional[str]
+    user_id: Optional[str],
+    user_cache: Dict[str, Any],
+    self_id: Optional[str],
+    default_visibility: str = "public",
 ) -> Tuple[str, Optional[List[str]]]:
-    """解析 Misskey 消息的可见性设置"""
-    visibility = "public"
+    """
+    解析 Misskey 消息的可见性设置
+    """
+    visibility = default_visibility
     visible_user_ids = None
 
     if user_id and user_cache:
         user_info = user_cache.get(user_id)
         if user_info:
-            original_visibility = user_info.get("visibility", "public")
+            original_visibility = user_info.get("visibility", default_visibility)
             if original_visibility == "specified":
                 visibility = "specified"
                 original_visible_users = user_info.get("visible_user_ids", [])

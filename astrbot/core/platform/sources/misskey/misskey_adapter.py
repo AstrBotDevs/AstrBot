@@ -38,6 +38,9 @@ class MisskeyPlatformAdapter(Platform):
         self.poll_interval = self.config.get("poll_interval", 5.0)
         self.max_message_length = self.config.get("max_message_length", 3000)
 
+        self.default_visibility = self.config.get("default_visibility", "public")
+        self.local_only = self.config.get("local_only", False)
+
         self.api: Optional[MisskeyAPI] = None
         self._running = False
         self.last_notification_id = None
@@ -46,11 +49,21 @@ class MisskeyPlatformAdapter(Platform):
         self._user_cache = {}
 
     def meta(self) -> PlatformMetadata:
+        default_config = {
+            "misskey_instance_url": "",
+            "misskey_token": "",
+            "poll_interval": 5.0,
+            "max_message_length": 3000,
+            "default_visibility": "public",
+            "local_only": False,
+        }
+        default_config.update(self.config)
+
         return PlatformMetadata(
             name="misskey",
             description="Misskey 平台适配器",
             id=self.config.get("id", "misskey"),
-            default_config_tmpl=self.config,
+            default_config_tmpl=default_config,
         )
 
     async def run(self):
@@ -207,6 +220,7 @@ class MisskeyPlatformAdapter(Platform):
                 user_id=user_id,
                 user_cache=self._user_cache,
                 self_id=self.client_self_id,
+                default_visibility=self.default_visibility,
             )
 
             if user_id and is_valid_user_session_id(user_id):
@@ -214,7 +228,10 @@ class MisskeyPlatformAdapter(Platform):
                 logger.debug("[Misskey] 私信发送成功")
             else:
                 await self.api.create_note(
-                    text, visibility=visibility, visible_user_ids=visible_user_ids
+                    text,
+                    visibility=visibility,
+                    visible_user_ids=visible_user_ids,
+                    local_only=self.local_only,
                 )
                 logger.debug("[Misskey] 帖子发送成功")
 
