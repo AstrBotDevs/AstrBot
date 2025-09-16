@@ -116,10 +116,10 @@ def add_at_mention_if_needed(
     if username:
         mention = f"@{username}"
         if not text.startswith(mention):
-            text = f"{mention} {text}".strip()
+            text = f"{mention}\n{text}".strip()
     elif nickname:
         mention = f"@{nickname}"
         if not text.startswith(mention):
-            text = f"{mention} {text}".strip()
+            text = f"{mention}\n{text}".strip()
 
     return text

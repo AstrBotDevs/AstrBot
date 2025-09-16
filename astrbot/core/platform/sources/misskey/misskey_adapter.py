@@ -167,19 +167,15 @@ class MisskeyPlatformAdapter(Platform):
         bot_user_id = self.client_self_id
         mentions = note.get("mentions", [])
 
-        # 检查文本中是否直接@了机器人
         if self._bot_username and f"@{self._bot_username}" in text:
             return True
 
-        # 检查是否在提及列表中
         if bot_user_id in [str(uid) for uid in mentions]:
             return True
 
-        # 检查回复情况
         reply = note.get("reply")
         if reply and isinstance(reply, dict):
             reply_user_id = str(reply.get("user", {}).get("id", ""))
-            # 如果回复的是机器人的消息，需要文本中有@机器人
             if reply_user_id == str(bot_user_id):
                 return bool(self._bot_username and f"@{self._bot_username}" in text)
 
