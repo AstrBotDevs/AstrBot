@@ -93,6 +93,7 @@ class MisskeyPlatformAdapter(Platform):
         return PlatformMetadata(
             name="misskey",
             description="Misskey 平台适配器",
+            id=self.config.get("id"),
             default_config_tmpl=self.config,
         )
 
