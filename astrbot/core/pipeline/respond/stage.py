@@ -221,6 +221,15 @@ class RespondStage(Stage):
                                 exc_info=True,
                             )
             else:
+                if all(
+                    comp.type in {ComponentType.Reply, ComponentType.At}
+                    for comp in result.chain
+                ):
+                    # may fix #2670
+                    logger.warning(
+                        f"消息链全为 Reply 和 At 消息段, 跳过发送阶段。chain: {result.chain}"
+                    )
+                    return
                 sep_comps = self._extract_comp(
                     result.chain,
                     need_separately,
