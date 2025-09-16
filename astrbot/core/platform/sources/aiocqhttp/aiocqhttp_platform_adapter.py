@@ -187,6 +187,7 @@ class AiocqhttpAdapter(Platform):
         if event["message_type"] == "group":
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
+            abm.group.group_name = event.get("group_name", "N/A")
         elif event["message_type"] == "private":
             abm.type = MessageType.FRIEND_MESSAGE
         if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
