@@ -633,6 +633,16 @@ class SatoriPlatformAdapter(Platform):
                 else:
                     elements.append(Plain(text="[ARK卡片]"))
 
+            elif tag_name == "json":
+                # JSON标签 视为ARK卡片消息
+                data = attrs.get("data", "")
+                if data:
+                    import html
+                    decoded_data = html.unescape(data)
+                    elements.append(Plain(text=f"[ARK卡片数据: {decoded_data}]"))
+                else:
+                    elements.append(Plain(text="[JSON卡片]"))
+
             else:
                 # 未知标签，递归处理其内容
                 if child.text and child.text.strip():
