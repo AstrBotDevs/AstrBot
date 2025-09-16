@@ -258,7 +258,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 )
                                 yield MessageChain(
                                     type="tool_direct_result"
-                                ).base64_image(res.content[0].data)
+                                ).base64_image(resource.blob)
                             else:
                                 tool_call_result_blocks.append(
                                     ToolCallMessageSegment(
