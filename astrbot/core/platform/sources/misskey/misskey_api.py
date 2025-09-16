@@ -100,11 +100,28 @@ class MisskeyAPI:
 
     async def _process_response(
         self, response: aiohttp.ClientResponse, endpoint: str
-    ) -> Dict[str, Any]:
+    ) -> Any:
         if response.status == HTTP_OK:
             try:
                 result = await response.json()
-                logger.debug(f"Misskey API 请求成功: {endpoint}")
+                # 减少轮询接口的重复日志输出
+                if endpoint == "i/notifications":
+                    # 只在有新通知时才输出日志
+                    notifications_data = (
+                        result
+                        if isinstance(result, list)
+                        else result.get("notifications", [])
+                        if isinstance(result, dict)
+                        else []
+                    )
+                    if len(notifications_data) > 0:
+                        logger.debug(
+                            f"Misskey API 获取到 {len(notifications_data)} 条新通知"
+                        )
+                    # 空结果不输出日志，避免频繁的轮询日志
+                else:
+                    # 其他接口正常输出成功日志
+                    logger.debug(f"Misskey API 请求成功: {endpoint}")
                 return result
             except json.JSONDecodeError as e:
                 logger.error(f"响应不是有效的 JSON 格式: {e}")
@@ -129,7 +146,7 @@ class MisskeyAPI:
     )
     async def _make_request(
         self, endpoint: str, data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    ) -> Any:
         url = f"{self.instance_url}/api/{endpoint}"
         payload = {"i": self.access_token}
         if data:
