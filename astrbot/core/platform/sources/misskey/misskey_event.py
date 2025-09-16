@@ -33,7 +33,6 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             original_message_id = getattr(self.message_obj, "message_id", None)
             raw_message = getattr(self.message_obj, "raw_message", {})
 
-            # 如果没有@用户，尝试添加@用户
             if raw_message and not has_at:
                 user_data = raw_message.get("user", {})
                 user_info = {
@@ -42,7 +41,6 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                 }
                 content = add_at_mention_if_needed(content, user_info, has_at)
 
-            # 处理回复消息
             if original_message_id and hasattr(self.client, "create_note"):
                 visibility, visible_user_ids = resolve_visibility_from_raw_message(
                     raw_message
@@ -54,14 +52,12 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                     visibility=visibility,
                     visible_user_ids=visible_user_ids,
                 )
-            # 处理私信
             elif hasattr(self.client, "send_message") and is_valid_user_session_id(
                 self.session_id
             ):
                 logger.debug(f"[MisskeyEvent] 发送私信: {self.session_id}")
                 await self.client.send_message(str(self.session_id), content)
                 return
-            # 创建新帖子
             elif hasattr(self.client, "create_note"):
                 logger.debug("[MisskeyEvent] 创建新帖子")
                 await self.client.create_note(content)

@@ -21,39 +21,26 @@ HTTP_TOO_MANY_REQUESTS = 429
 
 # Exceptions
 class APIError(Exception):
-    """Misskey API 基础异常"""
-
     pass
 
 
 class APIBadRequestError(APIError):
-    """请求参数错误"""
-
     pass
 
 
 class APIConnectionError(APIError):
-    """连接错误"""
-
     pass
 
 
 class APIRateLimitError(APIError):
-    """频率限制错误"""
-
     pass
 
 
 class AuthenticationError(APIError):
-    """认证错误"""
-
     pass
 
 
-# Retry decorator for API requests
 def retry_async(max_retries: int = 3, retryable_exceptions: tuple = ()):
-    """异步重试装饰器"""
-
     def decorator(func):
         async def wrapper(*args, **kwargs):
             last_exc = None
@@ -72,8 +59,6 @@ def retry_async(max_retries: int = 3, retryable_exceptions: tuple = ()):
 
 
 class MisskeyAPI:
-    """Misskey API 客户端，专为 AstrBot 适配器优化"""
-
     def __init__(self, instance_url: str, access_token: str):
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
@@ -87,7 +72,6 @@ class MisskeyAPI:
         return False
 
     async def close(self) -> None:
-        """关闭 API 客户端"""
         if self._session:
             await self._session.close()
             self._session = None
@@ -95,14 +79,12 @@ class MisskeyAPI:
 
     @property
     def session(self) -> aiohttp.ClientSession:
-        """获取或创建 HTTP 会话"""
         if self._session is None or self._session.closed:
             headers = {"Authorization": f"Bearer {self.access_token}"}
             self._session = aiohttp.ClientSession(headers=headers)
         return self._session
 
     def _handle_response_status(self, status: int, endpoint: str):
-        """处理 HTTP 响应状态码"""
         if status == HTTP_BAD_REQUEST:
             logger.error(f"API 请求错误: {endpoint} (状态码: {status})")
             raise APIBadRequestError(f"Bad request for {endpoint}")
@@ -119,7 +101,6 @@ class MisskeyAPI:
     async def _process_response(
         self, response: aiohttp.ClientResponse, endpoint: str
     ) -> Dict[str, Any]:
-        """处理 API 响应"""
         if response.status == HTTP_OK:
             try:
                 result = await response.json()
@@ -129,7 +110,6 @@ class MisskeyAPI:
                 logger.error(f"响应不是有效的 JSON 格式: {e}")
                 raise APIConnectionError("Invalid JSON response") from e
         else:
-            # 记录错误响应详情
             try:
                 error_text = await response.text()
                 logger.error(
@@ -141,7 +121,6 @@ class MisskeyAPI:
                 )
 
             self._handle_response_status(response.status, endpoint)
-            # 这行不会被执行，因为上面的方法总是抛出异常
             raise APIConnectionError(f"Request failed for {endpoint}")
 
     @retry_async(
@@ -151,7 +130,6 @@ class MisskeyAPI:
     async def _make_request(
         self, endpoint: str, data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """发送 API 请求"""
         url = f"{self.instance_url}/api/{endpoint}"
         payload = {"i": self.access_token}
         if data:
@@ -171,7 +149,6 @@ class MisskeyAPI:
         reply_id: Optional[str] = None,
         visible_user_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """创建帖子/回复"""
         data: Dict[str, Any] = {"text": text, "visibility": visibility}
         if reply_id:
             data["replyId"] = reply_id
@@ -184,11 +161,9 @@ class MisskeyAPI:
         return result
 
     async def get_current_user(self) -> Dict[str, Any]:
-        """获取当前用户信息"""
         return await self._make_request("i", {})
 
     async def send_message(self, user_id: str, text: str) -> Dict[str, Any]:
-        """发送私信"""
         result = await self._make_request(
             "chat/messages/create-to-user", {"toUserId": user_id, "text": text}
         )
@@ -199,14 +174,12 @@ class MisskeyAPI:
     async def get_mentions(
         self, limit: int = 10, since_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """获取提及通知（包括回复和引用）"""
         data: Dict[str, Any] = {"limit": limit}
         if since_id:
             data["sinceId"] = since_id
         data["includeTypes"] = ["mention", "reply", "quote"]
 
         result = await self._make_request("i/notifications", data)
-        # Misskey API 返回通知列表
         if isinstance(result, list):
             return result
         elif isinstance(result, dict) and "notifications" in result:

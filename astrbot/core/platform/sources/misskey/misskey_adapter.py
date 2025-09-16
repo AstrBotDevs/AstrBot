@@ -48,7 +48,7 @@ class MisskeyPlatformAdapter(Platform):
         return PlatformMetadata(
             name="misskey",
             description="Misskey 平台适配器",
-            id=self.config.get("id", "misskey"),  # 提供默认值防止 None
+            id=self.config.get("id", "misskey"),
             default_config_tmpl=self.config,
         )
 
@@ -75,19 +75,16 @@ class MisskeyPlatformAdapter(Platform):
         await self._start_polling()
 
     async def _start_polling(self):
-        """开始轮询通知"""
         if not self.api:
             logger.error("[Misskey] API 客户端未初始化，无法开始轮询")
             return
 
-        # 指数退避参数
         initial_backoff = 1
         max_backoff = 60
         backoff_multiplier = 2
         current_backoff = initial_backoff
         is_first_poll = True
 
-        # 获取起始通知ID
         try:
             latest_notifications = await self.api.get_mentions(limit=1)
             if latest_notifications:
@@ -96,7 +93,6 @@ class MisskeyPlatformAdapter(Platform):
         except Exception as e:
             logger.warning(f"[Misskey] 获取起始通知失败: {e}")
 
-        # 主轮询循环
         while self._running:
             if not self.api:
                 logger.error("[Misskey] API 客户端在轮询过程中变为 None")
@@ -107,9 +103,7 @@ class MisskeyPlatformAdapter(Platform):
                     limit=20, since_id=self.last_notification_id
                 )
 
-                # 重置退避时间
                 current_backoff = initial_backoff
-
                 await self._process_notifications(notifications, is_first_poll)
                 is_first_poll = False
 
@@ -122,7 +116,6 @@ class MisskeyPlatformAdapter(Platform):
                 current_backoff = min(current_backoff * backoff_multiplier, max_backoff)
 
     async def _process_notifications(self, notifications: list, is_first_poll: bool):
-        """处理通知列表"""
         if not notifications:
             if is_first_poll:
                 logger.info("[Misskey] 开始监听新消息")
@@ -132,14 +125,12 @@ class MisskeyPlatformAdapter(Platform):
             logger.debug(f"[Misskey] 跳过 {len(notifications)} 条历史通知")
             self.last_notification_id = notifications[0].get("id")
         else:
-            # 按时间顺序处理通知
             notifications.reverse()
             for notification in notifications:
                 await self._process_notification(notification)
             self.last_notification_id = notifications[0].get("id")
 
     async def _process_notification(self, notification: Dict[str, Any]):
-        """处理单个通知"""
         try:
             notification_type = notification.get("type")
             if notification_type not in ["mention", "reply", "quote"]:
@@ -191,22 +182,18 @@ class MisskeyPlatformAdapter(Platform):
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
     ) -> Awaitable[Any]:
-        """通过会话发送消息"""
         if not self.api:
             logger.error("[Misskey] API 客户端未初始化")
             return await super().send_by_session(session, message_chain)
 
         try:
-            # 解析session信息 - 现在session_id就是用户ID
             user_id = session.session_id
             text, has_at_user = serialize_message_chain(message_chain.chain)
 
-            # 添加@用户提及
             if not has_at_user and user_id:
                 user_info = self._user_cache.get(user_id)
                 text = add_at_mention_if_needed(text, user_info, has_at_user)
 
-            # 验证和处理消息内容
             if not text or not text.strip():
                 logger.warning("[Misskey] 消息内容为空，跳过发送")
                 return await super().send_by_session(session, message_chain)
@@ -214,14 +201,12 @@ class MisskeyPlatformAdapter(Platform):
             if len(text) > self.max_message_length:
                 text = text[: self.max_message_length] + "..."
 
-            # 确定可见性设置
             visibility, visible_user_ids = resolve_message_visibility(
                 user_id=user_id,
                 user_cache=self._user_cache,
                 self_id=self.client_self_id,
             )
 
-            # 发送消息
             if user_id and is_valid_user_session_id(user_id):
                 await self.api.send_message(user_id, text)
                 logger.debug(f"[Misskey] 私信发送成功: {user_id}")
@@ -251,8 +236,7 @@ class MisskeyPlatformAdapter(Platform):
 
         user_id = message.sender.user_id
         message_id = str(raw_data.get("id", ""))
-        # 使用 AstrBot 标准的会话ID格式: platform_name:message_type:session_id
-        message.session_id = user_id  # 使用用户ID作为基础session_id
+        message.session_id = user_id
         message.message_id = message_id
         message.self_id = self.client_self_id
         message.type = MessageType.FRIEND_MESSAGE
@@ -278,7 +262,6 @@ class MisskeyPlatformAdapter(Platform):
 
             message.message.append(Comp.Plain(raw_text))
 
-        # 处理文件附件
         files = raw_data.get("files", [])
         if files:
             for file_info in files:
@@ -287,10 +270,8 @@ class MisskeyPlatformAdapter(Platform):
                 file_name = file_info.get("name", "未知文件")
 
                 if file_type.startswith("image/"):
-                    # 图片文件
                     message.message.append(Comp.Image(file_url))
                 else:
-                    # 其他文件类型，作为纯文本描述
                     message.message.append(Comp.Plain(f"[文件: {file_name}]"))
 
         return message
