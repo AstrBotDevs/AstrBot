@@ -1,5 +1,5 @@
 import json
-from typing import Any, Optional
+from typing import Any, Optional, Dict, List
 
 try:
     import aiohttp
@@ -8,15 +8,7 @@ except ImportError as e:
         "aiohttp is required for Misskey API. Please install it with: pip install aiohttp"
     ) from e
 
-try:
-    from loguru import logger  # type: ignore
-except ImportError:
-    try:
-        from astrbot import logger
-    except ImportError:
-        import logging
-
-        logger = logging.getLogger(__name__)
+from astrbot.api import logger
 
 # Constants
 API_MAX_RETRIES = 3
@@ -29,63 +21,39 @@ HTTP_TOO_MANY_REQUESTS = 429
 
 # Exceptions
 class APIError(Exception):
+    """Misskey API 基础异常"""
+
     pass
 
 
 class APIBadRequestError(APIError):
+    """请求参数错误"""
+
     pass
 
 
 class APIConnectionError(APIError):
+    """连接错误"""
+
     pass
 
 
 class APIRateLimitError(APIError):
+    """频率限制错误"""
+
     pass
 
 
 class AuthenticationError(APIError):
+    """认证错误"""
+
     pass
 
 
-# HTTP Client Session Manager
-class ClientSession:
-    session: aiohttp.ClientSession | None = None
-    _token: str | None = None
-
-    @classmethod
-    def set_token(cls, token: str):
-        cls._token = token
-
-    @classmethod
-    async def close_session(cls, silent: bool = False):
-        if cls.session is not None:
-            try:
-                await cls.session.close()
-            except Exception:
-                if not silent:
-                    raise
-            finally:
-                cls.session = None
-
-    @classmethod
-    def _ensure_session(cls):
-        if cls.session is None:
-            headers = {}
-            if cls._token:
-                headers["Authorization"] = f"Bearer {cls._token}"
-            cls.session = aiohttp.ClientSession(headers=headers)
-
-    @classmethod
-    def post(cls, url, json=None):
-        cls._ensure_session()
-        if cls.session is None:
-            raise RuntimeError("Failed to create HTTP session")
-        return cls.session.post(url, json=json)
-
-
 # Retry decorator for API requests
-def retry_async(max_retries=3, retryable_exceptions=()):
+def retry_async(max_retries: int = 3, retryable_exceptions: tuple = ()):
+    """异步重试装饰器"""
+
     def decorator(func):
         async def wrapper(*args, **kwargs):
             last_exc = None
@@ -103,17 +71,13 @@ def retry_async(max_retries=3, retryable_exceptions=()):
     return decorator
 
 
-__all__ = ("MisskeyAPI",)
-
-
 class MisskeyAPI:
     """Misskey API 客户端，专为 AstrBot 适配器优化"""
 
     def __init__(self, instance_url: str, access_token: str):
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
-        self.transport = ClientSession
-        self.transport.set_token(access_token)
+        self._session: Optional[aiohttp.ClientSession] = None
 
     async def __aenter__(self):
         return self
@@ -124,32 +88,38 @@ class MisskeyAPI:
 
     async def close(self) -> None:
         """关闭 API 客户端"""
-        await self.transport.close_session(silent=True)
+        if self._session:
+            await self._session.close()
+            self._session = None
         logger.debug("Misskey API 客户端已关闭")
 
     @property
-    def session(self):
-        self.transport._ensure_session()
-        if self.transport.session is None:
-            raise RuntimeError("Failed to create HTTP session")
-        return self.transport.session
+    def session(self) -> aiohttp.ClientSession:
+        """获取或创建 HTTP 会话"""
+        if self._session is None or self._session.closed:
+            headers = {"Authorization": f"Bearer {self.access_token}"}
+            self._session = aiohttp.ClientSession(headers=headers)
+        return self._session
 
-    def _handle_response_status(self, response, endpoint: str):
-        status = response.status
+    def _handle_response_status(self, status: int, endpoint: str):
+        """处理 HTTP 响应状态码"""
         if status == HTTP_BAD_REQUEST:
             logger.error(f"API 请求错误: {endpoint} (状态码: {status})")
-            raise APIBadRequestError()
-        if status == HTTP_UNAUTHORIZED:
+            raise APIBadRequestError(f"Bad request for {endpoint}")
+        elif status in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN):
             logger.error(f"API 认证失败: {endpoint} (状态码: {status})")
-            raise AuthenticationError()
-        if status == HTTP_FORBIDDEN:
-            logger.error(f"API 权限不足: {endpoint} (状态码: {status})")
-            raise AuthenticationError()
-        if status == HTTP_TOO_MANY_REQUESTS:
+            raise AuthenticationError(f"Authentication failed for {endpoint}")
+        elif status == HTTP_TOO_MANY_REQUESTS:
             logger.warning(f"API 频率限制: {endpoint} (状态码: {status})")
-            raise APIRateLimitError()
+            raise APIRateLimitError(f"Rate limit exceeded for {endpoint}")
+        else:
+            logger.error(f"API 请求失败: {endpoint} (状态码: {status})")
+            raise APIConnectionError(f"HTTP {status} for {endpoint}")
 
-    async def _process_response(self, response, endpoint: str):
+    async def _process_response(
+        self, response: aiohttp.ClientResponse, endpoint: str
+    ) -> Dict[str, Any]:
+        """处理 API 响应"""
         if response.status == HTTP_OK:
             try:
                 result = await response.json()
@@ -157,49 +127,52 @@ class MisskeyAPI:
                 return result
             except json.JSONDecodeError as e:
                 logger.error(f"响应不是有效的 JSON 格式: {e}")
-                raise APIConnectionError() from e
-        # 获取错误响应的详细内容
-        try:
-            error_text = await response.text()
-            logger.error(
-                f"API 请求失败: {endpoint} - 状态码: {response.status}, 响应: {error_text}"
-            )
-        except Exception:
-            logger.error(
-                f"API 请求失败: {endpoint} - 状态码: {response.status}, 无法读取错误响应"
-            )
+                raise APIConnectionError("Invalid JSON response") from e
+        else:
+            # 记录错误响应详情
+            try:
+                error_text = await response.text()
+                logger.error(
+                    f"API 请求失败: {endpoint} - 状态码: {response.status}, 响应: {error_text}"
+                )
+            except Exception:
+                logger.error(
+                    f"API 请求失败: {endpoint} - 状态码: {response.status}, 无法读取错误响应"
+                )
 
-        self._handle_response_status(response, endpoint)
-        raise APIConnectionError()
+            self._handle_response_status(response.status, endpoint)
+            # 这行不会被执行，因为上面的方法总是抛出异常
+            raise APIConnectionError(f"Request failed for {endpoint}")
 
     @retry_async(
         max_retries=API_MAX_RETRIES,
         retryable_exceptions=(APIConnectionError, APIRateLimitError),
     )
     async def _make_request(
-        self, endpoint: str, data: Optional[dict[str, Any]] = None
-    ) -> dict[str, Any]:
+        self, endpoint: str, data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """发送 API 请求"""
         url = f"{self.instance_url}/api/{endpoint}"
         payload = {"i": self.access_token}
         if data:
-            payload |= data
+            payload.update(data)
+
         try:
             async with self.session.post(url, json=payload) as response:
                 return await self._process_response(response, endpoint)
-        except (aiohttp.ClientError, json.JSONDecodeError) as e:
+        except aiohttp.ClientError as e:
             logger.error(f"HTTP 请求错误: {e}")
-            raise APIConnectionError() from e
+            raise APIConnectionError(f"HTTP request failed: {e}") from e
 
     async def create_note(
         self,
         text: str,
         visibility: str = "public",
         reply_id: Optional[str] = None,
-        visible_user_ids: Optional[list[str]] = None,
-    ) -> dict[str, Any]:
+        visible_user_ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """创建帖子/回复"""
-        data: dict[str, Any] = {"text": text, "visibility": visibility}
+        data: Dict[str, Any] = {"text": text, "visibility": visibility}
         if reply_id:
             data["replyId"] = reply_id
         if visible_user_ids and visibility == "specified":
@@ -210,11 +183,11 @@ class MisskeyAPI:
         logger.debug(f"Misskey 发帖成功，note_id: {note_id}")
         return result
 
-    async def get_current_user(self) -> dict[str, Any]:
+    async def get_current_user(self) -> Dict[str, Any]:
         """获取当前用户信息"""
         return await self._make_request("i", {})
 
-    async def send_message(self, user_id: str, text: str) -> dict[str, Any]:
+    async def send_message(self, user_id: str, text: str) -> Dict[str, Any]:
         """发送私信"""
         result = await self._make_request(
             "chat/messages/create-to-user", {"toUserId": user_id, "text": text}
@@ -225,9 +198,9 @@ class MisskeyAPI:
 
     async def get_mentions(
         self, limit: int = 10, since_id: Optional[str] = None
-    ) -> list[dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """获取提及通知（包括回复和引用）"""
-        data: dict[str, Any] = {"limit": limit}
+        data: Dict[str, Any] = {"limit": limit}
         if since_id:
             data["sinceId"] = since_id
         data["includeTypes"] = ["mention", "reply", "quote"]
