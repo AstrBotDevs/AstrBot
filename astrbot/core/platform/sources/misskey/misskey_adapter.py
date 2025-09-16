@@ -229,22 +229,14 @@ class MisskeyPlatformAdapter(Platform):
             return super().send_by_session(session, message_chain)
 
         try:
-            # 首先解析session信息
+            # 解析session信息 - 现在session_id就是用户ID
             session_id = session.session_id
-            user_id = None
-            original_message_id = None
-
-            if session_id and "|" in session_id:
-                parts = session_id.split("|", 1)
-                user_id = parts[0]
-                original_message_id = parts[1] if len(parts) > 1 else None
-            elif session_id:
-                user_id = session_id
+            user_id = session_id  # 直接使用session_id作为用户ID
 
             text, has_at_user = _serialize_message_chain(message_chain.chain)
 
-            # 如果没有@用户并且是回复消息，添加@用户
-            if not has_at_user and original_message_id and user_id:
+            # 如果没有@用户，添加@用户
+            if not has_at_user and user_id:
                 user_info = self._user_cache.get(user_id)
                 if user_info:
                     username = user_info.get("username")
@@ -268,14 +260,7 @@ class MisskeyPlatformAdapter(Platform):
             )
 
             # 发送消息
-            if original_message_id:
-                await self.api.create_note(
-                    text,
-                    visibility=visibility,
-                    reply_id=original_message_id,
-                    visible_user_ids=visible_user_ids,
-                )
-            elif user_id and self._is_user_session(user_id):
+            if user_id and self._is_user_session(user_id):
                 await self.api.send_message(user_id, text)
             else:
                 await self.api.create_note(
@@ -305,7 +290,8 @@ class MisskeyPlatformAdapter(Platform):
 
         user_id = message.sender.user_id
         message_id = str(raw_data.get("id", ""))
-        message.session_id = f"{user_id}|{message_id}"
+        # 使用 AstrBot 标准的会话ID格式: platform_name:message_type:session_id
+        message.session_id = user_id  # 使用用户ID作为基础session_id
         message.message_id = message_id
         message.self_id = self.client_self_id
         message.type = MessageType.FRIEND_MESSAGE
