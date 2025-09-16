@@ -328,17 +328,13 @@ class SatoriPlatformAdapter(Platform):
             
             # 提取<quote>标签
             if "<quote" in content:
-                import re
-                quote_match = re.search(r'<quote\s+id="([^"]*)"[^>]*>(.*?)</quote>', content, re.DOTALL)
-                if quote_match:
-                    quote_id = quote_match.group(1)
-                    quote_content = quote_match.group(2)
-                    quote = {
-                        "id": quote_id,
-                        "content": quote_content
-                    }
-                    # 移除<quote>标签部分
-                    content_for_parsing = re.sub(r'<quote\s+id="[^"]*"[^>]*>.*?</quote>', '', content, flags=re.DOTALL)
+                try:
+                    quote_info = await self._extract_quote_element(content)
+                    if quote_info:
+                        quote = quote_info["quote"]
+                        content_for_parsing = quote_info["content_without_quote"]
+                except Exception as e:
+                    logger.error(f"解析<quote>标签时发生错误: {e}, 错误内容: {content}")
 
             if quote:
                 # 引用消息
@@ -381,6 +377,115 @@ class SatoriPlatformAdapter(Platform):
 
         except Exception as e:
             logger.error(f"转换 Satori 消息失败: {e}")
+            return None
+
+    def _extract_namespace_prefixes(self, content: str) -> set:
+        """提取XML内容中的命名空间前缀"""
+        prefixes = set()
+        
+        # 查找所有标签
+        i = 0
+        while i < len(content):
+            # 查找开始标签
+            if content[i] == '<' and i + 1 < len(content) and content[i + 1] != '/':
+                # 找到标签结束位置
+                tag_end = content.find('>', i)
+                if tag_end != -1:
+                    # 提取标签内容
+                    tag_content = content[i + 1:tag_end]
+                    # 检查是否有命名空间前缀
+                    if ':' in tag_content and 'xmlns:' not in tag_content:
+                        # 分割标签名
+                        parts = tag_content.split()
+                        if parts:
+                            tag_name = parts[0]
+                            if ':' in tag_name:
+                                prefix = tag_name.split(':')[0]
+                                # 确保是有效的命名空间前缀
+                                if prefix.isalnum() or prefix.replace('_', '').isalnum():
+                                    prefixes.add(prefix)
+                    i = tag_end + 1
+                else:
+                    i += 1
+            # 查找结束标签
+            elif content[i] == '<' and i + 1 < len(content) and content[i + 1] == '/':
+                # 找到标签结束位置
+                tag_end = content.find('>', i)
+                if tag_end != -1:
+                    # 提取标签内容
+                    tag_content = content[i + 2:tag_end]
+                    # 检查是否有命名空间前缀
+                    if ':' in tag_content:
+                        prefix = tag_content.split(':')[0]
+                        # 确保是有效的命名空间前缀
+                        if prefix.isalnum() or prefix.replace('_', '').isalnum():
+                            prefixes.add(prefix)
+                    i = tag_end + 1
+                else:
+                    i += 1
+            else:
+                i += 1
+        
+        return prefixes
+
+    async def _extract_quote_element(self, content: str) -> Optional[dict]:
+        """提取<quote>标签信息"""
+        try:
+            # 处理命名空间前缀问题
+            processed_content = content
+            if ':' in content and not content.startswith('<root'):
+                prefixes = self._extract_namespace_prefixes(content)
+                
+                # 构建命名空间声明
+                ns_declarations = ' '.join([f'xmlns:{prefix}="http://temp.uri/{prefix}"' for prefix in prefixes])
+                
+                # 包装内容
+                processed_content = f"<root {ns_declarations}>{content}</root>"
+            elif not content.startswith('<root'):
+                processed_content = f"<root>{content}</root>"
+            else:
+                processed_content = content
+            
+            root = ET.fromstring(processed_content)
+            
+            # 查找<quote>标签
+            quote_element = None
+            for elem in root.iter():
+                tag_name = elem.tag
+                if '}' in tag_name:
+                    tag_name = tag_name.split('}')[1]
+                if tag_name.lower() == "quote":
+                    quote_element = elem
+                    break
+            
+            if quote_element is not None:
+                # 提取quote标签的属性
+                quote_id = quote_element.get("id", "")
+                
+                # 提取<quote>标签内部的内容
+                inner_content = ""
+                if quote_element.text:
+                    inner_content += quote_element.text
+                for child in quote_element:
+                    inner_content += ET.tostring(child, encoding='unicode', method='xml')
+                    if child.tail:
+                        inner_content += child.tail
+                
+                # 构造移除了<quote>标签的内容
+                content_without_quote = content.replace(
+                    ET.tostring(quote_element, encoding='unicode', method='xml'), "")
+                
+                return {
+                    "quote": {
+                        "id": quote_id,
+                        "content": inner_content
+                    },
+                    "content_without_quote": content_without_quote
+                }
+            
+            return None
+        except Exception as e:
+            logger.error(f"提取<quote>标签时发生错误: {e}")
             return None
 
     async def _convert_quote_message(self, quote: dict) -> Optional[AstrBotMessage]:
@@ -434,9 +539,7 @@ class SatoriPlatformAdapter(Platform):
             # 处理命名空间前缀问题
             processed_content = content
             if ':' in content and not content.startswith('<root'):
-                # 收集所有命名空间前缀并添加声明
-                import re
-                prefixes = set(re.findall(r'</?([a-zA-Z0-9]+):[a-zA-Z0-9]+', content))
+                prefixes = self._extract_namespace_prefixes(content)
                 
                 # 构建命名空间声明
                 ns_declarations = ' '.join([f'xmlns:{prefix}="http://temp.uri/{prefix}"' for prefix in prefixes])
@@ -529,6 +632,16 @@ class SatoriPlatformAdapter(Platform):
                     elements.append(Plain(text=f"[ARK卡片数据: {decoded_data}]"))
                 else:
                     elements.append(Plain(text="[ARK卡片]"))
+
+            elif tag_name == "json":
+                # JSON标签 视为ARK卡片消息
+                data = attrs.get("data", "")
+                if data:
+                    import html
+                    decoded_data = html.unescape(data)
+                    elements.append(Plain(text=f"[ARK卡片数据: {decoded_data}]"))
+                else:
+                    elements.append(Plain(text="[JSON卡片]"))
 
             else:
                 # 未知标签，递归处理其内容
