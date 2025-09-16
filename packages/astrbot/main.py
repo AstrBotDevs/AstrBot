@@ -1214,6 +1214,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
             user_info = f"\n[User ID: {user_id}, Nickname: {user_nickname}]\n"
             req.prompt = user_info + req.prompt
 
+        if cfg.get("group_name_display") and event.message_obj.group_id:
+            group_name = event.message_obj.group.group_name
+
+            if group_name:
+                req.system_prompt += f"\nGroup name: {group_name}\n"
+
         # 启用附加时间戳
         if cfg.get("datetime_system_prompt"):
             current_time = None
