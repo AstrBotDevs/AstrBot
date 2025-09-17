@@ -384,14 +384,36 @@ class ProviderManager:
                 f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}"
             )
 
+    def _sync_current_provider(self, inst_list, curr_attr_name, provider_name):
+        """同步当前提供商实例，确保其有效性并在必要时自动选择第一个可用实例"""
+        curr = getattr(self, curr_attr_name)
+        # 如果当前实例无效（不在inst_map中），则置为None
+        if curr and curr.meta().id not in self.inst_map:
+            curr = None
+        # 如果当前没有实例但列表中有实例，则自动选择第一个
+        if curr is None:
+            if inst_list:
+                curr = inst_list[0]
+                logger.info(
+                    f"自动选择 {curr.meta().id} 作为当前{provider_name}提供商适配器。"
+                )
+            else:
+                curr = None
+        setattr(self, curr_attr_name, curr)
+
     async def reload(self, provider_config: dict):
         await self.terminate_provider(provider_config["id"])
         if provider_config["enable"]:
             await self.load_provider(provider_config)
 
-        # 重新获取最新的配置
-        latest_config = self.acm.get_conf("default")
-        self.providers_config = latest_config["provider"]
+        # 重新获取最新的配置，增加错误处理
+        try:
+            latest_config = self.acm.get_conf("default")
+            self.providers_config = latest_config.get("provider", [])
+        except Exception as e:
+            logger.error(f"获取最新配置时出错: {e}")
+            # 使用空列表作为后备方案
+            self.providers_config = []
 
         # 和配置文件保持同步
         config_ids = [provider["id"] for provider in self.providers_config]
@@ -400,50 +422,14 @@ class ProviderManager:
             if key not in config_ids:
                 await self.terminate_provider(key)
 
-        # 确保当前 Provider 实例仍然有效
-        if (
-            self.curr_provider_inst
-            and self.curr_provider_inst.meta().id not in self.inst_map
-        ):
-            self.curr_provider_inst = None
-        # 自动选择第一个可用的 Provider
-        if self.curr_provider_inst is None and len(self.provider_insts) > 0:
-            self.curr_provider_inst = self.provider_insts[0]
-            logger.info(
-                f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。"
-            )
-        elif len(self.provider_insts) == 0:
-            self.curr_provider_inst = None
-
-        # 确保当前 STT Provider 实例仍然有效
-        if (
-            self.curr_stt_provider_inst
-            and self.curr_stt_provider_inst.meta().id not in self.inst_map
-        ):
-            self.curr_stt_provider_inst = None
-        # 自动选择第一个可用的 STT Provider
-        if self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0:
-            self.curr_stt_provider_inst = self.stt_provider_insts[0]
-            logger.info(
-                f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。"
-            )
-        elif len(self.stt_provider_insts) == 0:
-            self.curr_stt_provider_inst = None
-
-        # 确保当前 TTS Provider 实例仍然有效
-        if (
-            self.curr_tts_provider_inst
-            and self.curr_tts_provider_inst.meta().id not in self.inst_map
-        ):
-            self.curr_tts_provider_inst = None
-        # 自动选择第一个可用的 TTS Provider
-        if self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0:
-            self.curr_tts_provider_inst = self.tts_provider_insts[0]
-            logger.info(
-                f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。"
-            )
-        elif len(self.tts_provider_insts) == 0:
-            self.curr_tts_provider_inst = None
+        # 使用辅助函数同步各个提供商实例
+        self._sync_current_provider(self.provider_insts, "curr_provider_inst", "提供商")
+        self._sync_current_provider(
+            self.stt_provider_insts, "curr_stt_provider_inst", "语音转文本"
+        )
+        self._sync_current_provider(
+            self.tts_provider_insts, "curr_tts_provider_inst", "文本转语音"
+        )
 
     def get_insts(self):
         return self.provider_insts
