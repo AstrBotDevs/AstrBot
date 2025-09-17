@@ -400,29 +400,50 @@ class ProviderManager:
             if key not in config_ids:
                 await self.terminate_provider(key)
 
-        if len(self.provider_insts) == 0:
+        # 确保当前 Provider 实例仍然有效
+        if (
+            self.curr_provider_inst
+            and self.curr_provider_inst.meta().id not in self.inst_map
+        ):
             self.curr_provider_inst = None
-        elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
+        # 自动选择第一个可用的 Provider
+        if self.curr_provider_inst is None and len(self.provider_insts) > 0:
             self.curr_provider_inst = self.provider_insts[0]
             logger.info(
                 f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。"
             )
+        elif len(self.provider_insts) == 0:
+            self.curr_provider_inst = None
 
-        if len(self.stt_provider_insts) == 0:
+        # 确保当前 STT Provider 实例仍然有效
+        if (
+            self.curr_stt_provider_inst
+            and self.curr_stt_provider_inst.meta().id not in self.inst_map
+        ):
             self.curr_stt_provider_inst = None
-        elif self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0:
+        # 自动选择第一个可用的 STT Provider
+        if self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
             logger.info(
                 f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。"
             )
+        elif len(self.stt_provider_insts) == 0:
+            self.curr_stt_provider_inst = None
 
-        if len(self.tts_provider_insts) == 0:
+        # 确保当前 TTS Provider 实例仍然有效
+        if (
+            self.curr_tts_provider_inst
+            and self.curr_tts_provider_inst.meta().id not in self.inst_map
+        ):
             self.curr_tts_provider_inst = None
-        elif self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0:
+        # 自动选择第一个可用的 TTS Provider
+        if self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
             logger.info(
                 f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。"
             )
+        elif len(self.tts_provider_insts) == 0:
+            self.curr_tts_provider_inst = None
 
     def get_insts(self):
         return self.provider_insts
