@@ -389,6 +389,10 @@ class ProviderManager:
         if provider_config["enable"]:
             await self.load_provider(provider_config)
 
+        # 重新获取最新的配置
+        latest_config = self.acm.get_conf("default")
+        self.providers_config = latest_config["provider"]
+
         # 和配置文件保持同步
         config_ids = [provider["id"] for provider in self.providers_config]
         logger.debug(f"providers in user's config: {config_ids}")
