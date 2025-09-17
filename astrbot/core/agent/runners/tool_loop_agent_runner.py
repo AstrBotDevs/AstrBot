@@ -269,17 +269,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 )
                                 yield MessageChain().message("返回的数据类型不受支持。")
 
-                            try:
-                                await self.agent_hooks.on_tool_end(
-                                    self.run_context,
-                                    func_tool_name,
-                                    func_tool_args,
-                                    resp,
-                                )
-                            except Exception as e:
-                                logger.error(
-                                    f"Error in on_tool_end hook: {e}", exc_info=True
-                                )
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
                         # 这里我们将直接结束 Agent Loop。
@@ -289,27 +278,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 yield MessageChain(
                                     chain=res.chain, type="tool_direct_result"
                                 )
-                        try:
-                            await self.agent_hooks.on_tool_end(
-                                self.run_context, func_tool_name, func_tool_args, None
-                            )
-                        except Exception as e:
-                            logger.error(
-                                f"Error in on_tool_end hook: {e}", exc_info=True
-                            )
                     else:
                         logger.warning(
                             f"Tool 返回了不支持的类型: {type(resp)}，将忽略。"
                         )
 
-                        try:
-                            await self.agent_hooks.on_tool_end(
-                                self.run_context, func_tool_name, func_tool_args, None
-                            )
-                        except Exception as e:
-                            logger.error(
-                                f"Error in on_tool_end hook: {e}", exc_info=True
-                            )
+                try:
+                    await self.agent_hooks.on_tool_end(
+                        self.run_context, func_tool, func_tool_args, None
+                    )
+                except Exception as e:
+                    logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
 
                 self.run_context.event.clear_result()
             except Exception as e:
