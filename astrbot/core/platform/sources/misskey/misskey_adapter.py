@@ -186,11 +186,6 @@ class MisskeyPlatformAdapter(Platform):
                 logger.debug(
                     f"[Misskey] 检查群聊消息: '{raw_text}', 机器人用户名: '{self._bot_username}'"
                 )
-                if not (self._bot_username and f"@{self._bot_username}" in raw_text):
-                    logger.debug(
-                        f"[Misskey] 群聊消息未@机器人，跳过处理: {raw_text[:30]}..."
-                    )
-                    return
 
                 message = await self.convert_room_message(data)
                 logger.info(f"[Misskey] 处理群聊消息: {message.message_str[:50]}...")
