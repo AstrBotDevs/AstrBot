@@ -10,7 +10,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
     register_platform_adapter,
 )
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.astr_message_event import MessageSession
 import astrbot.api.message_components as Comp
 
 from .misskey_api import MisskeyAPI
@@ -46,6 +46,8 @@ class MisskeyPlatformAdapter(Platform):
         )
         self.local_only = self.config.get("misskey_local_only", False)
         self.enable_chat = self.config.get("misskey_enable_chat", True)
+
+        self.unique_session = platform_settings["unique_session"]
 
         self.api: Optional[MisskeyAPI] = None
         self._running = False
@@ -229,7 +231,7 @@ class MisskeyPlatformAdapter(Platform):
         return False
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSession, message_chain: MessageChain
     ) -> Awaitable[Any]:
         if not self.api:
             logger.error("[Misskey] API 客户端未初始化")
@@ -281,9 +283,14 @@ class MisskeyPlatformAdapter(Platform):
         return await super().send_by_session(session, message_chain)
 
     async def convert_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
+        """将 Misskey 贴文数据转换为 AstrBotMessage 对象"""
         sender_info = extract_sender_info(raw_data, is_chat=False)
         message = create_base_message(
-            raw_data, sender_info, self.client_self_id, is_chat=False
+            raw_data,
+            sender_info,
+            self.client_self_id,
+            is_chat=False,
+            unique_session=self.unique_session,
         )
         cache_user_info(
             self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=False
@@ -310,9 +317,14 @@ class MisskeyPlatformAdapter(Platform):
         return message
 
     async def convert_chat_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
+        """将 Misskey 聊天消息数据转换为 AstrBotMessage 对象"""
         sender_info = extract_sender_info(raw_data, is_chat=True)
         message = create_base_message(
-            raw_data, sender_info, self.client_self_id, is_chat=True
+            raw_data,
+            sender_info,
+            self.client_self_id,
+            is_chat=True,
+            unique_session=self.unique_session,
         )
         cache_user_info(
             self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=True
@@ -329,10 +341,16 @@ class MisskeyPlatformAdapter(Platform):
         return message
 
     async def convert_room_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
+        """将 Misskey 群聊消息数据转换为 AstrBotMessage 对象"""
         sender_info = extract_sender_info(raw_data, is_chat=True)
         room_id = raw_data.get("toRoomId", "")
         message = create_base_message(
-            raw_data, sender_info, self.client_self_id, is_chat=False, room_id=room_id
+            raw_data,
+            sender_info,
+            self.client_self_id,
+            is_chat=False,
+            room_id=room_id,
+            unique_session=self.unique_session,
         )
 
         cache_user_info(

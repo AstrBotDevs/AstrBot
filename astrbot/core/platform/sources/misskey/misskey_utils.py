@@ -101,11 +101,11 @@ def resolve_visibility_from_raw_message(
 
 
 def is_valid_user_session_id(session_id: Union[str, Any]) -> bool:
-    """检查 session_id 是否是有效的聊天用户 session_id (仅限chat:前缀)"""
-    if not isinstance(session_id, str) or ":" not in session_id:
+    """检查 session_id 是否是有效的聊天用户 session_id (仅限chat%前缀)"""
+    if not isinstance(session_id, str) or "%" not in session_id:
         return False
 
-    parts = session_id.split(":")
+    parts = session_id.split("%")
     return (
         len(parts) == 2
         and parts[0] == "chat"
@@ -115,11 +115,11 @@ def is_valid_user_session_id(session_id: Union[str, Any]) -> bool:
 
 
 def is_valid_room_session_id(session_id: Union[str, Any]) -> bool:
-    """检查 session_id 是否是有效的房间 session_id (仅限room:前缀)"""
-    if not isinstance(session_id, str) or ":" not in session_id:
+    """检查 session_id 是否是有效的房间 session_id (仅限room%前缀)"""
+    if not isinstance(session_id, str) or "%" not in session_id:
         return False
 
-    parts = session_id.split(":")
+    parts = session_id.split("%")
     return (
         len(parts) == 2
         and parts[0] == "room"
@@ -130,8 +130,8 @@ def is_valid_room_session_id(session_id: Union[str, Any]) -> bool:
 
 def extract_user_id_from_session_id(session_id: str) -> str:
     """从 session_id 中提取用户 ID"""
-    if ":" in session_id:
-        parts = session_id.split(":")
+    if "%" in session_id:
+        parts = session_id.split("%")
         if len(parts) >= 2:
             return parts[1]
     return session_id
@@ -139,8 +139,8 @@ def extract_user_id_from_session_id(session_id: str) -> str:
 
 def extract_room_id_from_session_id(session_id: str) -> str:
     """从 session_id 中提取房间 ID"""
-    if ":" in session_id:
-        parts = session_id.split(":")
+    if "%" in session_id:
+        parts = session_id.split("%")
         if len(parts) >= 2 and parts[0] == "room":
             return parts[1]
     return session_id
@@ -222,6 +222,7 @@ def create_base_message(
     client_self_id: str,
     is_chat: bool = False,
     room_id: Optional[str] = None,
+    unique_session: bool = False,
 ) -> AstrBotMessage:
     """创建基础消息对象"""
     message = AstrBotMessage()
@@ -235,19 +236,22 @@ def create_base_message(
 
     if room_id:
         session_prefix = "room"
-        session_id = f"{session_prefix}:{room_id}"
+        session_id = f"{session_prefix}%{room_id}"
+        if unique_session:
+            session_id += f"_{sender_info['sender_id']}"
         message.type = MessageType.GROUP_MESSAGE
+        message.group_id = room_id
     elif is_chat:
         session_prefix = "chat"
-        session_id = f"{session_prefix}:{sender_info['sender_id']}"
+        session_id = f"{session_prefix}%{sender_info['sender_id']}"
         message.type = MessageType.FRIEND_MESSAGE
     else:
         session_prefix = "note"
-        session_id = f"{session_prefix}:{sender_info['sender_id']}"
+        session_id = f"{session_prefix}%{sender_info['sender_id']}"
         message.type = MessageType.FRIEND_MESSAGE
 
     message.session_id = (
-        session_id if sender_info["sender_id"] else f"{session_prefix}:unknown"
+        session_id if sender_info["sender_id"] else f"{session_prefix}%unknown"
     )
     message.message_id = str(raw_data.get("id", ""))
     message.self_id = client_self_id
