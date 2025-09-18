@@ -64,18 +64,15 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             ):
                 user_id = extract_user_id_from_session_id(self.session_id)
                 await self.client.send_message(user_id, content)
-                return
             elif hasattr(self.client, "send_room_message") and is_valid_room_session_id(
                 self.session_id
             ):
                 room_id = extract_room_id_from_session_id(self.session_id)
                 await self.client.send_room_message(room_id, content)
-                return
             elif original_message_id and hasattr(self.client, "create_note"):
                 visibility, visible_user_ids = resolve_visibility_from_raw_message(
                     raw_message
                 )
-
                 await self.client.create_note(
                     content,
                     reply_id=original_message_id,
