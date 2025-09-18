@@ -146,13 +146,17 @@ class StreamingClient:
         body = data.get("body", {})
 
         logger.debug(
-            f"[Misskey WebSocket] 收到消息:\n{json.dumps(data, indent=2, ensure_ascii=False)}"
+            f"[Misskey WebSocket] 收到消息类型: {message_type}\n数据: {json.dumps(data, indent=2, ensure_ascii=False)}"
         )
 
         if message_type == "channel":
             channel_id = body.get("id")
             event_type = body.get("type")
             event_body = body.get("body", {})
+
+            logger.debug(
+                f"[Misskey WebSocket] 频道消息: {channel_id}, 事件类型: {event_type}"
+            )
 
             if channel_id in self.channels:
                 channel_type = self.channels[channel_id]
