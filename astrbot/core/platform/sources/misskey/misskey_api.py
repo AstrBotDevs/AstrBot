@@ -277,7 +277,6 @@ class MisskeyAPI:
         if response.status == HTTP_OK:
             try:
                 result = await response.json()
-                # 特殊处理通知接口的响应格式
                 if endpoint == "i/notifications":
                     notifications_data = (
                         result
@@ -360,6 +359,15 @@ class MisskeyAPI:
         )
         message_id = result.get("id", "unknown")
         logger.debug(f"聊天发送成功，message_id: {message_id}")
+        return result
+
+    async def send_room_message(self, room_id: str, text: str) -> Dict[str, Any]:
+        """发送房间消息"""
+        result = await self._make_request(
+            "chat/messages/create-to-room", {"toRoomId": room_id, "text": text}
+        )
+        message_id = result.get("id", "unknown")
+        logger.debug(f"房间消息发送成功，message_id: {message_id}")
         return result
 
     async def get_messages(

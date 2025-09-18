@@ -6,8 +6,6 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
     AstrBotMessage,
-    MessageMember,
-    MessageType,
     Platform,
     PlatformMetadata,
     register_platform_adapter,
@@ -21,7 +19,14 @@ from .misskey_utils import (
     serialize_message_chain,
     resolve_message_visibility,
     is_valid_user_session_id,
+    is_valid_room_session_id,
     add_at_mention_if_needed,
+    process_files,
+    extract_sender_info,
+    create_base_message,
+    process_at_mention,
+    cache_user_info,
+    cache_room_info,
 )
 
 
@@ -168,12 +173,31 @@ class MisskeyPlatformAdapter(Platform):
             logger.debug(
                 f"[Misskey] 收到聊天事件数据:\n{json.dumps(data, indent=2, ensure_ascii=False)}"
             )
-            sender_id = str(data.get("user", {}).get("id", ""))
+
+            sender_id = str(
+                data.get("fromUserId", "") or data.get("fromUser", {}).get("id", "")
+            )
             if sender_id == self.client_self_id:
                 return
 
-            message = await self.convert_chat_message(data)
-            logger.info(f"[Misskey] 处理聊天消息: {message.message_str[:50]}...")
+            room_id = data.get("toRoomId")
+            if room_id:
+                raw_text = data.get("text", "")
+                logger.debug(
+                    f"[Misskey] 检查群聊消息: '{raw_text}', 机器人用户名: '{self._bot_username}'"
+                )
+                if not (self._bot_username and f"@{self._bot_username}" in raw_text):
+                    logger.debug(
+                        f"[Misskey] 群聊消息未@机器人，跳过处理: {raw_text[:30]}..."
+                    )
+                    return
+
+                message = await self.convert_room_message(data)
+                logger.info(f"[Misskey] 处理群聊消息: {message.message_str[:50]}...")
+            else:
+                message = await self.convert_chat_message(data)
+                logger.info(f"[Misskey] 处理私聊消息: {message.message_str[:50]}...")
+
             event = MisskeyPlatformEvent(
                 message_str=message.message_str,
                 message_obj=message,
@@ -217,11 +241,11 @@ class MisskeyPlatformAdapter(Platform):
             return await super().send_by_session(session, message_chain)
 
         try:
-            user_id = session.session_id
+            session_id = session.session_id
             text, has_at_user = serialize_message_chain(message_chain.chain)
 
-            if not has_at_user and user_id:
-                user_info = self._user_cache.get(user_id)
+            if not has_at_user and session_id:
+                user_info = self._user_cache.get(session_id)
                 text = add_at_mention_if_needed(text, user_info, has_at_user)
 
             if not text or not text.strip():
@@ -231,16 +255,24 @@ class MisskeyPlatformAdapter(Platform):
             if len(text) > self.max_message_length:
                 text = text[: self.max_message_length] + "..."
 
-            visibility, visible_user_ids = resolve_message_visibility(
-                user_id=user_id,
-                user_cache=self._user_cache,
-                self_id=self.client_self_id,
-                default_visibility=self.default_visibility,
-            )
+            if session_id and is_valid_user_session_id(session_id):
+                from .misskey_utils import extract_user_id_from_session_id
 
-            if user_id and is_valid_user_session_id(user_id):
+                user_id = extract_user_id_from_session_id(session_id)
                 await self.api.send_message(user_id, text)
+            elif session_id and is_valid_room_session_id(session_id):
+                from .misskey_utils import extract_room_id_from_session_id
+
+                room_id = extract_room_id_from_session_id(session_id)
+                await self.api.send_room_message(room_id, text)
             else:
+                visibility, visible_user_ids = resolve_message_visibility(
+                    user_id=session_id,
+                    user_cache=self._user_cache,
+                    self_id=self.client_self_id,
+                    default_visibility=self.default_visibility,
+                )
+
                 await self.api.create_note(
                     text,
                     visibility=visibility,
@@ -253,117 +285,27 @@ class MisskeyPlatformAdapter(Platform):
 
         return await super().send_by_session(session, message_chain)
 
-    def _create_file_component(self, file_info: Dict[str, Any]):
-        """创建文件组件和描述文本"""
-        file_url = file_info.get("url", "")
-        file_name = file_info.get("name", "未知文件")
-        file_type = file_info.get("type", "")
-
-        if file_type.startswith("image/"):
-            return Comp.Image(url=file_url, file=file_name), f"图片[{file_name}]"
-        elif file_type.startswith("audio/"):
-            return Comp.Record(url=file_url, file=file_name), f"音频[{file_name}]"
-        elif file_type.startswith("video/"):
-            return Comp.Video(url=file_url, file=file_name), f"视频[{file_name}]"
-        else:
-            return Comp.File(name=file_name, url=file_url), f"文件[{file_name}]"
-
-    def _extract_sender_info(self, raw_data: Dict[str, Any], is_chat: bool = False):
-        """提取发送者信息"""
-        if is_chat:
-            sender = raw_data.get("fromUser", {})
-            sender_id = str(sender.get("id", "") or raw_data.get("fromUserId", ""))
-        else:
-            sender = raw_data.get("user", {})
-            sender_id = str(sender.get("id", ""))
-
-        return {
-            "sender": sender,
-            "sender_id": sender_id,
-            "nickname": sender.get("name", sender.get("username", "")),
-            "username": sender.get("username", ""),
-        }
-
-    def _create_base_message(
-        self,
-        raw_data: Dict[str, Any],
-        sender_info: Dict[str, Any],
-        is_chat: bool = False,
-    ) -> AstrBotMessage:
-        """创建基础消息对象"""
-        message = AstrBotMessage()
-        message.raw_message = raw_data
-        message.message = []
-
-        message.sender = MessageMember(
-            user_id=sender_info["sender_id"],
-            nickname=sender_info["nickname"],
-        )
-
-        session_prefix = "chat" if is_chat else "note"
-        message.session_id = (
-            f"{session_prefix}:{sender_info['sender_id']}"
-            if sender_info["sender_id"]
-            else f"{session_prefix}:unknown"
-        )
-
-        message.message_id = str(raw_data.get("id", ""))
-        message.self_id = self.client_self_id
-        message.type = MessageType.FRIEND_MESSAGE
-
-        return message
-
-    def _cache_user_info(
-        self,
-        sender_info: Dict[str, Any],
-        raw_data: Dict[str, Any],
-        is_chat: bool = False,
-    ):
-        """缓存用户信息"""
-        if is_chat:
-            user_cache_data = {
-                "username": sender_info["username"],
-                "nickname": sender_info["nickname"],
-                "visibility": "specified",
-                "visible_user_ids": [self.client_self_id, sender_info["sender_id"]],
-            }
-        else:
-            user_cache_data = {
-                "username": sender_info["username"],
-                "nickname": sender_info["nickname"],
-                "visibility": raw_data.get("visibility", "public"),
-                "visible_user_ids": raw_data.get("visibleUserIds", []),
-            }
-
-        self._user_cache[sender_info["sender_id"]] = user_cache_data
-
     async def convert_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
-        """转换贴文消息"""
-        sender_info = self._extract_sender_info(raw_data, is_chat=False)
-        message = self._create_base_message(raw_data, sender_info, is_chat=False)
-        self._cache_user_info(sender_info, raw_data, is_chat=False)
+        sender_info = extract_sender_info(raw_data, is_chat=False)
+        message = create_base_message(
+            raw_data, sender_info, self.client_self_id, is_chat=False
+        )
+        cache_user_info(
+            self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=False
+        )
 
         message_parts = []
         raw_text = raw_data.get("text", "")
 
         if raw_text:
-            if self._bot_username and raw_text.startswith(f"@{self._bot_username}"):
-                at_mention = f"@{self._bot_username}"
-                message.message.append(Comp.At(qq=self.client_self_id))
-                remaining_text = raw_text[len(at_mention) :].strip()
-                if remaining_text:
-                    message.message.append(Comp.Plain(remaining_text))
-                    message_parts.append(remaining_text)
-            else:
-                message.message.append(Comp.Plain(raw_text))
-                message_parts.append(raw_text)
+            text_parts, processed_text = process_at_mention(
+                message, raw_text, self._bot_username, self.client_self_id
+            )
+            message_parts.extend(text_parts)
 
         files = raw_data.get("files", [])
-        if files:
-            for file_info in files:
-                component, part_text = self._create_file_component(file_info)
-                message.message.append(component)
-                message_parts.append(part_text)
+        file_parts = process_files(message, files)
+        message_parts.extend(file_parts)
 
         message.message_str = (
             " ".join(part for part in message_parts if part.strip())
@@ -373,22 +315,58 @@ class MisskeyPlatformAdapter(Platform):
         return message
 
     async def convert_chat_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
-        """转换聊天消息"""
-        sender_info = self._extract_sender_info(raw_data, is_chat=True)
-        message = self._create_base_message(raw_data, sender_info, is_chat=True)
-        self._cache_user_info(sender_info, raw_data, is_chat=True)
+        sender_info = extract_sender_info(raw_data, is_chat=True)
+        message = create_base_message(
+            raw_data, sender_info, self.client_self_id, is_chat=True
+        )
+        cache_user_info(
+            self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=True
+        )
 
         raw_text = raw_data.get("text", "")
         if raw_text:
             message.message.append(Comp.Plain(raw_text))
 
         files = raw_data.get("files", [])
-        if files:
-            for file_info in files:
-                component, _ = self._create_file_component(file_info)
-                message.message.append(component)
+        process_files(message, files, include_text_parts=False)
 
         message.message_str = raw_text if raw_text else ""
+        return message
+
+    async def convert_room_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
+        sender_info = extract_sender_info(raw_data, is_chat=True)
+        room_id = raw_data.get("toRoomId", "")
+        message = create_base_message(
+            raw_data, sender_info, self.client_self_id, is_chat=False, room_id=room_id
+        )
+
+        cache_user_info(
+            self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=False
+        )
+        cache_room_info(self._user_cache, raw_data, self.client_self_id)
+
+        raw_text = raw_data.get("text", "")
+        message_parts = []
+
+        if raw_text:
+            if self._bot_username and f"@{self._bot_username}" in raw_text:
+                text_parts, processed_text = process_at_mention(
+                    message, raw_text, self._bot_username, self.client_self_id
+                )
+                message_parts.extend(text_parts)
+            else:
+                message.message.append(Comp.Plain(raw_text))
+                message_parts.append(raw_text)
+
+        files = raw_data.get("files", [])
+        file_parts = process_files(message, files)
+        message_parts.extend(file_parts)
+
+        message.message_str = (
+            " ".join(part for part in message_parts if part.strip())
+            if message_parts
+            else ""
+        )
         return message
 
     async def terminate(self):

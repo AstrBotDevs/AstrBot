@@ -6,8 +6,10 @@ from .misskey_utils import (
     serialize_message_chain,
     resolve_visibility_from_raw_message,
     is_valid_user_session_id,
+    is_valid_room_session_id,
     add_at_mention_if_needed,
     extract_user_id_from_session_id,
+    extract_room_id_from_session_id,
 )
 
 
@@ -32,16 +34,10 @@ class MisskeyPlatformEvent(AstrMessageEvent):
         if not message_str or not message_str.strip():
             return False
 
-        # 常见的系统指令前缀
         system_prefixes = ["/", "!", "#", ".", "^"]
         message_trimmed = message_str.strip()
 
-        # 检查是否以系统指令前缀开头
-        for prefix in system_prefixes:
-            if message_trimmed.startswith(prefix):
-                return True
-
-        return False
+        return any(message_trimmed.startswith(prefix) for prefix in system_prefixes)
 
     async def send(self, message: MessageChain):
         content, has_at = serialize_message_chain(message.chain)
@@ -62,12 +58,18 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                 }
                 content = add_at_mention_if_needed(content, user_info, has_at)
 
-            # 对于聊天消息（私信），优先使用聊天API
+            # 根据会话类型选择发送方式
             if hasattr(self.client, "send_message") and is_valid_user_session_id(
                 self.session_id
             ):
                 user_id = extract_user_id_from_session_id(self.session_id)
                 await self.client.send_message(user_id, content)
+                return
+            elif hasattr(self.client, "send_room_message") and is_valid_room_session_id(
+                self.session_id
+            ):
+                room_id = extract_room_id_from_session_id(self.session_id)
+                await self.client.send_room_message(room_id, content)
                 return
             elif original_message_id and hasattr(self.client, "create_note"):
                 visibility, visible_user_ids = resolve_visibility_from_raw_message(
