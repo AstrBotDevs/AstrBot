@@ -8,6 +8,24 @@ from . import SearchResult
 from astrbot.api import logger
 
 
+class ZAIError(Exception):
+    """Base exception for ZAI API errors"""
+
+    pass
+
+
+class ZAIAPIError(ZAIError):
+    """Exception raised when ZAI API returns an error response"""
+
+    pass
+
+
+class ZAITimeoutError(ZAIError):
+    """Exception raised when ZAI API request times out"""
+
+    pass
+
+
 class ZAI:
     """Z.AI WebSearch API wrapper with multiple API keys support"""
 
@@ -67,7 +85,7 @@ class ZAI:
             payload["search_domain_filter"] = search_domain_filter
         if search_recency_filter != "noLimit":
             payload["search_recency_filter"] = search_recency_filter
-        if content_size in ["low", "medium", "high"]:
+        if content_size in {"low", "medium", "high"}:
             payload["content_size"] = content_size
 
         return payload
@@ -99,7 +117,7 @@ class ZAI:
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        raise Exception(
+                        raise ZAIAPIError(
                             f"ZAI API错误: {response.status} - {error_text}"
                         )
 
@@ -108,8 +126,8 @@ class ZAI:
                     logger.info(f"ZAI搜索完成 - 返回 {len(results)} 个结果")
                     return results
 
-            except asyncio.TimeoutError:
-                raise Exception("ZAI API请求超时")
+            except asyncio.TimeoutError as e:
+                raise ZAITimeoutError("ZAI API请求超时") from e
             except Exception as e:
                 logger.error(f"ZAI搜索失败: {e}")
                 raise

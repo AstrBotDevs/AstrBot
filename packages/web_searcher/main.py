@@ -12,6 +12,7 @@ from .engines import SearchResult
 from .engines.bing import Bing
 from .engines.sogo import Sogo
 from .engines.google import Google
+from .engines.zai import ZAI
 from readability import Document
 from bs4 import BeautifulSoup
 from .engines import HEADERS, USER_AGENTS
@@ -30,8 +31,6 @@ class Main(star.Star):
         self.context = context
         self.tavily_key_index = 0
         self.tavily_key_lock = asyncio.Lock()
-        self.zai_key_index = 0
-        self.zai_key_lock = asyncio.Lock()
 
         # 将 str 类型的 key 迁移至 list[str]，并保存
         cfg = self.context.get_config()
@@ -126,17 +125,6 @@ class Main(star.Star):
             self.tavily_key_index = (self.tavily_key_index + 1) % len(tavily_keys)
             return key
 
-    async def _get_zai_key(self, cfg: AstrBotConfig) -> str:
-        """并发安全的从列表中获取并轮换ZAI API密钥，参考Tavily实现。"""
-        zai_keys = cfg.get("provider_settings", {}).get("websearch_zai_keys", [])
-        if not zai_keys:
-            raise ValueError("错误：ZAI API密钥未在AstrBot中配置。")
-
-        async with self.zai_key_lock:
-            key = zai_keys[self.zai_key_index]
-            self.zai_key_index = (self.zai_key_index + 1) % len(zai_keys)
-            return key
-
     async def _web_search_tavily(
         self, cfg: AstrBotConfig, payload: dict
     ) -> list[SearchResult]:
@@ -195,32 +183,21 @@ class Main(star.Star):
     async def _web_search_zai(
         self, cfg: AstrBotConfig, payload: dict
     ) -> list[SearchResult]:
-        """使用 ZAI 搜索引擎进行搜索，参考Tavily实现"""
-        zai_key = await self._get_zai_key(cfg)
-        url = "https://open.bigmodel.cn/api/paas/v4/web_search"
-        header = {
-            "Authorization": f"Bearer {zai_key}",
-            "Content-Type": "application/json",
-        }
-        async with aiohttp.ClientSession(trust_env=True) as session:
-            async with session.post(
-                url, json=payload, headers=header, timeout=6
-            ) as response:
-                if response.status != 200:
-                    reason = await response.text()
-                    raise Exception(
-                        f"ZAI web search failed: {reason}, status: {response.status}"
-                    )
-                data = await response.json()
-                results = []
-                for item in data.get("search_result", []):
-                    result = SearchResult(
-                        title=item.get("title"),
-                        url=item.get("link"),
-                        snippet=item.get("content"),
-                    )
-                    results.append(result)
-                return results
+        """使用 ZAI 搜索引擎进行搜索"""
+        zai_keys = cfg.get("provider_settings", {}).get("websearch_zai_keys", [])
+        if not zai_keys:
+            raise ValueError("Error: ZAI API key is not configured in AstrBot.")
+
+        zai_engine = payload.get("search_engine", "search_pro")
+        zai = ZAI(zai_keys, zai_engine)
+
+        return await zai.search(
+            query=payload["search_query"],
+            count=payload["count"],
+            search_domain_filter=payload.get("search_domain_filter", ""),
+            search_recency_filter=payload.get("search_recency_filter", "oneWeek"),
+            content_size=payload.get("content_size", "high"),
+        )
 
     @filter.command("websearch")
     async def websearch(self, event: AstrMessageEvent, oper: str = None) -> str:
@@ -410,8 +387,10 @@ class Main(star.Star):
             "websearch_zai_content_size", "high"
         )
 
-        if search_recency_filter == "oneWeek":
-            search_recency_filter = prov_settings.get(
+        # 只有当用户没有明确指定时间范围时，才从配置中获取
+        final_recency_filter = search_recency_filter
+        if search_recency_filter == "oneWeek":  # 这是默认值
+            final_recency_filter = prov_settings.get(
                 "websearch_zai_recency_filter", "oneWeek"
             )
 
@@ -424,8 +403,8 @@ class Main(star.Star):
 
         if search_domain_filter:
             payload["search_domain_filter"] = search_domain_filter
-        if search_recency_filter != "noLimit":
-            payload["search_recency_filter"] = search_recency_filter
+        if final_recency_filter != "noLimit":
+            payload["search_recency_filter"] = final_recency_filter
         if content_size in ["low", "medium", "high"]:
             payload["content_size"] = content_size
 
