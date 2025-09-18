@@ -191,13 +191,20 @@ class Main(star.Star):
         zai_engine = payload.get("search_engine", "search_pro")
         zai = ZAI(zai_keys, zai_engine)
 
-        return await zai.search(
-            query=payload["search_query"],
-            count=payload["count"],
-            search_domain_filter=payload.get("search_domain_filter", ""),
-            search_recency_filter=payload.get("search_recency_filter", "oneWeek"),
-            content_size=payload.get("content_size", "high"),
-        )
+        # 构建参数，只传递非空值
+        search_args = {
+            "query": payload["search_query"],
+            "count": payload["count"],
+        }
+
+        if "search_domain_filter" in payload:
+            search_args["search_domain_filter"] = payload["search_domain_filter"]
+        if "search_recency_filter" in payload:
+            search_args["search_recency_filter"] = payload["search_recency_filter"]
+        if "content_size" in payload:
+            search_args["content_size"] = payload["content_size"]
+
+        return await zai.search(**search_args)
 
     @filter.command("websearch")
     async def websearch(self, event: AstrMessageEvent, oper: str = None) -> str:
@@ -361,7 +368,7 @@ class Main(star.Star):
         query: str,
         max_results: Optional[int] = None,
         search_domain_filter: str = "",
-        search_recency_filter: str = "oneWeek",
+        search_recency_filter: Optional[str] = None,
         content_size: Optional[str] = None,
     ) -> str:
         """使用 Z.AI WebSearch API 进行网络搜索。
@@ -382,30 +389,24 @@ class Main(star.Star):
 
         # 获取配置参数
         prov_settings = cfg["provider_settings"]
-        max_results = max_results or prov_settings.get("websearch_zai_max_results", 10)
-        content_size = content_size or prov_settings.get(
-            "websearch_zai_content_size", "high"
+        max_results = max_results or prov_settings.get("websearch_zai_max_results")
+        content_size = content_size or prov_settings.get("websearch_zai_content_size")
+        search_recency_filter = search_recency_filter or prov_settings.get(
+            "websearch_zai_recency_filter"
         )
-
-        # 只有当用户没有明确指定时间范围时，才从配置中获取
-        final_recency_filter = search_recency_filter
-        if search_recency_filter == "oneWeek":  # 这是默认值
-            final_recency_filter = prov_settings.get(
-                "websearch_zai_recency_filter", "oneWeek"
-            )
 
         # 构建请求参数
         payload = {
-            "search_engine": prov_settings.get("websearch_zai_engine", "search_pro"),
+            "search_engine": prov_settings.get("websearch_zai_engine"),
             "search_query": query,
             "count": min(max(max_results, 1), 50),
         }
 
         if search_domain_filter:
             payload["search_domain_filter"] = search_domain_filter
-        if final_recency_filter != "noLimit":
-            payload["search_recency_filter"] = final_recency_filter
-        if content_size in ["low", "medium", "high"]:
+        if search_recency_filter and search_recency_filter != "noLimit":
+            payload["search_recency_filter"] = search_recency_filter
+        if content_size and content_size in ["low", "medium", "high"]:
             payload["content_size"] = content_size
 
         results = await self._web_search_zai(cfg, payload)

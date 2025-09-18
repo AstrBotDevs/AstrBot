@@ -95,7 +95,7 @@ class ZAI:
         query: str,
         count: int = 10,
         search_domain_filter: str = "",
-        search_recency_filter: str = "oneWeek",
+        search_recency_filter: str = "oneMonth",
         content_size: str = "high",
     ) -> List[SearchResult]:
         """使用 Z.AI Web Search API 进行搜索"""
