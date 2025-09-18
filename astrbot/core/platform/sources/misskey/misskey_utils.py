@@ -102,10 +102,27 @@ def resolve_visibility_from_raw_message(
 
 
 def is_valid_user_session_id(session_id: Union[str, Any]) -> bool:
-    """检查是否为有效的用户会话ID"""
+    """检查 session_id 是否是有效的聊天用户 session_id (仅限chat:前缀)"""
     if not isinstance(session_id, str):
         return False
-    return 5 <= len(session_id) <= 64 and " " not in session_id
+
+    if ":" in session_id:
+        parts = session_id.split(":")
+        # 只有聊天格式 chat:user_id 才返回True
+        if len(parts) == 2 and parts[0] == "chat":
+            return bool(parts[1] and parts[1] != "unknown")
+
+    return False
+
+
+def extract_user_id_from_session_id(session_id: str) -> str:
+    """从 session_id 中提取用户 ID"""
+    if ":" in session_id:
+        parts = session_id.split(":")
+        if len(parts) >= 2:
+            # 支持 chat:user_id, note:user_id 等格式
+            return parts[1]
+    return session_id
 
 
 def add_at_mention_if_needed(

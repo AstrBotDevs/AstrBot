@@ -244,6 +244,7 @@ CONFIG_METADATA_2 = {
                         "misskey_token": "",
                         "misskey_default_visibility": "public",
                         "misskey_local_only": False,
+                        "misskey_enable_chat": True,
                     },
                     "Slack": {
                         "id": "slack",
@@ -366,6 +367,11 @@ CONFIG_METADATA_2 = {
                         "description": "仅限本站（不参与联合）",
                         "type": "bool",
                         "hint": "启用后，机器人发出的帖子将仅在本实例可见，不会联合到其他实例",
+                    },
+                    "misskey_enable_chat": {
+                        "description": "启用聊天消息响应",
+                        "type": "bool",
+                        "hint": "启用后，机器人将会监听和响应私信聊天消息",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",

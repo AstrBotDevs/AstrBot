@@ -1,11 +1,13 @@
 import json
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Callable, Awaitable
+import uuid
 
 try:
     import aiohttp
+    import websockets
 except ImportError as e:
     raise ImportError(
-        "aiohttp is required for Misskey API. Please install it with: pip install aiohttp"
+        "aiohttp and websockets are required for Misskey API. Please install them with: pip install aiohttp websockets"
     ) from e
 
 from astrbot.api import logger
@@ -40,6 +42,150 @@ class AuthenticationError(APIError):
     pass
 
 
+class WebSocketError(APIError):
+    pass
+
+
+class StreamingClient:
+    def __init__(self, instance_url: str, access_token: str):
+        self.instance_url = instance_url.rstrip("/")
+        self.access_token = access_token
+        self.websocket: Optional[Any] = None
+        self.is_connected = False
+        self.message_handlers: Dict[str, Callable] = {}
+        self.channels: Dict[str, str] = {}
+        self._running = False
+
+    async def connect(self) -> bool:
+        try:
+            ws_url = self.instance_url.replace("https://", "wss://").replace(
+                "http://", "ws://"
+            )
+            ws_url += f"/streaming?i={self.access_token}"
+
+            self.websocket = await websockets.connect(ws_url)
+            self.is_connected = True
+            self._running = True
+
+            logger.info("[Misskey WebSocket] 连接成功")
+            return True
+
+        except Exception as e:
+            logger.error(f"[Misskey WebSocket] 连接失败: {e}")
+            self.is_connected = False
+            return False
+
+    async def disconnect(self):
+        self._running = False
+        if self.websocket:
+            await self.websocket.close()
+            self.websocket = None
+        self.is_connected = False
+        logger.info("[Misskey WebSocket] 连接已断开")
+
+    async def subscribe_channel(
+        self, channel_type: str, params: Optional[Dict] = None
+    ) -> str:
+        if not self.is_connected or not self.websocket:
+            raise WebSocketError("WebSocket 未连接")
+
+        channel_id = str(uuid.uuid4())
+        message = {
+            "type": "connect",
+            "body": {"channel": channel_type, "id": channel_id, "params": params or {}},
+        }
+
+        await self.websocket.send(json.dumps(message))
+        self.channels[channel_id] = channel_type
+        return channel_id
+
+    async def unsubscribe_channel(self, channel_id: str):
+        if (
+            not self.is_connected
+            or not self.websocket
+            or channel_id not in self.channels
+        ):
+            return
+
+        message = {"type": "disconnect", "body": {"id": channel_id}}
+
+        await self.websocket.send(json.dumps(message))
+        del self.channels[channel_id]
+
+    def add_message_handler(
+        self, event_type: str, handler: Callable[[Dict], Awaitable[None]]
+    ):
+        self.message_handlers[event_type] = handler
+
+    async def listen(self):
+        if not self.is_connected or not self.websocket:
+            raise WebSocketError("WebSocket 未连接")
+
+        try:
+            async for message in self.websocket:
+                if not self._running:
+                    break
+
+                try:
+                    data = json.loads(message)
+                    await self._handle_message(data)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"[Misskey WebSocket] 无法解析消息: {e}")
+                except Exception as e:
+                    logger.error(f"[Misskey WebSocket] 处理消息失败: {e}")
+
+        except websockets.exceptions.ConnectionClosed:
+            logger.warning("[Misskey WebSocket] 连接已关闭")
+            self.is_connected = False
+        except Exception as e:
+            logger.error(f"[Misskey WebSocket] 监听消息失败: {e}")
+            self.is_connected = False
+
+    async def _handle_message(self, data: Dict[str, Any]):
+        message_type = data.get("type")
+        body = data.get("body", {})
+
+        logger.debug(
+            f"[Misskey WebSocket] 收到消息:\n{json.dumps(data, indent=2, ensure_ascii=False)}"
+        )
+
+        if message_type == "channel":
+            channel_id = body.get("id")
+            event_type = body.get("type")
+            event_body = body.get("body", {})
+
+            if channel_id in self.channels:
+                channel_type = self.channels[channel_id]
+                handler_key = f"{channel_type}:{event_type}"
+
+                if handler_key in self.message_handlers:
+                    logger.debug(f"[Misskey WebSocket] 使用处理器: {handler_key}")
+                    await self.message_handlers[handler_key](event_body)
+                elif event_type in self.message_handlers:
+                    logger.debug(f"[Misskey WebSocket] 使用事件处理器: {event_type}")
+                    await self.message_handlers[event_type](event_body)
+                else:
+                    logger.debug(
+                        f"[Misskey WebSocket] 未找到处理器: {handler_key} 或 {event_type}"
+                    )
+                    if "_debug" in self.message_handlers:
+                        await self.message_handlers["_debug"](
+                            {
+                                "type": event_type,
+                                "body": event_body,
+                                "channel": channel_type,
+                            }
+                        )
+
+        elif message_type in self.message_handlers:
+            logger.debug(f"[Misskey WebSocket] 直接消息处理器: {message_type}")
+            await self.message_handlers[message_type](body)
+        else:
+            logger.debug(f"[Misskey WebSocket] 未处理的消息类型: {message_type}")
+            if "_debug" in self.message_handlers:
+                await self.message_handlers["_debug"](data)
+
+
 def retry_async(max_retries: int = 3, retryable_exceptions: tuple = ()):
     def decorator(func):
         async def wrapper(*args, **kwargs):
@@ -63,6 +209,7 @@ class MisskeyAPI:
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
         self._session: Optional[aiohttp.ClientSession] = None
+        self.streaming: Optional[StreamingClient] = None
 
     async def __aenter__(self):
         return self
@@ -72,10 +219,18 @@ class MisskeyAPI:
         return False
 
     async def close(self) -> None:
+        if self.streaming:
+            await self.streaming.disconnect()
+            self.streaming = None
         if self._session:
             await self._session.close()
             self._session = None
         logger.debug("Misskey API 客户端已关闭")
+
+    def get_streaming_client(self) -> StreamingClient:
+        if not self.streaming:
+            self.streaming = StreamingClient(self.instance_url, self.access_token)
+        return self.streaming
 
     @property
     def session(self) -> aiohttp.ClientSession:
@@ -188,6 +343,20 @@ class MisskeyAPI:
         message_id = result.get("id", "unknown")
         logger.debug(f"Misskey 聊天发送成功，message_id: {message_id}")
         return result
+
+    async def get_messages(
+        self, user_id: str, limit: int = 10, since_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        data: Dict[str, Any] = {"userId": user_id, "limit": limit}
+        if since_id:
+            data["sinceId"] = since_id
+
+        result = await self._make_request("chat/messages/user-timeline", data)
+        if isinstance(result, list):
+            return result
+        else:
+            logger.warning(f"获取聊天消息响应格式异常: {type(result)}")
+            return []
 
     async def get_mentions(
         self, limit: int = 10, since_id: Optional[str] = None

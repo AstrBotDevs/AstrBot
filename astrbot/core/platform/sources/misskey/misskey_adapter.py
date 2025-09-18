@@ -35,17 +35,15 @@ class MisskeyPlatformAdapter(Platform):
         self.settings = platform_settings or {}
         self.instance_url = self.config.get("misskey_instance_url", "")
         self.access_token = self.config.get("misskey_token", "")
-        self.poll_interval = self.config.get("poll_interval", 5.0)
         self.max_message_length = self.config.get("max_message_length", 3000)
-
         self.default_visibility = self.config.get(
             "misskey_default_visibility", "public"
         )
         self.local_only = self.config.get("misskey_local_only", False)
+        self.enable_chat = self.config.get("misskey_enable_chat", True)
 
         self.api: Optional[MisskeyAPI] = None
         self._running = False
-        self.last_notification_id = None
         self.client_self_id = ""
         self._bot_username = ""
         self._user_cache = {}
@@ -54,10 +52,10 @@ class MisskeyPlatformAdapter(Platform):
         default_config = {
             "misskey_instance_url": "",
             "misskey_token": "",
-            "poll_interval": 5.0,
             "max_message_length": 3000,
             "misskey_default_visibility": "public",
             "misskey_local_only": False,
+            "misskey_enable_chat": True,
         }
         default_config.update(self.config)
 
@@ -88,79 +86,84 @@ class MisskeyPlatformAdapter(Platform):
             self._running = False
             return
 
-        await self._start_polling()
+        await self._start_websocket_connection()
 
-    async def _start_polling(self):
-        if not self.api:
-            logger.error("[Misskey] API 客户端未初始化，无法开始轮询")
-            return
-
-        initial_backoff = 1
-        max_backoff = 60
-        backoff_multiplier = 2
-        current_backoff = initial_backoff
-        is_first_poll = True
-
-        try:
-            latest_notifications = await self.api.get_mentions(limit=1)
-            if latest_notifications:
-                self.last_notification_id = latest_notifications[0].get("id")
-                logger.debug(f"[Misskey] 起始通知 ID: {self.last_notification_id}")
-        except Exception as e:
-            logger.warning(f"[Misskey] 获取起始通知失败: {e}")
+    async def _start_websocket_connection(self):
+        backoff_delay = 1.0
+        max_backoff = 300.0
+        backoff_multiplier = 1.5
 
         while self._running:
-            if not self.api:
-                logger.error("[Misskey] API 客户端在轮询过程中变为 None")
-                break
-
             try:
-                notifications = await self.api.get_mentions(
-                    limit=20, since_id=self.last_notification_id
-                )
+                if not self.api:
+                    logger.error("[Misskey] API 客户端未初始化")
+                    break
 
-                current_backoff = initial_backoff
-                await self._process_notifications(notifications, is_first_poll)
-                is_first_poll = False
+                streaming = self.api.get_streaming_client()
+                streaming.add_message_handler("notification", self._handle_notification)
+                if self.enable_chat:
+                    # Misskey 聊天消息的正确事件名称
+                    streaming.add_message_handler(
+                        "newChatMessage", self._handle_chat_message
+                    )
+                    # 添加通用事件处理器来调试
+                    streaming.add_message_handler("_debug", self._debug_handler)
 
-                await asyncio.sleep(self.poll_interval)
+                if await streaming.connect():
+                    logger.info("[Misskey] WebSocket 连接成功")
+                    await streaming.subscribe_channel("main")
+                    if self.enable_chat:
+                        # 尝试订阅多个可能的聊天频道
+                        await streaming.subscribe_channel("messaging")
+                        await streaming.subscribe_channel("messagingIndex")
+                        logger.info("[Misskey] 已订阅聊天频道")
+
+                    backoff_delay = 1.0
+                    await streaming.listen()
+                else:
+                    logger.error("[Misskey] WebSocket 连接失败")
 
             except Exception as e:
-                logger.warning(f"[Misskey] 轮询失败: {e}")
-                logger.info(f"[Misskey] 将在 {current_backoff} 秒后重试")
-                await asyncio.sleep(current_backoff)
-                current_backoff = min(current_backoff * backoff_multiplier, max_backoff)
+                logger.error(f"[Misskey] WebSocket 异常: {e}")
 
-    async def _process_notifications(self, notifications: list, is_first_poll: bool):
-        if not notifications:
-            if is_first_poll:
-                logger.info("[Misskey] 开始监听新消息")
-            return
+            if self._running:
+                logger.info(f"[Misskey] {backoff_delay:.1f}秒后重连")
+                await asyncio.sleep(backoff_delay)
+                backoff_delay = min(backoff_delay * backoff_multiplier, max_backoff)
 
-        if is_first_poll:
-            logger.debug(f"[Misskey] 跳过 {len(notifications)} 条历史通知")
-            self.last_notification_id = notifications[0].get("id")
-        else:
-            notifications.reverse()
-            for notification in notifications:
-                await self._process_notification(notification)
-            self.last_notification_id = notifications[0].get("id")
-
-    async def _process_notification(self, notification: Dict[str, Any]):
+    async def _handle_notification(self, data: Dict[str, Any]):
         try:
-            notification_type = notification.get("type")
-            if notification_type not in ["mention", "reply", "quote"]:
-                return
-
-            note = notification.get("note")
-            if not note or not self._is_bot_mentioned(note):
-                return
-
-            message = await self.convert_message(note)
             logger.debug(
-                f"[Misskey] 收到消息 - {message.sender.nickname}: {message.message_str}"
+                f"[Misskey] 收到通知事件:\n{json.dumps(data, indent=2, ensure_ascii=False)}"
             )
+            notification_type = data.get("type")
+            if notification_type in ["mention", "reply", "quote"]:
+                note = data.get("note")
+                if note and self._is_bot_mentioned(note):
+                    logger.info(f"[Misskey] 处理贴文提及: {note.get('text', '')}")
+                    message = await self.convert_message(note)
+                    event = MisskeyPlatformEvent(
+                        message_str=message.message_str,
+                        message_obj=message,
+                        platform_meta=self.meta(),
+                        session_id=message.session_id,
+                        client=self.api,
+                    )
+                    self.commit_event(event)
+        except Exception as e:
+            logger.error(f"[Misskey] 处理通知失败: {e}")
 
+    async def _handle_chat_message(self, data: Dict[str, Any]):
+        try:
+            logger.debug(
+                f"[Misskey] 收到聊天事件数据:\n{json.dumps(data, indent=2, ensure_ascii=False)}"
+            )
+            sender_id = str(data.get("user", {}).get("id", ""))
+            if sender_id == self.client_self_id:
+                return
+
+            message = await self.convert_chat_message(data)
+            logger.info(f"[Misskey] 处理聊天消息: {message.message_str}")
             event = MisskeyPlatformEvent(
                 message_str=message.message_str,
                 message_obj=message,
@@ -169,29 +172,29 @@ class MisskeyPlatformAdapter(Platform):
                 client=self.api,
             )
             self.commit_event(event)
-
         except Exception as e:
-            logger.error(f"[Misskey] 处理通知失败: {e}")
+            logger.error(f"[Misskey] 处理聊天消息失败: {e}")
+
+    async def _debug_handler(self, data: Dict[str, Any]):
+        logger.debug(
+            f"[Misskey] 收到未处理事件:\n{json.dumps(data, indent=2, ensure_ascii=False)}"
+        )
 
     def _is_bot_mentioned(self, note: Dict[str, Any]) -> bool:
-        """检查机器人是否被提及"""
         text = note.get("text", "")
         if not text:
             return False
 
-        bot_user_id = self.client_self_id
         mentions = note.get("mentions", [])
-
         if self._bot_username and f"@{self._bot_username}" in text:
             return True
-
-        if bot_user_id in [str(uid) for uid in mentions]:
+        if self.client_self_id in [str(uid) for uid in mentions]:
             return True
 
         reply = note.get("reply")
         if reply and isinstance(reply, dict):
             reply_user_id = str(reply.get("user", {}).get("id", ""))
-            if reply_user_id == str(bot_user_id):
+            if reply_user_id == self.client_self_id:
                 return bool(self._bot_username and f"@{self._bot_username}" in text)
 
         return False
@@ -227,7 +230,6 @@ class MisskeyPlatformAdapter(Platform):
 
             if user_id and is_valid_user_session_id(user_id):
                 await self.api.send_message(user_id, text)
-                logger.debug("[Misskey] 私信发送成功")
             else:
                 await self.api.create_note(
                     text,
@@ -235,7 +237,6 @@ class MisskeyPlatformAdapter(Platform):
                     visible_user_ids=visible_user_ids,
                     local_only=self.local_only,
                 )
-                logger.debug("[Misskey] 帖子发送成功")
 
         except Exception as e:
             logger.error(f"[Misskey] 发送消息失败: {e}")
@@ -243,7 +244,6 @@ class MisskeyPlatformAdapter(Platform):
         return await super().send_by_session(session, message_chain)
 
     def _create_file_component(self, file_info: Dict[str, Any]):
-        """根据文件类型创建相应的消息组件"""
         file_url = file_info.get("url", "")
         file_name = file_info.get("name", "未知文件")
         file_type = file_info.get("type", "")
@@ -258,10 +258,6 @@ class MisskeyPlatformAdapter(Platform):
             return Comp.File(name=file_name, url=file_url), f"文件[{file_name}]"
 
     async def convert_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
-        logger.debug(
-            f"[Misskey] 接收到完整帖子数据:\n{json.dumps(raw_data, ensure_ascii=False, indent=2)}"
-        )
-
         message = AstrBotMessage()
         message.raw_message = raw_data
         message.message = []
@@ -272,7 +268,11 @@ class MisskeyPlatformAdapter(Platform):
             nickname=sender.get("name", sender.get("username", "")),
         )
 
-        message.session_id = message.sender.user_id
+        message.session_id = (
+            f"note:{message.sender.user_id}"
+            if message.sender.user_id
+            else "note:unknown"
+        )
         message.message_id = str(raw_data.get("id", ""))
         message.self_id = self.client_self_id
         message.type = MessageType.FRIEND_MESSAGE
@@ -301,21 +301,10 @@ class MisskeyPlatformAdapter(Platform):
 
         files = raw_data.get("files", [])
         if files:
-            logger.debug(f"[Misskey] 检测到 {len(files)} 个附件")
-            for i, file_info in enumerate(files):
-                file_type = file_info.get("type", "")
-                file_name = file_info.get("name", "未知文件")
-                logger.debug(
-                    f"[Misskey] 附件 {i + 1}: 名称={file_name}, 类型={file_type}"
-                )
-
+            for file_info in files:
                 component, part_text = self._create_file_component(file_info)
                 message.message.append(component)
                 message_parts.append(part_text)
-
-        logger.debug(f"[Misskey] 最终消息组件数量: {len(message.message)}")
-        for i, comp in enumerate(message.message):
-            logger.debug(f"[Misskey] 组件 {i}: {type(comp).__name__} - {comp}")
 
         message.message_str = (
             " ".join(part for part in message_parts if part.strip())
@@ -324,8 +313,45 @@ class MisskeyPlatformAdapter(Platform):
         )
         return message
 
+    async def convert_chat_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
+        message = AstrBotMessage()
+        message.raw_message = raw_data
+        message.message = []
+
+        sender = raw_data.get("fromUser", {})
+        sender_id = str(sender.get("id", "") or raw_data.get("fromUserId", ""))
+
+        message.sender = MessageMember(
+            user_id=sender_id,
+            nickname=sender.get("name", sender.get("username", "")),
+        )
+
+        message.session_id = f"chat:{sender_id}" if sender_id else "chat:unknown"
+        message.message_id = str(raw_data.get("id", ""))
+        message.self_id = self.client_self_id
+        message.type = MessageType.FRIEND_MESSAGE
+
+        self._user_cache[message.sender.user_id] = {
+            "username": sender.get("username", ""),
+            "nickname": message.sender.nickname,
+            "visibility": "specified",
+            "visible_user_ids": [self.client_self_id, message.sender.user_id],
+        }
+
+        raw_text = raw_data.get("text", "")
+        if raw_text:
+            message.message.append(Comp.Plain(raw_text))
+
+        files = raw_data.get("files", [])
+        if files:
+            for file_info in files:
+                component, _ = self._create_file_component(file_info)
+                message.message.append(component)
+
+        message.message_str = raw_text if raw_text else ""
+        return message
+
     async def terminate(self):
-        logger.info("[Misskey] 终止适配器")
         self._running = False
         if self.api:
             await self.api.close()
