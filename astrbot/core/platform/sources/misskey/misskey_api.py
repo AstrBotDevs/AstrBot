@@ -15,34 +15,35 @@ from astrbot.api import logger
 # Constants
 API_MAX_RETRIES = 3
 HTTP_OK = 200
-HTTP_BAD_REQUEST = 400
-HTTP_UNAUTHORIZED = 401
-HTTP_FORBIDDEN = 403
-HTTP_TOO_MANY_REQUESTS = 429
 
 
-# Exceptions
 class APIError(Exception):
-    pass
+    """Misskey API 基础异常"""
 
-
-class APIBadRequestError(APIError):
     pass
 
 
 class APIConnectionError(APIError):
+    """网络连接异常"""
+
     pass
 
 
 class APIRateLimitError(APIError):
+    """API 频率限制异常"""
+
     pass
 
 
 class AuthenticationError(APIError):
+    """认证失败异常"""
+
     pass
 
 
 class WebSocketError(APIError):
+    """WebSocket 连接异常"""
+
     pass
 
 
@@ -67,7 +68,7 @@ class StreamingClient:
             self.is_connected = True
             self._running = True
 
-            logger.info("[Misskey WebSocket] 连接成功")
+            logger.info("[Misskey WebSocket] 已连接")
             return True
 
         except Exception as e:
@@ -229,7 +230,7 @@ class MisskeyAPI:
         if self._session:
             await self._session.close()
             self._session = None
-        logger.debug("Misskey API 客户端已关闭")
+        logger.debug("[Misskey API] 客户端已关闭")
 
     def get_streaming_client(self) -> StreamingClient:
         if not self.streaming:
@@ -244,13 +245,14 @@ class MisskeyAPI:
         return self._session
 
     def _handle_response_status(self, status: int, endpoint: str):
-        if status == HTTP_BAD_REQUEST:
+        """处理 HTTP 响应状态码"""
+        if status == 400:
             logger.error(f"API 请求错误: {endpoint} (状态码: {status})")
-            raise APIBadRequestError(f"Bad request for {endpoint}")
-        elif status in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN):
+            raise APIError(f"Bad request for {endpoint}")
+        elif status in (401, 403):
             logger.error(f"API 认证失败: {endpoint} (状态码: {status})")
             raise AuthenticationError(f"Authentication failed for {endpoint}")
-        elif status == HTTP_TOO_MANY_REQUESTS:
+        elif status == 429:
             logger.warning(f"API 频率限制: {endpoint} (状态码: {status})")
             raise APIRateLimitError(f"Rate limit exceeded for {endpoint}")
         else:
@@ -260,9 +262,11 @@ class MisskeyAPI:
     async def _process_response(
         self, response: aiohttp.ClientResponse, endpoint: str
     ) -> Any:
+        """处理 API 响应"""
         if response.status == HTTP_OK:
             try:
                 result = await response.json()
+                # 特殊处理通知接口的响应格式
                 if endpoint == "i/notifications":
                     notifications_data = (
                         result
@@ -271,12 +275,10 @@ class MisskeyAPI:
                         if isinstance(result, dict)
                         else []
                     )
-                    if len(notifications_data) > 0:
-                        logger.debug(
-                            f"Misskey API 获取到 {len(notifications_data)} 条新通知"
-                        )
+                    if notifications_data:
+                        logger.debug(f"获取到 {len(notifications_data)} 条新通知")
                 else:
-                    logger.debug(f"Misskey API 请求成功: {endpoint}")
+                    logger.debug(f"API 请求成功: {endpoint}")
                 return result
             except json.JSONDecodeError as e:
                 logger.error(f"响应不是有效的 JSON 格式: {e}")
@@ -288,9 +290,7 @@ class MisskeyAPI:
                     f"API 请求失败: {endpoint} - 状态码: {response.status}, 响应: {error_text}"
                 )
             except Exception:
-                logger.error(
-                    f"API 请求失败: {endpoint} - 状态码: {response.status}, 无法读取错误响应"
-                )
+                logger.error(f"API 请求失败: {endpoint} - 状态码: {response.status}")
 
             self._handle_response_status(response.status, endpoint)
             raise APIConnectionError(f"Request failed for {endpoint}")
@@ -322,6 +322,7 @@ class MisskeyAPI:
         visible_user_ids: Optional[List[str]] = None,
         local_only: bool = False,
     ) -> Dict[str, Any]:
+        """创建新贴文"""
         data: Dict[str, Any] = {
             "text": text,
             "visibility": visibility,
@@ -334,23 +335,26 @@ class MisskeyAPI:
 
         result = await self._make_request("notes/create", data)
         note_id = result.get("createdNote", {}).get("id", "unknown")
-        logger.debug(f"Misskey 发帖成功，note_id: {note_id}")
+        logger.debug(f"发帖成功，note_id: {note_id}")
         return result
 
     async def get_current_user(self) -> Dict[str, Any]:
+        """获取当前用户信息"""
         return await self._make_request("i", {})
 
     async def send_message(self, user_id: str, text: str) -> Dict[str, Any]:
+        """发送聊天消息"""
         result = await self._make_request(
             "chat/messages/create-to-user", {"toUserId": user_id, "text": text}
         )
         message_id = result.get("id", "unknown")
-        logger.debug(f"Misskey 聊天发送成功，message_id: {message_id}")
+        logger.debug(f"聊天发送成功，message_id: {message_id}")
         return result
 
     async def get_messages(
         self, user_id: str, limit: int = 10, since_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
+        """获取聊天消息历史"""
         data: Dict[str, Any] = {"userId": user_id, "limit": limit}
         if since_id:
             data["sinceId"] = since_id
@@ -365,6 +369,7 @@ class MisskeyAPI:
     async def get_mentions(
         self, limit: int = 10, since_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
+        """获取提及通知"""
         data: Dict[str, Any] = {"limit": limit}
         if since_id:
             data["sinceId"] = since_id
@@ -376,7 +381,5 @@ class MisskeyAPI:
         elif isinstance(result, dict) and "notifications" in result:
             return result["notifications"]
         else:
-            logger.warning(
-                f"获取提及通知响应格式异常: {type(result)}, 响应内容: {result}"
-            )
+            logger.warning(f"获取提及通知响应格式异常: {type(result)}")
             return []

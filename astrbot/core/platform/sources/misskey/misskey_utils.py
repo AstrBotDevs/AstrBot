@@ -21,7 +21,7 @@ def serialize_message_chain(chain: List[Any]) -> Tuple[str, bool]:
             return f"@{component.qq}"
         elif hasattr(component, "text"):
             text = getattr(component, "text", "")
-            if text and "@" in text:
+            if "@" in text:
                 has_at = True
             return text
         else:
@@ -103,16 +103,16 @@ def resolve_visibility_from_raw_message(
 
 def is_valid_user_session_id(session_id: Union[str, Any]) -> bool:
     """检查 session_id 是否是有效的聊天用户 session_id (仅限chat:前缀)"""
-    if not isinstance(session_id, str):
+    if not isinstance(session_id, str) or ":" not in session_id:
         return False
 
-    if ":" in session_id:
-        parts = session_id.split(":")
-        # 只有聊天格式 chat:user_id 才返回True
-        if len(parts) == 2 and parts[0] == "chat":
-            return bool(parts[1] and parts[1] != "unknown")
-
-    return False
+    parts = session_id.split(":")
+    return (
+        len(parts) == 2
+        and parts[0] == "chat"
+        and bool(parts[1])
+        and parts[1] != "unknown"
+    )
 
 
 def extract_user_id_from_session_id(session_id: str) -> str:
@@ -120,7 +120,6 @@ def extract_user_id_from_session_id(session_id: str) -> str:
     if ":" in session_id:
         parts = session_id.split(":")
         if len(parts) >= 2:
-            # 支持 chat:user_id, note:user_id 等格式
             return parts[1]
     return session_id
 

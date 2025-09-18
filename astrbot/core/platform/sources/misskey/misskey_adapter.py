@@ -79,7 +79,7 @@ class MisskeyPlatformAdapter(Platform):
             self.client_self_id = str(user_info.get("id", ""))
             self._bot_username = user_info.get("username", "")
             logger.info(
-                f"[Misskey] 用户: {user_info.get('username', '')} (ID: {self.client_self_id})"
+                f"[Misskey] 已连接用户: {self._bot_username} (ID: {self.client_self_id})"
             )
         except Exception as e:
             logger.error(f"[Misskey] 获取用户信息失败: {e}")
@@ -102,21 +102,18 @@ class MisskeyPlatformAdapter(Platform):
                 streaming = self.api.get_streaming_client()
                 streaming.add_message_handler("notification", self._handle_notification)
                 if self.enable_chat:
-                    # Misskey 聊天消息的正确事件名称
                     streaming.add_message_handler(
                         "newChatMessage", self._handle_chat_message
                     )
-                    # 添加通用事件处理器来调试
                     streaming.add_message_handler("_debug", self._debug_handler)
 
                 if await streaming.connect():
-                    logger.info("[Misskey] WebSocket 连接成功")
+                    logger.info("[Misskey] WebSocket 已连接")
                     await streaming.subscribe_channel("main")
                     if self.enable_chat:
-                        # 尝试订阅多个可能的聊天频道
                         await streaming.subscribe_channel("messaging")
                         await streaming.subscribe_channel("messagingIndex")
-                        logger.info("[Misskey] 已订阅聊天频道")
+                        logger.info("[Misskey] 聊天频道已订阅")
 
                     backoff_delay = 1.0
                     await streaming.listen()
@@ -140,7 +137,9 @@ class MisskeyPlatformAdapter(Platform):
             if notification_type in ["mention", "reply", "quote"]:
                 note = data.get("note")
                 if note and self._is_bot_mentioned(note):
-                    logger.info(f"[Misskey] 处理贴文提及: {note.get('text', '')}")
+                    logger.info(
+                        f"[Misskey] 处理贴文提及: {note.get('text', '')[:50]}..."
+                    )
                     message = await self.convert_message(note)
                     event = MisskeyPlatformEvent(
                         message_str=message.message_str,
@@ -163,7 +162,7 @@ class MisskeyPlatformAdapter(Platform):
                 return
 
             message = await self.convert_chat_message(data)
-            logger.info(f"[Misskey] 处理聊天消息: {message.message_str}")
+            logger.info(f"[Misskey] 处理聊天消息: {message.message_str[:50]}...")
             event = MisskeyPlatformEvent(
                 message_str=message.message_str,
                 message_obj=message,
@@ -244,6 +243,7 @@ class MisskeyPlatformAdapter(Platform):
         return await super().send_by_session(session, message_chain)
 
     def _create_file_component(self, file_info: Dict[str, Any]):
+        """创建文件组件和描述文本"""
         file_url = file_info.get("url", "")
         file_name = file_info.get("name", "未知文件")
         file_type = file_info.get("type", "")
@@ -257,32 +257,80 @@ class MisskeyPlatformAdapter(Platform):
         else:
             return Comp.File(name=file_name, url=file_url), f"文件[{file_name}]"
 
-    async def convert_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
+    def _extract_sender_info(self, raw_data: Dict[str, Any], is_chat: bool = False):
+        """提取发送者信息"""
+        if is_chat:
+            sender = raw_data.get("fromUser", {})
+            sender_id = str(sender.get("id", "") or raw_data.get("fromUserId", ""))
+        else:
+            sender = raw_data.get("user", {})
+            sender_id = str(sender.get("id", ""))
+
+        return {
+            "sender": sender,
+            "sender_id": sender_id,
+            "nickname": sender.get("name", sender.get("username", "")),
+            "username": sender.get("username", ""),
+        }
+
+    def _create_base_message(
+        self,
+        raw_data: Dict[str, Any],
+        sender_info: Dict[str, Any],
+        is_chat: bool = False,
+    ) -> AstrBotMessage:
+        """创建基础消息对象"""
         message = AstrBotMessage()
         message.raw_message = raw_data
         message.message = []
 
-        sender = raw_data.get("user", {})
         message.sender = MessageMember(
-            user_id=str(sender.get("id", "")),
-            nickname=sender.get("name", sender.get("username", "")),
+            user_id=sender_info["sender_id"],
+            nickname=sender_info["nickname"],
         )
 
+        session_prefix = "chat" if is_chat else "note"
         message.session_id = (
-            f"note:{message.sender.user_id}"
-            if message.sender.user_id
-            else "note:unknown"
+            f"{session_prefix}:{sender_info['sender_id']}"
+            if sender_info["sender_id"]
+            else f"{session_prefix}:unknown"
         )
+
         message.message_id = str(raw_data.get("id", ""))
         message.self_id = self.client_self_id
         message.type = MessageType.FRIEND_MESSAGE
 
-        self._user_cache[message.sender.user_id] = {
-            "username": sender.get("username", ""),
-            "nickname": message.sender.nickname,
-            "visibility": raw_data.get("visibility", "public"),
-            "visible_user_ids": raw_data.get("visibleUserIds", []),
-        }
+        return message
+
+    def _cache_user_info(
+        self,
+        sender_info: Dict[str, Any],
+        raw_data: Dict[str, Any],
+        is_chat: bool = False,
+    ):
+        """缓存用户信息"""
+        if is_chat:
+            user_cache_data = {
+                "username": sender_info["username"],
+                "nickname": sender_info["nickname"],
+                "visibility": "specified",
+                "visible_user_ids": [self.client_self_id, sender_info["sender_id"]],
+            }
+        else:
+            user_cache_data = {
+                "username": sender_info["username"],
+                "nickname": sender_info["nickname"],
+                "visibility": raw_data.get("visibility", "public"),
+                "visible_user_ids": raw_data.get("visibleUserIds", []),
+            }
+
+        self._user_cache[sender_info["sender_id"]] = user_cache_data
+
+    async def convert_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
+        """转换贴文消息"""
+        sender_info = self._extract_sender_info(raw_data, is_chat=False)
+        message = self._create_base_message(raw_data, sender_info, is_chat=False)
+        self._cache_user_info(sender_info, raw_data, is_chat=False)
 
         message_parts = []
         raw_text = raw_data.get("text", "")
@@ -314,29 +362,10 @@ class MisskeyPlatformAdapter(Platform):
         return message
 
     async def convert_chat_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
-        message = AstrBotMessage()
-        message.raw_message = raw_data
-        message.message = []
-
-        sender = raw_data.get("fromUser", {})
-        sender_id = str(sender.get("id", "") or raw_data.get("fromUserId", ""))
-
-        message.sender = MessageMember(
-            user_id=sender_id,
-            nickname=sender.get("name", sender.get("username", "")),
-        )
-
-        message.session_id = f"chat:{sender_id}" if sender_id else "chat:unknown"
-        message.message_id = str(raw_data.get("id", ""))
-        message.self_id = self.client_self_id
-        message.type = MessageType.FRIEND_MESSAGE
-
-        self._user_cache[message.sender.user_id] = {
-            "username": sender.get("username", ""),
-            "nickname": message.sender.nickname,
-            "visibility": "specified",
-            "visible_user_ids": [self.client_self_id, message.sender.user_id],
-        }
+        """转换聊天消息"""
+        sender_info = self._extract_sender_info(raw_data, is_chat=True)
+        message = self._create_base_message(raw_data, sender_info, is_chat=True)
+        self._cache_user_info(sender_info, raw_data, is_chat=True)
 
         raw_text = raw_data.get("text", "")
         if raw_text:
