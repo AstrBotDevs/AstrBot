@@ -92,9 +92,11 @@ class MisskeyPlatformAdapter(Platform):
         backoff_delay = 1.0
         max_backoff = 300.0
         backoff_multiplier = 1.5
+        connection_attempts = 0
 
         while self._running:
             try:
+                connection_attempts += 1
                 if not self.api:
                     logger.error("[Misskey] API 客户端未初始化")
                     break
@@ -108,23 +110,32 @@ class MisskeyPlatformAdapter(Platform):
                     streaming.add_message_handler("_debug", self._debug_handler)
 
                 if await streaming.connect():
-                    logger.info("[Misskey] WebSocket 已连接")
+                    logger.info(
+                        f"[Misskey] WebSocket 已连接 (尝试 #{connection_attempts})"
+                    )
+                    connection_attempts = 0  # 重置计数器
                     await streaming.subscribe_channel("main")
                     if self.enable_chat:
                         await streaming.subscribe_channel("messaging")
                         await streaming.subscribe_channel("messagingIndex")
                         logger.info("[Misskey] 聊天频道已订阅")
 
-                    backoff_delay = 1.0
+                    backoff_delay = 1.0  # 重置延迟
                     await streaming.listen()
                 else:
-                    logger.error("[Misskey] WebSocket 连接失败")
+                    logger.error(
+                        f"[Misskey] WebSocket 连接失败 (尝试 #{connection_attempts})"
+                    )
 
             except Exception as e:
-                logger.error(f"[Misskey] WebSocket 异常: {e}")
+                logger.error(
+                    f"[Misskey] WebSocket 异常 (尝试 #{connection_attempts}): {e}"
+                )
 
             if self._running:
-                logger.info(f"[Misskey] {backoff_delay:.1f}秒后重连")
+                logger.info(
+                    f"[Misskey] {backoff_delay:.1f}秒后重连 (下次尝试 #{connection_attempts + 1})"
+                )
                 await asyncio.sleep(backoff_delay)
                 backoff_delay = min(backoff_delay * backoff_multiplier, max_backoff)
 

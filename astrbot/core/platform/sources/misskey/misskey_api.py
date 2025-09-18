@@ -56,6 +56,7 @@ class StreamingClient:
         self.message_handlers: Dict[str, Callable] = {}
         self.channels: Dict[str, str] = {}
         self._running = False
+        self._last_pong = None
 
     async def connect(self) -> bool:
         try:
@@ -64,7 +65,9 @@ class StreamingClient:
             )
             ws_url += f"/streaming?i={self.access_token}"
 
-            self.websocket = await websockets.connect(ws_url)
+            self.websocket = await websockets.connect(
+                ws_url, ping_interval=30, ping_timeout=10
+            )
             self.is_connected = True
             self._running = True
 
@@ -135,8 +138,16 @@ class StreamingClient:
                 except Exception as e:
                     logger.error(f"[Misskey WebSocket] 处理消息失败: {e}")
 
-        except websockets.exceptions.ConnectionClosed:
-            logger.warning("[Misskey WebSocket] 连接已关闭")
+        except websockets.exceptions.ConnectionClosedError as e:
+            logger.warning(f"[Misskey WebSocket] 连接意外关闭: {e}")
+            self.is_connected = False
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.warning(
+                f"[Misskey WebSocket] 连接已关闭 (代码: {e.code}, 原因: {e.reason})"
+            )
+            self.is_connected = False
+        except websockets.exceptions.InvalidHandshake as e:
+            logger.error(f"[Misskey WebSocket] 握手失败: {e}")
             self.is_connected = False
         except Exception as e:
             logger.error(f"[Misskey WebSocket] 监听消息失败: {e}")
