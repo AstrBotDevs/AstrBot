@@ -236,6 +236,16 @@ CONFIG_METADATA_2 = {
                         "discord_guild_id_for_debug": "",
                         "discord_activity_name": "",
                     },
+                    "Misskey": {
+                        "id": "misskey",
+                        "type": "misskey",
+                        "enable": False,
+                        "misskey_instance_url": "https://misskey.example",
+                        "misskey_token": "",
+                        "misskey_default_visibility": "public",
+                        "misskey_local_only": False,
+                        "misskey_enable_chat": True,
+                    },
                     "Slack": {
                         "id": "slack",
                         "type": "slack",
@@ -336,6 +346,32 @@ CONFIG_METADATA_2 = {
                         "description": "Bot Token",
                         "type": "string",
                         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
+                    },
+                    "misskey_instance_url": {
+                        "description": "Misskey 实例 URL",
+                        "type": "string",
+                        "hint": "例如 https://misskey.example，填写 Bot 账号所在的 Misskey 实例地址",
+                    },
+                    "misskey_token": {
+                        "description": "Misskey Access Token",
+                        "type": "string",
+                        "hint": "连接服务设置生成的 API 鉴权访问令牌（Access token）",
+                    },
+                    "misskey_default_visibility": {
+                        "description": "默认帖子可见性",
+                        "type": "string",
+                        "options": ["public", "home", "followers"],
+                        "hint": "机器人发帖时的默认可见性设置。public：公开，home：主页时间线，followers：仅关注者。",
+                    },
+                    "misskey_local_only": {
+                        "description": "仅限本站（不参与联合）",
+                        "type": "bool",
+                        "hint": "启用后，机器人发出的帖子将仅在本实例可见，不会联合到其他实例",
+                    },
+                    "misskey_enable_chat": {
+                        "description": "启用聊天消息响应",
+                        "type": "bool",
+                        "hint": "启用后，机器人将会监听和响应私信聊天消息",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",
