@@ -236,19 +236,21 @@ def create_base_message(
     if room_id:
         session_prefix = "room"
         session_id = f"{session_prefix}:{room_id}"
+        message.type = MessageType.GROUP_MESSAGE
     elif is_chat:
         session_prefix = "chat"
         session_id = f"{session_prefix}:{sender_info['sender_id']}"
+        message.type = MessageType.FRIEND_MESSAGE
     else:
         session_prefix = "note"
         session_id = f"{session_prefix}:{sender_info['sender_id']}"
+        message.type = MessageType.FRIEND_MESSAGE
 
     message.session_id = (
         session_id if sender_info["sender_id"] else f"{session_prefix}:unknown"
     )
     message.message_id = str(raw_data.get("id", ""))
     message.self_id = client_self_id
-    message.type = MessageType.FRIEND_MESSAGE
 
     return message
 
